@@ -25,7 +25,7 @@ export function Header({ stars }: { stars: number | null }) {
           )}
         </a>
         <a
-          href={SITE.buyMeACoffee}
+          href={SITE.kofi}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-bg transition hover:opacity-85 sm:text-sm"

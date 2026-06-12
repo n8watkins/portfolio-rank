@@ -5,7 +5,18 @@
 1,700+ community-curated developer portfolios — browsable, searchable, and (soon) ranked
 by head-to-head human votes and AI scoring instead of alphabetical order.
 
-🌐 Live: _coming soon_ · ☕ [Buy me a coffee](https://buymeacoffee.com/n8watkins)
+🌐 Live: _coming soon_ · ☕ [Support on Ko-fi](https://ko-fi.com/n8watkins)
+
+## Origin
+
+It started with this tweet by [Ali Spittel](https://twitter.com/ASpittel), which inspired
+[Emma Bostian](https://github.com/emmabostian) to create
+[developer-portfolios](https://github.com/emmabostian/developer-portfolios) — the
+community list this project is built on:
+
+<a href="https://twitter.com/ASpittel/status/1171604728951779328">
+	<img width="597" alt="Ali Spittel's tweet: asking developers to share their portfolios" src="assets/ASpittel_tweet.png">
+</a>
 
 ## Why
 
