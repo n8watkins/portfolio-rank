@@ -4,4 +4,5 @@ export const SITE = {
   github: "https://github.com/n8watkins/portfolio-rank",
   githubRepo: "n8watkins/portfolio-rank",
   kofi: "https://ko-fi.com/n8watkins",
+  n8builds: "https://n8builds.dev",
 } as const;

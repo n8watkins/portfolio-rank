@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Portfolio } from "@/app/page";
 
-const PAGE_SIZE = 60;
+const PAGE_SIZE = 24;
+const LETTERS = ["All", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 
 function domainOf(url: string): string {
   try {
@@ -15,18 +16,23 @@ function domainOf(url: string): string {
 
 export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
   const [query, setQuery] = useState("");
+  const [letter, setLetter] = useState("All");
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return portfolios;
-    return portfolios.filter(
-      (p) =>
+    return portfolios.filter((p) => {
+      if (letter !== "All" && !p.name.toUpperCase().startsWith(letter)) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         p.name.toLowerCase().includes(q) ||
         p.tagline?.toLowerCase().includes(q) ||
         domainOf(p.url).toLowerCase().includes(q)
-    );
-  }, [query, portfolios]);
+      );
+    });
+  }, [query, letter, portfolios]);
 
   const shown = filtered.slice(0, visible);
 
@@ -44,6 +50,25 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
           placeholder="Search by name, role, or domain…"
           className="w-full rounded-lg border border-edge bg-card px-4 py-2 text-sm outline-none transition placeholder:text-mute focus:border-mute sm:w-80"
         />
+      </div>
+
+      <div className="mb-5 flex flex-wrap justify-center gap-1">
+        {LETTERS.map((l) => (
+          <button
+            key={l}
+            onClick={() => {
+              setLetter(l);
+              setVisible(PAGE_SIZE);
+            }}
+            className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
+              letter === l
+                ? "bg-accent text-bg"
+                : "text-mute hover:bg-edge hover:text-ink"
+            }`}
+          >
+            {l}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

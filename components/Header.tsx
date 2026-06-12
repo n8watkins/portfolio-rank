@@ -3,10 +3,35 @@ import { SITE } from "@/lib/site";
 export function Header({ stars }: { stars: number | null }) {
   return (
     <header className="sticky top-0 z-10 -mx-4 flex items-center justify-between border-b border-edge bg-bg/80 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-      <a href="#" className="text-sm font-bold tracking-tight sm:text-base">
-        Portfolio<span className="text-accent">Rank</span>
-      </a>
+      <div className="flex items-center gap-3">
+        <a
+          href="/"
+          className="flex items-center gap-2 text-sm font-bold tracking-tight sm:text-base"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/n8-logo.png"
+            alt="n8builds logo"
+            className="h-7 w-7 rounded-lg"
+          />
+          Portfolio<span className="text-accent">Rank</span>
+        </a>
+        <a
+          href={SITE.n8builds}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden text-xs font-medium text-mute transition hover:text-ink sm:block"
+        >
+          by n8builds.dev
+        </a>
+      </div>
       <nav className="flex items-center gap-2">
+        <a
+          href="/rank"
+          className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent sm:text-sm"
+        >
+          ⚔️ Rank
+        </a>
         <a
           href={SITE.github}
           target="_blank"

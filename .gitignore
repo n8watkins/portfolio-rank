@@ -4,3 +4,5 @@ out/
 .env*.local
 next-env.d.ts
 *.tsbuildinfo
+data/ratings.json
+data/votes.jsonl

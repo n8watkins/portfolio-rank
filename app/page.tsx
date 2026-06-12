@@ -31,43 +31,33 @@ export default async function Home() {
     <div className="mx-auto max-w-6xl px-4 sm:px-6">
       <Header stars={stars} />
 
-      <section className="py-16 text-center sm:py-24">
-        <p className="fade-up text-sm font-medium tracking-widest text-accent uppercase">
-          {portfolios.length.toLocaleString()} portfolios · community-curated
-          since 2019
-        </p>
-        <h1
-          className="fade-up mx-auto mt-4 max-w-2xl text-4xl font-bold tracking-tight text-balance sm:text-6xl"
-          style={{ animationDelay: "80ms" }}
-        >
+      <section className="py-8 text-center sm:py-10">
+        <h1 className="fade-up mx-auto max-w-2xl text-3xl font-bold tracking-tight text-balance sm:text-4xl">
           The best developer portfolios.{" "}
           <span className="text-accent">Ranked.</span>
         </h1>
         <p
-          className="fade-up mx-auto mt-5 max-w-xl text-lg text-mute"
-          style={{ animationDelay: "160ms" }}
+          className="fade-up mx-auto mt-3 max-w-xl text-sm text-mute sm:text-base"
+          style={{ animationDelay: "80ms" }}
         >
-          Browse the web&apos;s largest collection of developer portfolios.
-          Soon: head-to-head voting and AI scoring decide who rises to the
-          top.
+          {portfolios.length.toLocaleString()} community-curated portfolios.
+          Your votes decide who rises.
         </p>
         <div
-          className="fade-up mt-8 flex items-center justify-center gap-3"
-          style={{ animationDelay: "240ms" }}
+          className="fade-up mt-5 flex items-center justify-center gap-3"
+          style={{ animationDelay: "160ms" }}
         >
           <a
-            href="#browse"
-            className="rounded-lg bg-ink px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85"
+            href="/rank"
+            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85"
           >
-            Browse portfolios
+            ⚔️ Start ranking
           </a>
           <a
-            href={SITE.github}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#browse"
             className="rounded-lg border border-edge px-5 py-2.5 text-sm font-semibold transition hover:border-mute"
           >
-            ★ Star on GitHub
+            Browse
           </a>
         </div>
       </section>
@@ -87,12 +77,12 @@ export default async function Home() {
           </a>
           . Built by{" "}
           <a
-            href="https://github.com/n8watkins"
+            href={SITE.n8builds}
             target="_blank"
             rel="noopener noreferrer"
             className="underline decoration-edge underline-offset-4 transition hover:text-ink"
           >
-            n8watkins
+            n8builds.dev
           </a>
           .
         </p>
