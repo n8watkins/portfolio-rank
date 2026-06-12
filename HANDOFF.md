@@ -37,6 +37,22 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   Vercel production (GitHub OAuth app created 2026-06-12, callback points at production —
   local sign-in needs a second OAuth app, not created). Signed-in vote NOT yet exercised
   on prod by a real user.
+- **Security hardening: DONE, verified** (commit 874fad4, after a subagent audit).
+  (1) Vote integrity is now atomic: `votes` has `pair_key` (newline-joined sorted pair —
+  NOT NUL, which SQLite truncates TEXT at) and a `UNIQUE(rater_id, pair_key)` index; the
+  POST /api/rank handler runs all limit checks + insert + ELO upsert inside one
+  `db().transaction("write")`, so concurrent requests can't race past the dup-check /
+  pacing / daily cap or lost-update ELO. Dup is caught as the UNIQUE violation → 409.
+  Verified: 8 concurrent same-pair votes → exactly 1 lands; reversed re-vote → 409.
+  (2) /api/claim now counts against the daily cap (budget = DAILY_VOTE_LIMIT − today's
+  votes) so churning anon cookies can't mint unlimited official votes. (3) `lib/safefetch.ts`
+  — /api/inspect follows redirects manually, rejecting any hop on a private/loopback/
+  metadata host (SSRF), and caps the buffered body (DoS); blocklist unit-tested 16/16.
+  (4) Security headers (CSP, X-Frame-Options DENY, nosniff, Referrer-Policy,
+  Permissions-Policy) on all routes via next.config.ts. README has a blog-style
+  "Security: what building this taught me" section. Residual/accepted: DNS-rebind (host
+  blocklist is name-based, not resolved-IP); multi-OAuth-account sybil voting (inherent
+  to any voting site); capture.mjs still trusts hostile pages (owner-run, lower priority).
 - **Sign-in modal + practice-vote claim: BUILT, verified locally** (`components/
   SignInModal.tsx`, `app/api/claim/route.ts`, `components/ClaimVotes.tsx` in root layout).
   Modal (GitHub button; Google button appears automatically once AUTH_GOOGLE_ID/SECRET
