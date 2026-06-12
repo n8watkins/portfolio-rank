@@ -37,18 +37,18 @@ function Entry({ url, won }: { url: string; won: boolean }) {
 export default async function VotesPage() {
   const session = await auth();
 
-  if (!session?.githubId) {
+  if (!session?.raterId) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
         <h1 className="text-2xl font-bold tracking-tight">My votes</h1>
         <p className="mt-3 text-sm text-mute">
-          Sign in with GitHub to see your voting history.
+          Sign in to see your voting history.
         </p>
         <a
           href="/api/auth/signin?callbackUrl=/votes"
           className="mt-6 inline-block rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
         >
-          Sign in with GitHub
+          Sign in
         </a>
       </div>
     );
@@ -58,7 +58,7 @@ export default async function VotesPage() {
   const res = await db().execute({
     sql: `SELECT winner, loser, created_at FROM votes
           WHERE rater_id = ? ORDER BY id DESC LIMIT 500`,
-    args: [`gh:${session.githubId}`],
+    args: [session.raterId],
   });
 
   return (

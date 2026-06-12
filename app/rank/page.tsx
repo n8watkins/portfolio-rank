@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InspectChips } from "@/components/Diagnostics";
+import { SignInModal } from "@/components/SignInModal";
 
 type Entry = {
   name: string;
@@ -18,8 +19,6 @@ type RaterInfo = {
   anonVotesUsed: number | null;
   anonVoteLimit: number;
 };
-
-const SIGNIN_URL = "/api/auth/signin?callbackUrl=/rank";
 
 function domainOf(url: string): string {
   try {
@@ -65,6 +64,8 @@ export default function RankPage() {
   const [count, setCount] = useState(0);
   const [last, setLast] = useState<string | null>(null);
   const [rater, setRater] = useState<RaterInfo | null>(null);
+  const [signInOpen, setSignInOpen] = useState(false);
+  const nudgedRef = useRef(false);
   const pairRef = useRef(pair);
   pairRef.current = pair;
 
@@ -77,7 +78,21 @@ export default function RankPage() {
     const res = await fetch("/api/rank");
     const data = await res.json();
     setPair({ a: data.a, b: data.b });
-    if (data.rater) setRater(data.rater);
+    if (data.rater) {
+      setRater(data.rater);
+      // One-time nudge per tab session: invite first-time anon visitors to
+      // sign in up front, with an easy skip into practice mode.
+      if (
+        !data.rater.signedIn &&
+        (data.rater.anonVotesUsed ?? 0) === 0 &&
+        !nudgedRef.current &&
+        !sessionStorage.getItem("pr_signin_nudged")
+      ) {
+        nudgedRef.current = true;
+        sessionStorage.setItem("pr_signin_nudged", "1");
+        setSignInOpen(true);
+      }
+    }
     setBusy(false);
   }, []);
 
@@ -103,6 +118,7 @@ export default function RankPage() {
         setRater((r) =>
           r ? { ...r, anonVotesUsed: r.anonVoteLimit } : r
         );
+        setSignInOpen(true);
         setBusy(false);
         return;
       }
@@ -112,7 +128,11 @@ export default function RankPage() {
         return;
       }
       if (res.status === 429) {
-        setLast("Daily vote limit reached — come back tomorrow!");
+        setLast(
+          data.error === "too_fast"
+            ? "Easy there — give each pair a real look before voting."
+            : "Daily vote limit reached — come back tomorrow!"
+        );
         setBusy(false);
         return;
       }
@@ -155,6 +175,17 @@ export default function RankPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6">
+      <SignInModal
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        title={gated ? "You're out of practice votes" : "Make your votes count"}
+        body={
+          gated
+            ? "Sign in to keep voting — your practice votes convert into official ones."
+            : "Sign in so your picks move the official rankings. Or skip and try 10 practice votes first — they convert when you sign in."
+        }
+        skipLabel={gated ? "Not now" : "Skip — try practice votes first"}
+      />
       <header className="flex items-center justify-between py-4">
         <a href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
@@ -175,11 +206,14 @@ export default function RankPage() {
         {rater && !rater.signedIn && !gated && (
           <p className="mt-2 text-xs text-mute">
             Practice mode — {rater.anonVotesUsed ?? 0}/{rater.anonVoteLimit}{" "}
-            free votes used, they don&apos;t count toward official rankings.{" "}
-            <a href={SIGNIN_URL} className="font-semibold text-accent underline underline-offset-2">
-              Sign in with GitHub
-            </a>{" "}
-            to make votes count.
+            free votes used.{" "}
+            <button
+              onClick={() => setSignInOpen(true)}
+              className="font-semibold text-accent underline underline-offset-2"
+            >
+              Sign in
+            </button>{" "}
+            and your practice votes become official.
           </p>
         )}
         {rater?.signedIn && (
@@ -194,15 +228,15 @@ export default function RankPage() {
         <div className="mx-auto mb-6 max-w-md rounded-xl border border-accent/40 bg-card p-6 text-center">
           <p className="text-lg font-bold">You&apos;re out of practice votes</p>
           <p className="mt-2 text-sm text-mute">
-            Sign in with GitHub to keep voting — signed-in votes count toward
-            the official rankings.
+            Sign in to keep voting — your {rater?.anonVoteLimit} practice votes
+            convert into official ones, and everything after counts too.
           </p>
-          <a
-            href={SIGNIN_URL}
+          <button
+            onClick={() => setSignInOpen(true)}
             className="mt-4 inline-block rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
           >
-            Sign in with GitHub
-          </a>
+            Sign in
+          </button>
         </div>
       )}
 

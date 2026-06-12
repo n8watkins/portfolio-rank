@@ -14,14 +14,14 @@ export type Rater = {
 const ANON_COOKIE = "pr_anon";
 
 /**
- * Identify the voter: signed-in GitHub users are canonical (`human`),
- * everyone else gets a sticky anon session id whose votes are logged but
- * never count toward official ELO.
+ * Identify the voter: signed-in users are canonical (`human`, raterId is
+ * provider-prefixed: gh:<id> / g:<sub>), everyone else gets a sticky anon
+ * session id whose votes are logged but never count toward official ELO.
  */
 export async function getRater(): Promise<Rater> {
   const session = await auth();
-  if (session?.githubId) {
-    return { type: "human", id: `gh:${session.githubId}`, login: session.login };
+  if (session?.raterId) {
+    return { type: "human", id: session.raterId, login: session.login };
   }
   const jar = await cookies();
   let anonId = jar.get(ANON_COOKIE)?.value;

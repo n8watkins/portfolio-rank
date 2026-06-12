@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SignInModal } from "@/components/SignInModal";
 
 type SessionInfo = { login?: string; user?: { image?: string | null } } | null;
 
@@ -9,6 +10,7 @@ type SessionInfo = { login?: string; user?: { image?: string | null } } | null;
 export function AuthButton() {
   const [session, setSession] = useState<SessionInfo>(null);
   const [loaded, setLoaded] = useState(false);
+  const [modal, setModal] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -52,11 +54,14 @@ export function AuthButton() {
   }
 
   return (
-    <a
-      href="/api/auth/signin?callbackUrl=/rank"
-      className="rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
-    >
-      Sign in
-    </a>
+    <>
+      <button
+        onClick={() => setModal(true)}
+        className="rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
+      >
+        Sign in
+      </button>
+      <SignInModal open={modal} onClose={() => setModal(false)} />
+    </>
   );
 }

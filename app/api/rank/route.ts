@@ -110,6 +110,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
+  // Pace votes: a human looks at two screenshots before picking, a script
+  // doesn't. Anything faster than one vote per 2s per rater is rejected.
+  const recent = await countVotes(rater.id, "datetime('now', '-2 seconds')");
+  if (recent > 0) {
+    return NextResponse.json({ error: "too_fast" }, { status: 429 });
+  }
+
   // Anon votes are logged (they're still signal) but never move official ELO,
   // and after the free allowance the gate asks for GitHub sign-in.
   if (rater.type === "anon") {
