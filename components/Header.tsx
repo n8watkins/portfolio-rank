@@ -27,6 +27,12 @@ export function Header({ stars }: { stars: number | null }) {
       </div>
       <nav className="flex items-center gap-2">
         <a
+          href="/top"
+          className="px-2 py-1.5 text-xs font-semibold text-mute transition hover:text-ink sm:text-sm"
+        >
+          🏆 Top
+        </a>
+        <a
           href="/rank"
           className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent sm:text-sm"
         >

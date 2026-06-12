@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { InspectChips } from "@/components/Diagnostics";
 
 type Entry = {
   name: string;
@@ -130,14 +131,14 @@ export default function RankPage() {
                 className="group rounded-xl border border-edge bg-card text-left transition duration-200 hover:-translate-y-1 hover:border-accent disabled:opacity-60"
               >
                 <Shot url={p.url} />
-                <div className="flex items-start justify-between gap-2 p-4">
+                <div className="flex items-start justify-between gap-2 p-4 pb-2">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{p.name}</p>
                     <p className="truncate text-sm text-mute">
                       {p.tagline ?? domainOf(p.url)}
                     </p>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="flex shrink-0 items-center gap-3">
                     <p className="text-sm font-semibold tabular-nums">
                       {p.elo}
                     </p>
@@ -148,9 +149,21 @@ export default function RankPage() {
                       onClick={(e) => e.stopPropagation()}
                       className="text-xs text-mute underline decoration-edge underline-offset-2 transition hover:text-ink"
                     >
-                      peek ↗
+                      visit ↗
+                    </a>
+                    <a
+                      href={`/p/${encodeURIComponent(p.url)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-mute underline decoration-edge underline-offset-2 transition hover:text-ink"
+                    >
+                      details
                     </a>
                   </div>
+                </div>
+                <div className="px-4 pb-3">
+                  <InspectChips url={p.url} />
                 </div>
               </button>
             );
@@ -160,7 +173,19 @@ export default function RankPage() {
         <p className="py-24 text-center text-sm text-mute">Loading pair…</p>
       )}
 
-      <div className="pb-12 text-center">
+      <div className="flex items-center justify-center gap-3 pb-12">
+        <button
+          onClick={() => {
+            const p = pairRef.current;
+            if (!p) return;
+            window.open(p.a.url, "_blank", "noopener");
+            window.open(p.b.url, "_blank", "noopener");
+          }}
+          className="rounded-lg border border-edge px-5 py-2 text-sm font-semibold transition hover:border-mute"
+          title="If only one opens, allow pop-ups for this site"
+        >
+          Open both sites ↗↗
+        </button>
         <button
           onClick={skip}
           disabled={busy}
