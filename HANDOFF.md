@@ -24,7 +24,25 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   ~45s (GitHub connected via `vercel git connect`; domain added as a project domain so it
   follows every deploy). Deployment protection disabled via API so URLs are public.
 
-## State (all verified working locally AND in production, pushed through commit 98f4cef)
+## State (all verified working locally AND in production, pushed through commit 674aaab)
+
+- **Auth.js GitHub sign-in + three-tier votes: LIVE** (commit a7e05c0). Anon voters get a
+  sticky `pr_anon` cookie and 10 practice votes — logged with `rater_type='anon'` but they
+  NEVER update the `ratings` table; then the sign-in gate. Signed-in votes are
+  `rater_type='human'`, rater_id `gh:<github numeric id>`, and move official ELO. One vote
+  per pair per rater (either direction, 409), 100/day limit (429), vote URLs restricted to
+  the roster (403). `/votes` = vote history/bookmarks. AuthButton in header. AUTH_SECRET is
+  set in `.env.local` AND Vercel production. **BLOCKED on user: GitHub OAuth app** —
+  sign-in fails (no AUTH_GITHUB_ID/AUTH_GITHUB_SECRET) until created; anon flow verified
+  in prod. Signed-in vote path is code-reviewed but NOT yet exercised end-to-end.
+- **Phase 0 capture pipeline: BUILT, sample-verified** (commit 674aaab).
+  `node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]` —
+  gates (dead/parked/blank) + hero/mobile/full-page/3-frame strip + diagnostics into the
+  `portfolios` table (prod Turso — intended). 16 sites captured locally in `captures/`
+  (gitignored). Adaptive settle loop handles slow preloaders (verified on a 25s loader).
+  ~20s/site at concurrency 4 → full 1,779 ≈ 2.5h, NOT yet batch-run. R2 upload code ready
+  but dormant — **BLOCKED on user: R2 bucket + token**. App serves own shots once
+  `SHOTS_BASE_URL` (public R2 base) is set; until then mShots fallback everywhere.
 
 - **/** — compact hero, searchable card grid of all portfolios, A–Z letter chips,
   role filter chips (regex on taglines — note 924/1779 entries have no tagline),
@@ -53,21 +71,22 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 
 ## Next steps, in order
 
-1. **Auth.js GitHub login + three-tier votes** — the decided design (do not re-litigate):
-   anonymous users get ~10 votes tagged `anon` (session id) that do NOT count toward
-   official ELO, then a "Sign in with GitHub to make votes count" gate; signed-in votes
-   are `rater_type='human'`, canonical; AI votes later are `'ai'`. Per-rater rate limit
-   ~100/day, one vote per pair per rater, never delete vote rows (ELO is recomputed
-   from the `votes` table when purging abusers). Schema columns already exist.
-   Add "My votes" history page (doubles as bookmarks) once auth lands.
-2. **Phase 0 screenshot pipeline** (PLAN.md) — Playwright captures replace mShots
-   (the scaling weak link): hero/mobile/full-page/3-frame motion strip per live site,
-   gates for dead/parked sites (reuse `pipeline/check_parking_redirects.py`), store in
-   R2, add `portfolios` table to Turso (decided: same DB, new table — feed.json stays
-   the roster source until then).
-3. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
-   system (GRADING_CRITERIA.md §6). Needs screenshots from step 4.
-4. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
+1. **USER: create GitHub OAuth app** (github.com/settings/developers → New OAuth App):
+   homepage `https://portfoliorank.vercel.app`, callback
+   `https://portfoliorank.vercel.app/api/auth/callback/github`. Put AUTH_GITHUB_ID +
+   AUTH_GITHUB_SECRET in `.env.local` and Vercel production env (a second OAuth app with
+   callback `http://localhost:7678/api/auth/callback/github` for local dev is optional).
+   Then verify a signed-in vote end-to-end (it should update `ratings`; check /votes page).
+2. **USER: create Cloudflare R2 bucket** (+ API token): set R2_ACCOUNT_ID,
+   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET in `.env.local`, enable public
+   access on the bucket, set SHOTS_BASE_URL (public bucket URL) in `.env.local` + Vercel.
+3. **Run the full capture batch** — `node pipeline/capture.mjs --concurrency 6` (~2.5h,
+   resumable: already-checked URLs are skipped without --force). Then re-run with R2 on
+   (or add a backfill-upload flag) so shots serve from R2 in prod.
+4. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
+   system (GRADING_CRITERIA.md §6), `rater_type='ai'`. Uses captures from step 3
+   (strip0-2.png + extracted text).
+5. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
    "score my portfolio" instant report, auto OG share cards, weekly feed.json sync from
    the fork.
 
