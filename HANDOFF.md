@@ -18,7 +18,12 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - Stack: Next.js 15 App Router + Tailwind v4 on port **7678** (`npm run dev`);
   Turso (libSQL) for all persistence; Auth.js + Cloudflare R2 planned (see PLAN.md
   stack table)
-- Not yet deployed. Vercel is the target; DEPLOY.md has the exact steps.
+- **DEPLOYED: https://portfoliorank.vercel.app** (alias of project `portfolio-rank` in
+  the natkins23s-projects Vercel scope; `portfolio-rank.vercel.app` is squatted by an
+  unrelated project "Rankfolio"). GitHub auto-deploy is NOT connected (the Vercel
+  account lacks a GitHub login connection) — deploy with `vercel deploy --prod --yes`
+  from the repo root after pushing. Deployment protection was disabled via API so the
+  URLs are public.
 
 ## State (all verified working locally, all pushed through commit 56eb361)
 
@@ -42,27 +47,24 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 
 ## Next steps, in order
 
-1. **Deploy to Vercel** — user does the dashboard part (import repo at vercel.com/new,
-   paste TURSO_DATABASE_URL + TURSO_AUTH_TOKEN env vars). Agent: verify the deploy,
-   fix anything Vercel-specific. Acceptance: voting on the live URL writes rows to Turso.
-2. **PSI_API_KEY** — user must create (free): console.cloud.google.com → enable
+1. **PSI_API_KEY** — user must create (free): console.cloud.google.com → enable
    "PageSpeed Insights API" → API key → add to `.env.local` + Vercel. Until then
    /api/psi usually 429s (keyless quota is a shared global pool, often exhausted).
-3. **Auth.js GitHub login + three-tier votes** — the decided design (do not re-litigate):
+2. **Auth.js GitHub login + three-tier votes** — the decided design (do not re-litigate):
    anonymous users get ~10 votes tagged `anon` (session id) that do NOT count toward
    official ELO, then a "Sign in with GitHub to make votes count" gate; signed-in votes
    are `rater_type='human'`, canonical; AI votes later are `'ai'`. Per-rater rate limit
    ~100/day, one vote per pair per rater, never delete vote rows (ELO is recomputed
    from the `votes` table when purging abusers). Schema columns already exist.
    Add "My votes" history page (doubles as bookmarks) once auth lands.
-4. **Phase 0 screenshot pipeline** (PLAN.md) — Playwright captures replace mShots
+3. **Phase 0 screenshot pipeline** (PLAN.md) — Playwright captures replace mShots
    (the scaling weak link): hero/mobile/full-page/3-frame motion strip per live site,
    gates for dead/parked sites (reuse `pipeline/check_parking_redirects.py`), store in
    R2, add `portfolios` table to Turso (decided: same DB, new table — feed.json stays
    the roster source until then).
-5. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
+4. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
    system (GRADING_CRITERIA.md §6). Needs screenshots from step 4.
-6. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
+5. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
    "score my portfolio" instant report, auto OG share cards, weekly feed.json sync from
    the fork.
 
