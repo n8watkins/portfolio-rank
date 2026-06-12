@@ -49,8 +49,10 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   — /api/inspect follows redirects manually, rejecting any hop on a private/loopback/
   metadata host (SSRF), and caps the buffered body (DoS); blocklist unit-tested 16/16.
   (4) Security headers (CSP, X-Frame-Options DENY, nosniff, Referrer-Policy,
-  Permissions-Policy) on all routes via next.config.ts. README has a blog-style
-  "Security: what building this taught me" section. Residual/accepted: DNS-rebind (host
+  Permissions-Policy) on all routes via next.config.ts — VERIFIED LIVE on prod.
+  Writeup lives in `blog/building-portfoliorank-security.md` (casual blog post w/
+  captioned meme placeholders, for the user's personal blog later); README has only a
+  short Security blurb linking to it. Residual/accepted: DNS-rebind (host
   blocklist is name-based, not resolved-IP); multi-OAuth-account sybil voting (inherent
   to any voting site); capture.mjs still trusts hostile pages (owner-run, lower priority).
 - **Sign-in modal + practice-vote claim: BUILT, verified locally** (`components/
@@ -143,18 +145,34 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - Rankings framing: showcase the best, never surface a "worst" list.
 - Vote math: `lib/elo.ts`, K=32, base 1200. Pair selection samples 8 random entries,
   faces off the two least-voted.
+- **Voting is atomic now**: POST /api/rank does ALL checks + insert + ELO upsert inside
+  one `db().transaction("write")`. Add new vote-side invariants INSIDE that tx, not as a
+  separate pre-check (the whole point was killing check-then-write races). Dup detection
+  relies on the `votes_rater_pair_idx` UNIQUE index + `pairKey()`.
+- **`pairKey()` separator is `"\n"` on purpose** — do NOT use a NUL/`\0` byte: SQLite
+  silently truncates TEXT at a NUL, which corrupted pair_key during dev (caught via `xxd`).
+  Any separator that can't appear in a URL and isn't NUL is fine.
+- **Don't `pkill -f "next dev"`** — the pattern matches Claude's own shell wrapper and
+  kills the command (exit 144). Kill by port instead: `ss -ltnp | grep :7678` → `kill <pid>`.
+- After `rm -rf .next`, the first request to each route triggers a cold compile that can
+  take 60–110s (one GET took 105s). Use generous curl `--max-time` and warm the route once
+  before timing anything.
 - User created Ko-fi (not Buy Me a Coffee): ko-fi.com/n8watkins — already wired in
   `lib/site.ts` (all external URLs live there).
 
 ## File map
 
 - `app/page.tsx` — home (hero, grid, footer); `components/PortfolioGrid.tsx` — search/letter/role filters
-- `app/rank/page.tsx` — face-off UI; `app/api/rank/route.ts` — pair + vote endpoints
-- `app/top/page.tsx` — leaderboard; `app/p/[slug]/page.tsx` — detail page
-- `app/api/inspect/route.ts` — polish checks; `app/api/psi/route.ts` — Lighthouse
-- `components/Diagnostics.tsx` — InspectChips (rank cards) + DetailDiagnostics (detail page)
-- `components/Header.tsx` — nav (logo, Top, Rank, star count, Ko-fi)
-- `lib/db.ts` — libSQL client + schema; `lib/cache.ts` — DB-backed cache; `lib/elo.ts`; `lib/site.ts` — URLs/branding
+- `app/rank/page.tsx` — face-off UI (+ sign-in modal nudge); `app/api/rank/route.ts` — pair GET + atomic vote POST
+- `app/top/page.tsx` — leaderboard; `app/p/[slug]/page.tsx` — detail page; `app/votes/page.tsx` — vote history (uses session.raterId)
+- `app/api/claim/route.ts` — converts anon practice votes → official on sign-in (daily-cap-bound)
+- `app/api/inspect/route.ts` — polish checks (SSRF-hardened); `app/api/psi/route.ts` — Lighthouse
+- `auth.ts` — Auth.js config (GitHub always; Google conditional on env); `lib/rater.ts` — getRater + vote limits
+- `components/SignInModal.tsx` — in-app OAuth modal; `components/ClaimVotes.tsx` — fires /api/claim on sign-in (in layout)
+- `components/Diagnostics.tsx` — InspectChips + DetailDiagnostics; `components/Header.tsx` — nav + AuthButton
+- `lib/db.ts` — libSQL client + schema/migrations; `lib/safefetch.ts` — SSRF-safe fetch + size cap
+- `lib/cache.ts` — DB-backed cache; `lib/elo.ts` — ELO + `pairKey()`; `lib/site.ts` — URLs/branding; `lib/roster.ts` — feed allowlist
+- `next.config.ts` — security headers; `blog/building-portfoliorank-security.md` — security blog post (user's personal blog)
 - `data/feed.json` — portfolio roster (1,779); `data/PORTFOLIOS.md` — mirrored upstream list
 - `pipeline/` — scripts from the fork for Phase 0 (parking detection, feed generation)
 - `scripts/migrate-json-to-db.mjs` — one-off v0 JSON→DB migration (already run)
