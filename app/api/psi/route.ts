@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cached } from "@/lib/cache";
+import { isKnownPortfolio } from "@/lib/roster";
 
 export const runtime = "nodejs";
 
@@ -69,8 +70,10 @@ async function runPsi(target: string): Promise<PsiResult> {
 
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url");
-  if (!url || !/^https?:\/\//.test(url)) {
-    return NextResponse.json({ ok: false, error: "bad_url" }, { status: 400 });
+  // Only audit sites on the roster — keeps strangers from burning the PSI
+  // quota or pointing our server at arbitrary URLs.
+  if (!url || !isKnownPortfolio(url)) {
+    return NextResponse.json({ ok: false, error: "unknown_url" }, { status: 403 });
   }
   // Quota errors and timeouts are transient — never cache failures.
   const data = await cached<PsiResult>(
