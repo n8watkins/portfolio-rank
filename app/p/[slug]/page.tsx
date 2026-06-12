@@ -3,6 +3,7 @@ import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { DetailDiagnostics } from "@/components/Diagnostics";
 import { BASE_ELO } from "@/lib/elo";
+import { mshotsUrl, shotUrls } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,8 @@ export default async function PortfolioPage({
   ).rows[0];
   if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
 
-  const shot = `https://s.wordpress.com/mshots/v1/${encodeURIComponent(url)}?w=1200&vpw=1440&vph=900`;
+  const shot =
+    (await shotUrls([url])).get(url) ?? mshotsUrl(url, 1200);
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6">

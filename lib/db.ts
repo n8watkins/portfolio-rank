@@ -42,6 +42,18 @@ export function ensureSchema(): Promise<void> {
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
           )`,
           `CREATE INDEX IF NOT EXISTS ratings_elo_idx ON ratings (elo DESC)`,
+          // Per-site pipeline state: gate result + capture artifacts + diagnostics.
+          // Written by pipeline/capture.mjs; feed.json stays the roster source.
+          `CREATE TABLE IF NOT EXISTS portfolios (
+            url TEXT PRIMARY KEY,
+            name TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reason TEXT,
+            shot_key TEXT,
+            meta TEXT,
+            checked_at TEXT,
+            captured_at TEXT
+          )`,
           // Generic diagnostics cache (inspect:<url>, psi:<url>).
           `CREATE TABLE IF NOT EXISTS cache (
             k TEXT PRIMARY KEY,

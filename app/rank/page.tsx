@@ -9,6 +9,7 @@ type Entry = {
   tagline?: string;
   elo: number;
   votes: number;
+  shot?: string | null;
 };
 
 type RaterInfo = {
@@ -28,21 +29,27 @@ function domainOf(url: string): string {
   }
 }
 
-// Free live-screenshot service (v0 — replaced by our own Playwright captures).
-// mShots serves a placeholder while it generates, so retry until the real
-// shot (full width) arrives.
-function Shot({ url }: { url: string }) {
+// Prefers our own Playwright capture (`shot`, from R2); falls back to the
+// free mShots service, which serves a placeholder while it generates, so
+// retry until the real shot (full width) arrives.
+function Shot({ url, shot }: { url: string; shot?: string | null }) {
   const [tick, setTick] = useState(0);
-  const src = `https://s.wordpress.com/mshots/v1/${encodeURIComponent(
-    url
-  )}?w=900&vpw=1440&vph=900${tick ? `&retry=${tick}` : ""}`;
+  const [failed, setFailed] = useState(false);
+  const useOwn = shot && !failed;
+  const src = useOwn
+    ? shot
+    : `https://s.wordpress.com/mshots/v1/${encodeURIComponent(
+        url
+      )}?w=900&vpw=1440&vph=900${tick ? `&retry=${tick}` : ""}`;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={`Screenshot of ${domainOf(url)}`}
       className="aspect-[4/3] w-full rounded-t-xl bg-edge object-cover object-top"
+      onError={() => useOwn && setFailed(true)}
       onLoad={(e) => {
+        if (useOwn) return;
         const img = e.currentTarget;
         if (img.naturalWidth < 700 && tick < 6) {
           setTimeout(() => setTick((t) => t + 1), 2500);
@@ -210,7 +217,7 @@ export default function RankPage() {
                 disabled={busy || gated}
                 className="group rounded-xl border border-edge bg-card text-left transition duration-200 hover:-translate-y-1 hover:border-accent disabled:opacity-60"
               >
-                <Shot url={p.url} />
+                <Shot url={p.url} shot={p.shot} />
                 <div className="flex items-start justify-between gap-2 p-4 pb-2">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{p.name}</p>

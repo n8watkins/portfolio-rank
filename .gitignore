@@ -8,3 +8,4 @@ data/ratings.json
 data/votes.jsonl
 data/portfoliorank.db*
 .vercel
+captures/
