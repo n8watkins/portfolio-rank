@@ -8,6 +8,7 @@
 //
 // Usage:
 //   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]
+//   node pipeline/capture.mjs --upload-only   # backfill captures/ to R2 later
 import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
@@ -383,6 +384,20 @@ async function captureSite(browser, entry) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+if (args.includes("--upload-only")) {
+  if (!s3) {
+    console.error("R2_* env vars missing — nothing to upload to.");
+    process.exit(1);
+  }
+  const capDir = path.join(ROOT, "captures");
+  const keys = fs.existsSync(capDir) ? fs.readdirSync(capDir) : [];
+  for (const [i, key] of keys.entries()) {
+    await uploadDir(key, path.join(capDir, key));
+    console.log(`[${i + 1}/${keys.length}] uploaded ${key}`);
+  }
+  process.exit(0);
+}
+
 const feed = JSON.parse(
   fs.readFileSync(path.join(ROOT, "data", "feed.json"), "utf8")
 );
