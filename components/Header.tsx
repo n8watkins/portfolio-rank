@@ -1,4 +1,5 @@
 import { SITE } from "@/lib/site";
+import { AuthButton } from "@/components/AuthButton";
 
 export function Header({ stars }: { stars: number | null }) {
   return (
@@ -63,6 +64,7 @@ export function Header({ stars }: { stars: number | null }) {
         >
           ☕ <span className="hidden sm:inline">Buy me a coffee</span>
         </a>
+        <AuthButton />
       </nav>
     </header>
   );

@@ -11,6 +11,15 @@ type Entry = {
   votes: number;
 };
 
+type RaterInfo = {
+  signedIn: boolean;
+  login: string | null;
+  anonVotesUsed: number | null;
+  anonVoteLimit: number;
+};
+
+const SIGNIN_URL = "/api/auth/signin?callbackUrl=/rank";
+
 function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -48,12 +57,20 @@ export default function RankPage() {
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(0);
   const [last, setLast] = useState<string | null>(null);
+  const [rater, setRater] = useState<RaterInfo | null>(null);
   const pairRef = useRef(pair);
   pairRef.current = pair;
 
+  const gated =
+    rater !== null &&
+    !rater.signedIn &&
+    (rater.anonVotesUsed ?? 0) >= rater.anonVoteLimit;
+
   const loadPair = useCallback(async () => {
     const res = await fetch("/api/rank");
-    setPair(await res.json());
+    const data = await res.json();
+    setPair({ a: data.a, b: data.b });
+    if (data.rater) setRater(data.rater);
     setBusy(false);
   }, []);
 
@@ -64,7 +81,7 @@ export default function RankPage() {
   const vote = useCallback(
     async (side: "a" | "b") => {
       const p = pairRef.current;
-      if (!p || busy) return;
+      if (!p || busy || gated) return;
       setBusy(true);
       const winner = p[side];
       const loser = p[side === "a" ? "b" : "a"];
@@ -74,11 +91,42 @@ export default function RankPage() {
         body: JSON.stringify({ winner: winner.url, loser: loser.url }),
       });
       const data = await res.json();
-      setLast(`${winner.name} wins · +${data.delta} → ${data.winnerElo} ELO`);
+
+      if (res.status === 403 && data.error === "signin_required") {
+        setRater((r) =>
+          r ? { ...r, anonVotesUsed: r.anonVoteLimit } : r
+        );
+        setBusy(false);
+        return;
+      }
+      if (res.status === 409) {
+        setLast("You already voted on this pair — here's a fresh one.");
+        loadPair();
+        return;
+      }
+      if (res.status === 429) {
+        setLast("Daily vote limit reached — come back tomorrow!");
+        setBusy(false);
+        return;
+      }
+      if (!res.ok) {
+        setLast("Vote failed — try again.");
+        setBusy(false);
+        return;
+      }
+
+      setLast(
+        data.official
+          ? `${winner.name} wins · +${data.delta} → ${data.winnerElo} ELO`
+          : `${winner.name} wins · practice vote (+${data.delta} if official)`
+      );
+      if (typeof data.anonVotesUsed === "number") {
+        setRater((r) => (r ? { ...r, anonVotesUsed: data.anonVotesUsed } : r));
+      }
       setCount((c) => c + 1);
       loadPair();
     },
-    [busy, loadPair]
+    [busy, gated, loadPair]
   );
 
   const skip = useCallback(() => {
@@ -117,7 +165,39 @@ export default function RankPage() {
           Click one, or use ← → keys. ↓ to skip.
         </p>
         {last && <p className="mt-2 text-sm font-medium text-accent">{last}</p>}
+        {rater && !rater.signedIn && !gated && (
+          <p className="mt-2 text-xs text-mute">
+            Practice mode — {rater.anonVotesUsed ?? 0}/{rater.anonVoteLimit}{" "}
+            free votes used, they don&apos;t count toward official rankings.{" "}
+            <a href={SIGNIN_URL} className="font-semibold text-accent underline underline-offset-2">
+              Sign in with GitHub
+            </a>{" "}
+            to make votes count.
+          </p>
+        )}
+        {rater?.signedIn && (
+          <p className="mt-2 text-xs text-mute">
+            Voting as <span className="font-semibold">{rater.login}</span> —
+            your votes count toward official rankings.
+          </p>
+        )}
       </div>
+
+      {gated && (
+        <div className="mx-auto mb-6 max-w-md rounded-xl border border-accent/40 bg-card p-6 text-center">
+          <p className="text-lg font-bold">You&apos;re out of practice votes</p>
+          <p className="mt-2 text-sm text-mute">
+            Sign in with GitHub to keep voting — signed-in votes count toward
+            the official rankings.
+          </p>
+          <a
+            href={SIGNIN_URL}
+            className="mt-4 inline-block rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+          >
+            Sign in with GitHub
+          </a>
+        </div>
+      )}
 
       {pair ? (
         <div className="grid grid-cols-1 gap-4 pb-6 sm:grid-cols-2">
@@ -127,7 +207,7 @@ export default function RankPage() {
               <button
                 key={p.url}
                 onClick={() => vote(side)}
-                disabled={busy}
+                disabled={busy || gated}
                 className="group rounded-xl border border-edge bg-card text-left transition duration-200 hover:-translate-y-1 hover:border-accent disabled:opacity-60"
               >
                 <Shot url={p.url} />
