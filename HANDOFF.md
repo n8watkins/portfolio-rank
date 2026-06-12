@@ -18,14 +18,13 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - Stack: Next.js 15 App Router + Tailwind v4 on port **7678** (`npm run dev`);
   Turso (libSQL) for all persistence; Auth.js + Cloudflare R2 planned (see PLAN.md
   stack table)
-- **DEPLOYED: https://portfoliorank.vercel.app** (alias of project `portfolio-rank` in
-  the natkins23s-projects Vercel scope; `portfolio-rank.vercel.app` is squatted by an
-  unrelated project "Rankfolio"). GitHub auto-deploy is NOT connected (the Vercel
-  account lacks a GitHub login connection) — deploy with `vercel deploy --prod --yes`
-  from the repo root after pushing. Deployment protection was disabled via API so the
-  URLs are public.
+- **DEPLOYED: https://portfoliorank.vercel.app** (project `portfolio-rank`, Vercel scope
+  natkins23s-projects; `portfolio-rank.vercel.app` without the hyphen-less spelling is an
+  unrelated stock-portfolio app). **Auto-deploy IS live**: push to `main` → production in
+  ~45s (GitHub connected via `vercel git connect`; domain added as a project domain so it
+  follows every deploy). Deployment protection disabled via API so URLs are public.
 
-## State (all verified working locally, all pushed through commit 56eb361)
+## State (all verified working locally AND in production, pushed through commit 98f4cef)
 
 - **/** — compact hero, searchable card grid of all portfolios, A–Z letter chips,
   role filter chips (regex on taglines — note 924/1779 entries have no tagline),
@@ -39,6 +38,13 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - **/api/rank** GET pair (uncertainty-weighted sampling) / POST vote;
   **/api/inspect** live HTML polish checks (cached 7d); **/api/psi** Lighthouse via
   PageSpeed API (cached 30d, failures never cached)
+- **PSI_API_KEY: LIVE** in `.env.local` and Vercel production env. Key is restricted in
+  Google Cloud console to the PageSpeed Insights API only (verified: other APIs return
+  "blocked"). 25k runs/day quota — batch-auditing all 1,779 portfolios is now possible.
+- **API hardening (commit 98f4cef)**: /api/inspect and /api/psi accept only URLs present
+  in feed.json (`lib/roster.ts`) — 403 otherwise. Closes quota-burn + SSRF. Verified in prod.
+- **Contest status: voting is open, production DB has ZERO votes** — no humans have
+  voted, AI judging not built. Leaderboard empty until sites reach 3+ votes.
 - **Database: LIVE on Turso** — `libsql://portfolio-rank-n8watkins.aws-us-east-2.turso.io`,
   credentials in `.env.local` (gitignored, never commit). Tables `votes`, `ratings`,
   `cache` auto-create via `ensureSchema()` in `lib/db.ts`. Local dev WRITES TO PROD
@@ -47,30 +53,30 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 
 ## Next steps, in order
 
-1. **PSI_API_KEY** — user must create (free): console.cloud.google.com → enable
-   "PageSpeed Insights API" → API key → add to `.env.local` + Vercel. Until then
-   /api/psi usually 429s (keyless quota is a shared global pool, often exhausted).
-2. **Auth.js GitHub login + three-tier votes** — the decided design (do not re-litigate):
+1. **Auth.js GitHub login + three-tier votes** — the decided design (do not re-litigate):
    anonymous users get ~10 votes tagged `anon` (session id) that do NOT count toward
    official ELO, then a "Sign in with GitHub to make votes count" gate; signed-in votes
    are `rater_type='human'`, canonical; AI votes later are `'ai'`. Per-rater rate limit
    ~100/day, one vote per pair per rater, never delete vote rows (ELO is recomputed
    from the `votes` table when purging abusers). Schema columns already exist.
    Add "My votes" history page (doubles as bookmarks) once auth lands.
-3. **Phase 0 screenshot pipeline** (PLAN.md) — Playwright captures replace mShots
+2. **Phase 0 screenshot pipeline** (PLAN.md) — Playwright captures replace mShots
    (the scaling weak link): hero/mobile/full-page/3-frame motion strip per live site,
    gates for dead/parked sites (reuse `pipeline/check_parking_redirects.py`), store in
    R2, add `portfolios` table to Turso (decided: same DB, new table — feed.json stays
    the roster source until then).
-4. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
+3. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
    system (GRADING_CRITERIA.md §6). Needs screenshots from step 4.
-5. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
+4. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
    "score my portfolio" instant report, auto OG share cards, weekly feed.json sync from
    the fork.
 
 ## Conventions & gotchas
 
-- Commit after every verified change; trailer: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. Push (user said to push this session).
+- Commit after every verified change; trailer: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. Push — every push to main auto-deploys to production.
+- Vercel CLI is logged in as `natkins23`; project linked in `.vercel/`. Dashboard-only
+  settings can be changed via REST API with the CLI token from
+  `~/.local/share/com.vercel.cli/auth.json` (used for deployment protection + domains).
 - **NEVER run `npm run build` while the dev server is running** — both use `.next/`
   and the build corrupts the running server (broke once: "Cannot find module './331.js'").
   Verify with `npx tsc --noEmit` + curl against the dev server instead.
