@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cached } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
+import { safeFetch, readCapped } from "@/lib/safefetch";
 
 export const runtime = "nodejs";
 
@@ -42,47 +43,37 @@ function parseMetaTags(html: string): Record<string, string> {
 }
 
 async function inspect(target: string): Promise<Inspection> {
-  let res: Response;
-  try {
-    res = await fetch(target, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(10_000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; PortfolioRank/0.1)" },
-    });
-  } catch {
-    return { ok: false, error: "unreachable" };
-  }
+  // safeFetch follows redirects manually, rejecting any hop that points at a
+  // private/loopback/metadata address, so a roster site can't 302 us into the
+  // internal network (SSRF).
+  const fetched = await safeFetch(target, { timeoutMs: 10_000 });
+  if (!fetched) return { ok: false, error: "unreachable" };
+  const { res, finalUrl } = fetched;
   if (!res.ok) return { ok: false, error: `http_${res.status}` };
 
-  const html = (await res.text()).slice(0, 800_000);
+  // Cap the body so a hostile server can't OOM the function by streaming GBs.
+  const html = await readCapped(res, 800_000);
   const meta = parseMetaTags(html);
-  const finalUrl = res.url || target;
   const host = new URL(finalUrl).hostname;
 
   const ogImage = meta["og:image"] ?? null;
   let ogImageLoads = false;
   if (ogImage) {
-    try {
-      const abs = new URL(ogImage, finalUrl).href;
-      const img = await fetch(abs, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(6_000),
-      });
-      ogImageLoads =
-        img.ok &&
-        (img.headers.get("content-type")?.startsWith("image/") ?? false);
-    } catch {}
+    const abs = new URL(ogImage, finalUrl).href;
+    const img = await safeFetch(abs, { method: "HEAD", timeoutMs: 6_000 });
+    ogImageLoads = Boolean(
+      img?.res.ok &&
+        img.res.headers.get("content-type")?.startsWith("image/")
+    );
   }
 
   let favicon = /<link\s[^>]*rel=["'][^"']*icon[^"']*["']/i.test(html);
   if (!favicon) {
-    try {
-      const ico = await fetch(new URL("/favicon.ico", finalUrl).href, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(5_000),
-      });
-      favicon = ico.ok;
-    } catch {}
+    const ico = await safeFetch(new URL("/favicon.ico", finalUrl).href, {
+      method: "HEAD",
+      timeoutMs: 5_000,
+    });
+    favicon = Boolean(ico?.res.ok);
   }
 
   const yearMatch = html.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(20\d{2})/i);

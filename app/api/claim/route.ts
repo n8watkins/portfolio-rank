@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { BASE_ELO, eloUpdate } from "@/lib/elo";
+import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
-import { getRater } from "@/lib/rater";
+import { getRater, DAILY_VOTE_LIMIT } from "@/lib/rater";
 
 export const runtime = "nodejs";
 
 // Fold a visitor's anon practice votes into their signed-in identity: each
 // becomes an official human vote and moves ELO, except pairs they've already
-// voted on signed-in (the existing vote stands, the practice one is dropped).
-// Idempotent — converted votes stop matching rater_type='anon', and the spent
-// cookie is cleared at the end.
+// voted on signed-in (dropped — the existing vote stands). Claiming counts
+// against the same daily cap as live voting, so churning fresh anon cookies
+// can't be used to mint unlimited official votes. Idempotent: converted votes
+// stop matching rater_type='anon', and the spent cookie is cleared at the end.
 export async function POST() {
   await ensureSchema();
   const rater = await getRater();
@@ -24,6 +25,13 @@ export async function POST() {
     return NextResponse.json({ claimed: 0, dropped: 0 });
   }
 
+  // Remaining official votes this rater may cast in the last 24h.
+  const dailyRes = await db().execute({
+    sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-1 day')",
+    args: [rater.id],
+  });
+  let budget = DAILY_VOTE_LIMIT - Number(dailyRes.rows[0].n);
+
   const anon = await db().execute({
     sql: `SELECT id, winner, loser FROM votes
           WHERE rater_id = ? AND rater_type = 'anon' ORDER BY id`,
@@ -32,15 +40,14 @@ export async function POST() {
 
   let claimed = 0;
   for (const row of anon.rows) {
+    if (budget <= 0) break; // out of daily budget — leave the rest as anon
     const voteId = Number(row.id);
     const winner = String(row.winner);
     const loser = String(row.loser);
 
     const dup = await db().execute({
-      sql: `SELECT 1 FROM votes WHERE rater_id = ?
-            AND ((winner = ? AND loser = ?) OR (winner = ? AND loser = ?))
-            LIMIT 1`,
-      args: [rater.id, winner, loser, loser, winner],
+      sql: `SELECT 1 FROM votes WHERE rater_id = ? AND pair_key = ? LIMIT 1`,
+      args: [rater.id, pairKey(winner, loser)],
     });
     if (dup.rows.length > 0) {
       await db().execute({
@@ -71,8 +78,8 @@ export async function POST() {
     await db().batch(
       [
         {
-          sql: "UPDATE votes SET rater_type = 'human', rater_id = ? WHERE id = ?",
-          args: [rater.id, voteId],
+          sql: "UPDATE votes SET rater_type = 'human', rater_id = ?, pair_key = ? WHERE id = ?",
+          args: [rater.id, pairKey(winner, loser), voteId],
         },
         { sql: upsert, args: [winner, updated.winner, w.votes + 1] },
         { sql: upsert, args: [loser, updated.loser, l.votes + 1] },
@@ -80,6 +87,7 @@ export async function POST() {
       "write"
     );
     claimed++;
+    budget--;
   }
 
   jar.delete("pr_anon");

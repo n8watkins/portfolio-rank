@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import feed from "@/data/feed.json";
-import { BASE_ELO, eloUpdate } from "@/lib/elo";
+import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { isKnownPortfolio } from "@/lib/roster";
 import { ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, getRater } from "@/lib/rater";
@@ -93,79 +93,100 @@ export async function POST(req: Request) {
 
   await ensureSchema();
   const rater = await getRater();
+  const key = pairKey(winner, loser);
 
-  // One vote per pair per rater, in either direction.
-  const dup = await db().execute({
-    sql: `SELECT 1 FROM votes WHERE rater_id = ?
-          AND ((winner = ? AND loser = ?) OR (winner = ? AND loser = ?))
-          LIMIT 1`,
-    args: [rater.id, winner, loser, loser, winner],
-  });
-  if (dup.rows.length > 0) {
-    return NextResponse.json({ error: "already_voted" }, { status: 409 });
-  }
-
-  const daily = await countVotes(rater.id, "datetime('now', '-1 day')");
-  if (daily >= DAILY_VOTE_LIMIT) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  }
-
-  // Pace votes: a human looks at two screenshots before picking, a script
-  // doesn't. Anything faster than one vote per 2s per rater is rejected.
-  const recent = await countVotes(rater.id, "datetime('now', '-2 seconds')");
-  if (recent > 0) {
-    return NextResponse.json({ error: "too_fast" }, { status: 429 });
-  }
-
-  // Anon votes are logged (they're still signal) but never move official ELO,
-  // and after the free allowance the gate asks for GitHub sign-in.
-  if (rater.type === "anon") {
-    const used = await countVotes(rater.id);
-    if (used >= ANON_VOTE_LIMIT) {
-      return NextResponse.json(
-        { error: "signin_required", anonVoteLimit: ANON_VOTE_LIMIT },
-        { status: 403 }
-      );
+  // Everything — the limit checks, the vote insert, and the ELO update — runs
+  // in one write transaction. libSQL serializes write transactions, so the
+  // gaps that let concurrent requests slip past a check-then-insert (double
+  // votes, blown caps, lost-update ELO inflation) are closed. The
+  // UNIQUE(rater_id, pair_key) index is the final backstop for the dup check.
+  const tx = await db().transaction("write");
+  try {
+    // Pace votes: a human looks at two screenshots before picking, a script
+    // doesn't. Anything faster than one vote per 2s per rater is rejected.
+    const recent = await tx.execute({
+      sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-2 seconds')",
+      args: [rater.id],
+    });
+    if (Number(recent.rows[0].n) > 0) {
+      await tx.rollback();
+      return NextResponse.json({ error: "too_fast" }, { status: 429 });
     }
-  }
 
-  const ratings = await getRatings([winner, loser]);
-  const w = ratings.get(winner) ?? { elo: BASE_ELO, votes: 0 };
-  const l = ratings.get(loser) ?? { elo: BASE_ELO, votes: 0 };
-  const updated = eloUpdate(w.elo, l.elo);
+    const daily = await tx.execute({
+      sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-1 day')",
+      args: [rater.id],
+    });
+    if (Number(daily.rows[0].n) >= DAILY_VOTE_LIMIT) {
+      await tx.rollback();
+      return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+    }
 
-  const insertVote = {
-    sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES (?, ?, ?, ?)",
-    args: [winner, loser, rater.type, rater.id],
-  };
+    // Anon votes are logged (they're still signal) but never move official ELO,
+    // and after the free allowance the gate asks for sign-in.
+    if (rater.type === "anon") {
+      const used = await tx.execute({
+        sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ?",
+        args: [rater.id],
+      });
+      if (Number(used.rows[0].n) >= ANON_VOTE_LIMIT) {
+        await tx.rollback();
+        return NextResponse.json(
+          { error: "signin_required", anonVoteLimit: ANON_VOTE_LIMIT },
+          { status: 403 }
+        );
+      }
+    }
 
-  if (rater.type === "human") {
-    const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
-      VALUES (?, ?, ?, datetime('now'))
-      ON CONFLICT(url) DO UPDATE SET
-        elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
-    await db().batch(
-      [
-        insertVote,
-        { sql: upsert, args: [winner, updated.winner, w.votes + 1] },
-        { sql: upsert, args: [loser, updated.loser, l.votes + 1] },
-      ],
-      "write"
+    const rres = await tx.execute({
+      sql: "SELECT url, elo, votes FROM ratings WHERE url IN (?, ?)",
+      args: [winner, loser],
+    });
+    const map = new Map(
+      rres.rows.map((r) => [
+        String(r.url),
+        { elo: Number(r.elo), votes: Number(r.votes) },
+      ])
     );
-  } else {
-    await db().execute(insertVote);
+    const w = map.get(winner) ?? { elo: BASE_ELO, votes: 0 };
+    const l = map.get(loser) ?? { elo: BASE_ELO, votes: 0 };
+    const updated = eloUpdate(w.elo, l.elo);
+
+    // Insert first: a UNIQUE violation here means this rater already voted on
+    // this matchup (either direction) — caught below as 409.
+    await tx.execute({
+      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id) VALUES (?, ?, ?, ?, ?)",
+      args: [winner, loser, key, rater.type, rater.id],
+    });
+
+    if (rater.type === "human") {
+      const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(url) DO UPDATE SET
+          elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
+      await tx.execute({ sql: upsert, args: [winner, updated.winner, w.votes + 1] });
+      await tx.execute({ sql: upsert, args: [loser, updated.loser, l.votes + 1] });
+    }
+
+    await tx.commit();
+
+    const anonVotesUsed =
+      rater.type === "anon" ? await countVotes(rater.id) : null;
+
+    return NextResponse.json({
+      official: rater.type === "human",
+      // For anon votes these are "what would have happened" — shown, not stored.
+      winnerElo: updated.winner,
+      loserElo: updated.loser,
+      delta: updated.winner - w.elo,
+      anonVotesUsed,
+      anonVoteLimit: ANON_VOTE_LIMIT,
+    });
+  } catch (e) {
+    await tx.rollback().catch(() => {});
+    if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e))) {
+      return NextResponse.json({ error: "already_voted" }, { status: 409 });
+    }
+    throw e;
   }
-
-  const anonVotesUsed =
-    rater.type === "anon" ? await countVotes(rater.id) : null;
-
-  return NextResponse.json({
-    official: rater.type === "human",
-    // For anon votes these are "what would have happened" — shown, not stored.
-    winnerElo: updated.winner,
-    loserElo: updated.loser,
-    delta: updated.winner - w.elo,
-    anonVotesUsed,
-    anonVoteLimit: ANON_VOTE_LIMIT,
-  });
 }

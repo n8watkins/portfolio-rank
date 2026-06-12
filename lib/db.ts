@@ -22,14 +22,16 @@ export function db(): Client {
 
 export function ensureSchema(): Promise<void> {
   if (!ready) {
-    ready = db()
-      .batch(
+    ready = (async () => {
+      await db().batch(
         [
           // Append-only vote log: source of truth, ELO is recomputable from it.
+          // pair_key = direction-independent matchup id (see lib/elo.pairKey).
           `CREATE TABLE IF NOT EXISTS votes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             winner TEXT NOT NULL,
             loser TEXT NOT NULL,
+            pair_key TEXT,
             rater_type TEXT NOT NULL DEFAULT 'anon',
             rater_id TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -62,8 +64,20 @@ export function ensureSchema(): Promise<void> {
           )`,
         ],
         "write"
-      )
-      .then(() => {});
+      );
+      // Migrate vote tables that predate pair_key (no-op once the column exists).
+      try {
+        await db().execute("ALTER TABLE votes ADD COLUMN pair_key TEXT");
+      } catch {
+        /* column already present */
+      }
+      // One vote per (rater, matchup), enforced by the DB so concurrent inserts
+      // can't slip past a check-then-insert race. NULL pair_keys (legacy rows)
+      // are distinct under SQLite, so the index won't reject them.
+      await db().execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS votes_rater_pair_idx ON votes (rater_id, pair_key)"
+      );
+    })();
   }
   return ready;
 }
