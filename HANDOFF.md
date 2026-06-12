@@ -31,10 +31,12 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   NEVER update the `ratings` table; then the sign-in gate. Signed-in votes are
   `rater_type='human'`, rater_id `gh:<github numeric id>`, and move official ELO. One vote
   per pair per rater (either direction, 409), 100/day limit (429), vote URLs restricted to
-  the roster (403). `/votes` = vote history/bookmarks. AuthButton in header. AUTH_SECRET is
-  set in `.env.local` AND Vercel production. **BLOCKED on user: GitHub OAuth app** —
-  sign-in fails (no AUTH_GITHUB_ID/AUTH_GITHUB_SECRET) until created; anon flow verified
-  in prod. Signed-in vote path is code-reviewed but NOT yet exercised end-to-end.
+  the roster (403). `/votes` = vote history/bookmarks. AuthButton in header. AUTH_SECRET,
+  AUTH_GITHUB_ID, AUTH_GITHUB_SECRET all set in `.env.local` AND Vercel production
+  (GitHub OAuth app created 2026-06-12, callback points at production — local sign-in
+  needs a second OAuth app, not created). Provider verified live via
+  /api/auth/providers. Signed-in vote path NOT yet exercised end-to-end — user needs
+  to sign in on prod and cast a vote, then check it lands in `ratings` + /votes.
 - **Phase 0 capture pipeline: BUILT, sample-verified** (commit 674aaab).
   `node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]` —
   gates (dead/parked/blank) + hero/mobile/full-page/3-frame strip + diagnostics into the
@@ -71,12 +73,8 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 
 ## Next steps, in order
 
-1. **USER: create GitHub OAuth app** (github.com/settings/developers → New OAuth App):
-   homepage `https://portfoliorank.vercel.app`, callback
-   `https://portfoliorank.vercel.app/api/auth/callback/github`. Put AUTH_GITHUB_ID +
-   AUTH_GITHUB_SECRET in `.env.local` and Vercel production env (a second OAuth app with
-   callback `http://localhost:7678/api/auth/callback/github` for local dev is optional).
-   Then verify a signed-in vote end-to-end (it should update `ratings`; check /votes page).
+1. **Verify signed-in vote end-to-end** — user signs in at portfoliorank.vercel.app,
+   casts a vote; confirm it updates `ratings` (rater_type='human') and shows on /votes.
 2. **USER: create Cloudflare R2 bucket** (+ API token): set R2_ACCOUNT_ID,
    R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET in `.env.local`, enable public
    access on the bucket, set SHOTS_BASE_URL (public bucket URL) in `.env.local` + Vercel.
