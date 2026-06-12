@@ -1,30 +1,30 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import feed from "@/data/feed.json";
 import { BASE_ELO, eloUpdate } from "@/lib/elo";
+import { db, ensureSchema } from "@/lib/db";
 import type { Portfolio } from "@/app/page";
 
 export const runtime = "nodejs";
 
-// v0 storage: local JSON files. Replaced by Supabase when deployed —
-// Vercel's filesystem is read-only, so this is local-dev only.
-const RATINGS_FILE = path.join(process.cwd(), "data", "ratings.json");
-const VOTE_LOG = path.join(process.cwd(), "data", "votes.jsonl");
+type Rating = { elo: number; votes: number };
 
-type Ratings = Record<string, { elo: number; votes: number }>;
-
-async function loadRatings(): Promise<Ratings> {
-  try {
-    return JSON.parse(await fs.readFile(RATINGS_FILE, "utf8"));
-  } catch {
-    return {};
-  }
+async function getRatings(urls: string[]): Promise<Map<string, Rating>> {
+  const placeholders = urls.map(() => "?").join(",");
+  const res = await db().execute({
+    sql: `SELECT url, elo, votes FROM ratings WHERE url IN (${placeholders})`,
+    args: urls,
+  });
+  return new Map(
+    res.rows.map((r) => [
+      String(r.url),
+      { elo: Number(r.elo), votes: Number(r.votes) },
+    ])
+  );
 }
 
 export async function GET() {
+  await ensureSchema();
   const pool = feed as Portfolio[];
-  const ratings = await loadRatings();
 
   // Sample a handful of distinct entries, then face off the two least-voted
   // so every vote goes where the rating is most uncertain.
@@ -33,14 +33,16 @@ export async function GET() {
     const i = Math.floor(Math.random() * pool.length);
     picked.set(i, pool[i]);
   }
-  const candidates = [...picked.values()].sort(
-    (a, b) => (ratings[a.url]?.votes ?? 0) - (ratings[b.url]?.votes ?? 0)
+  const candidates = [...picked.values()];
+  const ratings = await getRatings(candidates.map((p) => p.url));
+  candidates.sort(
+    (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)
   );
 
   const withRating = (p: Portfolio) => ({
     ...p,
-    elo: ratings[p.url]?.elo ?? BASE_ELO,
-    votes: ratings[p.url]?.votes ?? 0,
+    elo: ratings.get(p.url)?.elo ?? BASE_ELO,
+    votes: ratings.get(p.url)?.votes ?? 0,
   });
 
   return NextResponse.json({
@@ -61,23 +63,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "bad_vote" }, { status: 400 });
   }
 
-  const ratings = await loadRatings();
-  const w = ratings[winner] ?? { elo: BASE_ELO, votes: 0 };
-  const l = ratings[loser] ?? { elo: BASE_ELO, votes: 0 };
+  await ensureSchema();
+  const ratings = await getRatings([winner, loser]);
+  const w = ratings.get(winner) ?? { elo: BASE_ELO, votes: 0 };
+  const l = ratings.get(loser) ?? { elo: BASE_ELO, votes: 0 };
   const updated = eloUpdate(w.elo, l.elo);
-  ratings[winner] = { elo: updated.winner, votes: w.votes + 1 };
-  ratings[loser] = { elo: updated.loser, votes: l.votes + 1 };
 
-  await fs.writeFile(RATINGS_FILE, JSON.stringify(ratings, null, 1));
-  // Raw vote log so ELO can always be recomputed from scratch.
-  await fs.appendFile(
-    VOTE_LOG,
-    JSON.stringify({
-      winner,
-      loser,
-      rater: "local",
-      at: new Date().toISOString(),
-    }) + "\n"
+  const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(url) DO UPDATE SET
+      elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
+
+  // TODO(auth): rater_id becomes the GitHub user / anon session id, with
+  // per-rater rate limits and pair dedupe.
+  await db().batch(
+    [
+      {
+        sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES (?, ?, 'anon', 'local')",
+        args: [winner, loser],
+      },
+      { sql: upsert, args: [winner, updated.winner, w.votes + 1] },
+      { sql: upsert, args: [loser, updated.loser, l.votes + 1] },
+    ],
+    "write"
   );
 
   return NextResponse.json({

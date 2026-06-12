@@ -10,8 +10,8 @@ ever cast one-click votes.
 
 - Upstream (emmabostian/developer-portfolios) is **not deployed anywhere** — no homepage,
   no GitHub Pages. It's a README. We are building the first real frontend for this dataset.
-- Our app: **Next.js on Vercel** (frontend + API routes) + **Supabase** (Postgres, GitHub
-  OAuth, storage for screenshots). Pipeline scripts run locally / GitHub Actions cron.
+- Our app: **Next.js on Vercel** (frontend + API routes) + **Turso** (libSQL DB), Auth.js (GitHub
+  login), Cloudflare R2 (screenshot storage). Pipeline scripts run locally / GitHub Actions cron.
 - The fork stays a clean data source (`feed.json`); the app lives in this repo and ingests
   it. Keep merging upstream PRs in the fork.
 
@@ -61,7 +61,7 @@ human vote takes ~5 seconds and never requires leaving our site.**
    full-page shot, 3-frame motion strip, short scroll webm when motion detected.
    Same run records: console errors, network log (weight / requests / 404s),
    responsive overflow check, dark-mode diff, DOM-shape hash.
-4. Upload media to Supabase Storage.
+4. Upload media to Cloudflare R2.
 
 ### Phase 0.5 — Objective scoring (free APIs)
 1. Extract PSI client from site-forge checkup route → `packages/site-audit`
@@ -75,7 +75,7 @@ human vote takes ~5 seconds and never requires leaving our site.**
 2. Pairwise cron: remaining daily budget on uncertainty-prioritized in-bucket
    comparisons → seed ELO. Credible top-100 in ~1 week.
 
-### Phase 2 — The site (Next.js + Supabase + Vercel)
+### Phase 2 — The site (Next.js + Turso + Vercel)
 1. **Browse**: card grid sorted by ELO; scorecard + badges per card; filters
    (role/tagline, badges); detail page with screenshots, scores, AI justification.
 2. **Face-off**: voting UX above. GitHub OAuth to vote; browse is public.
@@ -93,7 +93,9 @@ human vote takes ~5 seconds and never requires leaving our site.**
 | Piece | Choice | Why |
 |---|---|---|
 | Frontend/API | Next.js (App Router) on Vercel | free tier, he knows it |
-| DB/Auth/Storage | Supabase | Postgres + GitHub OAuth + storage in one free tier |
+| DB | Turso (libSQL) | free 9GB/1B reads, local file in dev, same SQL |
+| Auth | Auth.js + GitHub OAuth | free, self-hosted |
+| Screenshot storage | Cloudflare R2 | free egress |
 | Capture | Playwright (local + GH Actions) | free, already needed for screenshots |
 | Objective audit | PSI API (extracted from site-forge) | free 25k/day, real Lighthouse |
 | AI judge | Gemini Flash free tier | 500 req/day budget, vision-capable |

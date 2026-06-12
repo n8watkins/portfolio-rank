@@ -74,7 +74,7 @@ export async function GET(req: Request) {
   }
   // Quota errors and timeouts are transient — never cache failures.
   const data = await cached<PsiResult>(
-    "psi-cache.json",
+    "psi",
     url,
     30 * 24 * 3600 * 1000,
     () => runPsi(url),

@@ -1,28 +1,28 @@
-import fs from "fs/promises";
-import path from "path";
+import { db, ensureSchema } from "./db";
 
-// v0 file cache (local dev). Becomes a Supabase table when deployed —
-// Vercel's filesystem is read-only.
 export async function cached<T>(
-  file: string,
+  namespace: string,
   key: string,
   ttlMs: number,
   compute: () => Promise<T>,
   shouldCache: (data: T) => boolean = () => true
 ): Promise<T> {
-  const filePath = path.join(process.cwd(), "data", file);
-  let store: Record<string, { at: number; data: T }> = {};
-  try {
-    store = JSON.parse(await fs.readFile(filePath, "utf8"));
-  } catch {}
+  await ensureSchema();
+  const k = `${namespace}:${key}`;
 
-  const hit = store[key];
-  if (hit && Date.now() - hit.at < ttlMs) return hit.data;
+  const row = (
+    await db().execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [k] })
+  ).rows[0];
+  if (row && Date.now() - Number(row.at) < ttlMs) {
+    return JSON.parse(String(row.v)) as T;
+  }
 
   const data = await compute();
   if (shouldCache(data)) {
-    store[key] = { at: Date.now(), data };
-    await fs.writeFile(filePath, JSON.stringify(store));
+    await db().execute({
+      sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)",
+      args: [k, JSON.stringify(data), Date.now()],
+    });
   }
   return data;
 }

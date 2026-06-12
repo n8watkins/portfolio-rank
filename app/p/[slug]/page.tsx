@@ -1,10 +1,9 @@
-import fs from "fs/promises";
-import path from "path";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { DetailDiagnostics } from "@/components/Diagnostics";
 import { BASE_ELO } from "@/lib/elo";
+import { db, ensureSchema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +25,15 @@ export default async function PortfolioPage({
   const portfolio = (feed as Portfolio[]).find((p) => p.url === url);
   if (!portfolio) notFound();
 
+  await ensureSchema();
   let rating = { elo: BASE_ELO, votes: 0 };
-  try {
-    const ratings = JSON.parse(
-      await fs.readFile(path.join(process.cwd(), "data", "ratings.json"), "utf8")
-    );
-    if (ratings[url]) rating = ratings[url];
-  } catch {}
+  const row = (
+    await db().execute({
+      sql: "SELECT elo, votes FROM ratings WHERE url = ?",
+      args: [url],
+    })
+  ).rows[0];
+  if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
 
   const shot = `https://s.wordpress.com/mshots/v1/${encodeURIComponent(url)}?w=1200&vpw=1440&vph=900`;
 

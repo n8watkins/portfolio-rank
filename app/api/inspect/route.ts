@@ -113,7 +113,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "bad_url" }, { status: 400 });
   }
   const data = await cached<Inspection>(
-    "inspect-cache.json",
+    "inspect",
     url,
     7 * 24 * 3600 * 1000,
     () => inspect(url)

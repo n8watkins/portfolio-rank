@@ -1,7 +1,6 @@
-import fs from "fs/promises";
-import path from "path";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
+import { db, ensureSchema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -19,29 +18,24 @@ function domainOf(url: string): string {
   }
 }
 
-async function loadRatings(): Promise<
-  Record<string, { elo: number; votes: number }>
-> {
-  try {
-    return JSON.parse(
-      await fs.readFile(path.join(process.cwd(), "data", "ratings.json"), "utf8")
-    );
-  } catch {
-    return {};
-  }
-}
-
 export default async function TopPage() {
-  const ratings = await loadRatings();
+  await ensureSchema();
   const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
 
-  const ranked = Object.entries(ratings)
-    .filter(([url, r]) => r.votes >= MIN_VOTES && byUrl.has(url))
-    .sort((a, b) => b[1].elo - a[1].elo)
-    .slice(0, 100);
+  const res = await db().execute({
+    sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT 100",
+    args: [MIN_VOTES],
+  });
+  const ranked = res.rows
+    .filter((r) => byUrl.has(String(r.url)))
+    .map(
+      (r) =>
+        [String(r.url), { elo: Number(r.elo), votes: Number(r.votes) }] as const
+    );
 
-  const totalVotes =
-    Object.values(ratings).reduce((sum, r) => sum + r.votes, 0) / 2;
+  const totalVotes = Number(
+    (await db().execute("SELECT COUNT(*) AS n FROM votes")).rows[0]?.n ?? 0
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6">
