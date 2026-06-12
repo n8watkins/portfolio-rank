@@ -89,14 +89,14 @@ export default async function Home() {
         <p className="mt-2">
           Want your portfolio here?{" "}
           <a
-            href={`${SITE.github}#how-to-contribute`}
+            href={SITE.submit}
             target="_blank"
             rel="noopener noreferrer"
             className="underline decoration-edge underline-offset-4 transition hover:text-ink"
           >
-            Add it via PR
-          </a>
-          .
+            Submit it
+          </a>{" "}
+          — takes 30 seconds with a GitHub account.
         </p>
       </footer>
     </div>

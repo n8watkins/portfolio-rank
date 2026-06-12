@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Add yourself to the original list instead
+    url: https://github.com/emmabostian/developer-portfolios/blob/master/CONTRIBUTING.md
+    about: PRs merged there flow into PortfolioRank automatically on the next sync.

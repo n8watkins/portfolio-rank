@@ -1,0 +1,39 @@
+name: Submit your portfolio
+description: Add your developer portfolio to PortfolioRank
+title: "Add portfolio: YOUR NAME"
+labels: ["portfolio-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting! Once approved, your portfolio appears on PortfolioRank
+        and enters the rankings. Make sure the site is live before submitting.
+  - type: input
+    id: name
+    attributes:
+      label: Your name
+      placeholder: Jane Doe
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Portfolio URL
+      placeholder: https://janedoe.dev
+    validations:
+      required: true
+  - type: input
+    id: tagline
+    attributes:
+      label: Tagline (optional)
+      description: Your role or specialty, shown under your name
+      placeholder: Frontend Engineer
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: This is my own portfolio and it is live
+          required: true
+        - label: I understand it will be publicly rated and ranked
+          required: true

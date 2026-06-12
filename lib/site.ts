@@ -5,4 +5,6 @@ export const SITE = {
   githubRepo: "n8watkins/portfolio-rank",
   kofi: "https://ko-fi.com/n8watkins",
   n8builds: "https://n8builds.dev",
+  submit:
+    "https://github.com/n8watkins/portfolio-rank/issues/new?template=submit-portfolio.yml",
 } as const;

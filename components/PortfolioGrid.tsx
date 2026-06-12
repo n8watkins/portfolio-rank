@@ -2,9 +2,21 @@
 
 import { useMemo, useState } from "react";
 import type { Portfolio } from "@/app/page";
+import { SITE } from "@/lib/site";
 
 const PAGE_SIZE = 24;
 const LETTERS = ["All", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
+
+const ROLES: { label: string; pattern: RegExp }[] = [
+  { label: "Full Stack", pattern: /full.?stack/i },
+  { label: "Frontend", pattern: /front.?end|web dev/i },
+  { label: "Backend", pattern: /back.?end/i },
+  { label: "Software Engineer", pattern: /software (engineer|developer)/i },
+  { label: "AI / ML", pattern: /\bai\b|machine learning|\bml\b|data scien|deep learning|llm/i },
+  { label: "Mobile", pattern: /mobile|android|ios|flutter|react native/i },
+  { label: "DevOps / Cloud", pattern: /devops|cloud|sre|platform engineer|infrastructure/i },
+  { label: "Design / UX", pattern: /design|ux|\bui\b/i },
+];
 
 function domainOf(url: string): string {
   try {
@@ -17,12 +29,17 @@ function domainOf(url: string): string {
 export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
   const [query, setQuery] = useState("");
   const [letter, setLetter] = useState("All");
+  const [role, setRole] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const rolePattern = ROLES.find((r) => r.label === role)?.pattern;
     return portfolios.filter((p) => {
       if (letter !== "All" && !p.name.toUpperCase().startsWith(letter)) {
+        return false;
+      }
+      if (rolePattern && !(p.tagline && rolePattern.test(p.tagline))) {
         return false;
       }
       if (!q) return true;
@@ -32,14 +49,24 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
         domainOf(p.url).toLowerCase().includes(q)
       );
     });
-  }, [query, letter, portfolios]);
+  }, [query, letter, role, portfolios]);
 
   const shown = filtered.slice(0, visible);
 
   return (
     <section id="browse" className="scroll-mt-16">
       <div className="mb-6 flex flex-col items-center justify-between gap-3 sm:flex-row">
-        <h2 className="text-lg font-semibold">Browse</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold">Browse</h2>
+          <a
+            href={SITE.submit}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border border-edge px-2.5 py-1 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink"
+          >
+            + Submit yours
+          </a>
+        </div>
         <input
           type="search"
           value={query}
@@ -50,6 +77,25 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
           placeholder="Search by name, role, or domain…"
           className="w-full rounded-lg border border-edge bg-card px-4 py-2 text-sm outline-none transition placeholder:text-mute focus:border-mute sm:w-80"
         />
+      </div>
+
+      <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+        {ROLES.map((r) => (
+          <button
+            key={r.label}
+            onClick={() => {
+              setRole(role === r.label ? null : r.label);
+              setVisible(PAGE_SIZE);
+            }}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              role === r.label
+                ? "border-accent bg-accent text-bg"
+                : "border-edge text-mute hover:border-mute hover:text-ink"
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
 
       <div className="mb-5 flex flex-wrap justify-center gap-1">
