@@ -79,6 +79,19 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   but dormant — **BLOCKED on user: R2 bucket + token**. App serves own shots once
   `SHOTS_BASE_URL` (public R2 base) is set; until then mShots fallback everywhere.
 
+- **Phase 1 AI judge: BUILT, sample-verified against prod** (`pipeline/judge.mjs`).
+  `node pipeline/judge.mjs rubric [--limit N] [--only s] [--force] [--rpm R]` — 1 Gemini
+  call/site (strip0 + strip2 + full.jpg) → tier S–D + six 1–5 axes + notes +
+  is_portfolio flag, stored as JSON in `portfolios.ai_rubric` (column added by the
+  script). `node pipeline/judge.mjs pairwise [--votes N]` — hero-vs-hero votes, A/B
+  order randomized, written directly to `votes` as `rater_type='ai'` /
+  `rater_id='ai:gemini-2.5-flash'` with the ELO upsert in the same write transaction
+  (mirrors POST /api/rank; AI votes DO move official ELO — that's the bootstrap).
+  Verified: 2 rubrics stored, 3 pairwise votes landed with correct K=32 ELO and full
+  pair_keys. GEMINI_API_KEY is in `.env.local` (local pipeline only, NOT in Vercel —
+  nothing in the app calls Gemini). Model gemini-2.5-flash; paced --rpm 8 (free-tier
+  RPM); free budget ~500 req/day, plan full runs accordingly (1,779 rubrics ≈ 4 days).
+
 - **/** — compact hero, searchable card grid of all portfolios, A–Z letter chips,
   role filter chips (regex on taglines — note 924/1779 entries have no tagline),
   "+ Submit yours" → GitHub issue form (`.github/ISSUE_TEMPLATE/submit-portfolio.yml`)
@@ -121,9 +134,10 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 4. **Run the full capture batch** — `node pipeline/capture.mjs --concurrency 6` (~2.5h,
    resumable: already-checked URLs are skipped without --force). Then re-run with R2 on
    (or add a backfill-upload flag) so shots serve from R2 in prod.
-5. **Phase 1 AI bootstrap** — Gemini Flash rubric + pairwise votes into the same ELO
-   system (GRADING_CRITERIA.md §6), `rater_type='ai'`. Uses captures from step 3
-   (strip0-2.png + extracted text).
+5. **Run the Phase 1 AI bootstrap** — judge.mjs is built and verified (see State);
+   once the capture batch finishes, run `node pipeline/judge.mjs rubric` daily until
+   all sites are judged (~500 req/day free budget → ~4 days), then
+   `node pipeline/judge.mjs pairwise --votes N` with leftover budget to seed ELO.
 6. Growth features (decided, not started): per-portfolio embeddable rank badge SVG,
    "score my portfolio" instant report, auto OG share cards, weekly feed.json sync from
    the fork.
