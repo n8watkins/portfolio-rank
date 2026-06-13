@@ -10,8 +10,8 @@
 //              same math and pair_key convention as human votes.
 //
 // Usage:
-//   node pipeline/judge.mjs rubric   [--limit N] [--only substr] [--force] [--rpm R]
-//   node pipeline/judge.mjs pairwise [--votes N] [--rpm R]
+//   node pipeline/judge.mjs rubric   [--limit N] [--only substr] [--force] [--rpm R] [--model M]
+//   node pipeline/judge.mjs pairwise [--votes N] [--rpm R] [--model M]
 //
 // Budget: the free tier allows ~500 requests/day; every call is logged so you
 // can see what a run spent. Rate is paced to --rpm (default 8) to stay under
@@ -33,15 +33,16 @@ if (!process.env.GEMINI_API_KEY) {
   process.exit(1);
 }
 
-const MODEL = "gemini-2.5-flash";
-const RATER_ID = `ai:${MODEL}`;
-
 const args = process.argv.slice(2);
 const MODE = args[0];
 const flag = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : fallback;
 };
+// flash-lite has the biggest free-tier daily budget; --model swaps in a
+// stronger judge. rater_id carries the model so votes stay per-model tagged.
+const MODEL = flag("model", "gemini-3.1-flash-lite");
+const RATER_ID = `ai:${MODEL}`;
 const LIMIT = Number(flag("limit", "0")) || Infinity;
 const VOTES = Number(flag("votes", "20"));
 const ONLY = flag("only", "");
