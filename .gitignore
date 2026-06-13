@@ -10,3 +10,4 @@ data/portfoliorank.db*
 .vercel
 captures/
 capture-batch.log
+rubric-pass.log
