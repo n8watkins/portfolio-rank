@@ -9,3 +9,4 @@ data/votes.jsonl
 data/portfoliorank.db*
 .vercel
 captures/
+capture-batch.log

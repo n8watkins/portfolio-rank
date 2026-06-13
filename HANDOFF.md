@@ -64,15 +64,16 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   session: anon votes are re-attributed to the human rater and applied to ELO (dup pairs
   dropped), `pr_anon` cookie cleared. Claim flow e2e-tested locally with a minted session
   JWT (anon vote → ratings untouched → claim → ELO applied) and all test data removed.
-  NOTE: prod `votes` has 2 pre-auth-era rows (`rater_id='local'`, 2026-06-12 19:44) and
-  the 4 matching `ratings` rows (elo 1216/1184, 1 vote) — old test votes from before the
-  three-tier system; harmless (below the 3-vote leaderboard threshold), ask user before
-  wiping.
+  NOTE: the 2 pre-auth-era `rater_id='local'` test votes (+ their 4 ratings rows) are
+  GONE — prod `votes` and `ratings` were both empty as of 2026-06-12 (later session);
+  presumably the user wiped them. Vote tables start from a clean slate.
 - **Phase 0 capture pipeline: BUILT, sample-verified** (commit 674aaab).
   `node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]` —
   gates (dead/parked/blank) + hero/mobile/full-page/3-frame strip + diagnostics into the
-  `portfolios` table (prod Turso — intended). ~363 sites captured locally in `captures/`
-  (gitignored) — a full batch run was interrupted by a WSL crash on 2026-06-12; resumable.
+  `portfolios` table (prod Turso — intended). A WSL crash interrupted the first full
+  batch on 2026-06-12; resumed later that day at concurrency 4 (1,395 remaining,
+  log: `capture-batch.log`, gitignored). Already-checked URLs skip without `--force`;
+  `--upload-only` backfills `captures/` to R2 once R2_* env vars exist.
   Adaptive settle loop handles slow preloaders (verified on a 25s loader).
   ~20s/site at concurrency 4 → full 1,779 ≈ 2.5h. R2 upload code ready
   but dormant — **BLOCKED on user: R2 bucket + token**. App serves own shots once
