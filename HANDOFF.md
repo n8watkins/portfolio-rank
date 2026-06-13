@@ -70,10 +70,12 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - **Phase 0 capture pipeline: BUILT, sample-verified** (commit 674aaab).
   `node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]` —
   gates (dead/parked/blank) + hero/mobile/full-page/3-frame strip + diagnostics into the
-  `portfolios` table (prod Turso — intended). A WSL crash interrupted the first full
-  batch on 2026-06-12; resumed later that day at concurrency 4 (1,395 remaining,
-  log: `capture-batch.log`, gitignored). Already-checked URLs skip without `--force`;
-  `--upload-only` backfills `captures/` to R2 once R2_* env vars exist.
+  `portfolios` table (prod Turso — intended). **FULL BATCH COMPLETE (2026-06-12):**
+  all 1,779 sites processed — 1,692 live with captures, 44 dead, 43 error. ~2.0 GB in
+  `captures/` (gitignored, local only — NOT yet on R2; R2 still blocked on user). The
+  AI judge reads these local files, so don't delete `captures/` until both the R2
+  upload AND the rubric/pairwise passes are done. Already-checked URLs skip without
+  `--force`; `--upload-only` backfills `captures/` to R2 once R2_* env vars exist.
   Adaptive settle loop handles slow preloaders (verified on a 25s loader).
   ~20s/site at concurrency 4 → full 1,779 ≈ 2.5h. R2 upload code ready
   but dormant — **BLOCKED on user: R2 bucket + token**. App serves own shots once
