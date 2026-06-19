@@ -22,11 +22,15 @@ import path from "path";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
-for (const line of fs
-  .readFileSync(path.join(ROOT, ".env.local"), "utf8")
-  .split("\n")) {
-  const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-  if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
+// Optional: in CI (GitHub Actions) there's no .env.local — vars come from the
+// runner env/secrets instead.
+if (fs.existsSync(path.join(ROOT, ".env.local"))) {
+  for (const line of fs
+    .readFileSync(path.join(ROOT, ".env.local"), "utf8")
+    .split("\n")) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
+  }
 }
 if (!process.env.GEMINI_API_KEY) {
   console.error("GEMINI_API_KEY missing from .env.local");
