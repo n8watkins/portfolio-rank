@@ -11,3 +11,5 @@ data/portfoliorank.db*
 captures/
 capture-batch.log
 rubric-pass.log
+ai-grades.csv
+ai-grades-top.md
