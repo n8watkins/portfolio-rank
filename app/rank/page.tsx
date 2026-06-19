@@ -28,27 +28,42 @@ function domainOf(url: string): string {
   }
 }
 
-// Prefers our own Playwright capture (`shot`, from R2); falls back to the
-// free mShots service, which serves a placeholder while it generates, so
-// retry until the real shot (full width) arrives.
+// Prefers our own Playwright captures (`shot` = capture base dir): the mobile
+// frame on phones, the desktop hero above — so the face-off judges the site as
+// it actually renders on the viewer's device. Falls back to mShots (free, slow,
+// desktop-only, placeholder-while-generating → retry) when we have no capture.
+const SHOT_CLASS =
+  "aspect-[4/3] w-full rounded-t-xl bg-edge object-cover object-top";
+
 function Shot({ url, shot }: { url: string; shot?: string | null }) {
   const [tick, setTick] = useState(0);
   const [failed, setFailed] = useState(false);
-  const useOwn = shot && !failed;
-  const src = useOwn
-    ? shot
-    : `https://s.wordpress.com/mshots/v1/${encodeURIComponent(
-        url
-      )}?w=900&vpw=1440&vph=900${tick ? `&retry=${tick}` : ""}`;
+
+  if (shot && !failed) {
+    return (
+      <picture>
+        <source media="(max-width: 639px)" srcSet={`${shot}/mobile.jpg`} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`${shot}/hero.jpg`}
+          alt={`Screenshot of ${domainOf(url)}`}
+          className={SHOT_CLASS}
+          onError={() => setFailed(true)}
+        />
+      </picture>
+    );
+  }
+
+  const src = `https://s.wordpress.com/mshots/v1/${encodeURIComponent(
+    url
+  )}?w=900&vpw=1440&vph=900${tick ? `&retry=${tick}` : ""}`;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={`Screenshot of ${domainOf(url)}`}
-      className="aspect-[4/3] w-full rounded-t-xl bg-edge object-cover object-top"
-      onError={() => useOwn && setFailed(true)}
+      className={SHOT_CLASS}
       onLoad={(e) => {
-        if (useOwn) return;
         const img = e.currentTarget;
         if (img.naturalWidth < 700 && tick < 6) {
           setTimeout(() => setTick((t) => t + 1), 2500);
@@ -200,7 +215,12 @@ export default function RankPage() {
           Which portfolio is better?
         </h1>
         <p className="mt-2 text-sm text-mute">
-          Click one, or use ← → keys. ↓ to skip.
+          <span className="hidden sm:inline">
+            Click one, or use ← → keys. ↓ to skip.
+          </span>
+          <span className="sm:hidden">
+            Tap the better one — or Skip below if you can&apos;t tell.
+          </span>
         </p>
         {last && <p className="mt-2 text-sm font-medium text-accent">{last}</p>}
         {rater && !rater.signedIn && !gated && (

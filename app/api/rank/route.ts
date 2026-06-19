@@ -4,7 +4,7 @@ import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { isKnownPortfolio } from "@/lib/roster";
 import { ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, getRater } from "@/lib/rater";
-import { shotUrls } from "@/lib/shots";
+import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
 
 export const runtime = "nodejs";
@@ -53,11 +53,13 @@ export async function GET() {
     (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)
   );
 
-  const shots = await shotUrls([candidates[0].url, candidates[1].url]);
+  const shots = await shotBases([candidates[0].url, candidates[1].url]);
   const withRating = (p: Portfolio) => ({
     ...p,
     elo: ratings.get(p.url)?.elo ?? BASE_ELO,
     votes: ratings.get(p.url)?.votes ?? 0,
+    // Capture base dir (`${SHOTS_BASE_URL}/${shot_key}`) or null; the client
+    // builds hero/mobile frame URLs from it. Null → mShots fallback.
     shot: shots.get(p.url) ?? null,
   });
 
