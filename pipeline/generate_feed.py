@@ -1,85 +1,87 @@
 #!/usr/bin/env python3
 """
-Generate feed.json from README.md
+Generate feed.json from a developer-portfolios README.md.
 
-This script extracts all portfolio entries from README.md and creates
-a JSON file with structured data for each portfolio.
+Extracts every `- [Name](url) [tagline]` entry and writes structured JSON,
+de-duplicating by normalized URL. The first occurrence of a URL wins and its
+ORIGINAL url string is preserved verbatim (so existing DB/rating keys, which
+index on the exact url, are never rewritten).
 
 Usage:
-    python src/generate_feed.py
+    python generate_feed.py [README.md] [feed.json]
+    (defaults: README.md -> feed.json)
 """
 
 import re
 import json
 import sys
+from urllib.parse import urlsplit
+
+PATTERN = re.compile(r"^-\s+\[([^\]]+)\]\(([^)]+)\)(?:\s+\[([^\]]*)\])?")
+
+
+def norm_key(url):
+    """Dedup key: lowercased host (no www) + path without trailing slash."""
+    try:
+        parts = urlsplit(url.strip().lower())
+        host = parts.netloc
+        if host.startswith("www."):
+            host = host[4:]
+        path = parts.path.rstrip("/")
+        return f"{host}{path}" or url.strip().lower()
+    except Exception:
+        return url.strip().lower()
 
 
 def extract_portfolio_data(lines):
-    """
-    Extract portfolio data from README lines.
-    Returns a list of dictionaries with name, url, and optional tagline.
-
-    Format expected:
-    - [Name](url)
-    - [Name](url) [tagline]
-    """
     portfolios = []
-    # Regex to match markdown links with optional tagline
-    # Pattern: - [name](url) optional[tagline]
-    pattern = re.compile(r'^-\s+\[([^\]]+)\]\(([^)]+)\)(?:\s+\[([^\]]*)\])?')
-
+    seen = set()
+    dupes = 0
     for line in lines:
-        match = pattern.match(line.strip())
-        if match:
-            name = match.group(1).strip()
-            url = match.group(2).strip()
-            tagline = match.group(3).strip() if match.group(3) else None
-
-            portfolio_entry = {
-                "name": name,
-                "url": url
-            }
-
-            if tagline:
-                portfolio_entry["tagline"] = tagline
-
-            portfolios.append(portfolio_entry)
-
-    return portfolios
+        m = PATTERN.match(line.strip())
+        if not m:
+            continue
+        name = m.group(1).strip()
+        url = m.group(2).strip()
+        tagline = m.group(3).strip() if m.group(3) else None
+        key = norm_key(url)
+        if key in seen:
+            dupes += 1
+            continue
+        seen.add(key)
+        entry = {"name": name, "url": url}
+        if tagline:
+            entry["tagline"] = tagline
+        portfolios.append(entry)
+    return portfolios, dupes
 
 
 def create_feed_json(readme_path="README.md", output_path="feed.json"):
-    """
-    Read README.md and create/update feed.json with portfolio data.
-    Returns the number of portfolios extracted.
-    """
     try:
-        with open(readme_path, 'r', encoding='utf-8') as f:
+        with open(readme_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
-
-        portfolios = extract_portfolio_data(lines)
-
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(portfolios, f, indent=2, ensure_ascii=False)
-
-        return len(portfolios)
     except FileNotFoundError:
         print(f"Error: {readme_path} not found.")
         return 0
-    except Exception as e:
-        print(f"Error creating feed.json: {e}")
-        return 0
+
+    portfolios, dupes = extract_portfolio_data(lines)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(portfolios, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    if dupes:
+        print(f"  ({dupes} duplicate URL(s) skipped)")
+    return len(portfolios)
 
 
 def main():
-    """Main entry point for the script."""
-    portfolio_count = create_feed_json()
-    if portfolio_count:
-        print(f"✓ Successfully created feed.json with {portfolio_count} portfolio entries.")
+    readme = sys.argv[1] if len(sys.argv) > 1 else "README.md"
+    output = sys.argv[2] if len(sys.argv) > 2 else "feed.json"
+    count = create_feed_json(readme, output)
+    if count:
+        print(f"✓ Wrote {output} with {count} portfolio entries.")
         return 0
-    else:
-        print("✗ Failed to create feed.json")
-        return 1
+    print("✗ Failed to create feed.json")
+    return 1
 
 
 if __name__ == "__main__":

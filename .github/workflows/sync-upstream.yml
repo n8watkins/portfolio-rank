@@ -1,0 +1,83 @@
+name: Sync upstream + ingest
+
+# Fully hands-off intake of the *accepted* community portfolios:
+#   1. rebuild feed.json from emmabostian/developer-portfolios' merged README
+#      (trust gate = "Emma merged it"; open PRs are NOT pulled),
+#   2. commit it only if upstream actually changed,
+#   3. screenshot + AI-grade whatever is new.
+# capture.mjs reads feed.json and skips URLs already in the DB; judge.mjs skips
+# already-graded sites — so this only ever does the *new* work. Removed-upstream
+# links simply drop out of feed.json (the app filters to the roster).
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC
+
+# Share the lock with ingest.yml so two runs never write the DB at once.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: write # commit the refreshed feed.json
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      HAS_PAT: ${{ secrets.GH_SYNC_TOKEN != '' }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) Rebuild feed.json from upstream's merged (accepted) README.
+      - name: Rebuild feed.json from upstream
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/emmabostian/developer-portfolios/master/README.md \
+            -o /tmp/upstream-README.md
+          python3 pipeline/generate_feed.py /tmp/upstream-README.md data/feed.json
+
+      # 2) Keep your fork mirror current too — only if a PAT is provided.
+      - name: Sync fork mirror (optional)
+        if: env.HAS_PAT == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SYNC_TOKEN }}
+        run: |
+          gh repo sync n8watkins/developer-portfolios \
+            --source emmabostian/developer-portfolios || true
+
+      # 3) Commit feed.json only if upstream changed something.
+      - name: Commit refreshed feed.json
+        run: |
+          if git diff --quiet -- data/feed.json; then
+            echo "feed.json unchanged — nothing new upstream."
+          else
+            git config user.name "portfolio-rank-bot"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add data/feed.json
+            git commit -m "chore: sync portfolios from upstream"
+            git push
+          fi
+
+      # 4) Screenshot + AI-grade the new entries (both no-op on already-done work).
+      #    Grading self-limits to sites whose captures exist on this runner — i.e.
+      #    the ones just captured above — so it never burns budget re-scanning old
+      #    sites or the backlog handled elsewhere.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Capture new portfolios
+        run: node pipeline/capture.mjs --concurrency 4
+      - name: AI-grade new portfolios
+        run: node pipeline/judge.mjs rubric
