@@ -175,10 +175,15 @@ if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
   });
 }
 
+// Only the frames the app actually serves go to R2; the 3 motion-strip PNGs
+// (~77% of capture bytes) are AI-judge input only and stay local.
+const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg", "full.jpg"]);
+
 async function uploadDir(key, dir) {
   if (!s3) return;
   const { PutObjectCommand } = await import("@aws-sdk/client-s3");
   for (const f of fs.readdirSync(dir)) {
+    if (!SERVE_FILES.has(f)) continue;
     await s3.send(
       new PutObjectCommand({
         Bucket: process.env.R2_BUCKET ?? "portfolio-rank",
