@@ -45,7 +45,7 @@ export function Header({ stars }: { stars: number | null }) {
           href={SITE.github}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold transition hover:border-mute sm:text-sm"
+          className="hidden items-center gap-1.5 rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold transition hover:border-mute sm:flex sm:text-sm"
           title="Star on GitHub"
         >
           <svg viewBox="0 0 16 16" className="h-4 w-4 fill-current" aria-hidden>

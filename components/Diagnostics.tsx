@@ -125,7 +125,7 @@ export function Socials({ url }: { url: string }) {
           title={l.href}
         >
           <SocialIcon path={l.path} />
-          {l.label}
+          <span className="hidden sm:inline">{l.label}</span>
         </a>
       ))}
     </>
