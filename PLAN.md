@@ -6,6 +6,16 @@ into a ranked, browsable site where AI bootstraps the ranking and humans refine 
 Grading spec: see GRADING_CRITERIA.md. Everything there is machine-assessed; humans only
 ever cast one-click votes.
 
+## Status (2026-06-20): Phases 0–2 shipped & live
+
+Live in production (portfoliorank.vercel.app): capture pipeline + R2 storage, PSI/polish
+scorecards, the Gemini rubric + pairwise voting, the browse/face-off/leaderboard/detail
+UI, auth, and a self-running set of daily GitHub Actions (sync upstream, grade, vote,
+backup, prewarm). See **AUTOMATION.md** for the automation and **HANDOFF.md** for current
+state. What remains is Phase 3 (retention: taste profiles, streaks, AI-vs-crowd) and the
+growth features (rank badge SVG, "score my portfolio") — the roadmap below is kept for
+reference and historical intent.
+
 ## Deployment
 
 - Upstream (emmabostian/developer-portfolios) is **not deployed anywhere** — no homepage,

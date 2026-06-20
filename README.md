@@ -2,7 +2,7 @@
 
 **The best developer portfolios. Ranked.**
 
-1,700+ community-curated developer portfolios — browsable, searchable, and (soon) ranked
+1,700+ community-curated developer portfolios — browsable, searchable, and ranked
 by head-to-head human votes and AI scoring instead of alphabetical order.
 
 🌐 **Live: [portfoliorank.vercel.app](https://portfoliorank.vercel.app)** · ☕ [Support on Ko-fi](https://ko-fi.com/n8watkins)
@@ -24,16 +24,18 @@ The original list is an incredible community resource — thousands of contribut
 2019 — but it's a README sorted A→Z. Nobody can find the *good* ones. PortfolioRank gives
 the dataset a real frontend and a ranking system:
 
-- **Browse** — card grid of every portfolio, searchable by name, role, or domain
-- **Face-off voting** *(planned)* — two portfolios side by side, pick the better one,
-  ELO decides the leaderboard
-- **AI bootstrap** *(planned)* — Gemini judges design/content pairwise to seed rankings
-  before human votes accumulate
-- **Objective scorecards** *(planned)* — real Lighthouse scores (via PageSpeed Insights),
-  polish checks, and originality detection for every site
+- **Browse** — card grid of every portfolio, searchable by name, role, or domain,
+  each linking to a detail page with its screenshot, scores, and AI review
+- **Face-off voting** — two portfolios side by side, pick the better one; ELO decides
+  the leaderboard
+- **AI bootstrap** — Gemini judges design/content pairwise to seed rankings before
+  human votes accumulate, and grades each site on a 6-axis rubric
+- **Objective scorecards** — real Lighthouse scores (via PageSpeed Insights), polish
+  checks, and originality detection for every site
 
-See [PLAN.md](PLAN.md) for the roadmap and [GRADING_CRITERIA.md](GRADING_CRITERIA.md) for
-exactly how sites are graded.
+The whole pipeline runs itself — see [AUTOMATION.md](AUTOMATION.md) for the data flow
+and the daily GitHub Actions, [PLAN.md](PLAN.md) for the roadmap, and
+[GRADING_CRITERIA.md](GRADING_CRITERIA.md) for exactly how sites are graded.
 
 ## Development
 

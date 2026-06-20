@@ -1,5 +1,9 @@
 # Grading Criteria
 
+> Status (2026-06-20): implemented and running in production. Gates, PSI scorecards,
+> polish/behavior checks, the Gemini rubric, and human+AI ELO are all live; see
+> AUTOMATION.md for how they run.
+
 Every criterion below is assessed **automatically** — by deterministic scripts, free APIs, or
 Gemini. Humans are never asked to grade a rubric. The only thing humans ever do is the optional
 one-click "which is better?" vote (see PLAN.md → Voting UX).
