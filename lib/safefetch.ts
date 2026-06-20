@@ -44,7 +44,14 @@ export async function safeFetch(
         method: init.method ?? "GET",
         redirect: "manual",
         signal: AbortSignal.timeout(init.timeoutMs),
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; PortfolioRank/0.1)" },
+        // A real browser UA — some sites serve a block page or 403 to obviously
+        // non-browser agents, which showed up as "unreachable" in the checks.
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        },
       });
     } catch {
       return null;

@@ -104,9 +104,26 @@ async function inspect(target: string): Promise<Inspection> {
   }
 
   const yearMatch = html.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(20\d{2})/i);
-  const githubUrl = scrapeGithub(html);
-  const linkedinUrl = scrapeLinkedin(html);
-  const xUrl = scrapeX(html);
+  let githubUrl = scrapeGithub(html);
+  let linkedinUrl = scrapeLinkedin(html);
+  let xUrl = scrapeX(html);
+  // Fallback: lots of people put socials on an /about page, not the homepage.
+  // One extra fetch, only when the homepage had no GitHub link.
+  if (!githubUrl) {
+    try {
+      const about = await safeFetch(new URL("/about", finalUrl).href, {
+        timeoutMs: 8_000,
+      });
+      if (about?.res.ok) {
+        const ah = await readCapped(about.res, 400_000);
+        githubUrl = githubUrl ?? scrapeGithub(ah);
+        linkedinUrl = linkedinUrl ?? scrapeLinkedin(ah);
+        xUrl = xUrl ?? scrapeX(ah);
+      }
+    } catch {
+      /* no /about page — fine */
+    }
+  }
 
   return {
     ok: true,
