@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
 import { TopFive } from "@/components/TopFive";
+import { db, ensureSchema } from "@/lib/db";
 
 // Re-render at most every 5 min so the top-ranked marquee stays fresh without
 // querying the DB on every request.
@@ -30,7 +31,17 @@ async function getStarCount(): Promise<number | null> {
 }
 
 export default async function Home() {
-  const portfolios = feed as Portfolio[];
+  // Hide sites we've confirmed dead/parked/error from browse (voting already
+  // only uses live ones). Unconfirmed (pending/live) stay in.
+  await ensureSchema();
+  const excluded = new Set(
+    (
+      await db().execute(
+        "SELECT url FROM portfolios WHERE status IN ('dead', 'parked', 'error')"
+      )
+    ).rows.map((r) => String(r.url))
+  );
+  const portfolios = (feed as Portfolio[]).filter((p) => !excluded.has(p.url));
   const stars = await getStarCount();
 
   return (
