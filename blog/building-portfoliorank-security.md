@@ -91,9 +91,9 @@ No error. No warning. The types were correct. The API returned a cheerful `200`.
 
 *"It's the same two URLs but the stored value is half the length. That's not... that can't..."*
 
-I only caught it by dumping the raw bytes of what got saved (`xxd` is a hero) and noticing
-the length was wrong. Sure enough — `2200 22` where I expected `2220 22`. A NUL hiding
-between two quotes.
+I only caught it by looking at the raw bytes of what actually got saved and noticing the
+stored value was about half the length it should be — the invisible character was sitting
+right where my separator was supposed to be, quietly cutting every key in half.
 
 > **Takeaway:** When a string behaves *impossibly*, stop trusting your editor and look at
 > the actual bytes. And pick separators that can't show up in your data *and* can't be
