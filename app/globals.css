@@ -24,6 +24,32 @@
   animation: fade-up 0.5s ease-out both;
 }
 
+/* Top-ranked marquee: the track holds two copies of the items, so translating
+   one full set (-50%) loops seamlessly. Uniform per-card margin keeps the seam
+   spacing even. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee 45s linear infinite;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }

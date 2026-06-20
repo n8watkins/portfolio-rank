@@ -2,6 +2,11 @@ import feed from "@/data/feed.json";
 import { SITE } from "@/lib/site";
 import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
+import { TopMarquee } from "@/components/TopMarquee";
+
+// Re-render at most every 5 min so the top-ranked marquee stays fresh without
+// querying the DB on every request.
+export const revalidate = 300;
 
 export type Portfolio = {
   name: string;
@@ -61,6 +66,8 @@ export default async function Home() {
           </a>
         </div>
       </section>
+
+      <TopMarquee />
 
       <PortfolioGrid portfolios={portfolios} />
 
