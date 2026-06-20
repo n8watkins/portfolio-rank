@@ -56,6 +56,16 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
   return (
     <section id="browse" className="scroll-mt-16">
       <div className="mb-6 flex flex-col items-center justify-between gap-3 sm:flex-row">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setVisible(PAGE_SIZE);
+          }}
+          placeholder="Search by name, role, or domain…"
+          className="w-full rounded-lg border border-edge bg-card px-4 py-2 text-sm outline-none transition placeholder:text-mute focus:border-mute sm:w-80"
+        />
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Browse</h2>
           <a
@@ -67,16 +77,6 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             + Submit yours
           </a>
         </div>
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setVisible(PAGE_SIZE);
-          }}
-          placeholder="Search by name, role, or domain…"
-          className="w-full rounded-lg border border-edge bg-card px-4 py-2 text-sm outline-none transition placeholder:text-mute focus:border-mute sm:w-80"
-        />
       </div>
 
       <div className="mb-3 flex flex-wrap justify-center gap-1.5">
