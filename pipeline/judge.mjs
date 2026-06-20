@@ -307,6 +307,7 @@ async function runRubric() {
   console.log(`rubric: judging ${queue.length} site(s) with ${MODEL}`);
 
   let ok = 0;
+  let consecutiveErrors = 0;
   for (const [i, row] of queue.entries()) {
     const url = String(row.url);
     const dir = path.join(ROOT, "captures", String(row.shot_key));
@@ -331,6 +332,7 @@ async function runRubric() {
     }
     try {
       const rubric = await gemini(parts, rubricSchema);
+      consecutiveErrors = 0;
       rubric.model = MODEL;
       rubric.judged_at = new Date().toISOString();
       await db.execute({
@@ -343,6 +345,12 @@ async function runRubric() {
       );
     } catch (e) {
       console.log(`[${i + 1}/${queue.length}] ${url} — ERROR ${String(e.message).slice(0, 120)}`);
+      // Stop grinding once the daily quota is gone — every further call would
+      // just burn ~90s of retries and fail. Resets on any success above.
+      if (++consecutiveErrors >= 5) {
+        console.log("  aborting: 5 consecutive errors (likely daily quota exhausted)");
+        break;
+      }
     }
   }
   console.log(`rubric done: ${ok}/${queue.length} judged, ${calls} API call(s)`);
