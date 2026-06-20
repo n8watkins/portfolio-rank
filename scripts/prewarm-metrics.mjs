@@ -27,9 +27,7 @@ const db = createClient({
 // S/A/B sites missing fresh metrics are prioritized: order by url and let the
 // endpoint's own cache short-circuit already-warm ones cheaply.
 const rows = (
-  await db.execute(
-    "SELECT url FROM portfolios WHERE status='live' AND json_extract(ai_rubric,'$.tier') IN ('S','A','B') ORDER BY url"
-  )
+  await db.execute("SELECT url FROM portfolios WHERE status='live' ORDER BY url")
 ).rows.slice(0, LIMIT);
 
 console.log(`prewarming PSI + inspect for ${rows.length} S/A/B site(s) via ${PROD}`);
