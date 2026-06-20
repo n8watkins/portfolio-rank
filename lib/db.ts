@@ -71,6 +71,13 @@ export function ensureSchema(): Promise<void> {
       } catch {
         /* column already present */
       }
+      // delta = ELO points this vote moved (winner +delta, loser -delta), stored
+      // so a vote can be undone by reverting exactly what it applied.
+      try {
+        await db().execute("ALTER TABLE votes ADD COLUMN delta INTEGER");
+      } catch {
+        /* column already present */
+      }
       // One vote per (rater, matchup), enforced by the DB so concurrent inserts
       // can't slip past a check-then-insert race. NULL pair_keys (legacy rows)
       // are distinct under SQLite, so the index won't reject them.

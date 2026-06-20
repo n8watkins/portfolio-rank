@@ -153,12 +153,15 @@ export async function POST(req: Request) {
     const w = map.get(winner) ?? { elo: BASE_ELO, votes: 0 };
     const l = map.get(loser) ?? { elo: BASE_ELO, votes: 0 };
     const updated = eloUpdate(w.elo, l.elo);
+    // Human votes move ELO; anon (practice) votes don't, so their delta is 0.
+    // Stored so /api/rank/undo can revert exactly what this vote applied.
+    const appliedDelta = rater.type === "human" ? updated.winner - w.elo : 0;
 
     // Insert first: a UNIQUE violation here means this rater already voted on
     // this matchup (either direction) — caught below as 409.
     await tx.execute({
-      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id) VALUES (?, ?, ?, ?, ?)",
-      args: [winner, loser, key, rater.type, rater.id],
+      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta) VALUES (?, ?, ?, ?, ?, ?)",
+      args: [winner, loser, key, rater.type, rater.id, appliedDelta],
     });
 
     if (rater.type === "human") {

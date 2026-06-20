@@ -198,6 +198,27 @@ export default function RankPage() {
     loadPair();
   }, [busy, picked, loadPair]);
 
+  const undo = useCallback(async () => {
+    if (busy || picked || count === 0) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/rank/undo", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setCount((c) => Math.max(0, c - 1));
+        if (typeof data.anonVotesUsed === "number") {
+          setRater((r) => (r ? { ...r, anonVotesUsed: data.anonVotesUsed } : r));
+        }
+        setLast("↩ Undid your last vote.");
+      } else {
+        setLast("Nothing to undo.");
+      }
+    } catch {
+      setLast("Undo failed — try again.");
+    }
+    setBusy(false);
+  }, [busy, picked, count]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") vote("a");
@@ -379,6 +400,14 @@ export default function RankPage() {
           className="rounded-lg border border-edge px-5 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink disabled:opacity-60"
         >
           Skip — can&apos;t tell ↓
+        </button>
+        <button
+          onClick={undo}
+          disabled={busy || picked !== null || count === 0}
+          className="rounded-lg border border-edge px-5 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink disabled:opacity-40"
+          title="Undo your last vote (reverts its ELO)"
+        >
+          ↩ Undo
         </button>
         <button
           onClick={() => setShowDetails((s) => !s)}
