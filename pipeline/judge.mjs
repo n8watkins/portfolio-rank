@@ -187,6 +187,30 @@ async function heroPart(key, budgetBytes = 5 * 1024 * 1024) {
   }
 }
 
+// Generic uncached R2 image fetcher — used by rubric grading from the cloud,
+// where local capture strips don't exist (CI runners, backlog). null on failure.
+async function r2Part(key, file, budgetBytes = 5 * 1024 * 1024) {
+  if (!SHOTS_BASE) return null;
+  try {
+    const res = await fetch(`${SHOTS_BASE}/${key}/${file}`, {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return null;
+    const len = Number(res.headers.get("content-length") || 0);
+    if (len && len > budgetBytes) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > budgetBytes) return null;
+    return {
+      inline_data: {
+        mime_type: file.endsWith(".jpg") ? "image/jpeg" : "image/png",
+        data: buf.toString("base64"),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Batch-load cached objective signals (PSI/Lighthouse + inspect polish) for a
 // set of URLs from the generic `cache` table. Keys mirror the API routes
 // (`psi:<url>` 30d TTL, `inspect:<url>` 7d TTL); stale/unparseable/!ok rows are
@@ -297,10 +321,10 @@ async function runRubric() {
     /* column already present */
   }
   const res = await db.execute(
-    `SELECT url, name, shot_key FROM portfolios
+    `SELECT url, name, shot_key, meta FROM portfolios
      WHERE status = 'live' AND shot_key IS NOT NULL
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
-     ORDER BY url`
+     ORDER BY captured_at DESC, url`
   );
   let queue = res.rows.filter((r) => !ONLY || String(r.url).includes(ONLY));
   queue = queue.slice(0, LIMIT === Infinity ? queue.length : LIMIT);
@@ -310,26 +334,63 @@ async function runRubric() {
   let consecutiveErrors = 0;
   for (const [i, row] of queue.entries()) {
     const url = String(row.url);
-    const dir = path.join(ROOT, "captures", String(row.shot_key));
-    const parts = [
-      {
-        text:
-          `You are judging a developer's portfolio website: "${row.name}" at ${url}.\n` +
-          `Images, in order: (1) the settled desktop viewport, (2) the same viewport 3 seconds later ` +
-          `(compare with 1 to judge motion), (3) the full page top to bottom.\n` +
-          `Score each axis 1 (poor) to 5 (excellent) with one short justification:\n` +
-          AXES.map(([k, d]) => `- ${k}: ${d}`).join("\n") +
-          `\nAlso give an overall tier (S = exceptional, rare; A = strong; B = solid; C = weak; D = bad) ` +
-          `and whether this is actually a personal portfolio site.`,
-      },
+    const key = String(row.shot_key);
+    const dir = path.join(ROOT, "captures", key);
+
+    // Prefer local motion strips (full motion nuance); fall back to R2
+    // hero + full + the stored motion flag when strips aren't on this machine
+    // (CI runners, or the backlog graded from the cloud).
+    let images, imgDesc;
+    const localStrips = [
       imagePart(path.join(dir, "strip0.png")),
       imagePart(path.join(dir, "strip2.png")),
       imagePart(path.join(dir, "full.jpg")),
     ].filter(Boolean);
-    if (parts.length < 2) {
+    if (localStrips.length >= 2) {
+      images = localStrips;
+      imgDesc =
+        `Images, in order: (1) the settled desktop viewport, (2) the same viewport 3 seconds ` +
+        `later (compare with 1 to judge motion), (3) the full page top to bottom.`;
+    } else {
+      const r2 = [
+        await r2Part(key, "hero.jpg"),
+        await r2Part(key, "full.jpg"),
+      ].filter(Boolean);
+      if (r2.length >= 1) {
+        let motion;
+        try {
+          motion = JSON.parse(String(row.meta || "{}")).motion;
+        } catch {
+          motion = undefined;
+        }
+        const motionNote =
+          motion === true
+            ? "This site HAS animation/motion effects."
+            : motion === false
+              ? "This site appears STATIC (no motion detected)."
+              : "Motion is unknown for this site.";
+        images = r2;
+        imgDesc =
+          `Images, in order: (1) the desktop hero, (2) the full page top to bottom.\n` +
+          `${motionNote} Judge the motion axis from this fact (you cannot see the animation directly).`;
+      }
+    }
+    if (!images) {
       console.log(`[${i + 1}/${queue.length}] ${url} — skipped (no usable captures)`);
       continue;
     }
+    const parts = [
+      {
+        text:
+          `You are judging a developer's portfolio website: "${row.name}" at ${url}.\n` +
+          imgDesc +
+          `\nScore each axis 1 (poor) to 5 (excellent) with one short justification:\n` +
+          AXES.map(([k, d]) => `- ${k}: ${d}`).join("\n") +
+          `\nAlso give an overall tier (S = exceptional, rare; A = strong; B = solid; C = weak; D = bad) ` +
+          `and whether this is actually a personal portfolio site.`,
+      },
+      ...images,
+    ];
     try {
       const rubric = await gemini(parts, rubricSchema);
       consecutiveErrors = 0;
