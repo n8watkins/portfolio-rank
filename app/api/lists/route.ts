@@ -25,7 +25,9 @@ type ListRow = {
 export async function GET(req: Request) {
   await ensureSchema();
   const rater = await getRater();
-  if (rater.type !== "human") return NextResponse.json({ lists: [] });
+  if (rater.type !== "human") {
+    return NextResponse.json({ lists: [], signedIn: false });
+  }
 
   const url = new URL(req.url).searchParams.get("url");
   const res = await db().execute({
@@ -45,7 +47,7 @@ export async function GET(req: Request) {
     count: Number(r.count),
     ...(url ? { contains: Number(r.contains) === 1 } : {}),
   }));
-  return NextResponse.json({ lists });
+  return NextResponse.json({ lists, signedIn: true });
 }
 
 /** POST /api/lists { name } → create a named list, return it (with a fresh slug). */

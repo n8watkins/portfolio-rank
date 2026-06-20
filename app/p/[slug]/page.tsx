@@ -3,9 +3,13 @@ import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { DetailDiagnostics, Socials } from "@/components/Diagnostics";
+import { LikeButton } from "@/components/LikeButton";
+import { ShareButton } from "@/components/ShareButton";
+import { AddToListButton } from "@/components/AddToListButton";
 import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
+import { getRater } from "@/lib/rater";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +129,26 @@ export default async function PortfolioPage({
     ).rows[0]?.n ?? 0
   );
 
+  // Likes are a separate signal from the ⭐ super-vote: a public save count
+  // plus whether the signed-in rater has liked this one (drives the ♥ state).
+  const saveCount = Number(
+    (
+      await db().execute({
+        sql: "SELECT COUNT(*) AS n FROM likes WHERE url = ?",
+        args: [url],
+      })
+    ).rows[0]?.n ?? 0
+  );
+  const rater = await getRater();
+  const liked =
+    rater.type === "human" &&
+    (
+      await db().execute({
+        sql: "SELECT 1 FROM likes WHERE rater_id = ? AND url = ?",
+        args: [rater.id, url],
+      })
+    ).rows.length > 0;
+
   const rubricRow = (
     await db().execute({
       sql: "SELECT ai_rubric FROM portfolios WHERE url = ?",
@@ -170,8 +194,16 @@ export default async function PortfolioPage({
                   ⭐ {stars} loved
                 </p>
               )}
+              {saveCount > 0 && (
+                <p className="text-xs font-semibold text-rose-400">
+                  ♥ {saveCount} saved
+                </p>
+              )}
             </div>
             <Socials url={url} />
+            <LikeButton url={url} initialLiked={liked} />
+            <AddToListButton url={url} />
+            <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
             <a
               href={url}
               target="_blank"

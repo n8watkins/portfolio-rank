@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Portfolio } from "@/app/page";
 import { SITE } from "@/lib/site";
+import { LikeButton } from "@/components/LikeButton";
 
 const PAGE_SIZE = 18; // 6 rows on desktop (3-col); "Show more" reveals the rest
 const LETTERS = ["All", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
@@ -31,6 +32,15 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
   const [letter, setLetter] = useState("All");
   const [role, setRole] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
+  // Hydrate the signed-in rater's liked set once so cards show a filled ♥.
+  // Returns [] for anon, so the heart simply stays hollow.
+  const [likedSet, setLikedSet] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetch("/api/likes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.liked && setLikedSet(new Set<string>(d.liked)))
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -141,19 +151,26 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
                   </p>
                 </div>
               </div>
-              {/* Opens the real site; preventDefault keeps the card's own link
-                  (to the detail page) from firing. */}
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.open(p.url, "_blank", "noopener");
-                }}
-                className="shrink-0 rounded-md px-1.5 py-0.5 text-mute opacity-0 transition hover:text-ink group-hover:opacity-100"
-                title="Visit site"
-                aria-label={`Visit ${domainOf(p.url)}`}
-              >
-                ↗
-              </button>
+              {/* Like + visit. Both preventDefault so they don't trigger the
+                  card's own link to the detail page. */}
+              <div className="flex shrink-0 items-center gap-0.5">
+                <LikeButton
+                  url={p.url}
+                  initialLiked={likedSet.has(p.url)}
+                  variant="icon"
+                />
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(p.url, "_blank", "noopener");
+                  }}
+                  className="rounded-md px-1.5 py-0.5 text-mute opacity-0 transition hover:text-ink group-hover:opacity-100"
+                  title="Visit site"
+                  aria-label={`Visit ${domainOf(p.url)}`}
+                >
+                  ↗
+                </button>
+              </div>
             </div>
           </a>
         ))}

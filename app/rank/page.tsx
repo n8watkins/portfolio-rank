@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { InspectChips } from "@/components/Diagnostics";
 import { SignInModal } from "@/components/SignInModal";
 import { AuthButton } from "@/components/AuthButton";
+import { LikeButton } from "@/components/LikeButton";
 
 type Entry = {
   name: string;
@@ -12,6 +13,7 @@ type Entry = {
   elo: number;
   votes: number;
   shot?: string | null;
+  liked?: boolean;
 };
 
 type RaterInfo = {
@@ -384,6 +386,14 @@ export default function RankPage() {
                     >
                       ⭐ Super
                     </button>
+                  )}
+                  {!picked && (
+                    <LikeButton
+                      url={p.url}
+                      initialLiked={p.liked ?? false}
+                      variant="icon"
+                      className="absolute right-2 top-2 z-10"
+                    />
                   )}
                 </div>
 
