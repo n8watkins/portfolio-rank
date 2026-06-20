@@ -13,3 +13,5 @@ capture-batch.log
 rubric-pass.log
 ai-grades.csv
 ai-grades-top.md
+r2-backfill.log
+pairwise-pass.log

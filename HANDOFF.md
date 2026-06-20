@@ -1,7 +1,31 @@
 # HANDOFF — PortfolioRank
 
-Read this + PLAN.md + GRADING_CRITERIA.md + DEPLOY.md in full before doing anything.
-Do not re-ask the user anything answered here or there.
+Read this + AUTOMATION.md + PLAN.md + GRADING_CRITERIA.md + DEPLOY.md in full
+before doing anything. Do not re-ask the user anything answered here or there.
+
+## ⚡ Update 2026-06-20 (supersedes anything below that conflicts)
+
+The blockers in the old "Next steps" are **done**; the pipeline is fully automated.
+See **AUTOMATION.md** for the authoritative architecture + GitHub Actions.
+
+- **R2 is LIVE.** Cloudflare R2 bucket `portfolio-rank` (public base
+  `https://pub-680e930bd59047488d688e63d7477fee.r2.dev`). All 1,702 sites'
+  serve-frames (hero/mobile/full — motion strips stay local) uploaded; prod
+  serves its own screenshots from R2 (verified). Secrets set in GitHub Actions
+  AND Vercel prod (`SHOTS_BASE_URL`). **R2 token should be rotated** (it was
+  pasted in a chat session); update `.env.local` then re-push secrets.
+- **AI judge: grading ~done** (gemini-3.1-flash-lite, ~1,180+/1,779 rubrics) and
+  the **daily pairwise voting robot is live** (`judge-vote.yml`, S/A/B,
+  metrics-enriched, ≤30 votes/day). **Only gemini-3.1-flash-lite** — never 2.5.
+- **4 GitHub Actions** (ci, sync-upstream, backup, judge-vote) — see AUTOMATION.md.
+  `feed.json` = upstream − `data/excluded.json` + `data/additions.json`.
+- **Mobile face-off fixed** (serves mobile.jpg via `app/shots/` route in dev,
+  R2 in prod), **SSRF bypass closed**, **CI gate**, **daily DB backup to R2**,
+  **takedown path** (footer + issue → excluded.json), **sitemap/robots/error pages**.
+- **Cold caches / open items:** PSI+inspect metrics are populated lazily by
+  visits, so voting mostly judges visuals until a PSI/inspect prewarm runs.
+  Product decisions still open: grid cards link straight to external sites
+  (bypass detail pages + SEO); AI grades are computed but shown nowhere.
 
 ## What this is
 
