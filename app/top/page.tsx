@@ -98,6 +98,14 @@ export default async function TopPage() {
           human votes accrue. Objective measures (performance, accessibility,
           polish) live on each portfolio&apos;s own page.
         </p>
+        <p className="mt-3">
+          <a
+            href="/how"
+            className="text-xs font-semibold text-accent transition hover:underline"
+          >
+            How is this scored? →
+          </a>
+        </p>
       </div>
 
       {!champ ? (

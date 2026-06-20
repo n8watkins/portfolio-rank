@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
 import { TopFive } from "@/components/TopFive";
+import { FAQ } from "@/components/FAQ";
 import { db, ensureSchema } from "@/lib/db";
 
 // Re-render at most every 5 min so the top-ranked marquee stays fresh without
@@ -84,6 +85,8 @@ export default async function Home() {
       <TopMarquee />
 
       <PortfolioGrid portfolios={portfolios} />
+
+      <FAQ />
 
       <footer className="mt-20 border-t border-edge py-10 text-center text-sm text-mute">
         <p>
