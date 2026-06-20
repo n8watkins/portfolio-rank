@@ -4,8 +4,12 @@
 
 // Hostnames that must never be fetched: loopback, link-local (incl. the cloud
 // metadata endpoint 169.254.169.254), and RFC1918 / unique-local IP literals.
+// IPv6 forms covered: `\[?::` catches ::1 (loopback), :: (unspecified), and
+// crucially ::ffff:<v4> (IPv4-mapped — e.g. [::ffff:127.0.0.1], which a redirect
+// could use to smuggle loopback past a v4-only check); `f[cd]` = ULA (fc00::/7);
+// `fe[89ab]` = link-local (fe80::/10).
 const BLOCKED_HOST =
-  /^(localhost|.*\.local|0\.0\.0\.0|127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?|\[?f[cd])/i;
+  /^(localhost|.*\.local|0\.0\.0\.0|127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::|\[?f[cd]|\[?fe[89ab])/i;
 
 function isPublicHttpUrl(raw: string): boolean {
   let u: URL;
