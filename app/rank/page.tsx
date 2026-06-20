@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InspectChips } from "@/components/Diagnostics";
 import { SignInModal } from "@/components/SignInModal";
+import { AuthButton } from "@/components/AuthButton";
 
 type Entry = {
   name: string;
@@ -260,13 +261,16 @@ export default function RankPage() {
         }
         skipLabel={gated ? "Not now" : "Skip — try practice votes first"}
       />
-      <header className="flex items-center justify-between py-4">
+      <header className="flex items-center justify-between gap-3 py-4">
         <a href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
         </a>
-        <p className="text-xs text-mute">
-          {count} vote{count === 1 ? "" : "s"} this session
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="hidden text-xs text-mute sm:block">
+            {count} vote{count === 1 ? "" : "s"} this session
+          </p>
+          <AuthButton />
+        </div>
       </header>
 
       <div className="py-4 text-center">

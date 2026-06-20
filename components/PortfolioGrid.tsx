@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { Portfolio } from "@/app/page";
 import { SITE } from "@/lib/site";
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 18; // 6 rows on desktop (3-col); "Show more" reveals the rest
 const LETTERS = ["All", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 
 const ROLES: { label: string; pattern: RegExp }[] = [
@@ -62,7 +62,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             href={SITE.submit}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-md border border-edge px-2.5 py-1 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
           >
             + Submit yours
           </a>

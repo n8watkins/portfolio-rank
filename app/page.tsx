@@ -3,6 +3,7 @@ import { SITE } from "@/lib/site";
 import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
+import { TopFive } from "@/components/TopFive";
 
 // Re-render at most every 5 min so the top-ranked marquee stays fresh without
 // querying the DB on every request.
@@ -67,6 +68,8 @@ export default async function Home() {
         </div>
       </section>
 
+      <TopFive />
+
       <TopMarquee />
 
       <PortfolioGrid portfolios={portfolios} />
@@ -116,6 +119,16 @@ export default async function Home() {
             Remove my portfolio
           </a>
           .
+        </p>
+        <p className="mt-5">
+          <a
+            href={SITE.kofi}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+          >
+            ☕ Support on Ko-fi
+          </a>
         </p>
       </footer>
     </div>

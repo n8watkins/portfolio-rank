@@ -21,15 +21,17 @@ export function Header({ stars }: { stars: number | null }) {
           href={SITE.n8builds}
           target="_blank"
           rel="noopener noreferrer"
-          className="hidden text-xs font-medium text-mute transition hover:text-ink sm:block"
+          className="hidden items-center gap-1.5 text-xs font-medium text-mute transition hover:text-ink sm:flex"
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/n8-logo.png" alt="" className="h-4 w-4 rounded" />
           by n8builds.dev
         </a>
       </div>
       <nav className="flex items-center gap-2">
         <a
           href="/top"
-          className="px-2 py-1.5 text-xs font-semibold text-mute transition hover:text-ink sm:text-sm"
+          className="rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
         >
           🏆 Top
         </a>
@@ -62,7 +64,7 @@ export function Header({ stars }: { stars: number | null }) {
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-bg transition hover:opacity-85 sm:text-sm"
         >
-          ☕ <span className="hidden sm:inline">Buy me a coffee</span>
+          ☕ <span className="hidden sm:inline">Ko-fi</span>
         </a>
         <AuthButton />
       </nav>

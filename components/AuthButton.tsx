@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signOut } from "next-auth/react";
 import { SignInModal } from "@/components/SignInModal";
 
 type SessionInfo = { login?: string; user?: { image?: string | null } } | null;
@@ -22,7 +23,14 @@ export function AuthButton() {
       .catch(() => setLoaded(true));
   }, []);
 
-  if (!loaded) return null;
+  // Reserve space while the session loads so the nav doesn't jump (pop-in).
+  if (!loaded)
+    return (
+      <span
+        aria-hidden
+        className="h-7 w-20 animate-pulse rounded-lg bg-edge"
+      />
+    );
 
   if (session?.login) {
     return (
@@ -42,13 +50,13 @@ export function AuthButton() {
           )}
           <span className="max-w-[7rem] truncate">{session.login}</span>
         </a>
-        <a
-          href="/api/auth/signout"
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
           className="rounded-lg px-2 py-1 text-xs font-medium text-mute transition hover:text-ink"
           title="Sign out"
         >
           Sign out
-        </a>
+        </button>
       </span>
     );
   }

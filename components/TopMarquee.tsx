@@ -9,7 +9,7 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 export async function TopMarquee() {
   await ensureSchema();
   const res = await db().execute(
-    "SELECT url, elo FROM ratings WHERE votes >= 1 ORDER BY elo DESC LIMIT 14"
+    "SELECT url, elo FROM ratings WHERE votes >= 1 ORDER BY elo DESC LIMIT 15"
   );
   const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
   const ranked = res.rows
