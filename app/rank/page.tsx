@@ -29,11 +29,9 @@ function domainOf(url: string): string {
 }
 
 // Prefers our own Playwright captures (`shot` = capture base dir): the mobile
-// frame on phones, the desktop hero above — so the face-off judges the site as
-// it actually renders on the viewer's device. Falls back to mShots (free, slow,
-// desktop-only, placeholder-while-generating → retry) when we have no capture.
-const SHOT_CLASS =
-  "aspect-[4/3] w-full rounded-t-xl bg-edge object-cover object-top";
+// frame on phones, the desktop hero above. Falls back to mShots when we have no
+// capture (slow, placeholder-while-generating → retry until the real shot loads).
+const SHOT_CLASS = "aspect-[4/3] w-full bg-edge object-cover object-top";
 
 function Shot({ url, shot }: { url: string; shot?: string | null }) {
   const [tick, setTick] = useState(0);
@@ -76,6 +74,8 @@ function Shot({ url, shot }: { url: string; shot?: string | null }) {
 export default function RankPage() {
   const [pair, setPair] = useState<{ a: Entry; b: Entry } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<"a" | "b" | null>(null);
+  const [showDetails, setShowDetails] = useState(true);
   const [count, setCount] = useState(0);
   const [last, setLast] = useState<string | null>(null);
   const [rater, setRater] = useState<RaterInfo | null>(null);
@@ -95,8 +95,6 @@ export default function RankPage() {
     setPair({ a: data.a, b: data.b });
     if (data.rater) {
       setRater(data.rater);
-      // One-time nudge per tab session: invite first-time anon visitors to
-      // sign in up front, with an easy skip into practice mode.
       if (
         !data.rater.signedIn &&
         (data.rater.anonVotesUsed ?? 0) === 0 &&
@@ -108,6 +106,7 @@ export default function RankPage() {
         setSignInOpen(true);
       }
     }
+    setPicked(null);
     setBusy(false);
   }, []);
 
@@ -118,22 +117,38 @@ export default function RankPage() {
   const vote = useCallback(
     async (side: "a" | "b") => {
       const p = pairRef.current;
-      if (!p || busy || gated) return;
+      if (!p || busy || gated || picked) return;
       setBusy(true);
+      setPicked(side); // instant feedback — winner highlights, loser recedes
       const winner = p[side];
       const loser = p[side === "a" ? "b" : "a"];
-      const res = await fetch("/api/rank", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ winner: winner.url, loser: loser.url }),
-      });
-      const data = await res.json();
+
+      let res: Response;
+      let data: {
+        error?: string;
+        official?: boolean;
+        delta?: number;
+        winnerElo?: number;
+        anonVotesUsed?: number;
+      };
+      try {
+        res = await fetch("/api/rank", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ winner: winner.url, loser: loser.url }),
+        });
+        data = await res.json();
+      } catch {
+        setLast("Vote failed — try again.");
+        setPicked(null);
+        setBusy(false);
+        return;
+      }
 
       if (res.status === 403 && data.error === "signin_required") {
-        setRater((r) =>
-          r ? { ...r, anonVotesUsed: r.anonVoteLimit } : r
-        );
+        setRater((r) => (r ? { ...r, anonVotesUsed: r.anonVoteLimit } : r));
         setSignInOpen(true);
+        setPicked(null);
         setBusy(false);
         return;
       }
@@ -148,11 +163,13 @@ export default function RankPage() {
             ? "Easy there — give each pair a real look before voting."
             : "Daily vote limit reached — come back tomorrow!"
         );
+        setPicked(null);
         setBusy(false);
         return;
       }
       if (!res.ok) {
         setLast("Vote failed — try again.");
+        setPicked(null);
         setBusy(false);
         return;
       }
@@ -166,17 +183,19 @@ export default function RankPage() {
         setRater((r) => (r ? { ...r, anonVotesUsed: data.anonVotesUsed } : r));
       }
       setCount((c) => c + 1);
+      // Let the "you picked this" animation play before the next pair slides in.
+      await new Promise((r) => setTimeout(r, 480));
       loadPair();
     },
-    [busy, gated, loadPair]
+    [busy, gated, picked, loadPair]
   );
 
   const skip = useCallback(() => {
-    if (busy) return;
+    if (busy || picked) return;
     setBusy(true);
     setLast(null);
     loadPair();
-  }, [busy, loadPair]);
+  }, [busy, picked, loadPair]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -216,10 +235,10 @@ export default function RankPage() {
         </h1>
         <p className="mt-2 text-sm text-mute">
           <span className="hidden sm:inline">
-            Click one, or use ← → keys. ↓ to skip.
+            Click a screenshot to pick it, or use ← → keys. ↓ to skip.
           </span>
           <span className="sm:hidden">
-            Tap the better one — or Skip below if you can&apos;t tell.
+            Tap a screenshot to pick it — or Skip below if you can&apos;t tell.
           </span>
         </p>
         {last && <p className="mt-2 text-sm font-medium text-accent">{last}</p>}
@@ -264,14 +283,40 @@ export default function RankPage() {
         <div className="grid grid-cols-1 gap-4 pb-6 sm:grid-cols-2">
           {(["a", "b"] as const).map((side) => {
             const p = pair[side];
+            const isWinner = picked === side;
+            const isLoser = picked !== null && picked !== side;
             return (
-              <button
+              <div
                 key={p.url}
-                onClick={() => vote(side)}
-                disabled={busy || gated}
-                className="group rounded-xl border border-edge bg-card text-left transition duration-200 hover:-translate-y-1 hover:border-accent disabled:opacity-60"
+                className={`fade-up overflow-hidden rounded-xl border bg-card transition-all duration-500 ${
+                  isWinner
+                    ? "z-10 scale-[1.03] border-accent ring-2 ring-accent"
+                    : isLoser
+                      ? "scale-95 border-edge opacity-40"
+                      : "border-edge"
+                }`}
               >
-                <Shot url={p.url} shot={p.shot} />
+                {/* The screenshot is the only vote target. */}
+                <button
+                  onClick={() => vote(side)}
+                  disabled={busy || gated || picked !== null}
+                  aria-label={`Pick ${p.name}`}
+                  className="group relative block w-full disabled:cursor-default"
+                >
+                  <Shot url={p.url} shot={p.shot} />
+                  {!picked && (
+                    <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-bg/85 to-transparent py-4 text-sm font-bold text-ink opacity-0 transition group-hover:opacity-100">
+                      ✓ Pick this one
+                    </span>
+                  )}
+                  {isWinner && (
+                    <span className="absolute right-2 top-2 rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-bg shadow">
+                      ✓ Your pick
+                    </span>
+                  )}
+                </button>
+
+                {/* Metadata — deliberately OUTSIDE the vote target. */}
                 <div className="flex items-start justify-between gap-2 p-4 pb-2">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{p.name}</p>
@@ -280,14 +325,11 @@ export default function RankPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <p className="text-sm font-semibold tabular-nums">
-                      {p.elo}
-                    </p>
+                    <p className="text-sm font-semibold tabular-nums">{p.elo}</p>
                     <a
                       href={p.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
                       className="text-xs text-mute underline decoration-edge underline-offset-2 transition hover:text-ink"
                     >
                       visit ↗
@@ -296,17 +338,20 @@ export default function RankPage() {
                       href={`/p/${encodeURIComponent(p.url)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
                       className="text-xs text-mute underline decoration-edge underline-offset-2 transition hover:text-ink"
                     >
                       details
                     </a>
                   </div>
                 </div>
-                <div className="px-4 pb-3">
-                  <InspectChips url={p.url} />
-                </div>
-              </button>
+
+                {/* Diagnostics — desktop only, behind the toggle. */}
+                {showDetails && (
+                  <div className="hidden px-4 pb-3 sm:block">
+                    <InspectChips url={p.url} />
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -314,7 +359,7 @@ export default function RankPage() {
         <p className="py-24 text-center text-sm text-mute">Loading pair…</p>
       )}
 
-      <div className="flex items-center justify-center gap-3 pb-12">
+      <div className="flex flex-wrap items-center justify-center gap-3 pb-12">
         <button
           onClick={() => {
             const p = pairRef.current;
@@ -329,10 +374,16 @@ export default function RankPage() {
         </button>
         <button
           onClick={skip}
-          disabled={busy}
+          disabled={busy || picked !== null}
           className="rounded-lg border border-edge px-5 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink disabled:opacity-60"
         >
           Skip — can&apos;t tell ↓
+        </button>
+        <button
+          onClick={() => setShowDetails((s) => !s)}
+          className="hidden rounded-lg border border-edge px-5 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink sm:inline-flex"
+        >
+          {showDetails ? "Hide details" : "Show details"}
         </button>
       </div>
     </div>
