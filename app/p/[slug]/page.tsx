@@ -109,6 +109,15 @@ export default async function PortfolioPage({
   ).rows[0];
   if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
 
+  const stars = Number(
+    (
+      await db().execute({
+        sql: "SELECT COUNT(*) AS n FROM votes WHERE winner = ? AND starred = 1",
+        args: [url],
+      })
+    ).rows[0]?.n ?? 0
+  );
+
   const rubricRow = (
     await db().execute({
       sql: "SELECT ai_rubric FROM portfolios WHERE url = ?",
@@ -149,6 +158,11 @@ export default async function PortfolioPage({
               <p className="text-xs text-mute">
                 ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
               </p>
+              {stars > 0 && (
+                <p className="text-xs font-semibold text-accent">
+                  ⭐ {stars} loved
+                </p>
+              )}
             </div>
             <a
               href={url}

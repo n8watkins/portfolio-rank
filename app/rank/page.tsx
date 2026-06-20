@@ -18,6 +18,7 @@ type RaterInfo = {
   login: string | null;
   anonVotesUsed: number | null;
   anonVoteLimit: number;
+  stars: number;
 };
 
 function domainOf(url: string): string {
@@ -76,6 +77,7 @@ export default function RankPage() {
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<"a" | "b" | null>(null);
   const [showDetails, setShowDetails] = useState(true);
+  const [autoOpen, setAutoOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [last, setLast] = useState<string | null>(null);
   const [rater, setRater] = useState<RaterInfo | null>(null);
@@ -114,8 +116,12 @@ export default function RankPage() {
     loadPair();
   }, [loadPair]);
 
+  useEffect(() => {
+    setAutoOpen(localStorage.getItem("pr_autoopen") === "1");
+  }, []);
+
   const vote = useCallback(
-    async (side: "a" | "b") => {
+    async (side: "a" | "b", star = false) => {
       const p = pairRef.current;
       if (!p || busy || gated || picked) return;
       setBusy(true);
@@ -130,12 +136,14 @@ export default function RankPage() {
         delta?: number;
         winnerElo?: number;
         anonVotesUsed?: number;
+        starred?: boolean;
+        stars?: number;
       };
       try {
         res = await fetch("/api/rank", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ winner: winner.url, loser: loser.url }),
+          body: JSON.stringify({ winner: winner.url, loser: loser.url, star }),
         });
         data = await res.json();
       } catch {
@@ -175,20 +183,30 @@ export default function RankPage() {
       }
 
       setLast(
-        data.official
-          ? `${winner.name} wins · +${data.delta} → ${data.winnerElo} ELO`
-          : `${winner.name} wins · practice vote (+${data.delta} if official)`
+        data.starred
+          ? `⭐ Super-voted ${winner.name}! +${data.delta} → ${data.winnerElo} ELO`
+          : data.official
+            ? `${winner.name} wins · +${data.delta} → ${data.winnerElo} ELO`
+            : `${winner.name} wins · practice vote (+${data.delta} if official)`
       );
       const av = data.anonVotesUsed;
       if (typeof av === "number") {
         setRater((r) => (r ? { ...r, anonVotesUsed: av } : r));
+      }
+      const st = data.stars;
+      if (typeof st === "number") {
+        setRater((r) => (r ? { ...r, stars: st } : r));
+      }
+      if (autoOpen) {
+        window.open(winner.url, "_blank", "noopener");
+        window.open(loser.url, "_blank", "noopener");
       }
       setCount((c) => c + 1);
       // Let the "you picked this" animation play before the next pair slides in.
       await new Promise((r) => setTimeout(r, 480));
       loadPair();
     },
-    [busy, gated, picked, loadPair]
+    [busy, gated, picked, autoOpen, loadPair]
   );
 
   const skip = useCallback(() => {
@@ -283,6 +301,12 @@ export default function RankPage() {
             your votes count toward official rankings.
           </p>
         )}
+        {rater?.signedIn && rater.stars > 0 && (
+          <p className="mt-1 text-xs font-medium text-accent">
+            ⭐ {rater.stars} Superstar{rater.stars === 1 ? "" : "s"} to spend —
+            tap ⭐ on a standout to super-vote it (double weight + Most Loved).
+          </p>
+        )}
       </div>
 
       {gated && (
@@ -319,24 +343,36 @@ export default function RankPage() {
                 }`}
               >
                 {/* The screenshot is the only vote target. */}
-                <button
-                  onClick={() => vote(side)}
-                  disabled={busy || gated || picked !== null}
-                  aria-label={`Pick ${p.name}`}
-                  className="group relative block w-full disabled:cursor-default"
-                >
-                  <Shot url={p.url} shot={p.shot} />
-                  {!picked && (
-                    <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-bg/85 to-transparent py-4 text-sm font-bold text-ink opacity-0 transition group-hover:opacity-100">
-                      ✓ Pick this one
-                    </span>
+                <div className="relative">
+                  <button
+                    onClick={() => vote(side)}
+                    disabled={busy || gated || picked !== null}
+                    aria-label={`Pick ${p.name}`}
+                    className="group relative block w-full disabled:cursor-default"
+                  >
+                    <Shot url={p.url} shot={p.shot} />
+                    {!picked && (
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center bg-gradient-to-t from-bg/85 to-transparent py-4 text-sm font-bold text-ink opacity-0 transition group-hover:opacity-100">
+                        ✓ Pick this one
+                      </span>
+                    )}
+                    {isWinner && (
+                      <span className="absolute right-2 top-2 rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-bg shadow">
+                        ✓ Your pick
+                      </span>
+                    )}
+                  </button>
+                  {rater?.signedIn && rater.stars > 0 && !picked && (
+                    <button
+                      onClick={() => vote(side, true)}
+                      disabled={busy || picked !== null}
+                      title="Super-vote: spend a ⭐ for double ELO weight + a Most-Loved star"
+                      className="absolute left-2 top-2 z-10 rounded-full bg-bg/80 px-2.5 py-1 text-xs font-bold text-accent backdrop-blur transition hover:bg-accent hover:text-bg"
+                    >
+                      ⭐ Super
+                    </button>
                   )}
-                  {isWinner && (
-                    <span className="absolute right-2 top-2 rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-bg shadow">
-                      ✓ Your pick
-                    </span>
-                  )}
-                </button>
+                </div>
 
                 {/* Metadata — deliberately OUTSIDE the vote target. */}
                 <div className="flex items-start justify-between gap-2 p-4 pb-2">
@@ -414,6 +450,23 @@ export default function RankPage() {
           className="hidden rounded-lg border border-edge px-5 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink sm:inline-flex"
         >
           {showDetails ? "Hide details" : "Show details"}
+        </button>
+        <button
+          onClick={() =>
+            setAutoOpen((v) => {
+              const nv = !v;
+              localStorage.setItem("pr_autoopen", nv ? "1" : "0");
+              return nv;
+            })
+          }
+          title="Open both sites in new tabs automatically when you vote"
+          className={`rounded-lg border px-5 py-2 text-sm font-semibold transition ${
+            autoOpen
+              ? "border-accent text-accent"
+              : "border-edge text-mute hover:border-mute hover:text-ink"
+          }`}
+        >
+          Auto-open: {autoOpen ? "on" : "off"}
         </button>
       </div>
     </div>

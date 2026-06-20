@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 
 export const ANON_VOTE_LIMIT = 10; // free votes before the sign-in gate
 export const DAILY_VOTE_LIMIT = 100; // per rater, signed-in or not
+export const STAR_PER_VOTES = 5; // earn 1 Superstar per N votes
+export const STAR_BANK_CAP = 5; // bank at most this many unspent stars
 
 export type Rater = {
   type: "human" | "anon";

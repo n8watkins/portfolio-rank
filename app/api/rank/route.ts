@@ -3,7 +3,13 @@ import feed from "@/data/feed.json";
 import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { isKnownPortfolio } from "@/lib/roster";
-import { ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, getRater } from "@/lib/rater";
+import {
+  ANON_VOTE_LIMIT,
+  DAILY_VOTE_LIMIT,
+  STAR_BANK_CAP,
+  STAR_PER_VOTES,
+  getRater,
+} from "@/lib/rater";
 import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
 
@@ -33,6 +39,20 @@ async function countVotes(raterId: string, since?: string): Promise<number> {
     args: [raterId],
   });
   return Number(res.rows[0].n);
+}
+
+// Superstar balance: earn 1 per STAR_PER_VOTES votes, bank up to STAR_BANK_CAP.
+async function starBalance(raterId: string): Promise<number> {
+  const r = await db().execute({
+    sql: "SELECT COUNT(*) AS total, COALESCE(SUM(starred), 0) AS spent FROM votes WHERE rater_id = ?",
+    args: [raterId],
+  });
+  const total = Number(r.rows[0].total);
+  const spent = Number(r.rows[0].spent);
+  return Math.max(
+    0,
+    Math.min(Math.floor(total / STAR_PER_VOTES) - spent, STAR_BANK_CAP)
+  );
 }
 
 export async function GET() {
@@ -65,6 +85,7 @@ export async function GET() {
 
   const anonVotesUsed =
     rater.type === "anon" ? await countVotes(rater.id) : null;
+  const stars = rater.type === "human" ? await starBalance(rater.id) : 0;
 
   return NextResponse.json({
     a: withRating(candidates[0]),
@@ -74,6 +95,7 @@ export async function GET() {
       login: rater.login ?? null,
       anonVotesUsed,
       anonVoteLimit: ANON_VOTE_LIMIT,
+      stars,
     },
   });
 }
@@ -82,6 +104,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const winner = body?.winner;
   const loser = body?.loser;
+  const wantStar = body?.star === true;
   if (
     typeof winner !== "string" ||
     typeof loser !== "string" ||
@@ -140,6 +163,25 @@ export async function POST(req: Request) {
       }
     }
 
+    // Superstar super-vote: only a signed-in rater with a banked star can spend
+    // one. It doubles the ELO weight and flags the vote (= the ⭐ for the winner).
+    let useStar = false;
+    if (wantStar && rater.type === "human") {
+      const sb = await tx.execute({
+        sql: "SELECT COUNT(*) AS total, COALESCE(SUM(starred), 0) AS spent FROM votes WHERE rater_id = ?",
+        args: [rater.id],
+      });
+      const bal = Math.max(
+        0,
+        Math.min(
+          Math.floor(Number(sb.rows[0].total) / STAR_PER_VOTES) -
+            Number(sb.rows[0].spent),
+          STAR_BANK_CAP
+        )
+      );
+      useStar = bal > 0;
+    }
+
     const rres = await tx.execute({
       sql: "SELECT url, elo, votes FROM ratings WHERE url IN (?, ?)",
       args: [winner, loser],
@@ -152,7 +194,7 @@ export async function POST(req: Request) {
     );
     const w = map.get(winner) ?? { elo: BASE_ELO, votes: 0 };
     const l = map.get(loser) ?? { elo: BASE_ELO, votes: 0 };
-    const updated = eloUpdate(w.elo, l.elo);
+    const updated = eloUpdate(w.elo, l.elo, useStar ? 64 : 32);
     // Human votes move ELO; anon (practice) votes don't, so their delta is 0.
     // Stored so /api/rank/undo can revert exactly what this vote applied.
     const appliedDelta = rater.type === "human" ? updated.winner - w.elo : 0;
@@ -160,8 +202,8 @@ export async function POST(req: Request) {
     // Insert first: a UNIQUE violation here means this rater already voted on
     // this matchup (either direction) — caught below as 409.
     await tx.execute({
-      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta) VALUES (?, ?, ?, ?, ?, ?)",
-      args: [winner, loser, key, rater.type, rater.id, appliedDelta],
+      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta, starred) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      args: [winner, loser, key, rater.type, rater.id, appliedDelta, useStar ? 1 : 0],
     });
 
     if (rater.type === "human") {
@@ -177,6 +219,7 @@ export async function POST(req: Request) {
 
     const anonVotesUsed =
       rater.type === "anon" ? await countVotes(rater.id) : null;
+    const stars = rater.type === "human" ? await starBalance(rater.id) : 0;
 
     return NextResponse.json({
       official: rater.type === "human",
@@ -184,6 +227,8 @@ export async function POST(req: Request) {
       winnerElo: updated.winner,
       loserElo: updated.loser,
       delta: updated.winner - w.elo,
+      starred: useStar,
+      stars,
       anonVotesUsed,
       anonVoteLimit: ANON_VOTE_LIMIT,
     });

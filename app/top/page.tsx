@@ -52,6 +52,15 @@ export default async function TopPage() {
     (await db().execute("SELECT COUNT(*) AS n FROM votes")).rows[0]?.n ?? 0
   );
 
+  const mostLoved = (
+    await db().execute(
+      "SELECT winner AS url, COUNT(*) AS n FROM votes WHERE starred = 1 GROUP BY winner ORDER BY n DESC LIMIT 5"
+    )
+  ).rows
+    .map((r) => ({ url: String(r.url), stars: Number(r.n) }))
+    .filter((r) => byUrl.has(r.url))
+    .map((r) => ({ ...r, name: byUrl.get(r.url)!.name }));
+
   const champ = ranked[0];
   const champBase = champ ? (await shotBases([champ.url])).get(champ.url) : undefined;
   const champShot = champ
@@ -166,6 +175,25 @@ export default async function TopPage() {
           )}
 
           {rest.length > 0 && <LeaderboardRest entries={rest} />}
+
+          {mostLoved.length > 0 && (
+            <div className="mt-8 border-t border-edge pt-6 pb-16">
+              <h2 className="mb-2 text-sm font-semibold text-mute">
+                💖 Most Loved
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {mostLoved.map((m) => (
+                  <a
+                    key={m.url}
+                    href={`/p/${encodeURIComponent(m.url)}`}
+                    className="flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-semibold transition hover:border-accent"
+                  >
+                    {m.name} <span className="text-accent">⭐ {m.stars}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

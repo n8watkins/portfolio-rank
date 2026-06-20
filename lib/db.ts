@@ -78,6 +78,16 @@ export function ensureSchema(): Promise<void> {
       } catch {
         /* column already present */
       }
+      // starred = 1 if this vote was a "Superstar" super-vote (double ELO weight).
+      // Per-site ⭐ count and per-rater spend both derive from this column, so
+      // deleting a vote (undo) cleanly removes its star too — no separate table.
+      try {
+        await db().execute(
+          "ALTER TABLE votes ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"
+        );
+      } catch {
+        /* column already present */
+      }
       // One vote per (rater, matchup), enforced by the DB so concurrent inserts
       // can't slip past a check-then-insert race. NULL pair_keys (legacy rows)
       // are distinct under SQLite, so the index won't reject them.
