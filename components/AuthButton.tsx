@@ -26,11 +26,11 @@ export function AuthButton() {
 
   if (session?.login) {
     return (
-      <span className="flex items-center gap-1.5">
+      <span className="flex items-center gap-1">
         <a
           href="/votes"
-          className="flex items-center gap-1.5 rounded-lg border border-edge px-2 py-1 text-xs font-semibold transition hover:border-mute"
-          title="My votes"
+          className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-semibold text-ink transition hover:border-accent"
+          title="My votes & history"
         >
           {session.user?.image && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -40,14 +40,14 @@ export function AuthButton() {
               className="h-5 w-5 rounded-full"
             />
           )}
-          {session.login}
+          <span className="max-w-[7rem] truncate">{session.login}</span>
         </a>
         <a
           href="/api/auth/signout"
-          className="px-1.5 py-1 text-xs text-mute transition hover:text-ink"
+          className="rounded-lg px-2 py-1 text-xs font-medium text-mute transition hover:text-ink"
           title="Sign out"
         >
-          ✕
+          Sign out
         </a>
       </span>
     );

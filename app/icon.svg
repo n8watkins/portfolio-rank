@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="PortfolioRank">
+  <rect width="32" height="32" rx="7" fill="#131316"/>
+  <rect x="6" y="14" width="5.5" height="12" rx="1.6" fill="#fbbf24" opacity="0.7"/>
+  <rect x="13.25" y="7.5" width="5.5" height="18.5" rx="1.6" fill="#fbbf24"/>
+  <rect x="20.5" y="18" width="5.5" height="8" rx="1.6" fill="#fbbf24" opacity="0.55"/>
+  <circle cx="16" cy="4.4" r="1.7" fill="#fbbf24"/>
+</svg>

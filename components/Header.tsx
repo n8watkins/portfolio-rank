@@ -11,9 +11,9 @@ export function Header({ stars }: { stars: number | null }) {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/n8-logo.png"
-            alt="n8builds logo"
-            className="h-7 w-7 rounded-lg"
+            src="/pr-logo.svg"
+            alt="PortfolioRank logo"
+            className="h-7 w-7"
           />
           Portfolio<span className="text-accent">Rank</span>
         </a>
