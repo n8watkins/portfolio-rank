@@ -10,6 +10,7 @@ import {
   STAR_PER_VOTES,
   getRater,
 } from "@/lib/rater";
+import { starBalance } from "@/lib/stats";
 import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
 
@@ -41,20 +42,6 @@ async function countVotes(raterId: string, since?: string): Promise<number> {
   return Number(res.rows[0].n);
 }
 
-// Superstar balance: earn 1 per STAR_PER_VOTES votes, bank up to STAR_BANK_CAP.
-async function starBalance(raterId: string): Promise<number> {
-  const r = await db().execute({
-    sql: "SELECT COUNT(*) AS total, COALESCE(SUM(starred), 0) AS spent FROM votes WHERE rater_id = ?",
-    args: [raterId],
-  });
-  const total = Number(r.rows[0].total);
-  const spent = Number(r.rows[0].spent);
-  return Math.max(
-    0,
-    Math.min(Math.floor(total / STAR_PER_VOTES) - spent, STAR_BANK_CAP)
-  );
-}
-
 export async function GET() {
   await ensureSchema();
   const rater = await getRater();
@@ -82,6 +69,18 @@ export async function GET() {
   );
 
   const shots = await shotBases([candidates[0].url, candidates[1].url]);
+  // Which of the two the signed-in rater already likes, so the ♥ renders filled.
+  const likedSet =
+    rater.type === "human"
+      ? new Set(
+          (
+            await db().execute({
+              sql: "SELECT url FROM likes WHERE rater_id = ? AND url IN (?, ?)",
+              args: [rater.id, candidates[0].url, candidates[1].url],
+            })
+          ).rows.map((r) => String(r.url))
+        )
+      : new Set<string>();
   const withRating = (p: Portfolio) => ({
     ...p,
     elo: ratings.get(p.url)?.elo ?? BASE_ELO,
@@ -89,6 +88,7 @@ export async function GET() {
     // Capture base dir (`${SHOTS_BASE_URL}/${shot_key}`) or null; the client
     // builds hero/mobile frame URLs from it. Null → mShots fallback.
     shot: shots.get(p.url) ?? null,
+    liked: likedSet.has(p.url),
   });
 
   const anonVotesUsed =

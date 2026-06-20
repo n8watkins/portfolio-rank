@@ -62,6 +62,36 @@ export function ensureSchema(): Promise<void> {
             v TEXT NOT NULL,
             at INTEGER NOT NULL
           )`,
+          // A "like" = a personal bookmark of a portfolio. Deliberately its own
+          // table, separate from lists and from the ⭐ super-vote (lib/rater):
+          // liking is a free, private signal that never touches ELO.
+          `CREATE TABLE IF NOT EXISTS likes (
+            rater_id TEXT NOT NULL,
+            url TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (rater_id, url)
+          )`,
+          `CREATE INDEX IF NOT EXISTS likes_url_idx ON likes (url)`,
+          `CREATE INDEX IF NOT EXISTS likes_rater_idx ON likes (rater_id, created_at)`,
+          // Named, user-created collections. Every list gets a random slug so it
+          // can be shared read-only at /list/<slug> when is_public = 1.
+          `CREATE TABLE IF NOT EXISTS lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            name TEXT NOT NULL,
+            slug TEXT UNIQUE NOT NULL,
+            is_public INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          )`,
+          `CREATE INDEX IF NOT EXISTS lists_owner_idx ON lists (owner)`,
+          // Membership rows: one (list_id, url) per entry, newest-first by added_at.
+          `CREATE TABLE IF NOT EXISTS list_items (
+            list_id INTEGER NOT NULL,
+            url TEXT NOT NULL,
+            added_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (list_id, url)
+          )`,
+          `CREATE INDEX IF NOT EXISTS list_items_list_idx ON list_items (list_id, added_at)`,
         ],
         "write"
       );
