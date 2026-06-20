@@ -32,8 +32,8 @@ async function getStarCount(): Promise<number | null> {
 }
 
 export default async function Home() {
-  // Hide sites we've confirmed dead/parked/error from browse (voting already
-  // only uses live ones). Unconfirmed (pending/live) stay in.
+  // Hide confirmed dead/parked/error from browse (the voting pool filters them
+  // too — see app/api/rank). Unconfirmed (pending/live) stay in.
   await ensureSchema();
   const excluded = new Set(
     (

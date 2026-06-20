@@ -58,7 +58,15 @@ async function starBalance(raterId: string): Promise<number> {
 export async function GET() {
   await ensureSchema();
   const rater = await getRater();
-  const pool = feed as Portfolio[];
+  // Keep confirmed dead/parked/error sites out of matchups (same as browse).
+  const excluded = new Set(
+    (
+      await db().execute(
+        "SELECT url FROM portfolios WHERE status IN ('dead', 'parked', 'error')"
+      )
+    ).rows.map((r) => String(r.url))
+  );
+  const pool = (feed as Portfolio[]).filter((p) => !excluded.has(p.url));
 
   // Sample a handful of distinct entries, then face off the two least-voted
   // so every vote goes where the rating is most uncertain.

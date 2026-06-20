@@ -234,6 +234,9 @@ export default function RankPage() {
         if (typeof data.anonVotesUsed === "number") {
           setRater((r) => (r ? { ...r, anonVotesUsed: data.anonVotesUsed } : r));
         }
+        if (typeof data.stars === "number") {
+          setRater((r) => (r ? { ...r, stars: data.stars } : r));
+        }
         setLast("↩ Undid your last vote.");
       } else {
         setLast("Nothing to undo.");

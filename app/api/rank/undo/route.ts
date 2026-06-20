@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
-import { getRater } from "@/lib/rater";
+import { STAR_BANK_CAP, STAR_PER_VOTES, getRater } from "@/lib/rater";
 
 export const runtime = "nodejs";
 
@@ -25,9 +25,10 @@ export async function POST() {
 
     await tx.execute({ sql: "DELETE FROM votes WHERE id = ?", args: [v.id] });
 
-    // Only human votes moved ELO; anon (practice) votes had delta 0.
+    // Only human votes touched ratings. Always decrement the vote counter (POST
+    // always incremented it); the ELO term may be 0 for a lopsided matchup.
     const delta = v.delta == null ? 0 : Number(v.delta);
-    if (String(v.rater_type) === "human" && delta) {
+    if (String(v.rater_type) === "human") {
       await tx.execute({
         sql: "UPDATE ratings SET elo = elo - ?, votes = MAX(votes - 1, 0), updated_at = datetime('now') WHERE url = ?",
         args: [delta, String(v.winner)],
@@ -52,5 +53,21 @@ export async function POST() {
     });
     anonVotesUsed = Number(c.rows[0].n);
   }
-  return NextResponse.json({ ok: true, anonVotesUsed });
+  // Undoing a super-vote frees its star — return the fresh balance so the UI re-enables ⭐.
+  let stars = 0;
+  if (rater.type === "human") {
+    const sb = await db().execute({
+      sql: "SELECT COUNT(*) AS total, COALESCE(SUM(starred), 0) AS spent FROM votes WHERE rater_id = ?",
+      args: [rater.id],
+    });
+    stars = Math.max(
+      0,
+      Math.min(
+        Math.floor(Number(sb.rows[0].total) / STAR_PER_VOTES) -
+          Number(sb.rows[0].spent),
+        STAR_BANK_CAP
+      )
+    );
+  }
+  return NextResponse.json({ ok: true, anonVotesUsed, stars });
 }

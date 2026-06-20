@@ -44,7 +44,10 @@ function scrapeGithub(html: string): string | null {
 
 function scrapeLinkedin(html: string): string | null {
   const m = html.match(/linkedin\.com\/(in\/[A-Za-z0-9_%-]+|company\/[A-Za-z0-9_%-]+)/i);
-  return m ? `https://www.linkedin.com/${m[1]}` : null;
+  if (!m) return null;
+  const handle = m[1].split("/")[1] ?? "";
+  if (handle.length < 2 || !/[a-z0-9]/i.test(handle)) return null; // skip junk slugs
+  return `https://www.linkedin.com/${m[1]}`;
 }
 
 const X_NON_USER = /^(home|share|intent|hashtag|search|explore|notifications|messages|settings|login|signup|i)$/i;
@@ -108,8 +111,8 @@ async function inspect(target: string): Promise<Inspection> {
   let linkedinUrl = scrapeLinkedin(html);
   let xUrl = scrapeX(html);
   // Fallback: lots of people put socials on an /about page, not the homepage.
-  // One extra fetch, only when the homepage had no GitHub link.
-  if (!githubUrl) {
+  // One extra fetch, only when some social is still missing.
+  if (!githubUrl || !linkedinUrl || !xUrl) {
     try {
       const about = await safeFetch(new URL("/about", finalUrl).href, {
         timeoutMs: 8_000,
