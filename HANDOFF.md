@@ -17,7 +17,7 @@ See **AUTOMATION.md** for the authoritative architecture + GitHub Actions.
 - **AI judge: grading ~done** (gemini-3.1-flash-lite, ~1,180+/1,779 rubrics) and
   the **daily pairwise voting robot is live** (`judge-vote.yml`, S/A/B,
   metrics-enriched, ≤30 votes/day). **Only gemini-3.1-flash-lite** — never 2.5.
-- **4 GitHub Actions** (ci, sync-upstream, backup, judge-vote) — see AUTOMATION.md.
+- **5 GitHub Actions** (ci, sync-upstream, judge-vote, backup, prewarm) — see AUTOMATION.md.
   `feed.json` = upstream − `data/excluded.json` + `data/additions.json`.
 - **Mobile face-off fixed** (serves mobile.jpg via `app/shots/` route in dev,
   R2 in prod), **SSRF bypass closed**, **CI gate**, **daily DB backup to R2**,
@@ -171,7 +171,7 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 
 ## Conventions & gotchas
 
-- Commit after every verified change; trailer: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. Push — every push to main auto-deploys to production.
+- Commit after every verified change; trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Push — every push to main auto-deploys to production.
 - Vercel CLI is logged in as `natkins23`; project linked in `.vercel/`. Dashboard-only
   settings can be changed via REST API with the CLI token from
   `~/.local/share/com.vercel.cli/auth.json` (used for deployment protection + domains).

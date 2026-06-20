@@ -13,7 +13,8 @@ on:
   schedule:
     - cron: "0 6 * * *" # daily 06:00 UTC
 
-# Share the lock with ingest.yml so two runs never write the DB at once.
+# Serialize DB-writing sync runs so two never overlap (backup/prewarm/vote use
+# their own groups).
 concurrency:
   group: ingest
   cancel-in-progress: false
