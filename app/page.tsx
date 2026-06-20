@@ -49,20 +49,25 @@ export default async function Home() {
     <div className="mx-auto max-w-6xl px-4 sm:px-6">
       <Header stars={stars} />
 
-      <section className="py-8 text-center sm:py-10">
-        <h1 className="fade-up mx-auto max-w-2xl text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+      {/* Top 5 sits above the hero — the leaderboard is the first thing you see. */}
+      <div className="flex justify-center pt-4">
+        <TopFive />
+      </div>
+
+      <section className="pb-10 pt-4 text-center sm:pb-14">
+        <h1 className="fade-up mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
           The best developer portfolios.{" "}
           <span className="text-accent">Ranked.</span>
         </h1>
         <p
-          className="fade-up mx-auto mt-3 max-w-xl text-sm text-mute sm:text-base"
+          className="fade-up mx-auto mt-4 max-w-xl text-sm text-mute sm:text-lg"
           style={{ animationDelay: "80ms" }}
         >
           {portfolios.length.toLocaleString()} community-curated portfolios.
           Your votes decide who rises.
         </p>
         <div
-          className="fade-up mt-5 flex items-center justify-center gap-3"
+          className="fade-up mt-6 flex items-center justify-center gap-3"
           style={{ animationDelay: "160ms" }}
         >
           <a
@@ -80,11 +85,12 @@ export default async function Home() {
         </div>
       </section>
 
-      <TopFive />
-
-      <TopMarquee />
-
       <PortfolioGrid portfolios={portfolios} />
+
+      {/* Marquee moved below the browse grid (lower on the page). */}
+      <div className="mt-14">
+        <TopMarquee />
+      </div>
 
       <FAQ />
 
