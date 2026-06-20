@@ -43,7 +43,8 @@ jobs:
           curl -fsSL \
             https://raw.githubusercontent.com/emmabostian/developer-portfolios/master/README.md \
             -o /tmp/upstream-README.md
-          python3 pipeline/generate_feed.py /tmp/upstream-README.md data/feed.json
+          python3 pipeline/generate_feed.py /tmp/upstream-README.md data/feed.json \
+            --exclude data/excluded.json --add data/additions.json
 
       # 2) Keep your fork mirror current too — only if a PAT is provided.
       - name: Sync fork mirror (optional)

@@ -1,27 +1,34 @@
 #!/usr/bin/env python3
 """
-Generate feed.json from a developer-portfolios README.md.
+Build feed.json = (upstream README) - (our exclusions) + (our additions).
 
-Extracts every `- [Name](url) [tagline]` entry and writes structured JSON,
-de-duplicating by normalized URL. The first occurrence of a URL wins and its
-ORIGINAL url string is preserved verbatim (so existing DB/rating keys, which
-index on the exact url, are never rewritten).
+- Upstream: every `- [Name](url) [tagline]` entry in a developer-portfolios
+  README (the "accepted" community list).
+- Exclusions (--exclude): URLs WE'VE removed (dead/unmaintained sites we don't
+  want back even if upstream still lists them). JSON array of URL strings.
+- Additions (--add): OUR OWN entries (e.g. direct submissions) not in upstream.
+  JSON array of {name, url, tagline?}.
+
+De-duplicated by normalized URL throughout. The first occurrence of a URL wins
+and its ORIGINAL url string is preserved verbatim, so existing DB/rating keys
+(which index on the exact url) are never rewritten.
 
 Usage:
     python generate_feed.py [README.md] [feed.json]
-    (defaults: README.md -> feed.json)
+        [--exclude data/excluded.json] [--add data/additions.json]
 """
 
 import re
 import json
 import sys
+import argparse
 from urllib.parse import urlsplit
 
 PATTERN = re.compile(r"^-\s+\[([^\]]+)\]\(([^)]+)\)(?:\s+\[([^\]]*)\])?")
 
 
 def norm_key(url):
-    """Dedup key: lowercased host (no www) + path without trailing slash."""
+    """Dedup/exclusion key: lowercased host (no www) + path without trailing slash."""
     try:
         parts = urlsplit(url.strip().lower())
         host = parts.netloc
@@ -33,18 +40,35 @@ def norm_key(url):
         return url.strip().lower()
 
 
-def extract_portfolio_data(lines):
+def load_json_array(path):
+    if not path:
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+
+def build_feed(readme_path, exclude_path, add_path):
+    with open(readme_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    excluded = {norm_key(u) for u in load_json_array(exclude_path)}
     portfolios = []
     seen = set()
-    dupes = 0
+    dupes = excluded_hits = 0
+
     for line in lines:
         m = PATTERN.match(line.strip())
         if not m:
             continue
-        name = m.group(1).strip()
-        url = m.group(2).strip()
+        name, url = m.group(1).strip(), m.group(2).strip()
         tagline = m.group(3).strip() if m.group(3) else None
         key = norm_key(url)
+        if key in excluded:
+            excluded_hits += 1
+            continue
         if key in seen:
             dupes += 1
             continue
@@ -53,35 +77,50 @@ def extract_portfolio_data(lines):
         if tagline:
             entry["tagline"] = tagline
         portfolios.append(entry)
-    return portfolios, dupes
 
+    added = 0
+    for entry in load_json_array(add_path):
+        url = (entry.get("url") or "").strip()
+        if not url:
+            continue
+        key = norm_key(url)
+        if key in excluded or key in seen:
+            continue
+        seen.add(key)
+        portfolios.append(entry)
+        added += 1
 
-def create_feed_json(readme_path="README.md", output_path="feed.json"):
-    try:
-        with open(readme_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except FileNotFoundError:
-        print(f"Error: {readme_path} not found.")
-        return 0
-
-    portfolios, dupes = extract_portfolio_data(lines)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(portfolios, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-    if dupes:
-        print(f"  ({dupes} duplicate URL(s) skipped)")
-    return len(portfolios)
+    return portfolios, dupes, excluded_hits, added
 
 
 def main():
-    readme = sys.argv[1] if len(sys.argv) > 1 else "README.md"
-    output = sys.argv[2] if len(sys.argv) > 2 else "feed.json"
-    count = create_feed_json(readme, output)
-    if count:
-        print(f"✓ Wrote {output} with {count} portfolio entries.")
-        return 0
-    print("✗ Failed to create feed.json")
-    return 1
+    p = argparse.ArgumentParser()
+    p.add_argument("readme", nargs="?", default="README.md")
+    p.add_argument("output", nargs="?", default="feed.json")
+    p.add_argument("--exclude", help="JSON array of URLs to drop")
+    p.add_argument("--add", help="JSON array of extra {name,url,tagline} to include")
+    a = p.parse_args()
+
+    try:
+        portfolios, dupes, excluded_hits, added = build_feed(a.readme, a.exclude, a.add)
+    except FileNotFoundError:
+        print(f"Error: {a.readme} not found.")
+        return 1
+
+    with open(a.output, "w", encoding="utf-8") as f:
+        json.dump(portfolios, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    extras = []
+    if dupes:
+        extras.append(f"{dupes} dup(s)")
+    if excluded_hits:
+        extras.append(f"{excluded_hits} excluded")
+    if added:
+        extras.append(f"{added} added")
+    suffix = f"  ({', '.join(extras)})" if extras else ""
+    print(f"✓ Wrote {a.output} with {len(portfolios)} entries.{suffix}")
+    return 0
 
 
 if __name__ == "__main__":
