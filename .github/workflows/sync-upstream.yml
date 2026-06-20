@@ -20,6 +20,7 @@ concurrency:
 
 permissions:
   contents: write # commit the refreshed feed.json
+  issues: write # file an issue if a scheduled run fails
 
 jobs:
   sync:
@@ -82,3 +83,18 @@ jobs:
         run: node pipeline/capture.mjs --concurrency 4
       - name: AI-grade new portfolios
         run: node pipeline/judge.mjs rubric
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="⚠️ Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again: $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+          fi

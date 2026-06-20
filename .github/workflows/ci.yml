@@ -1,0 +1,24 @@
+name: CI
+
+# Safety gate for the auto-deploy-to-prod pipeline: every push to main ships to
+# production in ~45s, so a type error must be caught on the PR, not in prod.
+# tsc --noEmit needs no secrets/env and reliably catches the common breakage.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
