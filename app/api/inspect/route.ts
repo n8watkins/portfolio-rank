@@ -22,10 +22,22 @@ export type Inspection = {
   ogImageLoads?: boolean;
   favicon?: boolean;
   hasGithubLink?: boolean;
+  githubUrl?: string | null; // the owner's GitHub profile, scraped from the page
   hasResume?: boolean;
   hasContact?: boolean;
   copyrightYear?: number | null;
 };
+
+// First github.com/<user> link on the page → their profile URL. Skips GitHub's
+// own non-user paths (sponsors, topics, etc.) and reserved short words.
+const GH_NON_USER = /^(sponsors|topics|features|about|pricing|marketplace|orgs|organizations|settings|notifications|explore|login|join|new|search|apps|collections|readme|site|customer-stories|enterprise|team|security|contact)$/i;
+function scrapeGithub(html: string): string | null {
+  const m = html.match(
+    /github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/i
+  );
+  if (!m || GH_NON_USER.test(m[1])) return null;
+  return `https://github.com/${m[1]}`;
+}
 
 function parseMetaTags(html: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -77,6 +89,7 @@ async function inspect(target: string): Promise<Inspection> {
   }
 
   const yearMatch = html.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(20\d{2})/i);
+  const githubUrl = scrapeGithub(html);
 
   return {
     ok: true,
@@ -90,7 +103,8 @@ async function inspect(target: string): Promise<Inspection> {
     ogImage,
     ogImageLoads,
     favicon,
-    hasGithubLink: /href=["'][^"']*github\.com\//i.test(html),
+    githubUrl,
+    hasGithubLink: Boolean(githubUrl),
     hasResume: /href=["'][^"']*(resume|\bcv\b)[^"']*["']/i.test(html),
     hasContact:
       /mailto:|href=["'][^"']*contact|<form/i.test(html) ||

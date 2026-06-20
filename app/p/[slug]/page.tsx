@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
-import { DetailDiagnostics } from "@/components/Diagnostics";
+import { DetailDiagnostics, GithubLink } from "@/components/Diagnostics";
 import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
@@ -129,7 +129,7 @@ export default async function PortfolioPage({
   const shot = await shotFor(url);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6">
       <header className="flex items-center justify-between py-4">
         <a href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
@@ -152,8 +152,8 @@ export default async function PortfolioPage({
               {portfolio.tagline ?? "Developer"} · {domainOf(url)}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="mr-1 text-right">
               <p className="text-xl font-bold tabular-nums">{rating.elo}</p>
               <p className="text-xs text-mute">
                 ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
@@ -164,6 +164,7 @@ export default async function PortfolioPage({
                 </p>
               )}
             </div>
+            <GithubLink url={url} />
             <a
               href={url}
               target="_blank"
@@ -178,12 +179,14 @@ export default async function PortfolioPage({
         <img
           src={shot}
           alt={`Screenshot of ${domainOf(url)}`}
-          className="mt-4 aspect-[16/10] w-full rounded-lg border border-edge bg-edge object-cover object-top"
+          className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
         />
       </div>
 
+      <DetailDiagnostics url={url} />
+
       {grade && (
-        <div className="mb-4 rounded-xl border border-edge bg-card p-5">
+        <div className="mt-4 rounded-xl border border-edge bg-card p-5">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-lg font-bold text-bg">
               {grade.tier}
@@ -219,8 +222,6 @@ export default async function PortfolioPage({
           </div>
         </div>
       )}
-
-      <DetailDiagnostics url={url} />
 
       <p className="py-8 text-center text-xs text-mute">
         Diagnostics run live against the site and are cached. Think something
