@@ -361,7 +361,7 @@ async function runRubric() {
         r2Part(key, "hero.jpg"),
         r2Part(key, "full.jpg"),
       ]);
-      if (typeof hero === "object" && typeof full === "object") {
+      if (hero?.inline_data && full?.inline_data) {
         mode = "r2";
         images = [hero, full];
         let motion;
@@ -516,8 +516,10 @@ async function runPairwise() {
     // Randomize A/B presentation so position bias can't favor one slot.
     if (Math.random() < 0.5) [a, b] = [b, a];
 
-    const heroA = await heroPart(a.key);
-    const heroB = await heroPart(b.key);
+    const [heroA, heroB] = await Promise.all([
+      heroPart(a.key),
+      heroPart(b.key),
+    ]);
     if (!heroA || !heroB) {
       seen.add(pairKey(a.url, b.url)); // can't judge this pair this run
       continue;

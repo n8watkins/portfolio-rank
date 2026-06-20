@@ -87,7 +87,14 @@ def build_feed(readme_path, exclude_path, add_path):
         if key in excluded or key in seen:
             continue
         seen.add(key)
-        portfolios.append(entry)
+        # Normalize like the README path so name is always present (required by
+        # the Portfolio type / rendered into the detail-page <h1>).
+        name = (entry.get("name") or "").strip() or url
+        norm = {"name": name, "url": url}
+        tagline = (entry.get("tagline") or "").strip()
+        if tagline:
+            norm["tagline"] = tagline
+        portfolios.append(norm)
         added += 1
 
     return portfolios, dupes, excluded_hits, added

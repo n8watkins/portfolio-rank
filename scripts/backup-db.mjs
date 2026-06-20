@@ -4,9 +4,10 @@
 // meta (capture diagnostics) is intentionally omitted — it's regenerable and bulky.
 import { createClient } from "@libsql/client";
 import { gzipSync } from "zlib";
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 
-if (readFileSync) {
+// Optional in CI (GitHub Actions): no .env.local — vars come from runner secrets.
+if (existsSync(".env.local")) {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
     if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
