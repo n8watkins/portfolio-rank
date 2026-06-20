@@ -1,0 +1,33 @@
+name: Remove my portfolio
+description: Request removal of a portfolio from PortfolioRank — no questions asked.
+title: "[Remove] "
+labels: ["takedown"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Want your portfolio off PortfolioRank? Tell us the URL and it'll be removed.
+        Removed sites drop out of the grid, voting, and leaderboard and are never re-added.
+  - type: input
+    id: url
+    attributes:
+      label: Portfolio URL
+      description: The exact link as it appears on the site.
+      placeholder: https://yoursite.com
+    validations:
+      required: true
+  - type: dropdown
+    id: relationship
+    attributes:
+      label: Is this your portfolio?
+      options:
+        - "Yes, it's mine"
+        - "No — reporting on someone's behalf / other reason"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else? (optional)
+    validations:
+      required: false

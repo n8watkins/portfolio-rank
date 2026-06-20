@@ -98,6 +98,18 @@ export default async function Home() {
           </a>{" "}
           — takes 30 seconds with a GitHub account.
         </p>
+        <p className="mt-2 text-xs">
+          On the list and want off?{" "}
+          <a
+            href={SITE.remove}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
+          >
+            Remove my portfolio
+          </a>
+          .
+        </p>
       </footer>
     </div>
   );

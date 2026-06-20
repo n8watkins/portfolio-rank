@@ -58,6 +58,11 @@ export default async function TopPage() {
           {Math.round(totalVotes).toLocaleString()} votes cast · minimum{" "}
           {MIN_VOTES} votes to qualify.
         </p>
+        <p className="mx-auto mt-2 max-w-xl text-xs text-mute">
+          This reflects crowd preference on look &amp; first impression — not a
+          verdict on the developer. Objective measures (performance,
+          accessibility, polish) live on each portfolio&apos;s own page.
+        </p>
       </div>
 
       {ranked.length === 0 ? (
