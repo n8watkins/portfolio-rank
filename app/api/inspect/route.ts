@@ -22,7 +22,10 @@ export type Inspection = {
   ogImageLoads?: boolean;
   favicon?: boolean;
   hasGithubLink?: boolean;
-  githubUrl?: string | null; // the owner's GitHub profile, scraped from the page
+  // Social profiles scraped from the page so visitors can reach them directly.
+  githubUrl?: string | null;
+  linkedinUrl?: string | null;
+  xUrl?: string | null;
   hasResume?: boolean;
   hasContact?: boolean;
   copyrightYear?: number | null;
@@ -37,6 +40,18 @@ function scrapeGithub(html: string): string | null {
   );
   if (!m || GH_NON_USER.test(m[1])) return null;
   return `https://github.com/${m[1]}`;
+}
+
+function scrapeLinkedin(html: string): string | null {
+  const m = html.match(/linkedin\.com\/(in\/[A-Za-z0-9_%-]+|company\/[A-Za-z0-9_%-]+)/i);
+  return m ? `https://www.linkedin.com/${m[1]}` : null;
+}
+
+const X_NON_USER = /^(home|share|intent|hashtag|search|explore|notifications|messages|settings|login|signup|i)$/i;
+function scrapeX(html: string): string | null {
+  const m = html.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{1,15})/i);
+  if (!m || X_NON_USER.test(m[1])) return null;
+  return `https://x.com/${m[1]}`;
 }
 
 function parseMetaTags(html: string): Record<string, string> {
@@ -90,6 +105,8 @@ async function inspect(target: string): Promise<Inspection> {
 
   const yearMatch = html.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(20\d{2})/i);
   const githubUrl = scrapeGithub(html);
+  const linkedinUrl = scrapeLinkedin(html);
+  const xUrl = scrapeX(html);
 
   return {
     ok: true,
@@ -104,6 +121,8 @@ async function inspect(target: string): Promise<Inspection> {
     ogImageLoads,
     favicon,
     githubUrl,
+    linkedinUrl,
+    xUrl,
     hasGithubLink: Boolean(githubUrl),
     hasResume: /href=["'][^"']*(resume|\bcv\b)[^"']*["']/i.test(html),
     hasContact:

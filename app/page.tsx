@@ -120,7 +120,7 @@ export default async function Home() {
           </a>
           .
         </p>
-        <p className="mt-5">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <a
             href={SITE.kofi}
             target="_blank"
@@ -129,7 +129,17 @@ export default async function Home() {
           >
             ☕ Support on Ko-fi
           </a>
-        </p>
+          <a
+            href={SITE.n8builds}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm font-semibold transition hover:border-mute"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/n8-logo.png" alt="" className="h-4 w-4 rounded" />
+            n8builds.dev
+          </a>
+        </div>
       </footer>
     </div>
   );

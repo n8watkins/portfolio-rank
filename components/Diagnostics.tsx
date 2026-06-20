@@ -77,25 +77,58 @@ export function InspectChips({ url }: { url: string }) {
   );
 }
 
-// A GitHub-profile button, scraped from the portfolio page — so you can reach
-// someone's GitHub without opening their site. Renders nothing if none found.
-export function GithubLink({ url }: { url: string }) {
-  const data = useInspection(url);
-  if (!data?.ok || !data.githubUrl) return null;
-  const handle = data.githubUrl.replace(/^https?:\/\/github\.com\//, "@");
+const GH_PATH =
+  "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z";
+const LI_PATH =
+  "M13.6 13.6h-2.37V9.9c0-.88-.02-2.02-1.23-2.02-1.23 0-1.42.96-1.42 1.96v3.76H6.2V6h2.28v1.04h.03c.32-.6 1.1-1.23 2.26-1.23 2.4 0 2.85 1.58 2.85 3.64v4.15zM3.56 4.96a1.38 1.38 0 110-2.76 1.38 1.38 0 010 2.76zM4.75 13.6H2.37V6h2.38v7.6zM14.78 0H1.2C.54 0 0 .53 0 1.18v13.64C0 15.47.54 16 1.2 16h13.58c.66 0 1.22-.53 1.22-1.18V1.18C16 .53 15.44 0 14.78 0z";
+const X_PATH =
+  "M12.6 0h2.45l-5.36 6.12L16 16h-4.93l-3.86-5.05L2.7 16H.25l5.73-6.55L0 0h5.06l3.49 4.61L12.6 0zm-.86 14.54h1.36L4.32 1.39H2.86l8.88 13.15z";
+
+function SocialIcon({ path }: { path: string }) {
   return (
-    <a
-      href={data.githubUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-sm font-semibold transition hover:border-mute"
-      title="Their GitHub profile (scraped from the site)"
-    >
-      <svg viewBox="0 0 16 16" className="h-4 w-4 fill-current" aria-hidden>
-        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-      </svg>
-      {handle}
-    </a>
+    <svg viewBox="0 0 16 16" className="h-4 w-4 fill-current" aria-hidden>
+      <path d={path} />
+    </svg>
+  );
+}
+
+// Social profile buttons (GitHub / LinkedIn / X) scraped from the portfolio page
+// — reach someone's profiles without opening their site. Renders nothing if none.
+export function Socials({ url }: { url: string }) {
+  const data = useInspection(url);
+  if (!data?.ok) return null;
+  const links: { href: string; label: string; path: string }[] = [];
+  if (data.githubUrl)
+    links.push({
+      href: data.githubUrl,
+      label: data.githubUrl.replace(/^https?:\/\/github\.com\//, "@"),
+      path: GH_PATH,
+    });
+  if (data.linkedinUrl)
+    links.push({ href: data.linkedinUrl, label: "LinkedIn", path: LI_PATH });
+  if (data.xUrl)
+    links.push({
+      href: data.xUrl,
+      label: data.xUrl.replace(/^https?:\/\/x\.com\//, "@"),
+      path: X_PATH,
+    });
+  if (!links.length) return null;
+  return (
+    <>
+      {links.map((l) => (
+        <a
+          key={l.href}
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-sm font-semibold transition hover:border-mute"
+          title={l.href}
+        >
+          <SocialIcon path={l.path} />
+          {l.label}
+        </a>
+      ))}
+    </>
   );
 }
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
-import { DetailDiagnostics, GithubLink } from "@/components/Diagnostics";
+import { DetailDiagnostics, Socials } from "@/components/Diagnostics";
 import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
@@ -63,10 +63,12 @@ export async function generateMetadata({
   };
 }
 
-// Only S/A/B grades are surfaced publicly — low tiers stay internal so the site
-// showcases the best and never publicly labels someone's work "weak"/"bad".
+// The AI review shows for any graded site, but only the top tiers (S/A/B) get the
+// prominent letter badge — lower tiers show the axis scores under a neutral "AI"
+// mark, so we never slap a public "D" on someone's work.
 function publicGrade(raw: unknown): null | {
   tier: string;
+  showTier: boolean;
   model?: string;
   axes: { key: string; label: string; score: number; note?: string }[];
 } {
@@ -78,7 +80,7 @@ function publicGrade(raw: unknown): null | {
     return null;
   }
   const tier = r.tier as string | undefined;
-  if (!tier || !["S", "A", "B"].includes(tier)) return null;
+  if (!tier || !["S", "A", "B", "C", "D"].includes(tier)) return null;
   const axes = Object.entries(AXIS_LABELS)
     .map(([key, label]) => {
       const ax = r[key];
@@ -86,7 +88,12 @@ function publicGrade(raw: unknown): null | {
       return { key, label, score: ax.score, note: ax.note };
     })
     .filter((a): a is NonNullable<typeof a> => a !== null);
-  return { tier, model: typeof r.model === "string" ? r.model : undefined, axes };
+  return {
+    tier,
+    showTier: ["S", "A", "B"].includes(tier),
+    model: typeof r.model === "string" ? r.model : undefined,
+    axes,
+  };
 }
 
 export default async function PortfolioPage({
@@ -164,7 +171,7 @@ export default async function PortfolioPage({
                 </p>
               )}
             </div>
-            <GithubLink url={url} />
+            <Socials url={url} />
             <a
               href={url}
               target="_blank"
@@ -188,8 +195,12 @@ export default async function PortfolioPage({
       {grade && (
         <div className="mt-4 rounded-xl border border-edge bg-card p-5">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-lg font-bold text-bg">
-              {grade.tier}
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
+                grade.showTier ? "bg-accent text-bg" : "bg-edge text-mute"
+              }`}
+            >
+              {grade.showTier ? grade.tier : "AI"}
             </span>
             <div>
               <p className="font-semibold">AI design review</p>

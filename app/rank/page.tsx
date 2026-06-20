@@ -84,6 +84,9 @@ export default function RankPage() {
   const [rater, setRater] = useState<RaterInfo | null>(null);
   const [signInOpen, setSignInOpen] = useState(false);
   const nudgedRef = useRef(false);
+  const firstPairRef = useRef(true);
+  const autoOpenRef = useRef(autoOpen);
+  autoOpenRef.current = autoOpen;
   const pairRef = useRef(pair);
   pairRef.current = pair;
 
@@ -96,6 +99,13 @@ export default function RankPage() {
     const res = await fetch("/api/rank");
     const data = await res.json();
     setPair({ a: data.a, b: data.b });
+    // Auto-open both sites for the NEW pair so you can review them before voting.
+    // Skipped on the very first load (no user gesture → browsers block popups).
+    if (autoOpenRef.current && !firstPairRef.current) {
+      window.open(data.a.url, "_blank", "noopener");
+      window.open(data.b.url, "_blank", "noopener");
+    }
+    firstPairRef.current = false;
     if (data.rater) {
       setRater(data.rater);
       if (
@@ -198,16 +208,12 @@ export default function RankPage() {
       if (typeof st === "number") {
         setRater((r) => (r ? { ...r, stars: st } : r));
       }
-      if (autoOpen) {
-        window.open(winner.url, "_blank", "noopener");
-        window.open(loser.url, "_blank", "noopener");
-      }
       setCount((c) => c + 1);
       // Let the "you picked this" animation play before the next pair slides in.
       await new Promise((r) => setTimeout(r, 480));
       loadPair();
     },
-    [busy, gated, picked, autoOpen, loadPair]
+    [busy, gated, picked, loadPair]
   );
 
   const skip = useCallback(() => {
