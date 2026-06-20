@@ -84,8 +84,10 @@ export function FAQ() {
               className="overflow-hidden rounded-xl border border-edge bg-card"
             >
               <button
+                id={`faq-q-${i}`}
                 onClick={() => setOpen(isOpen ? null : i)}
                 aria-expanded={isOpen}
+                aria-controls={`faq-a-${i}`}
                 className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left text-sm font-semibold"
               >
                 {it.q}
@@ -98,6 +100,11 @@ export function FAQ() {
                 </span>
               </button>
               <div
+                id={`faq-a-${i}`}
+                aria-labelledby={`faq-q-${i}`}
+                // `inert` while collapsed keeps the zero-height answer (and any
+                // links inside it) out of the tab order and the a11y tree.
+                inert={!isOpen}
                 className={`accordion-panel grid transition-all duration-300 ease-out ${
                   isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
                 }`}
