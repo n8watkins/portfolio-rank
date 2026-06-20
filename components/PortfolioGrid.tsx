@@ -121,9 +121,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
         {shown.map((p, i) => (
           <a
             key={p.url}
-            href={p.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={`/p/${encodeURIComponent(p.url)}`}
             className="fade-up group rounded-xl border border-edge bg-card p-4 transition duration-200 hover:-translate-y-0.5 hover:border-mute"
             style={{ animationDelay: `${Math.min((i % PAGE_SIZE) * 15, 450)}ms` }}
           >
@@ -143,9 +141,19 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
                   </p>
                 </div>
               </div>
-              <span className="text-mute opacity-0 transition group-hover:opacity-100">
+              {/* Opens the real site; preventDefault keeps the card's own link
+                  (to the detail page) from firing. */}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(p.url, "_blank", "noopener");
+                }}
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-mute opacity-0 transition hover:text-ink group-hover:opacity-100"
+                title="Visit site"
+                aria-label={`Visit ${domainOf(p.url)}`}
+              >
                 ↗
-              </span>
+              </button>
             </div>
           </a>
         ))}

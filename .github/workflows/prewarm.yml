@@ -1,0 +1,55 @@
+name: Prewarm metrics
+
+# Fill the PSI (Lighthouse) + inspect (polish) caches for graded S/A/B sites so
+# the daily voting robot's comparisons actually have objective metrics (the cache
+# is otherwise only populated lazily by visitors). Hits the prod API endpoints,
+# which cache to Turso; PSI quota is 25k/day so this is comfortably free.
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max sites to prewarm this run"
+        required: false
+        default: "150"
+  schedule:
+    - cron: "0 9 * * *" # daily 09:00 UTC — clear of sync (06:00) and vote (13:00)
+
+concurrency:
+  group: prewarm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  prewarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Prewarm PSI + inspect caches
+        run: node scripts/prewarm-metrics.mjs --limit=${{ github.event.inputs.limit || '150' }}
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="⚠️ Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again: $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+          fi

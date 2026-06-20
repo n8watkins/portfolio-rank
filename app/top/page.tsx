@@ -8,7 +8,9 @@ export const metadata = {
   title: "Leaderboard — PortfolioRank",
 };
 
-const MIN_VOTES = 3;
+// Low during cold-start so the AI-seeded ELO has something to show; raise once
+// human votes accrue.
+const MIN_VOTES = 1;
 
 function domainOf(url: string): string {
   try {
@@ -60,8 +62,9 @@ export default async function TopPage() {
         </p>
         <p className="mx-auto mt-2 max-w-xl text-xs text-mute">
           This reflects crowd preference on look &amp; first impression — not a
-          verdict on the developer. Objective measures (performance,
-          accessibility, polish) live on each portfolio&apos;s own page.
+          verdict on the developer. Early rankings are AI-seeded until enough
+          human votes accrue. Objective measures (performance, accessibility,
+          polish) live on each portfolio&apos;s own page.
         </p>
       </div>
 

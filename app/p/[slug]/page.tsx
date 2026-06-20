@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
@@ -8,12 +9,84 @@ import { db, ensureSchema } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+const SITE_URL = "https://portfoliorank.vercel.app";
+
+const AXIS_LABELS: Record<string, string> = {
+  visual_design: "Visual design",
+  five_second_test: "5-second test",
+  storytelling: "Storytelling",
+  writing: "Writing",
+  memorability: "Memorability",
+  motion: "Motion",
+};
+
 function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
     return url;
   }
+}
+
+async function shotFor(url: string): Promise<string> {
+  const base = (await shotBases([url])).get(url);
+  return base ? heroOf(base) : mshotsUrl(url, 1200);
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const url = decodeURIComponent(slug);
+  const p = (feed as Portfolio[]).find((x) => x.url === url);
+  if (!p) return {};
+  const img = await shotFor(url);
+  const title = `${p.name} — PortfolioRank`;
+  const description = p.tagline
+    ? `${p.tagline} · ${domainOf(url)}`
+    : `Developer portfolio · ${domainOf(url)}`;
+  const canonical = `${SITE_URL}/p/${encodeURIComponent(url)}`;
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "website",
+      images: [{ url: img }],
+    },
+    twitter: { card: "summary_large_image", title, description, images: [img] },
+  };
+}
+
+// Only S/A/B grades are surfaced publicly — low tiers stay internal so the site
+// showcases the best and never publicly labels someone's work "weak"/"bad".
+function publicGrade(raw: unknown): null | {
+  tier: string;
+  model?: string;
+  axes: { key: string; label: string; score: number; note?: string }[];
+} {
+  if (typeof raw !== "string") return null;
+  let r: Record<string, { score?: number; note?: string } | string | undefined>;
+  try {
+    r = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const tier = r.tier as string | undefined;
+  if (!tier || !["S", "A", "B"].includes(tier)) return null;
+  const axes = Object.entries(AXIS_LABELS)
+    .map(([key, label]) => {
+      const ax = r[key];
+      if (!ax || typeof ax === "string" || typeof ax.score !== "number") return null;
+      return { key, label, score: ax.score, note: ax.note };
+    })
+    .filter((a): a is NonNullable<typeof a> => a !== null);
+  return { tier, model: typeof r.model === "string" ? r.model : undefined, axes };
 }
 
 export default async function PortfolioPage({
@@ -36,8 +109,15 @@ export default async function PortfolioPage({
   ).rows[0];
   if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
 
-  const base = (await shotBases([url])).get(url);
-  const shot = base ? heroOf(base) : mshotsUrl(url, 1200);
+  const rubricRow = (
+    await db().execute({
+      sql: "SELECT ai_rubric FROM portfolios WHERE url = ?",
+      args: [url],
+    })
+  ).rows[0];
+  const grade = publicGrade(rubricRow?.ai_rubric);
+
+  const shot = await shotFor(url);
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6">
@@ -87,6 +167,44 @@ export default async function PortfolioPage({
           className="mt-4 aspect-[16/10] w-full rounded-lg border border-edge bg-edge object-cover object-top"
         />
       </div>
+
+      {grade && (
+        <div className="mb-4 rounded-xl border border-edge bg-card p-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-lg font-bold text-bg">
+              {grade.tier}
+            </span>
+            <div>
+              <p className="font-semibold">AI design review</p>
+              <p className="text-xs text-mute">
+                by Gemini{grade.model ? ` (${grade.model})` : ""} — an opinion, not
+                a verdict
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {grade.axes.map((ax) => (
+              <div key={ax.key} className="rounded-lg border border-edge p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{ax.label}</span>
+                  <span className="text-sm font-bold tabular-nums">
+                    {ax.score}/5
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
+                  <div
+                    className="h-1.5 rounded-full bg-accent"
+                    style={{ width: `${(ax.score / 5) * 100}%` }}
+                  />
+                </div>
+                {ax.note && (
+                  <p className="mt-1.5 text-xs text-mute">{ax.note}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <DetailDiagnostics url={url} />
 
