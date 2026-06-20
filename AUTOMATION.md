@@ -32,7 +32,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
 | **Direct submission** | Unvetted | Issue form → `data/additions.json` |
 | **Takedown / opt-out** | — | "Remove my portfolio" issue → `data/excluded.json` (dropped forever) |
 
-## GitHub Actions (4)
+## GitHub Actions (5)
 
 All run on GitHub-hosted runners. The repo is **public → unlimited free Actions
 minutes**; the only real budget is the Gemini free tier. Every scheduled job
@@ -44,6 +44,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
 | **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite only) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → R2 `backups/` (~0.2 MB/run) | TURSO, R2 |
+| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for S/A/B sites by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
 
 Schedules are staggered: backup (05:00) → sync+grade (06:00) → vote (13:00, clear
 of the sync window). `sync-upstream` holds the `ingest` concurrency lock for DB
