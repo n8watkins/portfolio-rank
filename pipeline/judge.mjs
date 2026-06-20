@@ -189,12 +189,16 @@ async function heroPart(key, budgetBytes = 5 * 1024 * 1024) {
 
 // Generic uncached R2 image fetcher — used by rubric grading from the cloud,
 // where local capture strips don't exist (CI runners, backlog). null on failure.
+// Returns an inline_data part on success, the string "missing" on a definitive
+// 404 (object genuinely absent), or null on a transient failure (5xx/timeout/
+// oversize) — so callers can sentinel only on true absence, never on a blip.
 async function r2Part(key, file, budgetBytes = 5 * 1024 * 1024) {
   if (!SHOTS_BASE) return null;
   try {
     const res = await fetch(`${SHOTS_BASE}/${key}/${file}`, {
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(15000),
     });
+    if (res.status === 404) return "missing";
     if (!res.ok) return null;
     const len = Number(res.headers.get("content-length") || 0);
     if (len && len > budgetBytes) return null;
@@ -340,23 +344,26 @@ async function runRubric() {
     // Prefer local motion strips (full motion nuance); fall back to R2
     // hero + full + the stored motion flag when strips aren't on this machine
     // (CI runners, or the backlog graded from the cloud).
-    let images, imgDesc;
+    let images, imgDesc, mode;
     const localStrips = [
       imagePart(path.join(dir, "strip0.png")),
       imagePart(path.join(dir, "strip2.png")),
       imagePart(path.join(dir, "full.jpg")),
     ].filter(Boolean);
     if (localStrips.length >= 2) {
+      mode = "local";
       images = localStrips;
       imgDesc =
         `Images, in order: (1) the settled desktop viewport, (2) the same viewport 3 seconds ` +
         `later (compare with 1 to judge motion), (3) the full page top to bottom.`;
     } else {
-      const r2 = [
-        await r2Part(key, "hero.jpg"),
-        await r2Part(key, "full.jpg"),
-      ].filter(Boolean);
-      if (r2.length >= 1) {
+      const [hero, full] = await Promise.all([
+        r2Part(key, "hero.jpg"),
+        r2Part(key, "full.jpg"),
+      ]);
+      if (typeof hero === "object" && typeof full === "object") {
+        mode = "r2";
+        images = [hero, full];
         let motion;
         try {
           motion = JSON.parse(String(row.meta || "{}")).motion;
@@ -368,24 +375,48 @@ async function runRubric() {
             ? "This site HAS animation/motion effects."
             : motion === false
               ? "This site appears STATIC (no motion detected)."
-              : "Motion is unknown for this site.";
-        images = r2;
+              : "Motion for this site is unknown.";
         imgDesc =
           `Images, in order: (1) the desktop hero, (2) the full page top to bottom.\n` +
-          `${motionNote} Judge the motion axis from this fact (you cannot see the animation directly).`;
+          motionNote;
+      } else if (hero === "missing" && full === "missing") {
+        // Both frames are definitively absent from R2 (404) — sentinel so this
+        // row stops re-qualifying every run. Transient failures return null (not
+        // "missing"), so a blip never sentinels a healthy site; it just retries.
+        await db.execute({
+          sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
+          args: [
+            JSON.stringify({
+              error: "no_usable_captures",
+              judged_at: new Date().toISOString(),
+            }),
+            url,
+          ],
+        });
+        console.log(`[${i + 1}/${queue.length}] ${url} — no captures on R2, sentineled`);
+        continue;
       }
     }
     if (!images) {
-      console.log(`[${i + 1}/${queue.length}] ${url} — skipped (no usable captures)`);
+      console.log(
+        `[${i + 1}/${queue.length}] ${url} — skipped (captures unavailable, will retry)`
+      );
       continue;
     }
+    // Motion is judged from two real frames locally, but from the stated flag in
+    // R2 mode — so swap that one axis's instruction to match the inputs.
+    const axesText = AXES.map(([k, d]) =>
+      k === "motion" && mode === "r2"
+        ? `- motion: tasteful / gratuitous / absent — judge from the motion fact stated above (a technical signal, not visible frames)`
+        : `- ${k}: ${d}`
+    ).join("\n");
     const parts = [
       {
         text:
           `You are judging a developer's portfolio website: "${row.name}" at ${url}.\n` +
           imgDesc +
           `\nScore each axis 1 (poor) to 5 (excellent) with one short justification:\n` +
-          AXES.map(([k, d]) => `- ${k}: ${d}`).join("\n") +
+          axesText +
           `\nAlso give an overall tier (S = exceptional, rare; A = strong; B = solid; C = weak; D = bad) ` +
           `and whether this is actually a personal portfolio site.`,
       },
@@ -395,6 +426,7 @@ async function runRubric() {
       const rubric = await gemini(parts, rubricSchema);
       consecutiveErrors = 0;
       rubric.model = MODEL;
+      rubric.grading_source = mode; // "local" (frames) or "r2" (hero+full+flag)
       rubric.judged_at = new Date().toISOString();
       await db.execute({
         sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
