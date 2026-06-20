@@ -59,7 +59,8 @@ SQL).
 
 I also wrote about building it — using AI to turn a static list into something fun to
 browse, and the design (and security) decisions along the way:
-[**building-portfoliorank.md**](blog/building-portfoliorank.md).
+[**Making a Giant List Actually Fun to Browse**](https://n8builds.dev/blog/making-a-giant-list-fun-to-browse)
+on n8builds.dev.
 
 ## Data & credit
 
