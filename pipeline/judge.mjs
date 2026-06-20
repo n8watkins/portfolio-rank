@@ -52,6 +52,29 @@ const VOTES = Number(flag("votes", "20"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
 const RPM = Number(flag("rpm", "8"));
+// pairwise: concentrate votes on these graded tiers (NULL/other tiers excluded).
+const TIERS = (flag("tiers", "S,A,B") || "")
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter(Boolean);
+// Public R2 base (no trailing slash) — heroes are fetched from here in CI where
+// there are no local captures. Same env var lib/shots.ts uses.
+const SHOTS_BASE = (process.env.SHOTS_BASE_URL || "").replace(/\/+$/, "");
+
+if (MODE === "pairwise") {
+  if (MODEL !== "gemini-3.1-flash-lite" && !args.includes("--allow-model")) {
+    console.error("pairwise voting is flash-lite only (pass --allow-model to override)");
+    process.exit(1);
+  }
+  if (!SHOTS_BASE) {
+    console.error("SHOTS_BASE_URL required for pairwise (heroes are fetched from R2)");
+    process.exit(1);
+  }
+  if (!TIERS.length) {
+    console.error("--tiers must name at least one tier (e.g. S,A,B)");
+    process.exit(1);
+  }
+}
 
 const db = process.env.TURSO_DATABASE_URL
   ? createClient({
@@ -126,6 +149,111 @@ function imagePart(file, budgetBytes = 5 * 1024 * 1024) {
       data: fs.readFileSync(file).toString("base64"),
     },
   };
+}
+
+// Fetch a hero from R2 as an inline image part (pairwise runs on CI with no
+// local captures). Only SUCCESS and a definitive 404 are cached — transient
+// failures (timeout/5xx/network) return null WITHOUT caching, so a brief R2
+// blip can't blacklist a site for the whole run (it retries on a later round).
+const heroCache = new Map(); // shot_key -> inline_data | null
+async function heroPart(key, budgetBytes = 5 * 1024 * 1024) {
+  if (heroCache.has(key)) return heroCache.get(key);
+  try {
+    const res = await fetch(`${SHOTS_BASE}/${key}/hero.jpg`, {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (res.status === 404) {
+      heroCache.set(key, null); // genuinely absent — cache the miss
+      return null;
+    }
+    if (res.ok) {
+      const len = Number(res.headers.get("content-length") || 0);
+      if (len && len > budgetBytes) {
+        heroCache.set(key, null);
+        return null;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > budgetBytes) {
+        heroCache.set(key, null);
+        return null;
+      }
+      const part = { inline_data: { mime_type: "image/jpeg", data: buf.toString("base64") } };
+      heroCache.set(key, part);
+      return part;
+    }
+    return null; // transient (5xx, etc.) — not cached, retry later
+  } catch {
+    return null; // network/timeout — not cached, retry later
+  }
+}
+
+// Batch-load cached objective signals (PSI/Lighthouse + inspect polish) for a
+// set of URLs from the generic `cache` table. Keys mirror the API routes
+// (`psi:<url>` 30d TTL, `inspect:<url>` 7d TTL); stale/unparseable/!ok rows are
+// dropped. Wrapped so a missing `cache` table (cold DB) degrades to empty maps
+// rather than throwing and killing the whole run.
+const PSI_TTL = 30 * 24 * 3600 * 1000;
+const INSPECT_TTL = 7 * 24 * 3600 * 1000;
+async function loadSignals(urls) {
+  const psi = new Map();
+  const insp = new Map();
+  try {
+    const keys = [];
+    for (const u of urls) keys.push(`psi:${u}`, `inspect:${u}`);
+    if (!keys.length) return { psi, insp };
+    const ph = keys.map(() => "?").join(",");
+    const res = await db.execute({
+      sql: `SELECT k, v, at FROM cache WHERE k IN (${ph})`,
+      args: keys,
+    });
+    for (const row of res.rows) {
+      const k = String(row.k);
+      const age = Date.now() - Number(row.at);
+      let v;
+      try {
+        v = JSON.parse(String(row.v));
+      } catch {
+        continue;
+      }
+      if (k.startsWith("psi:") && age < PSI_TTL && v.ok) psi.set(k.slice(4), v);
+      else if (k.startsWith("inspect:") && age < INSPECT_TTL && v.ok) insp.set(k.slice(8), v);
+    }
+  } catch {
+    /* no cache table / DB hiccup — judge on visuals alone */
+  }
+  return { psi, insp };
+}
+
+// Format a site's objective signals for the prompt, omitting any absent field so
+// the prompt never asserts data it lacks (missing == unknown, not bad).
+function signalLines(label, url, sig) {
+  const lines = [];
+  const p = sig.psi.get(url);
+  if (p?.scores) {
+    const s = p.scores;
+    const parts = [];
+    if (s.performance != null) parts.push(`perf ${s.performance}`);
+    if (s.accessibility != null) parts.push(`a11y ${s.accessibility}`);
+    if (s["best-practices"] != null) parts.push(`best-practices ${s["best-practices"]}`);
+    if (s.seo != null) parts.push(`seo ${s.seo}`);
+    if (parts.length) lines.push(`Lighthouse (mobile, 0-100): ${parts.join(", ")}`);
+    if (p.metrics?.length)
+      lines.push(`Core Web Vitals: ${p.metrics.map((m) => `${m.label} ${m.value}`).join(", ")}`);
+  }
+  const i = sig.insp.get(url);
+  if (i) {
+    const flags = [];
+    if (i.customDomain) flags.push("custom domain");
+    else if (i.customDomain === false) flags.push("on free hosting subdomain");
+    if (i.hasGithubLink) flags.push("links GitHub");
+    if (i.hasResume) flags.push("has resume/CV");
+    if (i.hasContact) flags.push("has contact/LinkedIn");
+    if (i.ogImageLoads) flags.push("working social preview image");
+    if (i.favicon) flags.push("favicon");
+    if (typeof i.copyrightYear === "number") flags.push(`copyright ${i.copyrightYear}`);
+    if (flags.length) lines.push(`Polish signals: ${flags.join(", ")}`);
+  }
+  return lines.length ? `${label} metrics:\n  ${lines.join("\n  ")}` : `${label} metrics: none available`;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,45 +366,59 @@ const pairSchema = {
 
 async function runPairwise() {
   const res = await db.execute(
-    `SELECT p.url, p.name, p.shot_key,
+    `SELECT p.url, p.name, p.shot_key, p.ai_rubric,
             COALESCE(r.elo, ${BASE_ELO}) AS elo, COALESCE(r.votes, 0) AS votes
      FROM portfolios p LEFT JOIN ratings r ON r.url = p.url
      WHERE p.status = 'live' AND p.shot_key IS NOT NULL`
   );
-  const pool = res.rows.map((r) => ({
+  let pool = res.rows.map((r) => ({
     url: String(r.url),
     name: String(r.name),
     key: String(r.shot_key),
     elo: Number(r.elo),
     votes: Number(r.votes),
+    tier: (() => {
+      try {
+        return JSON.parse(String(r.ai_rubric || "{}")).tier;
+      } catch {
+        return undefined;
+      }
+    })(),
   }));
+  // Concentrate on graded tiers; ungraded (NULL tier) sites are excluded.
+  pool = pool.filter((p) => p.tier && TIERS.includes(p.tier));
+  if (pool.length < 2) {
+    console.log(`pairwise[tiers=${TIERS.join("/")}]: pool too small (${pool.length}) — nothing to do`);
+    return;
+  }
   const voted = await db.execute({
     sql: "SELECT pair_key FROM votes WHERE rater_id = ?",
     args: [RATER_ID],
   });
   const seen = new Set(voted.rows.map((r) => String(r.pair_key)));
+  // One batched read of objective signals for the (small) tiered pool.
+  const sig = await loadSignals(pool.map((p) => p.url));
   console.log(
-    `pairwise: pool ${pool.length} site(s), ${seen.size} pair(s) already voted, casting up to ${VOTES}`
+    `pairwise[tiers=${TIERS.join("/")}]: pool ${pool.length} site(s), ${seen.size} pair(s) already voted, casting up to ${VOTES}`
   );
 
   let cast = 0;
+  let consecutiveErrors = 0;
   for (let round = 0; cast < VOTES && round < VOTES * 5; round++) {
     // Uncertainty-prioritized: sample a handful, face off the two least-voted
     // whose ratings are close (same selection spirit as GET /api/rank).
     const sample = [...pool].sort(() => Math.random() - 0.5).slice(0, 12);
     sample.sort((a, b) => a.votes - b.votes || Math.abs(a.elo - b.elo));
     let a = sample[0];
-    let b = sample
-      .slice(1)
-      .find((p) => !seen.has(pairKey(a.url, p.url)));
+    let b = sample.slice(1).find((p) => !seen.has(pairKey(a.url, p.url)));
     if (!b) continue;
     // Randomize A/B presentation so position bias can't favor one slot.
     if (Math.random() < 0.5) [a, b] = [b, a];
 
-    const heroA = imagePart(path.join(ROOT, "captures", a.key, "hero.jpg"));
-    const heroB = imagePart(path.join(ROOT, "captures", b.key, "hero.jpg"));
+    const heroA = await heroPart(a.key);
+    const heroB = await heroPart(b.key);
     if (!heroA || !heroB) {
-      seen.add(pairKey(a.url, b.url)); // don't re-draw a pair we can't judge
+      seen.add(pairKey(a.url, b.url)); // can't judge this pair this run
       continue;
     }
 
@@ -285,9 +427,20 @@ async function runPairwise() {
         [
           {
             text:
-              `Two developer portfolio heroes. A: "${a.name}". B: "${b.name}".\n` +
-              `Which is the better portfolio overall — design, clarity, memorability? ` +
-              `Pick a winner; skip only if genuinely unusable or indistinguishable.`,
+              `You are judging two developer portfolio websites by their hero screenshots, ` +
+              `which are the primary evidence. A: "${a.name}". B: "${b.name}".\n\n` +
+              `Decide which is the better portfolio OVERALL. Judge substance, not just looks:\n` +
+              `- Visual craft (PRIMARY): hierarchy, typography, color, spacing, and clarity of who/what from the hero.\n` +
+              `- Then use the objective signals below as evidence of substance:\n` +
+              `  * Lighthouse performance/accessibility — a beautiful page that is slow or inaccessible is worse than it looks.\n` +
+              `  * Custom domain, working social preview, contact/resume/GitHub links indicate a finished, professional site.\n` +
+              `Let the screenshot lead; use metrics to break near-ties and to penalize a polished-looking page with poor ` +
+              `performance/accessibility. Do NOT penalize a site for having fewer metrics listed — missing data is unknown, not bad.\n\n` +
+              signalLines("A", a.url, sig) +
+              "\n" +
+              signalLines("B", b.url, sig) +
+              "\n\n" +
+              `Pick a winner; skip ONLY if a shot is unusable or the two are truly indistinguishable on both looks and signals.`,
           },
           { text: "A:" },
           heroA,
@@ -296,6 +449,7 @@ async function runPairwise() {
         ],
         pairSchema
       );
+      consecutiveErrors = 0;
       seen.add(pairKey(a.url, b.url));
       if (verdict.winner === "skip") {
         console.log(`  skip: ${a.url} vs ${b.url} — ${verdict.reason}`);
@@ -304,15 +458,17 @@ async function runPairwise() {
       const [win, lose] = verdict.winner === "A" ? [a, b] : [b, a];
       await castVote(win, lose);
       cast++;
-      console.log(
-        `[${cast}/${VOTES}] ${win.url} beat ${lose.url} — ${verdict.reason}`
-      );
+      console.log(`[${cast}/${VOTES}] ${win.url} beat ${lose.url} — ${verdict.reason}`);
     } catch (e) {
-      if (/UNIQUE constraint failed/i.test(String(e.message))) {
-        seen.add(pairKey(a.url, b.url));
-        continue;
-      }
+      // Never re-draw a failed pair this run — otherwise a poisoned pair recurs
+      // every round on a small tiered pool and burns the budget for 0 votes.
+      seen.add(pairKey(a.url, b.url));
+      if (/UNIQUE constraint failed/i.test(String(e.message))) continue; // dup, not an error
       console.log(`  ERROR ${a.url} vs ${b.url}: ${String(e.message).slice(0, 120)}`);
+      if (++consecutiveErrors >= 5) {
+        console.log("  aborting: 5 consecutive errors (likely quota exhausted or outage)");
+        break;
+      }
     }
   }
   console.log(`pairwise done: ${cast} vote(s) cast, ${calls} API call(s)`);

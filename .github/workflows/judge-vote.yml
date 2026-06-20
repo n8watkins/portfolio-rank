@@ -1,0 +1,88 @@
+name: Daily AI vote (pairwise-metrics)
+
+# Each day, gemini-3.1-flash-lite compares pairs of higher-tier portfolios using
+# the R2 hero image + cached objective metrics (PSI/Lighthouse + inspect polish)
+# and casts ELO-moving votes, concentrating on graded S/A/B sites so the
+# leaderboard (min 3 votes to qualify) fills. Heroes come from the public R2
+# bucket (no local captures on the runner). Write-light: one votes row + one ELO
+# upsert per vote, in a short transaction.
+#
+# Budget: shares the free-tier Gemini quota (~500/day) with sync-upstream's
+# rubric grading, which on steady-state days only touches NEW sites — so a 30-vote
+# cap leaves ample headroom. Cron is set CLEAR of sync's 06:00-11:30 window and
+# the job uses its OWN concurrency group, so a long sync run can't queue this into
+# a timeout.
+on:
+  workflow_dispatch:
+    inputs:
+      votes:
+        description: "Max votes this run"
+        required: false
+        default: "30"
+      tiers:
+        description: "Comma-separated tiers to concentrate on"
+        required: false
+        default: "S,A,B"
+  schedule:
+    - cron: "0 13 * * *" # 13:00 UTC — clear of sync-upstream's 06:00-11:30 window
+
+concurrency:
+  group: ai-vote # own group: write-light, must NOT queue behind the ingest lock
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write # file a failure issue
+
+jobs:
+  vote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }} # public R2 base, e.g. https://pub-xxxx.r2.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # Fail loudly on any missing secret — otherwise judge.mjs silently falls
+      # back (no R2 heroes, or a local sqlite file that doesn't exist) and casts
+      # 0 votes on a green run.
+      - name: Require secrets
+        run: |
+          missing=
+          for v in TURSO_DATABASE_URL TURSO_AUTH_TOKEN GEMINI_API_KEY SHOTS_BASE_URL; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing"
+            exit 1
+          fi
+
+      - name: Cast daily AI pairwise votes
+        run: >-
+          node pipeline/judge.mjs pairwise
+          --votes "${{ github.event.inputs.votes || '30' }}"
+          --tiers "${{ github.event.inputs.tiers || 'S,A,B' }}"
+          --rpm 8
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="⚠️ Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again: $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+          fi
