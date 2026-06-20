@@ -3,6 +3,58 @@
 Read this + AUTOMATION.md + PLAN.md + GRADING_CRITERIA.md + DEPLOY.md in full
 before doing anything. Do not re-ask the user anything answered here or there.
 
+## ⚡ Update 2026-06-20 (LATEST) — Likes / Lists / Profile + homepage polish
+
+**Shipped & live in production** (commits f9eed2e…0d31ba8, pushed + deploy
+verified: prod `/api/likes` went 404→200). Design + deviations in `LISTS_PLAN.md`.
+
+Done this session:
+- **Likes (♥)** — their own table/signal, separate from ⭐ super-votes AND from
+  lists. Schema `likes(rater_id,url)`; `/api/likes` toggle/set + batch hydrate.
+  ♥ on detail, rank cards, browse grid; public "saved" count on detail.
+- **Named lists** — `lists`/`list_items` tables; owner-scoped, roster-validated,
+  write-transactional `/api/lists` (+ `[id]`, `[id]/items`). "Add to list"
+  picker with inline creation. `/list/[slug]` public read-only + owner inline
+  edit; private lists 404 to non-owners; OG metadata + first-portfolio hero.
+- **`/profile` (private hub)** — stats (votes, Superstars avail/earned, likes,
+  lists), liked grid (unlike inline), full lists manager. `lib/stats.ts` holds
+  shared `raterStats`/`starBalance` (extracted from /api/rank). "My profile"
+  added to the account dropdown.
+- **Homepage polish** — removed Top 5; marquee restored above the grid; larger
+  hero headline; ambient background gradients (`.app-bg`, fixed layer in
+  layout.tsx); animated FAQ accordion (grid-rows 0fr→1fr height transition,
+  respects prefers-reduced-motion).
+- **Quality** — `tsc` clean; full authed lifecycle + cross-user access control
+  verified with minted session JWTs (test rows hard-purged, zero residual); a
+  5-dimension adversarial review → 13 confirmed fixes (commit 9886c41).
+
+New components: LikeButton, ShareButton, AddToListButton, ProfileLists,
+ProfileLikes, ListView. New libs: lib/slug.ts, lib/stats.ts. The 3 new tables
+were auto-created in prod Turso via `ensureSchema()` (dev writes to prod).
+
+### Revised next steps (supersede the older list lower down)
+1. **USER: create the Google OAuth client** (still pending) — the sign-in modal
+   shows only GitHub until AUTH_GOOGLE_ID/SECRET are set in Vercel. Likes/lists
+   need sign-in, so this widens who can use them. Redirect URI:
+   `https://portfoliorank.vercel.app/api/auth/callback/google`.
+2. **Rotate the R2 token** (was pasted into a chat) — update `.env.local`, re-push
+   Vercel + GitHub secrets.
+3. **Real-user prod check** — sign in on prod, like a portfolio, create/share a
+   list; the lifecycle was verified via a minted JWT, not a real OAuth round-trip.
+4. **Dead code:** `components/TopFive.tsx` is no longer imported (Top 5 removed
+   from home) — delete or repurpose for `/top`.
+5. **Accepted low review finding:** list item counts are raw membership counts;
+   they only diverge from the displayed (roster-filtered) count if a url leaves
+   feed.json. Revisit only if it matters.
+6. **Likes/lists follow-ups (deferred):** anon like/save → localStorage → claim
+   on sign-in (mirror the practice-vote claim flow in app/api/claim); surface
+   lists/likes more prominently than the dropdown; consider like/list signals in
+   discovery.
+7. **Growth (unchanged):** per-portfolio rank-badge SVG, "score my portfolio"
+   instant report, auto OG share cards, weekly feed.json sync.
+8. **Phase 3 retention (PLAN.md):** taste profiles, streaks, AI-vs-crowd page.
+9. **Docs:** optional auto-updating portfolio count (PLAN.md backlog option B).
+
 ## ⚡ Update 2026-06-20 (supersedes anything below that conflicts)
 
 The blockers in the old "Next steps" are **done**; the pipeline is fully automated.
