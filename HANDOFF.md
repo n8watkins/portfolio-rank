@@ -33,16 +33,20 @@ ProfileLikes, ListView. New libs: lib/slug.ts, lib/stats.ts. The 3 new tables
 were auto-created in prod Turso via `ensureSchema()` (dev writes to prod).
 
 ### Revised next steps (supersede the older list lower down)
-1. **Google OAuth — CONFIGURED 2026-06-20 (verify post-redeploy).** Client made in
-   Google Console; both `AUTH_GOOGLE_ID` + `AUTH_GOOGLE_SECRET` set in Vercel prod
-   (+ `.env.local`), and a prod redeploy triggered so they take effect — the
-   sign-in modal then shows the Google button automatically (`g:<sub>` identities).
-   Client authorized redirect URIs: `https://portfoliorank.vercel.app/api/auth/callback/google`
-   and `http://localhost:7678/api/auth/callback/google` (local testing on this
-   project's standard origin); JS origins `https://portfoliorank.vercel.app` +
-   `http://localhost:7678`. **⚠️ ROTATE the client secret** — it was pasted into a
-   chat (same caution as the R2 token): regenerate it in Google Console and re-set
-   the Vercel + `.env.local` value.
+
+> **Project location moved 2026-06-20:** the repo now lives at
+> `/home/natkins/n8builds/published/portfolio-rank` (was `…/public/portfolio-rank`).
+> A stale `…/public/portfolio-rank` may linger with just a `.next` cache — ignore it.
+> Restart the dev server (`npm run dev`, port 7678) from the new path.
+
+1. **Auth: GitHub-only (Google removed 2026-06-20).** Dropped Google to avoid
+   maintaining a Google Cloud project; `auth.ts` is GitHub-only and
+   `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` were removed from Vercel + `.env.local`.
+   **TODO (USER): delete the Google OAuth client/project in Google Console** — that
+   neutralizes the client secret that was pasted into a chat (no rotation needed
+   once deleted). NextAuth/Auth.js stays the handler; identities are
+   `gh:<github id>` (`session.raterId`), which every vote/like/list ownership row
+   keys on — do not switch auth providers without a data migration.
 2. **Rotate the R2 token** (was pasted into a chat) — update `.env.local`, re-push
    Vercel + GitHub secrets.
 3. **Real-user prod check** — sign in on prod, like a portfolio, create/share a
