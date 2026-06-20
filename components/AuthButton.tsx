@@ -65,6 +65,12 @@ export function AuthButton() {
               className="absolute right-0 z-30 mt-1 w-40 overflow-hidden rounded-lg border border-edge bg-card text-sm shadow-lg"
             >
               <a
+                href="/profile"
+                className="block px-3 py-2 transition hover:bg-edge"
+              >
+                My profile
+              </a>
+              <a
                 href="/votes"
                 className="block px-3 py-2 transition hover:bg-edge"
               >

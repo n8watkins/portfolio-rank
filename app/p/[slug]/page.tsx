@@ -9,7 +9,7 @@ import { AddToListButton } from "@/components/AddToListButton";
 import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
-import { getRater } from "@/lib/rater";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -139,13 +139,15 @@ export default async function PortfolioPage({
       })
     ).rows[0]?.n ?? 0
   );
-  const rater = await getRater();
+  // Read-only identity: only signed-in raters can like, and resolving via
+  // auth() (vs getRater) avoids mutating the anon cookie during render.
+  const session = await auth();
   const liked =
-    rater.type === "human" &&
+    !!session?.raterId &&
     (
       await db().execute({
         sql: "SELECT 1 FROM likes WHERE rater_id = ? AND url = ?",
-        args: [rater.id, url],
+        args: [session.raterId, url],
       })
     ).rows.length > 0;
 
