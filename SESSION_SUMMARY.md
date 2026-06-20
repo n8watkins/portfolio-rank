@@ -74,7 +74,16 @@ current state see **HANDOFF.md**.
 - README/PLAN/DEPLOY/GRADING brought current; AUTOMATION.md added; doc-staleness
   audited.
 
+## Likes / Lists / Profile (shipped 2026-06-20)
+- **Likes (♥)** — own table/signal, separate from ⭐ super-votes and from lists;
+  on detail, rank cards, browse grid; public "saved" count on detail.
+- **Named lists** — full CRUD + `/list/[slug]` public shareable (owner inline
+  edit), "Add to list" picker with inline creation. Owner-scoped, roster-only,
+  write-transactional APIs (`/api/likes`, `/api/lists*`).
+- **`/profile` hub (private)** — stats (votes, Superstars, likes, lists), your
+  likes grid, lists manager. `lib/stats.ts` shares `raterStats`/`starBalance`.
+- Built → 5-dimension adversarial review → 13 confirmed fixes. See `LISTS_PLAN.md`.
+
 ## Planned, not built
-- **Save / Share / Lists** → `LISTS_PLAN.md` (Turso-backed; 3-phase).
 - **Auto-updating portfolio count** in docs → backlog note in `PLAN.md`.
 - Dropped per owner: notifications, 20-at-once AI judging.

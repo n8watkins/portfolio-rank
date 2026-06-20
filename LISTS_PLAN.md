@@ -1,5 +1,35 @@
 # Plan: Save / Share / Lists
 
+## ✅ SHIPPED 2026-06-20 (all three phases + a profile hub)
+
+Built and verified end-to-end (authed lifecycle + cross-user access control
+tested with minted session JWTs; test data hard-purged). Key deviations from the
+original plan below:
+
+- **Likes are their own table/signal, NOT a default "Saved" list.** Per owner
+  decision, a ♥ "like" is a distinct, private bookmark — separate from named
+  lists AND from the existing ⭐ super-vote ("Most Loved"). Schema: `likes
+  (rater_id, url)`. So there is no auto-created "Saved" list; `/saved` was not
+  built — likes live on the profile instead.
+- **`/profile` hub (private)** aggregates everything: stats (votes cast,
+  Superstars available/earned, likes, lists), your likes grid (unlike inline),
+  and the full lists manager. `lib/stats.ts` holds the shared `raterStats` +
+  `starBalance` (the latter extracted from `/api/rank`).
+- **APIs:** `/api/likes` (toggle/set + hydrate), `/api/lists` (+ `[id]`,
+  `[id]/items`) — owner-scoped, roster-validated, write-transactional.
+- **Pages:** `/profile`, `/list/[slug]` (public read-only + owner inline edit;
+  private lists 404 for non-owners; OG metadata). ♥ wired into detail, rank
+  cards (via `/api/rank` `liked`), and the browse grid. "My profile" added to
+  the account dropdown. Components: `LikeButton`, `ShareButton`,
+  `AddToListButton`, `ProfileLists`, `ProfileLikes`, `ListView`.
+- A 5-dimension adversarial review ran post-build; 13 confirmed findings fixed
+  (see commit 9886c41).
+
+Original plan (kept for reference) follows.
+
+---
+
+
 Goal (owner's words): people should be able to **save** portfolios they like,
 **share** them (from the detail view *and* while voting), and keep **different
 named lists**. Backed by the existing **Turso** DB (signed-in, durable,
