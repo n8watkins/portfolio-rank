@@ -16,6 +16,20 @@ state. What remains is Phase 3 (retention: taste profiles, streaks, AI-vs-crowd)
 growth features (rank badge SVG, "score my portfolio") — the roadmap below is kept for
 reference and historical intent.
 
+### Backlog idea: keep the portfolio count fresh in docs
+
+The site already shows a live exact count (homepage hero = `feed.json` length,
+auto-updates each sync). `.md` files are static so they can't read env vars at
+view time. Two options for docs:
+
+- **A (current):** use "1,700+" — robust, never stale.
+- **B (auto-increment):** put a marker like `<!--COUNT-->1789<!--/COUNT-->` in the
+  docs, and add a `sed` step in `.github/workflows/sync-upstream.yml` (right before
+  the bot commits the regenerated feed.json) that rewrites it from
+  `jq length data/feed.json`. The count then auto-updates whenever a portfolio is
+  accepted — no env var needed. Low priority; only worth it if exact numbers in
+  docs matter.
+
 ## Deployment
 
 - Upstream (emmabostian/developer-portfolios) is **not deployed anywhere** — no homepage,
