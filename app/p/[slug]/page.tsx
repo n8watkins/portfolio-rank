@@ -196,14 +196,16 @@ export default async function PortfolioPage({
                   ⭐ {stars} loved
                 </p>
               )}
-              {saveCount > 0 && (
-                <p className="text-xs font-semibold text-rose-400">
-                  ♥ {saveCount} saved
-                </p>
-              )}
             </div>
             <Socials url={url} />
-            <LikeButton url={url} initialLiked={liked} />
+            {/* count+showCount → the ♥ label carries a live "saved" total that
+                updates when this same button toggles (no stale server value). */}
+            <LikeButton
+              url={url}
+              initialLiked={liked}
+              count={saveCount}
+              showCount
+            />
             <AddToListButton url={url} />
             <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
             <a

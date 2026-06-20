@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SignInModal } from "@/components/SignInModal";
 
 type List = {
@@ -34,6 +34,14 @@ export function AddToListButton({
   const [creating, setCreating] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+
+  // Esc closes the picker (the click-away backdrop is mouse-only otherwise).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const load = async () => {
     try {
@@ -114,16 +122,25 @@ export function AddToListButton({
       } else if (res.ok) {
         const list = await res.json();
         setNewName("");
-        // add the url to the brand-new list right away
-        await fetch(`/api/lists/${list.id}/items`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        setLists((ls) => [
-          { ...list, contains: true, count: 1 },
-          ...ls,
-        ]);
+        // Add the url to the brand-new list, but only reflect membership if the
+        // add actually lands — otherwise show the new (empty) list honestly.
+        let contains = false;
+        let count = 0;
+        try {
+          const add = await fetch(`/api/lists/${list.id}/items`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          });
+          if (add.ok) {
+            const d = await add.json();
+            contains = true;
+            count = typeof d.count === "number" ? d.count : 1;
+          }
+        } catch {
+          /* list exists but the add failed; leave it empty so state stays honest */
+        }
+        setLists((ls) => [{ ...list, contains, count }, ...ls]);
       }
     } catch {
       /* leave the input as-is so the user can retry */

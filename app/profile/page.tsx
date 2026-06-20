@@ -134,9 +134,11 @@ export default async function ProfilePage() {
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-lg font-semibold">
             Your likes
-            {likes.length > 0 && (
+            {stats.likes > 0 && (
               <span className="ml-2 text-sm font-normal text-mute">
-                {stats.likes}
+                {stats.likes > likes.length
+                  ? `showing ${likes.length} of ${stats.likes}`
+                  : stats.likes}
               </span>
             )}
           </h2>

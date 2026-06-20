@@ -47,7 +47,14 @@ export function SignInModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={(e) => {
+        // Stop the click from bubbling — the modal can be a DOM descendant of a
+        // navigating <a> (e.g. a browse-grid card), where a bare backdrop click
+        // would otherwise trigger that link instead of just closing.
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="Sign in"

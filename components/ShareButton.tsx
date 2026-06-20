@@ -3,6 +3,37 @@
 import { useState } from "react";
 
 /**
+ * Copy text to the clipboard, degrading gracefully: the async Clipboard API
+ * when available (secure contexts), otherwise a temp-textarea + execCommand
+ * fallback for insecure contexts (HTTP over a LAN IP) where navigator.clipboard
+ * is undefined. Returns whether the copy succeeded.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Share a URL: the native share sheet where available (mobile), otherwise copy
  * the link to the clipboard with a brief "Copied!" confirmation. `url` defaults
  * to the current page, so it works for both a portfolio and a shared list.
@@ -33,12 +64,12 @@ export function ShareButton({
         // user dismissed the sheet, or share failed — fall through to copy
       }
     }
-    try {
-      await navigator.clipboard.writeText(href);
+    if (await copyToClipboard(href)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard blocked — nothing graceful to do */
+    } else {
+      // Nothing worked (rare) — surface the link so the user can copy it by hand.
+      window.prompt("Copy this link:", href);
     }
   };
 

@@ -50,18 +50,56 @@ export async function POST(
   if (rater.type !== "human") {
     return NextResponse.json({ error: "signin_required" }, { status: 403 });
   }
-  if (!(await ownsList(id, rater.id))) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-  if ((await itemCount(id)) >= MAX_ITEMS_PER_LIST) {
-    return NextResponse.json({ error: "list_full" }, { status: 429 });
-  }
 
-  await db().execute({
-    sql: "INSERT OR IGNORE INTO list_items (list_id, url) VALUES (?, ?)",
-    args: [id, url],
-  });
-  return NextResponse.json({ ok: true, count: await itemCount(id) });
+  // Ownership check + cap check + insert in one write transaction (libSQL
+  // serializes these), so concurrent adds can't both slip past MAX_ITEMS, and
+  // the returned count is derived rather than re-queried.
+  const tx = await db().transaction("write");
+  try {
+    const owns =
+      (
+        await tx.execute({
+          sql: "SELECT 1 FROM lists WHERE id = ? AND owner = ?",
+          args: [id, rater.id],
+        })
+      ).rows.length > 0;
+    if (!owns) {
+      await tx.rollback();
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    const count = Number(
+      (
+        await tx.execute({
+          sql: "SELECT COUNT(*) AS n FROM list_items WHERE list_id = ?",
+          args: [id],
+        })
+      ).rows[0].n
+    );
+    const present =
+      (
+        await tx.execute({
+          sql: "SELECT 1 FROM list_items WHERE list_id = ? AND url = ?",
+          args: [id, url],
+        })
+      ).rows.length > 0;
+    // The cap only blocks genuinely new items — re-adding an existing url is an
+    // idempotent no-op and must still succeed even on a full list.
+    if (!present && count >= MAX_ITEMS_PER_LIST) {
+      await tx.rollback();
+      return NextResponse.json({ error: "list_full" }, { status: 429 });
+    }
+    if (!present) {
+      await tx.execute({
+        sql: "INSERT INTO list_items (list_id, url) VALUES (?, ?)",
+        args: [id, url],
+      });
+    }
+    await tx.commit();
+    return NextResponse.json({ ok: true, count: present ? count : count + 1 });
+  } catch (e) {
+    await tx.rollback().catch(() => {});
+    throw e;
+  }
 }
 
 /** DELETE /api/lists/[id]/items?url=<u> → remove a url from the list. */

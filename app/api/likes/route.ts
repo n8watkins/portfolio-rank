@@ -29,8 +29,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ liked: res.rows.map((r) => String(r.url)) });
   }
 
+  // Bounded: this hydrates the ♥ on the browse grid on every load, so cap it
+  // rather than serializing an unbounded like history.
   const res = await db().execute({
-    sql: "SELECT url FROM likes WHERE rater_id = ? ORDER BY created_at DESC",
+    sql: "SELECT url FROM likes WHERE rater_id = ? ORDER BY created_at DESC LIMIT 1000",
     args: [rater.id],
   });
   return NextResponse.json({ liked: res.rows.map((r) => String(r.url)) });

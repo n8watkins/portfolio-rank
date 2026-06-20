@@ -48,12 +48,14 @@ export function ListView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: next }),
       });
-      if (res.ok) setName(next);
+      if (res.ok) {
+        setName(next);
+        setEditing(false); // only close on success, so a failed save keeps the draft
+      }
     } catch {
-      /* ignore */
+      /* keep the editor open so the typed name isn't silently lost */
     }
     setBusy(false);
-    setEditing(false);
   };
 
   const togglePublic = async () => {

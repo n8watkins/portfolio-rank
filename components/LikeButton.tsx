@@ -49,9 +49,12 @@ export function LikeButton({
     touched.current = true;
     const next = !liked;
     setBusy(true);
-    setLiked(next); // optimistic
+    setLiked(next); // optimistic visual flip
     setN((c) => Math.max(0, c + (next ? 1 : -1)));
-    onChange?.(next);
+    // onChange fires ONCE, with the *committed* result, so consumers that act
+    // destructively (e.g. ProfileLikes removing the card on unlike) never act
+    // on an optimistic flip that the server then rejects.
+    let committed = next;
     try {
       const res = await fetch("/api/likes", {
         method: "POST",
@@ -60,24 +63,28 @@ export function LikeButton({
       });
       if (res.status === 403) {
         // anon → revert + prompt sign-in
+        committed = !next;
         setLiked(!next);
         setN((c) => Math.max(0, c + (next ? -1 : 1)));
-        onChange?.(!next);
         setSignInOpen(true);
       } else if (res.ok) {
         const data = await res.json();
-        if (typeof data.liked === "boolean") setLiked(data.liked);
+        if (typeof data.liked === "boolean") {
+          committed = data.liked;
+          setLiked(data.liked);
+        }
         if (typeof data.count === "number") setN(data.count);
       } else {
+        committed = !next;
         setLiked(!next);
         setN((c) => Math.max(0, c + (next ? -1 : 1)));
-        onChange?.(!next);
       }
     } catch {
+      committed = !next;
       setLiked(!next);
       setN((c) => Math.max(0, c + (next ? -1 : 1)));
-      onChange?.(!next);
     }
+    onChange?.(committed);
     setBusy(false);
   };
 
