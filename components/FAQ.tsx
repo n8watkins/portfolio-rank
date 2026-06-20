@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { SITE } from "@/lib/site";
 
 const ITEMS: { q: string; a: React.ReactNode }[] = [
@@ -65,22 +68,49 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
 ];
 
 export function FAQ() {
+  // Accordion: one panel open at a time. Animated open/close via the
+  // grid-template-rows 0fr→1fr trick (see .accordion-panel in globals.css).
+  const [open, setOpen] = useState<number | null>(null);
+
   return (
     <section className="mx-auto mt-16 max-w-3xl">
       <h2 className="mb-4 text-center text-lg font-semibold">FAQ</h2>
       <div className="space-y-2">
-        {ITEMS.map((it) => (
-          <details
-            key={it.q}
-            className="group rounded-xl border border-edge bg-card px-4 py-3"
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold">
-              {it.q}
-              <span className="text-mute transition group-open:rotate-180">⌄</span>
-            </summary>
-            <p className="mt-2 text-sm leading-relaxed text-mute">{it.a}</p>
-          </details>
-        ))}
+        {ITEMS.map((it, i) => {
+          const isOpen = open === i;
+          return (
+            <div
+              key={it.q}
+              className="overflow-hidden rounded-xl border border-edge bg-card"
+            >
+              <button
+                onClick={() => setOpen(isOpen ? null : i)}
+                aria-expanded={isOpen}
+                className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left text-sm font-semibold"
+              >
+                {it.q}
+                <span
+                  className={`ml-3 shrink-0 text-mute transition-transform duration-300 ${
+                    isOpen ? "rotate-180" : ""
+                  }`}
+                >
+                  ⌄
+                </span>
+              </button>
+              <div
+                className={`accordion-panel grid transition-all duration-300 ease-out ${
+                  isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <p className="px-4 pb-3 text-sm leading-relaxed text-mute">
+                    {it.a}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

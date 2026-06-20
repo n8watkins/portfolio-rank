@@ -3,7 +3,6 @@ import { SITE } from "@/lib/site";
 import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
-import { TopFive } from "@/components/TopFive";
 import { FAQ } from "@/components/FAQ";
 import { db, ensureSchema } from "@/lib/db";
 
@@ -49,12 +48,7 @@ export default async function Home() {
     <div className="mx-auto max-w-6xl px-4 sm:px-6">
       <Header stars={stars} />
 
-      {/* Top 5 sits above the hero — the leaderboard is the first thing you see. */}
-      <div className="flex justify-center pt-4">
-        <TopFive />
-      </div>
-
-      <section className="pb-10 pt-4 text-center sm:pb-14">
+      <section className="py-10 text-center sm:py-14">
         <h1 className="fade-up mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
           The best developer portfolios.{" "}
           <span className="text-accent">Ranked.</span>
@@ -85,12 +79,9 @@ export default async function Home() {
         </div>
       </section>
 
-      <PortfolioGrid portfolios={portfolios} />
+      <TopMarquee />
 
-      {/* Marquee moved below the browse grid (lower on the page). */}
-      <div className="mt-14">
-        <TopMarquee />
-      </div>
+      <PortfolioGrid portfolios={portfolios} />
 
       <FAQ />
 

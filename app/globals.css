@@ -53,3 +53,32 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* Ambient background: soft accent glows over the near-black bg, rendered in a
+   fixed, behind-everything layer (see layout.tsx) so they stay put on scroll. */
+.app-bg {
+  background:
+    radial-gradient(
+      55rem 55rem at 78% -8%,
+      rgba(251, 191, 36, 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      45rem 45rem at 12% 6%,
+      rgba(251, 191, 36, 0.07),
+      transparent 55%
+    ),
+    radial-gradient(
+      48rem 48rem at 50% 108%,
+      rgba(99, 102, 241, 0.07),
+      transparent 62%
+    );
+}
+
+/* FAQ accordion: animate the answer's height via grid-template-rows 0fr→1fr
+   (the inner wrapper is overflow-hidden), which the native <details> can't do. */
+@media (prefers-reduced-motion: reduce) {
+  .accordion-panel {
+    transition: none;
+  }
+}
