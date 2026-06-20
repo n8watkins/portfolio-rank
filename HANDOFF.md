@@ -74,9 +74,10 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   metadata host (SSRF), and caps the buffered body (DoS); blocklist unit-tested 16/16.
   (4) Security headers (CSP, X-Frame-Options DENY, nosniff, Referrer-Policy,
   Permissions-Policy) on all routes via next.config.ts — VERIFIED LIVE on prod.
-  Writeup lives in `blog/building-portfoliorank-security.md` (casual blog post w/
-  captioned meme placeholders, for the user's personal blog later); README has only a
-  short Security blurb linking to it. Residual/accepted: DNS-rebind (host
+  Writeup lives in `blog/building-portfoliorank.md` (casual blog post w/ captioned meme
+  placeholders, for the user's personal blog — REFRAMED 2026-06-20 to be about using
+  generative AI to make existing content fun to browse, keeping one light security beat);
+  README links to it. Residual/accepted: DNS-rebind (host
   blocklist is name-based, not resolved-IP); multi-OAuth-account sybil voting (inherent
   to any voting site); capture.mjs still trusts hostile pages (owner-run, lower priority).
 - **Sign-in modal + practice-vote claim: BUILT, verified locally** (`components/
@@ -213,7 +214,7 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - `components/Diagnostics.tsx` — InspectChips + DetailDiagnostics; `components/Header.tsx` — nav + AuthButton
 - `lib/db.ts` — libSQL client + schema/migrations; `lib/safefetch.ts` — SSRF-safe fetch + size cap
 - `lib/cache.ts` — DB-backed cache; `lib/elo.ts` — ELO + `pairKey()`; `lib/site.ts` — URLs/branding; `lib/roster.ts` — feed allowlist
-- `next.config.ts` — security headers; `blog/building-portfoliorank-security.md` — security blog post (user's personal blog)
+- `next.config.ts` — security headers; `blog/building-portfoliorank.md` — blog post (building with AI; user's personal blog)
 - `data/feed.json` — portfolio roster (1,779); `data/PORTFOLIOS.md` — mirrored upstream list
 - `pipeline/` — scripts from the fork for Phase 0 (parking detection, feed generation)
 - `scripts/migrate-json-to-db.mjs` — one-off v0 JSON→DB migration (already run)

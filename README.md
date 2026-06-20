@@ -57,8 +57,9 @@ SSRF-hardened (manual redirect validation + private-address blocklist), and the 
 defense-in-depth basics are in place (security headers, env-only secrets, parameterized
 SQL).
 
-I wrote up the bugs I found auditing my own site — and what they taught me — as a blog
-post: [**building-portfoliorank-security.md**](blog/building-portfoliorank-security.md).
+I also wrote about building it — using AI to turn a static list into something fun to
+browse, and the design (and security) decisions along the way:
+[**building-portfoliorank.md**](blog/building-portfoliorank.md).
 
 ## Data & credit
 
