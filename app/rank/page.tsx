@@ -179,8 +179,9 @@ export default function RankPage() {
           ? `${winner.name} wins · +${data.delta} → ${data.winnerElo} ELO`
           : `${winner.name} wins · practice vote (+${data.delta} if official)`
       );
-      if (typeof data.anonVotesUsed === "number") {
-        setRater((r) => (r ? { ...r, anonVotesUsed: data.anonVotesUsed } : r));
+      const av = data.anonVotesUsed;
+      if (typeof av === "number") {
+        setRater((r) => (r ? { ...r, anonVotesUsed: av } : r));
       }
       setCount((c) => c + 1);
       // Let the "you picked this" animation play before the next pair slides in.
