@@ -6,9 +6,9 @@
 
 Every criterion below is assessed **automatically** — by deterministic scripts, free APIs, or
 Gemini. Humans are never asked to grade a rubric. The only thing humans ever do is the optional
-one-click "which is better?" vote (see PLAN.md → Voting UX).
+one-click "which is better?" vote (see PLAN.md → Face-off screen).
 
-Data source: `feed.json` from github.com/n8watkins/developer-portfolios (1,779 entries).
+Data source: `feed.json` from github.com/n8watkins/developer-portfolios (~1,700+ entries).
 
 ## Who assesses what
 
@@ -69,7 +69,7 @@ Score = % of checks passed.
 
 ## 5. Originality (dataset-relative — our unique advantage)
 
-- DOM-shape hash + CSS class signature per site; cluster across all 1,779.
+- DOM-shape hash + CSS class signature per site; cluster across all ~1,700+.
   Site matching ≥N others in-dataset → "template" flag. Structural one-of-one → high score.
 - Second signal: fingerprints of known templates (HTML5UP, Start Bootstrap, popular
   Next.js/Astro portfolio starters).

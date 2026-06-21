@@ -44,7 +44,7 @@ current state see **HANDOFF.md**.
   link to /how. Cold-start threshold lowered to 1 vote.
 
 ## Homepage
-- **Top-ranked marquee** (top 15, R2 heroes), **vertical Top 5** (left), **FAQ**
+- **Top-ranked marquee** (top 15, R2 heroes) above the browse grid, **FAQ**
   accordion, **dead/parked/error sites filtered** from browse, search moved left,
   fewer grid rows (18) + Show more, bigger Submit, Ko-fi + n8builds footer buttons.
 
@@ -70,7 +70,8 @@ current state see **HANDOFF.md**.
 
 ## Content & docs
 - **/how** explainer page (ELO + AI-judging articles + video placeholder).
-- Blog reframed to "using AI to make content fun to browse" (+ renamed).
+- Blog writeup moved off-repo to the N8 Notions (Sanity) site as "Making a Giant
+  List Actually Fun to Browse"; the in-repo `.md` was deleted.
 - README/PLAN/DEPLOY/GRADING brought current; AUTOMATION.md added; doc-staleness
   audited.
 

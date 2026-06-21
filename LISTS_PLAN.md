@@ -40,7 +40,7 @@ cross-device, shareable) — not just localStorage.
 ```sql
 CREATE TABLE IF NOT EXISTS lists (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner TEXT NOT NULL,            -- rater_id (gh:.. / g:..); human only
+  owner TEXT NOT NULL,            -- rater_id (gh:<github id>); human only
   name TEXT NOT NULL,
   slug TEXT UNIQUE,               -- short random id for sharing (e.g. nanoid)
   is_public INTEGER NOT NULL DEFAULT 1,

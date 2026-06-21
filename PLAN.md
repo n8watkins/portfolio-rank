@@ -1,6 +1,6 @@
 # portfolio-rank — Plan
 
-Turn the developer-portfolios list (1,779 entries, alphabetical README, value locked up)
+Turn the developer-portfolios list (1,700+ entries, alphabetical README, value locked up)
 into a ranked, browsable site where AI bootstraps the ranking and humans refine it.
 
 Grading spec: see GRADING_CRITERIA.md. Everything there is machine-assessed; humans only

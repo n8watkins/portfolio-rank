@@ -7,7 +7,7 @@ Target: Vercel (app) + Turso (votes, ratings, portfolios, diagnostic caches) + A
 
 All of it is live in production (portfoliorank.vercel.app). Persistence runs on libSQL
 via `lib/db.ts` — a local file (`data/portfoliorank.db`) in dev, Turso in prod; tables
-auto-create on first use (`votes`, `ratings`, `portfolios`, `cache`). Auth (GitHub login,
+auto-create on first use (`votes`, `ratings`, `portfolios`, `cache`, `likes`, `lists`, `list_items`). Auth (GitHub login,
 vote tiers, rate limits) is shipped. Screenshots are captured by Playwright and served
 from Cloudflare R2 (mShots is only a fallback now). The whole pipeline runs itself via
 daily GitHub Actions — see **AUTOMATION.md**.

@@ -52,7 +52,7 @@ Next.js (App Router) + Tailwind. Data lives in `data/feed.json`; pipeline script
 Vote integrity is the thing this project protects hardest — a leaderboard nobody trusts is
 worthless. Votes are atomic (a `UNIQUE` constraint + a single write transaction, so
 concurrent requests can't race past the dup-check or daily cap), official votes require a
-GitHub/Google sign-in (one person, one vote per matchup), the URL-inspection endpoint is
+GitHub sign-in (one person, one vote per matchup), the URL-inspection endpoint is
 SSRF-hardened (manual redirect validation + private-address blocklist), and the usual
 defense-in-depth basics are in place (security headers, env-only secrets, parameterized
 SQL).

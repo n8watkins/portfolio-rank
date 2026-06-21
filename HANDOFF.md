@@ -143,7 +143,7 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   github.com/n8watkins/developer-portfolios (kept for syncing upstream, which gets
   daily community PRs)
 - Stack: Next.js 15 App Router + Tailwind v4 on port **7678** (`npm run dev`);
-  Turso (libSQL) for all persistence; Auth.js + Cloudflare R2 planned (see PLAN.md
+  Turso (libSQL) for all persistence; Auth.js (GitHub) + Cloudflare R2 — live (see PLAN.md
   stack table)
 - **DEPLOYED: https://portfoliorank.vercel.app** (project `portfolio-rank`, Vercel scope
   natkins23s-projects; `portfolio-rank.vercel.app` without the hyphen-less spelling is an
@@ -156,7 +156,7 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - **Auth.js sign-in + three-tier votes: LIVE.** Anon voters get a sticky `pr_anon`
   cookie and 10 practice votes — logged with `rater_type='anon'` but they NEVER update
   the `ratings` table; then the sign-in gate. Signed-in votes are `rater_type='human'`,
-  rater_id is provider-prefixed (`gh:<github id>`, `g:<google sub>` — `session.raterId`,
+  rater_id is provider-prefixed (`gh:<github id>` — `session.raterId`,
   the old `session.githubId` is gone) and move official ELO. One vote per pair per rater
   (either direction, 409), 100/day limit (429), **min 2s between votes per rater**
   (429 `too_fast`, anti-bot pacing), vote URLs restricted to the roster (403). `/votes` =
@@ -177,16 +177,14 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
   metadata host (SSRF), and caps the buffered body (DoS); blocklist unit-tested 16/16.
   (4) Security headers (CSP, X-Frame-Options DENY, nosniff, Referrer-Policy,
   Permissions-Policy) on all routes via next.config.ts — VERIFIED LIVE on prod.
-  Writeup lives in `blog/building-portfoliorank.md` (casual blog post w/ captioned meme
-  placeholders, for the user's personal blog — REFRAMED 2026-06-20 to be about using
-  generative AI to make existing content fun to browse, keeping one light security beat);
-  README links to it. Residual/accepted: DNS-rebind (host
+  The build-it writeup moved out of the repo to the owner's N8 Notions (Sanity) blog
+  (post "Making a Giant List Actually Fun to Browse"); README links to
+  n8builds.dev/blog/making-a-giant-list-fun-to-browse. Residual/accepted: DNS-rebind (host
   blocklist is name-based, not resolved-IP); multi-OAuth-account sybil voting (inherent
   to any voting site); capture.mjs still trusts hostile pages (owner-run, lower priority).
 - **Sign-in modal + practice-vote claim: BUILT, verified locally** (`components/
   SignInModal.tsx`, `app/api/claim/route.ts`, `components/ClaimVotes.tsx` in root layout).
-  Modal (GitHub button; Google button appears automatically once AUTH_GOOGLE_ID/SECRET
-  exist — provider added conditionally in auth.ts) replaces all default-signin-page links;
+  Modal (GitHub button only) replaces all default-signin-page links;
   /rank nudges anon first-timers once per tab session (sessionStorage `pr_signin_nudged`)
   with a skip into practice mode. On sign-in, ClaimVotes POSTs /api/claim once per tab
   session: anon votes are re-attributed to the human rater and applied to ELO (dup pairs
@@ -253,11 +251,8 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 1. **Verify signed-in vote end-to-end** — user signs in at portfoliorank.vercel.app,
    casts a vote; confirm it updates `ratings` (rater_type='human') and shows on /votes.
    Also confirm practice votes cast before sign-in get claimed (toast-free, check DB).
-2. **USER: create Google OAuth client** (console.cloud.google.com → APIs & Services →
-   Credentials → OAuth client ID, type Web app): authorized redirect URI
-   `https://portfoliorank.vercel.app/api/auth/callback/google`. Put AUTH_GOOGLE_ID +
-   AUTH_GOOGLE_SECRET in `.env.local` + Vercel production, redeploy — the Google button
-   appears in the modal automatically.
+2. ~~Create Google OAuth client~~ — **OBSOLETE:** auth is GitHub-only now (Google was
+   added then removed; the Google Cloud project was deleted). See the SESSION WRAP at top.
 3. **USER: create Cloudflare R2 bucket** (+ API token): set R2_ACCOUNT_ID,
    R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET in `.env.local`, enable public
    access on the bucket, set SHOTS_BASE_URL (public bucket URL) in `.env.local` + Vercel.
@@ -312,12 +307,12 @@ bootstraps rankings, and free APIs provide objective diagnostics. Owner: Nathan 
 - `app/top/page.tsx` — leaderboard; `app/p/[slug]/page.tsx` — detail page; `app/votes/page.tsx` — vote history (uses session.raterId)
 - `app/api/claim/route.ts` — converts anon practice votes → official on sign-in (daily-cap-bound)
 - `app/api/inspect/route.ts` — polish checks (SSRF-hardened); `app/api/psi/route.ts` — Lighthouse
-- `auth.ts` — Auth.js config (GitHub always; Google conditional on env); `lib/rater.ts` — getRater + vote limits
+- `auth.ts` — Auth.js config (GitHub only); `lib/rater.ts` — getRater + vote limits
 - `components/SignInModal.tsx` — in-app OAuth modal; `components/ClaimVotes.tsx` — fires /api/claim on sign-in (in layout)
 - `components/Diagnostics.tsx` — InspectChips + DetailDiagnostics; `components/Header.tsx` — nav + AuthButton
 - `lib/db.ts` — libSQL client + schema/migrations; `lib/safefetch.ts` — SSRF-safe fetch + size cap
 - `lib/cache.ts` — DB-backed cache; `lib/elo.ts` — ELO + `pairKey()`; `lib/site.ts` — URLs/branding; `lib/roster.ts` — feed allowlist
-- `next.config.ts` — security headers; `blog/building-portfoliorank.md` — blog post (building with AI; user's personal blog)
+- `next.config.ts` — security headers (the build-it writeup is no longer in-repo — it moved to the N8 Notions Sanity blog; see SESSION WRAP)
 - `data/feed.json` — portfolio roster (1,779); `data/PORTFOLIOS.md` — mirrored upstream list
 - `pipeline/` — scripts from the fork for Phase 0 (parking detection, feed generation)
 - `scripts/migrate-json-to-db.mjs` — one-off v0 JSON→DB migration (already run)
