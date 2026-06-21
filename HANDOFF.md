@@ -30,11 +30,11 @@ README link goes live. The blog/Studio code lives in the `n8builds-web` and
 `n8builds-studio` repos, not here.
 
 ### Open items (only these remain)
-1. **⚠️ PSI key may be dead.** The owner deleted the Google Cloud project; if it
-   held `PSI_API_KEY`, new Lighthouse lookups (`/api/psi`) will fail (cached
-   results still serve ~30d). Fix: make a fresh PSI key (restricted to the
-   PageSpeed Insights API), set it in `.env.local` + Vercel, redeploy, verify
-   with an uncached roster URL.
+1. **PSI key — RESOLVED 2026-06-20.** The old key died with the deleted Google
+   project; a fresh `PSI_API_KEY` is set in `.env.local` + Vercel and verified
+   working (direct Google PSI call + prod `/api/psi` both return live Lighthouse
+   scores). The key was pasted in chat → keep it restricted to the PageSpeed
+   Insights API in the console.
 2. **Rotate the R2 token** (pasted in chat once) — `.env.local` + re-push Vercel +
    GitHub secrets.
 3. **Real-user prod check** — sign in (GitHub) on prod, vote, like a portfolio,
