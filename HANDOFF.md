@@ -3,7 +3,48 @@
 Read this + AUTOMATION.md + PLAN.md + GRADING_CRITERIA.md + DEPLOY.md in full
 before doing anything. Do not re-ask the user anything answered here or there.
 
-## ⚡ Update 2026-06-20 (LATEST) — Likes / Lists / Profile + homepage polish
+## ⚡ Update 2026-06-20 (SESSION WRAP — read first)
+
+All PortfolioRank work is **shipped & live** (everything on `main`, pushed,
+deployed to portfoliorank.vercel.app). This wrap captures the final state + the
+only open items; sections below carry the detail.
+
+**Done & deployed this session** (portfolio-rank):
+- **Likes (♥) + named Lists** (CRUD + shareable `/list/[slug]`) + private
+  **`/profile`** hub. 5-agent adversarial review → 13 fixes (commit 9886c41).
+- **Homepage**: Top 5 removed, marquee above the grid, bigger hero, ambient bg
+  gradients, animated FAQ accordion. Subagent review → 3 fixes (incl. deleting
+  the now-unused `components/TopFive.tsx`).
+- **Auth is GitHub-only.** Google was set up, then removed per the owner;
+  `auth.ts` registers only GitHub and `AUTH_GOOGLE_*` was removed from Vercel +
+  `.env.local`. The owner then **deleted the Google Cloud project**.
+- **README** points the "building it" writeup at the blog post; the in-repo
+  `blog/building-portfoliorank.md` was deleted.
+
+**Blog writeup → N8 Notions (cross-repo):** the writeup was drafted into the
+owner's Sanity (project `abgyc32w`, post slug `making-a-giant-list-fun-to-browse`).
+It is **still a DRAFT** — once the owner publishes it in Studio
+(n8builds.sanity.studio), it renders at
+`n8builds.dev/blog/making-a-giant-list-fun-to-browse` and the (already-pushed)
+README link goes live. The blog/Studio code lives in the `n8builds-web` and
+`n8builds-studio` repos, not here.
+
+### Open items (only these remain)
+1. **⚠️ PSI key may be dead.** The owner deleted the Google Cloud project; if it
+   held `PSI_API_KEY`, new Lighthouse lookups (`/api/psi`) will fail (cached
+   results still serve ~30d). Fix: make a fresh PSI key (restricted to the
+   PageSpeed Insights API), set it in `.env.local` + Vercel, redeploy, verify
+   with an uncached roster URL.
+2. **Rotate the R2 token** (pasted in chat once) — `.env.local` + re-push Vercel +
+   GitHub secrets.
+3. **Real-user prod check** — sign in (GitHub) on prod, vote, like a portfolio,
+   create/share a list; confirm persistence.
+4. **Growth (unchanged):** rank-badge SVG, "score my portfolio", auto OG cards,
+   weekly feed sync. **Phase 3** (PLAN.md): taste profiles, streaks, AI-vs-crowd.
+
+This wrap supersedes anything below that conflicts.
+
+## ⚡ Update 2026-06-20 — Likes / Lists / Profile + homepage polish
 
 **Shipped & live in production** (commits f9eed2e…0d31ba8, pushed + deploy
 verified: prod `/api/likes` went 404→200). Design + deviations in `LISTS_PLAN.md`.
