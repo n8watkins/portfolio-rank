@@ -338,10 +338,6 @@
     "url": "https://abrahambankole.dev"
   },
   {
-    "name": "Abu Bakar Butt",
-    "url": "https://abu-bakar-portfolio-mauve.vercel.app"
-  },
-  {
     "name": "Abu Suhaib",
     "url": "https://ceo.pronexus.in",
     "tagline": "Leading Startup Founder"
@@ -758,6 +754,11 @@
     "name": "Althruist",
     "url": "https://althruist.fyi",
     "tagline": "Game Developer"
+  },
+  {
+    "name": "Alucard",
+    "url": "https://dg.aluc.me",
+    "tagline": "Full Stack Engineer | AI, Founder"
   },
   {
     "name": "Alvalens",
@@ -1304,6 +1305,11 @@
     "name": "Ashim Rudra Paul",
     "url": "https://ashimrudrapaul.com",
     "tagline": "Software Engineer | Gen AI Engineer & Cloud Architect"
+  },
+  {
+    "name": "Ashish Madan",
+    "url": "https://ashishmadan.netlify.app",
+    "tagline": "Senior Software Engineer | Full Stack Developer"
   },
   {
     "name": "Ashish Mehra",
@@ -2646,9 +2652,9 @@
     "tagline": "Developer, Designer, And Creator"
   },
   {
-    "name": "Evandro Antônio da Costa de Paula",
+    "name": "Evandro Antônio Da Costa De Paula",
     "url": "https://eacp.dev",
-    "tagline": "Software Engineer | Fullstack | Applied AI Engineer"
+    "tagline": "Software Engineer | Full Stack | Applied AI Engineer"
   },
   {
     "name": "Evangelos Pappas",
@@ -3509,10 +3515,6 @@
     "url": "https://jaykeraliya.com"
   },
   {
-    "name": "Jay Vegad",
-    "url": "https://jayvegad.vercel.app"
-  },
-  {
     "name": "Jay",
     "url": "https://jay-65.netlify.app",
     "tagline": "Frontend Developer"
@@ -3994,10 +3996,6 @@
     "tagline": "Software Developer"
   },
   {
-    "name": "Kidus Bewket",
-    "url": "https://kidus.ca"
-  },
-  {
     "name": "Kiran Poudel",
     "url": "https://pkiran.com.np"
   },
@@ -4006,8 +4004,8 @@
     "url": "https://kishorrj.vercel.app"
   },
   {
-    "name": "Kishore M",
-    "url": "https://mkishore.is-a.dev/"
+    "name": "Kishore",
+    "url": "https://mkishore.is-a.dev"
   },
   {
     "name": "Konan Serge",
@@ -4300,7 +4298,7 @@
   {
     "name": "Maame Yaa Twumasi",
     "url": "https://maameyaa.vercel.app",
-    "tagline": "FullStack Software Engineer"
+    "tagline": "Full Stack Software Engineer"
   },
   {
     "name": "Maciej Pulikowski",
@@ -4670,14 +4668,14 @@
     "url": "https://exoo25.github.io"
   },
   {
-    "name": "Mehedi Hasan",
-    "url": "https://m-hasan.vercel.app",
-    "tagline": "Frontend Developer"
-  },
-  {
     "name": "Mehedi Hasan Janny",
     "url": "https://mhjanny.com",
     "tagline": "Full Stack Developer"
+  },
+  {
+    "name": "Mehedi Hasan",
+    "url": "https://m-hasan.vercel.app",
+    "tagline": "Frontend Developer"
   },
   {
     "name": "Meicloudie",
@@ -6018,11 +6016,6 @@
     "tagline": "Help Desk Grunt | Next.js, React, SpringBoot, Full Stack"
   },
   {
-    "name": "Ridoy Dey",
-    "url": "https://iamridoydey.com",
-    "tagline": "Devops & Cloud Engineer | python, bash, go, Docker, CI/CD, Kubernetes, aws, azure, azure devops"
-  },
-  {
     "name": "Ridwan Ajanaku",
     "url": "https://olakunle.dev",
     "tagline": "Frontend Software Engineer"
@@ -6384,7 +6377,7 @@
   },
   {
     "name": "Sakib Mansuri",
-    "url": "https://sakib-m.me/",
+    "url": "https://sakib-m.me",
     "tagline": "Software engineer/AI developer"
   },
   {
@@ -6405,6 +6398,11 @@
     "name": "Sam Foreman",
     "url": "https://samforeman.me",
     "tagline": "Computational Scientist"
+  },
+  {
+    "name": "Samarth Batra",
+    "url": "https://batrasamarth.com",
+    "tagline": "Software Developer"
   },
   {
     "name": "Samarth Kadam",
@@ -6443,7 +6441,7 @@
   },
   {
     "name": "Samrit Mukherjee",
-    "url": "https://samrit.dev/",
+    "url": "https://samrit.dev",
     "tagline": "Full Stack Dev | AI Dev | Product Dev"
   },
   {
@@ -6660,11 +6658,6 @@
     "name": "Sebbie Chanzu",
     "url": "https://sebbie-chanzu.vercel.app",
     "tagline": "Backend, DevOps And Machine Learning Engineer"
-  },
-  {
-    "name": "Sebi",
-    "url": "https://sebilune.dev",
-    "tagline": "Full Stack Developer"
   },
   {
     "name": "Serdar Salim",
@@ -7142,10 +7135,6 @@
     "name": "Sujal Bedre",
     "url": "https://sujal-bedre.vercel.app",
     "tagline": "Ai/Ml Dev && Mern-Stack Dev"
-  },
-  {
-    "name": "Sumeet Haldar",
-    "url": "https://hsumeet.site"
   },
   {
     "name": "Sumeet",
@@ -7759,6 +7748,11 @@
   {
     "name": "Vishnu Sharma",
     "url": "https://vs-code-cloud.github.io"
+  },
+  {
+    "name": "Vishvaas Kumar",
+    "url": "https://vishvaas.dev",
+    "tagline": "Cat | Chomik"
   },
   {
     "name": "Vishwanath",
