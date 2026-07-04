@@ -34,6 +34,11 @@
     "tagline": "Software Developer"
   },
   {
+    "name": "Aakarsh Bibhaw",
+    "url": "https://aakarsh-devhq.vercel.app",
+    "tagline": "CS Undergrad | Full Stack & AI Eng."
+  },
+  {
     "name": "Aakash Rajbanshi",
     "url": "https://aakashrajbanshi.com.np",
     "tagline": "Flutter Developer"
@@ -467,7 +472,7 @@
   {
     "name": "Aditya Thakur",
     "url": "https://adityathakur.me",
-    "tagline": "Software Engineer | Full-Stack Engineer"
+    "tagline": "Software Engineer | Full Stack Engineer"
   },
   {
     "name": "Aditya Vikram Singh",
@@ -1831,6 +1836,10 @@
     "tagline": "Full Stack Developer"
   },
   {
+    "name": "Brijesh Chandrakar",
+    "url": "https://brijesh-chandrakar.vercel.app"
+  },
+  {
     "name": "Brijesh Patel",
     "url": "https://brijesh.work"
   },
@@ -3084,6 +3093,11 @@
     "url": "https://hamzanaseem.vercel.app"
   },
   {
+    "name": "Hanan Bhatti",
+    "url": "https://hanan-bhatti.site",
+    "tagline": "Full Stack Developer | Creator"
+  },
+  {
     "name": "Hangga Aji Sayekti",
     "url": "https://hangga.web.id",
     "tagline": "Software Engineer · Security Researcher · Tech Author"
@@ -3137,7 +3151,7 @@
   },
   {
     "name": "Harsh Prajapati",
-    "url": "https://harsh-prajapati54-github-io.vercel.app/",
+    "url": "https://harsh-prajapati54-github-io.vercel.app",
     "tagline": "AI|ML Engineer"
   },
   {
@@ -4281,6 +4295,11 @@
   {
     "name": "Long Do",
     "url": "https://longpdo.github.io"
+  },
+  {
+    "name": "Loren Kamau",
+    "url": "https://lorenkamau.com",
+    "tagline": "Founder of Aptifolio"
   },
   {
     "name": "Loránd Kiss",
@@ -6418,7 +6437,7 @@
   },
   {
     "name": "Sairithik Komuravelly",
-    "url": "https://heysai.dev/",
+    "url": "https://heysai.dev",
     "tagline": "Full Stack Engineer | AI Integration & Tooling"
   },
   {
@@ -7137,6 +7156,11 @@
     "url": "https://lin-stephanie.github.io"
   },
   {
+    "name": "Stimmie",
+    "url": "https://stimmie.dev",
+    "tagline": "Software Engineer | Next.js"
+  },
+  {
     "name": "Stuart Blackler",
     "url": "https://codewithstu.tv",
     "tagline": "Principal Software Engineer | AWS | .NET"
@@ -7144,11 +7168,6 @@
   {
     "name": "Stéphane Chan Hiou Kong",
     "url": "https://www.chan-stephane.me"
-  },
-  {
-    "name": "Stimmie",
-    "url": "https://stimmie.dev",
-    "tagline": "Software Engineer | Next.js"
   },
   {
     "name": "Subhajit Kar",
@@ -7635,7 +7654,7 @@
   {
     "name": "Vamshi Kumar",
     "url": "https://thvvamshi-dev.onrender.com",
-    "tagline": "Software Engineer | Backend & Full-Stack Developer"
+    "tagline": "Software Engineer | Backend & Full Stack Developer"
   },
   {
     "name": "Vamsi Indugu",
