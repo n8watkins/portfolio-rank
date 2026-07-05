@@ -131,6 +131,11 @@
     "tagline": "Software Engineer | Freelancer | AI & Blockchain Enthusiast"
   },
   {
+    "name": "Abdalla Elradi",
+    "url": "https://aelradi.engineer",
+    "tagline": "AI Automation Engineer"
+  },
+  {
     "name": "Abdalwahed Aldaghir",
     "url": "https://awrs.me/en"
   },
@@ -1103,6 +1108,11 @@
   {
     "name": "Antônio Junior",
     "url": "https://portfolio-antonio-ten.vercel.app"
+  },
+  {
+    "name": "Anubhav Singh",
+    "url": "https://mylivecv.com/mylivecv/pf-anubhav",
+    "tagline": "Fullstack Developer"
   },
   {
     "name": "Anuj Magar",
@@ -6388,6 +6398,11 @@
     "tagline": "Full Stack Developer"
   },
   {
+    "name": "Sahil Md",
+    "url": "https://macios.vercel.app",
+    "tagline": "Full Stack Software Engineer | Specialist in AI Integration & Software Development | Freelancer"
+  },
+  {
     "name": "Sahil",
     "url": "https://sahil500-portfolio.netlify.app"
   },
@@ -7157,8 +7172,13 @@
   },
   {
     "name": "Stimmie",
-    "url": "https://stimmie.dev",
+    "url": "https://www.stimmie.dev",
     "tagline": "Software Engineer | Next.js"
+  },
+  {
+    "name": "Stimmie – web portfolio",
+    "url": "https://web.stimmie.dev",
+    "tagline": "Freelance Developer | Nuxt"
   },
   {
     "name": "Stuart Blackler",
@@ -7632,6 +7652,11 @@
     "url": "https://vaidhyanathansm.netlify.app"
   },
   {
+    "name": "Vaishali Purohit",
+    "url": "https://vaishali-portfolio-nine.vercel.app/",
+    "tagline": "Senior Full Stack Engineer | React, Next.js, TypeScript, Node.js, Python | AI & Data Science"
+  },
+  {
     "name": "Valentin Gil",
     "url": "https://vgil.fr",
     "tagline": "Student"
@@ -7827,6 +7852,11 @@
     "name": "Vishal Singh",
     "url": "https://vi5hal.vercel.app",
     "tagline": "Full Stack Developer (Mern)"
+  },
+  {
+    "name": "Vishnu Rohith B",
+    "url": "https://vishnurohithb.dev",
+    "tagline": "Full-Stack Developer"
   },
   {
     "name": "Vishnu Sharma",
