@@ -2332,6 +2332,10 @@
     "url": "https://daolanx.com"
   },
   {
+    "name": "Daytime Dev",
+    "url": "https://daytime-dev.uk/"
+  },
+  {
     "name": "Debasish Dutta",
     "url": "https://debasishdutta.is-a.dev"
   },
@@ -5535,6 +5539,11 @@
     "url": "https://ogaston.com"
   },
   {
+    "name": "Omar Mubaidin",
+    "url": "https://mubx.dev",
+    "tagline": "Full Stack Developer | AI Engineer | CS Student"
+  },
+  {
     "name": "Omargpax",
     "url": "https://omargpax.pages.dev"
   },
@@ -5695,6 +5704,11 @@
   {
     "name": "Patrick Obermeier",
     "url": "https://www.patrickobermeier.at"
+  },
+  {
+    "name": "Patryk Jablonski",
+    "url": "https://patrykjablonski.cloud",
+    "tagline": "DevOps, Cloud & Systems Engineer"
   },
   {
     "name": "Paul Henry Atienza",
@@ -6252,8 +6266,18 @@
     "url": "https://rimonchowdhury.netlify.app"
   },
   {
+    "name": "Rishabh Chaturvedi",
+    "url": "https://rishabhchaturvedi.dev",
+    "tagline": "Lead Engineer | AI Architect & Backend Systems"
+  },
+  {
     "name": "Rishav",
     "url": "https://v0idrsh.vercel.app"
+  },
+  {
+    "name": "Rishav kumar singh",
+    "url": "https://rishavkumar-portfolio.vercel.app/",
+    "tagline": "Software Engineer | Full stack Developer"
   },
   {
     "name": "Ritesh Bucha",
@@ -6604,6 +6628,11 @@
   {
     "name": "Saitheja Komalla",
     "url": "https://saitheja20.github.io/Portfolio"
+  },
+  {
+    "name": "Sajid Alam",
+    "url": "https://sajidalam.pages.dev",
+    "tagline": "Full Stack Developer"
   },
   {
     "name": "Sakib Mansuri",
@@ -7797,6 +7826,11 @@
   {
     "name": "Utsav Ghimire",
     "url": "https://www.utsavghimire.com.np"
+  },
+  {
+    "name": "Utsav Gupta",
+    "url": "https://portfolio-84ka.vercel.app/",
+    "tagline": "AI & LLM Automation Developer"
   },
   {
     "name": "Uygar Polat",
