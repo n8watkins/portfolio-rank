@@ -1190,6 +1190,11 @@
     "tagline": "Full Stack App/Web and Embedded Systems Engineer"
   },
   {
+    "name": "Anwar Ul Haq",
+    "url": "https://anwarluck.github.io",
+    "tagline": "Senior Dynamics 365 CRM & Power Platform Consultant"
+  },
+  {
     "name": "Anzhelika Kostyuk",
     "url": "https://a-coderr.github.io/portfolio-website",
     "tagline": "Software Developer"
@@ -1356,7 +1361,8 @@
   },
   {
     "name": "Ashak Zahin Hasan",
-    "url": "https://aboutzahin.pages.dev"
+    "url": "https://zahin.dev",
+    "tagline": "Software Engineer"
   },
   {
     "name": "Ashar DevX",
@@ -2358,6 +2364,10 @@
   {
     "name": "Daytime Dev",
     "url": "https://daytime-dev.uk"
+  },
+  {
+    "name": "Debashish Saha",
+    "url": "https://deepsaha.com"
   },
   {
     "name": "Debasish Dutta",
