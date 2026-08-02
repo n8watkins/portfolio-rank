@@ -1295,6 +1295,11 @@
     "tagline": "Full Stack Developer"
   },
   {
+    "name": "Arnel Go",
+    "url": "https://arnelbg.com",
+    "tagline": "WordPress Systems Engineer | Performance & Security"
+  },
+  {
     "name": "Arsh Mishra",
     "url": "https://windows-xp-portfolio-tau.vercel.app",
     "tagline": "Full Stack Engineer | Systems Builder | Event-Driven System Design | Full Stack Application Architecture | AI-Integrated Data Processing Pipelines"
@@ -2228,10 +2233,6 @@
     "url": "https://cristianbarreiro.github.io"
   },
   {
-    "name": "Cristian Cezar Moisés",
-    "url": "https://ccm.securityops.com.br"
-  },
-  {
     "name": "Cristiano Filho",
     "url": "https://cristianofilho.github.io"
   },
@@ -2880,10 +2881,6 @@
   {
     "name": "Fahim Bin Amin",
     "url": "https://www.fahimbinamin.com"
-  },
-  {
-    "name": "Faisal Saifi",
-    "url": "https://faisalsaifi.tech"
   },
   {
     "name": "Faishal Hakim",
@@ -4299,11 +4296,6 @@
     "url": "https://krishnananda.netlify.app"
   },
   {
-    "name": "Kritan Shrestha",
-    "url": "https://kritan560.github.io/portfolio/",
-    "tagline": "Senior Full Stack Developer"
-  },
-  {
     "name": "Krupal Fataniya",
     "url": "https://krupal.vercel.app",
     "tagline": "Full Stack Developer | Python, Django & React Specialist"
@@ -5338,6 +5330,10 @@
   {
     "name": "Mukul Chugh",
     "url": "https://mukulchugh.com"
+  },
+  {
+    "name": "Munyaradzi Mzite",
+    "url": "https://munyaradzimzite.vercel.app/"
   },
   {
     "name": "Mushfiqur Rahman",
@@ -8018,6 +8014,11 @@
   {
     "name": "Umesh Nagare",
     "url": "https://umeshnagare.com"
+  },
+  {
+    "name": "Usman Ghias",
+    "url": "https://usman.codcrafters.org",
+    "tagline": "Senior Odoo Technical Developer | Full Stack & Flutter"
   },
   {
     "name": "Utkarsh Aggarwal",
