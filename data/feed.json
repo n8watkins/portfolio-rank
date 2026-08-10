@@ -869,6 +869,11 @@
     "url": "https://aman04.netlify.app"
   },
   {
+    "name": "Ameed Darawsha",
+    "url": "https://darawsha.github.io",
+    "tagline": "Computer Engineer | Design Verification , VLSI , Hardware"
+  },
+  {
     "name": "Ameer Muavia Shah",
     "url": "https://maveeshah.github.io/projects.html",
     "tagline": "Frappe | Erpnext | Python"
@@ -2087,7 +2092,7 @@
   },
   {
     "name": "Charan Reddy",
-    "url": "https://charanreddy.qzz.io/",
+    "url": "https://charanreddy.qzz.io",
     "tagline": "Student | Cyber Security"
   },
   {
@@ -2902,7 +2907,7 @@
   {
     "name": "Favian Izza",
     "url": "https://www.favianizza.space",
-    "tagline": "Software Engineer | Full-Stack | IoT"
+    "tagline": "Software Engineer | Full Stack | IoT"
   },
   {
     "name": "Fayaz Bin Salam",
@@ -3375,7 +3380,7 @@
   {
     "name": "Hasibul Islam",
     "url": "https://devhasibulislam.vercel.app",
-    "tagline": "Senior Full-Stack Engineer | Node.js, NestJS, TypeScript"
+    "tagline": "Senior Full Stack Engineer | Node.js, NestJS, TypeScript"
   },
   {
     "name": "Hasnat Amir",
@@ -3462,11 +3467,6 @@
     "name": "Houssam Bouzid",
     "url": "https://houssambouzid.dev",
     "tagline": "Software Engineer"
-  },
-  {
-    "name": "Hozaifa Ali",
-    "url": "https://hozi-web3.site",
-    "tagline": "Software Engineer | Flutter Developer"
   },
   {
     "name": "Hrithik Dhakrey",
@@ -7450,6 +7450,11 @@
     "tagline": "Platform Engineer, Enterprise Architect, Founder @ exemplar.dev"
   },
   {
+    "name": "Shushay Kebedew",
+    "url": "https://shushaykebedew-portfolio.vercel.app",
+    "tagline": "Full Stack Developer"
+  },
+  {
     "name": "Shuvam Manna",
     "url": "http://shuvam.xyz"
   },
@@ -7813,11 +7818,6 @@
     "tagline": "Frontend Developer"
   },
   {
-    "name": "Talha Kılıç",
-    "url": "https://talhakilic.com.tr",
-    "tagline": "Junior Frontend Developer"
-  },
-  {
     "name": "Tanay Shah",
     "url": "https://tanayshah.dev",
     "tagline": "AI Engineer | Agent Infrastructure · Founding-Engineer Reps · NYC"
@@ -7846,7 +7846,7 @@
   },
   {
     "name": "Tauqeer Ahmed",
-    "url": "https://tauqeerkhattak.github.io/",
+    "url": "https://tauqeerkhattak.github.io",
     "tagline": "Full Stack Developer | Flutter, Android, Golang"
   },
   {
