@@ -4790,6 +4790,11 @@
     "url": "https://marcobaldini.pages.dev"
   },
   {
+    "name": "Marco Bellingeri",
+    "url": "https://marcobellingeri.dev",
+    "tagline": "Cloud Platform & AI Security Engineer | RAG & agentic AI | OWASP LLM Top 10"
+  },
+  {
     "name": "Marcos Moura",
     "url": "https://marcos-moura97.github.io"
   },
@@ -7849,7 +7854,8 @@
   },
   {
     "name": "Tarikur Rahman",
-    "url": "https://yourtarikur.vercel.app"
+    "url": "https://yourtarikur.vercel.app",
+    "tagline": "Robotics Inventor & Tech Researcher"
   },
   {
     "name": "Tariqul Islam",
