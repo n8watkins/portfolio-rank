@@ -173,6 +173,11 @@
     "tagline": "Senior Front-end Engineer"
   },
   {
+    "name": "Abdul Mateen",
+    "url": "https://abdulmateenzwl.com",
+    "tagline": "Site Reliability Engineer, Cloud, Solution Architect"
+  },
+  {
     "name": "Abdul Momin",
     "url": "https://abdulmomin.dev",
     "tagline": "Software Engineer | Full Stack Engineer"
@@ -427,6 +432,11 @@
     "name": "Aditya Domle",
     "url": "https://adittya.site",
     "tagline": "Software Developer | Freelancer"
+  },
+  {
+    "name": "Aditya Dubey",
+    "url": "https://ad1tya.me",
+    "tagline": "Cloud and Platform Engineer"
   },
   {
     "name": "Aditya Dutt Pandey",
@@ -5592,7 +5602,7 @@
   },
   {
     "name": "Nikhil Kumawat",
-    "url": "https://nikhilkumawat.netlify.app/",
+    "url": "https://nikhilkumawat.netlify.app",
     "tagline": "Full Stack Developer | MERN, Java, DSA"
   },
   {
@@ -6035,6 +6045,11 @@
     "name": "Poorvaj Hinge",
     "url": "https://poorvajhinge.vercel.app",
     "tagline": "DevOps and AIOps Software Engineer"
+  },
+  {
+    "name": "Popuri Sushanth",
+    "url": "https://p-sushanth.github.io/Portfolio/",
+    "tagline": "Full Stack & AI Engineer | Quantum Computing"
   },
   {
     "name": "Pradip Chaudhary",
