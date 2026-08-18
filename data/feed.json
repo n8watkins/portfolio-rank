@@ -2024,11 +2024,6 @@
     "tagline": "AI-Powered Calculator Developer"
   },
   {
-    "name": "Camel Djoulako",
-    "url": "https://cameldjoulako.com",
-    "tagline": "Software Architect | Java, Spring Boot, Angular & Cloud/DevOps"
-  },
-  {
     "name": "Camil Bradea",
     "url": "https://bradeac.dev",
     "tagline": "Senior Full Stack Engineer | TypeScript, React, Laravel, Docker, AWS"
@@ -3437,11 +3432,6 @@
     "name": "Hassan Rj",
     "url": "https://hassanrj.vercel.app",
     "tagline": "Hassan RJ Full Stack Next.js Developer"
-  },
-  {
-    "name": "Hassan Tech",
-    "url": "https://hassanx.tech",
-    "tagline": "Web Developer"
   },
   {
     "name": "Hemang Yadav",
@@ -4880,10 +4870,6 @@
     "url": "https://markodenic.com"
   },
   {
-    "name": "Markus Polzer",
-    "url": "https://www.rapidtech1898.com"
-  },
-  {
     "name": "Marouane Rassili",
     "url": "https://mrassili.com"
   },
@@ -5381,6 +5367,11 @@
     "name": "Muhammad Saqib Atif",
     "url": "https://msaqibatifj.vercel.app",
     "tagline": "AI/ML Engineer | Full Stack Developer"
+  },
+  {
+    "name": "Muhammad Shamim Shoaib",
+    "url": "https://sshoaib.vercel.app",
+    "tagline": "Full Stack Developer"
   },
   {
     "name": "Muhammad Taha Nawab",
@@ -7768,6 +7759,11 @@
     "url": "https://www.sudevmagar.tech"
   },
   {
+    "name": "Sudhir Yadav",
+    "url": "https://sudhiryadav-dev.vercel.app",
+    "tagline": "Full Stack Developer"
+  },
+  {
     "name": "Suhail Roushan",
     "url": "https://suhailroushan.com"
   },
@@ -7828,6 +7824,11 @@
     "name": "Suraj Yadav",
     "url": "https://suraj-yadav0.github.io/terminal-portfolio/",
     "tagline": "Software Engineer | Ubuntu Touch Developer"
+  },
+  {
+    "name": "Sushant Mondal",
+    "url": "https://www.sushantmondal.com/",
+    "tagline": "Computer Architect (RISC-V) / Hardware | System Administrator (IaaS and PaaS)"
   },
   {
     "name": "Suvojit Konar",
