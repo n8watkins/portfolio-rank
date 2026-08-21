@@ -2111,6 +2111,11 @@
     "tagline": "Student | Cyber Security"
   },
   {
+    "name": "Charles Degraeuwe",
+    "url": "https://charlesdegraeuwe.com",
+    "tagline": "Student | Full Stack Engineer"
+  },
+  {
     "name": "Charles Ouimet",
     "url": "https://ouimet.info",
     "tagline": "Backend Developer"
@@ -6590,6 +6595,11 @@
   {
     "name": "Rishav",
     "url": "https://v0idrsh.vercel.app"
+  },
+  {
+    "name": "Rishhi Duetheesh",
+    "url": "https://rishhiduetheesh.netlify.app",
+    "tagline": "Frontend Developer"
   },
   {
     "name": "Ritesh Bucha",
