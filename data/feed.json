@@ -128,7 +128,7 @@
   },
   {
     "name": "Abass Alzouma",
-    "url": "abass.wanecrea.com"
+    "url": "https://abass.wanecrea.com"
   },
   {
     "name": "Abbas Raza",
@@ -808,6 +808,11 @@
     "name": "Ali Saleem",
     "url": "https://alisaleem252.com",
     "tagline": "Web Developer & Web Programmer"
+  },
+  {
+    "name": "Ali Younes",
+    "url": "https://aliyounes.dev",
+    "tagline": "Software Engineer | Systems & Full Stack"
   },
   {
     "name": "Alif Jobaer",
@@ -3330,6 +3335,11 @@
     "tagline": "Software Engineer | Backend & API Engineering | DevSecOps"
   },
   {
+    "name": "Hafsa Salman",
+    "url": "https://www.hafsasalman.com/",
+    "tagline": "Software Engineer | Full Stack Developer | AI"
+  },
+  {
     "name": "Hamish Williams",
     "url": "https://hamishw.com"
   },
@@ -5462,6 +5472,11 @@
     "url": "https://mfatihdinc.com"
   },
   {
+    "name": "Mujtaba Saqib",
+    "url": "https://www.mujtabasaqib.com/",
+    "tagline": "Data Engineer | Data Scientist"
+  },
+  {
     "name": "Mukesh",
     "url": "https://themukesh.com",
     "tagline": "Java,React, next.js, Full Stack Developer"
@@ -7016,6 +7031,11 @@
     "name": "Sajid Alam",
     "url": "https://sajidalam.pages.dev",
     "tagline": "Full Stack Developer"
+  },
+  {
+    "name": "Sajjad Hossain Soykot",
+    "url": "https://www.sajjadsoykot.me/",
+    "tagline": "Full-Stack Developer | System Designer"
   },
   {
     "name": "Sakib Mansuri",
