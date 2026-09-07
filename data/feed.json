@@ -1918,11 +1918,6 @@
     "tagline": "Data Scientist"
   },
   {
-    "name": "Blake Karbon",
-    "url": "https://balakekarbon.github.io",
-    "tagline": "Legacy Systems / COBOL, Firmware, AI / Big Data, and Full Stack Developer"
-  },
-  {
     "name": "Blake Werlinger",
     "url": "https://werlinger.dev",
     "tagline": "Gameplay Programming | Backend Architecture | Web Development"
@@ -3167,10 +3162,6 @@
     "tagline": "Software Developer | Audio DSP | AI Infrastructure | Music Tech"
   },
   {
-    "name": "Gaspare Tortora",
-    "url": "https://gaspavar.dev"
-  },
-  {
     "name": "Gaurav Bansal",
     "url": "https://gaurav-bansal.vercel.app"
   },
@@ -3394,6 +3385,11 @@
     "name": "Hariharan Narlakanti",
     "url": "https://portfolio-harin999s-projects.vercel.app",
     "tagline": "AI Engineer | Backend Developer"
+  },
+  {
+    "name": "Haris",
+    "url": "https://portfolio.haresmohd012.workers.dev/",
+    "tagline": "DevOps Engineer | Full Stack Developer | Cloud Engineer"
   },
   {
     "name": "Haris Priantury",
@@ -4682,11 +4678,6 @@
     "url": "https://dantsdev.vercel.app"
   },
   {
-    "name": "Lucas De Moraes",
-    "url": "https://devlucas.website",
-    "tagline": "Full Stack Developer"
-  },
-  {
     "name": "Lucas Lima",
     "url": "https://lucas-lima.vercel.app"
   },
@@ -5240,6 +5231,11 @@
     "url": "http://mitulsavani.com"
   },
   {
+    "name": "Mnelisi Mthuli",
+    "url": "https://www.seniordevelopermnelisi.com",
+    "tagline": "Senior C# / .NET Developer"
+  },
+  {
     "name": "Mohamad Fadhil Yaacob",
     "url": "https://fadhil-blog.dev"
   },
@@ -5317,11 +5313,6 @@
     "name": "Mohd Ubaid Khan",
     "url": "https://mdubaid.in",
     "tagline": "Software Engineer | Full Stack Engineer | Problem Solver"
-  },
-  {
-    "name": "Mohd Zaheer Uddin",
-    "url": "https://sohailkhan0525.github.io/MyPortfolio",
-    "tagline": "MACHINE LEARNING BEGINNER | Founder of @Qofeno"
   },
   {
     "name": "Mohibur Rahman Sani",
@@ -6562,7 +6553,7 @@
   },
   {
     "name": "Rathod Ramraj",
-    "url": "https://rathodram.is-a.dev/",
+    "url": "https://rathodram.vercel.app",
     "tagline": "Full Stack Dev | Student at NITJ"
   },
   {
@@ -7673,6 +7664,11 @@
     "tagline": "Frontend Developer | ReactJs"
   },
   {
+    "name": "Shreyam Adhikari",
+    "url": "https://shreyam1008.com.np/",
+    "tagline": "Full Stack Developer | Go, TypeScript & Development Tools"
+  },
+  {
     "name": "Shreyas Raviprakash",
     "url": "https://portfolio-vfee.vercel.app",
     "tagline": "Full Stack Developer"
@@ -8603,15 +8599,6 @@
     "tagline": "Full Stack Developer"
   },
   {
-    "name": "Vinay Kumar",
-    "url": "https://n4ryn.com",
-    "tagline": "Full Stack Developer"
-  },
-  {
-    "name": "Vinay Somawat",
-    "url": "https://vinaysomawat.github.io"
-  },
-  {
     "name": "Vineet Saraf",
     "url": "https://coastalvinny.dev"
   },
@@ -8893,6 +8880,11 @@
   {
     "name": "Yechiel Kalmenson",
     "url": "https://yechiel.me"
+  },
+  {
+    "name": "Yehia Gewily",
+    "url": "https://yehia-gewily.me",
+    "tagline": "AI Software Engineer"
   },
   {
     "name": "Yeshwanth Krishna",
