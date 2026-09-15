@@ -989,6 +989,11 @@
     "url": "https://anayparaswani.dev"
   },
   {
+    "name": "Andre Nunes Da Silva",
+    "url": "https://andresilva.tech",
+    "tagline": "Software Engineering Student | Backend Engineer"
+  },
+  {
     "name": "Andrea Ojeda",
     "url": "https://www.andreaoz.com"
   },
@@ -1471,7 +1476,7 @@
   {
     "name": "Ashish Choudhary",
     "url": "https://ashishchoudhary.dev",
-    "tagline": "Software Engineer | Full-Stack Web Developer"
+    "tagline": "Software Engineer | Full Stack Web Developer"
   },
   {
     "name": "Ashish Madan",
@@ -2383,6 +2388,11 @@
     "name": "Daniel Steele",
     "url": "https://www.danielsteele.dev",
     "tagline": "Full Stack Developer"
+  },
+  {
+    "name": "Daniella Ovbude",
+    "url": "https://daniella3.github.io/portfolio/",
+    "tagline": "Software Engineer | Frontend & Full Stack Developer"
   },
   {
     "name": "Danil Gordeev",
@@ -4467,11 +4477,6 @@
     "name": "Kuldeep Rajput",
     "url": "https://macos-kuldeeprajput.vercel.app",
     "tagline": "Software Engineer | Full Stack Web Developer"
-  },
-  {
-    "name": "Kuldeepsinh Jadeja",
-    "url": "https://kuldeepjadeja.dev",
-    "tagline": "Full Stack Developer | MERN Stack"
   },
   {
     "name": "Kunal Passan",
@@ -6792,11 +6797,6 @@
     "url": "https://rohitsolanki.me"
   },
   {
-    "name": "Rohit Soni",
-    "url": "https://rohitsoni007.github.io/portfolio",
-    "tagline": "Full Stack, Mern, Reactnative"
-  },
-  {
     "name": "Rohit Wadhwa",
     "url": "https://github.com/rohit-wadhwa"
   },
@@ -7520,11 +7520,6 @@
     "name": "Shakir Ali",
     "url": "https://shakiraliswe.com",
     "tagline": "Full Stack Developer"
-  },
-  {
-    "name": "Shalon Fernando",
-    "url": "https://shalon.vercel.app",
-    "tagline": "Software Engineer"
   },
   {
     "name": "Shamsur Rahman Shaikat",
