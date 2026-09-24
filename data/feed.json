@@ -174,7 +174,7 @@
   },
   {
     "name": "Abdul Jaber",
-    "url": "https://aj7.is-a.dev"
+    "url": "https://ajseven.me"
   },
   {
     "name": "Abdul Malik",
@@ -4960,6 +4960,11 @@
     "url": "http://marc.dev"
   },
   {
+    "name": "Marc Cheng",
+    "url": "https://chengmarc.com",
+    "tagline": "Founder | Software Architect | Data & ML"
+  },
+  {
     "name": "Marciano Mavungo",
     "url": "https://marcmav.dev",
     "tagline": "Frontend Software Engineer | vanillaJS | TailwindCSS"
@@ -5721,6 +5726,11 @@
     "name": "Nemanja Pavlovic",
     "url": "https://nemanja.works",
     "tagline": "Frontend Developer | Full Stack Developer | Software Engineer"
+  },
+  {
+    "name": "Nestor Jr Agnis",
+    "url": "https://nja-systems.vercel.app/",
+    "tagline": "Full Stack Developer | Software Engineer"
   },
   {
     "name": "Newton Yuan",
