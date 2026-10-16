@@ -1121,7 +1121,7 @@
   },
   {
     "name": "Aneeth Kumaar",
-    "url": "https://akwastaken.github.io",
+    "url": "https://aneethkumaar.is-a.dev",
     "tagline": "Graphic Designer | Programmer"
   },
   {
@@ -1308,6 +1308,11 @@
     "name": "Anubhav Singh",
     "url": "https://mylivecv.com/mylivecv/pf-anubhav",
     "tagline": "Full Stack Developer"
+  },
+  {
+    "name": "Anugrah Surya Putra",
+    "url": "https://downormal.dev",
+    "tagline": "Mobile Engineer | Flutter & Kotlin Multiplatform"
   },
   {
     "name": "Anuj Khurana",
@@ -3337,6 +3342,11 @@
   {
     "name": "Ganesh",
     "url": "https://ganesh717.netlify.app"
+  },
+  {
+    "name": "Gareth Wright",
+    "url": "https://garpunkal.dev",
+    "tagline": "Senior .NET & C# Solutions Architect"
   },
   {
     "name": "Garima Bhayana",
@@ -5735,6 +5745,11 @@
     "tagline": "Java,React, next.js, Full Stack Developer"
   },
   {
+    "name": "Mukesh Kumar",
+    "url": "https://mukeshdevx.vercel.app",
+    "tagline": "Full Stack Developer | MukeshDevX"
+  },
+  {
     "name": "Mukul Chugh",
     "url": "https://mukulchugh.com"
   },
@@ -6498,6 +6513,11 @@
     "name": "Pranay Bandaru",
     "url": "https://pranaybandaru.vercel.app",
     "tagline": "Data Science"
+  },
+  {
+    "name": "Praneeth Reddy",
+    "url": "https://praneeth-portfolio-silk.vercel.app",
+    "tagline": "Java Backend Developer"
   },
   {
     "name": "Pranshu Patel",
@@ -7554,7 +7574,8 @@
   },
   {
     "name": "Sartaj Alam",
-    "url": "https://sak03.github.io/sartaj.dev"
+    "url": "https://sartajalam.in/",
+    "tagline": "Full Stack Developer"
   },
   {
     "name": "Sarthak Bhushan",
@@ -8515,6 +8536,11 @@
     "name": "Thomas Havlik",
     "url": "https://thavlik.dev",
     "tagline": "Software Architect | Medical Student"
+  },
+  {
+    "name": "Thuany Paula Kamers",
+    "url": "https://thuanykamers.github.io/portfolio/",
+    "tagline": "Junior Developer & IT Support | Cybersecurity Enthusiast"
   },
   {
     "name": "Tiago Hermano",
