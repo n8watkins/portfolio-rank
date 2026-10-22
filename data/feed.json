@@ -2632,6 +2632,11 @@
     "url": "https://deepaksingh.vercel.app"
   },
   {
+    "name": "Deepak Terse",
+    "url": "https://deepak-terse.github.io",
+    "tagline": "Technical Architect & AI Engineer"
+  },
+  {
     "name": "Deepu Kunjumon",
     "url": "https://deepukunjumon.vercel.app",
     "tagline": "Software Developer - PHP | Laravel | Slim | React.js"
@@ -5627,6 +5632,11 @@
     "url": "https://mouadziani.github.io"
   },
   {
+    "name": "Mouayed Belkhir",
+    "url": "https://mouayedbelkhir.vercel.app",
+    "tagline": "Full Stack Developer | Next.js, Node.js, Strapi"
+  },
+  {
     "name": "Mouzan Raza",
     "url": "http://my-portfolio-jz1h.vercel.app",
     "tagline": "AI/LLM Engineer"
@@ -8447,6 +8457,11 @@
     "name": "Syed Abdul Aman",
     "url": "https://p-r-e-m-i-u-m.github.io/AmanGenAI/",
     "tagline": "Generative AI Developer | LLMs | Python"
+  },
+  {
+    "name": "Syed Faiz Imam",
+    "url": "https://faizimam.in",
+    "tagline": "Senior Software Developer | Backend, Voice AI & Kafka"
   },
   {
     "name": "Syed Muhammad Abdullah Ahsan",
