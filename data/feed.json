@@ -134,7 +134,7 @@
   },
   {
     "name": "Aathif Zahir",
-    "url": "https://az-dev.vercel.app"
+    "url": "https://aathifzahir.vercel.app"
   },
   {
     "name": "Aaweł Szostak",
@@ -3990,6 +3990,11 @@
     "url": "https://jainex.vercel.app"
   },
   {
+    "name": "Jaison David",
+    "url": "https://jaisondavid.in",
+    "tagline": "Backend & Distributed Systems Engineer | Go, Kafka, Redis"
+  },
+  {
     "name": "Jake Ginesin",
     "url": "https://jakegines.in"
   },
@@ -5985,6 +5990,10 @@
   {
     "name": "Nick Gray",
     "url": "https://nickgray.net"
+  },
+  {
+    "name": "Nickolas Diaz",
+    "url": "https://nickolasddiaz.github.io"
   },
   {
     "name": "Nico Bachner",
@@ -9340,8 +9349,8 @@
   },
   {
     "name": "Yogi Arif Widodo",
-    "url": "https://yogiveloper.com",
-    "tagline": "Full Stack Software Engineer | Newbie Hacker"
+    "url": "https://yogiarifwidodo.my.id",
+    "tagline": "Full Stack Software Engineer"
   },
   {
     "name": "Yohannes Getachew",
