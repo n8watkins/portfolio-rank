@@ -25,7 +25,11 @@ permissions:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04 on 2026-10-22, and Playwright 1.60
+    # can't install Chromium there ("does not support chromium on
+    # ubuntu26.04-x64"), so capture failed and new portfolios got no screenshots
+    # or grades. Unpin once Playwright is upgraded to a version that supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 330
     env:
       HAS_PAT: ${{ secrets.GH_SYNC_TOKEN != '' }}
