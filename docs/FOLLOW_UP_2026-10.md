@@ -88,13 +88,10 @@ The next day, check that the 13:00 UTC "Daily AI vote" run logs `pairwise done: 
 
 ## Part B - Close issue #3
 
-- [ ] **Step 5. Close #3 as fixed** (owner)
+- [x] **Step 5. Close #3 as fixed** (agent, done 2026-10-26)
 
-Do this after Step 4, so the comment can say grading works too.
-
-```bash
-gh issue close 3 -R n8watkins/portfolio-rank --reason completed --comment "Fixed by #5. ubuntu-latest became Ubuntu 26.04 on 2026-10-22 and Playwright 1.60 cannot install Chromium there, so the sync now runs on ubuntu-24.04. Manual run https://github.com/n8watkins/portfolio-rank/actions/runs/40244406862 captured the 19-site backlog. Grading was separately blocked by an invalid Gemini key since late July; the key is replaced and the backlog is being graded."
-```
+Closed before Part A, at the owner's request, with a comment that says the sync is fixed and grading is not yet: it links this plan for the Gemini key.
+Once Part A is done, add a short comment on #3 that grading works again (for example "Gemini key replaced; run <id> graded N sites").
 
 Verify: `gh issue view 3 -R n8watkins/portfolio-rank --json state --jq .state` prints `CLOSED`.
 The next scheduled sync (daily 06:00 UTC) should be green; if it fails, the workflow opens a new issue, because it only reuses an open one.
