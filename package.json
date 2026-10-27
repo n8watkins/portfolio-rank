@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "next dev -p 7678",
     "build": "next build",
-    "start": "next start -p 7678"
+    "start": "next start -p 7678",
+    "release": "release-kit release",
+    "release:check": "release-kit check && npm run build",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
@@ -22,6 +25,7 @@
     "@types/react-dom": "^19.1.0",
     "playwright": "^1.60.0",
     "pngjs": "^7.0.0",
+    "release-kit": "github:n8watkins/release-kit#v2.0.0",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.0"
   },
