@@ -93,7 +93,7 @@ function SocialIcon({ path }: { path: string }) {
 }
 
 // Social profile buttons (GitHub / LinkedIn / X) scraped from the portfolio page
-// — reach someone's profiles without opening their site. Renders nothing if none.
+// - reach someone's profiles without opening their site. Renders nothing if none.
 export function Socials({ url }: { url: string }) {
   const data = useInspection(url);
   if (!data?.ok) return null;
@@ -161,7 +161,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
         {!psi ? (
           <p className="flex items-center gap-2 text-sm text-mute">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-accent" />
-            Running Lighthouse on Google&apos;s servers — first run takes ~30s…
+            Running Lighthouse on Google&apos;s servers - first run takes ~30s…
           </p>
         ) : !psi.ok ? (
           <p className="text-sm text-red-400">
@@ -178,7 +178,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
                   <p
                     className={`text-2xl font-bold tabular-nums ${scoreColor(psi.scores?.[id])}`}
                   >
-                    {psi.scores?.[id] ?? "—"}
+                    {psi.scores?.[id] ?? "-"}
                   </p>
                   <p className="mt-1 text-xs text-mute">{label}</p>
                 </div>
@@ -268,7 +268,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
             </div>
           ) : (
             <p className="text-sm text-red-400">
-              ✗ No working share card — this link looks bare when posted on
+              ✗ No working share card - this link looks bare when posted on
               social media.
             </p>
           )}

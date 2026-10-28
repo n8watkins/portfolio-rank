@@ -178,7 +178,7 @@ export function ListView({
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-edge py-12 text-center text-sm text-mute">
           This list is empty
-          {isOwner && " — add portfolios with “Add to list” on any portfolio page"}
+          {isOwner && " - add portfolios with “Add to list” on any portfolio page"}
           .
         </p>
       ) : (

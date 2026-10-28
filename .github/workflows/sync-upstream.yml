@@ -6,7 +6,7 @@ name: Sync upstream + ingest
 #   2. commit it only if upstream actually changed,
 #   3. screenshot + AI-grade whatever is new.
 # capture.mjs reads feed.json and skips URLs already in the DB; judge.mjs skips
-# already-graded sites — so this only ever does the *new* work. Removed-upstream
+# already-graded sites - so this only ever does the *new* work. Removed-upstream
 # links simply drop out of feed.json (the app filters to the roster).
 on:
   workflow_dispatch: {}
@@ -53,7 +53,7 @@ jobs:
           python3 pipeline/generate_feed.py /tmp/upstream-README.md data/feed.json \
             --exclude data/excluded.json --add data/additions.json
 
-      # 2) Keep your fork mirror current too — only if a PAT is provided.
+      # 2) Keep your fork mirror current too - only if a PAT is provided.
       - name: Sync fork mirror (optional)
         if: env.HAS_PAT == 'true'
         env:
@@ -66,7 +66,7 @@ jobs:
       - name: Commit refreshed feed.json
         run: |
           if git diff --quiet -- data/feed.json; then
-            echo "feed.json unchanged — nothing new upstream."
+            echo "feed.json unchanged - nothing new upstream."
           else
             git config user.name "portfolio-rank-bot"
             git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -76,8 +76,8 @@ jobs:
           fi
 
       # 4) Screenshot + AI-grade the new entries (both no-op on already-done work).
-      #    Grading self-limits to sites whose captures exist on this runner — i.e.
-      #    the ones just captured above — so it never burns budget re-scanning old
+      #    Grading self-limits to sites whose captures exist on this runner - i.e.
+      #    the ones just captured above - so it never burns budget re-scanning old
       #    sites or the backlog handled elsewhere.
       - uses: actions/setup-node@v4
         with:
@@ -88,7 +88,7 @@ jobs:
       - name: Capture new portfolios
         run: node pipeline/capture.mjs --concurrency 4
       # Grades newest-captured first (new sites), then chips the existing backlog
-      # from R2 — budget-capped so it never blows the shared daily Gemini quota
+      # from R2 - budget-capped so it never blows the shared daily Gemini quota
       # (the consecutive-error abort stops it early if the quota runs out).
       - name: AI-grade new + backlog (budget-capped)
         run: node pipeline/judge.mjs rubric --limit 300

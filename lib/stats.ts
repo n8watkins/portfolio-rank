@@ -14,7 +14,7 @@ export type RaterStats = {
  * Banked Superstar balance: earn 1 per STAR_PER_VOTES votes, bank up to
  * STAR_BANK_CAP. Single source of truth for the GET side of /api/rank and the
  * profile. (The vote POST recomputes this inside its write transaction so the
- * spend stays atomic — see app/api/rank/route.ts.)
+ * spend stays atomic - see app/api/rank/route.ts.)
  */
 export async function starBalance(raterId: string): Promise<number> {
   const r = await db().execute({

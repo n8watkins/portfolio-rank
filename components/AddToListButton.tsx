@@ -123,7 +123,7 @@ export function AddToListButton({
         const list = await res.json();
         setNewName("");
         // Add the url to the brand-new list, but only reflect membership if the
-        // add actually lands — otherwise show the new (empty) list honestly.
+        // add actually lands - otherwise show the new (empty) list honestly.
         let contains = false;
         let count = 0;
         try {

@@ -12,7 +12,7 @@ on:
         required: false
         default: "150"
   schedule:
-    - cron: "0 9 * * *" # daily 09:00 UTC — clear of sync (06:00) and vote (13:00)
+    - cron: "0 9 * * *" # daily 09:00 UTC - clear of sync (06:00) and vote (13:00)
 
 concurrency:
   group: prewarm

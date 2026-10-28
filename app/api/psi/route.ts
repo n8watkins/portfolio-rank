@@ -70,12 +70,12 @@ async function runPsi(target: string): Promise<PsiResult> {
 
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url");
-  // Only audit sites on the roster — keeps strangers from burning the PSI
+  // Only audit sites on the roster - keeps strangers from burning the PSI
   // quota or pointing our server at arbitrary URLs.
   if (!url || !isKnownPortfolio(url)) {
     return NextResponse.json({ ok: false, error: "unknown_url" }, { status: 403 });
   }
-  // Quota errors and timeouts are transient — never cache failures.
+  // Quota errors and timeouts are transient - never cache failures.
   const data = await cached<PsiResult>(
     "psi",
     url,

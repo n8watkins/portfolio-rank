@@ -61,14 +61,14 @@ export function ShareButton({
         await navigator.share({ title, url: href });
         return;
       } catch {
-        // user dismissed the sheet, or share failed — fall through to copy
+        // user dismissed the sheet, or share failed - fall through to copy
       }
     }
     if (await copyToClipboard(href)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } else {
-      // Nothing worked (rare) — surface the link so the user can copy it by hand.
+      // Nothing worked (rare) - surface the link so the user can copy it by hand.
       window.prompt("Copy this link:", href);
     }
   };

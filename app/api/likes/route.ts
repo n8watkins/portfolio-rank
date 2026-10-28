@@ -6,8 +6,8 @@ import { getRater } from "@/lib/rater";
 export const runtime = "nodejs";
 
 /**
- * GET /api/likes            → { liked: string[] } — all urls the rater likes
- * GET /api/likes?urls=a,b,c → { liked: string[] } — the subset of those liked
+ * GET /api/likes            → { liked: string[] } - all urls the rater likes
+ * GET /api/likes?urls=a,b,c → { liked: string[] } - the subset of those liked
  *
  * Anon raters can't like, so they always get an empty set (the ♥ stays hollow
  * and tapping it opens the sign-in modal).

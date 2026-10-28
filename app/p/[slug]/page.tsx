@@ -47,7 +47,7 @@ export async function generateMetadata({
   const p = (feed as Portfolio[]).find((x) => x.url === url);
   if (!p) return {};
   const img = await shotFor(url);
-  const title = `${p.name} — PortfolioRank`;
+  const title = `${p.name} - PortfolioRank`;
   const description = p.tagline
     ? `${p.tagline} · ${domainOf(url)}`
     : `Developer portfolio · ${domainOf(url)}`;
@@ -68,7 +68,7 @@ export async function generateMetadata({
 }
 
 // The AI review shows for any graded site, but only the top tiers (S/A/B) get the
-// prominent letter badge — lower tiers show the axis scores under a neutral "AI"
+// prominent letter badge - lower tiers show the axis scores under a neutral "AI"
 // mark, so we never slap a public "D" on someone's work.
 function publicGrade(raw: unknown): null | {
   tier: string;
@@ -241,7 +241,7 @@ export default async function PortfolioPage({
             <div>
               <p className="font-semibold">AI design review</p>
               <p className="text-xs text-mute">
-                by Gemini{grade.model ? ` (${grade.model})` : ""} — an opinion, not
+                by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
                 a verdict
               </p>
             </div>
