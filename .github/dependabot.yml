@@ -7,6 +7,11 @@ updates:
       interval: daily
     allow:
       - dependency-name: release-kit
+    # Dependabot reads this git dependency's tags out of order and offered v2.0.0 -> v1.x
+    # downgrades. Raise this floor with each new major of the kit.
+    ignore:
+      - dependency-name: release-kit
+        versions: ["< 2.0.0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
