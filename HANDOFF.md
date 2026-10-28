@@ -24,6 +24,7 @@ The step-by-step October plan (key, failure handling, submissions, Playwright) i
   Check with `curl -s https://portfoliorank.vercel.app | grep -o "<title>[^<]*</title>"`, which should print `PortfolioRank - the best developer portfolios, ranked`.
 - PR #10 (switch the AI judge to `gemini-3.5-flash-lite`) is **open on purpose**: it cannot be verified until a new Gemini key exists.
 - The site has no analytics.
+- Security: the locked `next` 15.5.28 has no open advisories in GitHub's advisory database (checked 2026-10-27).
 - Open issues: #2, #4 and #7 are portfolio submissions waiting for a person to add them (see Part C and Part D of `docs/FOLLOW_UP_2026-10.md`).
 
 ### Open problem 1 (high): AI grading and AI voting have been dead since late July 2026
@@ -79,6 +80,12 @@ Do these in order; the detail for steps 3 and 6 is in `docs/FOLLOW_UP_2026-10.md
 Persistence is already in place: grades go to `portfolios.ai_rubric` and votes to `votes`/`ratings` in Turso, and `backup.yml` snapshots them to R2 daily.
 Switching models tags new AI votes as `ai:gemini-3.5-flash-lite`, so that judge may vote again on pairs the old one judged; re-grading the 1,485 old rubrics with `--force` is optional and is the owner's call.
 
+### Open problem 2 (low): CI and the scheduled jobs run on Node 20
+
+Every workflow (`ci.yml`, `sync-upstream.yml`, `judge-vote.yml`, `backup.yml`, `prewarm.yml`) sets `node-version: 20` with `actions/setup-node@v4`.
+Node 20 has been end-of-life since April 2026, and runs warn that Node 20 actions are deprecated.
+Fix: set `node-version: 24` and move `actions/checkout` and `actions/setup-node` to their current majors in one PR, then run `sync-upstream.yml` and `judge-vote.yml` once by hand to confirm both still pass.
+
 ### Blocked on the owner
 
 - A new Gemini API key, stored as above (steps 1 and 2).
@@ -93,7 +100,8 @@ Switching models tags new AI votes as `ai:gemini-3.5-flash-lite`, so that judge 
 3. Merge PR #10, run grading once, check results (plan steps 4 and 5).
 4. Confirm PR #9 is live once Vercel deploys again.
 5. Handle the waiting submissions (#2, #4, #7) and pick bot or copy in `docs/FOLLOW_UP_2026-10.md` Part D.
-6. Upgrade Playwright and unpin the Ubuntu 24.04 runner (Part E), and move the workflows to current `actions/*` majors and Node 22 or 24.
+6. Upgrade Playwright and unpin the Ubuntu 24.04 runner (Part E).
+7. Move CI and the scheduled workflows to Node 24 and current `actions/*` majors (open problem 2).
 
 
 Read this + AUTOMATION.md + PLAN.md + GRADING_CRITERIA.md + DEPLOY.md in full
