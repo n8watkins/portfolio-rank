@@ -1,4 +1,100 @@
-# HANDOFF — PortfolioRank
+# HANDOFF - PortfolioRank
+
+## Current state and open work (2026-10-27): start here
+
+This section is the entry point for a fresh session.
+It supersedes anything older below that conflicts with it.
+The older dated sections further down are history; read them only for detail.
+
+### What this is and where it lives
+
+PortfolioRank turns the emmabostian/developer-portfolios README into a browsable, ranked site: screenshots, objective checks, AI grades and head-to-head ELO votes.
+Live at https://portfoliorank.vercel.app (Vercel project `portfolio-rank`; every push to `main` deploys to production).
+The planned address is `rank.n8builds.dev`; that DNS step belongs to the owner and is not done.
+Architecture and the scheduled jobs are in `AUTOMATION.md`; deploy notes in `DEPLOY.md`; grading spec in `GRADING_CRITERIA.md`; roadmap in `PLAN.md`.
+The step-by-step October plan (key, failure handling, submissions, Playwright) is `docs/FOLLOW_UP_2026-10.md`.
+
+### Status today
+
+- The site is up and lists 1,705 portfolios.
+  The copy says "1,700+" and the tagline is "The developer portfolio leaderboard".
+- PR #9 (plain hyphens instead of em dashes in page titles and copy) is merged but **not live yet**.
+  Vercel refused the production build with "Deployment rate limited - retry in 24 hours", so production still shows the old title with an em dash.
+  The next push to `main` after the limit lifts (for example the daily `chore: sync portfolios from upstream` commit) deploys it.
+  Check with `curl -s https://portfoliorank.vercel.app | grep -o "<title>[^<]*</title>"`, which should print `PortfolioRank - the best developer portfolios, ranked`.
+- PR #10 (switch the AI judge to `gemini-3.5-flash-lite`) is **open on purpose**: it cannot be verified until a new Gemini key exists.
+- The site has no analytics.
+- Open issues: #2, #4 and #7 are portfolio submissions waiting for a person to add them (see Part C and Part D of `docs/FOLLOW_UP_2026-10.md`).
+
+### Open problem 1 (high): AI grading and AI voting have been dead since late July 2026
+
+What is known:
+
+- Grading and voting run in **GitHub Actions**, not on a laptop and not on Vercel.
+  `sync-upstream.yml` (daily 06:00 UTC) captures new sites and then runs `node pipeline/judge.mjs rubric --limit 300`.
+  `judge-vote.yml` (daily 13:00 UTC) runs `node pipeline/judge.mjs pairwise --votes 30 --tiers S,A,B`.
+  Both read the `GEMINI_API_KEY` **repository secret**.
+  `pipeline/judge.mjs` also loads `.env.local` when it exists, which is how local runs get the key.
+  Nothing in the Next.js app calls Gemini, so Vercel has no Gemini key and needs none.
+  The older note below that says the key lives "in `.env.local` only" is out of date.
+- The `GEMINI_API_KEY` repo secret was last set on 2026-06-20 and is no longer valid.
+  Every call returns `HTTP 401: API key not valid`; the 2026-10-27 sync run (40498870733) and vote run (40561200527) both still show it.
+- Both workflows stay green because `judge.mjs` logs the errors, stops after 5 in a row and exits 0, so the "Notify on failure" step never fires.
+- Database counts on 2026-10-27 (read-only query): 1,485 portfolios graded, all by `gemini-3.1-flash-lite`; 709 live portfolios have no grade.
+- Only 70 AI votes exist (`rater_id = ai:gemini-3.1-flash-lite`), and the newest is from 2026-06-20.
+  The vote runs between 2026-06-21 and 2026-07-24 were green but cast no votes, before the key broke; their logs have expired, so the cause is unknown.
+  Watch the first vote run after the key is fixed: if it logs `pairwise done: 0 vote(s) cast` with no 401, debug `runPairwise` in `pipeline/judge.mjs`.
+- The owner's decision (2026-10-27): the claims on n8builds.dev and on this site that every portfolio gets an AI review stay as they are until grading works again.
+
+How to reproduce:
+
+```bash
+gh run list -R n8watkins/portfolio-rank --workflow judge-vote.yml -L 1 --json databaseId --jq '.[0].databaseId' \
+  | xargs -I{} gh run view {} -R n8watkins/portfolio-rank --log | grep -c "HTTP 401"
+```
+
+It prints `5` while the key is bad.
+
+### Plan to restore continuous grading
+
+Do these in order; the detail for steps 3 and 6 is in `docs/FOLLOW_UP_2026-10.md` Part A.
+
+1. **Owner: new key.**
+   Create a key at https://aistudio.google.com/apikey.
+   Store it as the repo secret with `gh secret set GEMINI_API_KEY -R n8watkins/portfolio-rank` (paste it at the prompt; never in chat or a commit).
+   For local runs, also put it in `.env.local` as `GEMINI_API_KEY=...`.
+   Do not add it to Vercel.
+2. **Check the key and the model without printing the key:**
+   `set -a; . ./.env.local; set +a; curl -s -o /dev/null -w "%{http_code}\n" "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite?key=$GEMINI_API_KEY"` should print `200`.
+3. **Make a bad key turn the runs red** (agent, its own PR): in `pipeline/judge.mjs`, treat 401/403 as fatal and exit 1, and exit 1 when either loop aborts on 5 consecutive errors.
+   This is the error handling that would have caught the July failure on day one.
+4. **Merge PR #10** (Gemini 3.5 Flash-Lite), after an optional local smoke test on its branch with `node pipeline/judge.mjs rubric --limit 1`.
+5. **Run grading once and check the results:** `gh workflow run sync-upstream.yml -R n8watkins/portfolio-rank`, then `gh run watch`.
+   The grading step should end with `rubric done: N/300 judged` with N above 0 and no `HTTP 401`.
+   Open a newly graded detail page on the live site and confirm the AI review section shows a tier and axis scores.
+6. **Let the schedule finish the backlog.** At 300 grades a day, the 709 ungraded sites take about three daily sync runs.
+   The next 13:00 UTC "Daily AI vote" run should log `pairwise done: N vote(s) cast` with N above 0.
+7. **Then comment on issue #3** that grading works again, with the run ID.
+
+Persistence is already in place: grades go to `portfolios.ai_rubric` and votes to `votes`/`ratings` in Turso, and `backup.yml` snapshots them to R2 daily.
+Switching models tags new AI votes as `ai:gemini-3.5-flash-lite`, so that judge may vote again on pairs the old one judged; re-grading the 1,485 old rubrics with `--force` is optional and is the owner's call.
+
+### Blocked on the owner
+
+- A new Gemini API key, stored as above (steps 1 and 2).
+- The `rank.n8builds.dev` DNS record and Vercel domain.
+- Vercel's build rate limit, which clears by itself; nothing to do unless it recurs.
+- Older items still listed in the 2026-06-20 wrap below: rotate the R2 token, and a real signed-in vote on production.
+
+### Next steps in order
+
+1. Owner adds the Gemini key (plan steps 1 and 2).
+2. Agent ships the fail-loudly fix (plan step 3).
+3. Merge PR #10, run grading once, check results (plan steps 4 and 5).
+4. Confirm PR #9 is live once Vercel deploys again.
+5. Handle the waiting submissions (#2, #4, #7) and pick bot or copy in `docs/FOLLOW_UP_2026-10.md` Part D.
+6. Upgrade Playwright and unpin the Ubuntu 24.04 runner (Part E), and move the workflows to current `actions/*` majors and Node 22 or 24.
+
 
 Read this + AUTOMATION.md + PLAN.md + GRADING_CRITERIA.md + DEPLOY.md in full
 before doing anything. Do not re-ask the user anything answered here or there.
