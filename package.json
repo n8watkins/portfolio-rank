@@ -25,7 +25,7 @@
     "@types/react-dom": "^19.1.0",
     "playwright": "^1.60.0",
     "pngjs": "^7.0.0",
-    "release-kit": "github:n8watkins/release-kit#v2.0.0",
+    "release-kit": "github:n8watkins/release-kit#v1.0.3",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.0"
   },
