@@ -75,9 +75,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const list = await loadList(slug);
-  if (!list || !list.isPublic) return { title: "List — PortfolioRank" };
+  if (!list || !list.isPublic) return { title: "List - PortfolioRank" };
 
-  const title = `${list.name} — a PortfolioRank list`;
+  const title = `${list.name} - a PortfolioRank list`;
   const description = `${list.items.length} developer portfolio${
     list.items.length === 1 ? "" : "s"
   }, collected on PortfolioRank.`;

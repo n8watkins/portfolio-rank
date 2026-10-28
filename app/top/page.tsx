@@ -7,7 +7,7 @@ import { LeaderboardRest } from "@/components/LeaderboardRest";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Leaderboard — PortfolioRank",
+  title: "Leaderboard - PortfolioRank",
 };
 
 // Low during cold-start so the AI-seeded ELO has something to show; raise once
@@ -93,7 +93,7 @@ export default async function TopPage() {
           {MIN_VOTES} {MIN_VOTES === 1 ? "vote" : "votes"} to qualify.
         </p>
         <p className="mx-auto mt-2 max-w-xl text-xs text-mute">
-          This reflects crowd preference on look &amp; first impression — not a
+          This reflects crowd preference on look &amp; first impression - not a
           verdict on the developer. Early rankings are AI-seeded until enough
           human votes accrue. Objective measures (performance, accessibility,
           polish) live on each portfolio&apos;s own page.
@@ -110,7 +110,7 @@ export default async function TopPage() {
 
       {!champ ? (
         <p className="py-16 text-center text-sm text-mute">
-          No portfolios have {MIN_VOTES}+ votes yet —{" "}
+          No portfolios have {MIN_VOTES}+ votes yet -{" "}
           <a href="/rank" className="text-accent underline underline-offset-4">
             go cast some
           </a>
@@ -118,7 +118,7 @@ export default async function TopPage() {
         </p>
       ) : (
         <>
-          {/* Champion — the #1 spot gets the spotlight. */}
+          {/* Champion - the #1 spot gets the spotlight. */}
           <a
             href={`/p/${encodeURIComponent(champ.url)}`}
             className="fade-up mb-6 block overflow-hidden rounded-2xl border border-accent/50 bg-card transition hover:border-accent"
@@ -127,7 +127,7 @@ export default async function TopPage() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={champShot!}
-                alt={`${champ.name} — #1`}
+                alt={`${champ.name} - #1`}
                 className="aspect-[16/9] w-full bg-edge object-cover object-top"
               />
               <span className="absolute left-3 top-3 rounded-full bg-accent px-3 py-1 text-sm font-bold text-bg shadow">

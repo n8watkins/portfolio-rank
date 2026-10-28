@@ -2,7 +2,7 @@ import { createClient, type Client } from "@libsql/client";
 import path from "path";
 
 // Turso in production (TURSO_DATABASE_URL + TURSO_AUTH_TOKEN), a local
-// libSQL file in dev — same client, same SQL.
+// libSQL file in dev - same client, same SQL.
 let client: Client | null = null;
 let ready: Promise<void> | null = null;
 
@@ -110,7 +110,7 @@ export function ensureSchema(): Promise<void> {
       }
       // starred = 1 if this vote was a "Superstar" super-vote (double ELO weight).
       // Per-site ⭐ count and per-rater spend both derive from this column, so
-      // deleting a vote (undo) cleanly removes its star too — no separate table.
+      // deleting a vote (undo) cleanly removes its star too - no separate table.
       try {
         await db().execute(
           "ALTER TABLE votes ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"

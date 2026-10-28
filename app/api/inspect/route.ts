@@ -124,7 +124,7 @@ async function inspect(target: string): Promise<Inspection> {
         xUrl = xUrl ?? scrapeX(ah);
       }
     } catch {
-      /* no /about page — fine */
+      /* no /about page - fine */
     }
   }
 

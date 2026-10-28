@@ -32,7 +32,7 @@ async function getStarCount(): Promise<number | null> {
 
 export default async function Home() {
   // Hide confirmed dead/parked/error from browse (the voting pool filters them
-  // too — see app/api/rank). Unconfirmed (pending/live) stay in.
+  // too - see app/api/rank). Unconfirmed (pending/live) stay in.
   await ensureSchema();
   const excluded = new Set(
     (
@@ -117,7 +117,7 @@ export default async function Home() {
           >
             Submit it
           </a>{" "}
-          — takes 30 seconds with a GitHub account.
+          - takes 30 seconds with a GitHub account.
         </p>
         <p className="mt-2 text-xs">
           On the list and want off?{" "}

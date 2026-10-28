@@ -8,7 +8,7 @@ name: Daily AI vote (pairwise-metrics)
 # upsert per vote, in a short transaction.
 #
 # Budget: shares the free-tier Gemini quota (~500/day) with sync-upstream's
-# rubric grading, which on steady-state days only touches NEW sites — so a 30-vote
+# rubric grading, which on steady-state days only touches NEW sites - so a 30-vote
 # cap leaves ample headroom. Cron is set CLEAR of sync's 06:00-11:30 window and
 # the job uses its OWN concurrency group, so a long sync run can't queue this into
 # a timeout.
@@ -24,7 +24,7 @@ on:
         required: false
         default: "S,A,B"
   schedule:
-    - cron: "0 13 * * *" # 13:00 UTC — clear of sync-upstream's 06:00-11:30 window
+    - cron: "0 13 * * *" # 13:00 UTC - clear of sync-upstream's 06:00-11:30 window
 
 concurrency:
   group: ai-vote # own group: write-light, must NOT queue behind the ingest lock
@@ -51,7 +51,7 @@ jobs:
           cache: npm
       - run: npm ci
 
-      # Fail loudly on any missing secret — otherwise judge.mjs silently falls
+      # Fail loudly on any missing secret - otherwise judge.mjs silently falls
       # back (no R2 heroes, or a local sqlite file that doesn't exist) and casts
       # 0 votes on a green run.
       - name: Require secrets

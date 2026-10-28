@@ -128,7 +128,7 @@ export async function POST(req: Request) {
   const rater = await getRater();
   const key = pairKey(winner, loser);
 
-  // Everything — the limit checks, the vote insert, and the ELO update — runs
+  // Everything - the limit checks, the vote insert, and the ELO update - runs
   // in one write transaction. libSQL serializes write transactions, so the
   // gaps that let concurrent requests slip past a check-then-insert (double
   // votes, blown caps, lost-update ELO inflation) are closed. The
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
     const appliedDelta = rater.type === "human" ? updated.winner - w.elo : 0;
 
     // Insert first: a UNIQUE violation here means this rater already voted on
-    // this matchup (either direction) — caught below as 409.
+    // this matchup (either direction) - caught below as 409.
     await tx.execute({
       sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta, starred) VALUES (?, ?, ?, ?, ?, ?, ?)",
       args: [winner, loser, key, rater.type, rater.id, appliedDelta, useStar ? 1 : 0],
@@ -231,7 +231,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       official: rater.type === "human",
-      // For anon votes these are "what would have happened" — shown, not stored.
+      // For anon votes these are "what would have happened" - shown, not stored.
       winnerElo: updated.winner,
       loserElo: updated.loser,
       delta: updated.winner - w.elo,

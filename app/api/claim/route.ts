@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 // Fold a visitor's anon practice votes into their signed-in identity: each
 // becomes an official human vote and moves ELO, except pairs they've already
-// voted on signed-in (dropped — the existing vote stands). Claiming counts
+// voted on signed-in (dropped - the existing vote stands). Claiming counts
 // against the same daily cap as live voting, so churning fresh anon cookies
 // can't be used to mint unlimited official votes. Idempotent: converted votes
 // stop matching rater_type='anon', and the spent cookie is cleared at the end.
@@ -40,7 +40,7 @@ export async function POST() {
 
   let claimed = 0;
   for (const row of anon.rows) {
-    if (budget <= 0) break; // out of daily budget — leave the rest as anon
+    if (budget <= 0) break; // out of daily budget - leave the rest as anon
     const voteId = Number(row.id);
     const winner = String(row.winner);
     const loser = String(row.loser);

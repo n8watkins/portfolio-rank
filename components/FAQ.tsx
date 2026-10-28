@@ -18,7 +18,7 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "How does the AI grade them?",
-    a: "Gemini looks at each site's screenshot and scores design, clarity, storytelling, writing, memorability, and motion — and folds in real Lighthouse + polish data when it compares two. It judges how a site looks, so it only seeds the ranking; humans get the final say.",
+    a: "Gemini looks at each site's screenshot and scores design, clarity, storytelling, writing, memorability, and motion - and folds in real Lighthouse + polish data when it compares two. It judges how a site looks, so it only seeds the ranking; humans get the final say.",
   },
   {
     q: "Why do I have to sign in to vote?",
@@ -26,17 +26,17 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "What are Superstars (⭐)?",
-    a: "You earn one ⭐ every 5 votes. Spend it on a site you think is exceptional — it counts double and adds a visible ⭐ to that portfolio's 'Most Loved' tally.",
+    a: "You earn one ⭐ every 5 votes. Spend it on a site you think is exceptional - it counts double and adds a visible ⭐ to that portfolio's 'Most Loved' tally.",
   },
   {
     q: "Why does it judge screenshots instead of the live site?",
     a: "So a vote takes ~5 seconds and never makes you leave. We capture a real desktop + mobile screenshot of every site; objective measures (Lighthouse, polish) run live and are cached on each detail page.",
   },
   {
-    q: "My portfolio is on here — how do I get it off?",
+    q: "My portfolio is on here - how do I get it off?",
     a: (
       <>
-        No problem —{" "}
+        No problem -{" "}
         <a
           href={SITE.remove}
           target="_blank"
@@ -61,7 +61,7 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
         >
           Submit it
         </a>{" "}
-        — it flows in, gets screenshotted and graded automatically.
+        - it flows in, gets screenshotted and graded automatically.
       </>
     ),
   },

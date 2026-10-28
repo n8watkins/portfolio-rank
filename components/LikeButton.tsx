@@ -99,7 +99,7 @@ export function LikeButton({
           disabled={busy}
           aria-pressed={liked}
           aria-label={liked ? "Unlike" : "Like"}
-          title={liked ? "Liked — click to remove" : "Like (save to your profile)"}
+          title={liked ? "Liked - click to remove" : "Like (save to your profile)"}
           className={`rounded-full bg-bg/80 px-2 py-1 text-sm backdrop-blur transition hover:bg-bg ${
             liked ? "text-rose-400" : "text-mute hover:text-rose-400"
           } ${className}`}

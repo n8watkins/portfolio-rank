@@ -5,7 +5,7 @@
 // Hostnames that must never be fetched: loopback, link-local (incl. the cloud
 // metadata endpoint 169.254.169.254), and RFC1918 / unique-local IP literals.
 // IPv6 forms covered: `\[?::` catches ::1 (loopback), :: (unspecified), and
-// crucially ::ffff:<v4> (IPv4-mapped — e.g. [::ffff:127.0.0.1], which a redirect
+// crucially ::ffff:<v4> (IPv4-mapped - e.g. [::ffff:127.0.0.1], which a redirect
 // could use to smuggle loopback past a v4-only check); `f[cd]` = ULA (fc00::/7);
 // `fe[89ab]` = link-local (fe80::/10).
 const BLOCKED_HOST =
@@ -24,7 +24,7 @@ function isPublicHttpUrl(raw: string): boolean {
 
 /**
  * Fetch following redirects ourselves, re-checking every hop against the
- * private-address blocklist (a roster site can 302 to an internal address —
+ * private-address blocklist (a roster site can 302 to an internal address -
  * `redirect: "follow"` would chase it). Returns the final Response (body
  * undrained) and its resolved URL, or null if blocked/unreachable.
  */
@@ -44,7 +44,7 @@ export async function safeFetch(
         method: init.method ?? "GET",
         redirect: "manual",
         signal: AbortSignal.timeout(init.timeoutMs),
-        // A real browser UA — some sites serve a block page or 403 to obviously
+        // A real browser UA - some sites serve a block page or 403 to obviously
         // non-browser agents, which showed up as "unreachable" in the checks.
         headers: {
           "User-Agent":
@@ -68,7 +68,7 @@ export async function safeFetch(
 }
 
 /**
- * Read a response body as text, but never buffer more than `maxBytes` — a
+ * Read a response body as text, but never buffer more than `maxBytes` - a
  * hostile server can stream gigabytes within the timeout, and slicing after
  * `res.text()` is too late. Reads incrementally and stops at the budget.
  */

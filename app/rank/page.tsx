@@ -138,7 +138,7 @@ export default function RankPage() {
       const p = pairRef.current;
       if (!p || busy || gated || picked) return;
       setBusy(true);
-      setPicked(side); // instant feedback — winner highlights, loser recedes
+      setPicked(side); // instant feedback - winner highlights, loser recedes
       const winner = p[side];
       const loser = p[side === "a" ? "b" : "a"];
 
@@ -160,7 +160,7 @@ export default function RankPage() {
         });
         data = await res.json();
       } catch {
-        setLast("Vote failed — try again.");
+        setLast("Vote failed - try again.");
         setPicked(null);
         setBusy(false);
         return;
@@ -174,22 +174,22 @@ export default function RankPage() {
         return;
       }
       if (res.status === 409) {
-        setLast("You already voted on this pair — here's a fresh one.");
+        setLast("You already voted on this pair - here's a fresh one.");
         loadPair();
         return;
       }
       if (res.status === 429) {
         setLast(
           data.error === "too_fast"
-            ? "Easy there — give each pair a real look before voting."
-            : "Daily vote limit reached — come back tomorrow!"
+            ? "Easy there - give each pair a real look before voting."
+            : "Daily vote limit reached - come back tomorrow!"
         );
         setPicked(null);
         setBusy(false);
         return;
       }
       if (!res.ok) {
-        setLast("Vote failed — try again.");
+        setLast("Vote failed - try again.");
         setPicked(null);
         setBusy(false);
         return;
@@ -244,7 +244,7 @@ export default function RankPage() {
         setLast("Nothing to undo.");
       }
     } catch {
-      setLast("Undo failed — try again.");
+      setLast("Undo failed - try again.");
     }
     setBusy(false);
   }, [busy, picked, count]);
@@ -267,10 +267,10 @@ export default function RankPage() {
         title={gated ? "You're out of practice votes" : "Make your votes count"}
         body={
           gated
-            ? "Sign in to keep voting — your practice votes convert into official ones."
-            : "Sign in so your picks move the official rankings. Or skip and try 10 practice votes first — they convert when you sign in."
+            ? "Sign in to keep voting - your practice votes convert into official ones."
+            : "Sign in so your picks move the official rankings. Or skip and try 10 practice votes first - they convert when you sign in."
         }
-        skipLabel={gated ? "Not now" : "Skip — try practice votes first"}
+        skipLabel={gated ? "Not now" : "Skip - try practice votes first"}
       />
       <header className="flex items-center justify-between gap-3 py-4">
         <a href="/" className="text-sm font-bold tracking-tight">
@@ -293,13 +293,13 @@ export default function RankPage() {
             Click a screenshot to pick it, or use ← → keys. ↓ to skip.
           </span>
           <span className="sm:hidden">
-            Tap a screenshot to pick it — or Skip below if you can&apos;t tell.
+            Tap a screenshot to pick it - or Skip below if you can&apos;t tell.
           </span>
         </p>
         {last && <p className="mt-2 text-sm font-medium text-accent">{last}</p>}
         {rater && !rater.signedIn && !gated && (
           <p className="mt-2 text-xs text-mute">
-            Practice mode — {rater.anonVotesUsed ?? 0}/{rater.anonVoteLimit}{" "}
+            Practice mode - {rater.anonVotesUsed ?? 0}/{rater.anonVoteLimit}{" "}
             free votes used.{" "}
             <button
               onClick={() => setSignInOpen(true)}
@@ -312,13 +312,13 @@ export default function RankPage() {
         )}
         {rater?.signedIn && (
           <p className="mt-2 text-xs text-mute">
-            Voting as <span className="font-semibold">{rater.login}</span> —
+            Voting as <span className="font-semibold">{rater.login}</span> -
             your votes count toward official rankings.
           </p>
         )}
         {rater?.signedIn && rater.stars > 0 && (
           <p className="mt-1 text-xs font-medium text-accent">
-            ⭐ {rater.stars} Superstar{rater.stars === 1 ? "" : "s"} to spend —
+            ⭐ {rater.stars} Superstar{rater.stars === 1 ? "" : "s"} to spend -
             tap ⭐ on a standout to super-vote it (double weight + Most Loved).
           </p>
         )}
@@ -328,7 +328,7 @@ export default function RankPage() {
         <div className="mx-auto mb-6 max-w-md rounded-xl border border-accent/40 bg-card p-6 text-center">
           <p className="text-lg font-bold">You&apos;re out of practice votes</p>
           <p className="mt-2 text-sm text-mute">
-            Sign in to keep voting — your {rater?.anonVoteLimit} practice votes
+            Sign in to keep voting - your {rater?.anonVoteLimit} practice votes
             convert into official ones, and everything after counts too.
           </p>
           <button
@@ -397,7 +397,7 @@ export default function RankPage() {
                   )}
                 </div>
 
-                {/* Metadata — deliberately OUTSIDE the vote target. */}
+                {/* Metadata - deliberately OUTSIDE the vote target. */}
                 <div className="flex items-start justify-between gap-2 p-4 pb-2">
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{p.name}</p>
@@ -426,7 +426,7 @@ export default function RankPage() {
                   </div>
                 </div>
 
-                {/* Diagnostics — desktop only, behind the toggle. */}
+                {/* Diagnostics - desktop only, behind the toggle. */}
                 {showDetails && (
                   <div className="hidden px-4 pb-3 sm:block">
                     <InspectChips url={p.url} />
@@ -458,7 +458,7 @@ export default function RankPage() {
           disabled={busy || picked !== null}
           className="rounded-lg border border-edge px-5 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink disabled:opacity-60"
         >
-          Skip — can&apos;t tell ↓
+          Skip - can&apos;t tell ↓
         </button>
         <button
           onClick={undo}

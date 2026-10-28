@@ -20,7 +20,7 @@ export function SignInModal({
   open,
   onClose,
   title = "Make your votes count",
-  body = "Sign in so your picks move the official rankings — one account, one vote per matchup.",
+  body = "Sign in so your picks move the official rankings - one account, one vote per matchup.",
   skipLabel = "Not now",
 }: Props) {
   const [hasGoogle, setHasGoogle] = useState(false);
@@ -48,7 +48,7 @@ export function SignInModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={(e) => {
-        // Stop the click from bubbling — the modal can be a DOM descendant of a
+        // Stop the click from bubbling - the modal can be a DOM descendant of a
         // navigating <a> (e.g. a browse-grid card), where a bare backdrop click
         // would otherwise trigger that link instead of just closing.
         e.preventDefault();
@@ -106,7 +106,7 @@ export function SignInModal({
         </div>
 
         <p className="mt-4 text-xs text-mute">
-          We only see your public profile — used to count one vote per person.
+          We only see your public profile - used to count one vote per person.
         </p>
 
         {skipLabel && (

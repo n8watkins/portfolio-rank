@@ -5,7 +5,7 @@ import { STAR_BANK_CAP, STAR_PER_VOTES, getRater } from "@/lib/rater";
 export const runtime = "nodejs";
 
 // Undo the current rater's most recent vote: delete the vote row and revert the
-// exact ELO it applied (winner got +delta, loser got -delta) — all in one write
+// exact ELO it applied (winner got +delta, loser got -delta) - all in one write
 // transaction so it can't half-apply.
 export async function POST() {
   await ensureSchema();
@@ -53,7 +53,7 @@ export async function POST() {
     });
     anonVotesUsed = Number(c.rows[0].n);
   }
-  // Undoing a super-vote frees its star — return the fresh balance so the UI re-enables ⭐.
+  // Undoing a super-vote frees its star - return the fresh balance so the UI re-enables ⭐.
   let stars = 0;
   if (rater.type === "human") {
     const sb = await db().execute({

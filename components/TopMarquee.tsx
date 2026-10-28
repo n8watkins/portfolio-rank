@@ -3,7 +3,7 @@ import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 
-// Auto-scrolling gallery of the top-ranked portfolios' hero shots — the homepage
+// Auto-scrolling gallery of the top-ranked portfolios' hero shots - the homepage
 // payoff: "static list in, browsable ranked gallery out." Pure CSS animation
 // (see .marquee-track in globals.css); pauses on hover, off for reduced-motion.
 export async function TopMarquee() {
@@ -63,7 +63,7 @@ export async function TopMarquee() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={it.shot}
-                    alt={`${it.name} — ranked #${it.rank}`}
+                    alt={`${it.name} - ranked #${it.rank}`}
                     loading="lazy"
                     className="aspect-[16/10] w-full bg-edge object-cover object-top"
                   />

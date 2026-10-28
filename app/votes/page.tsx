@@ -6,7 +6,7 @@ import { db, ensureSchema } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "My votes — PortfolioRank",
+  title: "My votes - PortfolioRank",
 };
 
 const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
@@ -75,13 +75,13 @@ export default async function VotesPage() {
       <h1 className="pt-4 text-2xl font-bold tracking-tight">My votes</h1>
       <p className="mt-1 pb-6 text-sm text-mute">
         {res.rows.length} vote{res.rows.length === 1 ? "" : "s"} as{" "}
-        <span className="font-semibold">{session.login}</span> — every pick
+        <span className="font-semibold">{session.login}</span> - every pick
         links to the portfolio, so this doubles as your bookmarks.
       </p>
 
       {res.rows.length === 0 ? (
         <p className="pb-16 text-sm text-mute">
-          No votes yet —{" "}
+          No votes yet -{" "}
           <a href="/rank" className="text-accent underline underline-offset-2">
             go rank some portfolios
           </a>

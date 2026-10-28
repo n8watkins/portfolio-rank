@@ -5,7 +5,7 @@ export const BASE_ELO = 1200;
  * the same value. Backs the UNIQUE(rater_id, pair_key) index that enforces
  * one vote per pair per rater atomically (no check-then-insert race). The
  * separator must be a byte that can't appear in a URL and isn't NUL (SQLite
- * truncates stored TEXT at a NUL byte) — a newline satisfies both.
+ * truncates stored TEXT at a NUL byte) - a newline satisfies both.
  */
 export function pairKey(a: string, b: string): string {
   return [a, b].sort().join("\n");

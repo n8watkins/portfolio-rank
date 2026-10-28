@@ -1,5 +1,5 @@
 name: Remove my portfolio
-description: Request removal of a portfolio from PortfolioRank — no questions asked.
+description: Request removal of a portfolio from PortfolioRank - no questions asked.
 title: "[Remove] "
 labels: ["takedown"]
 body:
@@ -22,7 +22,7 @@ body:
       label: Is this your portfolio?
       options:
         - "Yes, it's mine"
-        - "No — reporting on someone's behalf / other reason"
+        - "No - reporting on someone's behalf / other reason"
     validations:
       required: true
   - type: textarea

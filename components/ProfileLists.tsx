@@ -192,8 +192,8 @@ export function ProfileLists() {
                     disabled={busyId === l.id}
                     title={
                       l.isPublic
-                        ? "Public — anyone with the link can view"
-                        : "Private — only you can view"
+                        ? "Public - anyone with the link can view"
+                        : "Private - only you can view"
                     }
                     className={`rounded-full border px-2 py-0.5 font-semibold transition ${
                       l.isPublic

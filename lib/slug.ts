@@ -4,7 +4,7 @@ const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 /**
  * Short, URL-safe, hard-to-guess id for shareable list slugs. 8 base-36 chars
- * ≈ 2.8e12 space — collisions are astronomically unlikely, and the unique
+ * ≈ 2.8e12 space - collisions are astronomically unlikely, and the unique
  * index on lists.slug is the backstop (callers retry on the rare clash).
  */
 export function newSlug(len = 8): string {

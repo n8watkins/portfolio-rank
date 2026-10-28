@@ -82,7 +82,7 @@ export async function POST(
           args: [id, url],
         })
       ).rows.length > 0;
-    // The cap only blocks genuinely new items — re-adding an existing url is an
+    // The cap only blocks genuinely new items - re-adding an existing url is an
     // idempotent no-op and must still succeed even on a full list.
     if (!present && count >= MAX_ITEMS_PER_LIST) {
       await tx.rollback();
