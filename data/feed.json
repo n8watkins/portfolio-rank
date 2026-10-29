@@ -2465,6 +2465,11 @@
     "url": "https://cuierd.github.io"
   },
   {
+    "name": "Custard",
+    "url": "https://custard.top/en",
+    "tagline": "Data Analysis | Product Development"
+  },
+  {
     "name": "César Gómez",
     "url": "https://cesargomez.dev",
     "tagline": "Senior Vue/Nuxt & Full Stack Engineer"
@@ -8910,6 +8915,11 @@
     "tagline": "Senior Full Stack Engineer | React, Next.js, TypeScript, Node.js, Python | AI & Data Science"
   },
   {
+    "name": "Vaishali Wankhede",
+    "url": "https://vaishbil.github.io/portfolio",
+    "tagline": "Full Stack Developer"
+  },
+  {
     "name": "Valentin Gil",
     "url": "https://vgil.fr",
     "tagline": "Student"
@@ -9058,6 +9068,11 @@
   {
     "name": "Vinit Shahdeo",
     "url": "https://vinitshahdeo.com"
+  },
+  {
+    "name": "Vip3r",
+    "url": "https://vip3r-portfolio.vercel.app",
+    "tagline": "Full-Stack Web Developer | Exiled Developer"
   },
   {
     "name": "Viraj Mavani",
