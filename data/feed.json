@@ -418,6 +418,11 @@
     "url": "https://abrahambankole.dev"
   },
   {
+    "name": "Abu Jafor",
+    "url": "https://portfolio-website-bc28.vercel.app/",
+    "tagline": "Frontend Developer | React, Next.js"
+  },
+  {
     "name": "Abu Suhaib",
     "url": "https://ceo.pronexus.in",
     "tagline": "Leading Startup Founder"
@@ -3260,6 +3265,11 @@
     "url": "https://Floriscodes.nl"
   },
   {
+    "name": "Foisal",
+    "url": "https://foisal.org",
+    "tagline": "Full Stack Developer | Blockchain"
+  },
+  {
     "name": "Forhad_Khan",
     "url": "https://forhadkhandev.vercel.app",
     "tagline": "Front-End Developer"
@@ -4951,6 +4961,11 @@
   {
     "name": "Loránd Kiss",
     "url": "https://lorandkissdev.github.io/github-portfolio"
+  },
+  {
+    "name": "Louey Lahwel",
+    "url": "https://forkfolio.dev/loueylahwel",
+    "tagline": "Data Engineer"
   },
   {
     "name": "Luca Félix",
@@ -7957,6 +7972,11 @@
     "name": "Shanto Joseph",
     "url": "https://shantojoseph.com",
     "tagline": "Full Stack | Developer"
+  },
+  {
+    "name": "Sharath Pai",
+    "url": "https://sharathpai.vercel.app",
+    "tagline": "AI & Backend Developer | LLMs, Agents, RAG"
   },
   {
     "name": "Sharif Rahat",
