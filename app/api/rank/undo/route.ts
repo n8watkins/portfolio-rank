@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { STAR_BANK_CAP, STAR_PER_VOTES, getRater } from "@/lib/rater";
 
-export const runtime = "nodejs";
-
 // Undo the current rater's most recent vote: delete the vote row and revert the
 // exact ELO it applied (winner got +delta, loser got -delta) - all in one write
 // transaction so it can't half-apply.

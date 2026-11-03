@@ -3,8 +3,6 @@ import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
 import { isKnownPortfolio } from "@/lib/roster";
 
-export const runtime = "nodejs";
-
 const MAX_ITEMS_PER_LIST = 500;
 
 /** Confirm the list exists and belongs to this rater; returns false otherwise. */

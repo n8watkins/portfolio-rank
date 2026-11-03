@@ -3,8 +3,6 @@ import { db, ensureSchema } from "@/lib/db";
 import { isKnownPortfolio } from "@/lib/roster";
 import { getRater } from "@/lib/rater";
 
-export const runtime = "nodejs";
-
 /**
  * GET /api/likes            → { liked: string[] } - all urls the rater likes
  * GET /api/likes?urls=a,b,c → { liked: string[] } - the subset of those liked

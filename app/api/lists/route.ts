@@ -3,8 +3,6 @@ import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
 import { newSlug } from "@/lib/slug";
 
-export const runtime = "nodejs";
-
 const MAX_LISTS_PER_OWNER = 100;
 const MAX_NAME_LEN = 60;
 

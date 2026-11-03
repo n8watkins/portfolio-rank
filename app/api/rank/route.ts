@@ -14,8 +14,6 @@ import { starBalance } from "@/lib/stats";
 import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
 
-export const runtime = "nodejs";
-
 type Rating = { elo: number; votes: number };
 
 async function getRatings(urls: string[]): Promise<Map<string, Rating>> {
