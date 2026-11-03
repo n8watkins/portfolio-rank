@@ -4,8 +4,6 @@ import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater, DAILY_VOTE_LIMIT } from "@/lib/rater";
 
-export const runtime = "nodejs";
-
 // Fold a visitor's anon practice votes into their signed-in identity: each
 // becomes an official human vote and moves ELO, except pairs they've already
 // voted on signed-in (dropped - the existing vote stands). Claiming counts

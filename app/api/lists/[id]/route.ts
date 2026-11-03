@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
 
-export const runtime = "nodejs";
-
 const MAX_NAME_LEN = 60;
 
 /**

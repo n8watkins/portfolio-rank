@@ -3,8 +3,6 @@ import { cached } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
 
-export const runtime = "nodejs";
-
 const FREE_HOSTS =
   /\.(vercel\.app|netlify\.app|github\.io|framer\.website|framer\.app|pages\.dev|web\.app|surge\.sh|onrender\.com|herokuapp\.com)$/i;
 

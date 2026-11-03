@@ -1,0 +1,49 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // PortfolioRank as a Cloudflare Worker, built by OpenNext (`npm run deploy`,
+  // see DEPLOY.md).
+  "name": "portfolio-rank",
+  "account_id": "b2c564cf83cb9184dd6d7cc4ff8b38bf",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-28",
+  // nodejs_compat is required by OpenNext; global_fetch_strictly_public keeps
+  // the server's own fetches (GitHub, PageSpeed, inspected sites) on the public
+  // internet.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Served at portfolio-rank.<account>.workers.dev until the domain moves.
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    // The screenshots the pipeline captures (pipeline/capture.mjs uploads them;
+    // app/shots/[key]/[file] serves them). The same bucket is public at
+    // SHOTS_BASE_URL. Locally (`next dev`, `npm run preview`) the binding is an
+    // empty simulated bucket.
+    { "binding": "SHOTS", "bucket_name": "portfolio-rank" },
+    // ISR pages (OpenNext incremental cache).
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "portfolio-rank-opennext-cache" }
+  ],
+  // Deduplicates the background revalidations of ISR pages.
+  "durable_objects": {
+    "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
+  // The revalidation queue renders pages again by calling the worker itself.
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
+  "vars": {
+    // Public base URL of the screenshot bucket; pages link captures there.
+    "SHOTS_BASE_URL": "https://pub-680e930bd59047488d688e63d7477fee.r2.dev"
+  },
+  // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
+  // AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN,
+  // PSI_API_KEY. See DEPLOY.md.
+  // Run next to the Turso database (aws-us-east-2): every request makes several
+  // queries, so a Worker near the visitor would pay a cross-country round trip
+  // for each. Static assets are still served from the edge.
+  "placement": { "mode": "targeted", "region": "aws:us-east-2" },
+  "observability": { "enabled": true },
+  "upload_source_maps": true
+}

@@ -29,6 +29,10 @@ jobs:
     env:
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      # The site whose API it calls. Unset, scripts/prewarm-metrics.mjs uses
+      # https://portfoliorank.vercel.app; set the repository variable to the
+      # Worker's address when the site moves to Cloudflare.
+      PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

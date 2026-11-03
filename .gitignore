@@ -18,3 +18,8 @@ pairwise-pass.log
 inspect-backfill.log
 prewarm.log
 retry-github.log
+
+# Cloudflare Workers (OpenNext build output, local state, dev secrets)
+.open-next
+.wrangler
+.dev.vars*

@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { cached } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 
-export const runtime = "nodejs";
-
 // Adapted from site-forge's checkup route. Works keyless at low volume;
 // set PSI_API_KEY (free, no billing) for the 25k/day quota.
 export type PsiResult = {
