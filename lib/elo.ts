@@ -11,11 +11,12 @@ export function pairKey(a: string, b: string): string {
   return [a, b].sort().join("\n");
 }
 
+/**
+ * Zero-sum ELO step: the loser loses exactly what the winner gains (rounded
+ * once), so a vote can be reverted by applying the same delta in reverse.
+ */
 export function eloUpdate(winnerElo: number, loserElo: number, k = 32) {
   const expectedWin = 1 / (1 + 10 ** ((loserElo - winnerElo) / 400));
-  const gain = k * (1 - expectedWin);
-  return {
-    winner: Math.round(winnerElo + gain),
-    loser: Math.round(loserElo - gain),
-  };
+  const gain = Math.round(k * (1 - expectedWin));
+  return { winner: winnerElo + gain, loser: loserElo - gain, delta: gain };
 }

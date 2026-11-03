@@ -13,7 +13,8 @@
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false cloudflare-env.d.ts",
-    "check:cf-types": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false --check cloudflare-env.d.ts"
+    "check:cf-types": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false --check cloudflare-env.d.ts",
+    "test:e2e": "scripts/test-e2e.sh"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

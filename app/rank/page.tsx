@@ -76,7 +76,7 @@ function Shot({ url, shot }: { url: string; shot?: string | null }) {
 }
 
 export default function RankPage() {
-  const [pair, setPair] = useState<{ a: Entry; b: Entry } | null>(null);
+  const [pair, setPair] = useState<{ a: Entry; b: Entry; token: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<"a" | "b" | null>(null);
   const [showDetails, setShowDetails] = useState(true);
@@ -100,7 +100,12 @@ export default function RankPage() {
   const loadPair = useCallback(async () => {
     const res = await fetch("/api/rank");
     const data = await res.json();
-    setPair({ a: data.a, b: data.b });
+    if (res.status === 429) {
+      setLast("You've skipped a lot this hour - take a break and come back soon.");
+      setBusy(false);
+      return;
+    }
+    setPair({ a: data.a, b: data.b, token: data.token });
     // Auto-open both sites for the NEW pair so you can review them before voting.
     // Skipped on the very first load (no user gesture → browsers block popups).
     if (autoOpenRef.current && !firstPairRef.current) {
@@ -156,7 +161,7 @@ export default function RankPage() {
         res = await fetch("/api/rank", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ winner: winner.url, loser: loser.url, star }),
+          body: JSON.stringify({ winner: winner.url, loser: loser.url, star, token: p.token }),
         });
         data = await res.json();
       } catch {
@@ -171,6 +176,11 @@ export default function RankPage() {
         setSignInOpen(true);
         setPicked(null);
         setBusy(false);
+        return;
+      }
+      if (res.status === 403 && data.error === "stale_matchup") {
+        setLast("That pair expired - here's a fresh one.");
+        loadPair();
         return;
       }
       if (res.status === 409) {

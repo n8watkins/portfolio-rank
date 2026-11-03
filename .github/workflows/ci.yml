@@ -41,3 +41,18 @@ jobs:
       - run: npm run build:worker
       - name: Bundle the Worker
         run: npx wrangler deploy --dry-run --outdir "${{ runner.temp }}/worker-bundle"
+
+  # Vote integrity end to end: builds the app, starts it on a throwaway local
+  # database and replays the audit's attacks over HTTP (tests/).
+  e2e:
+    name: E2E (vote integrity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:e2e

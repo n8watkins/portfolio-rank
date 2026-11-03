@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
-import { STAR_BANK_CAP, STAR_PER_VOTES, getRater } from "@/lib/rater";
+import {
+  STAR_BANK_CAP,
+  STAR_PER_VOTES,
+  UNDO_WINDOW_MINUTES,
+  getRater,
+} from "@/lib/rater";
 
-// Undo the current rater's most recent vote: delete the vote row and revert the
-// exact ELO it applied (winner got +delta, loser got -delta) - all in one write
-// transaction so it can't half-apply.
+// Undo the current rater's most recent vote, if it was cast (or claimed) in the
+// last UNDO_WINDOW_MINUTES: delete the vote row and revert the exact ELO it
+// applied (winner got +delta, loser got -delta) - all in one write transaction
+// so it can't half-apply. Every vote that moved ratings stores its delta
+// (live votes and claimed practice votes alike), so undo is exact.
 export async function POST() {
   await ensureSchema();
   const rater = await getRater();
@@ -12,8 +19,10 @@ export async function POST() {
   const tx = await db().transaction("write");
   try {
     const res = await tx.execute({
-      sql: "SELECT id, winner, loser, rater_type, delta FROM votes WHERE rater_id = ? ORDER BY id DESC LIMIT 1",
-      args: [rater.id],
+      sql: `SELECT id, winner, loser, rater_type, delta FROM votes
+            WHERE rater_id = ? AND created_at > datetime('now', ?)
+            ORDER BY id DESC LIMIT 1`,
+      args: [rater.id, `-${UNDO_WINDOW_MINUTES} minutes`],
     });
     const v = res.rows[0];
     if (!v) {

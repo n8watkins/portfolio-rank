@@ -6,10 +6,12 @@ import { isKnownPortfolio } from "@/lib/roster";
 import {
   ANON_VOTE_LIMIT,
   DAILY_VOTE_LIMIT,
+  MAX_DRAWS_PER_HOUR,
   STAR_BANK_CAP,
   STAR_PER_VOTES,
   getRater,
 } from "@/lib/rater";
+import { MATCHUP_TTL_MS, issueMatchupToken, verifyMatchupToken } from "@/lib/matchup";
 import { starBalance } from "@/lib/stats";
 import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
@@ -66,6 +68,46 @@ export async function GET() {
     (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)
   );
 
+  // Signed-in raters: record the served pair (an official vote must be for
+  // it) and cap redraws, so skipping until a chosen site shows up doesn't pay.
+  if (rater.type === "human") {
+    const now = Date.now();
+    const hourAgo = now - 60 * 60 * 1000;
+    const tx = await db().transaction("write");
+    try {
+      const row = (
+        await tx.execute({
+          sql: "SELECT window_start, draws FROM matchups WHERE rater_id = ?",
+          args: [rater.id],
+        })
+      ).rows[0];
+      const inWindow = row && Number(row.window_start) > hourAgo;
+      if (inWindow && Number(row.draws) >= MAX_DRAWS_PER_HOUR) {
+        await tx.rollback();
+        return NextResponse.json({ error: "too_many_draws" }, { status: 429 });
+      }
+      await tx.execute({
+        sql: `INSERT INTO matchups (rater_id, pair_key, issued_at, window_start, draws)
+              VALUES (?, ?, ?, ?, 1)
+              ON CONFLICT(rater_id) DO UPDATE SET
+                pair_key = excluded.pair_key, issued_at = excluded.issued_at,
+                window_start = ?, draws = ?`,
+        args: [
+          rater.id,
+          pairKey(candidates[0].url, candidates[1].url),
+          now,
+          now,
+          inWindow ? Number(row.window_start) : now,
+          inWindow ? Number(row.draws) + 1 : 1,
+        ],
+      });
+      await tx.commit();
+    } catch (e) {
+      await tx.rollback().catch(() => {});
+      throw e;
+    }
+  }
+
   const shots = await shotBases([candidates[0].url, candidates[1].url]);
   // Which of the two the signed-in rater already likes, so the ♥ renders filled.
   const likedSet =
@@ -96,6 +138,8 @@ export async function GET() {
   return NextResponse.json({
     a: withRating(candidates[0]),
     b: withRating(candidates[1]),
+    // Proof this rater was shown this pair; POST requires it.
+    token: issueMatchupToken(rater.id, candidates[0].url, candidates[1].url),
     rater: {
       signedIn: rater.type === "human",
       login: rater.login ?? null,
@@ -125,6 +169,10 @@ export async function POST(req: Request) {
   await ensureSchema();
   const rater = await getRater();
   const key = pairKey(winner, loser);
+  // Only a pair the server served to this rater can be voted on.
+  if (!verifyMatchupToken(body?.token, rater.id, winner, loser)) {
+    return NextResponse.json({ error: "stale_matchup" }, { status: 403 });
+  }
 
   // Everything - the limit checks, the vote insert, and the ELO update - runs
   // in one write transaction. libSQL serializes write transactions, so the
@@ -188,6 +236,19 @@ export async function POST(req: Request) {
       useStar = bal > 0;
     }
 
+    // An official vote must be for the pair most recently served to this
+    // rater, and spends it: the next vote needs a fresh draw.
+    if (rater.type === "human") {
+      const m = await tx.execute({
+        sql: "UPDATE matchups SET pair_key = NULL WHERE rater_id = ? AND pair_key = ? AND issued_at > ?",
+        args: [rater.id, key, Date.now() - MATCHUP_TTL_MS],
+      });
+      if (m.rowsAffected === 0) {
+        await tx.rollback();
+        return NextResponse.json({ error: "stale_matchup" }, { status: 403 });
+      }
+    }
+
     const rres = await tx.execute({
       sql: "SELECT url, elo, votes FROM ratings WHERE url IN (?, ?)",
       args: [winner, loser],
@@ -203,7 +264,7 @@ export async function POST(req: Request) {
     const updated = eloUpdate(w.elo, l.elo, useStar ? 64 : 32);
     // Human votes move ELO; anon (practice) votes don't, so their delta is 0.
     // Stored so /api/rank/undo can revert exactly what this vote applied.
-    const appliedDelta = rater.type === "human" ? updated.winner - w.elo : 0;
+    const appliedDelta = rater.type === "human" ? updated.delta : 0;
 
     // Insert first: a UNIQUE violation here means this rater already voted on
     // this matchup (either direction) - caught below as 409.
@@ -232,7 +293,7 @@ export async function POST(req: Request) {
       // For anon votes these are "what would have happened" - shown, not stored.
       winnerElo: updated.winner,
       loserElo: updated.loser,
-      delta: updated.winner - w.elo,
+      delta: updated.delta,
       starred: useStar,
       stars,
       anonVotesUsed,
