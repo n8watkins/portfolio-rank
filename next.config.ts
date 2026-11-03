@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
-// Defense-in-depth response headers applied to every route. Vercel already
-// adds HSTS; these cover clickjacking, MIME sniffing, referrer leakage, and a
+// Defense-in-depth response headers applied to every route. The host adds
+// HSTS; these cover clickjacking, MIME sniffing, referrer leakage, and a
 // baseline CSP. The CSP is deliberately permissive on images (we embed remote
 // screenshots/og-images and mShots) but locks scripts to same-origin.
 const securityHeaders = [
@@ -35,3 +36,7 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// Gives `next dev` the Worker's bindings (the SHOTS bucket) through wrangler.
+// Only in dev: `next build` (on Vercel too, until the move) needs no bindings.
+if (process.env.NODE_ENV === "development") initOpenNextCloudflareForDev();

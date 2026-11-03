@@ -1,5 +1,24 @@
 # Deploying PortfolioRank
 
+## Cloudflare Workers
+
+The app is moving from Vercel to a Cloudflare Worker built with OpenNext (`@opennextjs/cloudflare`); `wrangler.jsonc` and `open-next.config.ts` hold the config.
+Until the domain moves, portfoliorank.vercel.app keeps serving from Vercel and the Worker runs at https://portfolio-rank.nathancwatkins23.workers.dev.
+
+- **Deploy by hand:** `npm run deploy` (builds, then `wrangler deploy`).
+  The build prerenders the home page, so run it with `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `SHOTS_BASE_URL` in the environment, or the first render after a deploy shows no ranking until ISR refreshes it (5 minutes).
+- **Deploy from GitHub:** `.github/workflows/deploy.yml` builds on every push to main and deploys once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
+- **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
+- **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`.
+  `SHOTS_BASE_URL` is a plain variable in `wrangler.jsonc`.
+- **Screenshots:** the `SHOTS` binding is the `portfolio-rank` R2 bucket the pipeline uploads to, so `/shots/<shot_key>/<file>` serves the same objects as the public bucket URL, with `Cache-Control: public, max-age=86400`.
+- **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
+- **GitHub sign-in:** the OAuth app's callback must point at the Worker's host (`/api/auth/callback/github`) before sign-in works there.
+- **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
+  `prewarm.yml` calls the site's API at `PROD_BASE_URL`; set that repository variable to the Worker's address when the domain moves.
+
+## Vercel (until the move)
+
 Target: Vercel (app) + Turso (votes, ratings, portfolios, diagnostic caches) + Auth.js
 (GitHub login) + Cloudflare R2 (screenshots). All free tier.
 

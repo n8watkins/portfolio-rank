@@ -8,7 +8,12 @@
     "start": "next start -p 7678",
     "release": "release-kit release",
     "release:check": "release-kit check && npm run build",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false cloudflare-env.d.ts",
+    "check:cf-types": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false --check cloudflare-env.d.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
@@ -19,6 +24,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",
+    "@opennextjs/cloudflare": "1.20.15",
     "@tailwindcss/postcss": "^4.1.8",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
@@ -27,7 +33,8 @@
     "pngjs": "^7.0.0",
     "release-kit": "github:n8watkins/release-kit#v2.5.2",
     "tailwindcss": "^4.1.8",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "wrangler": "4.157.0"
   },
   "overrides": {
     "postcss": "^8.5.32"
