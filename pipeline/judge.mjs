@@ -87,13 +87,11 @@ const db = process.env.TURSO_DATABASE_URL
 // purpose (can't appear in a URL; NUL would be truncated by SQLite).
 const pairKey = (a, b) => [a, b].sort().join("\n");
 const BASE_ELO = 1200;
+// Zero-sum like lib/elo.ts eloUpdate(): the loser loses exactly what the winner gains.
 function eloUpdate(winnerElo, loserElo, k = 32) {
   const expectedWin = 1 / (1 + 10 ** ((loserElo - winnerElo) / 400));
-  const gain = k * (1 - expectedWin);
-  return {
-    winner: Math.round(winnerElo + gain),
-    loser: Math.round(loserElo - gain),
-  };
+  const gain = Math.round(k * (1 - expectedWin));
+  return { winner: winnerElo + gain, loser: loserElo - gain };
 }
 
 // ---------------------------------------------------------------------------

@@ -23,3 +23,4 @@ retry-github.log
 .open-next
 .wrangler
 .dev.vars*
+data/e2e.db*

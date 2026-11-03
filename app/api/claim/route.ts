@@ -2,14 +2,22 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
-import { getRater, DAILY_VOTE_LIMIT } from "@/lib/rater";
+import { readAnonId } from "@/lib/matchup";
+import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, getRater } from "@/lib/rater";
 
-// Fold a visitor's anon practice votes into their signed-in identity: each
-// becomes an official human vote and moves ELO, except pairs they've already
-// voted on signed-in (dropped - the existing vote stands). Claiming counts
-// against the same daily cap as live voting, so churning fresh anon cookies
-// can't be used to mint unlimited official votes. Idempotent: converted votes
-// stop matching rater_type='anon', and the spent cookie is cleared at the end.
+// Fold a visitor's practice votes into their signed-in identity: each becomes
+// an official human vote and moves ELO, except pairs they've already voted on
+// signed-in (dropped - the existing vote stands).
+//
+// Guards against minting official votes:
+// - only a practice cookie the server signed counts (a forged value claims nothing),
+// - practice votes were themselves cast on server-served pairs (matchup tokens),
+// - an account converts at most ANON_VOTE_LIMIT practice votes in its lifetime,
+//   and claiming counts against the same daily cap as live voting,
+// - each converted vote stores the delta it applied and the time it was
+//   claimed, so undo reverts it exactly.
+// Idempotent: converted votes stop matching rater_type='anon', and the spent
+// cookie is cleared at the end.
 export async function POST() {
   await ensureSchema();
   const rater = await getRater();
@@ -18,17 +26,27 @@ export async function POST() {
   }
 
   const jar = await cookies();
-  const anonId = jar.get("pr_anon")?.value;
+  const raw = jar.get(ANON_COOKIE)?.value;
+  const anonId = readAnonId(raw);
   if (!anonId) {
+    if (raw) jar.delete(ANON_COOKIE);
     return NextResponse.json({ claimed: 0, dropped: 0 });
   }
 
-  // Remaining official votes this rater may cast in the last 24h.
-  const dailyRes = await db().execute({
-    sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-1 day')",
-    args: [rater.id],
-  });
-  let budget = DAILY_VOTE_LIMIT - Number(dailyRes.rows[0].n);
+  const [dailyRes, claimedRes] = await Promise.all([
+    db().execute({
+      sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-1 day')",
+      args: [rater.id],
+    }),
+    db().execute({
+      sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND claimed = 1",
+      args: [rater.id],
+    }),
+  ]);
+  let budget = Math.min(
+    DAILY_VOTE_LIMIT - Number(dailyRes.rows[0].n),
+    ANON_VOTE_LIMIT - Number(claimedRes.rows[0].n)
+  );
 
   const anon = await db().execute({
     sql: `SELECT id, winner, loser FROM votes
@@ -36,58 +54,61 @@ export async function POST() {
     args: [`anon:${anonId}`],
   });
 
+  const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(url) DO UPDATE SET
+      elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
+
   let claimed = 0;
   for (const row of anon.rows) {
-    if (budget <= 0) break; // out of daily budget - leave the rest as anon
+    if (budget <= 0) break; // out of budget - leave the rest as practice votes
     const voteId = Number(row.id);
     const winner = String(row.winner);
     const loser = String(row.loser);
+    const key = pairKey(winner, loser);
 
-    const dup = await db().execute({
-      sql: `SELECT 1 FROM votes WHERE rater_id = ? AND pair_key = ? LIMIT 1`,
-      args: [rater.id, pairKey(winner, loser)],
-    });
-    if (dup.rows.length > 0) {
-      await db().execute({
-        sql: "DELETE FROM votes WHERE id = ?",
-        args: [voteId],
+    const tx = await db().transaction("write");
+    try {
+      const dup = await tx.execute({
+        sql: "SELECT 1 FROM votes WHERE rater_id = ? AND pair_key = ? LIMIT 1",
+        args: [rater.id, key],
       });
-      continue;
+      if (dup.rows.length > 0) {
+        await tx.execute({ sql: "DELETE FROM votes WHERE id = ?", args: [voteId] });
+        await tx.commit();
+        continue;
+      }
+      const res = await tx.execute({
+        sql: "SELECT url, elo, votes FROM ratings WHERE url IN (?, ?)",
+        args: [winner, loser],
+      });
+      const ratings = new Map(
+        res.rows.map((r) => [String(r.url), { elo: Number(r.elo), votes: Number(r.votes) }])
+      );
+      const w = ratings.get(winner) ?? { elo: BASE_ELO, votes: 0 };
+      const l = ratings.get(loser) ?? { elo: BASE_ELO, votes: 0 };
+      const updated = eloUpdate(w.elo, l.elo);
+      const conv = await tx.execute({
+        sql: `UPDATE votes SET rater_type = 'human', rater_id = ?, pair_key = ?, delta = ?,
+                claimed = 1, created_at = datetime('now')
+              WHERE id = ? AND rater_type = 'anon'`,
+        args: [rater.id, key, updated.delta, voteId],
+      });
+      if (conv.rowsAffected === 0) {
+        await tx.rollback(); // claimed concurrently by another request
+        continue;
+      }
+      await tx.execute({ sql: upsert, args: [winner, updated.winner, w.votes + 1] });
+      await tx.execute({ sql: upsert, args: [loser, updated.loser, l.votes + 1] });
+      await tx.commit();
+      claimed++;
+      budget--;
+    } catch (e) {
+      await tx.rollback().catch(() => {});
+      throw e;
     }
-
-    const res = await db().execute({
-      sql: "SELECT url, elo, votes FROM ratings WHERE url IN (?, ?)",
-      args: [winner, loser],
-    });
-    const ratings = new Map(
-      res.rows.map((r) => [
-        String(r.url),
-        { elo: Number(r.elo), votes: Number(r.votes) },
-      ])
-    );
-    const w = ratings.get(winner) ?? { elo: BASE_ELO, votes: 0 };
-    const l = ratings.get(loser) ?? { elo: BASE_ELO, votes: 0 };
-    const updated = eloUpdate(w.elo, l.elo);
-
-    const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
-      VALUES (?, ?, ?, datetime('now'))
-      ON CONFLICT(url) DO UPDATE SET
-        elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
-    await db().batch(
-      [
-        {
-          sql: "UPDATE votes SET rater_type = 'human', rater_id = ?, pair_key = ? WHERE id = ?",
-          args: [rater.id, pairKey(winner, loser), voteId],
-        },
-        { sql: upsert, args: [winner, updated.winner, w.votes + 1] },
-        { sql: upsert, args: [loser, updated.loser, l.votes + 1] },
-      ],
-      "write"
-    );
-    claimed++;
-    budget--;
   }
 
-  jar.delete("pr_anon");
+  jar.delete(ANON_COOKIE);
   return NextResponse.json({ claimed, dropped: anon.rows.length - claimed });
 }

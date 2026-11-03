@@ -14,7 +14,8 @@ export function db(): Client {
           authToken: process.env.TURSO_AUTH_TOKEN,
         })
       : createClient({
-          url: `file:${path.join(process.cwd(), "data", "portfoliorank.db")}`,
+          // LOCAL_DB_FILE lets the end-to-end tests use a throwaway file.
+          url: `file:${process.env.LOCAL_DB_FILE ?? path.join(process.cwd(), "data", "portfoliorank.db")}`,
         });
   }
   return client;
@@ -118,6 +119,25 @@ export function ensureSchema(): Promise<void> {
       } catch {
         /* column already present */
       }
+      // claimed = 1 if this vote was a practice vote converted at sign-in
+      // (/api/claim); each account converts at most ANON_VOTE_LIMIT of them.
+      try {
+        await db().execute(
+          "ALTER TABLE votes ADD COLUMN claimed INTEGER NOT NULL DEFAULT 0"
+        );
+      } catch {
+        /* column already present */
+      }
+      // The matchup most recently served to each signed-in rater, and how many
+      // they drew in the current hour: an official vote must be for this pair,
+      // and redrawing is capped so nobody can fish for a chosen site.
+      await db().execute(`CREATE TABLE IF NOT EXISTS matchups (
+        rater_id TEXT PRIMARY KEY,
+        pair_key TEXT,
+        issued_at INTEGER,
+        window_start INTEGER NOT NULL,
+        draws INTEGER NOT NULL
+      )`);
       // One vote per (rater, matchup), enforced by the DB so concurrent inserts
       // can't slip past a check-then-insert race. NULL pair_keys (legacy rows)
       // are distinct under SQLite, so the index won't reject them.
