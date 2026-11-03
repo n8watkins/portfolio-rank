@@ -43,7 +43,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
 | **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
 | **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite only) | TURSO, GEMINI, SHOTS_BASE_URL |
-| **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → R2 `backups/` (~0.2 MB/run) | TURSO, R2 |
+| **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → private R2 bucket `portfolio-rank-backups` (~0.3 MB/run) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for S/A/B sites by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
 
 Schedules are staggered: backup (05:00) → sync+grade (06:00) → vote (13:00, clear
@@ -65,6 +65,7 @@ queues behind a long sync.
 
 `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `GEMINI_API_KEY`,
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`,
+`R2_BACKUP_ACCESS_KEY_ID`, `R2_BACKUP_SECRET_ACCESS_KEY` (an R2 token with Object Read & Write on `portfolio-rank-backups` only),
 `SHOTS_BASE_URL` (public R2 base). Optional: `GH_SYNC_TOKEN` (keep the upstream
 fork mirror synced too). The app reads `SHOTS_BASE_URL` from `wrangler.jsonc` vars to
 serve images.
