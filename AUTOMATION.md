@@ -18,7 +18,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   judge-vote.mjs (pairwise)  ──►  Gemini ELO votes ──► Turso (votes, ratings)
         ▼
-  Next.js app (Vercel)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug]
+  Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug]
 ```
 
 ## The list (two intake doors + a takedown)
@@ -40,7 +40,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 
 | Workflow | Trigger | What it does | Secrets |
 |---|---|---|---|
-| **`ci.yml`** | PR → main | `tsc --noEmit` gate — protects the auto-deploy-to-prod pipeline | none |
+| **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
 | **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
 | **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite only) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → R2 `backups/` (~0.2 MB/run) | TURSO, R2 |

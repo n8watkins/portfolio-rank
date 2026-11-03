@@ -5,8 +5,9 @@ Work through the parts in order: Part A unblocks the grades that Parts B and C p
 Each step says who does it, what to run or click, and how to check that it worked.
 
 Repo: `n8watkins/portfolio-rank`.
-Live site: https://portfoliorank.vercel.app.
-Every push to `main` deploys to production on Vercel in about 45 seconds, so ship through PRs.
+Live site: https://portfoliorank.n8builds.dev (a Cloudflare Worker since 2026-11; see DEPLOY.md).
+Ship through PRs.
+The roster (`data/feed.json`) is bundled into the Worker at build time, so a merged change, including a sync commit, reaches the live site only after a deploy (`npm run deploy`, or the Deploy workflow once the `CLOUDFLARE_API_TOKEN` secret exists).
 
 ## What we found
 
@@ -47,7 +48,7 @@ If either is 0, read that run's log before going on: the cause is something else
 1. Open https://aistudio.google.com/apikey and create a key in the project the free tier is on.
 2. Run `gh secret set GEMINI_API_KEY -R n8watkins/portfolio-rank` and paste the key when asked.
 3. Put the same key in `.env.local` as `GEMINI_API_KEY=...` for local pipeline runs.
-   The key is not used by Vercel, so nothing changes there.
+   The key is not used by the Worker, so nothing changes there.
 
 Verify: `gh secret list -R n8watkins/portfolio-rank` shows `GEMINI_API_KEY` updated today.
 Then check the key itself without printing it:
@@ -113,7 +114,7 @@ Verify: `gh label list -R n8watkins/portfolio-rank | grep portfolio-submission` 
 curl -sL -o /dev/null -w "%{http_code} %{url_effective}\n" --max-time 15 https://shubhamsinha1010.github.io/
 grep -ci "shubhamsinha1010" data/feed.json data/additions.json data/excluded.json
 curl -fsSL https://raw.githubusercontent.com/emmabostian/developer-portfolios/master/README.md | grep -ci "shubhamsinha1010"
-curl -s -o /dev/null -w "%{http_code}\n" "https://portfoliorank.vercel.app/p/https%3A%2F%2Fshubhamsinha1010.github.io"
+curl -s -o /dev/null -w "%{http_code}\n" "https://portfoliorank.n8builds.dev/p/https%3A%2F%2Fshubhamsinha1010.github.io"
 ```
 
 Verify: the first line is `200` on an `https` URL, every count is `0`, and the detail page is `404`.
@@ -160,10 +161,10 @@ Verify in the run log:
 
 - [ ] **Step 10. Confirm it is live with a screenshot and a grade** (agent, then owner)
 
-After Vercel deploys the sync commit (about a minute):
+After the sync commit is deployed (`npm run deploy` from an up-to-date `main`; see DEPLOY.md):
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" "https://portfoliorank.vercel.app/p/https%3A%2F%2Fshubhamsinha1010.github.io"
+curl -s -o /dev/null -w "%{http_code}\n" "https://portfoliorank.n8builds.dev/p/https%3A%2F%2Fshubhamsinha1010.github.io"
 ```
 
 Verify: `200`.
@@ -174,7 +175,7 @@ If the screenshot shows but the grade does not, Part A is not done: go back to S
 
 ```bash
 gh issue close 4 -R n8watkins/portfolio-rank --duplicate-of 2 --comment "Thanks! This is the same portfolio as #2, so I'm tracking it there."
-gh issue close 2 -R n8watkins/portfolio-rank --reason completed --comment "Sorry for the wait, Shubham. You're on PortfolioRank now, with a screenshot and an AI grade: https://portfoliorank.vercel.app/p/https%3A%2F%2Fshubhamsinha1010.github.io . It joins the face-offs and the leaderboard from here."
+gh issue close 2 -R n8watkins/portfolio-rank --reason completed --comment "Sorry for the wait, Shubham. You're on PortfolioRank now, with a screenshot and an AI grade: https://portfoliorank.n8builds.dev/p/https%3A%2F%2Fshubhamsinha1010.github.io . It joins the face-offs and the leaderboard from here."
 ```
 
 Verify: `gh issue list -R n8watkins/portfolio-rank --state open` no longer lists #2 or #4, and #4 shows "Closed as duplicate of #2".
@@ -242,9 +243,9 @@ Add `.github/workflows/submission-intake.yml` and `scripts/submission/intake.mjs
   Never put `${{ github.event.issue.* }}` inside a `run:` script; the script reads the event JSON from disk.
   Pin `actions/checkout` and `actions/setup-node` to the same versions the other workflows use.
 
-`main` has no branch protection today, so the `GITHUB_TOKEN` push works.
+`main` has had a ruleset since 2026-11-03 (required status checks), which rejects a direct `GITHUB_TOKEN` push; the intake job must open a pull request or get a ruleset bypass.
 A push made with `GITHUB_TOKEN` starts no other workflow, which is why `approve` starts the sync with `workflow_dispatch` explicitly.
-Vercel's Git integration still deploys the commit.
+Nothing deploys the commit by itself: the Deploy workflow does not start for a `GITHUB_TOKEN` push, so deploy by hand (DEPLOY.md).
 
 Verify: `npx --yes actionlint` (or the actionlint binary) reports no errors, and `npm test` passes.
 

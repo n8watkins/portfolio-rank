@@ -8,7 +8,7 @@ ever cast one-click votes.
 
 ## Status (2026-06-20): Phases 0–2 shipped & live
 
-Live in production (portfoliorank.vercel.app): capture pipeline + R2 storage, PSI/polish
+Live in production (portfoliorank.n8builds.dev, on Cloudflare Workers since 2026-11; Vercel before that): capture pipeline + R2 storage, PSI/polish
 scorecards, the Gemini rubric + pairwise voting, the browse/face-off/leaderboard/detail
 UI, auth, and a self-running set of daily GitHub Actions (sync upstream, grade, vote,
 backup, prewarm). See **AUTOMATION.md** for the automation and **HANDOFF.md** for current
@@ -34,7 +34,7 @@ view time. Two options for docs:
 
 - Upstream (emmabostian/developer-portfolios) is **not deployed anywhere** — no homepage,
   no GitHub Pages. It's a README. We are building the first real frontend for this dataset.
-- Our app: **Next.js on Vercel** (frontend + API routes) + **Turso** (libSQL DB), Auth.js (GitHub
+- Our app: **Next.js on Cloudflare Workers** (via OpenNext; frontend + API routes) + **Turso** (libSQL DB), Auth.js (GitHub
   login), Cloudflare R2 (screenshot storage). Pipeline scripts run locally / GitHub Actions cron.
 - The fork stays a clean data source (`feed.json`); the app lives in this repo and ingests
   it. Keep merging upstream PRs in the fork.
@@ -99,7 +99,7 @@ human vote takes ~5 seconds and never requires leaving our site.**
 2. Pairwise cron: remaining daily budget on uncertainty-prioritized in-bucket
    comparisons → seed ELO. Credible top-100 in ~1 week.
 
-### Phase 2 — The site (Next.js + Turso + Vercel)
+### Phase 2 - The site (Next.js + Turso + Cloudflare Workers)
 1. **Browse**: card grid sorted by ELO; scorecard + badges per card; filters
    (role/tagline, badges); detail page with screenshots, scores, AI justification.
 2. **Face-off**: voting UX above. GitHub OAuth to vote; browse is public.
@@ -116,7 +116,7 @@ human vote takes ~5 seconds and never requires leaving our site.**
 
 | Piece | Choice | Why |
 |---|---|---|
-| Frontend/API | Next.js (App Router) on Vercel | free tier, he knows it |
+| Frontend/API | Next.js (App Router) on Cloudflare Workers (OpenNext) | free tier, same account as R2 |
 | DB | Turso (libSQL) | free 9GB/1B reads, local file in dev, same SQL |
 | Auth | Auth.js + GitHub OAuth | free, self-hosted |
 | Screenshot storage | Cloudflare R2 | free egress |

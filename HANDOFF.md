@@ -17,10 +17,9 @@ The step-by-step October plan (key, failure handling, submissions, Playwright) i
 
 - The site is up and lists 1,705 portfolios.
   The copy says "1,700+" and the tagline is "The developer portfolio leaderboard".
-- PR #9 (plain hyphens instead of em dashes in page titles and copy) is merged but **not live yet**.
-  Vercel refused the production build with "Deployment rate limited - retry in 24 hours", so production still shows the old title with an em dash.
-  The next push to `main` after the limit lifts (for example the daily `chore: sync portfolios from upstream` commit) deploys it.
-  Check with `curl -s https://portfoliorank.n8builds.dev | grep -o "<title>[^<]*</title>"`, which should print `PortfolioRank - the best developer portfolios, ranked`.
+- PR #9 (plain hyphens instead of em dashes in page titles and copy) is live: `curl -s https://portfoliorank.n8builds.dev | grep -o "<title>[^<]*</title>"` prints `PortfolioRank - the best developer portfolios, ranked` (checked 2026-11-03).
+- Deploys are by hand (`npm run deploy`, DEPLOY.md) until the `CLOUDFLARE_API_TOKEN` repository secret exists.
+  The roster is bundled at build time, so the daily sync commit reaches the live site only after a deploy.
 - PR #10 (switch the AI judge to `gemini-3.5-flash-lite`) is **open on purpose**: it cannot be verified until a new Gemini key exists.
 - The site has no analytics.
 - Security: the locked `next` 15.5.28 has no open advisories in GitHub's advisory database (checked 2026-10-27).
@@ -30,12 +29,12 @@ The step-by-step October plan (key, failure handling, submissions, Playwright) i
 
 What is known:
 
-- Grading and voting run in **GitHub Actions**, not on a laptop and not on Vercel.
+- Grading and voting run in **GitHub Actions**, not on a laptop and not in the Worker.
   `sync-upstream.yml` (daily 06:00 UTC) captures new sites and then runs `node pipeline/judge.mjs rubric --limit 300`.
   `judge-vote.yml` (daily 13:00 UTC) runs `node pipeline/judge.mjs pairwise --votes 30 --tiers S,A,B`.
   Both read the `GEMINI_API_KEY` **repository secret**.
   `pipeline/judge.mjs` also loads `.env.local` when it exists, which is how local runs get the key.
-  Nothing in the Next.js app calls Gemini, so Vercel has no Gemini key and needs none.
+  Nothing in the Next.js app calls Gemini, so the Worker has no Gemini key and needs none.
   The older note below that says the key lives "in `.env.local` only" is out of date.
 - The `GEMINI_API_KEY` repo secret was last set on 2026-06-20 and is no longer valid.
   Every call returns `HTTP 401: API key not valid`; the 2026-10-27 sync run (40498870733) and vote run (40561200527) both still show it.
@@ -63,7 +62,7 @@ Do these in order; the detail for steps 3 and 6 is in `docs/FOLLOW_UP_2026-10.md
    Create a key at https://aistudio.google.com/apikey.
    Store it as the repo secret with `gh secret set GEMINI_API_KEY -R n8watkins/portfolio-rank` (paste it at the prompt; never in chat or a commit).
    For local runs, also put it in `.env.local` as `GEMINI_API_KEY=...`.
-   Do not add it to Vercel.
+   Do not add it to the Worker.
 2. **Check the key and the model without printing the key:**
    `set -a; . ./.env.local; set +a; curl -s -o /dev/null -w "%{http_code}\n" "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite?key=$GEMINI_API_KEY"` should print `200`.
 3. **Make a bad key turn the runs red** (agent, its own PR): in `pipeline/judge.mjs`, treat 401/403 as fatal and exit 1, and exit 1 when either loop aborts on 5 consecutive errors.
@@ -88,8 +87,8 @@ Fix: set `node-version: 24` and move `actions/checkout` and `actions/setup-node`
 ### Blocked on the owner
 
 - A new Gemini API key, stored as above (steps 1 and 2).
-- The `rank.n8builds.dev` DNS record and Vercel domain.
-- Vercel's build rate limit, which clears by itself; nothing to do unless it recurs.
+- The `CLOUDFLARE_API_TOKEN` repository secret, so the Deploy workflow ships `main` by itself.
+- Retiring the old Vercel deployment, which still answers at portfoliorank.vercel.app.
 - Older items still listed in the 2026-06-20 wrap below: rotate the R2 token, and a real signed-in vote on production.
 
 ### Next steps in order
@@ -97,7 +96,7 @@ Fix: set `node-version: 24` and move `actions/checkout` and `actions/setup-node`
 1. Owner adds the Gemini key (plan steps 1 and 2).
 2. Agent ships the fail-loudly fix (plan step 3).
 3. Merge PR #10, run grading once, check results (plan steps 4 and 5).
-4. Confirm PR #9 is live once Vercel deploys again.
+4. (Done 2026-11-03: PR #9 is live.)
 5. Handle the waiting submissions (#2, #4, #7) and pick bot or copy in `docs/FOLLOW_UP_2026-10.md` Part D.
 6. Upgrade Playwright and unpin the Ubuntu 24.04 runner (Part E).
 7. Move CI and the scheduled workflows to Node 24 and current `actions/*` majors (open problem 2).
