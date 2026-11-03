@@ -47,6 +47,6 @@
   // queries, so a Worker near the visitor would pay a cross-country round trip
   // for each. Static assets are still served from the edge.
   "placement": { "mode": "targeted", "region": "aws:us-east-2" },
-  "observability": { "enabled": true },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
   "upload_source_maps": true
 }

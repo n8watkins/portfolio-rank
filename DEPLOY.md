@@ -17,6 +17,15 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
   `prewarm.yml` calls the site's API at the `PROD_BASE_URL` repository variable (`https://portfoliorank.n8builds.dev`).
 
+## Reading the logs
+
+Workers Logs keeps every request (`observability` in `wrangler.jsonc`, `head_sampling_rate: 1`).
+In the Cloudflare dashboard, open Workers & Pages, then the `portfolio-rank` Worker, then Logs.
+To stream them live, run `npx wrangler tail portfolio-rank --format pretty`.
+`--search` matches log messages only, not request URLs, so use `--status error` or no filter to see requests.
+Failures log one JSON line with `event`, `reason` and `route`: Auth.js errors as `auth_error` with the error type (such as `CallbackRouteError` or `InvalidCheck`), a masked message and the provider's OAuth error code, and errors thrown in pages, route handlers or middleware as `unhandled_exception` with the route (`instrumentation.ts`).
+They never carry secrets, tokens, OAuth codes or state values, cookies, emails or other personal data.
+
 ## Original Vercel setup (retired 2026-11, kept for reference)
 
 Target: Vercel (app) + Turso (votes, ratings, portfolios, diagnostic caches) + Auth.js

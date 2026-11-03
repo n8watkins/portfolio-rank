@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
+import { authLogger } from "@/lib/log";
 
 // JWT sessions (no DB adapter): raterId is the stable GitHub identity
 // (gh:<github numeric id>); login is for display only. GitHub-only by design —
@@ -16,6 +17,8 @@ declare module "next-auth" {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [GitHub],
   trustHost: true,
+  // Error type and a masked message only; see lib/log.ts.
+  logger: authLogger,
   callbacks: {
     jwt({ token, account, profile }) {
       if (account?.provider === "github" && profile) {
