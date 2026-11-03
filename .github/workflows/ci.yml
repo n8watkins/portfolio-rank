@@ -1,7 +1,7 @@
 name: CI
 
-# Safety gate for the auto-deploy-to-prod pipeline: every push to main ships to
-# production in ~45s, so a type error must be caught on the PR, not in prod.
+# Safety gate before main: what merges is what the next deploy ships (DEPLOY.md),
+# so a type error or a broken Worker build must be caught on the PR.
 # tsc --noEmit needs no secrets/env and reliably catches the common breakage.
 on:
   pull_request:
