@@ -6,10 +6,9 @@ import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { ListView, type ListItem } from "@/components/ListView";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-
-const SITE_URL = "https://portfoliorank.vercel.app";
 
 const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
 

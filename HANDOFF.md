@@ -9,8 +9,7 @@ The older dated sections further down are history; read them only for detail.
 ### What this is and where it lives
 
 PortfolioRank turns the emmabostian/developer-portfolios README into a browsable, ranked site: screenshots, objective checks, AI grades and head-to-head ELO votes.
-Live at https://portfoliorank.vercel.app (Vercel project `portfolio-rank`; every push to `main` deploys to production). It is moving to Cloudflare Workers (https://portfolio-rank.nathancwatkins23.workers.dev); see DEPLOY.md.
-The planned address is `rank.n8builds.dev`; that DNS step belongs to the owner and is not done.
+Live at https://portfoliorank.n8builds.dev on the Cloudflare Worker `portfolio-rank` (moved off Vercel 2026-11); see DEPLOY.md.
 Architecture and the scheduled jobs are in `AUTOMATION.md`; deploy notes in `DEPLOY.md`; grading spec in `GRADING_CRITERIA.md`; roadmap in `PLAN.md`.
 The step-by-step October plan (key, failure handling, submissions, Playwright) is `docs/FOLLOW_UP_2026-10.md`.
 
@@ -21,7 +20,7 @@ The step-by-step October plan (key, failure handling, submissions, Playwright) i
 - PR #9 (plain hyphens instead of em dashes in page titles and copy) is merged but **not live yet**.
   Vercel refused the production build with "Deployment rate limited - retry in 24 hours", so production still shows the old title with an em dash.
   The next push to `main` after the limit lifts (for example the daily `chore: sync portfolios from upstream` commit) deploys it.
-  Check with `curl -s https://portfoliorank.vercel.app | grep -o "<title>[^<]*</title>"`, which should print `PortfolioRank - the best developer portfolios, ranked`.
+  Check with `curl -s https://portfoliorank.n8builds.dev | grep -o "<title>[^<]*</title>"`, which should print `PortfolioRank - the best developer portfolios, ranked`.
 - PR #10 (switch the AI judge to `gemini-3.5-flash-lite`) is **open on purpose**: it cannot be verified until a new Gemini key exists.
 - The site has no analytics.
 - Security: the locked `next` 15.5.28 has no open advisories in GitHub's advisory database (checked 2026-10-27).

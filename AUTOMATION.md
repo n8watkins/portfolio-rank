@@ -66,7 +66,7 @@ queues behind a long sync.
 `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `GEMINI_API_KEY`,
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`,
 `SHOTS_BASE_URL` (public R2 base). Optional: `GH_SYNC_TOKEN` (keep the upstream
-fork mirror synced too). The app reads `SHOTS_BASE_URL` from Vercel prod env to
+fork mirror synced too). The app reads `SHOTS_BASE_URL` from `wrangler.jsonc` vars to
 serve images.
 
 ## Local pipeline scripts

@@ -5,7 +5,7 @@
 1,700+ community-curated developer portfolios - browsable, searchable, and ranked
 by head-to-head human votes and AI scoring instead of alphabetical order.
 
-🌐 **Live: [portfoliorank.vercel.app](https://portfoliorank.vercel.app)** · ☕ [Support on Ko-fi](https://ko-fi.com/n8watkins)
+🌐 **Live: [portfoliorank.n8builds.dev](https://portfoliorank.n8builds.dev)** · ☕ [Support on Ko-fi](https://ko-fi.com/n8watkins)
 
 ## Origin
 

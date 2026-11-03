@@ -10,8 +10,9 @@
   // the server's own fetches (GitHub, PageSpeed, inspected sites) on the public
   // internet.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // Served at portfolio-rank.<account>.workers.dev until the domain moves.
-  "workers_dev": true,
+  // Served only at its custom domain; deploys keep the domain attached.
+  "workers_dev": false,
+  "routes": [{ "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }],
   "preview_urls": false,
   "assets": {
     "directory": ".open-next/assets",
@@ -35,7 +36,9 @@
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
   "vars": {
     // Public base URL of the screenshot bucket; pages link captures there.
-    "SHOTS_BASE_URL": "https://pub-680e930bd59047488d688e63d7477fee.r2.dev"
+    "SHOTS_BASE_URL": "https://pub-680e930bd59047488d688e63d7477fee.r2.dev",
+    // Auth.js builds its callback URL (/api/auth/callback/github) from this.
+    "AUTH_URL": "https://portfoliorank.n8builds.dev"
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
   // AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN,
