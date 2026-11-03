@@ -10,10 +10,9 @@ import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { auth } from "@/auth";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-
-const SITE_URL = "https://portfoliorank.vercel.app";
 
 const AXIS_LABELS: Record<string, string> = {
   visual_design: "Visual design",
