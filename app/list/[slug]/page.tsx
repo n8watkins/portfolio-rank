@@ -36,7 +36,7 @@ async function loadList(slug: string): Promise<LoadedList | null> {
   await ensureSchema();
   const row = (
     await db().execute({
-      sql: "SELECT id, owner, name, slug, is_public FROM lists WHERE slug = ?",
+      sql: "SELECT id, owner, name, slug, is_public FROM lists WHERE slug = ? AND deleted_at IS NULL",
       args: [slug],
     })
   ).rows[0];

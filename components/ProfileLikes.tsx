@@ -2,15 +2,38 @@
 
 import { useState } from "react";
 import { LikeButton } from "@/components/LikeButton";
+import { useUndoToast } from "@/components/UndoToast";
 
 export type LikeItem = { url: string; name: string; domain: string };
 
 /**
  * The "Your likes" grid on the profile. Server-rendered initial set; unliking a
- * card removes it from view immediately (no refresh needed).
+ * card removes it from view immediately, with an Undo toast that likes it again
+ * in the same place.
  */
 export function ProfileLikes({ items }: { items: LikeItem[] }) {
   const [shown, setShown] = useState(items);
+  const showUndo = useUndoToast();
+
+  const unliked = (item: LikeItem, createdAt?: string) => {
+    const index = shown.findIndex((x) => x.url === item.url);
+    setShown((s) => s.filter((x) => x.url !== item.url));
+    showUndo({
+      id: `like:${item.url}`,
+      message: `Removed ${item.name} from your likes`,
+      undo: async () => {
+        const res = await fetch("/api/likes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: item.url, want: true, createdAt }),
+        });
+        if (!res.ok) throw new Error("restore_failed");
+        setShown((s) =>
+          s.some((x) => x.url === item.url) ? s : [...s.slice(0, index), item, ...s.slice(index)]
+        );
+      },
+    });
+  };
 
   if (shown.length === 0) {
     return (
@@ -47,8 +70,8 @@ export function ProfileLikes({ items }: { items: LikeItem[] }) {
             url={p.url}
             initialLiked
             variant="icon"
-            onChange={(liked) => {
-              if (!liked) setShown((s) => s.filter((x) => x.url !== p.url));
+            onChange={(liked, info) => {
+              if (!liked) unliked(p, info?.createdAt);
             }}
           />
         </div>

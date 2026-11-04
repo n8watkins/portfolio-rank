@@ -44,7 +44,8 @@ jobs:
 
   # End to end: builds the app, starts it on a throwaway local database and a
   # local PageSpeed stand-in, then runs tests/ over HTTP (vote integrity,
-  # stale-while-revalidate caching, the prewarm job's exit codes).
+  # stale-while-revalidate caching, the prewarm job's exit codes) and in a
+  # headless browser (Undo toasts).
   e2e:
     name: E2E
     runs-on: ubuntu-latest
@@ -56,4 +57,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # tests/undo-ui.test.mjs drives the app in headless Chromium.
+      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

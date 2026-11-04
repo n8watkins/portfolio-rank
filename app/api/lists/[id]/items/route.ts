@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
 import { isKnownPortfolio } from "@/lib/roster";
+import { restoredTimestamp } from "@/lib/list-trash";
 
 const MAX_ITEMS_PER_LIST = 500;
 
 /** Confirm the list exists and belongs to this rater; returns false otherwise. */
 async function ownsList(listId: number, raterId: string): Promise<boolean> {
   const res = await db().execute({
-    sql: "SELECT 1 FROM lists WHERE id = ? AND owner = ?",
+    sql: "SELECT 1 FROM lists WHERE id = ? AND owner = ? AND deleted_at IS NULL",
     args: [listId, raterId],
   });
   return res.rows.length > 0;
@@ -25,7 +26,10 @@ async function itemCount(listId: number): Promise<number> {
   );
 }
 
-/** POST /api/lists/[id]/items { url } → add a roster url to the list (idempotent). */
+/**
+ * POST /api/lists/[id]/items { url, addedAt? } → add a roster url to the list (idempotent).
+ * addedAt (from a DELETE response) puts an item removed by mistake back in its old place.
+ */
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -57,7 +61,7 @@ export async function POST(
     const owns =
       (
         await tx.execute({
-          sql: "SELECT 1 FROM lists WHERE id = ? AND owner = ?",
+          sql: "SELECT 1 FROM lists WHERE id = ? AND owner = ? AND deleted_at IS NULL",
           args: [id, rater.id],
         })
       ).rows.length > 0;
@@ -88,8 +92,8 @@ export async function POST(
     }
     if (!present) {
       await tx.execute({
-        sql: "INSERT INTO list_items (list_id, url) VALUES (?, ?)",
-        args: [id, url],
+        sql: "INSERT INTO list_items (list_id, url, added_at) VALUES (?, ?, COALESCE(?, datetime('now')))",
+        args: [id, url, restoredTimestamp(body?.addedAt)],
       });
     }
     await tx.commit();
@@ -100,7 +104,7 @@ export async function POST(
   }
 }
 
-/** DELETE /api/lists/[id]/items?url=<u> → remove a url from the list. */
+/** DELETE /api/lists/[id]/items?url=<u> → remove a url from the list; returns its addedAt for Undo. */
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -123,9 +127,14 @@ export async function DELETE(
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  await db().execute({
-    sql: "DELETE FROM list_items WHERE list_id = ? AND url = ?",
+  const removed = await db().execute({
+    sql: "DELETE FROM list_items WHERE list_id = ? AND url = ? RETURNING added_at",
     args: [id, url],
   });
-  return NextResponse.json({ ok: true, count: await itemCount(id) });
+  const addedAt = removed.rows[0]?.added_at;
+  return NextResponse.json({
+    ok: true,
+    count: await itemCount(id),
+    addedAt: typeof addedAt === "string" ? addedAt : null,
+  });
 }

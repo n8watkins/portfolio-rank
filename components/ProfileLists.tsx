@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ShareButton } from "@/components/ShareButton";
+import { LISTS_CHANGED, listDeletedToast, useUndoToast } from "@/components/UndoToast";
 
 type List = {
   id: number;
@@ -25,15 +27,30 @@ export function ProfileLists() {
   const [editName, setEditName] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [origin, setOrigin] = useState("");
+  const [error, setError] = useState("");
+  const showUndo = useUndoToast();
+  const router = useRouter();
 
-  useEffect(() => {
-    setOrigin(window.location.origin);
+  const load = useCallback(() => {
     fetch("/api/lists")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setLists(d?.lists ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    load();
+    // An Undo (here or after deleting from a list's own page) brings a list back;
+    // the server-rendered list count above follows along.
+    const restored = () => {
+      router.refresh();
+      load();
+    };
+    window.addEventListener(LISTS_CHANGED, restored);
+    return () => window.removeEventListener(LISTS_CHANGED, restored);
+  }, [load, router]);
 
   const create = async () => {
     const name = newName.trim();
@@ -101,16 +118,21 @@ export function ProfileLists() {
     setBusyId(null);
   };
 
+  // Deletes at once; the toast's Undo restores the list with its items and place.
   const remove = async (list: List) => {
-    if (!window.confirm(`Delete "${list.name}"? This can't be undone.`)) return;
-    setBusyId(list.id);
-    try {
-      const res = await fetch(`/api/lists/${list.id}`, { method: "DELETE" });
-      if (res.ok) setLists((ls) => ls.filter((l) => l.id !== list.id));
-    } catch {
-      /* ignore */
+    const index = lists.findIndex((l) => l.id === list.id);
+    setError("");
+    setLists((ls) => ls.filter((l) => l.id !== list.id));
+    const res = await fetch(`/api/lists/${list.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      setLists((ls) =>
+        ls.some((l) => l.id === list.id) ? ls : [...ls.slice(0, index), list, ...ls.slice(index)]
+      );
+      setError(`Couldn't delete “${list.name}”. Try again.`);
+      return;
     }
-    setBusyId(null);
+    showUndo(listDeletedToast(list.id, list.name));
+    router.refresh();
   };
 
   return (
@@ -133,6 +155,11 @@ export function ProfileLists() {
         </button>
       </div>
 
+      {error && (
+        <p role="alert" className="mb-3 text-sm text-rose-400">
+          {error}
+        </p>
+      )}
       {loading ? (
         <p className="py-6 text-center text-sm text-mute">Loading your lists…</p>
       ) : lists.length === 0 ? (
@@ -177,7 +204,7 @@ export function ProfileLists() {
                 ) : (
                   <a
                     href={`/list/${l.slug}`}
-                    className="min-w-0 flex-1 truncate text-sm font-semibold hover:underline"
+                    className="min-w-0 basis-full truncate text-sm font-semibold hover:underline sm:basis-0 sm:flex-1"
                   >
                     {l.name}
                     <span className="ml-2 text-xs font-normal text-mute">
@@ -223,6 +250,7 @@ export function ProfileLists() {
                   <button
                     onClick={() => remove(l)}
                     disabled={busyId === l.id}
+                    aria-label={`Delete ${l.name}`}
                     className="font-semibold text-mute transition hover:text-rose-400"
                   >
                     Delete

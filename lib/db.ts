@@ -109,6 +109,13 @@ export function ensureSchema(): Promise<void> {
       } catch {
         /* column already present */
       }
+      // deleted_at marks a list deleted moments ago, still restorable from the
+      // Undo toast (lib/list-trash.ts); every read skips such lists.
+      try {
+        await db().execute("ALTER TABLE lists ADD COLUMN deleted_at TEXT");
+      } catch {
+        /* column already present */
+      }
       // starred = 1 if this vote was a "Superstar" super-vote (double ELO weight).
       // Per-site ⭐ count and per-rater spend both derive from this column, so
       // deleting a vote (undo) cleanly removes its star too - no separate table.

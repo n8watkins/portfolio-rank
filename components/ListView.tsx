@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ShareButton } from "@/components/ShareButton";
+import { listDeletedToast, useUndoToast } from "@/components/UndoToast";
 
 export type ListItem = { url: string; name: string; domain: string };
 
@@ -34,6 +36,9 @@ export function ListView({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialName);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+  const showUndo = useUndoToast();
 
   const saveName = async () => {
     const next = draft.trim();
@@ -75,30 +80,52 @@ export function ListView({
     setBusy(false);
   };
 
+  // Deletes at once and returns to the profile; the toast there can still undo it.
   const del = async () => {
-    if (!window.confirm(`Delete "${name}"? This can't be undone.`)) return;
     setBusy(true);
-    try {
-      const res = await fetch(`/api/lists/${listId}`, { method: "DELETE" });
-      if (res.ok) {
-        window.location.href = "/profile";
-        return;
-      }
-    } catch {
-      /* ignore */
+    setError("");
+    const res = await fetch(`/api/lists/${listId}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      setBusy(false);
+      setError("Couldn't delete this list. Try again.");
+      return;
     }
-    setBusy(false);
+    showUndo(listDeletedToast(listId, name));
+    router.push("/profile");
   };
 
-  const removeItem = async (url: string) => {
-    setItems((it) => it.filter((x) => x.url !== url)); // optimistic
-    try {
-      await fetch(`/api/lists/${listId}/items?url=${encodeURIComponent(url)}`, {
-        method: "DELETE",
-      });
-    } catch {
-      /* the page reloads to truth on next visit */
+  // Removes at once; Undo puts the portfolio back in the same spot (same added date).
+  const removeItem = async (item: ListItem) => {
+    const index = items.findIndex((x) => x.url === item.url);
+    const putBack = () =>
+      setItems((it) =>
+        it.some((x) => x.url === item.url) ? it : [...it.slice(0, index), item, ...it.slice(index)]
+      );
+    setError("");
+    setItems((it) => it.filter((x) => x.url !== item.url));
+    const res = await fetch(
+      `/api/lists/${listId}/items?url=${encodeURIComponent(item.url)}`,
+      { method: "DELETE" }
+    ).catch(() => null);
+    if (!res?.ok) {
+      putBack();
+      setError(`Couldn't remove ${item.name}. Try again.`);
+      return;
     }
+    const { addedAt } = (await res.json().catch(() => ({}))) as { addedAt?: string | null };
+    showUndo({
+      id: `item:${listId}:${item.url}`,
+      message: `Removed ${item.name} from “${name}”`,
+      undo: async () => {
+        const back = await fetch(`/api/lists/${listId}/items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: item.url, addedAt }),
+        });
+        if (!back.ok) throw new Error("restore_failed");
+        putBack();
+      },
+    });
   };
 
   return (
@@ -175,6 +202,11 @@ export function ListView({
         </div>
       </div>
 
+      {error && (
+        <p role="alert" className="mb-3 text-sm text-rose-400">
+          {error}
+        </p>
+      )}
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-edge py-12 text-center text-sm text-mute">
           This list is empty
@@ -206,10 +238,10 @@ export function ListView({
               </a>
               {isOwner && (
                 <button
-                  onClick={() => removeItem(p.url)}
+                  onClick={() => removeItem(p)}
                   title="Remove from list"
                   aria-label={`Remove ${p.name}`}
-                  className="shrink-0 rounded-md px-1.5 py-0.5 text-mute opacity-0 transition hover:text-rose-400 group-hover:opacity-100"
+                  className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-md text-mute transition hover:text-rose-400 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                 >
                   ✕
                 </button>
