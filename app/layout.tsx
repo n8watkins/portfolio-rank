@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ClaimVotes } from "@/components/ClaimVotes";
+import { UndoToastProvider } from "@/components/UndoToast";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -24,7 +25,7 @@ export default function RootLayout({
         {/* Ambient gradient backdrop - fixed, behind all content. */}
         <div aria-hidden className="app-bg pointer-events-none fixed inset-0 -z-10" />
         <ClaimVotes />
-        {children}
+        <UndoToastProvider>{children}</UndoToastProvider>
       </body>
     </html>
   );

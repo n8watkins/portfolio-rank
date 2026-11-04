@@ -42,7 +42,7 @@ export async function raterStats(raterId: string): Promise<RaterStats> {
       args: [raterId],
     }),
     db().execute({
-      sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ?",
+      sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ? AND deleted_at IS NULL",
       args: [raterId],
     }),
   ]);

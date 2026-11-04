@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
+import { restoredTimestamp } from "@/lib/list-trash";
 import { isKnownPortfolio } from "@/lib/roster";
 import { getRater } from "@/lib/rater";
 
@@ -37,9 +38,10 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST /api/likes { url, want? }
+ * POST /api/likes { url, want?, createdAt? }
  *   want === true  → like, want === false → unlike, omitted → toggle.
- * Returns { liked, count }. Sign-in required (403 signin_required for anon, the
+ *   createdAt (from an unlike's response) restores a like in its old place (Undo).
+ * Returns { liked, count }, plus createdAt of the removed like on an unlike. Sign-in required (403 signin_required for anon, the
  * same gate voting uses). Only roster urls are accepted (403 unknown_url).
  */
 export async function POST(req: Request) {
@@ -72,16 +74,19 @@ export async function POST(req: Request) {
         })
       ).rows.length > 0;
     const liked = want === null ? !exists : want;
+    let createdAt: string | undefined;
     if (liked && !exists) {
       await tx.execute({
-        sql: "INSERT INTO likes (rater_id, url) VALUES (?, ?)",
-        args: [rater.id, url],
+        sql: "INSERT INTO likes (rater_id, url, created_at) VALUES (?, ?, COALESCE(?, datetime('now')))",
+        args: [rater.id, url, restoredTimestamp(body?.createdAt)],
       });
     } else if (!liked && exists) {
-      await tx.execute({
-        sql: "DELETE FROM likes WHERE rater_id = ? AND url = ?",
+      const removed = await tx.execute({
+        sql: "DELETE FROM likes WHERE rater_id = ? AND url = ? RETURNING created_at",
         args: [rater.id, url],
       });
+      const value = removed.rows[0]?.created_at;
+      if (typeof value === "string") createdAt = value;
     }
     const count = Number(
       (
@@ -92,7 +97,7 @@ export async function POST(req: Request) {
       ).rows[0].n
     );
     await tx.commit();
-    return NextResponse.json({ liked, count });
+    return NextResponse.json({ liked, count, ...(createdAt ? { createdAt } : {}) });
   } catch (e) {
     await tx.rollback().catch(() => {});
     throw e;

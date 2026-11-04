@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
 import { newSlug } from "@/lib/slug";
+import { purgeDeletedLists } from "@/lib/list-trash";
 
 const MAX_LISTS_PER_OWNER = 100;
 const MAX_NAME_LEN = 60;
@@ -28,12 +29,14 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url).searchParams.get("url");
+  // Lists deleted in a tab that closed before its Undo toast did go for good now.
+  await purgeDeletedLists(rater.id).catch(() => {});
   const res = await db().execute({
     sql: `SELECT l.id, l.name, l.slug, l.is_public,
                  (SELECT COUNT(*) FROM list_items li WHERE li.list_id = l.id) AS count,
                  EXISTS(SELECT 1 FROM list_items li2 WHERE li2.list_id = l.id AND li2.url = ?) AS contains
           FROM lists l
-          WHERE l.owner = ?
+          WHERE l.owner = ? AND l.deleted_at IS NULL
           ORDER BY l.created_at DESC`,
     args: [url ?? "", rater.id],
   });
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
   const existing = Number(
     (
       await db().execute({
-        sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ?",
+        sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ? AND deleted_at IS NULL",
         args: [rater.id],
       })
     ).rows[0].n

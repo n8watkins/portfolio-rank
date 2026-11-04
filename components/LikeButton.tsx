@@ -26,7 +26,8 @@ export function LikeButton({
   showCount?: boolean;
   variant?: Variant;
   className?: string;
-  onChange?: (liked: boolean) => void;
+  /** createdAt is the removed like's date on an unlike, for an Undo that restores its place. */
+  onChange?: (liked: boolean, info?: { createdAt?: string }) => void;
 }) {
   const [liked, setLiked] = useState(initialLiked);
   const [n, setN] = useState(count ?? 0);
@@ -55,6 +56,7 @@ export function LikeButton({
     // destructively (e.g. ProfileLikes removing the card on unlike) never act
     // on an optimistic flip that the server then rejects.
     let committed = next;
+    let createdAt: string | undefined;
     try {
       const res = await fetch("/api/likes", {
         method: "POST",
@@ -74,6 +76,7 @@ export function LikeButton({
           setLiked(data.liked);
         }
         if (typeof data.count === "number") setN(data.count);
+        if (typeof data.createdAt === "string") createdAt = data.createdAt;
       } else {
         committed = !next;
         setLiked(!next);
@@ -84,7 +87,7 @@ export function LikeButton({
       setLiked(!next);
       setN((c) => Math.max(0, c + (next ? -1 : 1)));
     }
-    onChange?.(committed);
+    onChange?.(committed, { createdAt });
     setBusy(false);
   };
 

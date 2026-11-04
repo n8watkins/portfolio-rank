@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
+import { purgeDeletedLists } from "@/lib/list-trash";
 
 const MAX_NAME_LEN = 60;
 
@@ -43,7 +44,7 @@ export async function PATCH(
   }
 
   const res = await db().execute({
-    sql: `UPDATE lists SET ${sets.join(", ")} WHERE id = ? AND owner = ?`,
+    sql: `UPDATE lists SET ${sets.join(", ")} WHERE id = ? AND owner = ? AND deleted_at IS NULL`,
     args: [...args, id, rater.id],
   });
   if (res.rowsAffected === 0) {
@@ -52,7 +53,10 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-/** DELETE /api/lists/[id] → remove the list and its membership rows (owner only). */
+/**
+ * DELETE /api/lists/[id] → soft-delete the list (owner only). It stays restorable from the
+ * Undo toast for a short window; see lib/list-trash.ts and ./trash/route.ts.
+ */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -68,26 +72,13 @@ export async function DELETE(
     return NextResponse.json({ error: "signin_required" }, { status: 403 });
   }
 
-  const tx = await db().transaction("write");
-  try {
-    const del = await tx.execute({
-      sql: "DELETE FROM lists WHERE id = ? AND owner = ?",
-      args: [id, rater.id],
-    });
-    if (del.rowsAffected === 0) {
-      await tx.rollback();
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
-    // Membership rows aren't FK-cascaded (libSQL FKs are off by default), so
-    // clear them in the same transaction to avoid orphans.
-    await tx.execute({
-      sql: "DELETE FROM list_items WHERE list_id = ?",
-      args: [id],
-    });
-    await tx.commit();
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    await tx.rollback().catch(() => {});
-    throw e;
+  await purgeDeletedLists(rater.id);
+  const res = await db().execute({
+    sql: "UPDATE lists SET deleted_at = datetime('now') WHERE id = ? AND owner = ? AND deleted_at IS NULL",
+    args: [id, rater.id],
+  });
+  if (res.rowsAffected === 0) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  return NextResponse.json({ ok: true });
 }
