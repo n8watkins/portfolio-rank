@@ -1,16 +1,25 @@
+import type { Metadata } from "next";
+import { EdgePage, primaryButton, secondaryButton } from "@/components/EdgePage";
+
+export const metadata: Metadata = { title: "Page not found - PortfolioRank" };
+
 export default function NotFound() {
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6 text-center">
-      <p className="text-5xl font-bold tracking-tight">404</p>
-      <p className="mt-3 text-sm text-mute">
-        That page isn&apos;t here. It may have been removed from the list.
-      </p>
-      <a
-        href="/"
-        className="mt-6 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85"
-      >
-        ← Back to PortfolioRank
-      </a>
-    </div>
+    <EdgePage
+      label="404 - page not found"
+      title="That page isn't here."
+      actions={
+        <>
+          <a href="/" className={primaryButton}>
+            Browse portfolios
+          </a>
+          <a href="/rank" className={secondaryButton}>
+            Rank portfolios
+          </a>
+        </>
+      }
+    >
+      It may have been removed from the list, or the link has a typo.
+    </EdgePage>
   );
 }

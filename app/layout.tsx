@@ -7,11 +7,17 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const TITLE = "PortfolioRank - the best developer portfolios, ranked";
+const DESCRIPTION =
+  "1,700+ community-curated developer portfolios, soon ranked by your votes and AI. Browse, compare, get inspired.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "PortfolioRank - the best developer portfolios, ranked",
-  description:
-    "1,700+ community-curated developer portfolios, soon ranked by your votes and AI. Browse, compare, get inspired.",
+  title: TITLE,
+  description: DESCRIPTION,
+  // The share image is app/opengraph-image.tsx (and twitter-image.tsx).
+  openGraph: { type: "website", siteName: "PortfolioRank", title: TITLE, description: DESCRIPTION, url: "/" },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 export default function RootLayout({

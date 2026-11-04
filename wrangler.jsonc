@@ -4,7 +4,7 @@
   // see DEPLOY.md).
   "name": "portfolio-rank",
   "account_id": "b2c564cf83cb9184dd6d7cc4ff8b38bf",
-  "main": ".open-next/worker.js",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-28",
   // nodejs_compat is required by OpenNext; global_fetch_strictly_public keeps
   // the server's own fetches (GitHub, PageSpeed, inspected sites) on the public
@@ -38,7 +38,10 @@
     // Public base URL of the screenshot bucket; pages link captures there.
     "SHOTS_BASE_URL": "https://pub-680e930bd59047488d688e63d7477fee.r2.dev",
     // Auth.js builds its callback URL (/api/auth/callback/github) from this.
-    "AUTH_URL": "https://portfoliorank.n8builds.dev"
+    "AUTH_URL": "https://portfoliorank.n8builds.dev",
+    // Server errors go to Sentry (worker/sentry.ts). A DSN is public by design:
+    // it only lets a sender add events to this one project.
+    "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136"
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
   // AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN,
