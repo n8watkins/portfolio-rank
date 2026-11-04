@@ -1,0 +1,110 @@
+// The prewarm job must fail loudly: these drive scripts/lib/prewarm.mjs with a
+// stand-in fetch, and run scripts/prewarm-metrics.mjs itself against a local
+// stand-in for the site to check its exit code and GitHub job summary.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { spawn } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createClient } from "@libsql/client";
+import { runPrewarm, classify } from "../scripts/lib/prewarm.mjs";
+
+const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const urls = ["https://a.dev", "https://b.dev", "https://c.dev", "https://d.dev"];
+const quiet = () => {};
+
+test("every lookup failing exits 1 and names the most common error", async () => {
+  const fetchFn = async (u) =>
+    u.includes("/api/psi")
+      ? json(200, { ok: false, error: "Quota exceeded for quota metric 'Queries' and limit 'Queries per day'" })
+      : json(200, { ok: false, error: "unreachable" });
+  const r = await runPrewarm({ urls, base: "http://x", fetchFn, pauseMs: 0, log: quiet });
+  assert.equal(r.exitCode, 1);
+  assert.match(r.verdict, /8 of 8 lookups failed; most common error: (quota|unreachable) \(4\)/);
+  assert.deepEqual(r.stats.psi, { attempted: 4, ok: 0, failed: 4, errors: { quota: 4 } });
+  assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| quota 4 \|/);
+});
+
+test("more than half failing exits 1; half or fewer exits 0", async () => {
+  // psi all fail (4), inspect: 1 of 4 fails -> 5 of 8 failed.
+  let n = 0;
+  const mostlyBad = async (u) =>
+    u.includes("/api/psi") ? json(200, { ok: false, error: "timeout" }) : n++ === 0 ? json(500, {}) : json(200, { ok: true });
+  const bad = await runPrewarm({ urls, base: "http://x", fetchFn: mostlyBad, pauseMs: 0, log: quiet });
+  assert.equal(bad.exitCode, 1);
+  assert.match(bad.verdict, /5 of 8 lookups failed; most common error: timeout \(4\)/);
+  assert.deepEqual(bad.stats.inspect.errors, { http_500: 1 });
+
+  // psi all fail (4), inspect all fine -> exactly half: not "more than half".
+  const half = async (u) => (u.includes("/api/psi") ? json(429, {}) : json(200, { ok: true }));
+  const ok = await runPrewarm({ urls, base: "http://x", fetchFn: half, pauseMs: 0, log: quiet });
+  assert.equal(ok.exitCode, 0);
+  assert.equal(ok.stats.psi.errors.quota, 4);
+});
+
+test("network errors and timeouts are counted, not thrown", async () => {
+  const fetchFn = async () => {
+    throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+  };
+  const r = await runPrewarm({ urls: urls.slice(0, 1), base: "http://x", fetchFn, pauseMs: 0, log: quiet });
+  assert.equal(r.exitCode, 1);
+  assert.deepEqual(r.stats.inspect.errors, { timeout: 1 });
+});
+
+test("error classes", () => {
+  assert.equal(classify("unknown_url"), "unknown_url");
+  assert.equal(classify("psi_403"), "http_403");
+  assert.equal(classify("http_404"), "http_404");
+  assert.equal(classify("API key not valid. Please pass a valid API key."), "api_key");
+  assert.equal(classify("fetch failed"), "unreachable");
+});
+
+async function runScript(handler) {
+  const server = createServer(handler);
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const dir = mkdtempSync(join(tmpdir(), "prewarm-"));
+  const dbFile = join(dir, "db.sqlite");
+  const db = createClient({ url: `file:${dbFile}` });
+  await db.execute("CREATE TABLE portfolios (url TEXT PRIMARY KEY, status TEXT)");
+  for (const u of urls) await db.execute({ sql: "INSERT INTO portfolios VALUES (?, 'live')", args: [u] });
+  db.close();
+  const summaryFile = join(dir, "summary.md");
+  const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", "--limit=4"], {
+    env: {
+      ...process.env,
+      TURSO_DATABASE_URL: `file:${dbFile}`,
+      TURSO_AUTH_TOKEN: "",
+      PROD_BASE_URL: `http://127.0.0.1:${server.address().port}`,
+      GITHUB_STEP_SUMMARY: summaryFile,
+      PREWARM_PAUSE_MS: "0",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let err = "";
+  child.stderr.on("data", (d) => (err += d));
+  const code = await new Promise((r) => child.on("exit", r));
+  server.close();
+  return { code, summary: readFileSync(summaryFile, "utf8"), err };
+}
+
+test("the script exits 1 and writes the job summary when PageSpeed has no key", async () => {
+  const r = await runScript((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify(req.url.startsWith("/api/psi") ? { ok: false, error: "Quota exceeded for quota metric 'Queries'" } : { ok: false, error: "unreachable" }));
+  });
+  assert.equal(r.code, 1);
+  assert.match(r.summary, /## Prewarm metrics/);
+  assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| quota 4 \|/);
+  assert.match(r.err, /::error::FAILED: 8 of 8 lookups failed/);
+});
+
+test("the script exits 0 when lookups succeed", async () => {
+  const r = await runScript((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ ok: true }));
+  });
+  assert.equal(r.code, 0);
+  assert.match(r.summary, /OK: 8 of 8 lookups succeeded/);
+});

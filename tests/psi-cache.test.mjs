@@ -1,0 +1,125 @@
+// Stale-while-revalidate for /api/psi and /api/inspect, end to end: the app
+// (started by scripts/test-e2e.sh with PSI_API_BASE pointed here) calls a local
+// stand-in for Google PageSpeed that answers slowly and counts its calls.
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { createClient } from "@libsql/client";
+import feed from "../data/feed.json" with { type: "json" };
+
+const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
+const db = createClient({ url: process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/e2e.db` });
+const PSI_PORT = Number(process.env.E2E_PSI_PORT ?? 7692);
+const SLOW_MS = 2500;
+const DAY = 24 * 3600 * 1000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let calls = 0;
+let failNext = false;
+const lighthouse = (perf) => ({
+  lighthouseResult: {
+    categories: { performance: { score: perf }, accessibility: { score: 0.9 }, "best-practices": { score: 0.8 }, seo: { score: 1 } },
+    audits: {},
+  },
+});
+let perf = 0.5;
+const psi = createServer(async (_req, res) => {
+  calls++;
+  await sleep(SLOW_MS);
+  if (failNext) { res.writeHead(500, { "content-type": "application/json" }); return res.end("{}"); }
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify(lighthouse(perf)));
+});
+
+before(async () => {
+  await new Promise((r) => psi.listen(PSI_PORT, "127.0.0.1", r));
+  for (let i = 0; i < 60; i++) {
+    try { if ((await fetch(BASE + "/api/rank")).ok) return; } catch {}
+    await sleep(1000);
+  }
+  throw new Error(`no server at ${BASE}`);
+});
+after(() => psi.close());
+
+async function get(kind, url) {
+  const t = Date.now();
+  const r = await fetch(`${BASE}/api/${kind}?url=${encodeURIComponent(url)}`);
+  return { ms: Date.now() - t, body: await r.json() };
+}
+const age = async (kind, url, ms) =>
+  db.execute({ sql: "UPDATE cache SET at = ? WHERE k = ?", args: [Date.now() - ms, `${kind}:${url}`] });
+const row = async (kind, url) =>
+  (await db.execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [`${kind}:${url}`] })).rows[0];
+
+test("only the first request for a never-measured site waits", async () => {
+  const url = feed[100].url;
+  calls = 0;
+  const first = await get("psi", url);
+  assert.ok(first.ms >= SLOW_MS - 100, `first fill took ${first.ms}ms`);
+  assert.equal(first.body.ok, true);
+  assert.equal(first.body.scores.performance, 50);
+  assert.ok(first.body.measuredAt);
+  assert.equal(first.body.stale, undefined);
+  const second = await get("psi", url);
+  assert.ok(second.ms < 1000, `cached hit took ${second.ms}ms`);
+  assert.equal(calls, 1);
+});
+
+test("a stale result returns at once, and concurrent requests schedule one refresh", async () => {
+  const url = feed[101].url;
+  perf = 0.5;
+  await get("psi", url);
+  await age("psi", url, 31 * DAY);
+  const oldAt = Number((await row("psi", url)).at);
+  calls = 0;
+  perf = 0.7;
+
+  const hits = await Promise.all(Array.from({ length: 5 }, () => get("psi", url)));
+  for (const h of hits) {
+    assert.ok(h.ms < 1000, `stale hit took ${h.ms}ms`);
+    assert.equal(h.body.stale, true);
+    assert.equal(h.body.scores.performance, 50);
+    assert.equal(h.body.measuredAt, new Date(oldAt).toISOString());
+  }
+  await sleep(SLOW_MS + 1500);
+  assert.equal(calls, 1, `expected one refresh, saw ${calls}`);
+  const fresh = await get("psi", url);
+  assert.equal(fresh.body.stale, undefined);
+  assert.equal(fresh.body.scores.performance, 70);
+  assert.ok(Date.parse(fresh.body.measuredAt) > oldAt);
+});
+
+test("a failed refresh keeps the old result and is not retried on every request", async () => {
+  const url = feed[102].url;
+  perf = 0.4;
+  await get("psi", url);
+  await age("psi", url, 31 * DAY);
+  calls = 0;
+  failNext = true;
+  try {
+    await get("psi", url);
+    await sleep(SLOW_MS + 1500);
+    for (let i = 0; i < 3; i++) {
+      const h = await get("psi", url);
+      assert.equal(h.body.ok, true);
+      assert.equal(h.body.stale, true);
+      assert.equal(h.body.scores.performance, 40);
+    }
+    await sleep(500);
+    assert.equal(calls, 1);
+  } finally {
+    failNext = false;
+  }
+});
+
+test("a stale inspection returns at once too", async () => {
+  const url = feed[103].url;
+  await db.execute({
+    sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)",
+    args: [`inspect:${url}`, JSON.stringify({ ok: true, https: true, title: "seeded" }), Date.now() - 8 * DAY],
+  });
+  const h = await get("inspect", url);
+  assert.ok(h.ms < 1000, `stale inspect took ${h.ms}ms`);
+  assert.equal(h.body.stale, true);
+  assert.equal(h.body.title, "seeded");
+});

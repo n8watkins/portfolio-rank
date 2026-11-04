@@ -30,6 +30,22 @@ function scoreColor(s: number | null | undefined) {
   return "text-red-400";
 }
 
+/** "Measured on Nov 3, 2026", plus "· updating" while a stale result refreshes. */
+function MeasuredOn({ at, stale }: { at?: string; stale?: boolean }) {
+  if (!at) return null;
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return null;
+  return (
+    <p className="mt-3 text-xs text-mute">
+      Measured on{" "}
+      <time dateTime={at}>
+        {d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+      </time>
+      {stale ? " · updating in the background" : ""}
+    </p>
+  );
+}
+
 const PSI_LABELS: Record<string, string> = {
   performance: "Performance",
   accessibility: "Accessibility",
@@ -189,6 +205,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
                 {psi.metrics.map((m) => `${m.label}: ${m.value}`).join(" · ")}
               </p>
             )}
+            <MeasuredOn at={psi.measuredAt} stale={psi.stale} />
           </>
         )}
       </section>
@@ -238,6 +255,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
               />
             </ul>
           )}
+          {inspect?.ok && <MeasuredOn at={inspect.measuredAt} stale={inspect.stale} />}
         </section>
 
         <section className="rounded-xl border border-edge bg-card p-5">

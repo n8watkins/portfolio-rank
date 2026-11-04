@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { cached } from "@/lib/cache";
+import { cached, type CacheMeta } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
 // set PSI_API_KEY (free, no billing) for the 25k/day quota.
-export type PsiResult = {
+export type PsiResult = CacheMeta & {
   ok: boolean;
   error?: string;
   scores?: Record<string, number | null>; // 0-100
@@ -18,8 +18,10 @@ const METRIC_AUDITS = [
 ] as const;
 
 async function runPsi(target: string): Promise<PsiResult> {
+  // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
   const psiUrl = new URL(
-    "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+    process.env.PSI_API_BASE ??
+      "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
   );
   psiUrl.searchParams.set("url", target);
   psiUrl.searchParams.set("strategy", "mobile");
@@ -73,7 +75,8 @@ export async function GET(req: Request) {
   if (!url || !isKnownPortfolio(url)) {
     return NextResponse.json({ ok: false, error: "unknown_url" }, { status: 403 });
   }
-  // Quota errors and timeouts are transient - never cache failures.
+  // Quota errors and timeouts are transient - never cache failures. A stale
+  // result is served at once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
     "psi",
     url,

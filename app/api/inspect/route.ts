@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { cached } from "@/lib/cache";
+import { cached, type CacheMeta } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
 
 const FREE_HOSTS =
   /\.(vercel\.app|netlify\.app|github\.io|framer\.website|framer\.app|pages\.dev|web\.app|surge\.sh|onrender\.com|herokuapp\.com)$/i;
 
-export type Inspection = {
+export type Inspection = CacheMeta & {
   ok: boolean;
   error?: string;
   finalUrl?: string;

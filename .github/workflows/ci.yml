@@ -42,10 +42,11 @@ jobs:
       - name: Bundle the Worker
         run: npx wrangler deploy --dry-run --outdir "${{ runner.temp }}/worker-bundle"
 
-  # Vote integrity end to end: builds the app, starts it on a throwaway local
-  # database and replays the audit's attacks over HTTP (tests/).
+  # End to end: builds the app, starts it on a throwaway local database and a
+  # local PageSpeed stand-in, then runs tests/ over HTTP (vote integrity,
+  # stale-while-revalidate caching, the prewarm job's exit codes).
   e2e:
-    name: E2E (vote integrity)
+    name: E2E
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
