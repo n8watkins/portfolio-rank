@@ -3,10 +3,13 @@
 // the pipeline). This is what makes the daily voting robot's metrics-enriched
 // comparisons actually have metrics — otherwise the cache is only filled lazily
 // by real visitors. Paced; safe to re-run (endpoints serve cache when fresh).
+// Exits 1 when more than half the lookups fail (or all of them), naming the most
+// common error, so a missing key or a spent quota turns the job red.
 //
 // Usage: node scripts/prewarm-metrics.mjs [--limit=N]
 import { createClient } from "@libsql/client";
-import { existsSync, readFileSync } from "fs";
+import { appendFileSync, existsSync, readFileSync } from "fs";
+import { runPrewarm } from "./lib/prewarm.mjs";
 
 if (existsSync(".env.local")) {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
@@ -30,24 +33,14 @@ const rows = (
   await db.execute("SELECT url FROM portfolios WHERE status='live' ORDER BY url")
 ).rows.slice(0, LIMIT);
 
-console.log(`prewarming PSI + inspect for ${rows.length} S/A/B site(s) via ${PROD}`);
-let ok = 0;
-for (const [i, r] of rows.entries()) {
-  const u = encodeURIComponent(String(r.url));
-  for (const ep of ["inspect", "psi"]) {
-    try {
-      const res = await fetch(`${PROD}/api/${ep}?url=${u}`, {
-        signal: AbortSignal.timeout(60000),
-      });
-      console.log(`[${i + 1}/${rows.length}] ${ep} ${r.url} -> ${res.status}`);
-    } catch (e) {
-      console.log(
-        `[${i + 1}/${rows.length}] ${ep} ${r.url} -> ERR ${String(e.message).slice(0, 60)}`
-      );
-    }
-    await new Promise((res) => setTimeout(res, 1200)); // gentle pacing
-  }
-  ok++;
-}
-console.log(`done: prewarmed ${ok} site(s)`);
-process.exit(0);
+console.log(`prewarming PSI + inspect for ${rows.length} site(s) via ${PROD}`);
+const { exitCode, summary, verdict } = await runPrewarm({
+  urls: rows.map((r) => String(r.url)),
+  base: PROD,
+  pauseMs: Number(process.env.PREWARM_PAUSE_MS ?? 1200), // gentle pacing
+});
+console.log(`\n${summary}`);
+// The Actions job summary shows the table on the run page.
+if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+if (exitCode !== 0) console.error(`::error::${verdict}`);
+process.exit(exitCode);
