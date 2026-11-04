@@ -45,7 +45,10 @@ const flag = (name, fallback) => {
 };
 // flash-lite has the biggest free-tier daily budget; --model swaps in a
 // stronger judge. rater_id carries the model so votes stay per-model tagged.
-const MODEL = flag("model", "gemini-3.1-flash-lite");
+// Owner's choice (2026-10-27): Gemini 3.5 Flash-Lite, stable ID per
+// https://ai.google.dev/gemini-api/docs/models.
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const MODEL = flag("model", DEFAULT_MODEL);
 const RATER_ID = `ai:${MODEL}`;
 const LIMIT = Number(flag("limit", "0")) || Infinity;
 const VOTES = Number(flag("votes", "20"));
@@ -62,7 +65,7 @@ const TIERS = (flag("tiers", "S,A,B") || "")
 const SHOTS_BASE = (process.env.SHOTS_BASE_URL || "").replace(/\/+$/, "");
 
 if (MODE === "pairwise") {
-  if (MODEL !== "gemini-3.1-flash-lite" && !args.includes("--allow-model")) {
+  if (MODEL !== DEFAULT_MODEL && !args.includes("--allow-model")) {
     console.error("pairwise voting is flash-lite only (pass --allow-model to override)");
     process.exit(1);
   }

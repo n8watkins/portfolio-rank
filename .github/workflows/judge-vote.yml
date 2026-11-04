@@ -1,6 +1,6 @@
 name: Daily AI vote (pairwise-metrics)
 
-# Each day, gemini-3.1-flash-lite compares pairs of higher-tier portfolios using
+# Each day, gemini-3.5-flash-lite compares pairs of higher-tier portfolios using
 # the R2 hero image + cached objective metrics (PSI/Lighthouse + inspect polish)
 # and casts ELO-moving votes, concentrating on graded S/A/B sites so the
 # leaderboard (min 3 votes to qualify) fills. Heroes come from the public R2

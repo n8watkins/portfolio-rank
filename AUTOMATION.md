@@ -55,7 +55,9 @@ queues behind a long sync.
 
 - **Gemini (free tier, shared):** grading self-limits to *new* sites/day; voting
   capped at 30/day. Both abort cleanly on sustained 429s. Model is
-  **`gemini-3.1-flash-lite` only**.
+  **`gemini-3.5-flash-lite` only** (switched from `gemini-3.1-flash-lite` on 2026-10-27).
+  Rubrics graded before the switch keep `"model": "gemini-3.1-flash-lite"`, and
+  AI votes are tagged per model (`rater_id = ai:<model>`).
 - **R2 (10 GB free):** ~570 MB of serve-frames (hero/mobile/full; motion strips
   stay local) + ~0.2 MB/day backups → far under the cap, $0.
 - **GitHub Actions:** unlimited (public repo).
