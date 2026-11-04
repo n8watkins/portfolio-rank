@@ -3,7 +3,8 @@ name: Sync upstream + ingest
 # Fully hands-off intake of the *accepted* community portfolios:
 #   1. rebuild feed.json from emmabostian/developer-portfolios' merged README
 #      (trust gate = "Emma merged it"; open PRs are NOT pulled),
-#   2. commit it only if upstream actually changed,
+#   2. if upstream actually changed, open (or refresh) one pull request with it
+#      and let it auto-merge once the required checks pass,
 #   3. screenshot + AI-grade whatever is new.
 # capture.mjs reads feed.json and skips URLs already in the DB; judge.mjs skips
 # already-graded sites - so this only ever does the *new* work. Removed-upstream
@@ -19,8 +20,11 @@ concurrency:
   group: ingest
   cancel-in-progress: false
 
+# main requires checks, so the refreshed feed.json lands through a pull request
+# opened by the release-kit bot (a GitHub App): its pull requests trigger CI,
+# unlike GITHUB_TOKEN's, and GitHub's auto-merge merges it once checks pass.
 permissions:
-  contents: write # commit the refreshed feed.json
+  contents: read
   issues: write # file an issue if a scheduled run fails
 
 jobs:
@@ -43,6 +47,9 @@ jobs:
       SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }} # lets rubric grade backlog from R2
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The sync step pushes with the bot token, not GITHUB_TOKEN.
+          persist-credentials: false
 
       # 1) Rebuild feed.json from upstream's merged (accepted) README.
       - name: Rebuild feed.json from upstream
@@ -62,18 +69,63 @@ jobs:
           gh repo sync n8watkins/developer-portfolios \
             --source emmabostian/developer-portfolios || true
 
-      # 3) Commit feed.json only if upstream changed something.
-      - name: Commit refreshed feed.json
+      # 3) If upstream changed something, put feed.json on the data/sync-upstream
+      #    branch (force-updated from main each run) and open or refresh one
+      #    pull request that squash-merges itself once the required checks pass.
+      - name: Detect feed.json change
+        id: feed
         run: |
           if git diff --quiet -- data/feed.json; then
             echo "feed.json unchanged - nothing new upstream."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            git config user.name "portfolio-rank-bot"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add data/feed.json
-            git commit -m "chore: sync portfolios from upstream"
-            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Mint a bot token
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.SYNC_BOT_APP_ID }}
+          private-key: ${{ secrets.SYNC_BOT_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open or update the sync pull request
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          BOT_SLUG: ${{ steps.bot.outputs.app-slug }}
+          CHANGED: ${{ steps.feed.outputs.changed }}
+          BRANCH: data/sync-upstream
+        run: |
+          open=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+          if [ "$CHANGED" != "true" ]; then
+            # main already matches upstream, so an older unmerged sync is stale.
+            if [ -n "$open" ]; then
+              gh pr close "$open" --delete-branch --comment "Superseded: main already matches upstream."
+            fi
+            exit 0
+          fi
+          title="chore(data): sync upstream portfolios $(date -u +%Y-%m-%d)"
+          bot_id=$(gh api "/users/${BOT_SLUG}%5Bbot%5D" --jq .id)
+          git config user.name "${BOT_SLUG}[bot]"
+          git config user.email "${bot_id}+${BOT_SLUG}[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add data/feed.json
+          git commit -m "$title"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+          body="Daily refresh of data/feed.json from emmabostian/developer-portfolios (merged README).
+
+          Opened by the [Sync upstream + ingest run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
+          if [ -n "$open" ]; then
+            gh pr edit "$open" --title "$title" --body "$body"
+            pr="$open"
+          else
+            url=$(gh pr create --base main --head "$BRANCH" --title "$title" --body "$body")
+            pr="${url##*/}"
+          fi
+          gh pr merge "$pr" --auto --squash --subject "$title (#$pr)" --body ""
 
       # 4) Screenshot + AI-grade the new entries (both no-op on already-done work).
       #    Grading self-limits to sites whose captures exist on this runner - i.e.
