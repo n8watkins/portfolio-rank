@@ -10,9 +10,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { runPrewarm, classify } from "../scripts/lib/prewarm.mjs";
+import feed from "../data/feed.json" with { type: "json" };
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const urls = ["https://a.dev", "https://b.dev", "https://c.dev", "https://d.dev"];
+// Real roster URLs: the script only prewarms sites on data/feed.json.
+const urls = feed.slice(0, 4).map((p) => p.url);
 const quiet = () => {};
 
 test("every lookup failing exits 1 and names the most common error", async () => {
@@ -54,7 +56,7 @@ test("network errors and timeouts are counted, not thrown", async () => {
 });
 
 test("error classes", () => {
-  assert.equal(classify("unknown_url"), "unknown_url");
+  assert.equal(classify("unknown_url"), "not_on_roster");
   assert.equal(classify("psi_403"), "http_403");
   assert.equal(classify("http_404"), "http_404");
   assert.equal(classify("API key not valid. Please pass a valid API key."), "api_key");
@@ -69,6 +71,10 @@ async function runScript(handler) {
   const db = createClient({ url: `file:${dbFile}` });
   await db.execute("CREATE TABLE portfolios (url TEXT PRIMARY KEY, status TEXT)");
   for (const u of urls) await db.execute({ sql: "INSERT INTO portfolios VALUES (?, 'live')", args: [u] });
+  // Live in the database but gone from the roster: must be skipped, not looked up.
+  for (const u of ["https://left-upstream.example", `${urls[0]}/`]) {
+    await db.execute({ sql: "INSERT INTO portfolios VALUES (?, 'live')", args: [u] });
+  }
   db.close();
   const summaryFile = join(dir, "summary.md");
   const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", "--limit=4"], {
@@ -98,6 +104,14 @@ test("the script exits 1 and writes the job summary when PageSpeed has no key", 
   assert.match(r.summary, /## Prewarm metrics/);
   assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| quota 4 \|/);
   assert.match(r.err, /::error::FAILED: 8 of 8 lookups failed/);
+  assert.match(r.summary, /Skipped 2 site\(s\) marked live in the database but no longer on the roster/);
+});
+
+test("roster rejections are reported as their own reason", async () => {
+  const fetchFn = async () => json(403, { ok: false, error: "unknown_url" });
+  const r = await runPrewarm({ urls: urls.slice(0, 2), base: "http://x", fetchFn, pauseMs: 0, log: quiet });
+  assert.equal(r.exitCode, 1);
+  assert.match(r.verdict, /most common error: not_on_roster \(4\)/);
 });
 
 test("the script exits 0 when lookups succeed", async () => {

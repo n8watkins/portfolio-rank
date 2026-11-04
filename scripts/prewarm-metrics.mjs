@@ -10,6 +10,7 @@
 import { createClient } from "@libsql/client";
 import { appendFileSync, existsSync, readFileSync } from "fs";
 import { runPrewarm } from "./lib/prewarm.mjs";
+import feed from "../data/feed.json" with { type: "json" };
 
 if (existsSync(".env.local")) {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
@@ -29,13 +30,23 @@ const db = createClient({
 
 // S/A/B sites missing fresh metrics are prioritized: order by url and let the
 // endpoint's own cache short-circuit already-warm ones cheaply.
-const rows = (
+//
+// Only roster URLs (data/feed.json) can be scored: the portfolios table keeps
+// rows for sites that left the upstream list or changed their URL there, and
+// the API rejects those with unknown_url. They are skipped and counted.
+const roster = new Set(feed.map((p) => p.url));
+const live = (
   await db.execute("SELECT url FROM portfolios WHERE status='live' ORDER BY url")
-).rows.slice(0, LIMIT);
+).rows.map((r) => String(r.url));
+const skipped = live.filter((u) => !roster.has(u));
+const urls = live.filter((u) => roster.has(u)).slice(0, LIMIT);
 
-console.log(`prewarming PSI + inspect for ${rows.length} site(s) via ${PROD}`);
+console.log(
+  `prewarming PSI + inspect for ${urls.length} site(s) via ${PROD} (${skipped.length} live in the database but not on the roster, skipped)`
+);
 const { exitCode, summary, verdict } = await runPrewarm({
-  urls: rows.map((r) => String(r.url)),
+  skipped,
+  urls,
   base: PROD,
   pauseMs: Number(process.env.PREWARM_PAUSE_MS ?? 1200), // gentle pacing
 });
