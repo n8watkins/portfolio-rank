@@ -15,7 +15,9 @@ export function Header({ stars }: { stars: number | null }) {
             alt="PortfolioRank logo"
             className="h-7 w-7"
           />
-          Portfolio<span className="text-accent">Rank</span>
+          <span>
+            Portfolio<span className="text-accent">Rank</span>
+          </span>
         </a>
         <a
           href={SITE.n8builds}
