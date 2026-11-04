@@ -12,7 +12,9 @@ export function classify(error) {
   if (!e) return "unknown";
   if (e.includes("quota") || e === "http_429" || e.includes("rate limit")) return "quota";
   if (e.includes("timeout") || e.includes("timed out") || e.includes("aborted")) return "timeout";
-  if (e.includes("unknown_url")) return "unknown_url";
+  // /api/psi and /api/inspect answer unknown_url for a URL the deployed
+  // roster (data/feed.json at build time) doesn't have.
+  if (e.includes("unknown_url")) return "not_on_roster";
   if (e.includes("api key") || e.includes("api_key")) return "api_key";
   const http = e.match(/^(?:http|psi)_(\d{3})$/);
   if (http) return `http_${http[1]}`;
@@ -44,6 +46,7 @@ export async function runPrewarm({
   pauseMs = 1200,
   timeoutMs = 60_000,
   log = console.log,
+  skipped = [],
 }) {
   const stats = Object.fromEntries(
     KINDS.map((k) => [k, { attempted: 0, ok: 0, failed: 0, errors: {} }])
@@ -95,6 +98,12 @@ export async function runPrewarm({
       return `| ${k} | ${s.attempted} | ${s.ok} | ${s.failed} | ${fmtErrors(s.errors)} |`;
     }),
     "",
+    ...(skipped.length
+      ? [
+          `Skipped ${skipped.length} site(s) marked live in the database but no longer on the roster (removed upstream, or listed under a different URL now), for example ${skipped.slice(0, 3).join(", ")}.`,
+          "",
+        ]
+      : []),
   ].join("\n");
 
   return { exitCode: tooMany ? 1 : 0, stats, summary, verdict };
