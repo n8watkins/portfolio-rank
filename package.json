@@ -21,7 +21,7 @@
     "@sentry/browser": "11.10.0",
     "@sentry/cloudflare": "11.10.0",
     "@sentry/core": "11.10.0",
-    "next": "^15.5.28",
+    "next": "^16.4.3",
     "next-auth": "^5.0.0-beta.32",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -30,14 +30,14 @@
     "@aws-sdk/client-s3": "^3.1161.0",
     "@opennextjs/cloudflare": "1.20.15",
     "@tailwindcss/postcss": "^4.1.8",
-    "@types/node": "^22.15.0",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "playwright": "^1.60.0",
     "pngjs": "^7.0.0",
     "release-kit": "github:n8watkins/release-kit#v2.8.1",
     "tailwindcss": "^4.1.8",
-    "typescript": "^5.8.0",
+    "typescript": "^7.0.2",
     "wrangler": "4.157.0"
   },
   "overrides": {
