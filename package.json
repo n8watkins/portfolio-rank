@@ -17,14 +17,14 @@
     "test:e2e": "scripts/test-e2e.sh"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.3",
+    "@libsql/client": "^0.18.0",
     "next": "^15.5.28",
     "next-auth": "^5.0.0-beta.32",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1068.0",
+    "@aws-sdk/client-s3": "^3.1161.0",
     "@opennextjs/cloudflare": "1.20.15",
     "@tailwindcss/postcss": "^4.1.8",
     "@types/node": "^22.15.0",
