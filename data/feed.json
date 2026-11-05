@@ -2071,6 +2071,11 @@
     "tagline": "Software Engineer | Android | Web | Chrome"
   },
   {
+    "name": "Biprodas Roy",
+    "url": "https://www.biprodas.dev",
+    "tagline": "Senior Software Engineer | NestJS, Next.js, AWS | AI Engineer"
+  },
+  {
     "name": "Bishnu Pokhrel",
     "url": "https://bishnupokhrel.netlify.app",
     "tagline": "Full Stack Laravel Vue Developer"
@@ -2854,6 +2859,11 @@
   {
     "name": "Dick Wyn Yong",
     "url": "https://dickwyn.xyz"
+  },
+  {
+    "name": "Diego López Reduello",
+    "url": "https://deinigu.github.io/portfolio/",
+    "tagline": "Data Scientist"
   },
   {
     "name": "Digbijaya Lenka",
@@ -3953,6 +3963,11 @@
     "name": "Ioannis Jone-Magalhaes",
     "url": "https://ioannisjonemagalhaes.com",
     "tagline": "Software Engineer | Cloud & IoT"
+  },
+  {
+    "name": "Irina Stéphane",
+    "url": "https://irina.is-a.dev",
+    "tagline": "Full Stack Developer | DevOps"
   },
   {
     "name": "Isabella Riquetti",
@@ -5143,6 +5158,11 @@
     "name": "Malaka Venugopal Reddy",
     "url": "https://malakavenu.com",
     "tagline": "AI & Agentic Systems Engineer | Frontend Architect | Design Systems Strategist"
+  },
+  {
+    "name": "Malav Naik",
+    "url": "https://malavnaik.com",
+    "tagline": "Data & GenAI Engineer | Data Engineering, GenAI"
   },
   {
     "name": "Malay Patra",
@@ -6738,7 +6758,7 @@
   },
   {
     "name": "Prem Thatikonda",
-    "url": "https://premthatikonda.xyz",
+    "url": "https://premthatikonda.runs-on.dev",
     "tagline": "Full Stack & AI Engineer"
   },
   {
@@ -9260,6 +9280,11 @@
   {
     "name": "Vm",
     "url": "https://vmthedev.web.app"
+  },
+  {
+    "name": "Vojtěch Klepáček",
+    "url": "https://klepacek.xyz",
+    "tagline": "Full Stack Developer"
   },
   {
     "name": "Vrushali Patil",
