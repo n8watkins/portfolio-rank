@@ -46,7 +46,7 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }} # lets rubric grade backlog from R2
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The sync step pushes with the bot token, not GITHUB_TOKEN.
           persist-credentials: false
@@ -131,7 +131,7 @@ jobs:
       #    Grading self-limits to sites whose captures exist on this runner - i.e.
       #    the ones just captured above - so it never burns budget re-scanning old
       #    sites or the backlog handled elsewhere.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm

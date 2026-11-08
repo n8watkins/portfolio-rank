@@ -44,8 +44,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }} # public R2 base, e.g. https://pub-xxxx.r2.dev
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
