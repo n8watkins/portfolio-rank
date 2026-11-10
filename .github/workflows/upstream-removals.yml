@@ -1,0 +1,171 @@
+name: Upstream removals
+
+# Once a month, one pull request to the community list
+# (emmabostian/developer-portfolios) removing entries our weekly health check
+# confirmed down (3+ failed checks spanning 2+ weeks; never "suspect" ones),
+# each re-checked right before, at most 25 per month. Prepared by
+# pipeline/upstream-removals.mjs in the list's own removal format, pushed from
+# the owner's fork n8watkins/developer-portfolios.
+#
+# Off until the owner turns it on:
+#   - a manual run defaults to dry_run: the would-be pull request (title, body,
+#     diff size) goes to the run summary and nothing is pushed;
+#   - the monthly schedule is a dry run too unless the repository variable
+#     UPSTREAM_PR_ENABLED is "true";
+#   - a real run needs the UPSTREAM_PR_TOKEN secret (a classic personal access
+#     token of the fork's owner with the public_repo and workflow scopes) and
+#     skips with a notice when it is missing.
+# If one of our pull requests is still open, it is updated instead of opening
+# another.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report the pull request, push nothing"
+        type: boolean
+        default: true
+  schedule:
+    - cron: "0 17 2 * *" # the 2nd of each month, 17:00 UTC
+
+concurrency:
+  group: upstream-removals
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write # file an issue if a scheduled run fails
+
+env:
+  UPSTREAM: emmabostian/developer-portfolios
+  FORK: n8watkins/developer-portfolios
+  BRANCH_PREFIX: portfoliorank/remove-broken-links
+
+jobs:
+  removals:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Decide the mode
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_INPUT: ${{ github.event.inputs.dry_run }}
+          ENABLED: ${{ vars.UPSTREAM_PR_ENABLED }}
+          HAS_TOKEN: ${{ secrets.UPSTREAM_PR_TOKEN != '' }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            dry="$DRY_INPUT"
+          elif [ "$ENABLED" = "true" ]; then
+            dry=false
+          else
+            dry=true
+          fi
+          if [ "$dry" != "true" ] && [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::UPSTREAM_PR_TOKEN is not set, so this is a dry run: nothing is pushed upstream."
+            dry=true
+          fi
+          echo "dry=$dry" >> "$GITHUB_OUTPUT"
+          echo "Mode: $([ "$dry" = true ] && echo 'dry run (nothing pushed)' || echo 'real: opens or updates the upstream pull request')" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare the removals
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/${UPSTREAM}/master/README.md" -o "$RUNNER_TEMP/upstream-README.md"
+          node pipeline/upstream-removals.mjs --readme "$RUNNER_TEMP/upstream-README.md" --out "$RUNNER_TEMP/upstream" --cap 25
+          echo "REMOVALS=$(node -p 'require(process.env.RUNNER_TEMP + "/upstream/plan.json").removals')" >> "$GITHUB_ENV"
+
+      # The token is only present in the steps that need it: the list's own
+      # src/generate_feed.py runs in a step without it, and the push skips
+      # git hooks, so code from the clone never sees the token.
+      - name: Sync the fork and find our open pull request
+        id: fork
+        if: steps.mode.outputs.dry == 'false' && env.REMOVALS != '0'
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_PR_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Bring the fork's master level with upstream, so the branch is one
+          # commit on top of the list as it is today.
+          gh api -X POST "repos/${FORK}/merge-upstream" -f branch=master >/dev/null
+          owner="${FORK%%/*}"
+          open=$(gh pr list -R "$UPSTREAM" --state open --author "$owner" --json number,headRefName \
+            --jq "[.[] | select(.headRefName | startswith(\"${BRANCH_PREFIX}\"))][0] // empty")
+          if [ -n "$open" ]; then
+            echo "pr=$(echo "$open" | jq -r .number)" >> "$GITHUB_OUTPUT"
+            echo "branch=$(echo "$open" | jq -r .headRefName)" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr=" >> "$GITHUB_OUTPUT"
+            echo "branch=${BRANCH_PREFIX}-$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "name=$(gh api user --jq '.name // .login')" >> "$GITHUB_OUTPUT"
+          echo "email=$(gh api user --jq '"\(.id)+\(.login)@users.noreply.github.com"')" >> "$GITHUB_OUTPUT"
+
+      - name: Make the commit (no token in this step)
+        if: steps.mode.outputs.dry == 'false' && env.REMOVALS != '0'
+        env:
+          BRANCH: ${{ steps.fork.outputs.branch }}
+          AUTHOR_NAME: ${{ steps.fork.outputs.name }}
+          AUTHOR_EMAIL: ${{ steps.fork.outputs.email }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/fork"
+          git clone --depth 1 "https://github.com/${FORK}.git" "$work"
+          cd "$work"
+          git switch -c "$BRANCH"
+          node "$GITHUB_WORKSPACE/pipeline/upstream-removals.mjs" --apply "$RUNNER_TEMP/upstream/plan.json" --readme README.md
+          python3 src/generate_feed.py
+          git config user.name "$AUTHOR_NAME"
+          git config user.email "$AUTHOR_EMAIL"
+          git add README.md feed.json
+          git commit -m "$(cat "$RUNNER_TEMP/upstream/pr-title.txt")"
+          # Exactly README.md and feed.json, nothing else.
+          changed=$(git diff --name-only HEAD~1 HEAD | sort | tr '\n' ' ')
+          if [ "$changed" != "README.md feed.json " ]; then
+            echo "::error::unexpected files in the commit: $changed"
+            exit 1
+          fi
+
+      - name: Push and open or update the upstream pull request
+        if: steps.mode.outputs.dry == 'false' && env.REMOVALS != '0'
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_PR_TOKEN }}
+          PR: ${{ steps.fork.outputs.pr }}
+          BRANCH: ${{ steps.fork.outputs.branch }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/fork"
+          git -c core.hooksPath=/dev/null push --force \
+            "https://x-access-token:${GH_TOKEN}@github.com/${FORK}.git" "HEAD:refs/heads/$BRANCH"
+          title=$(cat "$RUNNER_TEMP/upstream/pr-title.txt")
+          if [ -n "$PR" ]; then
+            gh pr edit "$PR" -R "$UPSTREAM" --title "$title" --body-file "$RUNNER_TEMP/upstream/pr-body.md"
+            echo "Updated ${UPSTREAM}#${PR}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            url=$(gh pr create -R "$UPSTREAM" --base master --head "${FORK%%/*}:${BRANCH}" \
+              --title "$title" --body-file "$RUNNER_TEMP/upstream/pr-body.md")
+            echo "Opened $url" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Notify on failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="⚠️ Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again: $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+          fi
