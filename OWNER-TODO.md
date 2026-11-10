@@ -12,10 +12,11 @@ Decisions and their reasons live in `docs/DECISIONS.md`; the plan in `docs/ROADM
 - [ ] **Redesign preview** at http://localhost:7690 (branch `preview/redesign`): approve, or send changes.
 - [ ] Guess the rank scoring (100 points for exact, zero at 4x off, "close" within 2x) and whether players guess the merged rank only or pick a view.
 - [ ] Polls in the main nav. Recommended: no, footer and the phone "More" menu.
-- [ ] Staging site (a copy of the live site to check changes first). Recommended: yes.
+- [x] Staging site: approved 2026-11-10 and built at https://staging.portfoliorank.n8builds.dev; it needs the setup steps under "Commands to run once".
 - [ ] Pause the daily AI face-off votes until the new ranking switches on. Recommended: yes.
 - [x] Email provider for reports, alerts and the newsletter: Cloudflare Email Service for all email (decided 2026-11-10; SES dropped).
-- [ ] Require CI checks before merging (repository ruleset). Recommended: yes.
+- [x] Require CI checks before merging: approved 2026-11-10.
+  Your part: add "Worker build" and "E2E" as required status checks in the `main` ruleset (Settings, Rules, Rulesets); agents can't edit rulesets.
 
 ## Keys and tokens
 
@@ -31,6 +32,8 @@ New values go into pass-env with `pass-env set <entry>` in your own terminal; ag
 - Turnstile keys need nothing from you: the agent can create the widget through Cloudflare.
 
 ## Commands to run once
+
+- [ ] Staging setup: a Turso login, the staging database filled from last night's backup, and a staging GitHub OAuth app (`DEPLOY.md`, "Setting staging up", steps 1 to 4; an agent can do steps 3 and 5 once the pass entries exist).
 
 - [ ] Restore test: restore last night's backup into a scratch database and compare counts (steps in `docs/ASSUMPTIONS.md`, section G, once merged).
 - [ ] Ratings recompute, when the new leaderboard switches on: `pass-env run -- node scripts/recompute-ratings.mjs --read-only`, then without `--read-only`.

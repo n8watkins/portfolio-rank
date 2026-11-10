@@ -14,3 +14,9 @@ export const SITE = {
 // The site's public address: canonical URLs, share links, the sitemap and
 // robots.txt are built from it.
 export const SITE_URL = "https://portfoliorank.n8builds.dev";
+
+// True in the staging build (the deploy workflow sets NEXT_PUBLIC_SITE_ENV to
+// "staging" for it; DEPLOY.md "Staging"): pages show a "Staging" ribbon and
+// say noindex. Inlined at build time, so the prerendered home page has it too.
+// The Worker adds robots.txt and the X-Robots-Tag header (worker/staging.ts).
+export const IS_STAGING = process.env.NEXT_PUBLIC_SITE_ENV === "staging";

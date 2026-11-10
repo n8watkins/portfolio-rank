@@ -17,7 +17,7 @@ function load(): Promise<SentryModule | null> {
       Sentry.init({
         dsn,
         release: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
-        environment: "production",
+        environment: process.env.NEXT_PUBLIC_SITE_ENV === "staging" ? "staging" : "production",
         // Collect nothing about the visitor or the request beyond the page path.
         dataCollection: {
           userInfo: false,
