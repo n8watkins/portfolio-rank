@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, CircleCheck, Circle } from "lucide-react";
 import { SampleTag, btnPrimary, card } from "@/components/preview/bits";
+import { FreeTierNote } from "@/components/preview/FreeTierNote";
 
 const STEPS = [
   { label: "Opening the page and taking screenshots", ms: 1400 },
@@ -55,6 +56,7 @@ export function GradeProgress({ url, reportHref }: { url: string; reportHref: st
           <p className="text-sm text-mute">Usually under a minute. You can leave; the report keeps its link.</p>
         )}
       </div>
+      <FreeTierNote className="mt-4 border-t border-edge pt-4" />
     </section>
   );
 }

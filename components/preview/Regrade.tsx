@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CircleCheck, Clock, RefreshCw, ScanSearch } from "lucide-react";
 import { btnPrimary, btnSecondary } from "@/components/preview/bits";
+import { FreeTierNote } from "@/components/preview/FreeTierNote";
 
 /**
  * Re-grade with a cooldown (mocked). Grades refresh on request, at most once
@@ -50,6 +51,7 @@ export function Regrade({ gradedOn }: { gradedOn: string }) {
           </div>
         </>
       )}
+      <FreeTierNote className="mt-3 border-t border-edge pt-3" />
     </div>
   );
 }

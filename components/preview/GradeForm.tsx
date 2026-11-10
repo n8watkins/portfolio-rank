@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Link2, Sparkles } from "lucide-react";
+import { FreeTierNote } from "@/components/preview/FreeTierNote";
 
 /** Paste a link, grade it. The preview goes to the mocked progress page. */
 export function GradeForm({ compact = false, id = "grade-url" }: { compact?: boolean; id?: string }) {
@@ -58,6 +59,7 @@ export function GradeForm({ compact = false, id = "grade-url" }: { compact?: boo
           {error}
         </p>
       )}
+      <FreeTierNote className="mt-2.5" center={!compact} />
     </form>
   );
 }
