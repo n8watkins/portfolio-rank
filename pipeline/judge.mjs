@@ -119,6 +119,10 @@ const gemini = createGemini({
   models: MODELS,
   limiter: createLimiter({ rpm: RPM }),
   onRequest: (r) => requestLog.record(r),
+  // Grading waits for tomorrow's 3.5 quota rather than spending 3.1 (whose
+  // grades would be re-graded by 3.5 later anyway); a single grade that keeps
+  // failing on 3.5 after the retries still goes to 3.1. Votes fall back.
+  onDailyQuota: MODE === "rubric" ? "stop" : "fallback",
 });
 
 // Inline image part; skips files that would blow the request size cap.
@@ -371,8 +375,9 @@ async function gradeRow(row) {
   return { status: "ok", rubric, model };
 }
 
-// Requests per day kept free for the daily vote job when deciding how many
-// re-grades fit in today's quota.
+// Grading stays inside today's 3.5 quota (500 by default), keeping RESERVE
+// requests free for the daily vote job (30 votes plus their retries). Every
+// request counts, retries included; rows beyond the budget wait for tomorrow.
 const RESERVE = Number(process.env.GEMINI_RESERVE ?? 100);
 
 async function runRubric() {
@@ -396,6 +401,16 @@ async function runRubric() {
   let regraded = 0;
   let consecutiveErrors = 0;
   let stopped = null;
+  let deferred = 0;
+
+  // Today's 3.5 requests before this run (from gemini_requests), plus this
+  // run's own, against the quota minus RESERVE.
+  const quota = dailyQuota()[PRIMARY_MODEL] ?? 0;
+  const usedBefore = (await dailyTotals(db)).used.get(PRIMARY_MODEL)?.n ?? 0;
+  const room = () => quota - RESERVE - usedBefore - (gemini.requests[PRIMARY_MODEL] ?? 0);
+  // Each grade can take up to 4 requests (3 retries); start one only with room for that.
+  const PER_GRADE = 4;
+  const budgeted = MODELS[0] === PRIMARY_MODEL;
 
   // Returns false when the run must stop (Gemini unavailable or out of quota).
   async function handle(row, label, { regrade = false } = {}) {
@@ -451,22 +466,28 @@ async function runRubric() {
   }
 
   for (const [i, row] of queue.entries()) {
+    if (budgeted && room() < PER_GRADE) {
+      deferred = queue.length - i;
+      stopped = `today's ${PRIMARY_MODEL} budget is used (${quota} a day, ${RESERVE} kept for votes); ${deferred} site(s) wait for tomorrow`;
+      break;
+    }
     if (!(await handle(row, `[${i + 1}/${queue.length}]`))) break;
   }
 
   // Re-grade queue, lowest priority: grades not made by the primary model,
   // re-done by it while today's quota has room (keeping RESERVE for votes).
   let regradeQueued = 0;
-  if (!stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && MODELS[0] === PRIMARY_MODEL && gemini.activeModel === PRIMARY_MODEL) {
-    const { used } = await dailyTotals(db);
-    const quota = dailyQuota()[PRIMARY_MODEL] ?? 0;
-    const room = quota - (used.get(PRIMARY_MODEL)?.n ?? 0) - RESERVE;
-    const budget = Math.min(LIMIT === Infinity ? room : LIMIT - queue.length, room);
+  if (!stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted) {
+    const left = room();
+    const budget = Math.min(LIMIT === Infinity ? left : LIMIT - queue.length, left);
     const rows = await regradeQueue(db, { primary: PRIMARY_MODEL, limit: Math.max(0, budget) });
     regradeQueued = rows.length;
-    if (rows.length) console.log(`re-grade: ${rows.length} grade(s) not made by ${PRIMARY_MODEL} (room today: ${room})`);
+    if (rows.length) console.log(`re-grade: ${rows.length} grade(s) not made by ${PRIMARY_MODEL} (room today: ${left})`);
     for (const [i, row] of rows.entries()) {
-      if (gemini.activeModel !== PRIMARY_MODEL) break;
+      if (room() < 1) {
+        deferred += rows.length - i;
+        break;
+      }
       if (!(await handle(row, `[re-grade ${i + 1}/${rows.length}]`, { regrade: true }))) break;
     }
   }
@@ -475,7 +496,7 @@ async function runRubric() {
   console.log(
     `rubric done: ${ok}/${queue.length} judged, ${regraded}/${regradeQueued} re-graded, ${skipped} skipped, ${gemini.summary()}`
   );
-  return { queued: queue.length + regradeQueued, ok: ok + regraded, errors, skipped, stopped };
+  return { queued: queue.length + regradeQueued, ok: ok + regraded, errors, skipped, deferred, stopped };
 }
 
 // ---------------------------------------------------------------------------

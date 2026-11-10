@@ -12,7 +12,9 @@
 //     call goes to the backup model, and the answer records which model gave it.
 //   - 429 with a per-day quota (RESOURCE_EXHAUSTED on a PerDay quota): the
 //     model is spent for the day, so this call and every later call in the
-//     run use the backup model.
+//     run use the backup model (onDailyQuota "fallback", the vote job), or
+//     the run stops and waits for tomorrow (onDailyQuota "stop", grading:
+//     3.1 grades get re-graded by 3.5 later anyway).
 //   - Any other 429 (per-minute limits): slow down and retry the same model,
 //     waiting the RetryInfo delay when Google gives one.
 //   - A rejected key (400 API_KEY_INVALID, 401, 403) is fatal
@@ -94,6 +96,10 @@ export function createGemini({
   retryDelaysMs = [10000, 30000, 60000],
   // Per-minute 429s: how many times to slow down before giving up on a call.
   maxSlowdowns = 5,
+  // "fallback": a spent daily quota moves the run to the next model.
+  // "stop": it ends the run instead (GeminiQuotaError), for work that would
+  // rather wait for tomorrow's quota than be done by the backup.
+  onDailyQuota = "fallback",
   slowdownMs = 60000,
   jitter = () => 0.8 + Math.random() * 0.4,
   timeoutMs = 120000,
@@ -203,6 +209,9 @@ export function createGemini({
         return { result: out.result, model, fallback: idx > 0 };
       }
       if (out.kind === "daily") {
+        if (onDailyQuota === "stop") {
+          throw new GeminiQuotaError(`gemini ${model}: daily quota used up; waiting for tomorrow's quota`);
+        }
         if (idx + 1 >= models.length) {
           throw new GeminiQuotaError(`gemini ${model}: daily quota used up and no backup model left`);
         }

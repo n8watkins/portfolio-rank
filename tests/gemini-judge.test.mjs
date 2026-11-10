@@ -134,6 +134,23 @@ test("a per-minute 429 slows down and retries 3.5, waiting Google's RetryInfo de
   assert.ok(sleeps.includes(7000), `waited ${sleeps}`);
 });
 
+test("grading stops on a spent daily quota instead of using the backup (onDailyQuota: stop)", async () => {
+  const { client, seen } = fakeGemini(
+    { [PRIMARY_MODEL]: [dailyQuota()], [BACKUP_MODEL]: [answer({ tier: "A" })] },
+    { onDailyQuota: "stop" }
+  );
+  await assert.rejects(client.generate([{ text: "hi" }], {}), GeminiQuotaError);
+  assert.deepEqual(seen.map((x) => x.model), [PRIMARY_MODEL]);
+});
+
+test("grading still sends one grade to the backup after 3.5 fails every retry", async () => {
+  const { client } = fakeGemini(
+    { [PRIMARY_MODEL]: [status(503), status(503), status(503), status(503)], [BACKUP_MODEL]: [answer({ tier: "A" })] },
+    { onDailyQuota: "stop" }
+  );
+  assert.equal((await client.generate([{ text: "hi" }], {})).model, BACKUP_MODEL);
+});
+
 test("per-minute 429s that never clear stop the call as unavailable", async () => {
   const { client } = fakeGemini({ [PRIMARY_MODEL]: Array.from({ length: 4 }, () => perMinute("1s")) }, { maxSlowdowns: 3 });
   await assert.rejects(client.generate([{ text: "hi" }], {}), GeminiUnavailableError);

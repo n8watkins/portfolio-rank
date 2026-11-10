@@ -12,7 +12,7 @@
 //                       Google's prices: set the current paid rates.
 
 export const DEFAULT_DAILY_QUOTA = {
-  "gemini-3.5-flash-lite": 1500,
+  "gemini-3.5-flash-lite": 500,
   "gemini-3.1-flash-lite": 500,
 };
 export const DEFAULT_PRICES = {

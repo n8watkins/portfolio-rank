@@ -137,7 +137,7 @@ test("the comparison report: tier agreement, per-axis difference, is_portfolio d
   assert.match(md, /\| visual_design \| 1\.00 \|/);
 });
 
-test("judge.mjs re-grades 3.1 grades with 3.5 when quota allows, keeps history, and logs every request", async () => {
+async function judgeRun({ newSites = 1, oldGrades = 0, quota, reserve = 0 }) {
   const { dir, file, db } = tempDb();
   await ensureRosterSchema(db);
   await db.batch([
@@ -145,12 +145,12 @@ test("judge.mjs re-grades 3.1 grades with 3.5 when quota allows, keeps history, 
        rater_type TEXT, rater_id TEXT, created_at TEXT DEFAULT (datetime('now')), delta INTEGER)`,
     `CREATE TABLE ratings (url TEXT PRIMARY KEY, elo INTEGER, votes INTEGER, updated_at TEXT)`,
   ]);
-  const [a, b, c] = feed;
-  await db.execute({ sql: "INSERT INTO portfolios (url, name, status, shot_key, captured_at) VALUES (?, 'New', 'live', 'k1', datetime('now'))", args: [a.url] });
-  for (const u of [b.url, c.url]) {
+  const sites = feed.slice(0, newSites + oldGrades);
+  for (const [i, p] of sites.entries()) {
+    const old = i >= newSites ? JSON.stringify(grade(BACKUP_MODEL, "B")) : null;
     await db.execute({
-      sql: "INSERT INTO portfolios (url, name, status, shot_key, captured_at, ai_rubric) VALUES (?, 'Old', 'live', 'k2', datetime('now'), ?)",
-      args: [u, JSON.stringify(grade(BACKUP_MODEL, "B"))],
+      sql: "INSERT INTO portfolios (url, name, status, shot_key, captured_at, ai_rubric) VALUES (?, 'Someone', 'live', ?, datetime('now'), ?)",
+      args: [p.url, `k${i}`, old],
     });
   }
   const summary = path.join(dir, "summary.md");
@@ -162,8 +162,8 @@ test("judge.mjs re-grades 3.1 grades with 3.5 when quota allows, keeps history, 
       GEMINI_API_KEY: "test-key-not-real",
       SHOTS_BASE_URL: "https://shots.test",
       GITHUB_STEP_SUMMARY: summary,
-      GEMINI_RESERVE: "0",
-      GEMINI_DAILY_QUOTA: JSON.stringify({ [PRIMARY_MODEL]: 2 }),
+      GEMINI_RESERVE: String(reserve),
+      GEMINI_DAILY_QUOTA: JSON.stringify({ [PRIMARY_MODEL]: quota }),
       MOCK_GEMINI: JSON.stringify([{ json: grade(null, "A", 4) }]),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -172,18 +172,37 @@ test("judge.mjs re-grades 3.1 grades with 3.5 when quota allows, keeps history, 
   child.stdout.on("data", (d) => (out += d));
   child.stderr.on("data", (d) => (out += d));
   const code = await new Promise((r) => child.on("exit", r));
+  return { code, out, db, md: fs.existsSync(summary) ? fs.readFileSync(summary, "utf8") : "" };
+}
+
+test("judge.mjs re-grades 3.1 grades with 3.5 while the budget lasts, keeps history, and logs every request", async () => {
+  // Quota 5, nothing reserved: 1 new grade, then 4 of the 5 old grades.
+  const { code, out, db, md } = await judgeRun({ newSites: 1, oldGrades: 5, quota: 5 });
   assert.equal(code, 0, out);
-  // Quota 2: one request for the new site, so room for exactly one re-grade.
-  const hist = (await db.execute("SELECT url, model, replaced_by_model FROM rubric_history")).rows;
-  assert.equal(hist.length, 1);
-  assert.deepEqual([hist[0].model, hist[0].replaced_by_model], [BACKUP_MODEL, PRIMARY_MODEL]);
-  const models = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios ORDER BY url")).rows.map((r) => r.m);
-  assert.equal(models.filter((m) => m === PRIMARY_MODEL).length, 2);
+  const hist = (await db.execute("SELECT model, replaced_by_model FROM rubric_history")).rows;
+  assert.equal(hist.length, 4);
+  assert.ok(hist.every((h) => h.model === BACKUP_MODEL && h.replaced_by_model === PRIMARY_MODEL));
+  const models = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows.map((r) => r.m);
+  assert.equal(models.filter((m) => m === PRIMARY_MODEL).length, 5);
   assert.equal(models.filter((m) => m === BACKUP_MODEL).length, 1);
   const logged = (await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'rubric' AND status = 200")).rows[0].n;
-  assert.equal(logged, 2);
-  const md = fs.readFileSync(summary, "utf8");
+  assert.equal(logged, 5);
   assert.match(md, /### Gemini requests this run/);
   assert.match(md, /### Gemini today/);
-  assert.match(md, /\*\*Warning:\*\*/); // 2 of 2 used
+  assert.match(md, /\*\*Warning:\*\*/); // 5 of 5 used
+  // 1 new + 4 re-grades queued (the queue is cut to the budget), all judged.
+  assert.match(md, /\| 5 \| 5 \| 0 \| 0 \| 0 \| 0 \|/);
+});
+
+test("with today's 3.5 budget used up, grading waits for tomorrow instead of failing or using 3.1", async () => {
+  // Quota 10 with 8 reserved for votes: no room for a grade (up to 4 requests).
+  const { code, out, db, md } = await judgeRun({ newSites: 2, quota: 10, reserve: 8 });
+  assert.equal(code, 0, out);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests")).rows[0].n, 0);
+  assert.match(md, /today's budget is used; 2 waiting for tomorrow/);
+});
+
+test("the default daily quotas are 500 for 3.5 and 500 for 3.1", async () => {
+  const { DEFAULT_DAILY_QUOTA } = await import("../pipeline/gemini-log.mjs");
+  assert.deepEqual(DEFAULT_DAILY_QUOTA, { [PRIMARY_MODEL]: 500, [BACKUP_MODEL]: 500 });
 });
