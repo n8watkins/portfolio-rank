@@ -145,6 +145,14 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Lint on every PR** (agent, from the site audit, 2026-11-10). Status: building (#59).
   Why: the repo had no lint setup at all.
 
+## Polls
+
+- **Automated polls people vote on** (owner, 2026-11-10). Status: planned.
+  A few polls are written each night from PortfolioRank's data in the content budget (for example "Which hero section is better?" with two real screenshots, "Should a portfolio show a resume?"); voting uses no AI, one vote per person through sign-in or a cookie plus Turnstile.
+  A poll card sits on home and a polls page shows the series of past polls and their results.
+  Results feed blog posts, and with enough votes become one more signal in the AI vs people comparisons.
+  Why: cheap, engaging, and it produces people's opinions to compare with the AI's.
+
 ## Content engine
 
 - **Fully automatic and fail-closed** (owner, 2026-11-10). Status: planned.
