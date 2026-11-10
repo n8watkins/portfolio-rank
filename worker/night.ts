@@ -13,7 +13,10 @@
 //                                    first until 21:15 at the latest
 //                                 2. the AI stages, one batch per step, paced
 //                                    (pipeline/night.mjs)
-//                                 3. the summary in night_runs
+//                                 3. the summary in night_runs, the owner
+//                                    alerts
+//                                 4. roll-ups and retention of the log
+//                                    tables (pipeline/retention.mjs)
 //
 // The instance id is "night-<Pacific date>", so a night runs at most once;
 // night_runs makes sure of it too. Nothing here calls Gemini outside the
@@ -21,6 +24,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { db as database } from "../lib/db";
 import { budgetPlan, isNightStart, nightTimeline, pacificParts } from "../pipeline/budget.mjs";
+import { retention } from "../pipeline/retention.mjs";
 import { dailyQuota } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_RPM } from "../pipeline/gemini.mjs";
 import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
@@ -191,6 +195,18 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       const r = await reconcileAlerts(ctx.db, { conditions, email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
       log("night.alerts", r);
       return r;
+    });
+    // 4. Roll-ups and retention of the log tables (pipeline/retention.mjs).
+    // Housekeeping: a failure is logged and never fails the night.
+    await step.do("roll up and prune the logs", ONCE_MORE, async () => {
+      try {
+        const r = await retention(engine(this.env, runId).db, { now: new Date() });
+        log("night.retention", r);
+        return r;
+      } catch (e) {
+        log("night.retention.failed", { error: String((e as Error)?.message ?? e).slice(0, 200) });
+        return { failed: true };
+      }
     });
     log("night.done", { night: state.night, status: done.status, stopped: done.stopped, requests: done.requests, estimate: done.estimate });
     return { status: done.status, stopped: done.stopped, requests: done.requests, estimate: done.estimate };
