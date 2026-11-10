@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
+import { AI_JUDGES, CODE_CHECKS, CODE_CONTEXT } from "@/lib/rubric-copy";
+
 export const metadata = {
   title: "How it works - PortfolioRank",
   description:
@@ -24,8 +27,9 @@ export default function HowPage() {
         <div className="py-6">
           <h1 className="text-3xl font-bold tracking-tight">How it works</h1>
           <p className="mt-2 text-mute">
-            A 1,700-portfolio list, turned into a ranking you can trust - by a mix
-            of a crowd, an AI, and some boring-but-honest measurements.
+            A list of {PORTFOLIO_COUNT_LABEL} portfolios, turned into a ranking you
+            can trust - by a mix of a crowd, an AI, and some boring-but-honest
+            measurements.
           </p>
         </div>
 
@@ -77,11 +81,14 @@ export default function HowPage() {
           </h2>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
-              Ranking 1,700 sites by hand is a non-starter, so an AI does the first
-              pass. Each site gets a screenshot captured by a real browser; Gemini
-              then looks at it and scores six things - visual design, the
-              5-second test (is it clear who you are?), project storytelling,
-              writing, memorability, and motion.
+              Ranking {PORTFOLIO_COUNT_LABEL} sites by hand is a non-starter, so an
+              AI does the first pass. A real browser captures each site, and the
+              work is split: <strong className="text-ink">code checks facts,
+              Gemini judges quality</strong>. Gemini reads the screenshot and the
+              page&apos;s text and scores {AI_JUDGES}, each from 1 to 5, which
+              add up to a quality score. Code checks {CODE_CHECKS}, which add up to
+              a checks score out of 100; it also records {CODE_CONTEXT} as context,
+              without scoring them.
             </p>
             <p>
               For the leaderboard, the AI also votes head-to-head, the same way you

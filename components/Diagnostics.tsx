@@ -163,10 +163,63 @@ export function Socials({ url }: { url: string }) {
   );
 }
 
+/** What a PageSpeed failure means for the visitor, and whether trying again can help. */
+function psiProblem(error: string | undefined): { text: string; retry: boolean } {
+  if (error === "site_down") return { text: "This site is down or parked, so there's nothing to measure.", retry: false };
+  if (error === "in_progress") return { text: "Lighthouse is already running for this site. Try again in a minute.", retry: true };
+  if (error === "timeout") return { text: "Google's Lighthouse timed out on this site.", retry: true };
+  if (/429|quota|rate/i.test(error ?? "")) return { text: "Google's Lighthouse quota is used up for now. Try again later.", retry: true };
+  return { text: "Lighthouse couldn't analyze this site right now.", retry: true };
+}
+
+function RetryButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-2 min-h-11 rounded-lg border border-edge px-4 text-sm font-semibold text-ink transition hover:border-mute"
+    >
+      Retry
+    </button>
+  );
+}
+
+function Unreachable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div role="alert">
+      <p className="text-sm text-red-400">Couldn&apos;t reach the site.</p>
+      <RetryButton onClick={onRetry} />
+    </div>
+  );
+}
+
+/** The share card preview; falls back to a note when the image won't load here. */
+function ShareImage({ src }: { src: string }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return (
+      <div className="flex aspect-[1.91/1] w-full items-center justify-center bg-edge px-4 text-center text-xs text-mute">
+        The share image exists, but its host doesn&apos;t let it show here.
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt="Social share preview"
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className="aspect-[1.91/1] w-full bg-edge object-cover"
+    />
+  );
+}
+
 /** Full panel for the detail page. Order: Lighthouse → Polish → Share card. */
 export function DetailDiagnostics({ url }: { url: string }) {
-  const inspect = useInspection(url);
-  const { data: psi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`);
+  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
+  const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`);
+  const psiFailure = psi && !psi.ok ? psiProblem(psi.error) : null;
 
   return (
     <div className="space-y-4">
@@ -182,10 +235,11 @@ export function DetailDiagnostics({ url }: { url: string }) {
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-accent" />
             Running Lighthouse on Google&apos;s servers - first run takes ~30s…
           </p>
-        ) : !psi.ok ? (
-          <p className="text-sm text-red-400">
-            Couldn&apos;t analyze: {psi.error}
-          </p>
+        ) : psiFailure ? (
+          <div role="alert">
+            <p className="text-sm text-red-400">{psiFailure.text}</p>
+            {psiFailure.retry && <RetryButton onClick={retryPsi} />}
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -219,7 +273,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
           {!inspect ? (
             <p className="text-sm text-mute">Checking…</p>
           ) : !inspect.ok ? (
-            <p className="text-sm text-red-400">Couldn&apos;t reach the site.</p>
+            <Unreachable onRetry={retryInspect} />
           ) : (
             <ul className="space-y-1.5">
               <Check pass={inspect.https} label="Served over HTTPS" />
@@ -269,12 +323,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
             <p className="text-sm text-red-400">Couldn&apos;t reach the site.</p>
           ) : inspect.ogImage && inspect.ogImageLoads ? (
             <div className="overflow-hidden rounded-lg border border-edge">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={new URL(inspect.ogImage, inspect.finalUrl).href}
-                alt="Social share preview"
-                className="aspect-[1.91/1] w-full bg-edge object-cover"
-              />
+              <ShareImage key={inspect.ogImage} src={new URL(inspect.ogImage, inspect.finalUrl).href} />
               <div className="border-t border-edge p-3">
                 <p className="truncate text-sm font-semibold">
                   {inspect.ogTitle ?? inspect.title}

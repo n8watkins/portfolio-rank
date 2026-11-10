@@ -4,13 +4,14 @@ import { ClaimVotes } from "@/components/ClaimVotes";
 import { UndoToastProvider } from "@/components/UndoToast";
 import { SignInProvider } from "@/components/SignInModal";
 import { SITE_URL } from "@/lib/site";
+import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 const TITLE = "PortfolioRank - the best developer portfolios, ranked";
 const DESCRIPTION =
-  "1,700+ community-curated developer portfolios, soon ranked by your votes and AI. Browse, compare, get inspired.";
+  `${PORTFOLIO_COUNT_LABEL} community-curated developer portfolios, ranked by your votes and AI. Browse, compare, get inspired.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { Portfolio } from "@/app/page";
 import { SITE } from "@/lib/site";
 import { LikeButton } from "@/components/LikeButton";
@@ -20,6 +20,48 @@ const ROLES: { label: string; pattern: RegExp }[] = [
   { label: "Design / UX", pattern: /design|ux|\bui\b/i },
 ];
 
+// Search and filters live in the address (?q=, ?role=, ?letter=), so a
+// filtered view can be shared and survives Back. Updates replace the history
+// entry instead of adding one per keystroke.
+const FILTERS_CHANGED = "portfoliorank:filters";
+
+function subscribeToAddress(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  window.addEventListener(FILTERS_CHANGED, onChange);
+  return () => {
+    window.removeEventListener("popstate", onChange);
+    window.removeEventListener(FILTERS_CHANGED, onChange);
+  };
+}
+
+function useFilters() {
+  // The server (and hydration) render unfiltered; the address applies right after.
+  const search = useSyncExternalStore(
+    subscribeToAddress,
+    () => window.location.search,
+    () => ""
+  );
+  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const roleParam = params.get("role");
+  const letterParam = params.get("letter")?.toUpperCase() ?? "";
+  const filters = {
+    query: params.get("q") ?? "",
+    role: ROLES.some((r) => r.label === roleParam) ? roleParam : null,
+    letter: LETTERS.includes(letterParam) ? letterParam : "All",
+  };
+  const set = useCallback((next: { query?: string; role?: string | null; letter?: string }) => {
+    const url = new URL(window.location.href);
+    const put = (k: string, v: string | null | undefined, empty: string | null = null) =>
+      v === undefined ? undefined : !v || v === empty ? url.searchParams.delete(k) : url.searchParams.set(k, v);
+    put("q", next.query);
+    put("role", next.role);
+    put("letter", next.letter, "All");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    window.dispatchEvent(new Event(FILTERS_CHANGED));
+  }, []);
+  return [filters, set] as const;
+}
+
 function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -29,10 +71,9 @@ function domainOf(url: string): string {
 }
 
 export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
-  const [query, setQuery] = useState("");
-  const [letter, setLetter] = useState("All");
-  const [role, setRole] = useState<string | null>(null);
+  const [{ query, letter, role }, setFilters] = useFilters();
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const filtering = Boolean(query.trim()) || letter !== "All" || role !== null;
   // Hydrate the signed-in rater's liked set once so cards show a filled ♥.
   // Returns [] for anon, so the heart simply stays hollow.
   const [likedSet, setLikedSet] = useState<Set<string>>(new Set());
@@ -75,7 +116,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
           type="search"
           value={query}
           onChange={(e) => {
-            setQuery(e.target.value);
+            setFilters({ query: e.target.value });
             setVisible(PAGE_SIZE);
           }}
           placeholder="Search by name, role, or domain…"
@@ -100,7 +141,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             key={r.label}
             aria-pressed={role === r.label}
             onClick={() => {
-              setRole(role === r.label ? null : r.label);
+              setFilters({ role: role === r.label ? null : r.label });
               setVisible(PAGE_SIZE);
             }}
             className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
@@ -121,7 +162,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             aria-pressed={letter === l}
             aria-label={l === "All" ? "All letters" : `Names starting with ${l}`}
             onClick={() => {
-              setLetter(l);
+              setFilters({ letter: l });
               setVisible(PAGE_SIZE);
             }}
             className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
@@ -133,6 +174,27 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             {l}
           </button>
         ))}
+      </div>
+
+      {/* How many match, read out as filters change; a way back to everything. */}
+      <div className="mb-3 flex min-h-11 items-center justify-center gap-3 text-sm text-mute">
+        <p role="status" aria-live="polite">
+          {filtering
+            ? `${filtered.length.toLocaleString()} of ${portfolios.length.toLocaleString()} portfolios`
+            : `${portfolios.length.toLocaleString()} portfolios`}
+        </p>
+        {filtering && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilters({ query: "", role: null, letter: "All" });
+              setVisible(PAGE_SIZE);
+            }}
+            className="min-h-11 px-2 font-semibold text-accent underline underline-offset-2"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -191,7 +253,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
 
       {shown.length === 0 && (
         <p className="py-16 text-center text-sm text-mute">
-          No portfolios match “{query}”.
+          No portfolios match {query.trim() ? `“${query.trim()}”` : "these filters"}.
         </p>
       )}
 

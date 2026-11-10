@@ -155,7 +155,9 @@ export default async function TopPage() {
                   <p className="text-2xl font-bold tabular-nums text-accent">
                     {champ.elo}
                   </p>
-                  <p className="text-xs text-mute">{champ.votes} votes</p>
+                  <p className="text-xs text-mute">
+                    {champ.votes} {champ.votes === 1 ? "vote" : "votes"}
+                  </p>
                 </div>
               </div>
             </a>
@@ -163,12 +165,12 @@ export default async function TopPage() {
             {topFive.length > 0 && (
               <div className="mb-2">
                 <h2 className="mb-2 text-sm font-semibold text-mute">Top 5</h2>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {topFive.map((e) => (
                     <a
                       key={e.url}
                       href={`/p/${encodeURIComponent(e.url)}`}
-                      className="flex items-center gap-3 rounded-xl border border-edge bg-card px-4 py-3 transition hover:border-mute"
+                      className="flex min-w-0 items-center gap-3 rounded-xl border border-edge bg-card px-4 py-3 transition hover:border-mute"
                     >
                       <span className="text-lg font-bold tabular-nums text-mute">
                         {e.rank === 2 ? "🥈" : e.rank === 3 ? "🥉" : e.rank}

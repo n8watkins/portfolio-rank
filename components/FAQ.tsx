@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { SITE } from "@/lib/site";
 
-const ITEMS: { q: string; a: React.ReactNode }[] = [
+const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
   {
     q: "How are portfolios ranked?",
     a: (
@@ -18,11 +18,11 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "How does the AI grade them?",
-    a: "Gemini looks at each site's screenshot and scores design, clarity, storytelling, writing, memorability, and motion - and folds in real Lighthouse + polish data when it compares two. It judges how a site looks, so it only seeds the ranking; humans get the final say.",
+    a: `Code checks the facts (links, domain, a fresh footer and the like); Gemini reads each site's screenshot and text and scores ${aiJudges}. When it compares two sites it also weighs real Lighthouse and polish data. It judges how a site looks and reads, so it only seeds the ranking; humans get the final say.`,
   },
   {
     q: "Why do I have to sign in to vote?",
-    a: "So one person is one vote. Anonymous visitors get a few practice votes; signing in (GitHub/Google) is what makes a crowd ranking trustworthy. Your practice votes convert when you sign in.",
+    a: "So one person is one vote. Anonymous visitors get a few practice votes; signing in with GitHub is what makes a crowd ranking trustworthy. Your practice votes convert when you sign in.",
   },
   {
     q: "What are Superstars (⭐)?",
@@ -61,13 +61,15 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
         >
           Submit it
         </a>{" "}
-        - it flows in, gets screenshotted and graded automatically.
+        - once it&apos;s approved, it&apos;s added, screenshotted and graded.
       </>
     ),
   },
 ];
 
-export function FAQ() {
+/** aiJudges: what Gemini scores, from the rubric (lib/rubric-copy.ts, read on the server). */
+export function FAQ({ aiJudges }: { aiJudges: string }) {
+  const ITEMS = items(aiJudges);
   // Accordion: one panel open at a time. Animated open/close via the
   // grid-template-rows 0fr→1fr trick (see .accordion-panel in globals.css).
   const [open, setOpen] = useState<number | null>(null);

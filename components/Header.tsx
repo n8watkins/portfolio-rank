@@ -13,10 +13,11 @@ export function Header({ stars }: { stars: number | null }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/pr-logo.svg"
-            alt="PortfolioRank logo"
+            alt=""
             className="h-7 w-7"
           />
-          <span>
+          {/* Logo mark only on phones, so the nav fits on one line. */}
+          <span className="sr-only sm:not-sr-only">
             Portfolio<span className="text-accent">Rank</span>
           </span>
         </Link>
@@ -34,13 +35,13 @@ export function Header({ stars }: { stars: number | null }) {
       <nav className="flex items-center gap-2">
         <a
           href="/top"
-          className="rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
+          className="whitespace-nowrap rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
         >
           🏆 Top
         </a>
         <a
           href="/rank"
-          className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent sm:text-sm"
+          className="whitespace-nowrap rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent sm:text-sm"
         >
           ⚔️ Rank
         </a>
