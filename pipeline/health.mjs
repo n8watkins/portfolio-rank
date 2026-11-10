@@ -345,7 +345,14 @@ export async function runHealthCheck({
     // A passing site whose last capture failed gets recaptured on the next sync.
     const retryNow = r.ok === true && row && String(row.status) !== "live";
     // Signals only from a page that loaded; otherwise the last ones stay.
-    const signals = r.signals ? JSON.stringify({ ...r.signals, checked_at: stamp }) : null;
+    const signals = r.signals
+      ? JSON.stringify({
+          ...r.signals,
+          checked_at: stamp,
+          // A move to another domain, and whether it looks like a hijack.
+          ...(r.moved ? { moved_to: r.finalUrl, hijack: Boolean(r.hijack) } : {}),
+        })
+      : null;
     stmts.push({
       sql: `INSERT INTO portfolios (url, name, health, health_reason, health_fails,
                                     health_first_fail_at, health_checked_at, final_url,

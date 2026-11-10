@@ -23,7 +23,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
   Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug] · /removed
 
   weekly health check  ──►  live → suspect → down  ──►  data/excluded.json (bot PR)
-                                                   ──►  monthly PR to the community list (opt-in)
+                                                   ──►  monthly report on the community list (PR opt-in, off)
 ```
 
 ## The list (two intake doors + a takedown)
@@ -59,8 +59,9 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
 - **Site visibility** (`lib/roster.ts hiddenUrls`): a roster site is hidden when it is confirmed down, or when its capture failed and the health check hasn't passed it since.
   Captures that fail are retried with backoff (1, 2, 4, 8, 16, then 30 days), and a passing health check schedules a recapture at once, so one transient error never hides a site for good.
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
-- **Upstream** (`upstream-removals.yml`, monthly, opt-in): one pull request to emmabostian/developer-portfolios removing entries confirmed down (never `suspect` ones), each re-checked right before, at most 25, in the list's own removal format.
-  It is a dry run (report only) unless started by hand with `dry_run` off or the repository variable `UPSTREAM_PR_ENABLED` is `true`, and it needs the `UPSTREAM_PR_TOKEN` secret.
+- **Upstream report** (`upstream-removals.yml`, monthly, report-only): the community list runs its own link checker every Saturday that removes broken and parked links (its CONTRIBUTING.md, sample report emmabostian/developer-portfolios#3696), so a removal PR for those would only duplicate it.
+  The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
+  Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
 
 ## GitHub Actions (7 scheduled)
 
@@ -76,7 +77,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → private R2 bucket `portfolio-rank-backups` (~0.3 MB/run) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
 | **`health.yml`** | Sundays 16:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
-| **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Dry-run report, or (opt-in) one PR to the community list removing confirmed-down entries | UPSTREAM_PR_TOKEN (optional) |
+| **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
 Schedules are staggered: backup (05:00) → sync+grade (06:00) → vote (13:00, clear
 of the sync window). `sync-upstream` holds the `ingest` concurrency lock for DB
@@ -132,6 +133,6 @@ serve images.
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
-- `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - prepare the upstream removal PR
+- `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `scripts/backup-db.mjs` — DB → R2 snapshot · `scripts/export-grades.mjs` — grades → CSV
 - `scripts/r2-check.mjs` — R2 connectivity · `scripts/r2-upload-one.mjs <key>` — single-site upload

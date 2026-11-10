@@ -1,24 +1,33 @@
 #!/usr/bin/env node
-// Give back to the community list: once a month, one pull request to
-// emmabostian/developer-portfolios removing entries PortfolioRank's health
-// check confirmed down (3+ failed weekly checks spanning 2+ weeks, so never a
-// site that is only "suspect"). Every candidate is checked once more right
-// before the pull request; any that load again are left in place.
+// What the community list (emmabostian/developer-portfolios) still lists that
+// its own checks miss. The list runs a link checker every Saturday that flags
+// and removes broken and parked links (its CONTRIBUTING.md; sample report
+// emmabostian/developer-portfolios#3696), so a removal PR for those would
+// only duplicate it. This job reports, once a month, only what that checker
+// can't see:
+//   - entries our health check confirmed down for a reason a link checker
+//     misses (a blank page, a redirect to a social profile), over 3+ failed
+//     weekly checks spanning 2+ weeks and failing again on a re-check now;
+//   - entries graded "not a portfolio" and confirmed the same way
+//     (for a person to review, never sent upstream automatically);
+//   - possible hijacks: entries now redirecting to another domain that
+//     carries none of the person's name (for a person to review).
+// Entries their checker will catch anyway are only counted.
 //
-// The format follows the list's own removal pull requests (for example
-// emmabostian/developer-portfolios#4450): title "Remove N broken portfolio
-// links", a Summary table with each entry's reason, a "Left in place" list,
-// and a test plan; README.md loses the lines, the "Current Portfolio Count"
-// is updated and feed.json is regenerated with the list's src/generate_feed.py.
-//
-// This script only prepares the change. .github/workflows/upstream-removals.yml
-// pushes it from the owner's fork and opens or updates the pull request.
+// Report-only by default. The pull request path (the first group only, at
+// most 25, in the list's own removal format: title "Remove N broken
+// portfolio links", a Summary table, "Left in place", a test plan, README
+// lines removed, the count updated and feed.json regenerated with the list's
+// src/generate_feed.py) runs only when .github/workflows/upstream-removals.yml
+// is started by hand with dry_run off, or on schedule with the repository
+// variable UPSTREAM_PR_ENABLED set to "true", and needs UPSTREAM_PR_TOKEN.
 //
 // Usage:
 //   node pipeline/upstream-removals.mjs --readme <upstream README.md> --out <dir>
 //                                       [--cap 25] [--no-browser]
 //     Writes <dir>/README.md (preview), <dir>/pr-title.txt, <dir>/pr-body.md,
-//     <dir>/plan.json; prints a Markdown report (also to GITHUB_STEP_SUMMARY).
+//     <dir>/plan.json; prints the Markdown report (also to GITHUB_STEP_SUMMARY).
+//     With TURSO_* set it also reads possible hijacks from the database.
 //   node pipeline/upstream-removals.mjs --apply <dir>/plan.json --readme <README.md>
 //     Removes the planned entries from that README in place (the fork's fresh
 //     copy, so nothing merged upstream since the plan is lost).
@@ -32,19 +41,31 @@ export const DEFAULT_CAP = 25;
 const ENTRY = /^-\s+\[([^\]]+)\]\(([^)]+)\)/;
 const SITE = "https://portfoliorank.n8builds.dev";
 
+// Reasons a link checker (status codes, DNS, TLS, parking redirects) sees
+// for itself; the list's Saturday checker removes those on its own.
+const CHECKER_SEES = /^(HTTP \d+|DNS|TLS|does not load|timeout|redirects to [a-z0-9.-]+$|parking phrase)/i;
+
+/** True when the list's own link checker would not catch this exclusion. */
+export function missedByTheirChecker(e) {
+  if (e.kind === "not_portfolio") return true;
+  if (e.kind !== "down") return false;
+  return !CHECKER_SEES.test(String(e.reason ?? ""));
+}
+
+const confirmed = (e) => {
+  if (!e.first_failed || !e.last_checked) return false;
+  const span = (new Date(e.last_checked) - new Date(e.first_failed)) / 86400000;
+  return Number(e.checks ?? 0) >= FAILS_TO_DOWN && span >= DOWN_AFTER_DAYS;
+};
+
 /**
- * Exclusions that qualify for upstream: kind "down" with evidence spanning at
- * least DOWN_AFTER_DAYS over FAILS_TO_DOWN checks. Duplicates, "not a
- * portfolio" grades and takedowns stay ours alone. Oldest removals first.
+ * Exclusions worth reporting upstream: confirmed (3+ failed checks spanning
+ * 2+ weeks), kind "down" or "not_portfolio", and missed by the list's own
+ * checker. Duplicates and takedowns stay ours alone. Oldest removals first.
  */
 export function selectCandidates(excluded) {
   return excluded
-    .filter((e) => e && typeof e === "object" && e.kind === "down" && e.url)
-    .filter((e) => {
-      if (!e.first_failed || !e.last_checked) return false;
-      const span = (new Date(e.last_checked) - new Date(e.first_failed)) / 86400000;
-      return Number(e.checks ?? 0) >= FAILS_TO_DOWN && span >= DOWN_AFTER_DAYS;
-    })
+    .filter((e) => e && typeof e === "object" && e.url && confirmed(e) && missedByTheirChecker(e))
     .sort((a, b) => String(a.removed ?? "").localeCompare(String(b.removed ?? "")));
 }
 
@@ -86,8 +107,9 @@ export function prBody({ removals, leftInPlace, alreadyGone, checkedOn }) {
   const lines = [
     "## Summary",
     `[PortfolioRank](${SITE}) is a ranked gallery built on this list.`,
-    `It checks every entry once a week with a browser User-Agent, redirects followed, a retry for timeouts and server errors, and a headless-browser second opinion; bot checks (403/429 challenges) never count as failures.`,
-    `The ${removals.length} entr${removals.length === 1 ? "y" : "ies"} below failed ${FAILS_TO_DOWN} or more checks in a row spanning at least two weeks, and failed again when re-checked on ${checkedOn} right before this pull request.`,
+    `It checks every entry once a week in a headless browser, with redirects followed and retries; bot checks (403/429 challenges) never count as failures.`,
+    `The ${removals.length} entr${removals.length === 1 ? "y" : "ies"} below load without an error, so the Saturday link checker passes them, but show no portfolio: a blank page, or a redirect to a social profile.`,
+    `Each failed ${FAILS_TO_DOWN} or more checks in a row spanning at least two weeks, and failed again when re-checked on ${checkedOn} right before this pull request.`,
     "",
     "| Name | URL | Reason | Failing since | Last checked |",
     "| --- | --- | --- | --- | --- |",
@@ -117,39 +139,96 @@ export function prBody({ removals, leftInPlace, alreadyGone, checkedOn }) {
   return lines.join("\n");
 }
 
-/**
- * Plan the pull request: candidates still in the upstream README, re-checked
- * now, capped. `check(entry)` returns checkSite's result.
- */
-export async function planUpstream({ excluded, readme, check, cap = DEFAULT_CAP, now = new Date() }) {
-  const candidates = selectCandidates(excluded);
-  const listed = new Set(
+const listedKeys = (readme) =>
+  new Set(
     readme
       .split("\n")
       .map((l) => l.trim().match(ENTRY)?.[2]?.trim())
       .filter(Boolean)
       .map(normKey)
   );
-  const alreadyGone = candidates.filter((c) => !listed.has(normKey(c.url))).map((c) => c.url);
+
+/**
+ * Plan the monthly report and the (optional) pull request. `check(entry)`
+ * returns checkSite's result; `hijacks` are listed rows that now redirect to
+ * an unrelated domain ({url, to}).
+ */
+export async function planUpstream({ excluded, readme, check, hijacks = [], cap = DEFAULT_CAP, now = new Date() }) {
+  const listed = listedKeys(readme);
+  const stillListed = (url) => listed.has(normKey(url));
+  const candidates = selectCandidates(excluded);
+  const alreadyGone = candidates.filter((c) => !stillListed(c.url)).map((c) => c.url);
   const removals = [];
   const leftInPlace = [];
-  for (const c of candidates.filter((c) => listed.has(normKey(c.url)))) {
-    if (removals.length >= cap) break;
+  const review = [];
+  for (const c of candidates.filter((c) => stillListed(c.url))) {
+    // An AI's "not a portfolio" is for a person to judge, never an automatic removal.
+    if (c.kind === "not_portfolio") {
+      review.push({ url: c.url, name: c.name, reason: c.reason });
+      continue;
+    }
+    if (removals.length >= cap) continue;
     const r = await check(c);
     // Only a fresh, definite failure goes upstream; a pass or a bot wall stays.
     if (r.ok === false) removals.push({ ...c, reason: r.reason || c.reason });
     else leftInPlace.push({ url: c.url, reason: r.ok === null ? r.reason : "loads" });
   }
+  // Removed on our side for a reason their own checker sees: it will catch them.
+  const caughtByThem = excluded.filter(
+    (e) => e && typeof e === "object" && e.kind === "down" && !missedByTheirChecker(e) && stillListed(e.url)
+  ).length;
   const edit = removeFromReadme(readme, removals.map((r) => r.url));
   const checkedOn = now.toISOString().slice(0, 10);
   return {
     removals,
     leftInPlace,
     alreadyGone,
+    review,
+    hijacks: hijacks.filter((h) => stillListed(h.url)),
+    caughtByThem,
     readme: edit.readme,
     title: prTitle(removals.length),
     body: prBody({ removals, leftInPlace, alreadyGone, checkedOn }),
   };
+}
+
+/** The monthly report for the run summary. */
+export function reportMarkdown(plan) {
+  const lines = [
+    "## Community list: what its own checker misses",
+    "",
+    "emmabostian/developer-portfolios runs a link checker every Saturday that removes broken and parked links, so those are not repeated here.",
+    `${plan.caughtByThem} entr${plan.caughtByThem === 1 ? "y" : "ies"} we removed for a broken link or parking are still listed upstream; their checker should catch ${plan.caughtByThem === 1 ? "it" : "them"}.`,
+    "",
+  ];
+  const table = (title, rows, cols) => {
+    lines.push(`### ${title}`, "");
+    if (!rows.length) {
+      lines.push("None.", "");
+      return;
+    }
+    lines.push(`| ${cols.map((c) => c[0]).join(" | ")} |`, `| ${cols.map(() => "---").join(" | ")} |`);
+    for (const r of rows) lines.push(`| ${cols.map((c) => cell(c[1](r))).join(" | ")} |`);
+    lines.push("");
+  };
+  table("Confirmed down, missed by their checker (pull request candidates)", plan.removals, [
+    ["Name", (r) => r.name],
+    ["URL", (r) => bare(r.url)],
+    ["Reason", (r) => r.reason],
+    ["Failing since", (r) => day(r.first_failed)],
+  ]);
+  table("Graded not a portfolio (for a person to review)", plan.review, [
+    ["Name", (r) => r.name],
+    ["URL", (r) => bare(r.url)],
+  ]);
+  table("Possible hijacks: redirect to an unrelated domain (for a person to review)", plan.hijacks, [
+    ["URL", (r) => bare(r.url)],
+    ["Now at", (r) => r.to],
+  ]);
+  if (plan.leftInPlace.length) {
+    lines.push(`Loaded again on the re-check, left out: ${plan.leftInPlace.map((l) => `\`${bare(l.url)}\``).join(", ")}.`, "");
+  }
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -198,10 +277,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     };
   }
   try {
+    // Possible hijacks from the weekly health check (database reads only).
+    let hijacks = [];
+    if (process.env.TURSO_DATABASE_URL) {
+      const { pipelineDb } = await import("./roster.mjs");
+      const res = await pipelineDb(ROOT).execute(
+        `SELECT url, json_extract(signals, '$.moved_to') AS moved_to FROM portfolios
+         WHERE delisted_at IS NULL AND json_valid(signals) AND json_extract(signals, '$.hijack') = 1
+         ORDER BY url`
+      );
+      hijacks = res.rows.map((r) => ({ url: String(r.url), to: String(r.moved_to ?? "") }));
+    }
     const plan = await planUpstream({
       excluded: readJson(path.join(ROOT, "data", "excluded.json"), []),
       readme: fs.readFileSync(readmePath, "utf8"),
       check: (e) => checkSite(e, { render }),
+      hijacks,
       cap: Number(flag("cap", String(DEFAULT_CAP))),
     });
     fs.mkdirSync(out, { recursive: true });
@@ -222,13 +313,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       )
     );
     const md = [
-      "## Upstream removals",
-      "",
-      plan.removals.length
-        ? `${plan.removals.length} removal(s) ready for emmabostian/developer-portfolios.`
-        : "Nothing to send upstream.",
-      "",
-      ...(plan.removals.length ? [`### ${plan.title}`, "", plan.body] : []),
+      reportMarkdown(plan),
+      ...(plan.removals.length ? ["### Pull request, if enabled", "", `**${plan.title}**`, "", plan.body] : []),
     ].join("\n");
     console.log(md);
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md}\n`);

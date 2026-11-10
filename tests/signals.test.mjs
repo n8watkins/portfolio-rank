@@ -75,6 +75,17 @@ test("a single-page app is judged on its rendered page before it is flagged", as
   assert.equal(r.signals.needsReview, false);
 });
 
+test("a move to an unrelated domain is stored as a possible hijack for the monthly report", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "signals-"));
+  const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
+  await ensureRosterSchema(db);
+  const feed = [{ name: "Jane Doe", url: "https://jane.vercel.app" }];
+  const fetchImpl = async () => ({ status: 200, ok: true, url: "https://casino.example/", text: async () => "<title>Best slots</title><p>" + "Win big today. ".repeat(10) + "</p>" });
+  await runHealthCheck({ db, feed, fetchImpl, log: () => {} });
+  const s = JSON.parse((await db.execute("SELECT signals FROM portfolios")).rows[0].signals);
+  assert.deepEqual([s.hijack, s.moved_to], [true, "https://casino.example/"]);
+});
+
 test("the health check stores signals and needs_review, and keeps the last ones when a site fails", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "signals-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });

@@ -1,27 +1,28 @@
-name: Upstream removals
+name: Upstream report
 
-# Once a month, one pull request to the community list
-# (emmabostian/developer-portfolios) removing entries our weekly health check
-# confirmed down (3+ failed checks spanning 2+ weeks; never "suspect" ones),
-# each re-checked right before, at most 25 per month. Prepared by
-# pipeline/upstream-removals.mjs in the list's own removal format, pushed from
-# the owner's fork n8watkins/developer-portfolios.
+# Once a month, a report (run summary) of what the community list
+# (emmabostian/developer-portfolios) still lists that its own checks miss.
+# The list runs a link checker every Saturday that removes broken and parked
+# links, so those are only counted. Reported: entries our weekly health check
+# confirmed down for a reason a link checker can't see (blank page, redirect
+# to a social profile), entries graded "not a portfolio", and possible
+# hijacks (redirects to an unrelated domain). See pipeline/upstream-removals.mjs.
 #
-# Off until the owner turns it on:
-#   - a manual run defaults to dry_run: the would-be pull request (title, body,
-#     diff size) goes to the run summary and nothing is pushed;
-#   - the monthly schedule is a dry run too unless the repository variable
+# Report-only by default. Opening a pull request (the first group only, at
+# most 25, in the list's own removal format, pushed from the owner's fork
+# n8watkins/developer-portfolios, updating our open one instead of opening
+# another) is off until the owner turns it on:
+#   - a manual run defaults to dry_run: nothing is pushed;
+#   - the monthly schedule is report-only unless the repository variable
 #     UPSTREAM_PR_ENABLED is "true";
 #   - a real run needs the UPSTREAM_PR_TOKEN secret (a classic personal access
 #     token of the fork's owner with the public_repo and workflow scopes) and
-#     skips with a notice when it is missing.
-# If one of our pull requests is still open, it is updated instead of opening
-# another.
+#     is report-only, with a notice, when it is missing.
 on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Only report the pull request, push nothing"
+        description: "Report only, push nothing (off opens or updates the upstream pull request)"
         type: boolean
         default: true
   schedule:
@@ -71,13 +72,17 @@ jobs:
             dry=true
           fi
           if [ "$dry" != "true" ] && [ "$HAS_TOKEN" != "true" ]; then
-            echo "::notice::UPSTREAM_PR_TOKEN is not set, so this is a dry run: nothing is pushed upstream."
+            echo "::notice::UPSTREAM_PR_TOKEN is not set, so this run only reports: nothing is pushed upstream."
             dry=true
           fi
           echo "dry=$dry" >> "$GITHUB_OUTPUT"
-          echo "Mode: $([ "$dry" = true ] && echo 'dry run (nothing pushed)' || echo 'real: opens or updates the upstream pull request')" >> "$GITHUB_STEP_SUMMARY"
+          echo "Mode: $([ "$dry" = true ] && echo 'report only (nothing pushed)' || echo 'opens or updates the upstream pull request')" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Prepare the removals
+      - name: Report what the list's own checker misses
+        env:
+          # Read-only: possible hijacks recorded by the weekly health check.
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: |
           curl -fsSL "https://raw.githubusercontent.com/${UPSTREAM}/master/README.md" -o "$RUNNER_TEMP/upstream-README.md"
           node pipeline/upstream-removals.mjs --readme "$RUNNER_TEMP/upstream-README.md" --out "$RUNNER_TEMP/upstream" --cap 25
