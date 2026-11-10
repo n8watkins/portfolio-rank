@@ -20,7 +20,9 @@ The step-by-step October plan (key, failure handling, submissions, Playwright) i
 - PR #9 (plain hyphens instead of em dashes in page titles and copy) is live: `curl -s https://portfoliorank.n8builds.dev | grep -o "<title>[^<]*</title>"` prints `PortfolioRank - the best developer portfolios, ranked` (checked 2026-11-03).
 - Deploys are by hand (`npm run deploy`, DEPLOY.md) until the `CLOUDFLARE_API_TOKEN` repository secret exists.
   The roster is bundled at build time, so the daily sync commit reaches the live site only after a deploy.
-- PR #10 (switch the AI judge to `gemini-3.5-flash-lite`) is **open on purpose**: it cannot be verified until a new Gemini key exists.
+- A new `GEMINI_API_KEY` secret was set on 2026-11-10.
+  The judge now sends it in the `x-goog-api-key` header and uses `gemini-3.5-flash-lite` with `gemini-3.1-flash-lite` as the backup (AUTOMATION.md, "AI judge").
+  This replaced PR #10, which was closed.
 - The site has no analytics.
 - Security: the locked `next` 15.5.28 has no open advisories in GitHub's advisory database (checked 2026-10-27).
 - Open issues: #2, #4 and #7 are portfolio submissions waiting for a person to add them (see Part C and Part D of `docs/FOLLOW_UP_2026-10.md`).
@@ -64,10 +66,10 @@ Do these in order; the detail for steps 3 and 6 is in `docs/FOLLOW_UP_2026-10.md
    For local runs, also put it in `.env.local` as `GEMINI_API_KEY=...`.
    Do not add it to the Worker.
 2. **Check the key and the model without printing the key:**
-   `set -a; . ./.env.local; set +a; curl -s -o /dev/null -w "%{http_code}\n" "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite?key=$GEMINI_API_KEY"` should print `200`.
-3. **Make a bad key turn the runs red** (agent, its own PR): in `pipeline/judge.mjs`, treat 401/403 as fatal and exit 1, and exit 1 when either loop aborts on 5 consecutive errors.
-   This is the error handling that would have caught the July failure on day one.
-4. **Merge PR #10** (Gemini 3.5 Flash-Lite), after an optional local smoke test on its branch with `node pipeline/judge.mjs rubric --limit 1`.
+   `pass-env run -- sh -c 'curl -s -o /dev/null -w "%{http_code}\n" -H "x-goog-api-key: $GEMINI_API_KEY" https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite'` should print `200`.
+   Send the key in the header: newer "AQ." keys are rejected as `?key=`.
+3. **Done 2026-11-10: a bad key turns the runs red.** `pipeline/judge.mjs` exits 1 on a rejected key, or when there was work and every call failed.
+4. **Done 2026-11-10: Gemini 3.5 Flash-Lite with 3.1 Flash-Lite as the backup** (replaced PR #10).
 5. **Run grading once and check the results:** `gh workflow run sync-upstream.yml -R n8watkins/portfolio-rank`, then `gh run watch`.
    The grading step should end with `rubric done: N/300 judged` with N above 0 and no `HTTP 401`.
    Open a newly graded detail page on the live site and confirm the AI review section shows a tier and axis scores.
@@ -76,7 +78,8 @@ Do these in order; the detail for steps 3 and 6 is in `docs/FOLLOW_UP_2026-10.md
 7. **Then comment on issue #3** that grading works again, with the run ID.
 
 Persistence is already in place: grades go to `portfolios.ai_rubric` and votes to `votes`/`ratings` in Turso, and `backup.yml` snapshots them to R2 daily.
-Switching models tags new AI votes as `ai:gemini-3.5-flash-lite`, so that judge may vote again on pairs the old one judged; re-grading the 1,485 old rubrics with `--force` is optional and is the owner's call.
+AI votes from both models share the rater id `ai:flash-lite` (the old `ai:gemini-3.1-flash-lite` votes are moved to it), so the new judge never votes again on a pair the old one judged.
+Re-grading the 1,485 old rubrics with `--force` is optional and is the owner's call.
 
 ### Open problem 2 (low): CI and the scheduled jobs run on Node 20
 
