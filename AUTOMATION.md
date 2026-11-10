@@ -146,7 +146,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | Workflow | Trigger | What it does | Secrets |
 |---|---|---|---|
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
-| **`sync-upstream.yml`** | the end-of-day Workflow at 20:30 Pacific; fallback schedule 06:00 UTC + manual | The free checks: rebuild `feed.json` from upstream's merged README, open the sync PR if it changed, capture new sites and re-capture the oldest (`--refresh`), measure page evidence, record page changes. No Gemini, except the manual `grade` input (fallback grading) | TURSO, R2, SHOTS_BASE_URL (GEMINI only for `grade`) |
+| **`sync-upstream.yml`** | the end-of-day Workflow at 20:30 Pacific; fallback schedule 06:00 UTC + manual | The free checks: rebuild `feed.json` from upstream's merged README, open the sync PR if it changed, capture new sites and re-capture the oldest (`--refresh`), measure page evidence, record page changes. No Gemini, except as the fallback: the manual `grade` input, or a scheduled run (Cloudflare didn't start it) grades within the accountant's shares | TURSO, R2, SHOTS_BASE_URL (GEMINI only for `grade`) |
 | **`health.yml`** | the end-of-day Workflow on Sunday nights; fallback schedule Mondays 12:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
 | **`judge-vote.yml`** | manual only | Fallback: the ELO-era AI votes, or (repository variable `RANKING_V2`) the ranking v2 comparisons and recompute, within the accountant's share | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
@@ -154,7 +154,8 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API | TURSO |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
-The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check), so they only run when Cloudflare could not start them (no token, or the Worker down).
+The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
+Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without claiming it and this fallback does the night's work.
 `judge-vote.yml` lost its schedule: AI comparisons run in the end-of-day run, and the ELO-era AI votes (30 a day into the shared ELO pool) no longer run on their own, since the owner's decision keeps background comparisons for `RANKING_V2`.
 `grade-compare`, `backup`, `prewarm` and `upstream-removals` call no Gemini and nothing depends on their exact time, so they keep their GitHub schedules.
 `sync-upstream` and `judge-vote` share the `gemini` concurrency group, so a manual fallback run and the nightly checks never overlap on the runner.

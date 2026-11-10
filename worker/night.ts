@@ -110,6 +110,13 @@ const MAX_BATCHES = 1500;
 export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> {
   async run(event: WorkflowEvent<NightParams>, step: WorkflowStep) {
     const runId = event.instanceId;
+    // Without the key there is nothing to run, and the night stays unclaimed
+    // (the GitHub fallback grades instead; AUTOMATION.md).
+    if (!this.env.GEMINI_API_KEY) {
+      const reason = "GEMINI_API_KEY is not set on the Worker: tonight's end-of-day run is skipped (the GitHub schedule of sync-upstream.yml is the fallback)";
+      log("night.skip", { reason });
+      return { skipped: reason };
+    }
     let state = (await step.do("claim the night", ONCE_MORE, () => startNight(engine(this.env, runId), { trigger: event.payload.trigger }))) as NightState;
     if (state.skip) {
       log("night.skip", { reason: state.reason });
@@ -197,6 +204,7 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
  * (busy, or the quota was spent), while there is quota for people.
  */
 export async function drainPeople(env: NightEnv) {
+  if (!env.GEMINI_API_KEY) return { done: 0, queued: 0, failed: 0 };
   const ctx = engine(env, "people-queue");
   const r = await drainPeopleQueue(ctx, { limit: 10 });
   if (r.done || r.failed || r.queued) log("people.queue", r);

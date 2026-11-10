@@ -15,7 +15,8 @@ name: Sync upstream + ingest
 # left it as delisted (pipeline/roster.mjs), and captures new sites plus
 # failed captures whose retry date has come. The feed may shrink by at most
 # 5% per run (generate_feed.py --max-shrink).
-# Grading here (the "grade" input) is the manual fallback only.
+# Grading here is the fallback only: by hand (the "grade" input), or when the
+# GitHub schedule runs because Cloudflare did not start this workflow.
 on:
   workflow_dispatch:
     inputs:
@@ -215,12 +216,13 @@ jobs:
       # Fingerprint changes become "Grade changed sites" tonight.
       - name: Record page changes
         run: node scripts/detect-changes.mjs
-      # Manual fallback only (the "grade" input): grades needs_review and
+      # Fallback only (the "grade" input, or a scheduled run because
+      # Cloudflare did not start this one): grades needs_review and
       # newest-captured sites first, then the backlog, then re-grades, inside
       # the budget accountant's shares (pipeline/budget.mjs). Grades come
       # from gemini-3.5-flash-lite only (owner, 2026-11-10).
-      - name: AI-grade new + backlog (manual fallback)
-        if: inputs.grade == true
+      - name: AI-grade new + backlog (fallback)
+        if: inputs.grade == true || github.event_name == 'schedule'
         env:
           GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
           GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
