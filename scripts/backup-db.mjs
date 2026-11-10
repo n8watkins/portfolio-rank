@@ -1,51 +1,50 @@
-// Back up the irreplaceable Turso data (human votes, ELO ratings, and the
-// expensive Gemini ai_rubric grades) to R2 as a gzipped JSON snapshot.
-// shot_key is included so a restore re-links to existing R2 screenshots.
-// meta (capture diagnostics) is intentionally omitted — it's regenerable and bulky.
+// The nightly backup (.github/workflows/backup.yml): a gzipped JSON snapshot
+// of the whole database (scripts/lib/snapshot.mjs says what is in it and
+// what is left out) to the private R2 bucket. Turso Free keeps only one day
+// of point-in-time restore, so this snapshot is the real backup; the restore
+// is scripts/restore-db.mjs and docs/ASSUMPTIONS.md section G.
+//   node scripts/backup-db.mjs                 upload (R2_* set) to the bucket
+//   node scripts/backup-db.mjs --out FILE      write the snapshot to FILE instead
+// Credentials come from the environment (Actions secrets, or `pass-env run`
+// locally), never from a file.
 import { createClient } from "@libsql/client";
-import { gzipSync } from "zlib";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { gzipSync } from "node:zlib";
+import { writeFileSync } from "node:fs";
+import { countsOf, takeSnapshot } from "./lib/snapshot.mjs";
 
-// Optional in CI (GitHub Actions): no .env.local — vars come from runner secrets.
-if (existsSync(".env.local")) {
-  for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
-  }
-}
-
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
-const rows = async (sql) => (await db.execute(sql)).rows;
-
-const now = new Date();
-const data = {
-  exported_at: now.toISOString(),
-  votes: await rows("SELECT * FROM votes"),
-  ratings: await rows("SELECT * FROM ratings"),
-  portfolios: await rows(
-    "SELECT url, name, status, reason, shot_key, ai_rubric, checked_at, captured_at FROM portfolios"
-  ),
+const arg = (name) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : null;
 };
 
-const json = JSON.stringify(data);
+if (!process.env.TURSO_DATABASE_URL) {
+  console.error("TURSO_DATABASE_URL is required");
+  process.exit(1);
+}
+const db = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+
+const now = new Date();
+const snap = await takeSnapshot(db, { now });
+const json = JSON.stringify(snap);
 const gz = gzipSync(json, { level: 9 });
 console.log(
-  `votes:${data.votes.length}  ratings:${data.ratings.length}  portfolios:${data.portfolios.length}`
+  Object.entries(countsOf(snap))
+    .map(([t, n]) => `${t}:${n}`)
+    .join("  ")
 );
-console.log(
-  `raw JSON: ${(json.length / 1024 / 1024).toFixed(2)} MB  |  gzipped: ${(gz.length / 1024 / 1024).toFixed(2)} MB`
-);
+console.log(`raw JSON: ${(json.length / 1024 / 1024).toFixed(2)} MB  |  gzipped: ${(gz.length / 1024 / 1024).toFixed(2)} MB`);
 
 // Backups go to their own private bucket (no r2.dev access), never to the
 // public screenshot bucket at SHOTS_BASE_URL: a snapshot holds every vote with
 // its rater id. The R2 token in R2_BACKUP_* should be scoped to that bucket only.
 const BACKUP_BUCKET = process.env.R2_BACKUP_BUCKET || "portfolio-rank-backups";
 const PUBLIC_BUCKET = "portfolio-rank";
+const out = arg("--out") ?? (process.argv.includes("--measure-only") ? "/tmp/backup-sample.json.gz" : null);
 
-if (process.env.R2_ACCOUNT_ID && !process.argv.includes("--measure-only")) {
+if (out) {
+  writeFileSync(out, gz);
+  console.log(`wrote ${out}`);
+} else if (process.env.R2_ACCOUNT_ID) {
   if (BACKUP_BUCKET === PUBLIC_BUCKET) {
     console.error(`refusing to write a backup to the public bucket "${PUBLIC_BUCKET}"`);
     process.exit(1);
@@ -63,17 +62,10 @@ if (process.env.R2_ACCOUNT_ID && !process.argv.includes("--measure-only")) {
     credentials: { accessKeyId, secretAccessKey },
   });
   const key = `backups/portfoliorank-${now.toISOString().slice(0, 10)}.json.gz`;
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: BACKUP_BUCKET,
-      Key: key,
-      Body: gz,
-      ContentType: "application/gzip",
-    })
-  );
+  await s3.send(new PutObjectCommand({ Bucket: BACKUP_BUCKET, Key: key, Body: gz, ContentType: "application/gzip" }));
   console.log(`uploaded to R2: ${BACKUP_BUCKET}/${key}`);
 } else {
-  writeFileSync("/tmp/backup-sample.json.gz", gz);
-  console.log("measure-only: wrote /tmp/backup-sample.json.gz");
+  console.error("nowhere to write: set R2_ACCOUNT_ID (and R2_BACKUP_*) or pass --out FILE");
+  process.exit(1);
 }
 process.exit(0);
