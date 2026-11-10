@@ -3,6 +3,7 @@ import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { LeaderboardRest } from "@/components/LeaderboardRest";
+import { hiddenUrls } from "@/lib/roster";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,10 @@ function githubHandle(url: string): string | null {
 
 export default async function TopPage() {
   await ensureSchema();
-  const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
+  const hidden = await hiddenUrls();
+  const byUrl = new Map(
+    (feed as Portfolio[]).filter((p) => !hidden.has(p.url)).map((p) => [p.url, p])
+  );
 
   const res = await db().execute({
     sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT 100",

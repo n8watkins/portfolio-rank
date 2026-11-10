@@ -2,6 +2,7 @@ import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
+import { hiddenUrls } from "@/lib/roster";
 
 // Auto-scrolling gallery of the top-ranked portfolios' hero shots - the homepage
 // payoff: "static list in, browsable ranked gallery out." Pure CSS animation
@@ -11,7 +12,10 @@ export async function TopMarquee() {
   const res = await db().execute(
     "SELECT url, elo FROM ratings WHERE votes >= 1 ORDER BY elo DESC LIMIT 15"
   );
-  const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
+  const hidden = await hiddenUrls();
+  const byUrl = new Map(
+    (feed as Portfolio[]).filter((p) => !hidden.has(p.url)).map((p) => [p.url, p])
+  );
   const ranked = res.rows
     .map((r) => ({ url: String(r.url), elo: Number(r.elo) }))
     .filter((r) => byUrl.has(r.url));

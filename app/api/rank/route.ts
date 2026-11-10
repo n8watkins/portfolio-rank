@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import feed from "@/data/feed.json";
 import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
-import { isKnownPortfolio } from "@/lib/roster";
+import { hiddenUrls, isKnownPortfolio } from "@/lib/roster";
 import {
   ANON_VOTE_LIMIT,
   DAILY_VOTE_LIMIT,
@@ -45,15 +45,9 @@ async function countVotes(raterId: string, since?: string): Promise<number> {
 export async function GET() {
   await ensureSchema();
   const rater = await getRater();
-  // Keep confirmed dead/parked/error sites out of matchups (same as browse).
-  const excluded = new Set(
-    (
-      await db().execute(
-        "SELECT url FROM portfolios WHERE status IN ('dead', 'parked', 'error')"
-      )
-    ).rows.map((r) => String(r.url))
-  );
-  const pool = (feed as Portfolio[]).filter((p) => !excluded.has(p.url));
+  // Keep hidden sites out of matchups (same rule as browse: lib/roster).
+  const hidden = await hiddenUrls();
+  const pool = (feed as Portfolio[]).filter((p) => !hidden.has(p.url));
 
   // Sample a handful of distinct entries, then face off the two least-voted
   // so every vote goes where the rating is most uncertain.

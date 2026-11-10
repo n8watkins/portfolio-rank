@@ -10,6 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: BASE, changeFrequency: "daily", priority: 1 },
     { url: `${BASE}/top`, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/rank`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${BASE}/removed`, changeFrequency: "weekly", priority: 0.3 },
   ];
   const detail: MetadataRoute.Sitemap = (feed as Portfolio[]).map((p) => ({
     url: `${BASE}/p/${encodeURIComponent(p.url)}`,
