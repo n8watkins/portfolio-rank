@@ -20,7 +20,7 @@
 // the Worker has no email binding, so the sender is null and alerts are
 // recorded and logged but not delivered; a day's alert is only marked sent
 // once a sender delivers it. Wire a sender in emailSender() to turn it on.
-import { quotaDay } from "./budget.mjs";
+import { quotaDay } from "./quota-day.mjs";
 
 export const DEFAULT_TRACTION = { peopleGrades: 50, humanVotes: 300 };
 
@@ -140,7 +140,7 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
       log(`owner alert (email off, no provider set up): ${c.title}`);
       continue;
     }
-    const since = String(row?.first_seen ?? at).slice(0, 10);
+    const since = quotaDay(new Date(String(row?.first_seen ?? at))).day;
     await email.send({
       to,
       subject: `${c.kind === "good" ? "" : "[PortfolioRank] "}${c.title}`,

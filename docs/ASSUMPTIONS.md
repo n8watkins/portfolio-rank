@@ -19,10 +19,13 @@ Status per entry:
 1. **Public grading needs the paid tier before launch, not only when volume grows** (contradicted).
    The Gemini API terms allow only Paid Services when an API client is made available to users in the EEA, Switzerland or the UK, and tell free-tier users not to submit personal information.
    A public "grade my portfolio" button reaches those users and sends page text with names and contact details.
-2. **Our daily ledger counts UTC days; Google's daily quota resets at midnight Pacific** (contradicted).
-   `pipeline/gemini-log.mjs` and `lib/ranking/store.mjs` both key "today" on the UTC date, so a budget can reset while Google's quota has not.
+   Decided (owner, 2026-11-10): stay on the free tier everywhere, block no region, and accept the risk for now; contact details are stripped from page text before it reaches Gemini, and where a visitor starts AI work they get a clear free-tier notice and a bring-your-own-key option (DECISIONS.md, "Free tier everywhere").
+   Revisit at the public launch or when traffic grows; paid billing removes both issues.
+2. **Our daily ledger counted UTC days; Google's daily quota resets at midnight Pacific** (contradicted, resolved).
+   Every Gemini "today" now uses one Pacific quota-day helper, `pipeline/quota-day.mjs`, tested across both DST changes (#69, #72).
 3. **`maxOutputTokens` includes thinking tokens** (verified, not handled).
-   A response that hits the cap ends with `MAX_TOKENS` and possibly truncated JSON, and the thinking tokens are still billed; `pipeline/gemini.mjs` does not read `finishReason`.
+   A response that hits the cap ends with `MAX_TOKENS` and possibly truncated JSON, and the thinking tokens are still billed.
+   Resolved (#72): `finishReason` is logged for every response, an answer that did not finish with `STOP` is a failed answer that is never stored, and the caps leave room for thinking (A7).
 4. **3.1 Flash-Lite shuts down no earlier than 2027-05-07** (verified).
    Every labelled 3.1 experiment (the 3.1-vs-3.5 comparison, trend analysis) has to finish before then.
 5. **Failed requests (400 and 500) count against quota but are not charged** (verified).
@@ -31,13 +34,14 @@ Status per entry:
    The 500-a-day figure in DECISIONS.md is the owner's reading of AI Studio and stays an assumption until the owner re-reads it there (test G1).
 7. **Turso's Free plan blocks every query when any monthly limit is exceeded, and keeps only 1 day of point-in-time restore** (verified).
    The owner decided to stay on Turso for now; COSTS.md section C shows our projected use against the Free limits and the roll-ups that keep it far below them, and section E keeps the D1 comparison for when it is revisited.
-   The nightly backup holds only `votes`, `ratings` and part of `portfolios`; `comparisons`, the source of truth for ranking v2, is not in it (section G).
+   The nightly backup held only `votes`, `ratings` and part of `portfolios`; since #72 it holds every table but the transient `cache` and `matchups`, with a tested restore script (section G).
 8. **GitHub's terms restrict what GitHub-hosted runners may be used for** (verified, a risk for on-demand grading).
    Actions may not be used "as part of a serverless application" where the burden outweighs the benefit, nor, on GitHub-hosted runners, for activity unrelated to the software project; capturing a stranger's site because they pressed "grade my portfolio" is the kind of use this clause is about (section F).
 9. **Image tokens can be cut 4x with `media_resolution` LOW** (verified that the setting exists, not that grades stay as good).
    This matters most for batched comparisons; see MODEL-LIMITS.md and test G6.
 10. **The first Turso limit we would hit is reads from two per-page-view full scans, not log growth** (estimated from the code).
-   `/top` counts every row of `votes` on each render and `/api/leaderboard` reads a whole board view on each request; COSTS.md section C has the numbers and the fixes.
+   `/top` counted every row of `votes` on each render and `/api/leaderboard` read a whole board view on each request; COSTS.md section C has the numbers.
+   Fixed (#72): vote counters kept by triggers, a paged and edge-cached board, and nightly roll-ups and retention for the log tables.
 
 ## A. Gemini
 
@@ -63,9 +67,9 @@ Status per entry:
 
 - Assumption: midnight Pacific.
 - Verified: "Requests per day (RPD) quotas reset at midnight Pacific time." ([rate limits](https://aistudio.google.com/docs/rate-limits)).
-- Contradicted in our code: `dailyTotals` in `pipeline/gemini-log.mjs` and `comparisonsToday` in `lib/ranking/store.mjs` take "today" as the UTC date (`toISOString().slice(0, 10)`).
-  Midnight Pacific is 08:00 UTC in winter and 07:00 UTC in summer, so work at 23:00 UTC and at 01:00 UTC lands on two of our days but one of Google's, and a full budget spent on both sides can hit the daily 429.
-- Decision (proposed for the Gemini lane, not made here): key the Gemini ledger and the daily budgets on the `America/Los_Angeles` date, and keep the 18:00 UTC roll-over of unused shares (DECISIONS.md) as is, since it falls inside one Pacific day.
+- Was contradicted in our code: `dailyTotals` in `pipeline/gemini-log.mjs` and `comparisonsToday` in `lib/ranking/store.mjs` took "today" as the UTC date.
+  Midnight Pacific is 08:00 UTC in winter and 07:00 UTC in summer, so work at 23:00 UTC and at 01:00 UTC landed on two of our days but one of Google's.
+- Resolved: #69 moved the ledger and the budgets to the Pacific day; #72 made `pipeline/quota-day.mjs` the one helper every Gemini "today" uses (the ledger, the accountant, the ranking store, the comparison seed, owner alerts), with tests for every hour of 2026 and 2027 and both DST days.
 
 ### A4. Whether failed or retried requests count
 
@@ -81,9 +85,11 @@ Status per entry:
 - Verified: the error reference lists three 429 codes: `rate_limit_exceeded` ("exceeded the per-minute or per-second request or token limit"), `quota_exceeded` ("exceeded your daily quota") and `too_many_requests` ([API errors](https://aistudio.google.com/docs/api-errors)).
 - Not documented: the `google.rpc.QuotaFailure` details (`quotaId`, `quotaMetric`) and `RetryInfo.retryDelay` that `generateContent` 429 bodies carry; the troubleshooting page only says to retry 429 with backoff ([troubleshooting](https://aistudio.google.com/docs/troubleshooting)).
   `isDailyQuota` in `pipeline/gemini.mjs` matches `PerDay`, "per day" or "daily", which covers both the documented message and the undocumented quota id.
-- Test G3: store the first 300 characters of every 429 body in `gemini_requests.reason` (today it stores only "HTTP 429 daily quota" or "rate limit").
+- Test G3: store the first 300 characters of every 429 body.
   Cost: 0 extra requests.
   Proves: the exact body Google sends for each limit, so the classifier can match a field instead of a regex.
+  Status: running since #72: every error body (429, 5xx, other 4xx) goes to `gemini_requests.detail`, one line, key-like strings removed; `reason` keeps the short label.
+  Next: after the first 429s, read `SELECT at, reason, detail FROM gemini_requests WHERE status = 429` and switch `isDailyQuota` to the quota id if the bodies carry it.
 
 ### A6. Image input
 
@@ -110,11 +116,13 @@ Status per entry:
 - Verified: 3.5 and 3.1 Flash-Lite support thinking levels `minimal`, `low`, `medium` and `high`, default `minimal`; `minimal` "does not guarantee that thinking is off" and Flash-Lite has no full thinking-off ([thinking](https://aistudio.google.com/docs/thinking?generate-content=true)).
 - Verified: thinking tokens are billed as output ("response pricing is the sum of output tokens and thinking tokens"), reported in `thoughtsTokenCount` ([thinking](https://aistudio.google.com/docs/thinking?generate-content=true)); the pricing page lists output prices "including thinking tokens" ([pricing](https://aistudio.google.com/docs/pricing)).
 - Verified, and not handled in our code: `maxOutputTokens` "sets the maximum number of tokens a response can generate, including thought tokens"; hitting it ends with `MAX_TOKENS`, possibly with truncated or empty output, and the doc recommends a lower thinking level rather than a small cap ([thinking](https://aistudio.google.com/docs/thinking?generate-content=true)).
-  Our caps are 600 (rubric) and 400 (comparisons) with thinking at `minimal`.
+  Our caps were 600 (rubric) and 400 (comparisons) with thinking at `minimal`.
 - Test G5: add `finishReason` to the request log and count `MAX_TOKENS` per job for a week.
   Cost: 0 extra requests.
   Proves: whether the caps ever cut an answer; if they do, raise the cap rather than retry.
-- Decision: keep `minimal` and the caps; log `finishReason` (proposed for the Gemini lane).
+  Status: running since #72 (`gemini_requests.finish_reason`; run summaries show a "Cut off" column).
+  Next: after a week, `SELECT job, finish_reason, COUNT(*) FROM gemini_requests WHERE status = 200 GROUP BY job, finish_reason`.
+- Decision (#72): keep `minimal`; raise the caps to 2,048 (rubric) and 1,024 (comparisons) so thinking has room, since only tokens produced are billed; an answer that did not finish with `STOP` is a failed answer, never stored and not retried.
 
 ### A8. Prices
 
@@ -129,8 +137,9 @@ Status per entry:
 - Verified, Unpaid Services: Google uses prompts and responses to improve its products, human reviewers may read them, and "Do not submit sensitive, confidential, or personal information to the Unpaid Services." ([terms](https://aistudio.google.com/docs/terms), effective 2026-03-23).
 - Verified, Paid Services: prompts and responses are not used to improve products; they are logged for a limited, unstated period for abuse detection ([terms](https://aistudio.google.com/docs/terms)).
 - Verified: "You must be 18 years of age or older to use the APIs", and for the EEA, Switzerland and the UK only Paid Services may be used when making API clients available to users ([terms](https://aistudio.google.com/docs/terms)).
-- Decision (recommended to the owner): the public grader, the queue and any feature a visitor triggers run on a billed project from the day they are public; the background jobs on today's list may stay on the free tier until then.
-  This turns "a paid key comes later" (DECISIONS.md) into "a paid key before the grader is public", whatever the volume.
+- Recommended here: the public grader, the queue and any feature a visitor triggers run on a billed project from the day they are public.
+- Decided (owner, 2026-11-10): not now. PortfolioRank stays on the free tier for everyone and blocks no region, accepting the terms risk; email addresses and phone numbers are removed from page text before it reaches Gemini (`pipeline/redact.mjs`), and where a visitor starts AI work they see a clear free-tier notice ("don't submit private details") and can use their own Gemini key (DECISIONS.md, "Free tier everywhere" and "Public by design").
+  Revisit at the public launch or when traffic grows.
 
 ### A10. Stable status and deprecation
 
@@ -295,23 +304,24 @@ Decision (owner, 2026-11-10): captures and every other browser job stay on GitHu
 Assumption: the nightly R2 snapshot (`.github/workflows/backup.yml`, `scripts/backup-db.mjs`) can rebuild the database if Turso loses it.
 Turso Free keeps only 1 day of point-in-time restore (section C), so this snapshot is the real backup.
 
-What the snapshot holds (read from `scripts/backup-db.mjs`, 2026-11-10): every row of `votes` and `ratings`, and `url, name, status, reason, shot_key, ai_rubric, checked_at, captured_at` of `portfolios`.
-What it does not hold: `comparisons`, `rubric_history`, `gemini_requests`, `site_ratings`, `rank_history`, `ranking_runs`, `rating_resets`, `site_fingerprints`, `matchups`, `likes`, `lists`, `list_items`, `cache`, `schema_meta`, and the other `portfolios` columns (such as `page_text` and `meta`).
-`comparisons` is the source of truth for ranking v2 and `lists` and `likes` are people's own data, so they belong in the snapshot (proposed for the lane that owns the backup; the rest can be recomputed or re-captured).
+What the snapshot holds (format 2, `scripts/lib/snapshot.mjs`, since #72): every row and column of every table except `cache` (PageSpeed and inspect results, refetched on demand) and `matchups` (minutes of draw state), plus the schema as SQLite stored it (tables, indexes, triggers).
+That includes `comparisons`, `likes`, `lists` and `list_items`, all of `portfolios` (`page_text`, `facts`, `meta`), `rubric_history`, `gemini_requests` and `gemini_daily`, the ranking tables, `night_runs`, `night_item_failures`, `people_requests`, `owner_alerts`, the vote counters and `schema_meta`; a table added later is included automatically.
+Before #72 it held only `votes`, `ratings` and eight columns of `portfolios`; such a format 1 snapshot still restores.
 
 Procedure (the owner runs it; it needs Turso and R2 credentials and touches only a scratch database):
 
 1. Create a scratch database and a token for it: `turso db create pr-restore-test` and `turso db tokens create pr-restore-test`.
    Keep both in `pass` (for example `portfolio-rank/RESTORE_DATABASE_URL` and `portfolio-rank/RESTORE_AUTH_TOKEN`), never in a file or the chat.
 2. Download last night's snapshot from the private bucket: `npx wrangler r2 object get portfolio-rank-backups/backups/portfoliorank-YYYY-MM-DD.json.gz --remote --file=/tmp/pr-restore.json.gz`.
-   The log line of that night's backup run gives the expected counts (`votes:N ratings:N portfolios:N`).
-3. Create the schema in the scratch database, pointing the migration at it and not at production: `TURSO_DATABASE_URL=$RESTORE_DATABASE_URL TURSO_AUTH_TOKEN=$RESTORE_AUTH_TOKEN node scripts/migrate.mjs`, run through `pass-env run`.
-4. Load the snapshot with a short script that reads only `RESTORE_DATABASE_URL` and `RESTORE_AUTH_TOKEN` (so it can never write to production) and, for each of `votes`, `ratings` and `portfolios`, inserts every row with `INSERT OR REPLACE INTO <table> (<the row's keys>) VALUES (...)` in batches of 200 through `client.batch(stmts, "write")`.
-   Until such a script exists in `scripts/`, this is the step to write first; it is about 30 lines.
-5. Verify: `SELECT COUNT(*)` per table in the scratch database equals the snapshot's counts; `SELECT COUNT(*) FROM portfolios WHERE ai_rubric IS NOT NULL` equals the same count in production; ten random `votes` rows match production by `id`.
+   The log line of that night's backup run gives the expected counts (`votes:N ratings:N portfolios:N comparisons:N ...`, one per table).
+3. Restore into the scratch database: `pass-env run -- node scripts/restore-db.mjs /tmp/pr-restore.json.gz`, with the restore credentials as `RESTORE_DATABASE_URL` and `RESTORE_AUTH_TOKEN`.
+   The script reads only those two, refuses to run when `RESTORE_DATABASE_URL` equals `TURSO_DATABASE_URL` or the target has any table, creates the snapshot's tables, loads every row in batches of 200, then the indexes and triggers (so the vote counters come back as saved), runs the migration for anything newer, and prints each table's count against the snapshot, exiting non-zero on any mismatch.
+4. Compare with the backup log line from step 2: every table's count matches.
+5. Spot-check against production: `SELECT COUNT(*) FROM portfolios WHERE ai_rubric IS NOT NULL` and `SELECT n FROM vote_totals WHERE k = 'all'` match; ten random `votes` and `comparisons` rows match by `id`.
 6. Point a local dev server at the scratch database (`pass-env run` with the restore credentials as `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`) and open `/top` and one `/p/[slug]` page: the board and a grade card render.
 7. Delete the scratch database: `turso db destroy pr-restore-test`, and remove the two `pass` entries.
 
 Cost: one scratch database on the Free plan (100 allowed) and a few thousand rows written, well under 1% of the monthly 10 million.
-Proves: the snapshot restores the tables it holds and the site runs on them; it also shows exactly what a restore loses until the snapshot covers `comparisons`, `lists` and `likes`.
+Proves: the snapshot restores every table and the site runs on it.
+The same round trip runs on throwaway files in CI (`tests/backup-restore.test.mjs`); this drill proves it on the real data and credentials.
 Repeat after any change to the backup script, and at least every quarter.

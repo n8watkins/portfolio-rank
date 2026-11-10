@@ -1,8 +1,9 @@
 name: Backup DB to R2
 
-# Snapshot the irreplaceable Turso data (human votes, ELO ratings, and the
-# expensive Gemini ai_rubric grades) to R2 as a gzipped JSON (~0.3 MB/run).
-# Cheap insurance: the free-tier DB has no managed backups.
+# Snapshot every table the site needs (scripts/lib/snapshot.mjs) to R2 as
+# gzipped JSON. Turso Free keeps only one day of point-in-time restore, so
+# this is the real backup; the restore is scripts/restore-db.mjs
+# (docs/ASSUMPTIONS.md section G).
 # Snapshots go to the private portfolio-rank-backups bucket (no r2.dev access),
 # with an R2 token scoped to that bucket only; never to the public screenshot
 # bucket, since a snapshot holds every vote with its rater id.

@@ -49,7 +49,7 @@ globalThis.fetch = async (input, init = {}) => {
     const body =
       step.raw ??
       JSON.stringify({
-        candidates: [{ content: { parts: [{ text: JSON.stringify(step.json ?? {}) }] } }],
+        candidates: [{ content: { parts: [{ text: JSON.stringify(step.json ?? {}) }] }, finishReason: step.finishReason ?? "STOP" }],
         usageMetadata: step.usage ?? { promptTokenCount: 1000, candidatesTokenCount: 50 },
       });
     return new Response(body, { status: step.status ?? 200, headers: { "content-type": "application/json" } });

@@ -36,6 +36,7 @@
 import { createGemini, createLimiter, DEFAULT_RPM, fallbackEnabled, GeminiAuthError, GeminiQuotaError, GeminiUnavailableError, judgeModels, PRIMARY_MODEL } from "./gemini.mjs";
 import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
+import { quotaDay } from "./quota-day.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
 import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
@@ -116,7 +117,8 @@ async function run() {
   await syncVotes(db);
 
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  // The seed names the Gemini quota day (Pacific), the same day comparisonsToday counts.
+  const today = quotaDay(now).day;
   const done = await comparisonsToday(db, { now });
   const want = {
     one_on_one: Math.max(0, Number(flag("one-on-one", config.budget.one_on_one)) - done.one_on_one),

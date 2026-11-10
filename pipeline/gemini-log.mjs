@@ -17,7 +17,7 @@
 // GEMINI_CATCHUP (catch-up mode on 3.1) was removed on 2026-11-10: grades and
 // votes come from 3.5 only (GEMINI_FALLBACK, pipeline/gemini.mjs).
 
-import { quotaDay } from "./budget.mjs";
+import { quotaDay } from "./quota-day.mjs";
 
 export const DEFAULT_DAILY_QUOTA = {
   "gemini-3.5-flash-lite": 500,
@@ -57,14 +57,18 @@ export async function ensureGeminiLog(db) {
     output_tokens INTEGER,
     retry INTEGER NOT NULL DEFAULT 0,
     fallback INTEGER NOT NULL DEFAULT 0,
-    thoughts_tokens INTEGER
+    thoughts_tokens INTEGER,
+    finish_reason TEXT,
+    detail TEXT
   )`);
   await db.execute("CREATE INDEX IF NOT EXISTS gemini_requests_at_idx ON gemini_requests (at)");
-  // Thinking tokens (billed as output) came later; add the column to older tables.
+  // Columns added later (thinking tokens, then the finish reason and the
+  // error detail); add them to older tables.
   const cols = new Set((await db.execute("PRAGMA table_info(gemini_requests)")).rows.map((r) => String(r.name)));
-  if (!cols.has("thoughts_tokens")) {
+  for (const [name, type] of [["thoughts_tokens", "INTEGER"], ["finish_reason", "TEXT"], ["detail", "TEXT"]]) {
+    if (cols.has(name)) continue;
     try {
-      await db.execute("ALTER TABLE gemini_requests ADD COLUMN thoughts_tokens INTEGER");
+      await db.execute(`ALTER TABLE gemini_requests ADD COLUMN ${name} ${type}`);
     } catch (e) {
       if (!/duplicate column/i.test(String(e?.message))) throw e;
     }
@@ -93,8 +97,8 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
       try {
         await db.execute({
           sql: `INSERT INTO gemini_requests (at, run_id, job, model, status, reason, latency_ms,
-                                             input_tokens, output_tokens, thoughts_tokens, retry, fallback)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                             input_tokens, output_tokens, thoughts_tokens, retry, fallback, finish_reason, detail)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             r.at,
             runId,
@@ -108,6 +112,8 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
             r.thoughtsTokens ?? null,
             r.retry ? 1 : 0,
             r.fallback ? 1 : 0,
+            r.finishReason ?? null,
+            r.detail ?? null,
           ],
         });
       } catch {
@@ -124,9 +130,10 @@ const usd = (n) => `$${n.toFixed(4)}`;
 export function runSummary(rows, priceTable = prices()) {
   const by = new Map();
   for (const r of rows) {
-    const m = by.get(r.model) ?? { requests: 0, ok: 0, s5xx: 0, s429: 0, network: 0, retries: 0, fallbacks: 0, inTok: 0, outTok: 0, thinkTok: 0 };
+    const m = by.get(r.model) ?? { requests: 0, ok: 0, cut: 0, s5xx: 0, s429: 0, network: 0, retries: 0, fallbacks: 0, inTok: 0, outTok: 0, thinkTok: 0 };
     m.requests++;
-    if (r.status === 200) m.ok++;
+    if (r.status === 200 && r.finishReason && r.finishReason !== "STOP") m.cut++;
+    else if (r.status === 200) m.ok++;
     else if (r.status >= 500) m.s5xx++;
     else if (r.status === 429) m.s429++;
     else if (!r.status) m.network++;
@@ -140,8 +147,8 @@ export function runSummary(rows, priceTable = prices()) {
   const lines = [
     "### Gemini requests this run",
     "",
-    "| Model | Requests | OK | 5xx | 429 | Network | Retries | Fallback | Input tokens | Output tokens | Thinking tokens | Est. cost |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| Model | Requests | OK | Cut off | 5xx | 429 | Network | Retries | Fallback | Input tokens | Output tokens | Thinking tokens | Est. cost |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
   let total = 0;
   for (const [model, m] of by) {
@@ -149,13 +156,13 @@ export function runSummary(rows, priceTable = prices()) {
     const cost = (m.inTok * p.in + (m.outTok + m.thinkTok) * p.out) / 1e6;
     total += cost;
     lines.push(
-      `| ${model} | ${m.requests} | ${m.ok} | ${m.s5xx} | ${m.s429} | ${m.network} | ${m.retries} | ${m.fallbacks} | ${m.inTok} | ${m.outTok} | ${m.thinkTok} | ${usd(cost)} |`
+      `| ${model} | ${m.requests} | ${m.ok} | ${m.cut} | ${m.s5xx} | ${m.s429} | ${m.network} | ${m.retries} | ${m.fallbacks} | ${m.inTok} | ${m.outTok} | ${m.thinkTok} | ${usd(cost)} |`
     );
   }
-  if (!by.size) lines.push("| (none) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | $0.0000 |");
+  if (!by.size) lines.push("| (none) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | $0.0000 |");
   lines.push(
     "",
-    `Estimated cost at paid rates: ${usd(total)} (thinking billed as output; rates from GEMINI_PRICES, else Google's published rates on 2026-11-10).`,
+    `Estimated cost at paid rates: ${usd(total)} (thinking billed as output; rates from GEMINI_PRICES, else Google's published rates on 2026-11-10). "Cut off": answered without finishing (finishReason other than STOP, such as MAX_TOKENS); never stored.`,
     ""
   );
   return lines.join("\n");
@@ -170,7 +177,7 @@ export async function dailyTotals(db, { now = new Date(), quota = dailyQuota() }
   const { day, start, end } = quotaDay(now);
   const res = await db.execute({
     sql: `SELECT model, COUNT(*) AS n,
-                 SUM(CASE WHEN status = 200 THEN 1 ELSE 0 END) AS ok
+                 SUM(CASE WHEN status = 200 AND COALESCE(finish_reason, 'STOP') = 'STOP' THEN 1 ELSE 0 END) AS ok
           FROM gemini_requests WHERE at >= ? AND at < ? GROUP BY model ORDER BY model`,
     args: [start.toISOString(), end.toISOString()],
   });

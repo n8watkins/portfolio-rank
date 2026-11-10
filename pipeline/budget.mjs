@@ -3,10 +3,10 @@
 // many requests it may spend now; the answer comes from what the
 // gemini_requests table says was spent since the quota day began.
 //
-// The quota day: Google's free quota resets at midnight Pacific
-// (America/Los_Angeles), so "today" is the Pacific calendar day, 23 or 25
-// hours long on the two DST days. Every time here is a real instant (UTC ISO
-// in the database); only the day boundaries and the schedule are Pacific.
+// The quota day: Google's free quota resets at midnight Pacific, so "today"
+// is the Pacific calendar day (pipeline/quota-day.mjs, the one definition).
+// Every time here is a real instant (UTC ISO in the database); only the day
+// boundaries and the schedule are Pacific.
 //
 // Who gets what (3.5 Flash-Lite, 500 a day):
 //   - People ("grade my portfolio", re-grade requests; jobs named people-*)
@@ -24,8 +24,10 @@
 // wrangler.jsonc and a repository variable for the Actions fallback),
 // GEMINI_DAILY_QUOTA (pipeline/gemini-log.mjs) and GEMINI_RPM.
 import { PRIMARY_MODEL } from "./gemini.mjs";
+import { QUOTA_TZ, pacificParts, pad, quotaDay } from "./quota-day.mjs";
 
-export const QUOTA_TZ = "America/Los_Angeles";
+// The quota-day helpers live in quota-day.mjs; re-exported for older imports.
+export { QUOTA_TZ, pacificParts, previousDay, quotaDay } from "./quota-day.mjs";
 
 /**
  * The background stages, in priority order. `job` is what each stage writes
@@ -106,70 +108,6 @@ export function budgetPlan(raw = globalThis.process?.env?.GEMINI_BUDGET) {
   const stages = { ...DEFAULT_PLAN.stages };
   for (const [k, v] of Object.entries(over.stages ?? {})) stages[k] = { ...(stages[k] ?? { cap: 0, minutes: 0 }), ...v };
   return { ...DEFAULT_PLAN, ...over, stages };
-}
-
-// ---------------------------------------------------------------------------
-// Pacific time
-// ---------------------------------------------------------------------------
-const partsFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: QUOTA_TZ,
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  weekday: "short",
-});
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-/** The Pacific wall-clock parts of an instant: { year, month, day, hour, minute, weekday (0 = Sunday) }. */
-export function pacificParts(at) {
-  const p = Object.fromEntries(partsFmt.formatToParts(new Date(at)).map((x) => [x.type, x.value]));
-  return {
-    year: Number(p.year),
-    month: Number(p.month),
-    day: Number(p.day),
-    hour: Number(p.hour),
-    minute: Number(p.minute),
-    weekday: WEEKDAYS.indexOf(p.weekday),
-  };
-}
-
-const pad = (n) => String(n).padStart(2, "0");
-
-// The instant of midnight Pacific that starts the given calendar day: 07:00
-// UTC under daylight time, 08:00 UTC under standard time. DST changes at
-// 2 am, so midnight itself is never ambiguous.
-function pacificMidnight(year, month, day) {
-  for (const offset of [7, 8]) {
-    const t = new Date(Date.UTC(year, month - 1, day, offset));
-    const p = pacificParts(t);
-    if (p.year === year && p.month === month && p.day === day && p.hour === 0 && p.minute === 0) return t;
-  }
-  throw new Error(`no Pacific midnight on ${year}-${month}-${day}`);
-}
-
-/**
- * The Gemini quota day an instant falls in: { day: "YYYY-MM-DD" (Pacific),
- * start, end } where start and end are the Date instants of the midnights
- * that bound it.
- */
-export function quotaDay(at = new Date()) {
-  const p = pacificParts(at);
-  const next = new Date(Date.UTC(p.year, p.month - 1, p.day + 1));
-  return {
-    day: `${p.year}-${pad(p.month)}-${pad(p.day)}`,
-    start: pacificMidnight(p.year, p.month, p.day),
-    end: pacificMidnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()),
-  };
-}
-
-/** The Pacific day before `day` ("YYYY-MM-DD"). */
-export function previousDay(day) {
-  const [y, m, d] = day.split("-").map(Number);
-  const t = new Date(Date.UTC(y, m - 1, d - 1));
-  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`;
 }
 
 /**
@@ -342,7 +280,7 @@ export async function usageHistory(db, { now = new Date(), days = 30, quota = {}
   for (let i = 1; i < days; i++) first = quotaDay(new Date(first.start.getTime() - 3600000));
   const res = await db.execute({
     sql: `SELECT substr(at, 1, 13) AS hour, job, model, COUNT(*) AS n,
-                 SUM(CASE WHEN status = 200 THEN 1 ELSE 0 END) AS ok
+                 SUM(CASE WHEN status = 200 AND COALESCE(finish_reason, 'STOP') = 'STOP' THEN 1 ELSE 0 END) AS ok
           FROM gemini_requests WHERE at >= ? AND at < ?
           GROUP BY hour, job, model`,
     args: [first.start.toISOString(), today.end.toISOString()],

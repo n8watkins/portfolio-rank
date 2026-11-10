@@ -1,11 +1,11 @@
 import { db, ensureSchema } from "@/lib/db";
-import { hiddenUrls, isKnownPortfolio } from "@/lib/roster";
 
 // Read side of the new leaderboards (ranking v2, RANKING.md) for the app:
 // scripts/recompute-ratings.mjs writes site_ratings; this only reads it.
 // Not used by any page yet: the switch from the ELO board happens with the
 // redesign. Until the first recompute the table doesn't exist and every
-// view is empty.
+// view is empty. The API in front of it is cached at the edge
+// (app/api/leaderboard).
 
 export const VIEWS = ["merged", "people", "ai"] as const;
 export type View = (typeof VIEWS)[number];
@@ -30,47 +30,48 @@ export type BoardRow = {
 export type Board = { view: View; computedAt: string | null; total: number; rows: BoardRow[] };
 
 /**
- * One view of the board, best first. Sites the app hides (down, failed
- * capture) and URLs no longer on the list are left out; ranks are counted
- * again over what is shown, so they have no gaps.
+ * One page of a view of the board, best first. Which sites the app shows (on
+ * the list, not hidden) is decided when the board is computed
+ * (lib/ranking/store.mjs assignShownRanks), so a request reads only its page
+ * through the (view, shown_rank) index plus two single-row lookups, never
+ * the whole view (docs/COSTS.md section C).
  */
 export async function readBoard(view: View, { limit = 100, offset = 0 } = {}): Promise<Board> {
   await ensureSchema();
   let rows: BoardRow[] = [];
+  let total = 0;
   let computedAt: string | null = null;
   try {
     const res = await db().execute({
-      sql: `SELECT url, mu, sigma, confidence, tied_with_next, comparisons, wins, losses, tier
-            FROM site_ratings WHERE view = ? ORDER BY rank`,
-      args: [view],
+      sql: `SELECT shown_rank, url, mu, sigma, confidence, tied_with_next, comparisons, wins, losses, tier
+            FROM site_ratings WHERE view = ? AND shown_rank > ? ORDER BY shown_rank LIMIT ?`,
+      args: [view, offset, limit],
     });
-    const hidden = await hiddenUrls();
-    rows = res.rows
-      .map((r) => ({ url: String(r.url), r }))
-      .filter(({ url }) => isKnownPortfolio(url) && !hidden.has(url))
-      .map(({ url, r }, i) => {
-        const mu = Number(r.mu);
-        const sigma = Number(r.sigma);
-        return {
-          rank: i + 1,
-          url,
-          mu,
-          sigma,
-          low: Math.round((mu - 2 * sigma) * 100) / 100,
-          high: Math.round((mu + 2 * sigma) * 100) / 100,
-          confidence: String(r.confidence) as BoardRow["confidence"],
-          tiedWithNext: Number(r.tied_with_next) === 1,
-          comparisons: Number(r.comparisons),
-          wins: Number(r.wins),
-          losses: Number(r.losses),
-          tier: r.tier == null ? null : String(r.tier),
-        };
-      });
+    rows = res.rows.map((r) => {
+      const mu = Number(r.mu);
+      const sigma = Number(r.sigma);
+      return {
+        rank: Number(r.shown_rank),
+        url: String(r.url),
+        mu,
+        sigma,
+        low: Math.round((mu - 2 * sigma) * 100) / 100,
+        high: Math.round((mu + 2 * sigma) * 100) / 100,
+        confidence: String(r.confidence) as BoardRow["confidence"],
+        tiedWithNext: Number(r.tied_with_next) === 1,
+        comparisons: Number(r.comparisons),
+        wins: Number(r.wins),
+        losses: Number(r.losses),
+        tier: r.tier == null ? null : String(r.tier),
+      };
+    });
+    const max = await db().execute({ sql: "SELECT MAX(shown_rank) AS n FROM site_ratings WHERE view = ?", args: [view] });
+    total = Number(max.rows[0]?.n ?? 0);
     const run = await db().execute("SELECT at FROM ranking_runs ORDER BY id DESC LIMIT 1");
     computedAt = run.rows[0]?.at == null ? null : String(run.rows[0].at);
   } catch (e) {
-    // No recompute has run yet (the tables don't exist): an empty board.
-    if (!/no such table/i.test(String((e as Error).message))) throw e;
+    // No recompute has run yet (the tables or the column don't exist): an empty board.
+    if (!/no such (table|column)/i.test(String((e as Error).message))) throw e;
   }
-  return { view, computedAt, total: rows.length, rows: rows.slice(offset, offset + limit) };
+  return { view, computedAt, total, rows };
 }

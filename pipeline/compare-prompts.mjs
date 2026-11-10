@@ -7,11 +7,15 @@
 // Evidence per site, as in rubric v2: the top-of-page screenshot and the
 // start of the visible page text. The page text is untrusted and goes in a
 // <site_data> block the system instruction tells the model not to obey.
+import { redactContacts } from "./redact.mjs";
 
 /** Characters of page text sent per site (one-on-one; batched sends half, it shows more sites). */
 export const PAGE_TEXT_ONE_ON_ONE = 1200;
 export const PAGE_TEXT_BATCHED = 600;
-export const MAX_OUTPUT_TOKENS = 400;
+// Counts thinking tokens too (docs/MODEL-LIMITS.md): an order of up to 26
+// sites with a short reason is under 300 tokens, the rest is room for
+// thinking, since a cut-off answer is never stored (pipeline/gemini.mjs).
+export const MAX_OUTPUT_TOKENS = 1024;
 export const THINKING_LEVEL = "minimal";
 
 export const SYSTEM_INSTRUCTION = [
@@ -23,13 +27,14 @@ export const SYSTEM_INSTRUCTION = [
   "Judge on quality only, not on the person's seniority, name, country or the technologies they use.",
 ].join(" ");
 
+// Contact details never reach the model (pipeline/redact.mjs).
 const excerpt = (text, max) => {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
+  const t = redactContacts(String(text ?? "")).replace(/\s+/g, " ").trim();
   return t.length > max ? `${t.slice(0, max)}...` : t;
 };
 
 const siteBlock = (label, site, max) =>
-  `<site_data label="${label}">\nname: ${String(site.name ?? "").slice(0, 80)}\npage text: ${excerpt(site.pageText, max) || "(none captured)"}\n</site_data>`;
+  `<site_data label="${label}">\nname: ${redactContacts(String(site.name ?? "").slice(0, 80))}\npage text: ${excerpt(site.pageText, max) || "(none captured)"}\n</site_data>`;
 
 export const PAIR_SCHEMA = {
   type: "OBJECT",

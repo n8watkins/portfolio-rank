@@ -18,6 +18,13 @@
 //     waiting the RetryInfo delay when Google gives one.
 //   - A rejected key (400 API_KEY_INVALID, 401, 403) is fatal
 //     (GeminiAuthError); any other 4xx fails the call.
+//   - A 200 whose candidate did not finish with STOP (MAX_TOKENS, SAFETY,
+//     RECITATION, a blocked prompt, ...) is a failed answer
+//     (GeminiIncompleteError): possibly truncated JSON, so it is never
+//     stored as a grade or a comparison, and it is not retried (the same
+//     request would be cut again; raise the cap instead).
+// Every request's finishReason, and the first 300 characters of every
+// error body (429s say which limit was hit), go to the request log.
 // The backup path is kept for labelled experiments only (the 3.1-vs-3.5
 // comparison, non-ranking analysis): a caller passes models:
 // FLASH_LITE_CHAIN, which the judge does only with GEMINI_FALLBACK=on
@@ -71,6 +78,41 @@ export class GeminiUnavailableError extends Error {
     this.name = "GeminiUnavailableError";
   }
 }
+/**
+ * The model answered (HTTP 200) but its answer did not finish with STOP:
+ * cut off at maxOutputTokens (thinking included), blocked for safety, and
+ * so on. `finishReason` says which. Callers treat it as a failed item.
+ */
+export class GeminiIncompleteError extends Error {
+  constructor(message, finishReason) {
+    super(message);
+    this.name = "GeminiIncompleteError";
+    this.finishReason = finishReason;
+  }
+}
+
+/** The first `max` characters of an error body, one line, with anything key-like removed. */
+export function errorDetail(body, { apiKey = "", max = 300 } = {}) {
+  let t = String(body ?? "");
+  if (apiKey) t = t.split(apiKey).join("[key]");
+  t = t
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[key]")
+    .replace(/\bAQ\.[0-9A-Za-z_.-]{10,}/g, "[key]")
+    .replace(/([?&](?:key|access_token)=)[^&\s"']+/gi, "$1[key]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return t.slice(0, max);
+}
+
+/** The finishReason of a generateContent answer: the candidate's, or BLOCKED:<reason> for a blocked prompt; null when absent. */
+export function finishReasonOf(data) {
+  const c = data?.candidates?.[0];
+  if (c?.finishReason) return String(c.finishReason);
+  const blocked = data?.promptFeedback?.blockReason;
+  if (blocked) return `BLOCKED:${blocked}`;
+  return null;
+}
+
 export class GeminiQuotaError extends GeminiUnavailableError {
   constructor(message) {
     super(message);
@@ -163,7 +205,7 @@ export function createGemini({
 
   const requests = Object.fromEntries(models.map((m) => [m, 0]));
   const answered = Object.fromEntries(models.map((m) => [m, 0]));
-  const counts = { http5xx: 0, http429: 0, network: 0, fallbacks: 0, retries: 0 };
+  const counts = { http5xx: 0, http429: 0, network: 0, fallbacks: 0, retries: 0, incomplete: 0 };
   // Index of the model in use; moves forward for good when a model's daily
   // quota is spent.
   let active = 0;
@@ -182,7 +224,7 @@ export function createGemini({
     await pace.take();
     requests[model]++;
     const started = now();
-    const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null };
+    const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null, finishReason: null, detail: null };
     let res;
     try {
       res = await fetchImpl(`${GEMINI_API_BASE}/models/${model}:generateContent`, {
@@ -201,6 +243,7 @@ export function createGemini({
     if (res.status === 429 || res.status >= 500) {
       const text = (await res.text().catch(() => "")).slice(0, 2000);
       rec.latencyMs = now() - started;
+      rec.detail = errorDetail(text, { apiKey });
       if (res.status >= 500) {
         counts.http5xx++;
         await report({ ...rec, reason: `HTTP ${res.status}` });
@@ -214,7 +257,7 @@ export function createGemini({
     }
     if (!res.ok) {
       const text = (await res.text()).slice(0, 300);
-      await report({ ...rec, reason: `HTTP ${res.status}`, latencyMs: now() - started });
+      await report({ ...rec, reason: `HTTP ${res.status}`, latencyMs: now() - started, detail: errorDetail(text, { apiKey }) });
       if (thinking && res.status === 400 && /thinking/i.test(text)) {
         return { kind: "thinking", reason: `HTTP 400 thinking config: ${text.slice(0, 120)}` };
       }
@@ -230,7 +273,17 @@ export function createGemini({
       outputTokens: meta.candidatesTokenCount ?? null,
       thoughtsTokens: meta.thoughtsTokenCount ?? null,
     };
-    await report({ ...rec, reason: "ok", latencyMs: now() - started, ...usage });
+    const finishReason = finishReasonOf(data);
+    // No finishReason at all (not seen from the API) is judged by the JSON below.
+    const complete = finishReason == null || finishReason === "STOP";
+    await report({ ...rec, reason: complete ? "ok" : `incomplete: ${finishReason}`, latencyMs: now() - started, finishReason, ...usage });
+    if (!complete) {
+      counts.incomplete++;
+      throw new GeminiIncompleteError(
+        `gemini ${model} answer did not finish (${finishReason}; ${usage.outputTokens ?? "?"} output and ${usage.thoughtsTokens ?? "?"} thinking tokens)`,
+        finishReason
+      );
+    }
     // Thought summaries (if a model sends them) come first; the answer is the
     // last non-thought text part.
     const parts = (data.candidates?.[0]?.content?.parts ?? []).filter((p) => typeof p.text === "string" && !p.thought);

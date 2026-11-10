@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { ensureRankingSchema } from "../lib/ranking/store.mjs";
+import { assignShownRanks, ensureRankingSchema } from "../lib/ranking/store.mjs";
+import { migrate } from "../lib/schema.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
@@ -14,6 +15,7 @@ test("leaderboard API: rejects an unknown view, serves each view best first with
   const bad = await fetch(`${BASE}/api/leaderboard?view=elo`);
   assert.equal(bad.status, 400);
 
+  await migrate(db);
   await ensureRankingSchema(db);
   const [a, b, c] = feed.slice(-3).map((p) => p.url);
   await db.execute("DELETE FROM site_ratings WHERE view = 'people'");
@@ -24,6 +26,12 @@ test("leaderboard API: rejects an unknown view, serves each view best first with
     { sql: "INSERT INTO site_ratings (view, url, rank, mu, sigma, confidence, tied_with_next, comparisons, wins, losses, tier) VALUES ('people', ?, 3, 29.5, 6, 'unsure', 1, 2, 1, 1, NULL)", args: [a] },
     { sql: "INSERT INTO site_ratings (view, url, rank, mu, sigma, confidence, tied_with_next, comparisons, wins, losses, tier) VALUES ('people', ?, 4, 20, 4, 'provisional', 0, 4, 0, 4, 'D')", args: [c] },
   ]);
+  // The listed sites, as the roster sync writes them; the recompute numbers
+  // the shown sites after writing a board.
+  for (const url of [a, b, c]) {
+    await db.execute({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live') ON CONFLICT(url) DO UPDATE SET status = 'live', health = NULL, delisted_at = NULL", args: [url] });
+  }
+  await assignShownRanks(db);
   const res = await fetch(`${BASE}/api/leaderboard?view=people&limit=2`);
   assert.equal(res.status, 200);
   const body = await res.json();
