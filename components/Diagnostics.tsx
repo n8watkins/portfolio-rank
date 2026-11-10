@@ -53,20 +53,35 @@ const PSI_LABELS: Record<string, string> = {
   seo: "SEO",
 };
 
-export function useInspection(url: string) {
-  const [data, setData] = useState<Inspection | null>(null);
+const FAILED = { ok: false, error: "failed" } as const;
+
+/**
+ * GETs a JSON endpoint; null until the answer for this endpoint (and attempt)
+ * arrives, so switching URLs never shows the previous site's result.
+ * retry() asks again.
+ */
+function useJson<T>(endpoint: string): { data: T | null; retry: () => void } {
+  const [attempt, setAttempt] = useState(0);
+  const key = `${attempt}:${endpoint}`;
+  const [result, setResult] = useState<{ key: string; data: T } | null>(null);
   useEffect(() => {
     let live = true;
-    setData(null);
-    fetch(`/api/inspect?url=${encodeURIComponent(url)}`)
+    fetch(endpoint)
       .then((r) => r.json())
-      .then((d) => live && setData(d))
-      .catch(() => live && setData({ ok: false, error: "failed" }));
+      .then((d) => live && setResult({ key, data: d }))
+      .catch(() => live && setResult({ key, data: FAILED as T }));
     return () => {
       live = false;
     };
-  }, [url]);
-  return data;
+  }, [endpoint, key]);
+  return {
+    data: result?.key === key ? result.data : null,
+    retry: () => setAttempt((a) => a + 1),
+  };
+}
+
+export function useInspection(url: string) {
+  return useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`).data;
 }
 
 /** Compact one-line chips for the face-off cards. */
@@ -151,19 +166,7 @@ export function Socials({ url }: { url: string }) {
 /** Full panel for the detail page. Order: Lighthouse → Polish → Share card. */
 export function DetailDiagnostics({ url }: { url: string }) {
   const inspect = useInspection(url);
-  const [psi, setPsi] = useState<PsiResult | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    setPsi(null);
-    fetch(`/api/psi?url=${encodeURIComponent(url)}`)
-      .then((r) => r.json())
-      .then((d) => live && setPsi(d))
-      .catch(() => live && setPsi({ ok: false, error: "failed" }));
-    return () => {
-      live = false;
-    };
-  }, [url]);
+  const { data: psi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`);
 
   return (
     <div className="space-y-4">

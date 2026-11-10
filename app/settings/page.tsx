@@ -1,27 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useStoredFlag } from "@/lib/client-state";
 
 export default function SettingsPage() {
-  const [autoOpen, setAutoOpen] = useState(false);
-
-  useEffect(() => {
-    setAutoOpen(localStorage.getItem("pr_autoopen") === "1");
-  }, []);
-
-  const toggleAutoOpen = () =>
-    setAutoOpen((v) => {
-      const nv = !v;
-      localStorage.setItem("pr_autoopen", nv ? "1" : "0");
-      return nv;
-    });
+  const [autoOpen, setAutoOpen] = useStoredFlag("pr_autoopen");
+  const toggleAutoOpen = () => setAutoOpen(!autoOpen);
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16 sm:px-6">
       <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
+        <Link href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
-        </a>
+        </Link>
         <a
           href="/rank"
           className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent"

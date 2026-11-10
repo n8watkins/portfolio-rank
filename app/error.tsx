@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { EdgePage, primaryButton, secondaryButton } from "@/components/EdgePage";
 import { reportError } from "@/lib/error-reporting";
@@ -16,9 +17,9 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           <button type="button" onClick={reset} className={primaryButton}>
             Try again
           </button>
-          <a href="/" className={secondaryButton}>
+          <Link href="/" className={secondaryButton}>
             Browse portfolios
-          </a>
+          </Link>
         </>
       }
     >

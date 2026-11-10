@@ -48,25 +48,34 @@ function safeCallback(raw: string | null): string | undefined {
   }
 }
 
+/** The dialog state /?signin asks for, or null. */
+function fromAddress(): State | null {
+  if (typeof window === "undefined") return null;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("signin")) return null;
+  const error = url.searchParams.get("error") ?? undefined;
+  return {
+    callbackUrl: safeCallback(url.searchParams.get("callbackUrl")),
+    error,
+    title: error ? "Sign-in didn't finish" : "Sign in to PortfolioRank",
+    body: error
+      ? "GitHub didn't complete the sign-in. Try again - if it keeps failing, open an issue on GitHub."
+      : "Vote in the official rankings, like portfolios and keep lists. One account, one vote per matchup.",
+  };
+}
+
 export function SignInProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<State | null>(null);
+  // The ?signin deep link opens it on arrival. The dialog itself renders only
+  // after hydration (Modal), so reading the address here can't cause a mismatch.
+  const [state, setState] = useState<State | null>(fromAddress);
 
   const open = useCallback((prompt?: SignInPrompt) => setState({ ...prompt }), []);
   const close = useCallback(() => setState(null), []);
 
-  // The ?signin deep link: open, then tidy the address so a reload doesn't reopen it.
+  // Tidy the address so a reload doesn't reopen it.
   useEffect(() => {
     const url = new URL(window.location.href);
     if (!url.searchParams.has("signin")) return;
-    const error = url.searchParams.get("error") ?? undefined;
-    setState({
-      callbackUrl: safeCallback(url.searchParams.get("callbackUrl")),
-      error,
-      title: error ? "Sign-in didn't finish" : "Sign in to PortfolioRank",
-      body: error
-        ? "GitHub didn't complete the sign-in. Try again - if it keeps failing, open an issue on GitHub."
-        : "Vote in the official rankings, like portfolios and keep lists. One account, one vote per matchup.",
-    });
     for (const k of ["signin", "callbackUrl", "error"]) url.searchParams.delete(k);
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }, []);

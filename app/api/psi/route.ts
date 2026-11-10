@@ -17,6 +17,14 @@ const METRIC_AUDITS = [
   "total-blocking-time",
 ] as const;
 
+// The slice of the PageSpeed Insights v5 response this reads.
+type PsiResponse = {
+  lighthouseResult?: {
+    categories?: Record<string, { score?: number | null } | undefined>;
+    audits?: Record<string, { title?: string; displayValue?: string } | undefined>;
+  };
+};
+
 async function runPsi(target: string): Promise<PsiResult> {
   // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
   const psiUrl = new URL(
@@ -32,7 +40,7 @@ async function runPsi(target: string): Promise<PsiResult> {
     psiUrl.searchParams.append("category", cat);
   }
 
-  let data: any;
+  let data: PsiResponse;
   try {
     const res = await fetch(psiUrl.toString(), {
       signal: AbortSignal.timeout(90_000),
@@ -45,8 +53,8 @@ async function runPsi(target: string): Promise<PsiResult> {
       };
     }
     data = await res.json();
-  } catch (e: any) {
-    return { ok: false, error: e?.name === "TimeoutError" ? "timeout" : "fetch_error" };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.name === "TimeoutError" ? "timeout" : "fetch_error" };
   }
 
   const lhr = data.lighthouseResult;

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
@@ -163,9 +164,9 @@ export default async function PortfolioPage({
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6">
       <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
+        <Link href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
-        </a>
+        </Link>
         <a
           href="/top"
           className="text-xs font-semibold text-mute transition hover:text-ink"

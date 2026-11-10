@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SITE } from "@/lib/site";
 import { AuthButton } from "@/components/AuthButton";
 
@@ -5,7 +6,7 @@ export function Header({ stars }: { stars: number | null }) {
   return (
     <header className="sticky top-0 z-10 -mx-4 flex items-center justify-between border-b border-edge bg-bg/80 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
       <div className="flex items-center gap-3">
-        <a
+        <Link
           href="/"
           className="flex items-center gap-2 text-sm font-bold tracking-tight sm:text-base"
         >
@@ -18,7 +19,7 @@ export function Header({ stars }: { stars: number | null }) {
           <span>
             Portfolio<span className="text-accent">Rank</span>
           </span>
-        </a>
+        </Link>
         <a
           href={SITE.n8builds}
           target="_blank"

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { EdgePage, primaryButton, secondaryButton } from "@/components/EdgePage";
 
@@ -10,9 +11,9 @@ export default function NotFound() {
       title="That page isn't here."
       actions={
         <>
-          <a href="/" className={primaryButton}>
+          <Link href="/" className={primaryButton}>
             Browse portfolios
-          </a>
+          </Link>
           <a href="/rank" className={secondaryButton}>
             Rank portfolios
           </a>
