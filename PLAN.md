@@ -1,5 +1,9 @@
 # portfolio-rank — Plan
 
+> **Superseded for current work (2026-11-10):** the roadmap is [docs/ROADMAP.md](docs/ROADMAP.md) and the decisions behind it are in [docs/DECISIONS.md](docs/DECISIONS.md).
+> This file is the original June 2026 plan, kept for history; where they differ, those files win.
+> Outdated here: ELO as the ranking (now OpenSkill with three views), AI votes in the same pool as people's, the Gemini Flash rubric with three images, and "Gemini Flash free tier, 500 req/day" as the only budget.
+
 Turn the developer-portfolios list (1,700+ entries, alphabetical README, value locked up)
 into a ranked, browsable site where AI bootstraps the ranking and humans refine it.
 
