@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { runPrewarm, classify } from "../scripts/lib/prewarm.mjs";
+import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -63,21 +64,39 @@ test("error classes", () => {
   assert.equal(classify("fetch failed"), "unreachable");
 });
 
-async function runScript(handler) {
-  const server = createServer(handler);
+// Roster sites that must never be prewarmed, and one with an old PSI result.
+const [tierC, fresh, down, old] = feed.slice(4, 8).map((p) => p.url);
+const DAY = 86400000;
+
+async function runScript(handler, { limit = 4 } = {}) {
+  const requested = [];
+  const server = createServer((req, res) => {
+    requested.push(req.url);
+    handler(req, res);
+  });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const dir = mkdtempSync(join(tmpdir(), "prewarm-"));
   const dbFile = join(dir, "db.sqlite");
   const db = createClient({ url: `file:${dbFile}` });
-  await db.execute("CREATE TABLE portfolios (url TEXT PRIMARY KEY, status TEXT)");
-  for (const u of urls) await db.execute({ sql: "INSERT INTO portfolios VALUES (?, 'live')", args: [u] });
-  // Live in the database but gone from the roster: must be skipped, not looked up.
-  for (const u of ["https://left-upstream.example", `${urls[0]}/`]) {
-    await db.execute({ sql: "INSERT INTO portfolios VALUES (?, 'live')", args: [u] });
-  }
+  await ensureRosterSchema(db);
+  const add = (url, tier, extra = {}) =>
+    db.execute({
+      sql: "INSERT INTO portfolios (url, status, ai_rubric, health) VALUES (?, ?, ?, ?)",
+      args: [url, extra.status ?? "live", JSON.stringify({ tier }), extra.health ?? null],
+    });
+  for (const [i, u] of urls.entries()) await add(u, ["S", "A", "B", "A"][i]);
+  await add(tierC, "C");
+  await add(fresh, "A");
+  await add(down, "A", { health: "down" });
+  await add(old, "S");
+  // Gone from the roster (delisted on start), or a variant of a roster URL.
+  for (const u of ["https://left-upstream.example", `${urls[0]}/`]) await add(u, "S");
+  const now = Date.now();
+  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${fresh}`, now - DAY] });
+  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${old}`, now - 40 * DAY] });
   db.close();
   const summaryFile = join(dir, "summary.md");
-  const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", "--limit=4"], {
+  const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", `--limit=${limit}`], {
     env: {
       ...process.env,
       TURSO_DATABASE_URL: `file:${dbFile}`,
@@ -92,7 +111,10 @@ async function runScript(handler) {
   child.stderr.on("data", (d) => (err += d));
   const code = await new Promise((r) => child.on("exit", r));
   server.close();
-  return { code, summary: readFileSync(summaryFile, "utf8"), err };
+  const psi = requested
+    .filter((u) => u.startsWith("/api/psi"))
+    .map((u) => new URL(u, "http://x").searchParams.get("url"));
+  return { code, summary: readFileSync(summaryFile, "utf8"), err, psi };
 }
 
 test("the script exits 1 and writes the job summary when PageSpeed has no key", async () => {
@@ -104,7 +126,6 @@ test("the script exits 1 and writes the job summary when PageSpeed has no key", 
   assert.match(r.summary, /## Prewarm metrics/);
   assert.match(r.summary, /\| psi \| 4 \| 0 \| 4 \| quota 4 \|/);
   assert.match(r.err, /::error::FAILED: 8 of 8 lookups failed/);
-  assert.match(r.summary, /Skipped 2 site\(s\) marked live in the database but no longer on the roster/);
 });
 
 test("roster rejections are reported as their own reason", async () => {
@@ -121,4 +142,15 @@ test("the script exits 0 when lookups succeed", async () => {
   });
   assert.equal(r.code, 0);
   assert.match(r.summary, /OK: 8 of 8 lookups succeeded/);
+});
+
+test("the script picks listed S/A/B sites without a fresh PSI result, never-measured first, then the oldest", async () => {
+  const r = await runScript((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ ok: true }));
+  }, { limit: 50 });
+  assert.equal(r.code, 0);
+  // Never measured (by URL), then the 40-day-old result. Not: tier C, fresh,
+  // confirmed down, delisted, or not on the roster.
+  assert.deepEqual(r.psi, [...[...urls].sort(), old]);
 });

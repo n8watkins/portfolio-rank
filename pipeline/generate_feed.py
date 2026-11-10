@@ -5,7 +5,8 @@ Build feed.json = (upstream README) - (our exclusions) + (our additions).
 - Upstream: every `- [Name](url) [tagline]` entry in a developer-portfolios
   README (the "accepted" community list).
 - Exclusions (--exclude): URLs WE'VE removed (dead/unmaintained sites we don't
-  want back even if upstream still lists them). JSON array of URL strings.
+  want back even if upstream still lists them). JSON array of URL strings or
+  of {url, reason, kind, removed, ...} objects (pipeline/exclusions.mjs).
 - Additions (--add): OUR OWN entries (e.g. direct submissions) not in upstream.
   JSON array of {name, url, tagline?}.
 
@@ -16,6 +17,11 @@ and its ORIGINAL url string is preserved verbatim, so existing DB/rating keys
 Usage:
     python generate_feed.py [README.md] [feed.json]
         [--exclude data/excluded.json] [--add data/additions.json]
+        [--max-shrink 0.05]
+
+--max-shrink refuses to write (exit 2) when the new feed has more than that
+fraction fewer entries than the feed.json already there: a broken or
+truncated upstream README must never wipe the list.
 """
 
 import re
@@ -54,7 +60,10 @@ def build_feed(readme_path, exclude_path, add_path):
     with open(readme_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
-    excluded = {norm_key(u) for u in load_json_array(exclude_path)}
+    excluded = {
+        norm_key(e if isinstance(e, str) else (e.get("url") or ""))
+        for e in load_json_array(exclude_path)
+    }
     portfolios = []
     seen = set()
     dupes = excluded_hits = 0
@@ -106,6 +115,8 @@ def main():
     p.add_argument("output", nargs="?", default="feed.json")
     p.add_argument("--exclude", help="JSON array of URLs to drop")
     p.add_argument("--add", help="JSON array of extra {name,url,tagline} to include")
+    p.add_argument("--max-shrink", type=float, default=None,
+                   help="fail if the feed shrinks by more than this fraction")
     a = p.parse_args()
 
     try:
@@ -113,6 +124,16 @@ def main():
     except FileNotFoundError:
         print(f"Error: {a.readme} not found.")
         return 1
+
+    if a.max_shrink is not None:
+        current = load_json_array(a.output)
+        if current and len(portfolios) < len(current) * (1 - a.max_shrink):
+            print(
+                f"Error: the new feed has {len(portfolios)} entries, "
+                f"{len(current) - len(portfolios)} fewer than the current {len(current)} "
+                f"(more than {a.max_shrink:.0%}); refusing to write {a.output}."
+            )
+            return 2
 
     with open(a.output, "w", encoding="utf-8") as f:
         json.dump(portfolios, f, indent=2, ensure_ascii=False)

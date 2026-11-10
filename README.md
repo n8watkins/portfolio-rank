@@ -30,8 +30,10 @@ the dataset a real frontend and a ranking system:
   the leaderboard
 - **AI bootstrap** - Gemini judges design/content pairwise to seed rankings before
   human votes accumulate, and grades each site on a 6-axis rubric
-- **Objective scorecards** - real Lighthouse scores (via PageSpeed Insights), polish
-  checks, and originality detection for every site
+- **Objective scorecards** - real Lighthouse scores (via PageSpeed Insights) and polish
+  checks for every site
+- **Its own cleanup** - every site on the list is checked weekly; sites confirmed down
+  over two weeks leave the list and are listed with the reason at `/removed`
 
 The whole pipeline runs itself - see [AUTOMATION.md](AUTOMATION.md) for the data flow
 and the daily GitHub Actions, [PLAN.md](PLAN.md) for the roadmap, and

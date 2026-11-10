@@ -17,11 +17,12 @@
 // Budget: the free tier allows ~500 requests/day; every call is logged so you
 // can see what a run spent. Rate is paced to --rpm (default 8) to stay under
 // the free-tier requests-per-minute cap.
-import { createClient } from "@libsql/client";
 import fs from "fs";
 import path from "path";
 import { createGemini, FLASH_LITE_CHAIN, GeminiAuthError } from "./gemini.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
+import { judgeOutcome } from "./judge-outcome.mjs";
+import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -80,12 +81,7 @@ if (MODE === "pairwise") {
   }
 }
 
-const db = process.env.TURSO_DATABASE_URL
-  ? createClient({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    })
-  : createClient({ url: `file:${path.join(ROOT, "data", "portfoliorank.db")}` });
+const db = pipelineDb(ROOT);
 
 // Same direction-independent key as lib/elo.ts pairKey() — "\n" separator on
 // purpose (can't appear in a URL; NUL would be truncated by SQLite).
@@ -286,16 +282,14 @@ const rubricSchema = {
 };
 
 async function runRubric() {
-  try {
-    await db.execute("ALTER TABLE portfolios ADD COLUMN ai_rubric TEXT");
-  } catch {
-    /* column already present */
-  }
+  // Only sites on the current list that aren't confirmed down get graded.
+  // Sites the health check flagged needs_review (little that looks like a
+  // portfolio) go first, so is_portfolio confirms or clears them soon.
   const res = await db.execute(
     `SELECT url, name, shot_key, meta FROM portfolios
-     WHERE status = 'live' AND shot_key IS NOT NULL
+     WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
-     ORDER BY captured_at DESC, url`
+     ORDER BY needs_review DESC, captured_at DESC, url`
   );
   let queue = res.rows.filter((r) => !ONLY || String(r.url).includes(ONLY));
   queue = queue.slice(0, LIMIT === Infinity ? queue.length : LIMIT);
@@ -303,6 +297,7 @@ async function runRubric() {
 
   let ok = 0;
   let errors = 0;
+  let skipped = 0;
   let consecutiveErrors = 0;
   for (const [i, row] of queue.entries()) {
     const url = String(row.url);
@@ -366,6 +361,7 @@ async function runRubric() {
       }
     }
     if (!images) {
+      skipped++;
       console.log(
         `[${i + 1}/${queue.length}] ${url} — skipped (captures unavailable, will retry)`
       );
@@ -417,8 +413,8 @@ async function runRubric() {
       }
     }
   }
-  console.log(`rubric done: ${ok}/${queue.length} judged, ${gemini.summary()}`);
-  return { attempted: ok + errors, ok };
+  console.log(`rubric done: ${ok}/${queue.length} judged, ${skipped} skipped, ${gemini.summary()}`);
+  return { queued: queue.length, ok, errors, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +438,8 @@ async function runPairwise() {
     `SELECT p.url, p.name, p.shot_key, p.ai_rubric,
             COALESCE(r.elo, ${BASE_ELO}) AS elo, COALESCE(r.votes, 0) AS votes
      FROM portfolios p LEFT JOIN ratings r ON r.url = p.url
-     WHERE p.status = 'live' AND p.shot_key IS NOT NULL`
+     WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")}
+       AND NOT ${NOT_PORTFOLIO("p")}`
   );
   let pool = res.rows.map((r) => ({
     url: String(r.url),
@@ -462,7 +459,7 @@ async function runPairwise() {
   pool = pool.filter((p) => p.tier && TIERS.includes(p.tier));
   if (pool.length < 2) {
     console.log(`pairwise[tiers=${TIERS.join("/")}]: pool too small (${pool.length}) — nothing to do`);
-    return { attempted: 0, ok: 0 };
+    return { queued: 0, ok: 0 };
   }
   const adopted = await prepareAiVotes(db);
   if (adopted) console.log(`moved ${adopted} legacy AI vote(s) to rater ${FLASH_LITE_RATER_ID}`);
@@ -479,6 +476,9 @@ async function runPairwise() {
 
   let cast = 0;
   let errors = 0;
+  let skipped = 0;
+  let abstained = 0;
+  let queued = 0;
   let consecutiveErrors = 0;
   for (let round = 0; cast < VOTES && round < VOTES * 5; round++) {
     // Uncertainty-prioritized: sample a handful, face off the two least-voted
@@ -490,6 +490,7 @@ async function runPairwise() {
     if (!b) continue;
     // Randomize A/B presentation so position bias can't favor one slot.
     if (Math.random() < 0.5) [a, b] = [b, a];
+    queued++;
 
     const [heroA, heroB] = await Promise.all([
       heroPart(a.key),
@@ -497,6 +498,7 @@ async function runPairwise() {
     ]);
     if (!heroA || !heroB) {
       seen.add(pairKey(a.url, b.url)); // can't judge this pair this run
+      skipped++;
       continue;
     }
 
@@ -530,6 +532,7 @@ async function runPairwise() {
       consecutiveErrors = 0;
       seen.add(pairKey(a.url, b.url));
       if (verdict.winner === "skip") {
+        abstained++;
         console.log(`  skip (${model}): ${a.url} vs ${b.url} - ${verdict.reason}`);
         continue;
       }
@@ -551,8 +554,10 @@ async function runPairwise() {
       }
     }
   }
-  console.log(`pairwise done: ${cast} vote(s) cast, ${gemini.summary()}`);
-  return { attempted: cast + errors, ok: cast };
+  console.log(
+    `pairwise done: ${cast} vote(s) cast, ${abstained} abstained, ${skipped} pair(s) skipped, ${gemini.summary()}`
+  );
+  return { queued, ok: cast, errors, skipped, abstained };
 }
 
 // Mirrors POST /api/rank: insert + ELO upsert in one write transaction, with
@@ -601,18 +606,28 @@ async function castVote(win, lose, model) {
 }
 
 // ---------------------------------------------------------------------------
-// Exit non-zero when the key is rejected, or when there was work and every
-// Gemini call failed, so a dead key or a full outage fails the workflow
-// instead of passing green with nothing judged (July-November 2026).
+// Exit non-zero when the key is rejected, when there was work and nothing was
+// judged, or when most of the work was skipped (pipeline/judge-outcome.mjs),
+// so the workflow's "Notify on failure" step files an issue instead of the
+// run passing green with nothing done (July-November 2026).
 // Running out of daily quota after some successes still exits 0.
 if (MODE !== "rubric" && MODE !== "pairwise") {
   console.error("usage: node pipeline/judge.mjs rubric|pairwise [flags]");
   process.exit(1);
 }
 try {
-  const { attempted, ok } = MODE === "rubric" ? await runRubric() : await runPairwise();
-  if (attempted > 0 && ok === 0) {
-    console.error(`${MODE}: every Gemini call failed (${gemini.summary()})`);
+  // Mark rows that left the list, so only roster sites are judged.
+  const roster = await syncRoster(db, await loadFeed(ROOT));
+  if (roster.delisted || roster.relisted) {
+    console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
+  }
+  const counts = MODE === "rubric" ? await runRubric() : await runPairwise();
+  const outcome = judgeOutcome({ mode: MODE, ...counts });
+  const summary = `${outcome.summary}\nGemini: ${gemini.summary()}\n`;
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  console.log(outcome.verdict);
+  if (outcome.exitCode) {
+    console.error(`::error::${MODE}: ${outcome.verdict} (${gemini.summary()})`);
     process.exit(1);
   }
 } catch (e) {

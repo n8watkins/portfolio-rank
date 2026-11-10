@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
 import { FAQ } from "@/components/FAQ";
-import { db, ensureSchema } from "@/lib/db";
+import { hiddenUrls } from "@/lib/roster";
 
 // Re-render at most every 5 min so the top-ranked marquee stays fresh without
 // querying the DB on every request.
@@ -31,17 +31,10 @@ async function getStarCount(): Promise<number | null> {
 }
 
 export default async function Home() {
-  // Hide confirmed dead/parked/error from browse (the voting pool filters them
-  // too - see app/api/rank). Unconfirmed (pending/live) stay in.
-  await ensureSchema();
-  const excluded = new Set(
-    (
-      await db().execute(
-        "SELECT url FROM portfolios WHERE status IN ('dead', 'parked', 'error')"
-      )
-    ).rows.map((r) => String(r.url))
-  );
-  const portfolios = (feed as Portfolio[]).filter((p) => !excluded.has(p.url));
+  // Hide sites confirmed down or failing (lib/roster.hiddenUrls; the voting
+  // pool and leaderboards filter them too).
+  const hidden = await hiddenUrls();
+  const portfolios = (feed as Portfolio[]).filter((p) => !hidden.has(p.url));
   const stars = await getStarCount();
 
   return (
@@ -128,6 +121,13 @@ export default async function Home() {
             className="underline decoration-edge underline-offset-4 transition hover:text-ink"
           >
             Remove my portfolio
+          </a>
+          . See what was{" "}
+          <a
+            href="/removed"
+            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
+          >
+            removed and why
           </a>
           .
         </p>

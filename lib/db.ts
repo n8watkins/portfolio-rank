@@ -16,6 +16,11 @@ export function db(): Client {
       : createClient({
           // LOCAL_DB_FILE lets the end-to-end tests use a throwaway file.
           url: `file:${process.env.LOCAL_DB_FILE ?? path.join(process.cwd(), "data", "portfoliorank.db")}`,
+          // A local file is shared by several connections (the client's pool,
+          // and the test process in the end-to-end tests). Without a busy
+          // timeout a write that meets another connection's lock fails at
+          // once with SQLITE_BUSY and the request answers 500.
+          timeout: 5000,
         });
   }
   return client;
@@ -134,6 +139,30 @@ export function ensureSchema(): Promise<void> {
         );
       } catch {
         /* column already present */
+      }
+      // Roster and health columns written by the pipeline (pipeline/roster.mjs
+      // adds the same ones): delisted_at when a URL left data/feed.json,
+      // health live/suspect/down from the weekly health check, retry_at for
+      // failed captures. Additive, so safe on the live database.
+      for (const column of [
+        "ai_rubric TEXT",
+        "delisted_at TEXT",
+        "health TEXT",
+        "health_reason TEXT",
+        "health_fails INTEGER NOT NULL DEFAULT 0",
+        "health_first_fail_at TEXT",
+        "health_checked_at TEXT",
+        "final_url TEXT",
+        "capture_attempts INTEGER NOT NULL DEFAULT 0",
+        "retry_at TEXT",
+        "signals TEXT",
+        "needs_review INTEGER NOT NULL DEFAULT 0",
+      ]) {
+        try {
+          await db().execute(`ALTER TABLE portfolios ADD COLUMN ${column}`);
+        } catch {
+          /* column already present */
+        }
       }
       // The matchup most recently served to each signed-in rater, and how many
       // they drew in the current hour: an official vote must be for this pair,

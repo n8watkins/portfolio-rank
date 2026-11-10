@@ -12,13 +12,18 @@ emmabostian/developer-portfolios (upstream, community-curated)
   sync-upstream Action  ──rebuild──►  data/feed.json
         │                               = upstream − excluded.json + additions.json
         ▼
+  roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
+        ▼
   capture.mjs  ──►  screenshots ──► Cloudflare R2 (public)   + diagnostics ──► Turso
         ▼
   judge.mjs rubric  ──►  Gemini tier + 6-axis grades ──► Turso (portfolios.ai_rubric)
         ▼
   judge.mjs pairwise  ──►  Gemini ELO votes ──► Turso (votes, ratings)
         ▼
-  Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug]
+  Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug] · /removed
+
+  weekly health check  ──►  live → suspect → down  ──►  data/excluded.json (bot PR)
+                                                   ──►  monthly report on the community list (PR opt-in, off)
 ```
 
 ## The list (two intake doors + a takedown)
@@ -31,8 +36,34 @@ emmabostian/developer-portfolios (upstream, community-curated)
 | **Upstream merge** | High (Emma reviewed it) | Auto-pulled by `sync-upstream` |
 | **Direct submission** | Unvetted | Issue form → `data/additions.json` |
 | **Takedown / opt-out** | — | "Remove my portfolio" issue → `data/excluded.json` (dropped forever) |
+| **Our own cleanup** | Health check, confirmed over 2+ weeks | `health.yml` → `data/excluded.json` (reason, dates, evidence) |
 
-## GitHub Actions (5)
+### Our list wins (owner decision 2026-11-10)
+
+PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
+
+- **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
+  Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries).
+  Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
+- **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages, duplicates and a stored `is_portfolio=false`.
+  States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row spanning at least 13 days); a pass resets to `live`.
+  Bot walls (403/429 challenges) are inconclusive and leave the state alone; free-tier apps answering 502/503/504 get a second look after 30 seconds.
+  A redirect to another domain is a move, not a failure: the run summary lists moves (and flags targets that don't carry the person's name) so the stored URL can be updated.
+  When more than 30% of sites fail in one run the runner is the likelier culprit, so nothing is recorded and the job fails.
+- **Portfolio-likeness** (`pipeline/signals.mjs`, part of the health check): from each loaded page's HTML (the rendered DOM for single-page apps) it records six yes/no signals in `portfolios.signals`: projects/work section, about, contact (mailto, form or social links), resume/CV, a GitHub profile link, and the person's name in the title or h1.
+  A page with at most one is flagged `needs_review`: never removed or hidden for it, listed in the run summary, and graded first by the rubric so Gemini's `is_portfolio` confirms or clears it.
+- **Exclusions**: newly confirmed-down sites are appended to `data/excluded.json` as `{url, name, reason, kind, removed, first_failed, last_checked, checks}` and dropped from `feed.json` in one bot pull request (branch `data/health-exclusions`, auto-merge), at most 10% of the list at once.
+  `generate_feed.py` reads both these objects and the older plain URL strings.
+  `/removed` lists them with the reason and date; takedown requests are counted there but never named.
+- **Site visibility** (`lib/roster.ts hiddenUrls`): a roster site is hidden when it is confirmed down, or when its capture failed and the health check hasn't passed it since.
+  Captures that fail are retried with backoff (1, 2, 4, 8, 16, then 30 days), and a passing health check schedules a recapture at once, so one transient error never hides a site for good.
+- **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
+- **Upstream report** (`upstream-removals.yml`, monthly, report-only): the community list runs its own link checker every Saturday that removes broken and parked links (its CONTRIBUTING.md, sample report emmabostian/developer-portfolios#3696), so a removal PR for those would only duplicate it.
+  The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
+  Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
+
+## GitHub Actions (7 scheduled)
 
 All run on GitHub-hosted runners. The repo is **public → unlimited free Actions
 minutes**; the only real budget is the Gemini free tier. Every scheduled job
@@ -44,7 +75,9 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
 | **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite chain only) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → private R2 bucket `portfolio-rank-backups` (~0.3 MB/run) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
-| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for S/A/B sites by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
+| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
+| **`health.yml`** | Sundays 16:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
+| **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
 Schedules are staggered: backup (05:00) → sync+grade (06:00) → vote (13:00, clear
 of the sync window). `sync-upstream` holds the `ingest` concurrency lock for DB
@@ -72,7 +105,9 @@ queues behind a long sync.
   A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request never falls back.
   When both models are unavailable, the chain is retried after 15, 30 and 45 seconds.
   `--model M` uses only `M`, with no fallback.
-- **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, or when there was work and every call failed, so the "Notify on failure" step files an issue.
+- **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows (or pairs) were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
+  Skipped rows are counted on their own, never as attempted.
+  The counts (queued, judged, abstained, errors, skipped) go to the run's job summary.
   Running out of daily quota after some successes still exits 0.
 - **Which model judged:** each rubric stores the model that actually answered in `ai_rubric.model`, and each AI vote stores it in `votes.model`.
 - **One AI voter:** every vote the flash-lite chain casts uses one logical rater id, `ai:flash-lite`, whichever model answered.
@@ -95,6 +130,9 @@ serve images.
 
 - `pipeline/capture.mjs [--upload-only] [--only s] [--force]` — Playwright capture + R2 upload
 - `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs` tests its Gemini client offline)
-- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f]` — build feed.json
+- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
+- `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
+- `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
+- `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `scripts/backup-db.mjs` — DB → R2 snapshot · `scripts/export-grades.mjs` — grades → CSV
 - `scripts/r2-check.mjs` — R2 connectivity · `scripts/r2-upload-one.mjs <key>` — single-site upload

@@ -18,7 +18,8 @@ import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
-const db = createClient({ url: DB_URL });
+// Shares the server's SQLite file: wait for its locks instead of SQLITE_BUSY.
+const db = createClient({ url: DB_URL, timeout: 10000 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PACE = 2100; // the server rejects a rater's votes closer than 2s apart
 

@@ -8,7 +8,8 @@ import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
-const db = createClient({ url: process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/e2e.db` });
+// Shares the server's SQLite file: wait for its locks instead of SQLITE_BUSY.
+const db = createClient({ url: process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/e2e.db`, timeout: 10000 });
 const PSI_PORT = Number(process.env.E2E_PSI_PORT ?? 7692);
 const SLOW_MS = 2500;
 const DAY = 24 * 3600 * 1000;
