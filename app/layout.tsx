@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ClaimVotes } from "@/components/ClaimVotes";
 import { UndoToastProvider } from "@/components/UndoToast";
+import { SignInProvider } from "@/components/SignInModal";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -30,8 +31,17 @@ export default function RootLayout({
       <body className={`${inter.className} bg-bg text-ink antialiased`}>
         {/* Ambient gradient backdrop - fixed, behind all content. */}
         <div aria-hidden className="app-bg pointer-events-none fixed inset-0 -z-10" />
+        {/* Pages put their content in <main id="main">; the first Tab offers to jump there. */}
+        <a
+          href="#main"
+          className="sr-only rounded-lg bg-accent text-sm font-semibold text-bg focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[70] focus:px-4 focus:py-2.5"
+        >
+          Skip to content
+        </a>
         <ClaimVotes />
-        <UndoToastProvider>{children}</UndoToastProvider>
+        <UndoToastProvider>
+          <SignInProvider>{children}</SignInProvider>
+        </UndoToastProvider>
       </body>
     </html>
   );

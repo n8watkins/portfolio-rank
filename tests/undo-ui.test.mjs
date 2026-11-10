@@ -188,7 +188,7 @@ test("an unliked portfolio on the profile can be liked again in place", async ()
   const liked = () => page.locator("a[href^='/p/'] p.font-semibold").allTextContents();
   const order = await liked();
   assert.equal(order.length, 3);
-  await page.locator("div.group", { hasText: order[1] }).getByRole("button", { name: "Unlike" }).click();
+  await page.locator("div.group", { hasText: order[1] }).getByRole("button", { name: `Like ${order[1]}`, pressed: true }).click();
   await toast(page, `Removed ${order[1]} from your likes`).waitFor();
   await until(liked, [order[0], order[2]]);
   await toast(page, "from your likes").getByRole("button", { name: "Undo" }).click();

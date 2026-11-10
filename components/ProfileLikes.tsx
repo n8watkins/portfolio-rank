@@ -68,6 +68,7 @@ export function ProfileLikes({ items }: { items: LikeItem[] }) {
           </a>
           <LikeButton
             url={p.url}
+            name={p.name}
             initialLiked
             variant="icon"
             onChange={(liked, info) => {

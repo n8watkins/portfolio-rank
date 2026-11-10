@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { isTextField } from "@/lib/dom";
 import { createUndoQueue, type UndoEntry, type UndoQueue, type UndoToast } from "@/lib/undo-queue";
 
 // "List deleted · Undo": reversible actions happen at once and this toast offers the way back.
@@ -41,9 +42,6 @@ export function listDeletedToast(id: number, name: string) {
   };
 }
 
-function isTextField(target: EventTarget | null) {
-  return target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
-}
 
 export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<UndoToast[]>([]);

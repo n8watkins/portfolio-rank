@@ -66,7 +66,11 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
   return (
     <section id="browse" className="scroll-mt-16">
       <div className="mb-6 flex flex-col items-center justify-between gap-3 sm:flex-row">
+        <label htmlFor="browse-search" className="sr-only">
+          Search portfolios
+        </label>
         <input
+          id="browse-search"
           type="search"
           value={query}
           onChange={(e) => {
@@ -74,7 +78,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             setVisible(PAGE_SIZE);
           }}
           placeholder="Search by name, role, or domain…"
-          className="w-full rounded-lg border border-edge bg-card px-4 py-2 text-sm outline-none transition placeholder:text-mute focus:border-mute sm:w-80"
+          className="w-full rounded-lg border border-edge bg-card px-4 py-2 text-base outline-none transition placeholder:text-mute focus:border-mute sm:w-80 sm:text-sm"
         />
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Browse</h2>
@@ -93,6 +97,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
         {ROLES.map((r) => (
           <button
             key={r.label}
+            aria-pressed={role === r.label}
             onClick={() => {
               setRole(role === r.label ? null : r.label);
               setVisible(PAGE_SIZE);
@@ -112,6 +117,8 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
         {LETTERS.map((l) => (
           <button
             key={l}
+            aria-pressed={letter === l}
+            aria-label={l === "All" ? "All letters" : `Names starting with ${l}`}
             onClick={() => {
               setLetter(l);
               setVisible(PAGE_SIZE);
@@ -129,10 +136,12 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((p, i) => (
-          <a
+          // The name is the card's link and stretches over the whole card
+          // (::after); Like and Visit sit above it as siblings, never nested
+          // inside the link.
+          <div
             key={p.url}
-            href={`/p/${encodeURIComponent(p.url)}`}
-            className="fade-up group rounded-xl border border-edge bg-card p-4 transition duration-200 hover:-translate-y-0.5 hover:border-mute"
+            className="fade-up group relative rounded-xl border border-edge bg-card p-4 transition duration-200 hover:-translate-y-0.5 hover:border-mute"
             style={{ animationDelay: `${Math.min((i % PAGE_SIZE) * 15, 450)}ms` }}
           >
             <div className="flex items-start justify-between gap-2">
@@ -145,34 +154,37 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
                   className="h-7 w-7 shrink-0 rounded-md bg-edge"
                 />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{p.name}</p>
+                  <a
+                    href={`/p/${encodeURIComponent(p.url)}`}
+                    className="block truncate text-sm font-semibold after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
+                  >
+                    {p.name}
+                  </a>
                   <p className="truncate text-xs text-mute">
                     {p.tagline ?? domainOf(p.url)}
                   </p>
                 </div>
               </div>
-              {/* Like + visit. Both preventDefault so they don't trigger the
-                  card's own link to the detail page. */}
-              <div className="flex shrink-0 items-center gap-0.5">
+              <div className="relative z-10 flex shrink-0 items-center gap-0.5">
                 <LikeButton
                   url={p.url}
+                  name={p.name}
                   initialLiked={likedSet.has(p.url)}
                   variant="icon"
                 />
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.open(p.url, "_blank", "noopener");
-                  }}
-                  className="rounded-md px-1.5 py-0.5 text-mute opacity-0 transition hover:text-ink group-hover:opacity-100"
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative rounded-md px-1.5 py-0.5 text-mute opacity-0 transition after:absolute after:-inset-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                   title="Visit site"
-                  aria-label={`Visit ${domainOf(p.url)}`}
+                  aria-label={`Visit ${domainOf(p.url)} (opens in a new tab)`}
                 >
-                  ↗
-                </button>
+                  <span aria-hidden>↗</span>
+                </a>
               </div>
             </div>
-          </a>
+          </div>
         ))}
       </div>
 

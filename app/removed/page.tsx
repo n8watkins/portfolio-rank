@@ -55,65 +55,67 @@ export default function RemovedPage() {
         </a>
       </header>
 
-      <div className="py-6">
-        <h1 className="text-3xl font-bold tracking-tight">Removed portfolios</h1>
-        <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
-          <p>
-            Every week PortfolioRank checks each site on its list. A site is only
-            removed after it fails three checks in a row spanning at least two
-            weeks, so a short outage never takes anyone off. Bot checks that block
-            automated visitors don&apos;t count as failures.
-          </p>
-          <p>
-            Is your site back up, or was it removed by mistake?{" "}
-            <a
-              href={SITE.submit}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent hover:underline"
-            >
-              Submit it again
-            </a>{" "}
-            and it returns on the next sync.
-          </p>
+      <main id="main" tabIndex={-1}>
+        <div className="py-6">
+          <h1 className="text-3xl font-bold tracking-tight">Removed portfolios</h1>
+          <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
+            <p>
+              Every week PortfolioRank checks each site on its list. A site is only
+              removed after it fails three checks in a row spanning at least two
+              weeks, so a short outage never takes anyone off. Bot checks that block
+              automated visitors don&apos;t count as failures.
+            </p>
+            <p>
+              Is your site back up, or was it removed by mistake?{" "}
+              <a
+                href={SITE.submit}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Submit it again
+              </a>{" "}
+              and it returns on the next sync.
+            </p>
+          </div>
         </div>
-      </div>
 
-      {rows.length === 0 ? (
-        <p className="rounded-xl border border-edge bg-card px-4 py-6 text-center text-sm text-mute">
-          Nothing has been removed yet.
-        </p>
-      ) : (
-        <ul className="divide-y divide-edge rounded-xl border border-edge bg-card">
-          {rows.map((r) => (
-            <li
-              key={r.url}
-              className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{r.name ?? domainOf(r.url)}</p>
-                <p className="truncate text-xs text-mute">{domainOf(r.url)}</p>
-              </div>
-              <div className="shrink-0 text-xs text-mute sm:text-right">
-                <p>
-                  <span className="font-semibold text-ink">
-                    {KIND_LABEL[r.kind ?? "down"] ?? "Removed"}
-                  </span>
-                  {r.reason ? ` - ${r.reason}` : ""}
-                </p>
-                {r.removed ? <p>{r.removed}</p> : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+        {rows.length === 0 ? (
+          <p className="rounded-xl border border-edge bg-card px-4 py-6 text-center text-sm text-mute">
+            Nothing has been removed yet.
+          </p>
+        ) : (
+          <ul className="divide-y divide-edge rounded-xl border border-edge bg-card">
+            {rows.map((r) => (
+              <li
+                key={r.url}
+                className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{r.name ?? domainOf(r.url)}</p>
+                  <p className="truncate text-xs text-mute">{domainOf(r.url)}</p>
+                </div>
+                <div className="shrink-0 text-xs text-mute sm:text-right">
+                  <p>
+                    <span className="font-semibold text-ink">
+                      {KIND_LABEL[r.kind ?? "down"] ?? "Removed"}
+                    </span>
+                    {r.reason ? ` - ${r.reason}` : ""}
+                  </p>
+                  {r.removed ? <p>{r.removed}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {requests > 0 ? (
-        <p className="mt-4 text-xs text-mute">
-          Plus {requests.toLocaleString()} portfolio{requests === 1 ? "" : "s"} removed at the
-          owner&apos;s request (not listed by name).
-        </p>
-      ) : null}
+        {requests > 0 ? (
+          <p className="mt-4 text-xs text-mute">
+            Plus {requests.toLocaleString()} portfolio{requests === 1 ? "" : "s"} removed at the
+            owner&apos;s request (not listed by name).
+          </p>
+        ) : null}
+      </main>
     </div>
   );
 }
