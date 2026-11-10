@@ -226,11 +226,19 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 
 ## Content engine
 
+The design, with the decisions still open, is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
+
 - **Fully automatic and fail-closed** (owner, 2026-11-10). Status: planned.
   Posts publish on their own with no review step; a draft that fails a check is revised automatically, and if it still fails after two rounds it is dropped, never published and never queued for the owner.
-  Every number must match what code computed, links must load, quotes and sources can't be invented, a second Gemini pass reviews tone and claims, and a later data check that contradicts a post unpublishes it with a correction note.
-  The owner is informed, not asked: a weekly "what went out" email, plus an admin page and kill switches.
+  Every number must match what code computed, links must load, quotes and sources can't be invented, and a second Gemini pass reviews tone and claims.
+  The owner is informed, not asked: a weekly "what went out" summary, plus an admin page and kill switches.
   Why: the owner wants it to run without him; failing closed means the cost of a bad draft is a missing post, not a wrong one in his name.
+- **Positive by design** (owner, 2026-11-10, security review). Status: planned.
+  Posts are about what the best developers are doing and how to fit the job market; topics and news are limited to careers, hiring and portfolios, and anything hostile or off-topic is skipped.
+- **Claims checked before publishing, not purged after** (owner, 2026-11-10, security review). Status: planned.
+  Numbers from our data are checked by code, outside claims are checked with a Tavily search, and a claim that can't be checked is cut; there is no automatic unpublishing.
+- **Only the essential gates** (owner, 2026-11-10, security review: "don't overbuild"). Status: planned.
+  Facts from code, outside claims searched, a topic filter, copyright-safe images, caps and a kill switch, and one week of private dry run before the first post.
 - **The naming rule** (owner, 2026-11-10). Status: planned.
   Individual developers are named only for positive reasons (top sites, climbers, redesigns that paid off); anything critical or any low score is discussed only in aggregate.
   A post that breaks it is dropped.
@@ -249,7 +257,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Sources in order of preference: charts made by code, our own screenshots (naming rule applies), Unsplash and Pexels stock with automatic credit, and Cloudflare Workers AI illustrations on the free allowance; Gemini's paid image model is not used.
   Gemini proposes each image slot with alt text, code makes or fetches 2-3 candidates, Gemini picks the best for fit and accuracy, one retry, else a chart or no image.
   Why: charts and screenshots are free and exact; the review catches wrong charts and odd generated images without a human.
-- **Model watch is news only, weekly** (owner, 2026-11-10; weekly by the owner the same day). Status: building.
+- **Model watch is news only, weekly** (owner, 2026-11-10; weekly by the owner the same day). Status: built (#74).
   Every Monday a Worker cron reads Google's model list (`models.list`, no generate quota), the deprecations page and the release notes, compares them with last week's snapshot and reports new models, retirements with dates, Flash-Lite changes and the status of the models in use through the owner alerts and the admin quota API ([AUTOMATION.md](../AUTOMATION.md#model-watch)).
   It never changes a setting: a new model runs as an experiment first, and switching the judge is a config change by the owner.
   A model in use that is deprecated, missing or within 90 days of its shutdown date raises an alert every week until resolved.
@@ -314,3 +322,4 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Catch-up mode** (owner, 2026-11-10; built in #54): grading spent 3.5's budget and then 3.1's, about 850 grades a day.
   Replaced on 2026-11-10 by "No catch-up mode; the backlog is graded on 3.5's daily budget".
 - **Blog drafts automatic, publishing one click by the owner** (ranking design suggestion, 2026-11-10): replaced the same day by fully automatic, fail-closed publishing.
+- **Unpublish a post automatically when later data contradicts it, with a correction note** (owner, 2026-11-10, part of "Fully automatic and fail-closed"): replaced the same day by "Claims checked before publishing, not purged after"; the owner fixes or unpublishes a wrong post from the admin page.
