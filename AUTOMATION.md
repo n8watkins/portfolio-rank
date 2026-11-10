@@ -129,7 +129,7 @@ Each run writes its summary to `night_runs` and to the Worker's logs: the estima
 
 After every run, [pipeline/alerts.mjs](pipeline/alerts.mjs) checks: the quota used up before the run, a stage stopped by the circuit breaker, parked items, and traction (people's grade requests or human votes in a day past `ALERT_TRACTION`, default 50 and 300).
 A condition that holds sends one email a day, every day, until it clears; the state is the `owner_alerts` table.
-No email provider is chosen yet and the Worker has no email binding, so the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent until a sender is wired in `emailSender()` (with `OWNER_EMAIL`).
+The provider is Cloudflare Email Service (docs/DECISIONS.md), and alerts will go to the owner's verified address, which is free and doesn't count against the monthly sends; the Worker has no email binding yet, so the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent until a sender is wired in `emailSender()` (with `OWNER_EMAIL`).
 
 ### What stays on GitHub Actions, and why
 

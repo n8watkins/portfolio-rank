@@ -25,7 +25,7 @@ About one email a week, sent by [owner: legal name or business name] from [owner
 ## Your address
 
 - Your email is used only to send this newsletter.
-- It's never sold, rented or shared, except with the service that sends the email ([owner: email provider]).
+- It's never sold, rented or shared, except with the service that sends the email (Cloudflare Email Service).
 - More in the [privacy page](privacy.md).
 
 ## In every email

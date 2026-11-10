@@ -28,11 +28,38 @@ export async function cachedResponse(key: string, make: () => Promise<Response>)
   const request = new Request(key);
   try {
     const hit = await cache.match(request);
-    if (hit) return hit;
+    // The zone's Browser Cache TTL raises a cached copy's max-age (to 4 hours
+    // on this zone); give the browser the max-age the route chose instead.
+    // A copy older than the route's max-age counts as a miss, whatever TTL the
+    // zone gave the stored copy.
+    if (hit && !expired(hit)) return withHeader(hit, "cache-control", originalCacheControl(hit));
   } catch {
     /* a cache failure only costs a fresh answer */
   }
   const res = await make();
-  if (res.status === 200) runInBackground(cache.put(request, res.clone()));
+  if (res.status === 200) {
+    const copy = res.clone();
+    // Keep the route's own cache-control beside the one the zone may rewrite.
+    const stored = withHeader(copy, ORIGINAL, copy.headers.get("cache-control") ?? "");
+    runInBackground(cache.put(request, stored));
+  }
   return res;
+}
+
+const ORIGINAL = "x-origin-cache-control";
+
+function originalCacheControl(hit: Response): string {
+  return hit.headers.get(ORIGINAL) || hit.headers.get("cache-control") || "no-cache";
+}
+
+function expired(hit: Response): boolean {
+  const maxAge = Number(originalCacheControl(hit).match(/max-age=(\d+)/)?.[1] ?? 0);
+  return Number(hit.headers.get("age") ?? 0) >= maxAge;
+}
+
+function withHeader(res: Response, name: string, value: string): Response {
+  const out = new Response(res.body, res);
+  out.headers.set(name, value);
+  if (name === "cache-control") out.headers.delete(ORIGINAL);
+  return out;
 }
