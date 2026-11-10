@@ -51,12 +51,19 @@ const age = async (kind, url, ms) =>
   db.execute({ sql: "UPDATE cache SET at = ? WHERE k = ?", args: [Date.now() - ms, `${kind}:${url}`] });
 const row = async (kind, url) =>
   (await db.execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [`${kind}:${url}`] })).rows[0];
+// Each test starts from no cached result and no lease for its site. Earlier
+// test files share this database and server: the browser tests open pages
+// whose diagnostics ask /api/psi for whatever sites they show, and with no
+// PageSpeed stand-in running then, a failure is cached for an hour.
+const clean = async (url) =>
+  db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?, ?, ?)", args: [`psi:${url}`, `inspect:${url}`, `lease:psi:${url}`, `lease:inspect:${url}`] });
 
 test("only the first request for a never-measured site waits", async () => {
   const url = feed[100].url;
+  await clean(url);
   calls = 0;
   const first = await get("psi", url);
-  assert.ok(first.ms >= SLOW_MS - 100, `first fill took ${first.ms}ms`);
+  assert.ok(first.ms >= SLOW_MS - 100, `first fill took ${first.ms}ms: ${JSON.stringify(first.body)}`);
   assert.equal(first.body.ok, true);
   assert.equal(first.body.scores.performance, 50);
   assert.ok(first.body.measuredAt);
@@ -68,6 +75,7 @@ test("only the first request for a never-measured site waits", async () => {
 
 test("a stale result returns at once, and concurrent requests schedule one refresh", async () => {
   const url = feed[101].url;
+  await clean(url);
   perf = 0.5;
   await get("psi", url);
   await age("psi", url, 31 * DAY);
@@ -92,6 +100,7 @@ test("a stale result returns at once, and concurrent requests schedule one refre
 
 test("a failed refresh keeps the old result and is not retried on every request", async () => {
   const url = feed[102].url;
+  await clean(url);
   perf = 0.4;
   await get("psi", url);
   await age("psi", url, 31 * DAY);
@@ -115,6 +124,7 @@ test("a failed refresh keeps the old result and is not retried on every request"
 
 test("a stale inspection returns at once too", async () => {
   const url = feed[103].url;
+  await clean(url);
   await db.execute({
     sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)",
     args: [`inspect:${url}`, JSON.stringify({ ok: true, https: true, title: "seeded" }), Date.now() - 8 * DAY],
@@ -127,6 +137,7 @@ test("a stale inspection returns at once too", async () => {
 
 test("a failed PageSpeed run is cached for an hour, then retried", async () => {
   const url = feed[104].url;
+  await clean(url);
   calls = 0;
   failNext = true;
   try {
@@ -148,6 +159,7 @@ test("a failed PageSpeed run is cached for an hour, then retried", async () => {
 
 test("a miss while another isolate holds the lease answers in_progress without calling PageSpeed", async () => {
   const url = feed[105].url;
+  await clean(url);
   await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '', ?)", args: [`lease:psi:${url}`, Date.now()] });
   calls = 0;
   const h = await get("psi", url);
@@ -159,6 +171,7 @@ test("a miss while another isolate holds the lease answers in_progress without c
 
 test("a site the health check found dead is never sent to PageSpeed", async () => {
   const url = feed[106].url;
+  await clean(url);
   await db.execute({
     sql: "INSERT OR REPLACE INTO portfolios (url, status) VALUES (?, 'dead')",
     args: [url],
