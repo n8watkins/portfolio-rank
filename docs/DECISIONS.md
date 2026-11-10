@@ -212,11 +212,17 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 
 ## Polls
 
-- **Automated polls people vote on** (owner, 2026-11-10). Status: planned.
+- **Automated polls people vote on** (owner, 2026-11-10). Status: back end built (tables, read and vote API, nightly generation; AUTOMATION.md "Polls"); the poll card and the polls page come with the redesign.
   A few polls are written each night from PortfolioRank's data in the content budget (for example "Which hero section is better?" with two real screenshots, "Should a portfolio show a resume?"); voting uses no AI, one vote per person through sign-in or a cookie plus Turnstile.
   A poll card sits on home and a polls page shows the series of past polls and their results.
   Results feed blog posts, and with enough votes become one more signal in the AI vs people comparisons.
   Why: cheap, engaging, and it produces people's opinions to compare with the AI's.
+- **One poll a week, Monday to Monday Pacific; Gemini at most 2 requests a week** (agent, 2026-11-10). Status: built.
+  A night writes 4 candidates in one 3.5 Flash-Lite request only when fewer than 2 future weeks have a poll; code validates them and picks the screenshots (sites graded S or A only), and when nothing is ready, code makes the week's poll without Gemini.
+  Why: a weekly poll gathers enough votes to mean something, and the content budget stays almost untouched.
+- **Results are totals only; one vote per account and per browser** (agent, 2026-11-10). Status: built.
+  Vote rows exist only for the one-vote rule and are deleted 30 days after a poll closes; rate limits key on the browser and a hashed IP; Turnstile switches on with its secret.
+  Why: the people who vote never asked to be on record, and a cookie alone is easy to clear.
 
 ## Content engine
 
