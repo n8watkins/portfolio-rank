@@ -61,7 +61,7 @@ Depends on: can start alongside phase 2; the leaderboard tabs fill in when ranki
 
 | Step | Status |
 | --- | --- |
-| Live capture on Cloudflare Browser Rendering, the free checks, PageSpeed, then the v2 grade | to do |
+| The free checks at once from the Worker (plain fetch), then a GitHub Actions job started by the Worker for the screenshot and the v2 grade, then a notification (Browser Rendering parked) | to do |
 | Queue with live progress; past the daily share, "we'll email your report" | the queue that waits for 3.5 and emails when done is building (#69); live progress to do |
 | Report page, share image, "add me to the leaderboard" request | to do |
 | Guardrails: Turnstile, per-person, per-network and site-wide caps, strict address checks, cache by address, private screenshots, untrusted page text | to do |

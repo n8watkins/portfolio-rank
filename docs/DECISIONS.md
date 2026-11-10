@@ -142,6 +142,11 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   The redesign's admin page will read it.
 - **A paid key comes later, with a hard cap** (owner, 2026-11-10). Status: planned.
   See Gemini above.
+- **Real-browser work stays on GitHub Actions** (owner, 2026-11-10). Status: built for the nightly checks (#69); planned for "grade my portfolio".
+  Screenshots, rendered text and health checks run on Actions (free for a public repository), started on time by the Cloudflare cron or on demand by the Worker with a `workflow_dispatch`.
+  Live "grade my portfolio" shows the free fact checks at once (a plain fetch from the Worker) and starts an Actions job for the screenshot and the AI grade, then notifies.
+  Cloudflare Browser Rendering is parked as a later upgrade.
+  The database moves from Turso to Cloudflare D1 in a later lane, so new code reaches the database only through `lib/db.ts` and the pipeline's `db` parameter.
 - **Kill switches** (agent, 2026-11-10). Status: planned.
   One setting each pauses grading, comparisons, publishing and email; today `GEMINI_BUDGET` caps can be set to 0 per stage.
 

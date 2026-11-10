@@ -19,7 +19,7 @@
 // night_runs makes sure of it too. Nothing here calls Gemini outside the
 // batches, and every step is safe to run again.
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { createClient } from "@libsql/client";
+import { db as database } from "../lib/db";
 import { budgetPlan, isNightStart, nightTimeline, pacificParts } from "../pipeline/budget.mjs";
 import { dailyQuota } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_RPM } from "../pipeline/gemini.mjs";
@@ -31,9 +31,7 @@ import { drainPeopleQueue } from "../pipeline/people.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
-  // Secrets (wrangler secret put).
-  TURSO_DATABASE_URL?: string;
-  TURSO_AUTH_TOKEN?: string;
+  // Secrets (wrangler secret put). The database comes from lib/db.ts, like the app's.
   GEMINI_API_KEY?: string;
   GITHUB_DISPATCH_TOKEN?: string;
   // Optional vars: the defaults in code apply when they are absent.
@@ -59,8 +57,8 @@ const CHECKS_POLL = "1 minute";
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 
 function engine(env: NightEnv, runId: string) {
-  if (!env.TURSO_DATABASE_URL) throw new Error("TURSO_DATABASE_URL is not set");
-  const db = createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN });
+  // The app's database module, so a later move of the database changes one place.
+  const db = database();
   const plan = budgetPlan(env.GEMINI_BUDGET);
   return {
     db,
