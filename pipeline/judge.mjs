@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Phase 1 AI bootstrap (GRADING_CRITERIA.md §6): Gemini Flash judges captured
-// portfolios.
+// Phase 1 AI bootstrap (GRADING_CRITERIA.md §6): Gemini Flash-Lite judges
+// captured portfolios (3.5 Flash-Lite, falling back to 3.1 Flash-Lite; see
+// pipeline/gemini.mjs and pipeline/ai-votes.mjs).
 //
 //   rubric   — 1 call/site: settled hero + motion frame + full-page shot →
 //              tier + six 1–5 axis scores + one-line justifications, stored as
@@ -19,6 +20,8 @@
 import { createClient } from "@libsql/client";
 import fs from "fs";
 import path from "path";
+import { createGemini, FLASH_LITE_CHAIN, GeminiAuthError } from "./gemini.mjs";
+import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -43,10 +46,11 @@ const flag = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : fallback;
 };
-// flash-lite has the biggest free-tier daily budget; --model swaps in a
-// stronger judge. rater_id carries the model so votes stay per-model tagged.
-const MODEL = flag("model", "gemini-3.1-flash-lite");
-const RATER_ID = `ai:${MODEL}`;
+// flash-lite has the biggest free-tier daily budget. The default is the
+// flash-lite chain (3.5, then 3.1 when 3.5 is rate limited, overloaded or
+// unreachable); --model M uses only M, with no fallback.
+const MODELS = flag("model") ? [flag("model")] : FLASH_LITE_CHAIN;
+const RATER_ID = raterIdFor(MODELS);
 const LIMIT = Number(flag("limit", "0")) || Infinity;
 const VOTES = Number(flag("votes", "20"));
 const ONLY = flag("only", "");
@@ -62,7 +66,7 @@ const TIERS = (flag("tiers", "S,A,B") || "")
 const SHOTS_BASE = (process.env.SHOTS_BASE_URL || "").replace(/\/+$/, "");
 
 if (MODE === "pairwise") {
-  if (MODEL !== "gemini-3.1-flash-lite" && !args.includes("--allow-model")) {
+  if (RATER_ID !== FLASH_LITE_RATER_ID && !args.includes("--allow-model")) {
     console.error("pairwise voting is flash-lite only (pass --allow-model to override)");
     process.exit(1);
   }
@@ -95,48 +99,13 @@ function eloUpdate(winnerElo, loserElo, k = 32) {
 }
 
 // ---------------------------------------------------------------------------
-// Gemini REST client: JSON-mode generateContent with pacing + retry
+// Gemini client (key in the x-goog-api-key header; see pipeline/gemini.mjs)
 // ---------------------------------------------------------------------------
-let calls = 0;
-let lastCall = 0;
-async function gemini(parts, schema) {
-  const gap = Math.ceil(60000 / RPM);
-  const wait = lastCall + gap - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastCall = Date.now();
-  calls++;
-
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
-            responseSchema: schema,
-          },
-        }),
-        signal: AbortSignal.timeout(120000),
-      }
-    );
-    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
-      const delay = 15000 * (attempt + 1);
-      console.log(`  gemini ${res.status}, retrying in ${delay / 1000}s`);
-      await new Promise((r) => setTimeout(r, delay));
-      continue;
-    }
-    if (!res.ok)
-      throw new Error(`gemini HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error(`gemini empty response: ${JSON.stringify(data).slice(0, 300)}`);
-    return JSON.parse(text);
-  }
-}
+const gemini = createGemini({
+  apiKey: process.env.GEMINI_API_KEY,
+  models: MODELS,
+  rpm: RPM,
+});
 
 // Inline image part; skips files that would blow the request size cap.
 function imagePart(file, budgetBytes = 5 * 1024 * 1024) {
@@ -330,9 +299,10 @@ async function runRubric() {
   );
   let queue = res.rows.filter((r) => !ONLY || String(r.url).includes(ONLY));
   queue = queue.slice(0, LIMIT === Infinity ? queue.length : LIMIT);
-  console.log(`rubric: judging ${queue.length} site(s) with ${MODEL}`);
+  console.log(`rubric: judging ${queue.length} site(s) with ${MODELS.join(" > ")}`);
 
   let ok = 0;
+  let errors = 0;
   let consecutiveErrors = 0;
   for (const [i, row] of queue.entries()) {
     const url = String(row.url);
@@ -421,9 +391,10 @@ async function runRubric() {
       ...images,
     ];
     try {
-      const rubric = await gemini(parts, rubricSchema);
+      const { result: rubric, model } = await gemini.generate(parts, rubricSchema);
       consecutiveErrors = 0;
-      rubric.model = MODEL;
+      rubric.model = model; // the model that actually answered
+
       rubric.grading_source = mode; // "local" (frames) or "r2" (hero+full+flag)
       rubric.judged_at = new Date().toISOString();
       await db.execute({
@@ -432,9 +403,11 @@ async function runRubric() {
       });
       ok++;
       console.log(
-        `[${i + 1}/${queue.length}] ${url} — tier ${rubric.tier}, portfolio=${rubric.is_portfolio}, design=${rubric.visual_design.score}`
+        `[${i + 1}/${queue.length}] ${url} - tier ${rubric.tier}, portfolio=${rubric.is_portfolio}, design=${rubric.visual_design.score} (${model})`
       );
     } catch (e) {
+      if (e instanceof GeminiAuthError) throw e;
+      errors++;
       console.log(`[${i + 1}/${queue.length}] ${url} — ERROR ${String(e.message).slice(0, 120)}`);
       // Stop grinding once the daily quota is gone — every further call would
       // just burn ~90s of retries and fail. Resets on any success above.
@@ -444,7 +417,8 @@ async function runRubric() {
       }
     }
   }
-  console.log(`rubric done: ${ok}/${queue.length} judged, ${calls} API call(s)`);
+  console.log(`rubric done: ${ok}/${queue.length} judged, ${gemini.summary()}`);
+  return { attempted: ok + errors, ok };
 }
 
 // ---------------------------------------------------------------------------
@@ -488,8 +462,10 @@ async function runPairwise() {
   pool = pool.filter((p) => p.tier && TIERS.includes(p.tier));
   if (pool.length < 2) {
     console.log(`pairwise[tiers=${TIERS.join("/")}]: pool too small (${pool.length}) — nothing to do`);
-    return;
+    return { attempted: 0, ok: 0 };
   }
+  const adopted = await prepareAiVotes(db);
+  if (adopted) console.log(`moved ${adopted} legacy AI vote(s) to rater ${FLASH_LITE_RATER_ID}`);
   const voted = await db.execute({
     sql: "SELECT pair_key FROM votes WHERE rater_id = ?",
     args: [RATER_ID],
@@ -498,10 +474,11 @@ async function runPairwise() {
   // One batched read of objective signals for the (small) tiered pool.
   const sig = await loadSignals(pool.map((p) => p.url));
   console.log(
-    `pairwise[tiers=${TIERS.join("/")}]: pool ${pool.length} site(s), ${seen.size} pair(s) already voted, casting up to ${VOTES}`
+    `pairwise[tiers=${TIERS.join("/")}]: pool ${pool.length} site(s), ${seen.size} pair(s) already voted by ${RATER_ID}, casting up to ${VOTES} with ${MODELS.join(" > ")}`
   );
 
   let cast = 0;
+  let errors = 0;
   let consecutiveErrors = 0;
   for (let round = 0; cast < VOTES && round < VOTES * 5; round++) {
     // Uncertainty-prioritized: sample a handful, face off the two least-voted
@@ -524,7 +501,7 @@ async function runPairwise() {
     }
 
     try {
-      const verdict = await gemini(
+      const { result: verdict, model } = await gemini.generate(
         [
           {
             text:
@@ -553,18 +530,20 @@ async function runPairwise() {
       consecutiveErrors = 0;
       seen.add(pairKey(a.url, b.url));
       if (verdict.winner === "skip") {
-        console.log(`  skip: ${a.url} vs ${b.url} — ${verdict.reason}`);
+        console.log(`  skip (${model}): ${a.url} vs ${b.url} - ${verdict.reason}`);
         continue;
       }
       const [win, lose] = verdict.winner === "A" ? [a, b] : [b, a];
-      await castVote(win, lose);
+      await castVote(win, lose, model);
       cast++;
-      console.log(`[${cast}/${VOTES}] ${win.url} beat ${lose.url} — ${verdict.reason}`);
+      console.log(`[${cast}/${VOTES}] (${model}) ${win.url} beat ${lose.url} - ${verdict.reason}`);
     } catch (e) {
+      if (e instanceof GeminiAuthError) throw e;
       // Never re-draw a failed pair this run — otherwise a poisoned pair recurs
       // every round on a small tiered pool and burns the budget for 0 votes.
       seen.add(pairKey(a.url, b.url));
       if (/UNIQUE constraint failed/i.test(String(e.message))) continue; // dup, not an error
+      errors++;
       console.log(`  ERROR ${a.url} vs ${b.url}: ${String(e.message).slice(0, 120)}`);
       if (++consecutiveErrors >= 5) {
         console.log("  aborting: 5 consecutive errors (likely quota exhausted or outage)");
@@ -572,13 +551,14 @@ async function runPairwise() {
       }
     }
   }
-  console.log(`pairwise done: ${cast} vote(s) cast, ${calls} API call(s)`);
+  console.log(`pairwise done: ${cast} vote(s) cast, ${gemini.summary()}`);
+  return { attempted: cast + errors, ok: cast };
 }
 
 // Mirrors POST /api/rank: insert + ELO upsert in one write transaction, with
 // the UNIQUE(rater_id, pair_key) index as the dup backstop. AI votes move
 // official ELO — that is the whole point of the bootstrap (GRADING §7).
-async function castVote(win, lose) {
+async function castVote(win, lose, model) {
   const tx = await db.transaction("write");
   try {
     const rres = await tx.execute({
@@ -592,8 +572,15 @@ async function castVote(win, lose) {
     const l = map.get(lose.url) ?? { elo: BASE_ELO, votes: 0 };
     const updated = eloUpdate(w.elo, l.elo);
     await tx.execute({
-      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id) VALUES (?, ?, ?, 'ai', ?)",
-      args: [win.url, lose.url, pairKey(win.url, lose.url), RATER_ID],
+      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, model, delta) VALUES (?, ?, ?, 'ai', ?, ?, ?)",
+      args: [
+        win.url,
+        lose.url,
+        pairKey(win.url, lose.url),
+        RATER_ID,
+        model,
+        updated.winner - w.elo,
+      ],
     });
     const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
       VALUES (?, ?, ?, datetime('now'))
@@ -614,9 +601,22 @@ async function castVote(win, lose) {
 }
 
 // ---------------------------------------------------------------------------
-if (MODE === "rubric") await runRubric();
-else if (MODE === "pairwise") await runPairwise();
-else {
+// Exit non-zero when the key is rejected, or when there was work and every
+// Gemini call failed, so a dead key or a full outage fails the workflow
+// instead of passing green with nothing judged (July-November 2026).
+// Running out of daily quota after some successes still exits 0.
+if (MODE !== "rubric" && MODE !== "pairwise") {
   console.error("usage: node pipeline/judge.mjs rubric|pairwise [flags]");
+  process.exit(1);
+}
+try {
+  const { attempted, ok } = MODE === "rubric" ? await runRubric() : await runPairwise();
+  if (attempted > 0 && ok === 0) {
+    console.error(`${MODE}: every Gemini call failed (${gemini.summary()})`);
+    process.exit(1);
+  }
+} catch (e) {
+  if (!(e instanceof GeminiAuthError)) throw e;
+  console.error(`${e.message}\nCheck the GEMINI_API_KEY secret (${gemini.summary()}).`);
   process.exit(1);
 }

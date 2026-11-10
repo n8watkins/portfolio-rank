@@ -54,14 +54,16 @@ Verify: `gh secret list -R n8watkins/portfolio-rank` shows `GEMINI_API_KEY` upda
 Then check the key itself without printing it:
 
 ```bash
-set -a; . ./.env.local; set +a
-curl -s -o /dev/null -w "%{http_code}\n" \
-  "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY"
+pass-env run -- sh -c 'curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "x-goog-api-key: $GEMINI_API_KEY" \
+  https://generativelanguage.googleapis.com/v1beta/models'
 ```
+
+Send the key in the `x-goog-api-key` header: newer "AQ." keys are rejected as `?key=`.
 
 It should print `200`, not `400` or `401`.
 
-- [ ] **Step 3. Make the grading jobs fail when the key is bad** (agent)
+- [x] **Step 3. Make the grading jobs fail when the key is bad** (agent, done 2026-11-10 with the Gemini 3.5 Flash-Lite switch)
 
 A bad key must turn the run red, so the existing "Notify on failure" step files an issue.
 In `pipeline/judge.mjs`:
