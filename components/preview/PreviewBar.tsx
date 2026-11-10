@@ -14,23 +14,22 @@ const STATES: [string, string][] = [
 const COOKIE = "pr-preview-state";
 
 /** Preview-only: switch the visitor state and theme. Not part of the design. */
-export function PreviewBar({ state, region }: { state: string; region: "blocked" | "open" }) {
+export function PreviewBar({ state }: { state: string }) {
   const [theme, setTheme] = useTheme();
 
   // A ?state= link is remembered, so every page keeps that visitor.
   useEffect(() => {
     document.cookie = `${COOKIE}=${state}; path=/; max-age=31536000; samesite=lax`;
-    document.cookie = `pr-preview-region=${region}; path=/; max-age=31536000; samesite=lax`;
-  }, [state, region]);
+  }, [state]);
 
   const select =
     "h-7 rounded-md border border-edge-strong bg-card px-1.5 text-xs font-medium text-ink outline-none focus-visible:border-accent";
   return (
     <div className="border-b border-dashed border-edge-strong bg-raised">
-      <div className="mx-auto flex max-w-6xl items-center gap-x-2.5 sm:gap-x-4 px-4 py-1.5 text-xs sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center gap-x-3 sm:gap-x-4 px-4 py-1.5 text-xs sm:px-6">
         <p className="flex items-center gap-1.5 font-semibold text-ink">
           <FlaskConical className="h-3.5 w-3.5" aria-hidden />
-          <span className="max-sm:sr-only">Preview</span>
+          Preview
           <span className="hidden font-normal text-mute md:inline">Sample data is marked. Not deployed.</span>
         </p>
         <label className="flex items-center gap-1.5 text-mute">
@@ -49,21 +48,6 @@ export function PreviewBar({ state, region }: { state: string; region: "blocked"
                 {l}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5 text-mute">
-          <span className="sr-only sm:not-sr-only">Region</span>
-          <select
-            className={select}
-            value={region}
-            onChange={(e) => {
-              const u = new URL(location.href);
-              u.searchParams.set("region", e.target.value);
-              location.href = u.toString();
-            }}
-          >
-            <option value="open">Open</option>
-            <option value="blocked">UK/EU</option>
           </select>
         </label>
         <label className="flex items-center gap-1.5 text-mute">

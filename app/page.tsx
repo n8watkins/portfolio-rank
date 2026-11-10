@@ -58,15 +58,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
             How good is your <span className="text-accent">portfolio</span>?
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(120)}>
-            {v.blocked
-              ? "See how " + total.toLocaleString() + " developer portfolios rank, vote in face-offs, and guess where a portfolio lands."
-              : "Paste a link. In about a minute you get a grade, where you'd rank among " + total.toLocaleString() + " developer portfolios, and the three things to fix first."}
+            Paste a link. In about a minute you get a grade, where you&apos;d rank among {total.toLocaleString()} developer portfolios, and the three things to fix first.
           </p>
           <div className="rise mx-auto mt-7 max-w-xl" style={d(180)}>
-            <GradeForm blocked={v.blocked} />
+            <GradeForm />
           </div>
           <p className="rise mt-4 text-sm text-mute" style={d(240)}>
-            {v.blocked ? "You can still" : "Free, no account needed. Or"}{" "}
+            Free, no account needed. Or{" "}
             <a href="/rank" className="font-semibold text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
               vote in a face-off
             </a>
@@ -85,7 +83,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
               </h2>
               <p className="mt-1 text-sm text-mute">A friend&apos;s, or a new version of yours.</p>
               <div className="mt-3">
-                <GradeForm compact id="grade-another" blocked={v.blocked} />
+                <GradeForm compact id="grade-another" />
               </div>
             </section>
             <FaceOffTeaser className="flex-1" />

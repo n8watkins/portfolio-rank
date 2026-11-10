@@ -1,38 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Link2, Sparkles } from "lucide-react";
+import { Link2, Sparkles } from "lucide-react";
 
 /** Paste a link, grade it. The preview goes to the mocked progress page. */
-export function GradeForm({ compact = false, id = "grade-url", blocked = false }: { compact?: boolean; id?: string; blocked?: boolean }) {
+export function GradeForm({ compact = false, id = "grade-url" }: { compact?: boolean; id?: string }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
-  if (blocked) {
-    // Grading is off in the visitor's region: the same box, disabled, with the reason.
-    return (
-      <div className="w-full" aria-disabled="true">
-        <div className={`flex gap-2 ${compact ? "" : "flex-col sm:flex-row"}`}>
-          <div className={`relative min-w-0 shrink-0 sm:flex-1 rounded-lg border border-dashed border-edge-strong bg-raised ${compact ? "h-10" : "h-12"}`}>
-            <Link2 className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-mute" aria-hidden />
-            <label htmlFor={id} className="sr-only">
-              Your portfolio address (grading is off in your region)
-            </label>
-            <input id={id} disabled placeholder="yourname.dev" className="h-full w-full cursor-not-allowed bg-transparent pl-10 pr-3 text-[15px] text-mute outline-none placeholder:text-mute/70" />
-          </div>
-          <button
-            type="button"
-            disabled
-            className={`inline-flex shrink-0 cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-dashed border-edge-strong font-semibold text-mute ${compact ? "h-10 px-4 text-sm" : "h-12 px-6 text-[15px]"}`}
-          >
-            <Ban className="h-4 w-4" aria-hidden /> {compact ? "Off" : "Grading off here"}
-          </button>
-        </div>
-        <p className={`mt-2 text-sm text-mute ${compact ? "" : "text-center"}`}>
-          AI grading is off in the UK, the EU/EEA and Switzerland, because Google&apos;s free Gemini tier isn&apos;t allowed there.
-        </p>
-      </div>
-    );
-  }
   return (
     <form
       noValidate

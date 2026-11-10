@@ -1,6 +1,5 @@
 import { PreviewBar } from "@/components/preview/PreviewBar";
 import { RevealObserver } from "@/components/preview/RevealObserver";
-import { RegionNotice } from "@/components/preview/RegionNotice";
 import { MobileTabBar } from "@/components/shell/MobileTabBar";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { SiteHeader } from "@/components/shell/SiteHeader";
@@ -22,9 +21,8 @@ export function AppShell({
   const name = "Jordan";
   return (
     <div className="flex min-h-dvh flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
-      <PreviewBar state={visitor.state} region={visitor.blocked ? "blocked" : "open"} />
-      <SiteHeader current={current} action={action} signedIn={visitor.signedIn} name={name} blocked={visitor.blocked} />
-      {visitor.country && <RegionNotice country={visitor.country} />}
+      <PreviewBar state={visitor.state} />
+      <SiteHeader current={current} action={action} signedIn={visitor.signedIn} name={name} />
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6">
         {children}
       </main>

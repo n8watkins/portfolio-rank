@@ -28,7 +28,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           <h1 className="mt-5 text-2xl font-bold tracking-tight">Your portfolio lives here once it&apos;s graded</h1>
           <p className="mt-2 text-mute">Grade it to see your rank, how you compare in every criterion, and what to fix first.</p>
           <div className="mt-6 text-left">
-            <GradeForm id="me-grade" blocked={v.blocked} />
+            <GradeForm id="me-grade" />
           </div>
         </section>
       </AppShell>
@@ -102,7 +102,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
               )}
             </div>
           </div>
-          <Regrade gradedOn={rep.gradedOn} blocked={v.blocked} />
+          <Regrade gradedOn={rep.gradedOn} />
         </section>
 
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
