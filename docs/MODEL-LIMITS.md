@@ -24,8 +24,8 @@ Daily quotas are per project and reset at midnight Pacific.
 - The image is `hero.jpg`: the top of the page in a 1440 x 900 viewport, JPEG quality 75 (`pipeline/capture.mjs`).
   Over 1,696 local captures it is 68 KB at the median, 130 KB at the 95th percentile and 231 KB at most, so 91 KB, 173 KB and 308 KB as base64.
   A file over 5 MB is skipped.
-- A grade (`pipeline/rubric.mjs`) sends one hero, the facts and up to 4,000 characters of page text; thinking `minimal`, `maxOutputTokens` 2,048 (600 until #PRNUM), temperature 0.2.
-- A one-on-one comparison (`pipeline/compare-prompts.mjs`) sends two heroes with 1,200 characters of page text each; a batched comparison sends N heroes with 600 characters each; both use thinking `minimal` and `maxOutputTokens` 1,024 (400 until #PRNUM).
+- A grade (`pipeline/rubric.mjs`) sends one hero, the facts and up to 4,000 characters of page text; thinking `minimal`, `maxOutputTokens` 2,048 (600 until #72), temperature 0.2.
+- A one-on-one comparison (`pipeline/compare-prompts.mjs`) sends two heroes with 1,200 characters of page text each; a batched comparison sends N heroes with 600 characters each; both use thinking `minimal` and `maxOutputTokens` 1,024 (400 until #72).
 - Email addresses and phone numbers in page text and names are replaced by `[email]` and `[phone]` before the prompt is built (`pipeline/redact.mjs`).
 - Every response's `finishReason` is logged; an answer that did not finish with `STOP` (such as `MAX_TOKENS`) is a failed answer, never stored and not retried (`pipeline/gemini.mjs`).
 - No `media_resolution` is set, so every image costs the default 1,120 tokens on Gemini 3.

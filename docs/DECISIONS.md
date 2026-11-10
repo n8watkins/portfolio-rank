@@ -50,7 +50,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Browsing, leaderboards, face-off and guess-the-rank voting, polls, the blog, profiles and the background grading of listed sites need none of this.
   Revisit at the public launch or when traffic grows; switching to paid billing removes both issues.
   Why: the owner prefers one open site for everyone over geo-blocking, and only public portfolio content reaches the model.
-- **Public by design** (owner, 2026-11-10). Status: built for page text (#PRNUM); the wording goes on the privacy page ([legal/privacy.md](legal/privacy.md), draft).
+- **Public by design** (owner, 2026-11-10). Status: built for page text (#72); the wording goes on the privacy page ([legal/privacy.md](legal/privacy.md), draft).
   The wording:
 
   > Public by design.
@@ -59,15 +59,15 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   > Names, public photos and the portfolio's own content stay, because that's what a portfolio is for.
   > Nothing is blocked by region.
 
-- **Contact details never reach Gemini** (owner, 2026-11-10). Status: built (#PRNUM).
+- **Contact details never reach Gemini** (owner, 2026-11-10). Status: built (#72).
   Before any page text goes into a prompt (rubric v2 grades, one-on-one and batched comparisons), email addresses, phone numbers and mailto:/tel: links, spelled-out addresses included ("jane at example dot com"), become `[email]` and `[phone]` (`pipeline/redact.mjs`).
   The contact fact check still works, since code measures it from the page's links, and the grader is told what the tokens mean.
   Why: the free tier's terms ask not to send personal information, and the model needs to know a contact path exists, not what it is.
-- **A cut-off answer is a failed answer** (agent, 2026-11-10). Status: built (#PRNUM).
+- **A cut-off answer is a failed answer** (agent, 2026-11-10). Status: built (#72).
   Every Gemini response's `finishReason` is logged in `gemini_requests`; an answer that did not finish with `STOP` (`MAX_TOKENS`, `SAFETY`, a blocked prompt) is never stored as a grade or a comparison and is not retried.
   The answer caps leave room for thinking, which `maxOutputTokens` counts: 2,048 for a grade (was 600) and 1,024 for a comparison (was 400); only tokens produced are billed.
   Why: a truncated JSON answer must never become a grade, and 3.x models think a little even at `minimal` ([MODEL-LIMITS.md](MODEL-LIMITS.md)).
-- **Error bodies are kept** (agent, 2026-11-10). Status: built (#PRNUM).
+- **Error bodies are kept** (agent, 2026-11-10). Status: built (#72).
   The first 300 characters of every Gemini error body (429s name the limit that was hit) go to `gemini_requests.detail`, on one line, with anything key-like removed.
   Why: test G3 in ASSUMPTIONS.md; the classifier can later match Google's quota id instead of a regex.
 
@@ -135,7 +135,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   3.5 only (`GEMINI_FALLBACK` off), at today's pace.
   Why: the free quota resets at midnight Pacific and unused requests are lost, so people never wait behind background work and the background never wastes a day.
   This replaces the fixed daily split and its flex rules (see Superseded).
-- **The quota day is the Pacific day** (agent, 2026-11-10). Status: built (#69; one helper, `pipeline/quota-day.mjs`, since #PRNUM).
+- **The quota day is the Pacific day** (agent, 2026-11-10). Status: built (#69; one helper, `pipeline/quota-day.mjs`, since #72).
   Every count of "today" (the accountant, job summaries, comparisons per day, the comparison seed, owner alerts) runs midnight to midnight in America/Los_Angeles, 23 or 25 hours on the DST days.
   Why: that is when Google resets the free quota; counting UTC days split one quota day in two.
 - **One budget accountant** (owner, 2026-11-10). Status: building (#69).
@@ -270,16 +270,16 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Revisit when Turso's free limits get close; by then paying for a database may be the answer anyway.
   The limits, our projected use and the fixes that keep us under them are in [COSTS.md](COSTS.md); the D1 comparison and a backup restore test are in [ASSUMPTIONS.md](ASSUMPTIONS.md).
   Why: a move is real work across the app and the pipeline, and with the fixes in COSTS.md the free plan holds even the popular scenario.
-- **No page view scans a whole table** (agent, 2026-11-10, from COSTS.md section C). Status: built (#PRNUM).
+- **No page view scans a whole table** (agent, 2026-11-10, from COSTS.md section C). Status: built (#72).
   Vote totals and star counts are counters kept by triggers on `votes` (`lib/schema.mjs`), so `/top` and portfolio pages read a few rows; `/top` renders at most every 5 minutes; the board API reads one page through a `(view, shown_rank)` index, with visible ranks stored by the recompute, and is cached at the edge for 5 minutes; the hidden-site set is kept per isolate for 5 minutes.
   Why: Turso Free blocks every query once 500 million rows are read in a month, and these scans were the first thing that would get there.
-- **Log tables roll up and expire** (agent, 2026-11-10, from COSTS.md section C). Status: built (#PRNUM).
+- **Log tables roll up and expire** (agent, 2026-11-10, from COSTS.md section C). Status: built (#72).
   After the end-of-day run: `gemini_requests` keeps 90 Pacific days raw, then one `gemini_daily` row per day, model, job and outcome; `night_runs` keeps 180 days; `comparisons` keep every row the recompute and the open method need, and only the model's free-text reason is cleared after 90 days; cleared owner alerts go after 180 days.
   Why: bounded growth, without losing anything a budget, a report or the public recompute reads.
-- **The nightly backup holds every table** (agent, 2026-11-10). Status: built (#PRNUM).
+- **The nightly backup holds every table** (agent, 2026-11-10). Status: built (#72).
   Every table and column except the transient `cache` and `matchups`, with the schema (tables, indexes, triggers), and a restore script that writes only to a new, empty database and checks every table's count ([ASSUMPTIONS.md](ASSUMPTIONS.md) section G).
   Why: Turso Free keeps one day of point-in-time restore, so this snapshot is the real backup, and it was missing `comparisons`, `likes` and `lists`.
-- **The ISR queue's Durable Object stays** (agent, 2026-11-10). Status: built (#PRNUM).
+- **The ISR queue's Durable Object stays** (agent, 2026-11-10). Status: built (#72).
   The deploy's "DOQueueHandler isn't exported" warning comes from the local proxy OpenNext starts to read the config, not from the uploaded Worker, which exports it; CI checks the bundle exports every bound class.
   Why: removing the binding would break deduplicated ISR re-renders to silence a false alarm.
 - **Browser work stays on GitHub Actions; Browser Rendering is parked** (owner, 2026-11-10). Status: decided.

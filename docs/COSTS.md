@@ -150,7 +150,7 @@ Watching:
 
 With 1, 2, 4 and 6 to 8 in place, the popular scenario stays under about 3 million writes and 220 million reads a month in its first year, inside Turso Free.
 
-### Status (2026-11-10, #PRNUM)
+### Status (2026-11-10, #72)
 
 Built:
 

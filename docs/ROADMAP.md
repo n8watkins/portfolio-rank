@@ -99,8 +99,8 @@ Depends on: the blog shell and model watch can start any time; most stories need
 | One admin page: quotas used, grades queued, posts queued, emails sent, removals pending | the quota data API is building (#69); the page comes with the redesign |
 | OpenPing watching health, the daily Gemini totals and the content pipeline | to do |
 | Paid Gemini key with a budget alert and hard cap: revisit at the public launch or when traffic grows (DECISIONS.md, "Free tier everywhere") | needs owner, later |
-| Turso reads: vote counters, a paged and edge-cached board API, nightly log roll-ups and retention (docs/COSTS.md section C) | done (#PRNUM) |
-| Nightly backup of every table, with a tested restore (`scripts/restore-db.mjs`) | done (#PRNUM); the owner's restore drill (ASSUMPTIONS.md section G) to do |
+| Turso reads: vote counters, a paged and edge-cached board API, nightly log roll-ups and retention (docs/COSTS.md section C) | done (#72) |
+| Nightly backup of every table, with a tested restore (`scripts/restore-db.mjs`) | done (#72); the owner's restore drill (ASSUMPTIONS.md section G) to do |
 
 Depends on: phase 1's request log; the budget must exist before phase 4 opens to the public.
 

@@ -22,10 +22,10 @@ Status per entry:
    Decided (owner, 2026-11-10): stay on the free tier everywhere, block no region, and accept the risk for now; contact details are stripped from page text before it reaches Gemini, and where a visitor starts AI work they get a clear free-tier notice and a bring-your-own-key option (DECISIONS.md, "Free tier everywhere").
    Revisit at the public launch or when traffic grows; paid billing removes both issues.
 2. **Our daily ledger counted UTC days; Google's daily quota resets at midnight Pacific** (contradicted, resolved).
-   Every Gemini "today" now uses one Pacific quota-day helper, `pipeline/quota-day.mjs`, tested across both DST changes (#69, #PRNUM).
+   Every Gemini "today" now uses one Pacific quota-day helper, `pipeline/quota-day.mjs`, tested across both DST changes (#69, #72).
 3. **`maxOutputTokens` includes thinking tokens** (verified, not handled).
    A response that hits the cap ends with `MAX_TOKENS` and possibly truncated JSON, and the thinking tokens are still billed.
-   Resolved (#PRNUM): `finishReason` is logged for every response, an answer that did not finish with `STOP` is a failed answer that is never stored, and the caps leave room for thinking (A7).
+   Resolved (#72): `finishReason` is logged for every response, an answer that did not finish with `STOP` is a failed answer that is never stored, and the caps leave room for thinking (A7).
 4. **3.1 Flash-Lite shuts down no earlier than 2027-05-07** (verified).
    Every labelled 3.1 experiment (the 3.1-vs-3.5 comparison, trend analysis) has to finish before then.
 5. **Failed requests (400 and 500) count against quota but are not charged** (verified).
@@ -34,14 +34,14 @@ Status per entry:
    The 500-a-day figure in DECISIONS.md is the owner's reading of AI Studio and stays an assumption until the owner re-reads it there (test G1).
 7. **Turso's Free plan blocks every query when any monthly limit is exceeded, and keeps only 1 day of point-in-time restore** (verified).
    The owner decided to stay on Turso for now; COSTS.md section C shows our projected use against the Free limits and the roll-ups that keep it far below them, and section E keeps the D1 comparison for when it is revisited.
-   The nightly backup held only `votes`, `ratings` and part of `portfolios`; since #PRNUM it holds every table but the transient `cache` and `matchups`, with a tested restore script (section G).
+   The nightly backup held only `votes`, `ratings` and part of `portfolios`; since #72 it holds every table but the transient `cache` and `matchups`, with a tested restore script (section G).
 8. **GitHub's terms restrict what GitHub-hosted runners may be used for** (verified, a risk for on-demand grading).
    Actions may not be used "as part of a serverless application" where the burden outweighs the benefit, nor, on GitHub-hosted runners, for activity unrelated to the software project; capturing a stranger's site because they pressed "grade my portfolio" is the kind of use this clause is about (section F).
 9. **Image tokens can be cut 4x with `media_resolution` LOW** (verified that the setting exists, not that grades stay as good).
    This matters most for batched comparisons; see MODEL-LIMITS.md and test G6.
 10. **The first Turso limit we would hit is reads from two per-page-view full scans, not log growth** (estimated from the code).
    `/top` counted every row of `votes` on each render and `/api/leaderboard` read a whole board view on each request; COSTS.md section C has the numbers.
-   Fixed (#PRNUM): vote counters kept by triggers, a paged and edge-cached board, and nightly roll-ups and retention for the log tables.
+   Fixed (#72): vote counters kept by triggers, a paged and edge-cached board, and nightly roll-ups and retention for the log tables.
 
 ## A. Gemini
 
@@ -69,7 +69,7 @@ Status per entry:
 - Verified: "Requests per day (RPD) quotas reset at midnight Pacific time." ([rate limits](https://aistudio.google.com/docs/rate-limits)).
 - Was contradicted in our code: `dailyTotals` in `pipeline/gemini-log.mjs` and `comparisonsToday` in `lib/ranking/store.mjs` took "today" as the UTC date.
   Midnight Pacific is 08:00 UTC in winter and 07:00 UTC in summer, so work at 23:00 UTC and at 01:00 UTC landed on two of our days but one of Google's.
-- Resolved: #69 moved the ledger and the budgets to the Pacific day; #PRNUM made `pipeline/quota-day.mjs` the one helper every Gemini "today" uses (the ledger, the accountant, the ranking store, the comparison seed, owner alerts), with tests for every hour of 2026 and 2027 and both DST days.
+- Resolved: #69 moved the ledger and the budgets to the Pacific day; #72 made `pipeline/quota-day.mjs` the one helper every Gemini "today" uses (the ledger, the accountant, the ranking store, the comparison seed, owner alerts), with tests for every hour of 2026 and 2027 and both DST days.
 
 ### A4. Whether failed or retried requests count
 
@@ -88,7 +88,7 @@ Status per entry:
 - Test G3: store the first 300 characters of every 429 body.
   Cost: 0 extra requests.
   Proves: the exact body Google sends for each limit, so the classifier can match a field instead of a regex.
-  Status: running since #PRNUM: every error body (429, 5xx, other 4xx) goes to `gemini_requests.detail`, one line, key-like strings removed; `reason` keeps the short label.
+  Status: running since #72: every error body (429, 5xx, other 4xx) goes to `gemini_requests.detail`, one line, key-like strings removed; `reason` keeps the short label.
   Next: after the first 429s, read `SELECT at, reason, detail FROM gemini_requests WHERE status = 429` and switch `isDailyQuota` to the quota id if the bodies carry it.
 
 ### A6. Image input
@@ -120,9 +120,9 @@ Status per entry:
 - Test G5: add `finishReason` to the request log and count `MAX_TOKENS` per job for a week.
   Cost: 0 extra requests.
   Proves: whether the caps ever cut an answer; if they do, raise the cap rather than retry.
-  Status: running since #PRNUM (`gemini_requests.finish_reason`; run summaries show a "Cut off" column).
+  Status: running since #72 (`gemini_requests.finish_reason`; run summaries show a "Cut off" column).
   Next: after a week, `SELECT job, finish_reason, COUNT(*) FROM gemini_requests WHERE status = 200 GROUP BY job, finish_reason`.
-- Decision (#PRNUM): keep `minimal`; raise the caps to 2,048 (rubric) and 1,024 (comparisons) so thinking has room, since only tokens produced are billed; an answer that did not finish with `STOP` is a failed answer, never stored and not retried.
+- Decision (#72): keep `minimal`; raise the caps to 2,048 (rubric) and 1,024 (comparisons) so thinking has room, since only tokens produced are billed; an answer that did not finish with `STOP` is a failed answer, never stored and not retried.
 
 ### A8. Prices
 
@@ -304,9 +304,9 @@ Decision (owner, 2026-11-10): captures and every other browser job stay on GitHu
 Assumption: the nightly R2 snapshot (`.github/workflows/backup.yml`, `scripts/backup-db.mjs`) can rebuild the database if Turso loses it.
 Turso Free keeps only 1 day of point-in-time restore (section C), so this snapshot is the real backup.
 
-What the snapshot holds (format 2, `scripts/lib/snapshot.mjs`, since #PRNUM): every row and column of every table except `cache` (PageSpeed and inspect results, refetched on demand) and `matchups` (minutes of draw state), plus the schema as SQLite stored it (tables, indexes, triggers).
+What the snapshot holds (format 2, `scripts/lib/snapshot.mjs`, since #72): every row and column of every table except `cache` (PageSpeed and inspect results, refetched on demand) and `matchups` (minutes of draw state), plus the schema as SQLite stored it (tables, indexes, triggers).
 That includes `comparisons`, `likes`, `lists` and `list_items`, all of `portfolios` (`page_text`, `facts`, `meta`), `rubric_history`, `gemini_requests` and `gemini_daily`, the ranking tables, `night_runs`, `night_item_failures`, `people_requests`, `owner_alerts`, the vote counters and `schema_meta`; a table added later is included automatically.
-Before #PRNUM it held only `votes`, `ratings` and eight columns of `portfolios`; such a format 1 snapshot still restores.
+Before #72 it held only `votes`, `ratings` and eight columns of `portfolios`; such a format 1 snapshot still restores.
 
 Procedure (the owner runs it; it needs Turso and R2 credentials and touches only a scratch database):
 
