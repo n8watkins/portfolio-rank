@@ -319,3 +319,83 @@ test("grades from an older rubric version are re-graded last, and only with RUBR
   assert.equal(hist.length, 1, "the v1 grade is kept in rubric_history");
   assert.equal(JSON.parse(String(hist[0].rubric)).motion.score, 2);
 });
+
+// Owner decision 2026-11-10: grades and votes come from 3.5 only. A spent
+// quota or a 3.5 that stays busy leaves the rest for the next run.
+const DAILY_429 = {
+  status: 429,
+  raw: JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [{ violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } }),
+};
+const modelsOf = (r) => [...new Set(r.requests.map((q) => q.model))];
+
+test("rubric: a spent 3.5 daily quota stops cleanly, never asks 3.1, and is not a failure", async () => {
+  const [a, b, c] = feed;
+  const { dir, dbFile, db } = await setup([{ url: a.url }, { url: b.url }, { url: c.url }]);
+  const r = await runJudge(dir, dbFile, ["rubric"], { MOCK_GEMINI: JSON.stringify([{ json: rubric() }, DAILY_429]) });
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(modelsOf(r), [PRIMARY_MODEL]);
+  assert.equal(r.calls, 2);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM portfolios WHERE ai_rubric IS NOT NULL")).rows[0].n, 1);
+  assert.match(r.summary, /OK: 1 of 1 site\(s\) judged/);
+  // 3 queued, 1 judged, 0 errors, 2 deferred.
+  assert.match(r.summary, /\| 1 \| 1 \| 0 \| 0 \| 0 \| 2 \|/);
+  assert.match(r.summary, /Stopped early: gemini gemini-3\.5-flash-lite: daily quota used up; waiting for tomorrow's quota \(no fallback to a lower model: GEMINI_FALLBACK is off\)/);
+});
+
+test("rubric: a spent 3.5 quota before anything is graded still passes (planned waiting)", async () => {
+  const { dir, dbFile } = await setup([{ url: feed[0].url }, { url: feed[1].url }]);
+  const r = await runJudge(dir, dbFile, ["rubric"], { MOCK_GEMINI: JSON.stringify([DAILY_429]) });
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(modelsOf(r), [PRIMARY_MODEL]);
+  assert.match(r.summary, /Nothing judged: today's budget is used; 2 waiting for tomorrow/);
+});
+
+test("rubric: 3.5 busy through every retry with nothing graded fails loudly, without asking 3.1", async () => {
+  const { dir, dbFile, db } = await setup([{ url: feed[0].url }, { url: feed[1].url }]);
+  const r = await runJudge(dir, dbFile, ["rubric"], { MOCK_FAST_TIMERS: "1", MOCK_GEMINI: JSON.stringify([{ status: 503, raw: "{}" }]) });
+  assert.equal(r.code, 1, r.out);
+  assert.equal(r.calls, 4, "the first try and 3 retries, all on 3.5");
+  assert.deepEqual(modelsOf(r), [PRIMARY_MODEL]);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM portfolios WHERE ai_rubric IS NOT NULL")).rows[0].n, 0);
+  assert.match(r.summary, /FAILED: every Gemini call failed/);
+  assert.match(r.summary, /Stopped early: gemini unavailable: gemini-3\.5-flash-lite HTTP 503 after 3 retries; the rest waits for the next run/);
+});
+
+test("rubric: GEMINI_FALLBACK=on (experiments only) brings back the 3.1 chain, labelled with its model", async () => {
+  const [a] = feed;
+  const { dir, dbFile, db } = await setup([{ url: a.url }]);
+  const r = await runJudge(dir, dbFile, ["rubric"], {
+    GEMINI_FALLBACK: "on",
+    MOCK_GEMINI: JSON.stringify([DAILY_429, { json: rubric() }]),
+  });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /GEMINI_FALLBACK is on: experiment mode/);
+  assert.deepEqual(r.requests.map((q) => q.model), [PRIMARY_MODEL, BACKUP_MODEL]);
+  assert.equal((await gradeOf(db, a.url)).model, BACKUP_MODEL);
+});
+
+test("pairwise: a spent 3.5 daily quota casts what it could, never asks 3.1, and passes", async () => {
+  const [a, b, c, d] = feed;
+  const { dir, dbFile, db } = await setup([a, b, c, d].map((p) => ({ url: p.url, rubric: rubric({ tier: "A" }) })));
+  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "5"], {
+    MOCK_GEMINI: JSON.stringify([{ json: { winner: "A", reason: "cleaner" } }, DAILY_429]),
+  });
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(modelsOf(r), [PRIMARY_MODEL]);
+  const votes = (await db.execute("SELECT model FROM votes")).rows;
+  assert.deepEqual(votes.map((v) => v.model), [PRIMARY_MODEL]);
+  assert.match(r.summary, /OK: 1 of 1 pair\(s\) judged/);
+  assert.match(r.summary, /4 vote\(s\) wait for tomorrow \(no fallback to a lower model/);
+});
+
+test("pairwise: --model gemini-3.1-flash-lite is refused without --allow-model", async () => {
+  const { dir, dbFile, db } = await setup([
+    { url: feed[0].url, rubric: rubric({ tier: "A" }) },
+    { url: feed[1].url, rubric: rubric({ tier: "A" }) },
+  ]);
+  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "1", "--model", BACKUP_MODEL]);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /pairwise voting is gemini-3\.5-flash-lite only/);
+  assert.equal(r.calls, 0);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM votes")).rows[0].n, 0);
+});

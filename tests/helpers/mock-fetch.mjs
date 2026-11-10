@@ -6,8 +6,14 @@
 // test can see what was sent: the model, the key header, the number of
 // images, the system instruction, the thinking level and the last text part.
 // Any other URL is the portfolio itself: MOCK_PAGE (HTML) when set, else an
-// error, so no test reaches a real site.
+// error, so no test reaches a real site. MOCK_FAST_TIMERS=1 makes every
+// setTimeout fire at once, so the 10/30/60 s retry backoff takes no time.
 import fs from "node:fs";
+
+if (process.env.MOCK_FAST_TIMERS === "1") {
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, _ms, ...rest) => realSetTimeout(fn, 0, ...rest);
+}
 
 const steps = JSON.parse(process.env.MOCK_GEMINI ?? '[{"status":200,"json":{}}]');
 let i = 0;

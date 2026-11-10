@@ -12,10 +12,13 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 
 ## Gemini
 
-- **3.5 Flash-Lite first, 3.1 Flash-Lite as the backup** (owner, 2026-11-10). Status: built (#52, #54).
-  `gemini-3.5-flash-lite` answers everything until its daily quota is spent; `gemini-3.1-flash-lite` only then.
-  An overloaded, timed-out or unreachable 3.5 is retried on 3.5 after 10, 30 and 60 seconds, and only a call that still fails goes to 3.1; the next call is back on 3.5.
-  Why: 3.5 is the stronger judge, and every test-run switch to 3.1 was Google's 503 "busy", not us sending too fast, so a retry usually wins.
+- **Grades and ranking comparisons from 3.5 Flash-Lite only, never a lower model** (owner, 2026-11-10). Status: building (#PR).
+  `gemini-3.5-flash-lite` makes every grade and every AI vote.
+  An overloaded, timed-out or unreachable 3.5 is retried on 3.5 after 10, 30 and 60 seconds; if it is still busy, or its daily quota or grading budget is used up, the item is left for the next run, with no fallback to 3.1.
+  A run that stops this way says why in its job summary; it fails only when it did nothing for a reason other than a spent budget or quota.
+  `gemini-3.1-flash-lite` may only be used for explicitly labelled experiments (such as the 3.1-vs-3.5 comparison) and non-ranking analysis, and is never written into grades or ratings.
+  The fallback code from #54 stays behind `GEMINI_FALLBACK` (default `off`) for those experiments; the grading and vote workflows pin it to `off`.
+  Why: one consistent judge for every grade and every comparison matters more than speed; the backlog can wait a few days for 3.5's budget.
 - **The key goes in the `x-goog-api-key` header, never in the URL** (agent, 2026-11-10). Status: built (#52).
   Why: newer AI Studio keys are rejected as `?key=`, which is what killed grading from late July, and a URL key leaks into logs.
 - **Every grade and vote records the model that answered** (owner, 2026-11-10). Status: built (#52).
@@ -28,11 +31,12 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Pacing and a request log** (agent, 2026-11-10). Status: built (#54).
   One limiter per run spaces every request (8 a minute by default), every request is a row in `gemini_requests`, and each run's summary shows today's totals against the quotas with a warning from 80%.
   Why: real numbers instead of estimates, and one place to see when a quota is about to run out.
-- **Catch-up mode** (owner, 2026-11-10). Status: built (#54); on until the backlog and the one-time re-grade are done.
-  While `GEMINI_CATCHUP` is on, grading spends 3.5's budget first and then 3.1's, about 850 grades a day.
-  Why: about 675 listed sites had no grade after the outage, and both quotas together clear that in a day or two.
+- **No catch-up mode; the backlog is graded on 3.5's daily budget** (owner, 2026-11-10). Status: building (#PR).
+  The repository variable `GEMINI_CATCHUP` is `"false"` and the code no longer reads it; ungraded sites are worked through over the coming days, within 3.5's grading budget.
+  Why: catch-up mode wrote 3.1 grades, which the "3.5 only" decision rules out.
 - **Conditional re-grades of 3.1 grades on 3.5** (owner, 2026-11-10). Status: built (#54); the stop rule is planned.
-  Every 3.1 grade is queued for a 3.5 re-grade from spare 3.5 budget, and the old grade moves to `rubric_history`, so each re-grade is a free 3.1-vs-3.5 pair for the Sunday comparison report.
+  Every existing 3.1 grade is queued for a 3.5 re-grade from spare 3.5 budget, and the old grade moves to `rubric_history`, so each re-grade is a free 3.1-vs-3.5 pair for the Sunday comparison report.
+  No new 3.1 grades are made, so the queue only holds grades from before the "3.5 only" decision.
   The re-grades stop once that report shows no meaningful difference (for example, tiers differ on 10% of sites or fewer), and the quota goes back to ranking and content.
   Why: the leaderboard should compare like with like, but not spend quota proving a difference that isn't there.
 - **A paid key comes later, with a hard cap** (owner, 2026-11-10). Status: planned.
@@ -73,7 +77,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   It travels in a `<site_data>` block the instructions mark as data, never instructions.
   Why: once grades are public, sites will try to talk to the judge.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
-  Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until catch-up is done.
+  Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
 
 ## Ranking
 
@@ -83,8 +87,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Three leaderboard views, merged by default** (owner, 2026-11-10). Status: planned.
   Merged (AI and people) is the default, with AI-only and People-only tabs; big gaps between AI and people are flagged and become reports.
   Why: about 85% of today's leaderboard votes are AI votes counted like people's; separate views let the AI compare all day without drowning people out.
-- **AI comparisons use 3.5 only** (agent, 2026-11-10). Status: planned.
-  Why: the AI view needs one consistent judge; 3.1 is for catching up on grades.
+- **AI comparisons use 3.5 only** (owner, 2026-11-10). Status: building (#PR) for today's daily votes; planned for the new ranking.
+  Why: the AI view needs one consistent judge; 3.1 is for labelled experiments only (see "Grades and ranking comparisons from 3.5 Flash-Lite only").
 - **Matchmaking: close matches, 1 in 5 random** (owner, 2026-11-10). Status: planned.
   Four of every five comparisons pair sites with similar ratings, favouring the least certain; one pairs a site with a random one from anywhere; which site is shown first is random, and pairs come from a recorded seed so a day can be reproduced.
   Why: close matches teach the most, the random one lets a much-improved site jump fast, and random order cancels the judge's first-position bias.
@@ -98,12 +102,12 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 ## Gemini budget, one key
 
 - **Daily split on 3.5: 100 / 100 / 100 / 100 plus buffer** (owner, 2026-11-10). Status: planned; today only the grading budget exists (#54).
-  100 for people's grades ("grade my portfolio"), 100 one-on-one ranking comparisons, 100 batched ranking comparisons, 100 for the content engine, then 50 for catch-up and re-grades and 50 for retries and buffer.
-  On 3.1: about 250 catch-up grading, 150 trend analysis (10 portfolios a request) and 100 fallback.
+  100 for people's grades ("grade my portfolio"), 100 one-on-one ranking comparisons, 100 batched ranking comparisons, 100 for the content engine, then 50 for the backlog and re-grades and 50 for retries and buffer.
+  On 3.1: labelled experiments and non-ranking analysis only, such as trend analysis (10 portfolios a request); never grades, comparisons or fallback (changed 2026-11-10 from "250 catch-up grading, 150 trend analysis and 100 fallback").
   This replaces the earlier 125 + 125 comparison split and the 150 / 125 / 125 / 30 / 10 / 60 split in the build outline.
   Why: the owner wanted each job to get a real share, and an engine that publishes with no oversight needs more requests for drafting and self-checks, not fewer.
 - **Shares flex, with a priority order** (agent, 2026-11-10). Status: planned.
-  What a job hasn't used by 18:00 UTC rolls to catch-up and ranking; when 3.5 runs out, people's grades and new sites go first, then content, then ranking and experiments; people's grades past their share go to the email queue.
+  What a job hasn't used by 18:00 UTC rolls to the backlog and ranking; when 3.5 runs out, people's grades and new sites go first, then content, then ranking and experiments; people's grades past their share go to the email queue.
   Why: no quota is wasted and people never lose to background work.
 - **One budget, enforced in one place, with kill switches** (agent, 2026-11-10). Status: planned.
   One setting each pauses grading, comparisons, publishing and email.
@@ -187,5 +191,9 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 ## Superseded
 
 - **AI votes in the same ELO pool as people's, with equal weight** (2026-06): replaced by the three views and OpenSkill (2026-11-10). Today's code still works this way until the ranking lane lands.
-- **Grades from 3.5 only, waiting for tomorrow instead of using 3.1** (grading audit recommendation, 2026-11-10): replaced the same day by catch-up mode with conditional re-grades.
+- **Grades from 3.5 only, waiting for tomorrow instead of using 3.1** (grading audit recommendation, 2026-11-10): replaced the same day by catch-up mode with conditional re-grades, then adopted later that day as the owner's "3.5 only" decision.
+- **3.5 Flash-Lite first, 3.1 Flash-Lite as the backup** (owner, 2026-11-10; built in #52, #54): a call still failing after its retries, or a spent 3.5 quota, went to 3.1.
+  Replaced on 2026-11-10 by "Grades and ranking comparisons from 3.5 Flash-Lite only"; the fallback stays in the code behind `GEMINI_FALLBACK` for experiments.
+- **Catch-up mode** (owner, 2026-11-10; built in #54): grading spent 3.5's budget and then 3.1's, about 850 grades a day.
+  Replaced on 2026-11-10 by "No catch-up mode; the backlog is graded on 3.5's daily budget".
 - **Blog drafts automatic, publishing one click by the owner** (ranking design suggestion, 2026-11-10): replaced the same day by fully automatic, fail-closed publishing.
