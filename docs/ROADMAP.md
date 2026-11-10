@@ -82,7 +82,7 @@ Depends on: phases 1 and 3; uses phase 2 for "you'd rank about #340".
 | Images: charts, screenshots, stock, Workers AI illustrations, Gemini review of each slot | to do |
 | Admin page: queue, unpublish, edit, feature, block a topic; weekly "what went out" email | to do |
 | Newsletter: sign-up with email confirmation, one-click unsubscribe, weekly digest | to do, after the email provider |
-| Model watch: daily check of Google's model list and free tier, updates to the owner | to do |
+| Model watch: weekly check of Google's model list, deprecations and release notes, updates to the owner | building |
 | Polls: a few generated each night from our data (content budget), one vote per person (sign-in or cookie plus Turnstile), a poll card on home and a polls page with past results; results feed blog posts and, with enough votes, the AI vs people comparisons | to do (owner, 2026-11-10) |
 
 Depends on: the blog shell and model watch can start any time; most stories need phase 2 data; the newsletter needs the email gate from phase 4.

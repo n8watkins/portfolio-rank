@@ -79,6 +79,7 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
 | 23:30 | Workflow | Hard stop, 30 minutes before the reset; the summary and owner alerts |
 | Then | Workflow | Roll-ups and retention of the log tables ([pipeline/retention.mjs](pipeline/retention.mjs)): `gemini_requests` older than 90 Pacific days becomes `gemini_daily`, `night_runs` older than 180 days and the free-text reason of comparisons older than 90 days go |
+| Mondays 08:00 or 09:00 | Worker cron `0 16 * * 1` | Model watch (below): Google's model list, deprecations and release notes; no Gemini generate calls |
 
 The cron: Cron Triggers run in UTC, so `wrangler.jsonc` has `30 3 * * *` (20:30 under daylight time) and `30 4 * * *` (20:30 under standard time); the handler starts the run only from the one that is 20:30 in Los Angeles, so the run starts at the same local time all year ([pipeline/budget.mjs](pipeline/budget.mjs) `isNightStart`, tested for every day of 2026 and 2027).
 The Workflow instance is `night-<Pacific date>` and the night is claimed in the `night_runs` table, so a night runs once: a failed or stopped run never restarts itself.
@@ -137,6 +138,33 @@ The provider is Cloudflare Email Service (docs/DECISIONS.md), and alerts will go
   Without the secret, the start is skipped with one log line and the AI stages work with what is already captured.
 - Measuring page evidence for old rows needs a browser for client-rendered pages, so it runs in the free checks too.
 - Grading, comparisons and the board rebuild run on Cloudflare: they need only the database (libSQL over HTTP), the `SHOTS` bucket and `fetch` to Gemini.
+
+## Model watch
+
+Owner decision of 2026-11-10: model watch is news only; nothing switches on its own.
+Every Monday at 16:00 UTC (08:00 or 09:00 Pacific) a Cron Trigger on the Worker (`0 16 * * 1` in `wrangler.jsonc`, [worker/model-watch.ts](worker/model-watch.ts)) runs [pipeline/model-watch.mjs](pipeline/model-watch.mjs).
+
+| Source | What it gives | Cost |
+| --- | --- | --- |
+| [models.list](https://aistudio.google.com/api-reference/models/list-models) (`GET /v1beta/models`, key in `x-goog-api-key`) | every model the key can use, with version, token limits, methods and thinking | nothing: a metadata call with no model and no tokens, so no model's generate quota (requests per day are counted per model) and no token price applies; it is not logged in `gemini_requests` |
+| [Deprecations page](https://aistudio.google.com/docs/deprecations) | release date, earliest shutdown date and replacement per model | nothing (a public page) |
+| [Release notes](https://aistudio.google.com/docs/changelog) | one section per date | nothing (a public page) |
+
+Google serves both pages as Markdown, which the module parses; a page that stops parsing, a model list with fewer than 10 models, or an HTTP error is a failed source, never "every model was retired".
+A failed source keeps last week's copy and raises its own alert.
+
+Each run compares the sources with the last snapshot in `model_watch_runs` (one row a week, the last 60 kept) and reports: new models, models retired or deprecated (with their dates), other changes (version, token limits, replacement), Flash-Lite changes on their own, new or edited release notes (marked when they name a model in use), and the status of the models in use: `gemini-3.5-flash-lite` for grades and comparisons, `gemini-3.1-flash-lite` for labelled experiments.
+The first run records a baseline instead of reporting every model as new.
+
+It goes to the owner through the owner alerts, keys `model-watch:*`:
+
+- `model-watch:report` (kind `news`): the week's report in plain words, while there are changes; a quiet week clears it.
+- `model-watch:in-use:<model>` (kind `problem`): a model in use is missing from the list, deprecated, or within 90 days of its shutdown date; it holds every week until that is resolved.
+- `model-watch:source:<source>` (kind `problem`): a source could not be read.
+
+The weekly run reconciles only the `model-watch:*` keys and the end-of-day run never clears them.
+Email is off until the Cloudflare Email Service sender is wired ("Owner alerts" above); the alerts are recorded and shown, and `GET /api/admin/quota` returns `modelWatch` (the latest report with its text, and the last 8 runs).
+By hand: `pass-env run -- node scripts/model-watch.mjs [--dry-run]`.
 
 ## GitHub Actions
 
@@ -253,6 +281,7 @@ serve images.
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
+- `node scripts/model-watch.mjs [--dry-run]` - the weekly model watch by hand (needs `GEMINI_API_KEY` for the model list; no generate calls)
 - `node pipeline/capture.mjs --refresh N` - also re-capture the N sites captured longest ago (finds redesigns)
 - `node pipeline/evidence.mjs [--limit N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them
 - `node scripts/detect-changes.mjs` - record page fingerprint changes (`rating_resets`)
