@@ -24,7 +24,13 @@
 //     stops cleanly and the next run picks up where it left off.
 // Every HTTP request waits its turn on one shared limiter (createLimiter), so
 // retries count against the rate too, and is reported to onRequest for the
-// request log (pipeline/gemini-log.mjs).
+// request log (pipeline/gemini-log.mjs), thinking tokens included.
+//
+// generate(parts, schema, options) takes an optional systemInstruction,
+// thinkingLevel, maxOutputTokens and temperature. A model that rejects the
+// thinking level (HTTP 400 naming thinking) is asked again once without it,
+// and is not sent one again for the rest of the run, so a level one model
+// lacks never fails a grade.
 
 // Owner's choice (2026-11-10): 3.5 Flash-Lite first, 3.1 Flash-Lite as backup.
 // Stable IDs per https://ai.google.dev/gemini-api/docs/models.
@@ -130,11 +136,11 @@ export function createGemini({
 
   // One HTTP request. Returns { kind: "ok", result } | { kind: "transient" |
   // "daily" | "slow", reason, body }; throws for auth and other 4xx errors.
-  async function attempt(model, body, { retry, fallback }) {
+  async function attempt(model, body, { retry, fallback, thinking = false }) {
     await pace.take();
     requests[model]++;
     const started = now();
-    const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null };
+    const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null };
     let res;
     try {
       res = await fetchImpl(`${GEMINI_API_BASE}/models/${model}:generateContent`, {
@@ -167,35 +173,50 @@ export function createGemini({
     if (!res.ok) {
       const text = (await res.text()).slice(0, 300);
       await report({ ...rec, reason: `HTTP ${res.status}`, latencyMs: now() - started });
+      if (thinking && res.status === 400 && /thinking/i.test(text)) {
+        return { kind: "thinking", reason: `HTTP 400 thinking config: ${text.slice(0, 120)}` };
+      }
       if (isAuthFailure(res.status, text)) {
         throw new GeminiAuthError(`gemini ${model} rejected the API key: HTTP ${res.status}: ${text}`);
       }
       throw new Error(`gemini ${model} HTTP ${res.status}: ${text}`);
     }
     const data = await res.json();
-    const usage = data.usageMetadata ?? {};
-    await report({
-      ...rec,
-      reason: "ok",
-      latencyMs: now() - started,
-      inputTokens: usage.promptTokenCount ?? null,
-      outputTokens: usage.candidatesTokenCount ?? null,
-    });
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const meta = data.usageMetadata ?? {};
+    const usage = {
+      inputTokens: meta.promptTokenCount ?? null,
+      outputTokens: meta.candidatesTokenCount ?? null,
+      thoughtsTokens: meta.thoughtsTokenCount ?? null,
+    };
+    await report({ ...rec, reason: "ok", latencyMs: now() - started, ...usage });
+    // Thought summaries (if a model sends them) come first; the answer is the
+    // last non-thought text part.
+    const parts = (data.candidates?.[0]?.content?.parts ?? []).filter((p) => typeof p.text === "string" && !p.thought);
+    const text = parts.at(-1)?.text;
     if (!text) throw new Error(`gemini ${model} empty response: ${JSON.stringify(data).slice(0, 300)}`);
-    return { kind: "ok", result: JSON.parse(text) };
+    return { kind: "ok", result: JSON.parse(text), usage };
   }
 
-  // Returns { result, model, fallback } where model is the one that answered.
-  async function generate(parts, schema) {
-    const body = JSON.stringify({
-      contents: [{ parts }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json",
-        responseSchema: schema,
-      },
-    });
+  // Models that rejected a thinking level this run; they get none.
+  const noThinking = new Set();
+  function bodyFor(model, parts, schema, { systemInstruction, thinkingLevel, maxOutputTokens, temperature = 0.2 }) {
+    const generationConfig = { temperature, responseMimeType: "application/json", responseSchema: schema };
+    if (maxOutputTokens) generationConfig.maxOutputTokens = maxOutputTokens;
+    const thinking = Boolean(thinkingLevel) && !noThinking.has(model);
+    if (thinking) generationConfig.thinkingConfig = { thinkingLevel };
+    return {
+      thinking,
+      body: JSON.stringify({
+        ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
+        contents: [{ role: "user", parts }],
+        generationConfig,
+      }),
+    };
+  }
+
+  // Returns { result, model, fallback, usage } where model is the one that
+  // answered and usage its { inputTokens, outputTokens, thoughtsTokens }.
+  async function generate(parts, schema, options = {}) {
 
     let transient = 0;
     let slowdowns = 0;
@@ -203,10 +224,17 @@ export function createGemini({
     let oneOff = false; // this call alone moved to the backup after retries
     for (let n = 0; ; n++) {
       const model = models[idx];
-      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0 });
+      const { body, thinking } = bodyFor(model, parts, schema, options);
+      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking });
       if (out.kind === "ok") {
         answered[model]++;
-        return { result: out.result, model, fallback: idx > 0 };
+        return { result: out.result, model, fallback: idx > 0, usage: out.usage };
+      }
+      if (out.kind === "thinking") {
+        log(`  gemini ${model} does not take thinking level ${options.thinkingLevel}; asking again without it`);
+        noThinking.add(model);
+        counts.retries++;
+        continue;
       }
       if (out.kind === "daily") {
         if (onDailyQuota === "stop") {

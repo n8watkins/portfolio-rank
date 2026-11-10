@@ -3,9 +3,12 @@
 // captured portfolios (3.5 Flash-Lite, falling back to 3.1 Flash-Lite; see
 // pipeline/gemini.mjs and pipeline/ai-votes.mjs).
 //
-//   rubric   — 1 call/site: settled hero + motion frame + full-page shot →
-//              tier + six 1–5 axis scores + one-line justifications, stored as
-//              JSON in portfolios.ai_rubric (shown in UI later).
+//   rubric   - 1 call/site, rubric v2 (pipeline/rubric.mjs): the top-of-page
+//              screenshot, the facts measured by code (pipeline/facts.mjs)
+//              and the page's visible text -> tier, is_portfolio and five 1-5
+//              quality scores with one short clause each, stored as JSON in
+//              portfolios.ai_rubric with the rubric version, the model, the
+//              token usage, the facts and the code checks.
 //   pairwise — 1 call = 2 sites: "which is better overall?" on hero shots →
 //              a vote in the `votes` table (rater_type='ai') that moves ELO,
 //              same math and pair_key convention as human votes.
@@ -17,8 +20,10 @@
 // Budget: every Gemini request is recorded in gemini_requests and summarized
 // per run (pipeline/gemini-log.mjs). All requests share one pace: --rpm, else
 // GEMINI_RPM, else 8 per minute. The rubric re-grades grades not made by
-// 3.5 Flash-Lite with whatever room today's quota has left (lowest priority;
-// --no-regrade turns it off), keeping each old grade in rubric_history.
+// 3.5 Flash-Lite with whatever room today's quota has left (low priority;
+// --no-regrade turns it off), then, only when RUBRIC_REGRADE is "true",
+// 3.5 grades from an older rubric version (lowest priority), keeping each
+// old grade in rubric_history.
 import fs from "fs";
 import path from "path";
 import {
@@ -31,7 +36,17 @@ import {
   PRIMARY_MODEL,
 } from "./gemini.mjs";
 import { catchUpMode, createRequestLog, dailyTotals, ensureGeminiLog, gradingBudget, runSummary } from "./gemini-log.mjs";
-import { ensureRubricHistory, regradeQueue, replaceGradeStatements } from "./rubric-history.mjs";
+import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import {
+  RESPONSE_SCHEMA,
+  RUBRIC_VERSION,
+  buildRubricRequest,
+  gradeRecord,
+  normalizePageText,
+  parseRubricResponse,
+} from "./rubric.mjs";
+import { measurePage } from "./facts.mjs";
+import { httpGate, UA, visibleText } from "./gate.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
 import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
@@ -76,6 +91,10 @@ const RPM = Number(flag("rpm", process.env.GEMINI_RPM || String(DEFAULT_RPM)));
 // grading uses 3.5's daily budget first and then 3.1's, so both quotas work.
 // Every 3.1 grade goes on the re-grade queue for 3.5 afterwards.
 const CATCHUP = catchUpMode();
+// Re-grade 3.5 grades from an older rubric version (lowest priority, inside
+// the grading budget). Off unless the RUBRIC_REGRADE repository variable is
+// "true": the owner decides when the one-time re-grade starts.
+const RUBRIC_REGRADE = String(process.env.RUBRIC_REGRADE ?? "").toLowerCase() === "true";
 // pairwise: concentrate votes on these graded tiers (NULL/other tiers excluded).
 const TIERS = (flag("tiers", "S,A,B") || "")
   .split(",")
@@ -178,8 +197,8 @@ async function heroPart(key, budgetBytes = 5 * 1024 * 1024) {
   }
 }
 
-// Generic uncached R2 image fetcher — used by rubric grading from the cloud,
-// where local capture strips don't exist (CI runners, backlog). null on failure.
+// Generic uncached R2 image fetcher, used by rubric grading when this machine
+// has no capture of the site (re-grades, the backlog).
 // Returns an inline_data part on success, the string "missing" on a definitive
 // 404 (object genuinely absent), or null on a transient failure (5xx/timeout/
 // oversize) — so callers can sentinel only on true absence, never on a blip.
@@ -276,108 +295,74 @@ function signalLines(label, url, sig) {
 }
 
 // ---------------------------------------------------------------------------
-// rubric mode
+// rubric mode (rubric v2: pipeline/rubric.mjs)
 // ---------------------------------------------------------------------------
-const AXES = [
-  ["visual_design", "hierarchy, typography, color, use of space"],
-  ["five_second_test", "is it clear who they are and what they do from the hero alone"],
-  ["storytelling", "projects framed as problem/outcome vs bare tech lists"],
-  ["writing", "typos, clarity, voice"],
-  ["memorability", "would you remember this site tomorrow"],
-  ["motion", "tasteful / gratuitous / absent — judge from the difference between the two viewport frames"],
-];
+const parseJson = (v) => {
+  if (v == null) return null;
+  try {
+    const o = JSON.parse(String(v));
+    return o && typeof o === "object" ? o : null;
+  } catch {
+    return null;
+  }
+};
 
-const axisSchema = {
-  type: "OBJECT",
-  properties: {
-    score: { type: "INTEGER", description: "1 (poor) to 5 (excellent)" },
-    note: { type: "STRING", description: "one short sentence of justification" },
-  },
-  required: ["score", "note"],
-};
-const rubricSchema = {
-  type: "OBJECT",
-  properties: {
-    is_portfolio: {
-      type: "BOOLEAN",
-      description:
-        "false for parked/hijacked domains, bare starter templates with placeholder content, plain blogs/link hubs with no work shown",
-    },
-    tier: { type: "STRING", enum: ["S", "A", "B", "C", "D"] },
-    ...Object.fromEntries(AXES.map(([k]) => [k, axisSchema])),
-  },
-  required: ["is_portfolio", "tier", ...AXES.map(([k]) => k)],
-};
+// The page text and measured facts for a grade: stored by capture.mjs, or,
+// for rows captured before facts existed, measured now over plain HTTP (free)
+// and stored. Motion always comes from the capture (meta.motion).
+async function pageEvidence(row) {
+  const url = String(row.url);
+  const m = parseJson(row.meta)?.motion;
+  const motion = typeof m === "boolean" ? m : null;
+  const stored = parseJson(row.facts);
+  if (row.page_text != null && stored) {
+    return { pageText: String(row.page_text), facts: stored.motion == null && motion != null ? { ...stored, motion } : stored };
+  }
+  const gate = await httpGate(url).catch(() => null);
+  if (gate?.status !== "live") {
+    return { pageText: "", facts: motion == null ? null : { source: "capture", motion } };
+  }
+  const text = visibleText(gate.html);
+  const facts = await measurePage(
+    { html: gate.html, text, url, finalUrl: gate.finalUrl, name: String(row.name ?? ""), motion, source: "http" },
+    { userAgent: UA }
+  );
+  const pageText = normalizePageText(text);
+  try {
+    await db.execute({
+      sql: "UPDATE portfolios SET page_text = ?, facts = ?, facts_at = ? WHERE url = ?",
+      args: [pageText, JSON.stringify(facts), facts.measured_at, url],
+    });
+  } catch {
+    /* the grade still uses them; the next grade measures again */
+  }
+  return { pageText, facts };
+}
 
 // Grade one site. Returns { status: "ok", rubric, model } | { status:
-// "skipped" } (screenshots unavailable, retried next run) | { status:
-// "sentinel" } (screenshots gone for good). Throws Gemini errors.
+// "skipped" } (screenshot unavailable, retried next run) | { status:
+// "sentinel" } (screenshot gone for good). Throws Gemini errors and
+// malformed answers.
 async function gradeRow(row) {
   const url = String(row.url);
   const key = String(row.shot_key);
-  const dir = path.join(ROOT, "captures", key);
-
-  // Prefer local motion strips (full motion nuance); fall back to R2
-  // hero + full + the stored motion flag when strips aren't on this machine
-  // (CI runners, or the backlog graded from the cloud).
-  let images, imgDesc, mode;
-  const localStrips = [
-    imagePart(path.join(dir, "strip0.png")),
-    imagePart(path.join(dir, "strip2.png")),
-    imagePart(path.join(dir, "full.jpg")),
-  ].filter(Boolean);
-  if (localStrips.length >= 2) {
-    mode = "local";
-    images = localStrips;
-    imgDesc =
-      `Images, in order: (1) the settled desktop viewport, (2) the same viewport 3 seconds ` +
-      `later (compare with 1 to judge motion), (3) the full page top to bottom.`;
-  } else {
-    const [hero, full] = await Promise.all([r2Part(key, "hero.jpg"), r2Part(key, "full.jpg")]);
-    if (hero?.inline_data && full?.inline_data) {
-      mode = "r2";
-      images = [hero, full];
-      let motion;
-      try {
-        motion = JSON.parse(String(row.meta || "{}")).motion;
-      } catch {
-        motion = undefined;
-      }
-      const motionNote =
-        motion === true
-          ? "This site HAS animation/motion effects."
-          : motion === false
-            ? "This site appears STATIC (no motion detected)."
-            : "Motion for this site is unknown.";
-      imgDesc = `Images, in order: (1) the desktop hero, (2) the full page top to bottom.\n` + motionNote;
-    } else if (hero === "missing" && full === "missing") {
-      return { status: "sentinel" };
-    }
+  // One image: the settled top of the page, from this machine's capture when
+  // there is one (the nightly job captures and grades on the same runner),
+  // else from R2.
+  let image = imagePart(path.join(ROOT, "captures", key, "hero.jpg"));
+  let source = "local";
+  if (!image) {
+    const hero = await r2Part(key, "hero.jpg");
+    if (hero === "missing") return { status: "sentinel" };
+    if (!hero) return { status: "skipped" };
+    image = hero;
+    source = "r2";
   }
-  if (!images) return { status: "skipped" };
-  // Motion is judged from two real frames locally, but from the stated flag in
-  // R2 mode, so swap that one axis's instruction to match the inputs.
-  const axesText = AXES.map(([k, d]) =>
-    k === "motion" && mode === "r2"
-      ? `- motion: tasteful / gratuitous / absent - judge from the motion fact stated above (a technical signal, not visible frames)`
-      : `- ${k}: ${d}`
-  ).join("\n");
-  const parts = [
-    {
-      text:
-        `You are judging a developer's portfolio website: "${row.name}" at ${url}.\n` +
-        imgDesc +
-        `\nScore each axis 1 (poor) to 5 (excellent) with one short justification:\n` +
-        axesText +
-        `\nAlso give an overall tier (S = exceptional, rare; A = strong; B = solid; C = weak; D = bad) ` +
-        `and whether this is actually a personal portfolio site.`,
-    },
-    ...images,
-  ];
-  const { result: rubric, model } = await gemini.generate(parts, rubricSchema);
-  rubric.model = model; // the model that actually answered
-  rubric.grading_source = mode; // "local" (frames) or "r2" (hero+full+flag)
-  rubric.judged_at = new Date().toISOString();
+  const { pageText, facts } = await pageEvidence(row);
+  const request = buildRubricRequest({ name: String(row.name ?? ""), url, pageText, facts, image });
+  const { result, model, usage } = await gemini.generate(request.parts, RESPONSE_SCHEMA, request.options);
+  const parsed = parseRubricResponse(result);
+  const rubric = gradeRecord({ parsed, model, usage, facts, source });
   return { status: "ok", rubric, model };
 }
 
@@ -392,7 +377,7 @@ async function runRubric() {
   // Sites the health check flagged needs_review (little that looks like a
   // portfolio) go first, so is_portfolio confirms or clears them soon.
   const res = await db.execute(
-    `SELECT url, name, shot_key, meta, ai_rubric FROM portfolios
+    `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
      WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
      ORDER BY needs_review DESC, captured_at DESC, url`
@@ -437,7 +422,7 @@ async function runRubric() {
     try {
       const out = await gradeRow(row);
       if (out.status === "sentinel") {
-        // Both frames are definitively absent from R2 (404): sentinel so this
+        // The screenshot is definitively absent from R2 (404): sentinel so this
         // row stops re-qualifying every run. Transient failures are "skipped".
         if (!regrade) {
           await db.execute({
@@ -450,7 +435,7 @@ async function runRubric() {
       }
       if (out.status === "skipped") {
         skipped++;
-        console.log(`${label} ${url} - skipped (captures unavailable, will retry)`);
+        console.log(`${label} ${url} - skipped (screenshot unavailable, will retry)`);
         return true;
       }
       consecutiveErrors = 0;
@@ -463,7 +448,7 @@ async function runRubric() {
       if (regrade) regraded++;
       else ok++;
       console.log(
-        `${label} ${url} - tier ${out.rubric.tier}, portfolio=${out.rubric.is_portfolio}, design=${out.rubric.visual_design?.score} (${out.model})${regrade ? " [re-grade]" : ""}`
+        `${label} ${url} - tier ${out.rubric.tier}, portfolio=${out.rubric.is_portfolio}, design=${out.rubric.visual_design?.score}, checks=${out.rubric.checks_score ?? "-"} (${out.model}, v${RUBRIC_VERSION})${regrade ? " [re-grade]" : ""}`
       );
       return true;
     } catch (e) {
@@ -493,22 +478,41 @@ async function runRubric() {
     if (!(await handle(row, `[${i + 1}/${queue.length}]`))) break;
   }
 
-  // Re-grade queue, lowest priority: grades not made by 3.5, re-done by 3.5
-  // within its grading budget. Re-grading only ever runs on 3.5.
+  // Re-grade queues, after new and ungraded sites: first grades not made by
+  // 3.5 (3.1 -> 3.5), then, lowest priority and only with RUBRIC_REGRADE,
+  // 3.5 grades from an older rubric version. Both run only on 3.5, within
+  // its grading budget.
   let regradeQueued = 0;
-  if (!stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted && gemini.activeModel === PRIMARY_MODEL) {
+  const regradeOn = () =>
+    !stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted && gemini.activeModel === PRIMARY_MODEL;
+  const slots = () => {
     const left = room(PRIMARY_MODEL);
-    const n = Math.min(LIMIT === Infinity ? left : LIMIT - queue.length, left);
-    const rows = await regradeQueue(db, { primary: PRIMARY_MODEL, limit: Math.max(0, n) });
-    regradeQueued = rows.length;
-    if (rows.length) console.log(`re-grade: ${rows.length} grade(s) not made by ${PRIMARY_MODEL} (room today: ${left})`);
+    return Math.max(0, Math.min(LIMIT === Infinity ? left : LIMIT - queue.length - regradeQueued, left));
+  };
+  const queues = [
+    ["re-grade", () => regradeQueue(db, { primary: PRIMARY_MODEL, limit: slots() }), `grade(s) not made by ${PRIMARY_MODEL}`],
+    ...(RUBRIC_REGRADE
+      ? [["rubric re-grade", () => versionRegradeQueue(db, { primary: PRIMARY_MODEL, version: RUBRIC_VERSION, limit: slots() }), `grade(s) from a rubric older than v${RUBRIC_VERSION}`]]
+      : []),
+  ];
+  for (const [name, load, what] of queues) {
+    if (!regradeOn()) break;
+    const rows = await load();
+    regradeQueued += rows.length;
+    if (rows.length) console.log(`${name}: ${rows.length} ${what} (room today: ${room(PRIMARY_MODEL)})`);
+    let stop = false;
     for (const [i, row] of rows.entries()) {
       if (gemini.activeModel !== PRIMARY_MODEL || room(PRIMARY_MODEL) < 1) {
         deferred += rows.length - i;
+        stop = true;
         break;
       }
-      if (!(await handle(row, `[re-grade ${i + 1}/${rows.length}]`, { regrade: true }))) break;
+      if (!(await handle(row, `[${name} ${i + 1}/${rows.length}]`, { regrade: true }))) {
+        stop = true;
+        break;
+      }
     }
+    if (stop) break;
   }
 
   if (stopped) console.log(`  stopped early: ${stopped}`);
