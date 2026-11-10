@@ -10,6 +10,8 @@
 //   matchups  the pair each rater was last served and their draw counts:
 //             a few minutes of state, rebuilt on the next visit.
 //   rate_limits  poll vote rate-limit windows: an hour of state.
+//   badge_checks the last badge check per player: a minute of state, redone
+//             from the tables it summarises.
 // Everything else is in, including the polls (lib/polls/schema.mjs: polls,
 // their totals, the vote rows behind the one-vote rule and the generation
 // log), comparisons (the source of truth for
@@ -18,7 +20,7 @@
 // queue. A table added later is included automatically.
 
 export const SNAPSHOT_FORMAT = 2;
-export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits"]);
+export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits", "badge_checks"]);
 
 const internal = (name) => name.startsWith("sqlite_") || name.startsWith("libsql_") || name.startsWith("_litestream");
 
