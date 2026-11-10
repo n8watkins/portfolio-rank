@@ -42,7 +42,7 @@ New values go into pass-env with `pass-env set <entry>` in your own terminal; ag
 
 ## Whenever convenient
 
-- [ ] Legal placeholders in `docs/legal/`: contact email, jurisdiction, minimum age (13 or 16), how long data is kept.
+- [ ] Legal drafts in `docs/legal/`: contact email, governing law, minimum age and retention are filled in (2026-11-10); the few questions still open are listed in `docs/legal/README.md`.
 - [ ] Optional vote guards: `HUMAN_MAX_DRAWS_PER_DAY`, `MIN_GITHUB_ACCOUNT_AGE_DAYS` (off now).
 - [ ] HSTS preload: whether to submit the domain to browser preload lists.
 - [ ] Later: $25 one-time for a Google Play developer account (a 12-tester, 14-day closed test comes first for new personal accounts).

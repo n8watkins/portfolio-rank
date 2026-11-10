@@ -48,7 +48,7 @@ If it still fails after two rounds, it's dropped: never published.
 ## Mistakes and corrections
 
 - If a later data check contradicts a published post, it's unpublished automatically and a short correction note takes its place.
-- If you spot a mistake, email [owner: contact email] or open an issue on [GitHub](https://github.com/n8watkins/portfolio-rank/issues); I fix or unpublish it within [owner: e.g. 2 days].
+- If you spot a mistake, email nate@n8builds.dev or open an issue on [GitHub](https://github.com/n8watkins/portfolio-rank/issues); I fix or unpublish it within 14 days.
 
 ## What the posts are not
 

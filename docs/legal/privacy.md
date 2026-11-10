@@ -8,7 +8,7 @@ PortfolioRank is a side project run by me, [owner: legal name, or business name 
 This page says what the site stores about you, why, who else sees it, and how long it's kept.
 Short version: I store as little as I can, I never sell anything, and you can ask me to delete what's yours.
 
-Questions or requests: [owner: contact email].
+Questions or requests: nate@n8builds.dev.
 
 ## If you just browse
 
@@ -18,6 +18,7 @@ Questions or requests: [owner: contact email].
   They carry the error and the page's path, nothing else: no account, no cookies, no request headers, no query string.
 - **Hosting logs.** The site runs on Cloudflare, which sees your IP address and browser details to serve the page, as any host does.
   I don't store your IP address in PortfolioRank's database.
+  Where the site limits how often a network can do something (poll votes, and later grade requests), it stores only a one-way hash of the address, never the address itself, and deletes it within 30 days.
 
 ## If you vote without signing in
 
@@ -37,7 +38,8 @@ GitHub tells PortfolioRank your GitHub id number, username, display name, email,
 - I don't store your GitHub email or display name in the database.
 - The account creation date is used only to tell whether a vote counts when a minimum account age is set.
 
-**Votes are kept** for as long as the site runs, because the leaderboard is recomputed from the full vote log.
+**Votes and ratings are kept** for as long as the site runs, because the leaderboard is recomputed from the full vote log.
+That goes for practice votes made without signing in too: they're tied only to the random id in your cookie.
 When the comparison log is published (when the open ranking method launches), it will show which kind of voter cast each vote (a person or the AI), never who.
 
 ## If your portfolio is listed
@@ -56,12 +58,18 @@ If your site leaves the list, its screenshots and stored page data are deleted 3
 Its past votes stay in the vote log but are no longer shown.
 To be removed, or to stay listed but never be named in posts, see [removal.md](removal.md).
 
+## If you vote in a poll
+
+- Each vote is stored with your account id (or the random id from your practice-vote cookie) and a signed browser id, so each person votes once.
+- No API ever shows who voted for what; results are totals.
+- Individual poll votes are deleted 30 days after the poll closes; the totals stay.
+
 ## If you grade your portfolio (when "grade my portfolio" launches)
 
 - I store the address you submit, its screenshots, page text, measured facts and the report.
 - The report is private by default and shareable by link; you can delete it. [owner: confirm reports are unlisted and deletable]
-- To stop abuse, I count requests per account and per network; network addresses are stored only as a one-way hash, kept for [owner: e.g. 2 days].
-- If the day's capacity is used up and you ask for an email, I store your email address only to send that report, and delete it [owner: e.g. 7 days] after it's sent.
+- To stop abuse, I count requests per account and per network; network addresses are stored only as a one-way hash, kept for at most 30 days.
+- If the day's capacity is used up and you ask for an email, I store your email address only to send that report, and delete it 30 days after it's sent, along with the grade request.
 - A graded site is never added to the leaderboard unless you ask.
 
 ## If you subscribe to the newsletter (when it launches)
@@ -69,7 +77,8 @@ To be removed, or to stay listed but never be named in posts, see [removal.md](r
 - I store your email address, when you signed up and when you confirmed.
 - You only get emails after you click the confirmation link.
 - Every email has a one-click unsubscribe.
-  After you unsubscribe, I keep only a record that the address unsubscribed, so it's never emailed again. [owner: confirm, or delete entirely]
+  An address that isn't confirmed within 7 days is deleted.
+- After you unsubscribe, I keep the address only on a do-not-email list, so it's never emailed again.
 - Terms: [newsletter.md](newsletter.md).
 
 ## Google Gemini and the free tier
@@ -95,7 +104,7 @@ If PortfolioRank moves to a paid Gemini plan, this section will be updated.
 
 | Service | What for |
 | --- | --- |
-| Cloudflare | Hosting, screenshot storage (R2), page-view counts, and (later) screenshots and email [owner: confirm] |
+| Cloudflare | Hosting, screenshot storage (R2) and page-view counts |
 | Turso | The database (votes, likes, lists, grades) |
 | GitHub | Sign-in, and the scheduled jobs that update the site |
 | Google | Gemini (grades, writing) and PageSpeed Insights (speed scores) |
@@ -108,25 +117,30 @@ None of them get your data to sell, and neither do I.
 
 | Data | Kept |
 | --- | --- |
-| Votes | As long as the site runs (the leaderboard is computed from them) |
+| Votes and ratings, including practice votes | As long as the site runs (the leaderboard is computed from them) |
+| Individual poll votes | 30 days after the poll closes; the totals stay |
 | Likes and lists | Until you delete them, or ask me to delete your account's data |
 | Listed site data | While listed, then deleted 30 days after it leaves the list |
-| Nightly database backups | [owner: retention period, e.g. 30 days] |
-| Grade requests and reports | [owner: e.g. 12 months, or until you delete the report] |
-| Newsletter address | Until you unsubscribe |
+| Hashed network addresses (rate limits) | At most 30 days |
+| Gemini request log (which job asked, when, tokens used; no visitor data) | 90 days, then only daily totals |
+| Nightly database backups | 30 days |
+| Grade requests, and the email address for a queued report | 30 days after the report is sent |
+| Grade reports | [owner: how long a report stays, or until you delete it] |
+| Newsletter sign-up that's never confirmed | 7 days |
+| Newsletter address | Until you unsubscribe; after that, only on the do-not-email list |
 
 ## Your choices
 
-- Ask for a copy of what's stored about you, or for it to be deleted: email [owner: contact email] from the address or GitHub account it's about.
-  I'll answer within [owner: e.g. 30 days].
+- Ask for a copy of what's stored about you, or for it to be deleted: email nate@n8builds.dev from the address or GitHub account it's about.
+  I'll answer within 30 days.
 - Deleting your account's data removes your likes and lists; your votes are removed from the log and the leaderboard recomputed. [owner: confirm votes are deleted on request rather than anonymised]
 - Block cookies in your browser; you can still browse, but not vote or sign in.
 
-PortfolioRank is not meant for children under [owner: 13 or 16].
+PortfolioRank is not meant for anyone under 16.
 
 ## Changes
 
 When this page changes, the date at the top changes too.
 Big changes get a note on the site [owner: and in the newsletter].
 
-Governing law: [owner: jurisdiction].
+Governing law: California, United States.

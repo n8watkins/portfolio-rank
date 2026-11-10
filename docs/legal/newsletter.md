@@ -13,7 +13,7 @@ About one email a week, sent by [owner: legal name or business name] from [owner
 
 - You only join by typing your email into the sign-up box yourself.
 - I send one confirmation email; nothing else arrives until you click its link.
-  An address that isn't confirmed within [owner: e.g. 7 days] is deleted.
+  An address that isn't confirmed within 7 days is deleted.
 - Signing up for the newsletter is separate from everything else: grading your portfolio or signing in never adds you to it.
 
 ## Unsubscribe
@@ -21,6 +21,7 @@ About one email a week, sent by [owner: legal name or business name] from [owner
 - Every email has an unsubscribe link at the bottom, and supports one-click unsubscribe in mail apps that offer it.
 - One click is enough: no login, no "are you sure", no survey.
 - Unsubscribes take effect right away, and at most within 10 business days as the law requires.
+- After you unsubscribe, your address stays only on a do-not-email list, so it's never emailed again.
 
 ## Your address
 
