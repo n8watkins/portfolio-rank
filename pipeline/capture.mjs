@@ -15,7 +15,6 @@
 //   node pipeline/capture.mjs --upload-only   # backfill captures/ to R2 later
 //
 // Failed captures are retried later with backoff (see recordFailure).
-import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
 import { createHash } from "crypto";
@@ -373,7 +372,8 @@ await Promise.all(
       const entry = queue[idx++];
       const t = Date.now();
       const result = await captureSite(browser, entry);
-      result.startsWith("live") ? ok++ : skipped++;
+      if (result.startsWith("live")) ok++;
+      else skipped++;
       console.log(
         `[${idx}/${queue.length}] ${entry.url} — ${result} (${((Date.now() - t) / 1000).toFixed(1)}s)`
       );

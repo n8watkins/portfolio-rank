@@ -100,7 +100,8 @@ test("the parser normalizes good answers and rejects malformed ones", () => {
   assert.ok(p.writing.note.length <= 120);
   assert.throws(() => parseRubricResponse({ ...answer(), tier: "Z" }), /bad tier/);
   assert.throws(() => parseRubricResponse({ ...answer(), is_portfolio: "yes" }), /is_portfolio/);
-  const { memorability, ...missing } = answer();
+  const missing = answer();
+  delete missing.memorability;
   assert.throws(() => parseRubricResponse(missing), /memorability missing/);
 });
 
