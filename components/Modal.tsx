@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useIsClient } from "@/lib/client-state";
 
 // The one modal for the whole site, on the browser's own <dialog>:
 // showModal() puts it in the top layer (above every stacking context, so no
@@ -57,10 +58,12 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   const pressedOnBackdrop = useRef(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // The portal needs document.body, so the dialog renders only on the client.
+  const mounted = useIsClient();
 
   useEffect(() => {
     const dialog = ref.current;

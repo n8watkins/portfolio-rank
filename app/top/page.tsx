@@ -1,3 +1,4 @@
+import Link from "next/link";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
@@ -78,9 +79,9 @@ export default async function TopPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6">
       <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
+        <Link href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
-        </a>
+        </Link>
         <a
           href="/rank"
           className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent"

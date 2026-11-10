@@ -1,3 +1,4 @@
+import Link from "next/link";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { auth } from "@/auth";
@@ -64,9 +65,9 @@ export default async function VotesPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6">
       <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
+        <Link href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
-        </a>
+        </Link>
         <a href="/rank" className="text-xs font-semibold text-accent">
           ⚔️ Keep ranking
         </a>

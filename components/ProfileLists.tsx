@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SITE_URL } from "@/lib/site";
 import { ShareButton } from "@/components/ShareButton";
 import { LISTS_CHANGED, listDeletedToast, useUndoToast } from "@/components/UndoToast";
 
@@ -26,7 +27,6 @@ export function ProfileLists() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [origin, setOrigin] = useState("");
   const [error, setError] = useState("");
   const showUndo = useUndoToast();
   const router = useRouter();
@@ -40,7 +40,6 @@ export function ProfileLists() {
   }, []);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
     load();
     // An Undo (here or after deleting from a list's own page) brings a list back;
     // the server-rendered list count above follows along.
@@ -230,9 +229,9 @@ export function ProfileLists() {
                   >
                     {l.isPublic ? "Public" : "Private"}
                   </button>
-                  {l.isPublic && origin && (
+                  {l.isPublic && (
                     <ShareButton
-                      url={`${origin}/list/${l.slug}`}
+                      url={`${SITE_URL}/list/${l.slug}`}
                       title={l.name}
                       label="Share"
                       className="!px-2 !py-0.5 !text-xs"

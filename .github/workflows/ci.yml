@@ -22,6 +22,10 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      # Next.js's rules (React, hooks, Core Web Vitals, TypeScript); see
+      # eslint.config.mjs. Errors fail the PR.
+      - name: Lint
+        run: npm run lint
 
   # The Cloudflare Worker: binding types match wrangler.jsonc, the OpenNext
   # build succeeds and wrangler can bundle it.

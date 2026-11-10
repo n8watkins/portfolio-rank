@@ -1,3 +1,4 @@
+import Link from "next/link";
 export const metadata = {
   title: "How it works - PortfolioRank",
   description:
@@ -8,9 +9,9 @@ export default function HowPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 pb-20 sm:px-6">
       <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
+        <Link href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
-        </a>
+        </Link>
         <a
           href="/top"
           className="text-xs font-semibold text-mute transition hover:text-ink"

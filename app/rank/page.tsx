@@ -5,6 +5,8 @@ import { InspectChips } from "@/components/Diagnostics";
 import { useSignIn } from "@/components/SignInModal";
 import { isModalOpen } from "@/components/Modal";
 import { isTextField } from "@/lib/dom";
+import { useStoredFlag } from "@/lib/client-state";
+import Link from "next/link";
 import { AuthButton } from "@/components/AuthButton";
 import { LikeButton } from "@/components/LikeButton";
 
@@ -47,7 +49,6 @@ function Shot({ url, shot }: { url: string; shot?: string | null }) {
     return (
       <picture>
         <source media="(max-width: 639px)" srcSet={`${shot}/mobile.jpg`} />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`${shot}/hero.jpg`}
           alt={`Screenshot of ${domainOf(url)}`}
@@ -82,7 +83,7 @@ export default function RankPage() {
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<"a" | "b" | null>(null);
   const [showDetails, setShowDetails] = useState(true);
-  const [autoOpen, setAutoOpen] = useState(false);
+  const [autoOpen, setAutoOpen] = useStoredFlag("pr_autoopen");
   const [count, setCount] = useState(0);
   const [last, setLast] = useState<string | null>(null);
   const [rater, setRater] = useState<RaterInfo | null>(null);
@@ -90,10 +91,13 @@ export default function RankPage() {
   const openSignIn = useSignIn();
   const nudgedRef = useRef(false);
   const firstPairRef = useRef(true);
+  // Read by callbacks that must not be recreated when these change.
   const autoOpenRef = useRef(autoOpen);
-  autoOpenRef.current = autoOpen;
   const pairRef = useRef(pair);
-  pairRef.current = pair;
+  useEffect(() => {
+    autoOpenRef.current = autoOpen;
+    pairRef.current = pair;
+  }, [autoOpen, pair]);
 
   const gated =
     rater !== null &&
@@ -170,12 +174,12 @@ export default function RankPage() {
   }, [promptSignIn]);
 
   useEffect(() => {
+    // loadPair only sets state once its fetch settles (after its first await),
+    // which is the effect-then-setState-in-a-callback pattern the rule allows;
+    // the compiler can't see through the async callback.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPair();
   }, [loadPair]);
-
-  useEffect(() => {
-    setAutoOpen(localStorage.getItem("pr_autoopen") === "1");
-  }, []);
 
   const vote = useCallback(
     async (side: "a" | "b", star = false) => {
@@ -270,7 +274,7 @@ export default function RankPage() {
       await new Promise((r) => setTimeout(r, 480));
       loadPair();
     },
-    [busy, gated, picked, loadPair]
+    [busy, gated, picked, loadPair, promptSignIn]
   );
 
   const skip = useCallback(() => {
@@ -324,9 +328,9 @@ export default function RankPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6">
       <header className="flex items-center justify-between gap-3 py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
+        <Link href="/" className="text-sm font-bold tracking-tight">
           ← Portfolio<span className="text-accent">Rank</span>
-        </a>
+        </Link>
         <div className="flex items-center gap-3">
           <p className="hidden text-xs text-mute sm:block">
             {count} vote{count === 1 ? "" : "s"} this session
@@ -575,13 +579,7 @@ export default function RankPage() {
             {showDetails ? "Hide details" : "Show details"}
           </button>
           <button
-            onClick={() =>
-              setAutoOpen((v) => {
-                const nv = !v;
-                localStorage.setItem("pr_autoopen", nv ? "1" : "0");
-                return nv;
-              })
-            }
+            onClick={() => setAutoOpen(!autoOpen)}
             title="Open both sites in new tabs automatically when you vote"
             aria-pressed={autoOpen}
             className={`rounded-lg border px-5 py-2 text-sm font-semibold transition ${

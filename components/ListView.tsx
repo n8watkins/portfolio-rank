@@ -15,7 +15,6 @@ export type ListItem = { url: string; name: string; domain: string };
  */
 export function ListView({
   listId,
-  slug,
   initialName,
   initialPublic,
   isOwner,
@@ -23,7 +22,6 @@ export function ListView({
   shareUrl,
 }: {
   listId: number;
-  slug: string;
   initialName: string;
   initialPublic: boolean;
   isOwner: boolean;

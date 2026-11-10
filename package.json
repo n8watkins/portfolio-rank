@@ -16,7 +16,8 @@
     "check:cf-types": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false --check cloudflare-env.d.ts",
     "test:e2e": "scripts/test-e2e.sh",
     "eval:rubric": "node scripts/eval-rubric.mjs",
-    "docs:rubric": "node scripts/rubric-docs.mjs"
+    "docs:rubric": "node scripts/rubric-docs.mjs",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
@@ -35,6 +36,9 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@typescript/typescript6": "^6.0.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.5",
     "playwright": "^1.65.0",
     "pngjs": "^7.0.0",
     "release-kit": "github:n8watkins/release-kit#v2.9.0",
@@ -43,9 +47,6 @@
     "wrangler": "4.158.0"
   },
   "overrides": {
-    "postcss": "^8.5.32",
-    "@node-minify/core": {
-      "glob": "^10.5.0"
-    }
+    "postcss": "^8.5.32"
   }
 }
