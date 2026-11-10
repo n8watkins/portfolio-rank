@@ -217,6 +217,12 @@ export default function RankPage() {
         setBusy(false);
         return;
       }
+      if (res.status === 403 && data.error === "account_too_new") {
+        setLast("Votes from GitHub accounts this new don't count yet - thanks for looking!");
+        setPicked(null);
+        setBusy(false);
+        return;
+      }
       if (res.status === 403 && data.error === "stale_matchup") {
         setLast("That pair expired - here's a fresh one.");
         loadPair();

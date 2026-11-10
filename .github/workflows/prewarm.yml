@@ -40,7 +40,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Prewarm PSI + inspect caches
-        run: node scripts/prewarm-metrics.mjs --limit=${{ github.event.inputs.limit || '150' }}
+        # Inputs reach the shell as variables, never pasted into the script.
+        env:
+          LIMIT: ${{ github.event.inputs.limit || '150' }}
+        run: node scripts/prewarm-metrics.mjs --limit="$LIMIT"
 
       - name: Notify on failure
         if: failure()

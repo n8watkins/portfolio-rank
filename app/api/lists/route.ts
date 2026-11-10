@@ -65,26 +65,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "signin_required" }, { status: 403 });
   }
 
-  const existing = Number(
-    (
-      await db().execute({
-        sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ? AND deleted_at IS NULL",
-        args: [rater.id],
-      })
-    ).rows[0].n
-  );
-  if (existing >= MAX_LISTS_PER_OWNER) {
-    return NextResponse.json({ error: "too_many_lists" }, { status: 429 });
-  }
-
-  // Retry on the (astronomically rare) slug collision the UNIQUE index rejects.
+  // Cap check and insert in one write transaction (libSQL serializes these),
+  // so concurrent creates can't both slip past MAX_LISTS_PER_OWNER. Retries
+  // on the (astronomically rare) slug collision the UNIQUE index rejects.
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = newSlug();
+    const tx = await db().transaction("write");
     try {
-      const res = await db().execute({
+      const existing = Number(
+        (
+          await tx.execute({
+            sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ? AND deleted_at IS NULL",
+            args: [rater.id],
+          })
+        ).rows[0].n
+      );
+      if (existing >= MAX_LISTS_PER_OWNER) {
+        await tx.rollback();
+        return NextResponse.json({ error: "too_many_lists" }, { status: 429 });
+      }
+      const res = await tx.execute({
         sql: "INSERT INTO lists (owner, name, slug) VALUES (?, ?, ?) RETURNING id, is_public",
         args: [rater.id, name, slug],
       });
+      await tx.commit();
       const row = res.rows[0];
       return NextResponse.json({
         id: Number(row.id),
@@ -94,6 +98,7 @@ export async function POST(req: Request) {
         count: 0,
       });
     } catch (e) {
+      await tx.rollback().catch(() => {});
       if (/UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e))) {
         continue;
       }

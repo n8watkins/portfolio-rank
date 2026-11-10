@@ -4,12 +4,15 @@ import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { hiddenUrls, isKnownPortfolio } from "@/lib/roster";
 import {
+  ANON_MAX_DRAWS_PER_DAY,
   ANON_VOTE_LIMIT,
   DAILY_VOTE_LIMIT,
   MAX_DRAWS_PER_HOUR,
   STAR_BANK_CAP,
   STAR_PER_VOTES,
+  accountTooNew,
   getRater,
+  guardConfig,
 } from "@/lib/rater";
 import { MATCHUP_TTL_MS, issueMatchupToken, verifyMatchupToken } from "@/lib/matchup";
 import { starBalance } from "@/lib/stats";
@@ -32,15 +35,16 @@ async function getRatings(urls: string[]): Promise<Map<string, Rating>> {
   );
 }
 
-async function countVotes(raterId: string, since?: string): Promise<number> {
+async function countVotes(raterId: string): Promise<number> {
   const res = await db().execute({
-    sql: since
-      ? `SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > ${since}`
-      : "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ?",
+    sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ?",
     args: [raterId],
   });
   return Number(res.rows[0].n);
 }
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 export async function GET() {
   await ensureSchema();
@@ -62,44 +66,61 @@ export async function GET() {
     (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)
   );
 
-  // Signed-in raters: record the served pair (an official vote must be for
-  // it) and cap redraws, so skipping until a chosen site shows up doesn't pay.
-  if (rater.type === "human") {
-    const now = Date.now();
-    const hourAgo = now - 60 * 60 * 1000;
-    const tx = await db().transaction("write");
-    try {
-      const row = (
-        await tx.execute({
-          sql: "SELECT window_start, draws FROM matchups WHERE rater_id = ?",
-          args: [rater.id],
-        })
-      ).rows[0];
-      const inWindow = row && Number(row.window_start) > hourAgo;
-      if (inWindow && Number(row.draws) >= MAX_DRAWS_PER_HOUR) {
-        await tx.rollback();
-        return NextResponse.json({ error: "too_many_draws" }, { status: 429 });
-      }
+  // Every rater, practice visitors included: record the served pair (a vote
+  // must be for it) and cap redraws, so skipping until a chosen site shows up
+  // doesn't pay - neither for an official vote nor for a practice vote that
+  // is claimed at sign-in. Signed-in raters get MAX_DRAWS_PER_HOUR (plus the
+  // optional HUMAN_MAX_DRAWS_PER_DAY), practice visitors ANON_MAX_DRAWS_PER_DAY.
+  const now = Date.now();
+  const dayCap =
+    rater.type === "human" ? guardConfig().humanMaxDrawsPerDay : ANON_MAX_DRAWS_PER_DAY;
+  const tx = await db().transaction("write");
+  try {
+    const row = (
       await tx.execute({
-        sql: `INSERT INTO matchups (rater_id, pair_key, issued_at, window_start, draws)
-              VALUES (?, ?, ?, ?, 1)
-              ON CONFLICT(rater_id) DO UPDATE SET
-                pair_key = excluded.pair_key, issued_at = excluded.issued_at,
-                window_start = ?, draws = ?`,
-        args: [
-          rater.id,
-          pairKey(candidates[0].url, candidates[1].url),
-          now,
-          now,
-          inWindow ? Number(row.window_start) : now,
-          inWindow ? Number(row.draws) + 1 : 1,
-        ],
-      });
-      await tx.commit();
-    } catch (e) {
-      await tx.rollback().catch(() => {});
-      throw e;
+        sql: "SELECT window_start, draws, day_start, day_draws FROM matchups WHERE rater_id = ?",
+        args: [rater.id],
+      })
+    ).rows[0];
+    const inHour = row && Number(row.window_start) > now - HOUR_MS;
+    const inDay = row && row.day_start != null && Number(row.day_start) > now - DAY_MS;
+    const hourDraws = inHour ? Number(row.draws) : 0;
+    const dayDraws = inDay ? Number(row.day_draws) : 0;
+    if (hourDraws >= MAX_DRAWS_PER_HOUR || (dayCap > 0 && dayDraws >= dayCap)) {
+      await tx.rollback();
+      return NextResponse.json(
+        { error: rater.type === "human" ? "too_many_draws" : "signin_required" },
+        { status: 429 }
+      );
     }
+    await tx.execute({
+      sql: `INSERT INTO matchups (rater_id, pair_key, issued_at, window_start, draws, day_start, day_draws)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(rater_id) DO UPDATE SET
+              pair_key = excluded.pair_key, issued_at = excluded.issued_at,
+              window_start = excluded.window_start, draws = excluded.draws,
+              day_start = excluded.day_start, day_draws = excluded.day_draws`,
+      args: [
+        rater.id,
+        pairKey(candidates[0].url, candidates[1].url),
+        now,
+        inHour ? Number(row.window_start) : now,
+        hourDraws + 1,
+        inDay ? Number(row.day_start) : now,
+        dayDraws + 1,
+      ],
+    });
+    // Practice visitors leave a row each; drop ones idle for a week now and then.
+    if (Math.random() < 0.01) {
+      await tx.execute({
+        sql: "DELETE FROM matchups WHERE rater_id LIKE 'anon:%' AND issued_at < ?",
+        args: [now - 7 * DAY_MS],
+      });
+    }
+    await tx.commit();
+  } catch (e) {
+    await tx.rollback().catch(() => {});
+    throw e;
   }
 
   const shots = await shotBases([candidates[0].url, candidates[1].url]);
@@ -167,6 +188,13 @@ export async function POST(req: Request) {
   if (!verifyMatchupToken(body?.token, rater.id, winner, loser)) {
     return NextResponse.json({ error: "stale_matchup" }, { status: 403 });
   }
+  // MIN_GITHUB_ACCOUNT_AGE_DAYS (off unless the owner sets it).
+  if (accountTooNew(rater)) {
+    return NextResponse.json(
+      { error: "account_too_new", minAccountAgeDays: guardConfig().minAccountAgeDays },
+      { status: 403 }
+    );
+  }
 
   // Everything - the limit checks, the vote insert, and the ELO update - runs
   // in one write transaction. libSQL serializes write transactions, so the
@@ -230,17 +258,15 @@ export async function POST(req: Request) {
       useStar = bal > 0;
     }
 
-    // An official vote must be for the pair most recently served to this
-    // rater, and spends it: the next vote needs a fresh draw.
-    if (rater.type === "human") {
-      const m = await tx.execute({
-        sql: "UPDATE matchups SET pair_key = NULL WHERE rater_id = ? AND pair_key = ? AND issued_at > ?",
-        args: [rater.id, key, Date.now() - MATCHUP_TTL_MS],
-      });
-      if (m.rowsAffected === 0) {
-        await tx.rollback();
-        return NextResponse.json({ error: "stale_matchup" }, { status: 403 });
-      }
+    // A vote - official or practice - must be for the pair most recently
+    // served to this rater, and spends it: the next vote needs a fresh draw.
+    const m = await tx.execute({
+      sql: "UPDATE matchups SET pair_key = NULL WHERE rater_id = ? AND pair_key = ? AND issued_at > ?",
+      args: [rater.id, key, Date.now() - MATCHUP_TTL_MS],
+    });
+    if (m.rowsAffected === 0) {
+      await tx.rollback();
+      return NextResponse.json({ error: "stale_matchup" }, { status: 403 });
     }
 
     const rres = await tx.execute({
@@ -263,7 +289,9 @@ export async function POST(req: Request) {
     // Insert first: a UNIQUE violation here means this rater already voted on
     // this matchup (either direction) - caught below as 409.
     await tx.execute({
-      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta, starred) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      // served = 1: cast on a pair recorded in matchups; only such practice
+      // votes can be claimed (/api/claim).
+      sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta, starred, served) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
       args: [winner, loser, key, rater.type, rater.id, appliedDelta, useStar ? 1 : 0],
     });
 

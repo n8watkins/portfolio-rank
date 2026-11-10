@@ -11,6 +11,8 @@ declare module "next-auth" {
   interface Session {
     raterId?: string;
     login?: string;
+    /** When the GitHub account was created (ISO 8601), for MIN_GITHUB_ACCOUNT_AGE_DAYS. */
+    accountCreatedAt?: string;
   }
 }
 
@@ -27,12 +29,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === "github" && profile) {
         token.raterId = `gh:${profile.id}`;
         token.login = String(profile.login);
+        if (typeof profile.created_at === "string") token.accountCreatedAt = profile.created_at;
       }
       return token;
     },
     session({ session, token }) {
       session.raterId = token.raterId as string | undefined;
       session.login = token.login as string | undefined;
+      session.accountCreatedAt = token.accountCreatedAt as string | undefined;
       return session;
     },
   },

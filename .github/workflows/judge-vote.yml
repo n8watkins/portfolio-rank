@@ -77,10 +77,13 @@ jobs:
           GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
           GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
           GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
+          # Inputs reach the shell as variables, never pasted into the script.
+          VOTES: ${{ github.event.inputs.votes || '30' }}
+          TIERS: ${{ github.event.inputs.tiers || 'S,A,B' }}
         run: >-
           node pipeline/judge.mjs pairwise
-          --votes "${{ github.event.inputs.votes || '30' }}"
-          --tiers "${{ github.event.inputs.tiers || 'S,A,B' }}"
+          --votes "$VOTES"
+          --tiers "$TIERS"
 
       - name: Notify on failure
         if: failure()

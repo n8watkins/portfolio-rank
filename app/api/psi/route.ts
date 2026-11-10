@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cached, type CacheMeta } from "@/lib/cache";
-import { isKnownPortfolio } from "@/lib/roster";
+import { hiddenUrls, isKnownPortfolio } from "@/lib/roster";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
 // set PSI_API_KEY (free, no billing) for the 25k/day quota.
@@ -75,14 +75,27 @@ export async function GET(req: Request) {
   if (!url || !isKnownPortfolio(url)) {
     return NextResponse.json({ ok: false, error: "unknown_url" }, { status: 403 });
   }
-  // Quota errors and timeouts are transient - never cache failures. A stale
-  // result is served at once and refreshed in the background (lib/cache.ts).
+  // A site the health check found down, dead or parked has nothing to
+  // measure: don't spend PageSpeed quota on it.
+  if ((await hiddenUrls()).has(url)) {
+    return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
+  }
+  // A result stays fresh for 30 days; a failure (quota, timeout, a site that
+  // won't load) for an hour, so a broken site can't burn the quota by being
+  // asked again and again, and a good result is never replaced by a failure.
+  // A miss takes the lease first: one PageSpeed run per site at a time, the
+  // other callers hear "in_progress" and retry. A stale result is served at
+  // once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
     "psi",
     url,
-    30 * 24 * 3600 * 1000,
-    () => runPsi(url),
-    (d) => d.ok
+    {
+      ttlMs: 30 * 24 * 3600 * 1000,
+      isFailure: (d) => !d.ok,
+      failureTtlMs: 3600 * 1000,
+      leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
+    },
+    () => runPsi(url)
   );
   return NextResponse.json(data);
 }

@@ -159,7 +159,7 @@ export async function GET(req: Request) {
   const data = await cached<Inspection>(
     "inspect",
     url,
-    7 * 24 * 3600 * 1000,
+    { ttlMs: 7 * 24 * 3600 * 1000 },
     () => inspect(url)
   );
   return NextResponse.json(data);
