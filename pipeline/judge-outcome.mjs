@@ -9,13 +9,16 @@
 //   skipped    rows or pairs that could not be judged at all (screenshots
 //              unavailable): no call was made, so they are not "attempted",
 //              but a run that skips most of its work is not healthy either
+//   deferred   rows left for tomorrow because today's 3.5 budget is used:
+//              planned waiting, not a failure
 //
 // The run fails (exit 1) when there was work and nothing was done, or when
 // most of the work was skipped. Running out of daily quota after some
 // successes still passes: the rest waits for the next run.
 
-export function judgeOutcome({ mode, queued = 0, ok = 0, abstained = 0, errors = 0, skipped = 0 }) {
+export function judgeOutcome({ mode, queued: planned = 0, ok = 0, abstained = 0, errors = 0, skipped = 0, deferred = 0 }) {
   const done = ok + abstained;
+  const queued = Math.max(0, planned - deferred);
   let failure = null;
   if (queued > 0 && done === 0) {
     failure = errors
@@ -26,7 +29,9 @@ export function judgeOutcome({ mode, queued = 0, ok = 0, abstained = 0, errors =
   }
   const what = mode === "pairwise" ? "pair(s)" : "site(s)";
   const verdict = queued === 0
-    ? "Nothing to do."
+    ? deferred
+      ? `Nothing judged: today's budget is used; ${deferred} waiting for tomorrow.`
+      : "Nothing to do."
     : failure
       ? `FAILED: ${failure}.`
       : `OK: ${done} of ${queued} ${what} judged.`;
@@ -35,9 +40,9 @@ export function judgeOutcome({ mode, queued = 0, ok = 0, abstained = 0, errors =
     "",
     verdict,
     "",
-    "| Queued | Judged | Abstained | Errors | Skipped |",
-    "| ---: | ---: | ---: | ---: | ---: |",
-    `| ${queued} | ${ok} | ${abstained} | ${errors} | ${skipped} |`,
+    "| Queued | Judged | Abstained | Errors | Skipped | Deferred |",
+    "| ---: | ---: | ---: | ---: | ---: | ---: |",
+    `| ${queued} | ${ok} | ${abstained} | ${errors} | ${skipped} | ${deferred} |`,
     "",
   ].join("\n");
   return { exitCode: failure ? 1 : 0, verdict, summary };

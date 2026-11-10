@@ -14,12 +14,24 @@
 //   node pipeline/judge.mjs rubric   [--limit N] [--only substr] [--force] [--rpm R] [--model M]
 //   node pipeline/judge.mjs pairwise [--votes N] [--rpm R] [--model M]
 //
-// Budget: the free tier allows ~500 requests/day; every call is logged so you
-// can see what a run spent. Rate is paced to --rpm (default 8) to stay under
-// the free-tier requests-per-minute cap.
+// Budget: every Gemini request is recorded in gemini_requests and summarized
+// per run (pipeline/gemini-log.mjs). All requests share one pace: --rpm, else
+// GEMINI_RPM, else 8 per minute. The rubric re-grades grades not made by
+// 3.5 Flash-Lite with whatever room today's quota has left (lowest priority;
+// --no-regrade turns it off), keeping each old grade in rubric_history.
 import fs from "fs";
 import path from "path";
-import { createGemini, FLASH_LITE_CHAIN, GeminiAuthError } from "./gemini.mjs";
+import {
+  createGemini,
+  createLimiter,
+  DEFAULT_RPM,
+  FLASH_LITE_CHAIN,
+  GeminiAuthError,
+  GeminiUnavailableError,
+  PRIMARY_MODEL,
+} from "./gemini.mjs";
+import { catchUpMode, createRequestLog, dailyTotals, ensureGeminiLog, gradingBudget, runSummary } from "./gemini-log.mjs";
+import { ensureRubricHistory, regradeQueue, replaceGradeStatements } from "./rubric-history.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
 import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
@@ -56,7 +68,14 @@ const LIMIT = Number(flag("limit", "0")) || Infinity;
 const VOTES = Number(flag("votes", "20"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
-const RPM = Number(flag("rpm", "8"));
+// One pace for every Gemini request in the run, retries included: --rpm,
+// else the GEMINI_RPM repository variable, else DEFAULT_RPM.
+const RPM = Number(flag("rpm", process.env.GEMINI_RPM || String(DEFAULT_RPM)));
+// Catch-up mode (repository variable GEMINI_CATCHUP, on unless "false"):
+// while the backlog and the one-time full re-grade are being worked through,
+// grading uses 3.5's daily budget first and then 3.1's, so both quotas work.
+// Every 3.1 grade goes on the re-grade queue for 3.5 afterwards.
+const CATCHUP = catchUpMode();
 // pairwise: concentrate votes on these graded tiers (NULL/other tiers excluded).
 const TIERS = (flag("tiers", "S,A,B") || "")
   .split(",")
@@ -97,10 +116,19 @@ function eloUpdate(winnerElo, loserElo, k = 32) {
 // ---------------------------------------------------------------------------
 // Gemini client (key in the x-goog-api-key header; see pipeline/gemini.mjs)
 // ---------------------------------------------------------------------------
+// Every request is recorded in gemini_requests (pipeline/gemini-log.mjs).
+await ensureGeminiLog(db);
+const requestLog = createRequestLog({ db, job: MODE });
 const gemini = createGemini({
   apiKey: process.env.GEMINI_API_KEY,
   models: MODELS,
-  rpm: RPM,
+  limiter: createLimiter({ rpm: RPM }),
+  onRequest: (r) => requestLog.record(r),
+  // Outside catch-up mode, grading waits for tomorrow's 3.5 quota rather
+  // than spending 3.1 (whose grades would be re-graded by 3.5 later anyway);
+  // a single grade that keeps failing on 3.5 after the retries still goes to
+  // 3.1. In catch-up mode, and for votes, a spent 3.5 quota moves to 3.1.
+  onDailyQuota: MODE === "rubric" && !CATCHUP ? "stop" : "fallback",
 });
 
 // Inline image part; skips files that would blow the request size cap.
@@ -281,12 +309,90 @@ const rubricSchema = {
   required: ["is_portfolio", "tier", ...AXES.map(([k]) => k)],
 };
 
+// Grade one site. Returns { status: "ok", rubric, model } | { status:
+// "skipped" } (screenshots unavailable, retried next run) | { status:
+// "sentinel" } (screenshots gone for good). Throws Gemini errors.
+async function gradeRow(row) {
+  const url = String(row.url);
+  const key = String(row.shot_key);
+  const dir = path.join(ROOT, "captures", key);
+
+  // Prefer local motion strips (full motion nuance); fall back to R2
+  // hero + full + the stored motion flag when strips aren't on this machine
+  // (CI runners, or the backlog graded from the cloud).
+  let images, imgDesc, mode;
+  const localStrips = [
+    imagePart(path.join(dir, "strip0.png")),
+    imagePart(path.join(dir, "strip2.png")),
+    imagePart(path.join(dir, "full.jpg")),
+  ].filter(Boolean);
+  if (localStrips.length >= 2) {
+    mode = "local";
+    images = localStrips;
+    imgDesc =
+      `Images, in order: (1) the settled desktop viewport, (2) the same viewport 3 seconds ` +
+      `later (compare with 1 to judge motion), (3) the full page top to bottom.`;
+  } else {
+    const [hero, full] = await Promise.all([r2Part(key, "hero.jpg"), r2Part(key, "full.jpg")]);
+    if (hero?.inline_data && full?.inline_data) {
+      mode = "r2";
+      images = [hero, full];
+      let motion;
+      try {
+        motion = JSON.parse(String(row.meta || "{}")).motion;
+      } catch {
+        motion = undefined;
+      }
+      const motionNote =
+        motion === true
+          ? "This site HAS animation/motion effects."
+          : motion === false
+            ? "This site appears STATIC (no motion detected)."
+            : "Motion for this site is unknown.";
+      imgDesc = `Images, in order: (1) the desktop hero, (2) the full page top to bottom.\n` + motionNote;
+    } else if (hero === "missing" && full === "missing") {
+      return { status: "sentinel" };
+    }
+  }
+  if (!images) return { status: "skipped" };
+  // Motion is judged from two real frames locally, but from the stated flag in
+  // R2 mode, so swap that one axis's instruction to match the inputs.
+  const axesText = AXES.map(([k, d]) =>
+    k === "motion" && mode === "r2"
+      ? `- motion: tasteful / gratuitous / absent - judge from the motion fact stated above (a technical signal, not visible frames)`
+      : `- ${k}: ${d}`
+  ).join("\n");
+  const parts = [
+    {
+      text:
+        `You are judging a developer's portfolio website: "${row.name}" at ${url}.\n` +
+        imgDesc +
+        `\nScore each axis 1 (poor) to 5 (excellent) with one short justification:\n` +
+        axesText +
+        `\nAlso give an overall tier (S = exceptional, rare; A = strong; B = solid; C = weak; D = bad) ` +
+        `and whether this is actually a personal portfolio site.`,
+    },
+    ...images,
+  ];
+  const { result: rubric, model } = await gemini.generate(parts, rubricSchema);
+  rubric.model = model; // the model that actually answered
+  rubric.grading_source = mode; // "local" (frames) or "r2" (hero+full+flag)
+  rubric.judged_at = new Date().toISOString();
+  return { status: "ok", rubric, model };
+}
+
+// Grading stays inside a daily budget per model (GEMINI_GRADING_BUDGET;
+// 3.5's leaves room in its 500 for the daily vote job). Every request counts,
+// retries included, plus what earlier runs spent today (gemini_requests).
+// Rows beyond the budget wait for tomorrow.
+
 async function runRubric() {
+  await ensureRubricHistory(db);
   // Only sites on the current list that aren't confirmed down get graded.
   // Sites the health check flagged needs_review (little that looks like a
   // portfolio) go first, so is_portfolio confirms or clears them soon.
   const res = await db.execute(
-    `SELECT url, name, shot_key, meta FROM portfolios
+    `SELECT url, name, shot_key, meta, ai_rubric FROM portfolios
      WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
      ORDER BY needs_review DESC, captured_at DESC, url`
@@ -298,123 +404,118 @@ async function runRubric() {
   let ok = 0;
   let errors = 0;
   let skipped = 0;
+  let regraded = 0;
   let consecutiveErrors = 0;
-  for (const [i, row] of queue.entries()) {
-    const url = String(row.url);
-    const key = String(row.shot_key);
-    const dir = path.join(ROOT, "captures", key);
+  let stopped = null;
+  let deferred = 0;
 
-    // Prefer local motion strips (full motion nuance); fall back to R2
-    // hero + full + the stored motion flag when strips aren't on this machine
-    // (CI runners, or the backlog graded from the cloud).
-    let images, imgDesc, mode;
-    const localStrips = [
-      imagePart(path.join(dir, "strip0.png")),
-      imagePart(path.join(dir, "strip2.png")),
-      imagePart(path.join(dir, "full.jpg")),
-    ].filter(Boolean);
-    if (localStrips.length >= 2) {
-      mode = "local";
-      images = localStrips;
-      imgDesc =
-        `Images, in order: (1) the settled desktop viewport, (2) the same viewport 3 seconds ` +
-        `later (compare with 1 to judge motion), (3) the full page top to bottom.`;
-    } else {
-      const [hero, full] = await Promise.all([
-        r2Part(key, "hero.jpg"),
-        r2Part(key, "full.jpg"),
-      ]);
-      if (hero?.inline_data && full?.inline_data) {
-        mode = "r2";
-        images = [hero, full];
-        let motion;
-        try {
-          motion = JSON.parse(String(row.meta || "{}")).motion;
-        } catch {
-          motion = undefined;
-        }
-        const motionNote =
-          motion === true
-            ? "This site HAS animation/motion effects."
-            : motion === false
-              ? "This site appears STATIC (no motion detected)."
-              : "Motion for this site is unknown.";
-        imgDesc =
-          `Images, in order: (1) the desktop hero, (2) the full page top to bottom.\n` +
-          motionNote;
-      } else if (hero === "missing" && full === "missing") {
-        // Both frames are definitively absent from R2 (404) — sentinel so this
-        // row stops re-qualifying every run. Transient failures return null (not
-        // "missing"), so a blip never sentinels a healthy site; it just retries.
-        await db.execute({
-          sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
-          args: [
-            JSON.stringify({
-              error: "no_usable_captures",
-              judged_at: new Date().toISOString(),
-            }),
-            url,
-          ],
-        });
-        console.log(`[${i + 1}/${queue.length}] ${url} — no captures on R2, sentineled`);
-        continue;
+  // Today's requests per model before this run, plus this run's own, against
+  // the grading budget.
+  const budget = gradingBudget();
+  const { used } = await dailyTotals(db);
+  const room = (model = gemini.activeModel) =>
+    (budget[model] ?? 0) - (used.get(model)?.n ?? 0) - (gemini.requests[model] ?? 0);
+  // Each grade can take up to 4 requests (3 retries); start one only with room for that.
+  const PER_GRADE = 4;
+  const budgeted = MODELS[0] === PRIMARY_MODEL;
+  // In catch-up mode a spent 3.5 budget moves grading to 3.1; otherwise it waits.
+  const haveRoom = (need) => {
+    if (room() >= need) return true;
+    if (CATCHUP && gemini.activeModel === PRIMARY_MODEL) {
+      const next = gemini.useNextModel();
+      if (next) {
+        console.log(`  ${PRIMARY_MODEL} grading budget used; catch-up mode continues on ${next}`);
+        return room() >= need;
       }
     }
-    if (!images) {
-      skipped++;
-      console.log(
-        `[${i + 1}/${queue.length}] ${url} — skipped (captures unavailable, will retry)`
-      );
-      continue;
-    }
-    // Motion is judged from two real frames locally, but from the stated flag in
-    // R2 mode — so swap that one axis's instruction to match the inputs.
-    const axesText = AXES.map(([k, d]) =>
-      k === "motion" && mode === "r2"
-        ? `- motion: tasteful / gratuitous / absent — judge from the motion fact stated above (a technical signal, not visible frames)`
-        : `- ${k}: ${d}`
-    ).join("\n");
-    const parts = [
-      {
-        text:
-          `You are judging a developer's portfolio website: "${row.name}" at ${url}.\n` +
-          imgDesc +
-          `\nScore each axis 1 (poor) to 5 (excellent) with one short justification:\n` +
-          axesText +
-          `\nAlso give an overall tier (S = exceptional, rare; A = strong; B = solid; C = weak; D = bad) ` +
-          `and whether this is actually a personal portfolio site.`,
-      },
-      ...images,
-    ];
-    try {
-      const { result: rubric, model } = await gemini.generate(parts, rubricSchema);
-      consecutiveErrors = 0;
-      rubric.model = model; // the model that actually answered
+    return false;
+  };
 
-      rubric.grading_source = mode; // "local" (frames) or "r2" (hero+full+flag)
-      rubric.judged_at = new Date().toISOString();
-      await db.execute({
-        sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
-        args: [JSON.stringify(rubric), url],
-      });
-      ok++;
+  // Returns false when the run must stop (Gemini unavailable or out of quota).
+  async function handle(row, label, { regrade = false } = {}) {
+    const url = String(row.url);
+    try {
+      const out = await gradeRow(row);
+      if (out.status === "sentinel") {
+        // Both frames are definitively absent from R2 (404): sentinel so this
+        // row stops re-qualifying every run. Transient failures are "skipped".
+        if (!regrade) {
+          await db.execute({
+            sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
+            args: [JSON.stringify({ error: "no_usable_captures", judged_at: new Date().toISOString() }), url],
+          });
+        }
+        console.log(`${label} ${url} - no captures on R2${regrade ? "" : ", sentineled"}`);
+        return true;
+      }
+      if (out.status === "skipped") {
+        skipped++;
+        console.log(`${label} ${url} - skipped (captures unavailable, will retry)`);
+        return true;
+      }
+      consecutiveErrors = 0;
+      if (regrade && out.model !== PRIMARY_MODEL) {
+        // A re-grade only helps when the primary model makes it.
+        console.log(`${label} ${url} - answered by ${out.model}, not ${PRIMARY_MODEL}; re-grading stops`);
+        return false;
+      }
+      await db.batch(replaceGradeStatements(url, row.ai_rubric, out.rubric), "write");
+      if (regrade) regraded++;
+      else ok++;
       console.log(
-        `[${i + 1}/${queue.length}] ${url} - tier ${rubric.tier}, portfolio=${rubric.is_portfolio}, design=${rubric.visual_design.score} (${model})`
+        `${label} ${url} - tier ${out.rubric.tier}, portfolio=${out.rubric.is_portfolio}, design=${out.rubric.visual_design?.score} (${out.model})${regrade ? " [re-grade]" : ""}`
       );
+      return true;
     } catch (e) {
       if (e instanceof GeminiAuthError) throw e;
       errors++;
-      console.log(`[${i + 1}/${queue.length}] ${url} — ERROR ${String(e.message).slice(0, 120)}`);
-      // Stop grinding once the daily quota is gone — every further call would
-      // just burn ~90s of retries and fail. Resets on any success above.
-      if (++consecutiveErrors >= 5) {
-        console.log("  aborting: 5 consecutive errors (likely daily quota exhausted)");
-        break;
+      console.log(`${label} ${url} - ERROR ${String(e.message).slice(0, 160)}`);
+      if (e instanceof GeminiUnavailableError) {
+        // Out of quota, or the models stayed unavailable through every retry:
+        // stop cleanly; the next run picks up the rest.
+        stopped = e.message;
+        return false;
       }
+      if (++consecutiveErrors >= 5) {
+        stopped = "5 consecutive errors";
+        return false;
+      }
+      return true;
     }
   }
-  console.log(`rubric done: ${ok}/${queue.length} judged, ${skipped} skipped, ${gemini.summary()}`);
-  return { queued: queue.length, ok, errors, skipped };
+
+  for (const [i, row] of queue.entries()) {
+    if (budgeted && !haveRoom(PER_GRADE)) {
+      deferred = queue.length - i;
+      stopped = `today's grading budget is used (${JSON.stringify(budget)}); ${deferred} site(s) wait for tomorrow`;
+      break;
+    }
+    if (!(await handle(row, `[${i + 1}/${queue.length}]`))) break;
+  }
+
+  // Re-grade queue, lowest priority: grades not made by 3.5, re-done by 3.5
+  // within its grading budget. Re-grading only ever runs on 3.5.
+  let regradeQueued = 0;
+  if (!stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted && gemini.activeModel === PRIMARY_MODEL) {
+    const left = room(PRIMARY_MODEL);
+    const n = Math.min(LIMIT === Infinity ? left : LIMIT - queue.length, left);
+    const rows = await regradeQueue(db, { primary: PRIMARY_MODEL, limit: Math.max(0, n) });
+    regradeQueued = rows.length;
+    if (rows.length) console.log(`re-grade: ${rows.length} grade(s) not made by ${PRIMARY_MODEL} (room today: ${left})`);
+    for (const [i, row] of rows.entries()) {
+      if (gemini.activeModel !== PRIMARY_MODEL || room(PRIMARY_MODEL) < 1) {
+        deferred += rows.length - i;
+        break;
+      }
+      if (!(await handle(row, `[re-grade ${i + 1}/${rows.length}]`, { regrade: true }))) break;
+    }
+  }
+
+  if (stopped) console.log(`  stopped early: ${stopped}`);
+  console.log(
+    `rubric done: ${ok}/${queue.length} judged, ${regraded}/${regradeQueued} re-graded, ${skipped} skipped, ${gemini.summary()}`
+  );
+  return { queued: queue.length + regradeQueued, ok: ok + regraded, errors, skipped, deferred, stopped };
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +581,7 @@ async function runPairwise() {
   let abstained = 0;
   let queued = 0;
   let consecutiveErrors = 0;
+  let stopped = null;
   for (let round = 0; cast < VOTES && round < VOTES * 5; round++) {
     // Uncertainty-prioritized: sample a handful, face off the two least-voted
     // whose ratings are close (same selection spirit as GET /api/rank).
@@ -548,6 +650,11 @@ async function runPairwise() {
       if (/UNIQUE constraint failed/i.test(String(e.message))) continue; // dup, not an error
       errors++;
       console.log(`  ERROR ${a.url} vs ${b.url}: ${String(e.message).slice(0, 120)}`);
+      if (e instanceof GeminiUnavailableError) {
+        // Out of quota, or unavailable through every retry: stop cleanly.
+        stopped = e.message;
+        break;
+      }
       if (++consecutiveErrors >= 5) {
         console.log("  aborting: 5 consecutive errors (likely quota exhausted or outage)");
         break;
@@ -557,7 +664,8 @@ async function runPairwise() {
   console.log(
     `pairwise done: ${cast} vote(s) cast, ${abstained} abstained, ${skipped} pair(s) skipped, ${gemini.summary()}`
   );
-  return { queued, ok: cast, errors, skipped, abstained };
+  if (stopped) console.log(`  stopped early: ${stopped}`);
+  return { queued, ok: cast, errors, skipped, abstained, stopped };
 }
 
 // Mirrors POST /api/rank: insert + ELO upsert in one write transaction, with
@@ -605,6 +713,28 @@ async function castVote(win, lose, model) {
   }
 }
 
+// The job summary: the judge's counts, this run's Gemini requests (per model,
+// 5xx, 429, fallbacks, tokens, estimated cost) and today's totals against
+// the daily quota, with a warning from 80%.
+async function writeSummary(outcome, stopped) {
+  let today = { markdown: "", warnings: [] };
+  try {
+    today = await dailyTotals(db);
+  } catch {
+    /* the request log is optional */
+  }
+  const md = [
+    outcome.summary,
+    stopped ? `Stopped early: ${stopped}. The next run continues where this one stopped.\n` : "",
+    runSummary(requestLog.rows),
+    today.markdown,
+    requestLog.writeErrors ? `${requestLog.writeErrors} request(s) could not be written to gemini_requests.\n` : "",
+  ].join("\n");
+  for (const w of today.warnings) console.log(`::warning::${w}`);
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md}\n`);
+  else console.log(md);
+}
+
 // ---------------------------------------------------------------------------
 // Exit non-zero when the key is rejected, when there was work and nothing was
 // judged, or when most of the work was skipped (pipeline/judge-outcome.mjs),
@@ -623,8 +753,7 @@ try {
   }
   const counts = MODE === "rubric" ? await runRubric() : await runPairwise();
   const outcome = judgeOutcome({ mode: MODE, ...counts });
-  const summary = `${outcome.summary}\nGemini: ${gemini.summary()}\n`;
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  await writeSummary(outcome, counts.stopped);
   console.log(outcome.verdict);
   if (outcome.exitCode) {
     console.error(`::error::${MODE}: ${outcome.verdict} (${gemini.summary()})`);
@@ -632,6 +761,7 @@ try {
   }
 } catch (e) {
   if (!(e instanceof GeminiAuthError)) throw e;
+  await writeSummary({ summary: `## AI judge: ${MODE}\n\nFAILED: the API key was rejected.\n` }, null);
   console.error(`${e.message}\nCheck the GEMINI_API_KEY secret (${gemini.summary()}).`);
   process.exit(1);
 }

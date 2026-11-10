@@ -1,0 +1,30 @@
+name: Weekly grade comparison
+
+# 3.1 Flash-Lite vs 3.5 Flash-Lite on the same sites: every re-grade keeps the
+# old grade in rubric_history, and this report (scripts/grade-compare.mjs)
+# writes the pair count, tier agreement, per-axis differences and
+# is_portfolio disagreement to the run summary. Database reads only; no Gemini.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 18 * * 0" # Sundays 18:00 UTC, after the health check
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Compare grades
+        run: node scripts/grade-compare.mjs

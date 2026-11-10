@@ -16,10 +16,12 @@ on:
   schedule:
     - cron: "0 6 * * *" # daily 06:00 UTC
 
-# Serialize DB-writing sync runs so two never overlap (backup/prewarm/vote use
-# their own groups).
+# One group for every job that calls Gemini (this one grades, judge-vote
+# votes): they never run at the same time, so the shared per-minute pace and
+# the daily quota are never split between two runs. Also serializes the
+# DB-writing sync runs.
 concurrency:
-  group: ingest
+  group: gemini
   cancel-in-progress: false
 
 # main requires checks, so the refreshed feed.json lands through a pull request
@@ -143,11 +145,19 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Capture new portfolios
         run: node pipeline/capture.mjs --concurrency 4
-      # Grades newest-captured first (new sites), then chips the existing backlog
-      # from R2 - budget-capped so it never blows the shared daily Gemini quota
-      # (the consecutive-error abort stops it early if the quota runs out).
+      # Grades needs_review and newest-captured sites first, then the backlog,
+      # then re-grades older grades with 3.5, inside the per-model daily
+      # grading budget (GEMINI_GRADING_BUDGET; 3.5 keeps room for the vote
+      # job). Catch-up mode (GEMINI_CATCHUP, on unless "false") moves to 3.1's
+      # budget once 3.5's is used, so both quotas work through the backlog.
       - name: AI-grade new + backlog (budget-capped)
-        run: node pipeline/judge.mjs rubric --limit 300
+        env:
+          GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
+          GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
+          GEMINI_GRADING_BUDGET: ${{ vars.GEMINI_GRADING_BUDGET }}
+          GEMINI_CATCHUP: ${{ vars.GEMINI_CATCHUP || 'true' }}
+          GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
+        run: node pipeline/judge.mjs rubric --limit 1000
 
       - name: Notify on failure
         if: failure()
