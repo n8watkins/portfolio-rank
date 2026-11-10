@@ -91,7 +91,7 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 | 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts | 300 | 60 min |
 | 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`) | 100 | 30 min |
 | 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
-| 4 | Content (`content`) | not built yet | 100 | 30 min |
+| 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; the content engine's posts join later | 100 | 30 min |
 | 5 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics | 300 | 60 min |
 | 6 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
@@ -138,6 +138,41 @@ The provider is Cloudflare Email Service (docs/DECISIONS.md), and alerts will go
   Without the secret, the start is skipped with one log line and the AI stages work with what is already captured.
 - Measuring page evidence for old rows needs a browser for client-rendered pages, so it runs in the free checks too.
 - Grading, comparisons and the board rebuild run on Cloudflare: they need only the database (libSQL over HTTP), the `SHOTS` bucket and `fetch` to Gemini.
+
+### Polls
+
+Owner decision of 2026-11-10 ([docs/DECISIONS.md](docs/DECISIONS.md#polls)): one poll a week that people vote on, written from PortfolioRank's data.
+The back end is built; the poll card on home and the `/polls` page come with the redesign.
+
+- **Weeks:** each poll owns one Pacific week, Monday 00:00 to the next Monday 00:00 ([lib/polls/week.mjs](lib/polls/week.mjs)); its id is that Monday's date.
+- **Kinds:** `hero` (two real screenshots side by side, "Which hero section is better?", options Left and Right with the portfolio's URL) and `text` (2 to 4 written options).
+- **Every night, free** ([pipeline/polls.mjs](pipeline/polls.mjs) `schedulePolls`, called by `planNight` before the AI stages): this week has a poll, and so does next week when it starts before the next run.
+  When nothing was written ahead, code makes one without Gemini: a hero poll between two sites graded S or A whose screenshots exist, or the next unused evergreen text poll.
+  It also deletes per-person vote rows 30 days after a poll closes (the totals stay) and old rate-limit windows.
+- **Content stage, Gemini** (`pollsContent`): when fewer than 2 future weeks have a poll, one request to 3.5 Flash-Lite writes 4 candidates from aggregate data only (percentages of graded sites with a resume link, GitHub link, contact and so on; never a name or a site).
+  Code then checks each one: known kind and topic, question length, 2 to 4 distinct options, no negative wording, no links, handles or roster names or domains, not a repeat of any earlier poll, at most one hero poll; code picks the hero poll's two sites (S or A only, not shown in the last 12 weeks, screenshots checked in R2).
+  Up to 3 accepted polls get the next free weeks.
+- **Limits:** one generation a night, at most 2 requests in any 7 days (retries included), recorded in `poll_generations` with what was proposed, accepted and rejected and why; the Content stage cap in `GEMINI_BUDGET` (set it to 0 to stop generation) still applies.
+- **Tables** ([lib/polls/schema.mjs](lib/polls/schema.mjs)): `polls`, `poll_options` (with the running total, kept by a trigger), `poll_votes` (only for the one-vote rule), `poll_generations`, `rate_limits`; all but `rate_limits` are in the nightly backup.
+- **Withdrawing a poll:** set its `status` to `withdrawn`; it disappears from every API and keeps its week, so nothing replaces it automatically.
+
+The API ([app/api/polls](app/api/polls)):
+
+| Request | Answer | Cache |
+| --- | --- | --- |
+| `GET /api/polls?past=12` | `{ active, past, at }`: this week's poll or null, and closed polls newest first (1 to 52) | public, 60 s, and the Worker's edge cache |
+| `GET /api/polls/<id>` | `{ poll }` for an active or closed poll; 404 for an unknown, upcoming or withdrawn one | public, 60 s, edge cache |
+| `GET /api/polls/<id>/vote` | `{ mine, open, turnstile }`: the visitor's own option index or null | private, no-store |
+| `POST /api/polls/<id>/vote` `{ option, turnstileToken? }` | 200 `{ mine, poll }` with fresh totals; 409 `already_voted` with `mine`; 400, 403 `bad_origin` or `turnstile_failed`, 404, 410 `closed`, 429 `rate_limited` | private, no-store |
+
+A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, options: [{ index, label, votes, percent, site? }] }`, where a hero option's `site` is `{ url, name, domain, path, shot, hero }` (`hero` is the screenshot's URL, null without one).
+
+- **One vote per visitor:** per signed-in account and per browser (the signed `pr_anon` cookie, issued on the first vote), enforced by unique indexes, so concurrent requests can't vote twice.
+  Signing in or out on the same browser, or using the same account on another browser, doesn't give a second vote.
+- **Guards on a vote:** the `Origin` header must be the site's own; at most 20 attempts per browser and 60 per IP an hour (`rate_limits`, the IP stored only as a keyed hash); Cloudflare Turnstile when the `TURNSTILE_SECRET_KEY` Worker secret is set (widget action `poll-vote`), skipped without it.
+- **Privacy:** no API returns who voted for what; results are totals and percentages.
+- **Results feed:** `pollResults(db, { since })` in [lib/polls/store.mjs](lib/polls/store.mjs) returns closed polls with totals, the winning option and the margin in points, for the content engine and the AI vs people comparisons; the public `past` list carries the same totals.
+- **Turso reads:** a public read is a handful of indexed rows, at most once a minute per data center; a vote is one insert (plus the trigger's update) and two rate-limit upserts.
 
 ## Model watch
 
