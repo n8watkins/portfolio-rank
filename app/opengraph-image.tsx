@@ -1,10 +1,11 @@
 import { OG_SIZE, WindowShot, dataUrl, shareCard } from "@/lib/og-card";
 import { readPublicFile } from "@/lib/publicFile";
+import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 
 // The share card (Open Graph and Twitter): the n8builds family layout in
 // PortfolioRank's black and amber, with the home page leaderboard on the right.
 
-export const alt = "PortfolioRank: 1,700+ developer portfolios in one place. Browse, compare and vote for the best.";
+export const alt = `PortfolioRank: ${PORTFOLIO_COUNT_LABEL} developer portfolios in one place. Browse, compare and vote for the best.`;
 export const size = OG_SIZE;
 export const contentType = "image/png";
 
@@ -44,7 +45,7 @@ export default async function Image() {
       </div>
     ),
     nameSize: 66,
-    tagline: "1,700+ developer portfolios in one place. Browse, compare and vote for the best.",
+    tagline: `${PORTFOLIO_COUNT_LABEL} developer portfolios in one place. Browse, compare and vote for the best.`,
     visual: (
       <WindowShot
         src={dataUrl(shot, "image/jpeg")}

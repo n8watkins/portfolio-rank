@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
 import { FAQ } from "@/components/FAQ";
+import { AI_JUDGES } from "@/lib/rubric-copy";
 import { hiddenUrls } from "@/lib/roster";
 
 // Re-render at most every 5 min so the top-ranked marquee stays fresh without
@@ -77,7 +78,7 @@ export default async function Home() {
 
         <PortfolioGrid portfolios={portfolios} />
 
-        <FAQ />
+        <FAQ aiJudges={AI_JUDGES} />
       </main>
 
       <footer className="mt-20 border-t border-edge py-10 text-center text-sm text-mute">
@@ -89,7 +90,7 @@ export default async function Home() {
             rel="noopener noreferrer"
             className="underline decoration-edge underline-offset-4 transition hover:text-ink"
           >
-            Emma Bostian &amp; 1,700+ contributors
+            Emma Bostian &amp; contributors
           </a>
           . Built by{" "}
           <a

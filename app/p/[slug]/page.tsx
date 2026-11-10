@@ -11,6 +11,7 @@ import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
+import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -21,14 +22,11 @@ export async function generateStaticParams() {
   return [];
 }
 
-const AXIS_LABELS: Record<string, string> = {
-  visual_design: "Visual design",
-  five_second_test: "5-second test",
-  storytelling: "Storytelling",
-  writing: "Writing",
-  memorability: "Memorability",
-  motion: "Motion",
-};
+// The AI-judged criteria and their names come from the rubric itself
+// (pipeline/rubric.mjs), so the page follows it when it changes.
+const AXIS_LABELS: Record<string, string> = Object.fromEntries(
+  AI_CRITERIA.map((c) => [c.id, c.name])
+);
 
 function domainOf(url: string): string {
   try {
@@ -80,6 +78,9 @@ function publicGrade(raw: unknown): null | {
   tier: string;
   showTier: boolean;
   model?: string;
+  /** Rubric v2: weighted AI quality (1-5) and the share of code checks passed (0-100). */
+  quality?: number;
+  checks?: number;
   axes: { key: string; label: string; score: number; note?: string }[];
 } {
   if (typeof raw !== "string") return null;
@@ -102,6 +103,8 @@ function publicGrade(raw: unknown): null | {
     tier,
     showTier: ["S", "A", "B"].includes(tier),
     model: typeof r.model === "string" ? r.model : undefined,
+    quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
+    checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
     axes,
   };
 }
@@ -242,6 +245,21 @@ export default async function PortfolioPage({
                   by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
                   a verdict
                 </p>
+                {(grade.quality !== undefined || grade.checks !== undefined) && (
+                  <p className="mt-0.5 text-xs text-mute">
+                    {grade.quality !== undefined && (
+                      <>
+                        Quality <span className="font-semibold tabular-nums text-ink">{grade.quality.toFixed(1)}/5</span>
+                      </>
+                    )}
+                    {grade.quality !== undefined && grade.checks !== undefined && " · "}
+                    {grade.checks !== undefined && (
+                      <>
+                        Checks passed <span className="font-semibold tabular-nums text-ink">{grade.checks}/100</span>
+                      </>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
