@@ -17,7 +17,7 @@
 // GEMINI_CATCHUP (catch-up mode on 3.1) was removed on 2026-11-10: grades and
 // votes come from 3.5 only (GEMINI_FALLBACK, pipeline/gemini.mjs).
 
-import { quotaDay } from "./budget.mjs";
+import { quotaDay } from "./quota-day.mjs";
 
 export const DEFAULT_DAILY_QUOTA = {
   "gemini-3.5-flash-lite": 500,
