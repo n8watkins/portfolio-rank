@@ -15,6 +15,11 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
   Screenshots come from the `SHOTS` binding (the `portfolio-rank` R2 bucket the pipeline uploads to); pages add `?v=<capture time>`, so a recapture gets a new URL and each version is served with `Cache-Control: public, max-age=31536000, immutable`.
   Favicons come from Google's favicon service for roster domains only, with a placeholder when a site has none, cached for a week.
   The bucket's public r2.dev address is for the pipeline (the `SHOTS_BASE_URL` repository secret); pages never link it.
+- **Database schema:** `lib/schema.mjs` holds every table, index and added column; the deploy workflow runs `node scripts/migrate.mjs` before it builds.
+  At runtime `ensureSchema()` only checks the recorded version (one query per isolate) and migrates a database that is behind, such as a fresh local file.
+  To change the schema, add the statement or column there and bump `SCHEMA_VERSION`.
+- **Sentry source maps:** add the `SENTRY_AUTH_TOKEN` secret (a Sentry auth token with project release access) and the `SENTRY_ORG` and `SENTRY_PROJECT` repository variables.
+  The deploy then builds browser source maps, uploads them for the release (the commit SHA) and deletes them before publishing; without those settings it skips the step.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
 - **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`.
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.

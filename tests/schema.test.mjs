@@ -1,0 +1,39 @@
+// The schema migration (lib/schema.mjs) on throwaway local databases.
+import { test, after } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { createClient } from "@libsql/client";
+import { SCHEMA_VERSION, migrate, schemaVersion } from "../lib/schema.mjs";
+
+const dir = mkdtempSync(path.join(tmpdir(), "pr-schema-"));
+after(() => rmSync(dir, { recursive: true, force: true }));
+const fresh = (name) => createClient({ url: `file:${path.join(dir, name)}` });
+const columns = async (db, table) =>
+  (await db.execute({ sql: "SELECT name FROM pragma_table_info(?)", args: [table] })).rows.map((r) => String(r.name));
+
+test("a fresh database gets every table and the current version, and a second run changes nothing", async () => {
+  const db = fresh("fresh.db");
+  assert.equal(await schemaVersion(db), 0);
+  await migrate(db);
+  assert.equal(await schemaVersion(db), SCHEMA_VERSION);
+  for (const c of ["served", "claimed", "starred", "delta"]) assert.ok((await columns(db, "votes")).includes(c), c);
+  assert.ok((await columns(db, "matchups")).includes("day_draws"));
+  assert.deepEqual(await migrate(db), []);
+});
+
+test("an older database gets the missing columns without losing rows", async () => {
+  const db = fresh("old.db");
+  await db.execute(`CREATE TABLE votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, winner TEXT NOT NULL, loser TEXT NOT NULL,
+    rater_type TEXT NOT NULL DEFAULT 'anon', rater_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  await db.execute(`CREATE TABLE matchups (rater_id TEXT PRIMARY KEY, pair_key TEXT, issued_at INTEGER,
+    window_start INTEGER NOT NULL, draws INTEGER NOT NULL)`);
+  await db.execute("INSERT INTO votes (winner, loser, rater_id) VALUES ('a', 'b', 'gh:1')");
+  const added = await migrate(db);
+  assert.ok(added.includes("votes.pair_key") && added.includes("votes.served") && added.includes("matchups.day_start"), added.join());
+  const row = (await db.execute("SELECT winner, served, claimed FROM votes")).rows[0];
+  assert.deepEqual([row.winner, Number(row.served), Number(row.claimed)], ["a", 0, 0]);
+});
