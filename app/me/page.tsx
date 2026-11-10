@@ -4,6 +4,7 @@ import { GradeForm } from "@/components/preview/GradeForm";
 import { RankChart } from "@/components/preview/RankChart";
 import { rankLabel } from "@/components/preview/RankRow";
 import { Regrade } from "@/components/preview/Regrade";
+import { Badges } from "@/components/preview/Badges";
 import { Shot } from "@/components/preview/Shot";
 import { Queued } from "@/components/preview/YourPortfolio";
 import { Movement, SampleTag, TierBadge, btnSecondary, sectionTitle } from "@/components/preview/bits";
@@ -243,6 +244,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
               </a>
             </section>
         </div>
+        <Badges state={v.state} signedIn={v.signedIn} />
       </div>
     </AppShell>
   );

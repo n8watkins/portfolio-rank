@@ -1,8 +1,10 @@
 import { ArrowRight, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { GradeForm } from "@/components/preview/GradeForm";
+import { Showcase } from "@/components/preview/Showcase";
+import { NewsletterFeature } from "@/components/preview/NewsletterFeature";
+import { PlayBand } from "@/components/preview/PlayBand";
 import { Climbers, FaceOffTeaser, LiveStats } from "@/components/preview/HomeCards";
-import { Newsletter } from "@/components/preview/Newsletter";
 import { PastPollsMini } from "@/components/preview/PastPolls";
 import { PollCard } from "@/components/preview/PollCard";
 import { polls } from "@/lib/preview/polls";
@@ -20,8 +22,13 @@ export const dynamic = "force-dynamic";
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
-  const v = await visitor(await searchParams);
+export default async function Home({ searchParams }: { searchParams: Promise<{ state?: string; hero?: string }> }) {
+  const sp = await searchParams;
+  const v = await visitor(sp);
+  const heroVariant = sp.hero === "b" ? "b" : "a";
+  const showcase = leaderboard("merged")
+    .slice(0, 6)
+    .map((r) => ({ name: r.name, domain: r.domain, shot: r.shot, slug: r.slug, tier: r.grade!.tier, rank: r.rank }));
   const total = rosterCount();
   const tops = Object.fromEntries(
     (["merged", "ai", "people"] as ViewKey[]).map((k) => [
@@ -43,7 +50,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
       </div>,
     ])
   ) as Record<ViewKey, React.ReactNode>;
-  const latest = posts().slice(0, v.subscribed ? 3 : 2);
+  const latest = posts().slice(0, 3);
   const first = v.state === "first";
   const poll = polls();
 
@@ -53,26 +60,31 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
       <div className="band band-glow">
         <div className="wrap">
           {first ? (
-            <section id="grade" aria-labelledby="hero" className="scroll-mt-24 py-14 text-center sm:py-20">
-              <p className="rise mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-mute shadow-[var(--card-hi)]">
-                <span className="attn-dot" aria-hidden /> {total.toLocaleString()} portfolios ranked by people and AI
-              </p>
-              <h1 className="rise mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-6xl" style={d(60)}>
-                How good is your <span className="text-accent">portfolio</span>?
-              </h1>
-              <p className="rise mx-auto mt-5 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(120)}>
-                Paste a link. In about a minute you get a grade, where you&apos;d rank among {total.toLocaleString()} developer portfolios, and the three things to fix first.
-              </p>
-              <div className="rise mx-auto mt-8 max-w-xl" style={d(180)}>
-                <GradeForm />
+            <section id="grade" aria-labelledby="hero" className="grid scroll-mt-24 grid-cols-1 items-center gap-10 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14 lg:py-24">
+              <div className="text-center lg:text-left">
+                <p className="rise mb-5 inline-flex items-center gap-2 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-mute shadow-[var(--card-hi)]">
+                  <span className="attn-dot" aria-hidden /> {total.toLocaleString()} portfolios ranked by people and AI
+                </p>
+                <h1 className="rise text-4xl font-bold tracking-tight text-balance sm:text-6xl" style={d(60)}>
+                  How good is your <span className="bg-gradient-to-r from-[#fcd34d] via-[#f59e0b] to-[#ea7a0c] bg-clip-text text-transparent">portfolio</span>?
+                </h1>
+                <p className="rise mx-auto mt-5 max-w-xl text-[15px] text-mute text-pretty sm:text-lg lg:mx-0" style={d(120)}>
+                  Paste a link. In about a minute you get a grade, where you&apos;d rank among {total.toLocaleString()} developer portfolios, and the three things to fix first.
+                </p>
+                <div className="rise mx-auto mt-8 max-w-xl lg:mx-0" style={d(180)}>
+                  <GradeForm />
+                </div>
+                <p className="rise mt-4 text-sm text-mute" style={d(240)}>
+                  Free, no account needed. Or{" "}
+                  <a href="/play" className="font-semibold text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
+                    play a round
+                  </a>
+                  .
+                </p>
               </div>
-              <p className="rise mt-4 text-sm text-mute" style={d(240)}>
-                Free, no account needed. Or{" "}
-                <a href="/play" className="font-semibold text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
-                  play a round
-                </a>
-                .
-              </p>
+              <div className="rise mx-auto w-full max-w-xl lg:max-w-none" style={d(200)}>
+                <Showcase items={showcase} variant={heroVariant} />
+              </div>
             </section>
           ) : (
             <div className="grid grid-cols-1 gap-5 py-10 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:py-14">
@@ -121,6 +133,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
         </div>
       </div>
 
+      {/* Play */}
+      <div className="band band-glow py-14 lg:py-20">
+        <div className="wrap">
+          <SectionHead eyebrow="Play" title="Test your eye" href="/play" link="All games" />
+          <PlayBand />
+        </div>
+      </div>
+
       {/* 3. Have your say */}
       <div className="band py-14 lg:py-20">
         <div className="wrap">
@@ -131,6 +151,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           </div>
         </div>
       </div>
+
+      {/* Newsletter */}
+      {!v.subscribed && (
+        <div className="band pb-14 lg:pb-20">
+          <div className="wrap reveal">
+            <NewsletterFeature id="home-nl" />
+          </div>
+        </div>
+      )}
 
       {/* 4. From the blog */}
       <div className="band band-raised band-rule py-14 lg:py-20">
@@ -156,7 +185,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
                 </span>
               </a>
             ))}
-            {!v.subscribed && <Newsletter />}
           </div>
         </section>
       </div>
@@ -166,7 +194,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
 
 function SectionHead({ eyebrow, title, href, link, id }: { eyebrow: string; title: string; href: string; link: string; id?: string }) {
   return (
-    <div className="rise mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="rise mb-7 flex flex-wrap items-end justify-between gap-3">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{eyebrow}</p>
         <h2 id={id} className="mt-1.5 text-2xl font-bold tracking-tight sm:text-3xl">

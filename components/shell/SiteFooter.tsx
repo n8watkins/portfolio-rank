@@ -8,7 +8,7 @@ const COLS: { title: string; links: { href: string; label: string; ext?: boolean
     links: [
       { href: "/top", label: "Leaderboard" },
       { href: "/rank", label: "Face-off" },
-      { href: "/play?mode=guess", label: "Guess the rank" },
+      { href: "/play?mode=guess", label: "Guess the percentile" },
       { href: "/browse", label: "Browse" },
       { href: "/#grade", label: "Grade your portfolio" },
     ],

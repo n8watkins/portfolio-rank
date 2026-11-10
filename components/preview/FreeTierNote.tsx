@@ -6,7 +6,7 @@ import { Info, KeyRound } from "lucide-react";
  */
 export function FreeTierNote({ className = "", center = false }: { className?: string; center?: boolean }) {
   return (
-    <p className={`flex items-start gap-1.5 text-xs leading-relaxed text-mute ${center ? "justify-center text-center" : ""} ${className}`}>
+    <p className={`flex items-start gap-1.5 text-xs leading-relaxed text-mute ${center ? "justify-center text-center lg:justify-start lg:text-left" : ""} ${className}`}>
       <Info className="mt-[3px] h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>
         Grades run on Google Gemini&apos;s free tier. Don&apos;t include private details; for heavier use you can add your own Gemini key.{" "}

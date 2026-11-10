@@ -1,6 +1,6 @@
 import { ArrowRight, Rss } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
-import { Newsletter } from "@/components/preview/Newsletter";
+import { NewsletterFeature } from "@/components/preview/NewsletterFeature";
 import { SampleTag } from "@/components/preview/bits";
 import { TAG_LABEL, posts } from "@/lib/preview/blog";
 import { visitor } from "@/lib/preview/visitor";
@@ -45,10 +45,11 @@ export default async function BlogIndex({ searchParams }: { searchParams: Promis
           ))}
         </nav>
 
+        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
         {lead && (
           <a
             href={`/blog/${lead.slug}`}
-            className="card card-hover rise group mt-6 grid grid-cols-1 gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
+            className="card card-hover card-featured rise group grid grid-cols-1 gap-6 p-6 sm:p-8 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
             style={{ "--d": "120ms" } as React.CSSProperties}
           >
             <span className="flex flex-col">
@@ -62,16 +63,27 @@ export default async function BlogIndex({ searchParams }: { searchParams: Promis
             <span className="block rounded-xl border border-edge bg-bg/40 p-4">
               <span className="block text-xs font-bold uppercase tracking-wider text-mute">TL;DR</span>
               <span className="mt-2 grid grid-cols-1 gap-2 text-sm">
-                {lead.tldr.map((t) => (
+                {lead.tldr.slice(0, 3).map((t) => (
                   <span key={t} className="flex gap-2.5">
                     <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
-                    <span>{t.replace(/`/g, "")}</span>
+                    <span>{short(t)}</span>
                   </span>
                 ))}
               </span>
             </span>
           </a>
         )}
+        <div className="rise" style={{ "--d": "160ms" } as React.CSSProperties}>
+          {v.subscribed ? (
+            <div className="card flex h-full flex-col p-5 text-sm">
+              <p className="font-semibold">How posts are made</p>
+              <p className="mt-1 text-mute">Reports are AI-written from PortfolioRank data and checked by a person before they go out. Every number traces to a source.</p>
+            </div>
+          ) : (
+            <NewsletterFeature layout="side" id="blog-nl" />
+          )}
+        </div>
+        </div>
 
         <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
           {rest.map((p) => (
@@ -84,20 +96,13 @@ export default async function BlogIndex({ searchParams }: { searchParams: Promis
               </span>
             </a>
           ))}
-          {v.subscribed ? (
-            <div className="card reveal flex flex-col p-5 text-sm">
-              <p className="font-semibold">How posts are made</p>
-              <p className="mt-1 text-mute">
-                Reports are AI-written from PortfolioRank data and checked by a person before they go out. Every number traces to a source.
-              </p>
-            </div>
-          ) : (
-            <Newsletter className="reveal" />
-          )}
+          <div className="card reveal flex flex-col justify-center p-5 text-sm">
+            <p className="font-semibold">How posts are made</p>
+            <p className="mt-1 text-mute">
+              Reports are AI-written from PortfolioRank data and checked by a person before they go out. Every number traces to a source.
+            </p>
+          </div>
         </div>
-        {!v.subscribed && (
-          <p className="mt-5 text-center text-xs text-mute">Reports are AI-written from PortfolioRank data and checked by a person before they go out.</p>
-        )}
       </div>
     </AppShell>
   );
@@ -118,4 +123,11 @@ function Meta({ p }: { p: ReturnType<typeof posts>[number] }) {
       )}
     </span>
   );
+}
+
+/** A TL;DR bullet cut to its first clause for the index (the post has the full list). */
+function short(t: string) {
+  const clean = t.replace(/`/g, "");
+  const first = clean.split(/(?<=[.;:])\s/)[0].replace(/[.;:]$/, "");
+  return first.length > 90 ? first.slice(0, 88).trimEnd() + "..." : first;
 }

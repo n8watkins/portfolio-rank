@@ -248,9 +248,11 @@ export function estimate(g: AiGrade): { rank: number; total: number; topPct: num
 }
 
 /** Pairs for the face-off, from the top of the merged board. */
-export function faceoffPairs(count = 12): [Ranked, Ranked][] {
+export function faceoffPairs(count = 12, withSlug?: string): [Ranked, Ranked][] {
   const top = leaderboard("merged").slice(0, 160);
   const out: [Ranked, Ranked][] = [];
+  const first = withSlug ? leaderboard("merged").find((r) => r.slug === withSlug) : undefined;
+  if (first) out.push([first, top.find((r) => r.url !== first.url && Math.abs(r.rank - first.rank) > 3) ?? top[0]]);
   for (let i = 0; i < count; i++) {
     const a = top[(i * 37 + 5) % top.length];
     const b = top[(i * 53 + 11) % top.length];
@@ -464,21 +466,99 @@ export function recommendations(site: Site) {
   });
 }
 
-/** Rounds for "Guess the rank": real sites spread across the merged board. */
-export function guessRounds() {
+/** Top X% for a rank among n graded sites (1 = the very top). */
+export const topPct = (rank: number, n: number) => Math.max(1, Math.ceil((rank / n) * 100));
+
+export type QuizRound = {
+  name: string;
+  domain: string;
+  url: string;
+  shot: string;
+  slug: string;
+  tagline?: string;
+  /** "Top X%" in each view. */
+  merged: number;
+  ai: number;
+  people: number;
+  card: Scorecard;
+};
+
+/**
+ * Five portfolios for a quiz, picked from the whole graded pool by a seed:
+ * the date for the Daily 5 (same set for everyone that day), or a short id
+ * for a random quiz, which a "challenge" link replays exactly.
+ */
+export function quizSet(seed: string, firstSlug?: string): QuizRound[] {
   const board = leaderboard("merged");
-  const at = [3, 41, 118, 260, 17, 402, 74, 560, 9, 190];
-  return at
-    .map((i) => board[Math.min(i, board.length - 1)])
-    .map((r) => ({
+  const n = board.length;
+  const out: QuizRound[] = [];
+  const used = new Set<number>();
+  // Spread the five across the board so a quiz isn't all top sites.
+  for (let k = 0; out.length < 5 && k < 40; k++) {
+    const band = out.length;
+    const lo = Math.floor((band / 5) * n);
+    const hi = Math.floor(((band + 1) / 5) * n);
+    const idx = lo + Math.floor(hashNum(seed, `q${k}`) * (hi - lo));
+    if (used.has(idx)) continue;
+    used.add(idx);
+    const r = board[idx];
+    out.push({
       name: r.name,
       domain: r.domain,
+      url: r.url,
       shot: r.shot,
       slug: r.slug,
       tagline: r.tagline,
-      merged: r.rank,
-      ai: r.aiRank,
-      people: r.peopleRank,
-      tier: r.grade!.tier,
-    }));
+      merged: topPct(r.rank, n),
+      ai: topPct(r.aiRank, n),
+      people: topPct(r.peopleRank, n),
+      card: scorecard(r.url),
+    });
+  }
+  // Shuffle the order so the bands don't run top to bottom.
+  const sorted = out.sort((a, b) => hashNum(seed + a.url, "o") - hashNum(seed + b.url, "o"));
+  // "Guess its percentile" from a portfolio page: that site goes first.
+  const first = firstSlug ? board.find((r) => r.slug === firstSlug) : undefined;
+  if (first && !sorted.some((q) => q.url === first.url)) {
+    sorted[0] = {
+      name: first.name,
+      domain: first.domain,
+      url: first.url,
+      shot: first.shot,
+      slug: first.slug,
+      tagline: first.tagline,
+      merged: topPct(first.rank, n),
+      ai: topPct(first.aiRank, n),
+      people: topPct(first.peopleRank, n),
+      card: scorecard(first.url),
+    };
+  }
+  return sorted;
+}
+
+export type Scorecard = {
+  tier: string;
+  verdict: string;
+  facts: { label: string; pass: boolean; detail: string }[];
+  subs: { label: string; value: number; note: string }[];
+};
+
+const VERDICT: Record<string, string> = {
+  S: "One of the best: polished, clear and memorable.",
+  A: "Strong and clear, with a few rough edges.",
+  B: "Solid basics; the projects need more story.",
+  C: "Works, but looks like a template and says little.",
+  D: "Hard to tell who this is or what they built.",
+};
+
+/** The details panel's scorecard: measured facts and the AI's judgments. */
+export function scorecard(url: string): Scorecard {
+  const site = load().roster.find((s) => s.url === url)!;
+  const rep = report(site);
+  return {
+    tier: rep.grade.tier,
+    verdict: VERDICT[rep.grade.tier] ?? VERDICT.C,
+    facts: rep.facts.map(({ label, pass, detail }) => ({ label, pass, detail })),
+    subs: rep.subs.map(({ label, value, note }) => ({ label, value, note })),
+  };
 }

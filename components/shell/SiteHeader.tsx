@@ -1,4 +1,4 @@
-import { Clock, Sparkles, UserRound } from "lucide-react";
+import { Clock, Gamepad2, Sparkles, UserRound } from "lucide-react";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { NAV, type NavKey } from "@/components/shell/nav";
@@ -49,8 +49,11 @@ export function SiteHeader({
               key={n.key}
               href={n.href}
               aria-current={current === n.key ? "page" : undefined}
-              className="relative rounded-lg px-3.5 py-2 text-[15px] font-medium text-mute transition hover:bg-raised hover:text-ink aria-[current=page]:text-ink aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3.5 aria-[current=page]:after:-bottom-[15px] aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-accent"
+              className={`group relative inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[15px] font-medium transition hover:bg-raised hover:text-ink aria-[current=page]:text-ink aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3.5 aria-[current=page]:after:-bottom-[15px] aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-accent ${
+                n.key === "rank" ? "text-ink" : "text-mute"
+              }`}
             >
+              {n.key === "rank" && <Gamepad2 className="icon-shake h-4 w-4 text-accent" aria-hidden />}
               {n.label}
             </a>
           ))}

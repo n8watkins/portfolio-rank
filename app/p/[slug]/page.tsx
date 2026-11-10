@@ -1,3 +1,7 @@
+import { AppShell } from "@/components/shell/AppShell";
+import { PlayCta } from "@/components/preview/PlayCta";
+import { roster } from "@/lib/preview/data";
+import { visitor } from "@/lib/preview/visitor";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
@@ -101,9 +105,12 @@ function publicGrade(raw: unknown): null | {
 
 export default async function PortfolioPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ state?: string }>;
 }) {
+  const v = await visitor(await searchParams);
   const { slug } = await params;
   const url = decodeURIComponent(slug);
   const portfolio = (feed as Portfolio[]).find((p) => p.url === url);
@@ -140,7 +147,8 @@ export default async function PortfolioPage({
   );
   // Read-only identity: only signed-in raters can like, and resolving via
   // auth() (vs getRater) avoids mutating the anon cookie during render.
-  const session = await auth();
+  // Preview branch: no auth secret locally, so skip the session lookup.
+  const session = process.env.AUTH_SECRET ? await auth() : null;
   const liked =
     !!session?.raterId &&
     (
@@ -159,22 +167,11 @@ export default async function PortfolioPage({
   const grade = publicGrade(rubricRow?.ai_rubric);
 
   const shot = await shotFor(url);
+  const previewSlug = roster().find((x) => x.url === url)?.slug;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </a>
-        <a
-          href="/top"
-          className="text-xs font-semibold text-mute transition hover:text-ink"
-        >
-          Leaderboard
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+    <AppShell visitor={v} current="other">
+      <div className="mx-auto max-w-5xl py-8">
         <div className="mb-4 rounded-xl border border-edge bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
@@ -226,6 +223,8 @@ export default async function PortfolioPage({
             className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
           />
         </div>
+
+        {previewSlug && <PlayCta slug={previewSlug} name={portfolio.name} />}
 
         <DetailDiagnostics url={url} />
 
@@ -282,7 +281,7 @@ export default async function PortfolioPage({
           </a>
           .
         </p>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

@@ -5,8 +5,12 @@ import { ArrowRight, Check, Flame, RotateCcw, SkipForward, Target, Undo2, Users,
 import { isModalOpen } from "@/components/Modal";
 import { isTextField } from "@/lib/dom";
 import { useCountUp } from "@/components/preview/useCountUp";
+import { SiteActions } from "@/components/preview/SiteActions";
+import { Details } from "@/components/preview/Details";
+import { Burst } from "@/components/preview/Burst";
+import type { Scorecard } from "@/lib/preview/data";
 
-export type Entry = { name: string; domain: string; shot: string; tagline?: string; slug: string };
+export type Entry = { name: string; domain: string; url: string; shot: string; tagline?: string; slug: string; card: Scorecard };
 
 const ROUND = 10;
 
@@ -34,9 +38,11 @@ function Share({ pct, mine, k }: { pct: number; mine: boolean; k: string }) {
   return (
     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-12 text-white sm:p-4">
       {mine && (
-        <span className="pop-in mb-2 inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-xs font-bold text-on-fill">
-          <Check className="h-3 w-3" aria-hidden /> Your pick
-        </span>
+        <Burst on>
+          <span className="pop-in mb-2 inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-xs font-bold text-on-fill">
+            <Check className="h-3 w-3" aria-hidden /> Your pick
+          </span>
+        </Burst>
       )}
       <p className="text-3xl font-bold tabular-nums sm:text-4xl">{n}%</p>
       <p className="text-xs text-white/80">of people picked this</p>
@@ -48,7 +54,7 @@ function Share({ pct, mine, k }: { pct: number; mine: boolean; k: string }) {
 }
 
 /** Two portfolios, pick one; the crowd's split shows on the cards themselves. */
-export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: boolean }) {
+export function FaceOff({ pairs, voted, details }: { pairs: [Entry, Entry][]; voted: boolean; details?: "simple" | "advanced" }) {
   const [i, setI] = useState(0);
   const [pick, setPick] = useState<0 | 1 | null>(null);
   const [intro, setIntro] = useState(!voted);
@@ -56,6 +62,13 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
   const [agreed, setAgreed] = useState(0);
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
+  // Off by default so votes stay honest; remembered in this browser.
+  const [showScores, setShowScores] = useState(false);
+  useEffect(() => {
+    try {
+      setShowScores(localStorage.getItem("pr-show-scores") === "1");
+    } catch {}
+  }, []);
   const pair = pairs[i % pairs.length];
   // Sample share of people who picked the left one.
   const leftPct = 35 + ((i * 29) % 40);
@@ -66,6 +79,8 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
     (side: 0 | 1) => {
       if (pick !== null || finished) return;
       setPick(side);
+      // A tiny haptic tick on phones that support it.
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) navigator.vibrate?.(12);
       setDone((d) => d + 1);
       setIntro(false);
       const withCrowd = pct[side] >= 50;
@@ -123,7 +138,10 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
             <Users className="h-4 w-4" aria-hidden /> <span className="font-semibold text-ink tabular-nums">{agreed}</span> with the crowd
           </span>
           <span className="flex items-center gap-1.5">
-            <Flame className={`h-4 w-4 ${streak > 1 ? "text-accent" : ""}`} aria-hidden /> streak <span className="font-semibold text-ink tabular-nums">{streak}</span>
+            <Flame className={`h-4 w-4 ${streak > 1 ? "flicker text-accent" : ""}`} aria-hidden /> streak{" "}
+            <span key={streak} className={`font-semibold tabular-nums ${streak > 1 ? "pop-in text-accent" : "text-ink"}`}>
+              {streak > 1 ? `x${streak}` : streak}
+            </span>
           </span>
         </span>
       </div>
@@ -155,7 +173,7 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
               <RotateCcw className="h-4 w-4" aria-hidden /> Play another round
             </button>
             <a href="/play?mode=guess" className="inline-flex h-11 items-center rounded-lg border border-edge bg-card px-4 text-sm font-semibold shadow-[var(--card-hi)] hover:border-edge-strong">
-              Try Guess the rank
+              Try Guess the percentile
             </a>
           </div>
         </section>
@@ -165,18 +183,19 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
             const mine = pick === side;
             const state = pick === null ? "" : mine ? "win-pop" : "lose-dim";
             return (
-              <button
+              <div
                 key={`${i}-${side}`}
-                type="button"
-                onClick={() => vote(side as 0 | 1)}
-                disabled={pick !== null}
-                aria-label={`Pick ${e.name}`}
-                aria-keyshortcuts={side === 0 ? "ArrowLeft" : "ArrowRight"}
-                className={`card group relative overflow-hidden text-left disabled:cursor-default ${pick === null ? "card-hover" : ""} ${state} ${
-                  mine ? "ring-2 ring-accent" : ""
-                }`}
+                className={`card group relative overflow-hidden ${pick === null ? "card-hover deal-in" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
+                style={{ "--d": `${side * 90}ms` } as React.CSSProperties}
               >
-                <div className="relative aspect-[390/560] w-full md:aspect-[16/10]">
+                <button
+                  type="button"
+                  onClick={() => vote(side as 0 | 1)}
+                  disabled={pick !== null}
+                  aria-label={`Pick ${e.name}`}
+                  aria-keyshortcuts={side === 0 ? "ArrowLeft" : "ArrowRight"}
+                  className="relative block aspect-[390/560] w-full text-left disabled:cursor-default md:aspect-[16/10]"
+                >
                   <Frame e={e} eager />
                   {pick === null && (
                     <span className="pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/25 group-hover:opacity-100 md:flex">
@@ -184,17 +203,32 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
                     </span>
                   )}
                   {pick !== null && <Share pct={pct[side]} mine={mine} k={`${i}-${side}`} />}
-                </div>
-                <div className="flex items-center gap-2 p-3 sm:p-4">
+                </button>
+                <div className="flex flex-wrap items-center gap-2 p-3 sm:p-4">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">{e.name}</span>
                     <span className="block truncate text-xs text-mute sm:text-sm">{e.domain}</span>
                   </span>
-                  <kbd className={`hidden h-7 min-w-7 place-items-center rounded-md border border-edge px-1.5 text-xs text-mute ${pick === null ? "md:grid" : ""}`} aria-hidden>
+                  <span className="flex items-center gap-1.5">
+                    <Details
+                      name={e.name}
+                      domain={e.domain}
+                      url={e.url}
+                      shot={e.shot}
+                      card={e.card}
+                      compact
+                      hideScores={pick === null && !showScores}
+                      hiddenWhy="Scores stay hidden until you vote, so votes stay honest. You can change this below the cards."
+                      initialOpen={!!details && side === 0 && i === 0}
+                      initialView={details}
+                    />
+                    <SiteActions url={e.url} name={e.name} compact />
+                  </span>
+                  <kbd className={`hidden h-7 min-w-7 place-items-center rounded-md border border-edge px-1.5 text-xs text-mute ${pick === null ? "lg:grid" : ""}`} aria-hidden>
                     {side === 0 ? "←" : "→"}
                   </kbd>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -209,6 +243,20 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
                 <kbd className="rounded border border-edge px-1.5 text-xs">S</kbd> to skip.
               </p>
               <p className="text-sm text-mute md:hidden">Tap the one you&apos;d hire from.</p>
+              <label className="flex items-center gap-2 text-xs text-mute">
+                <input
+                  type="checkbox"
+                  checked={showScores}
+                  onChange={(e) => {
+                    setShowScores(e.target.checked);
+                    try {
+                      localStorage.setItem("pr-show-scores", e.target.checked ? "1" : "0");
+                    } catch {}
+                  }}
+                  className="h-4 w-4 accent-[var(--color-fill)]"
+                />
+                Show scores before voting
+              </label>
               <button type="button" onClick={next} aria-keyshortcuts="S" className="inline-flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-mute transition hover:bg-raised hover:text-ink">
                 <SkipForward className="h-4 w-4" aria-hidden /> Skip
               </button>
