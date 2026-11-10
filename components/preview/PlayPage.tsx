@@ -39,7 +39,7 @@ export function PlayPage({
   );
   return (
     <AppShell visitor={v} current="rank">
-      <div className="mx-auto max-w-6xl py-4 sm:py-8">
+      <div className="py-4 sm:py-8">
         <h1 className="sr-only">Play</h1>
         <nav aria-label="Game mode" className="rise mb-3 grid grid-cols-2 gap-3 sm:gap-4">
           {MODES.map(({ key, href, label, hint, Icon }) => {
