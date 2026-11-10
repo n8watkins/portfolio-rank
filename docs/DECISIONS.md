@@ -199,6 +199,16 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Every "grade my portfolio" request goes through a queue; with quota left it runs at once and the person watches, past the cap it waits and the report is emailed when ready (on the Batch API at half price once billing is on).
   Why: an email costs about 1/50 of a grade, so the queue lets free quota and Batch carry the load instead of refusing people.
 
+## Infrastructure
+
+- **Stay on Turso for now; D1 is the reference alternative** (owner, 2026-11-10). Status: decided.
+  Revisit when Turso's free limits get close; by then paying for a database may be the answer anyway.
+  The limits, our projected use and the fixes that keep us under them are in [COSTS.md](COSTS.md); the D1 comparison and a backup restore test are in [ASSUMPTIONS.md](ASSUMPTIONS.md).
+  Why: a move is real work across the app and the pipeline, and with the fixes in COSTS.md the free plan holds even the popular scenario.
+- **Browser work stays on GitHub Actions; Browser Rendering is parked** (owner, 2026-11-10). Status: decided.
+  Captures and health checks run on standard runners, free for this public repository; Browser Rendering is the upgrade if Actions is too slow or GitHub's Actions terms become a problem for on-demand grading ([ASSUMPTIONS.md](ASSUMPTIONS.md) section F).
+  Why: free today, and the code already runs there.
+
 ## Superseded
 
 - **AI votes in the same ELO pool as people's, with equal weight** (2026-06): replaced by the three views and OpenSkill (2026-11-10). Today's code still works this way until the ranking lane lands.
