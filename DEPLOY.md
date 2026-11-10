@@ -7,7 +7,7 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 
 - **Deploy by hand:** `npm run deploy` (builds, then `wrangler deploy`).
   The build prerenders the home page, so run it with `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `SHOTS_BASE_URL=/shots` in the environment, or the first render after a deploy shows no ranking until ISR refreshes it (5 minutes).
-- **Deploy from GitHub:** `.github/workflows/deploy.yml` builds on every push to main and deploys once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
+- **Deploy from GitHub:** `.github/workflows/deploy.yml` ships every push to main, staging first ("How a change ships" below), once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
 - **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
 - **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`, plus two for the end-of-day run ([AUTOMATION.md](AUTOMATION.md#end-of-day-run)):
   `GEMINI_API_KEY` (send it with `pass-env pipe portfolio-rank/GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY`) and `GITHUB_DISPATCH_TOKEN` (a fine-grained token for `n8watkins/portfolio-rank` only with "Actions: Read and write"; `pass-env pipe portfolio-rank/GITHUB_DISPATCH_TOKEN -- npx wrangler secret put GITHUB_DISPATCH_TOKEN`).
@@ -30,9 +30,76 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
   The deploy log prints "A DurableObjectNamespace in the config referenced the class "DOQueueHandler", but no such Durable Object class is exported from the worker".
   It is a false alarm: `opennextjs-cloudflare deploy` starts a local Miniflare proxy (wrangler's `getPlatformProxy`) only to read the config's variables, and that proxy runs none of our code.
   The uploaded Worker does export the class (`worker/index.ts`), and CI proves it on every change (`scripts/check-worker-exports.mjs` on the dry-run bundle).
-- **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`.
+- **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`; staging has its own OAuth app ("Staging" below).
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
   `prewarm.yml` calls the site's API at the `PROD_BASE_URL` repository variable (`https://portfoliorank.n8builds.dev`).
+
+## How a change ships
+
+A merge to main runs `.github/workflows/deploy.yml`, which has two jobs in a row:
+
+1. **Staging:** migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging`.
+2. **Deploy (production):** runs only when staging passed; it migrates, builds and deploys production as before, then runs `node scripts/smoke.mjs https://portfoliorank.n8builds.dev`.
+
+A failed staging deploy or smoke check stops the run before production.
+The smoke check is read-only (GET requests and the start of a GitHub sign-in).
+It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, and sign-in redirects to GitHub with a client id and the site's own callback URL.
+To try a branch on staging before it merges, run the Deploy workflow by hand on that branch (`gh workflow run deploy.yml --ref <branch>`): it deploys staging only, and the next merge to main puts main back.
+Pull requests do not deploy on their own: parallel PRs would overwrite each other on the one staging site, and CI (typecheck, lint, the Worker build for both environments, E2E) already runs on every PR.
+Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging job skips with a notice and production deploys without it.
+
+## Staging
+
+https://staging.portfoliorank.n8builds.dev runs the same code as production on its own Worker, `portfolio-rank-staging` (`env.staging` in `wrangler.jsonc`).
+
+- **Database:** its own Turso database, `portfolio-rank-staging`, filled once from a production backup with `scripts/restore-db.mjs`, which only restores into an empty database that is not production.
+  The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
+- **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
+  It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
+- **No Gemini:** no Cron Triggers, and no `GEMINI_API_KEY` or `GITHUB_DISPATCH_TOKEN` secret, so staging never spends the production quota or starts production's GitHub jobs.
+  Its Workflow is `portfolio-rank-night-staging`; nothing starts it, and a run started by hand skips without the key.
+  Never add those two secrets to staging.
+- **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
+  The staging build adds a robots meta tag and a red "Staging" ribbon in the bottom-left corner (`components/StagingRibbon.tsx`).
+- **Sign-in:** a separate GitHub OAuth app, "PortfolioRank (staging)", with the callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, so a staging secret never unlocks the production app.
+- **Secrets on the staging Worker:** `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, each kept in pass as `portfolio-rank/STAGING_<NAME>` and sent with `pass-env pipe portfolio-rank/STAGING_<NAME> -- npx wrangler secret put <NAME> --env staging`.
+  `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.
+- **Sentry:** events from staging carry the environment `staging`.
+- **Keeping the copy fresh:** the copy holds real votes and rater ids, and the nightly retention jobs do not run on staging.
+  Replace it at least every 30 days, like a backup: the owner deletes the `portfolio-rank-staging` database in Turso, then steps 2, 3 and 5 below run again.
+
+### Setting staging up (once)
+
+Done already: the Worker, its custom domain, the cache bucket and `AUTH_SECRET`.
+The owner runs the steps that need a Turso login or a new OAuth app; an agent can run the restore and `pass-env pipe` steps once the pass entries exist.
+
+1. Log in to Turso in your own terminal: `! turso auth login`.
+2. Create the database in the same group (and so the same region, `aws-us-east-2`, where the Worker runs) as production, and keep its address and a token in pass:
+   ```bash
+   turso db show portfolio-rank                  # note the group and location
+   turso db create portfolio-rank-staging --group <that group>
+   turso db show portfolio-rank-staging --url | pass-env set portfolio-rank/STAGING_TURSO_DATABASE_URL
+   turso db tokens create portfolio-rank-staging | pass-env set portfolio-rank/STAGING_TURSO_AUTH_TOKEN
+   ```
+3. Copy last night's backup into it before anything else touches the database (the restore refuses a database with any table):
+   ```bash
+   npx wrangler r2 object get portfolio-rank-backups/backups/portfoliorank-$(date -u +%F).json.gz --remote --file=/tmp/pr-staging.json.gz
+   pass-env run -e RESTORE_DATABASE_URL=portfolio-rank/STAGING_TURSO_DATABASE_URL -e RESTORE_AUTH_TOKEN=portfolio-rank/STAGING_TURSO_AUTH_TOKEN -- node scripts/restore-db.mjs /tmp/pr-staging.json.gz
+   ```
+   Every table prints `N of N`, and the last line is `restored the snapshot of <time>`.
+   Then delete `/tmp/pr-staging.json.gz`: it holds every vote with its rater id.
+4. Create the staging OAuth app at https://github.com/settings/applications/new: name `PortfolioRank (staging)`, homepage `https://staging.portfoliorank.n8builds.dev`, callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, device flow off.
+   Then run `pass-env set portfolio-rank/STAGING_AUTH_GITHUB_ID` and paste the Client ID; press "Generate a new client secret", run `pass-env set portfolio-rank/STAGING_AUTH_GITHUB_SECRET` and paste it.
+5. Send the four values to the staging Worker, and the database pair to the repository:
+   ```bash
+   for n in TURSO_DATABASE_URL TURSO_AUTH_TOKEN AUTH_GITHUB_ID AUTH_GITHUB_SECRET; do
+     pass-env pipe portfolio-rank/STAGING_$n -- npx wrangler secret put $n --env staging
+   done
+   pass-env pipe portfolio-rank/STAGING_TURSO_DATABASE_URL -- gh secret set STAGING_TURSO_DATABASE_URL
+   pass-env pipe portfolio-rank/STAGING_TURSO_AUTH_TOKEN -- gh secret set STAGING_TURSO_AUTH_TOKEN
+   ```
+6. Run `gh workflow run deploy.yml` (or merge the next change): the staging job deploys and its smoke check passes, then production deploys.
+   Sign in on staging once to check the round trip through GitHub.
 
 ## Reading the logs
 

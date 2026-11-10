@@ -104,6 +104,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Page text is untrusted data** (agent, 2026-11-10). Status: built (#57).
   It travels in a `<site_data>` block the instructions mark as data, never instructions.
   Why: once grades are public, sites will try to talk to the judge.
+- **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: planned (the grader lane implements it).
+  Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
 
@@ -307,6 +309,13 @@ The design, with the decisions still open, is [CONTENT-ENGINE.md](CONTENT-ENGINE
 - **Browser work stays on GitHub Actions; Browser Rendering is parked** (owner, 2026-11-10). Status: decided.
   Captures and health checks run on standard runners, free for this public repository; Browser Rendering is the upgrade if Actions is too slow or GitHub's Actions terms become a problem for on-demand grading ([ASSUMPTIONS.md](ASSUMPTIONS.md) section F).
   Why: free today, and the code already runs there.
+
+- **A staging site checks every change before production** (owner approved, 2026-11-10; the flow is the agent's). Status: building.
+  https://staging.portfoliorank.n8builds.dev is the same Worker code in the wrangler environment `staging`, with its own Turso database (a copy of a production backup), its own ISR cache bucket, no Cron Triggers and no Gemini key, robots noindex and a "Staging" ribbon ([DEPLOY.md](../DEPLOY.md), "Staging").
+  A merge to main deploys staging, runs a read-only smoke check there, and only then deploys production, which gets the same check; pull requests don't deploy, and a branch goes to staging by running the Deploy workflow on it.
+  Why: one staging site can't serve parallel PRs without them overwriting each other, while gating production on a live staging check catches what CI on a local database can't (bindings, secrets, the real data).
+- **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
+  Why: what merges is what the next deploy ships.
 
 ## Superseded
 
