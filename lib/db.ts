@@ -135,6 +135,30 @@ export function ensureSchema(): Promise<void> {
       } catch {
         /* column already present */
       }
+      // Roster and health columns written by the pipeline (pipeline/roster.mjs
+      // adds the same ones): delisted_at when a URL left data/feed.json,
+      // health live/suspect/down from the weekly health check, retry_at for
+      // failed captures. Additive, so safe on the live database.
+      for (const column of [
+        "ai_rubric TEXT",
+        "delisted_at TEXT",
+        "health TEXT",
+        "health_reason TEXT",
+        "health_fails INTEGER NOT NULL DEFAULT 0",
+        "health_first_fail_at TEXT",
+        "health_checked_at TEXT",
+        "final_url TEXT",
+        "capture_attempts INTEGER NOT NULL DEFAULT 0",
+        "retry_at TEXT",
+        "signals TEXT",
+        "needs_review INTEGER NOT NULL DEFAULT 0",
+      ]) {
+        try {
+          await db().execute(`ALTER TABLE portfolios ADD COLUMN ${column}`);
+        } catch {
+          /* column already present */
+        }
+      }
       // The matchup most recently served to each signed-in rater, and how many
       // they drew in the current hour: an official vote must be for this pair,
       // and redrawing is capped so nobody can fish for a chosen site.

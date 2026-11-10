@@ -9,12 +9,22 @@
 // Usage:
 //   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]
 //   node pipeline/capture.mjs --upload-only   # backfill captures/ to R2 later
+//
+// Failed captures are retried later with backoff (see recordFailure).
 import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
+import { httpGate, readRenderedPage, UA } from "./gate.mjs";
+import {
+  captureRetryAt,
+  dueForCapture,
+  ensureRosterSchema,
+  pipelineDb,
+  syncRoster,
+} from "./roster.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -43,73 +53,6 @@ const LIMIT = Number(flag("limit", "0")) || Infinity;
 const CONCURRENCY = Number(flag("concurrency", "3"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
-
-// ---------------------------------------------------------------------------
-// Gate tables (ported from pipeline/check_parking_redirects.py)
-// ---------------------------------------------------------------------------
-const PARKING_DOMAINS = new Set([
-  "sedoparking.com", "sedo.com", "bodis.com", "parkingcrew.net",
-  "sav.com", "dan.com", "afternic.com", "hugedomains.com",
-  "undeveloped.com", "buydomains.com", "brandbucket.com", "efty.com",
-  "domainmarket.com", "above.com", "parklogic.com", "uniregistry.com",
-  "domainnameshop.com", "registrar-servers.com", "topdns.com",
-  "godaddysites.com", "secureserver.net", "domaincontrol.com",
-  "domainnamesales.com", "domainagents.com", "squadhelp.com",
-  "flippa.com", "epik.com",
-]);
-const PARKING_PHRASES = [
-  "domain for sale", "buy this domain", "this domain is for sale",
-  "make an offer", "parked domain", "this domain is parked",
-  "domain parking", "purchase this domain", "inquire about this domain",
-  "this web page is parked", "the domain has expired", "domain has expired",
-  "this domain expired", "renew this domain", "domain registration expired",
-];
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-
-const netloc = (url) => {
-  try {
-    const n = new URL(url).hostname.toLowerCase();
-    return n.startsWith("www.") ? n.slice(4) : n;
-  } catch {
-    return "";
-  }
-};
-const isParkingDomain = (url) => {
-  const d = netloc(url);
-  return [...PARKING_DOMAINS].some((p) => d === p || d.endsWith("." + p));
-};
-
-/** HTTP-level gate. Returns { status: 'live'|'dead'|'parked'|'error', reason } */
-async function httpGate(url) {
-  let res;
-  try {
-    res = await fetch(url, {
-      redirect: "follow",
-      headers: { "User-Agent": UA, Accept: "text/html,*/*;q=0.8" },
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch (e) {
-    const msg = String(e?.cause?.code ?? e?.cause ?? e);
-    if (/ENOTFOUND|EAI_AGAIN/.test(msg))
-      return { status: "dead", reason: "DNS resolution failed" };
-    if (/CERT|certificate/i.test(msg))
-      return { status: "error", reason: "TLS error" };
-    if (e.name === "TimeoutError")
-      return { status: "error", reason: "timeout" };
-    return { status: "error", reason: msg.slice(0, 120) };
-  }
-  if (res.status === 404 || res.status === 410)
-    return { status: "dead", reason: `HTTP ${res.status}` };
-  if (!res.ok) return { status: "error", reason: `HTTP ${res.status}` };
-  if (isParkingDomain(res.url))
-    return { status: "parked", reason: `redirects to ${netloc(res.url)}` };
-  const body = (await res.text()).slice(0, 65536).toLowerCase();
-  const phrase = PARKING_PHRASES.find((p) => body.includes(p));
-  if (phrase) return { status: "parked", reason: `parking phrase: "${phrase}"` };
-  return { status: "live", reason: "" };
-}
 
 // ---------------------------------------------------------------------------
 // PNG diff: fraction of sampled pixels that differ noticeably
@@ -145,25 +88,8 @@ function pngDiff(bufA, bufB, centerOnly = false) {
 // ---------------------------------------------------------------------------
 // DB + R2
 // ---------------------------------------------------------------------------
-const db = process.env.TURSO_DATABASE_URL
-  ? createClient({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    })
-  : createClient({
-      url: `file:${path.join(ROOT, "data", "portfoliorank.db")}`,
-    });
-
-await db.execute(`CREATE TABLE IF NOT EXISTS portfolios (
-  url TEXT PRIMARY KEY,
-  name TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
-  reason TEXT,
-  shot_key TEXT,
-  meta TEXT,
-  checked_at TEXT,
-  captured_at TEXT
-)`);
+const db = pipelineDb(ROOT);
+await ensureRosterSchema(db);
 
 let s3 = null;
 if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
@@ -203,6 +129,26 @@ async function uploadDir(key, dir) {
 // ---------------------------------------------------------------------------
 const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 16);
 
+// A failed capture (gate said dead/parked/error, blank page, or a crash) is
+// never final: the row gets a retry date with growing backoff
+// (roster.captureRetryAt), and the weekly health check pulls the retry
+// forward once the site passes. Whether a site is shown is decided by the
+// health check (pipeline/health.mjs), not by one capture attempt.
+async function recordFailure(url, name, status, reason) {
+  const row = (
+    await db.execute({ sql: "SELECT capture_attempts FROM portfolios WHERE url = ?", args: [url] })
+  ).rows[0];
+  const attempts = Number(row?.capture_attempts ?? 0) + 1;
+  await db.execute({
+    sql: `INSERT INTO portfolios (url, name, status, reason, checked_at, capture_attempts, retry_at)
+          VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+          ON CONFLICT(url) DO UPDATE SET status=excluded.status,
+            reason=excluded.reason, checked_at=excluded.checked_at,
+            capture_attempts=excluded.capture_attempts, retry_at=excluded.retry_at`,
+    args: [url, name, status, reason, attempts, captureRetryAt(attempts)],
+  });
+}
+
 async function captureSite(browser, entry) {
   const { url, name } = entry;
   const key = keyOf(url);
@@ -210,13 +156,7 @@ async function captureSite(browser, entry) {
 
   const gate = await httpGate(url);
   if (gate.status !== "live") {
-    await db.execute({
-      sql: `INSERT INTO portfolios (url, name, status, reason, checked_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
-            ON CONFLICT(url) DO UPDATE SET status=excluded.status,
-              reason=excluded.reason, checked_at=excluded.checked_at`,
-      args: [url, name, gate.status, gate.reason],
-    });
+    await recordFailure(url, name, gate.status, gate.reason);
     return `${gate.status} (${gate.reason})`;
   }
 
@@ -252,18 +192,12 @@ async function captureSite(browser, entry) {
     await page.waitForTimeout(1500);
 
     // Blank-page gate: needs visible text within the rendered page.
-    const textLen = await page.evaluate(
-      () => document.body?.innerText?.trim().length ?? 0
-    );
-    if (textLen < 30) {
+    // Blank-page gate: visible text, or visual content (canvas apps such as
+    // Flutter web have no text in the DOM).
+    const rendered = await page.evaluate(readRenderedPage);
+    if (rendered.text.trim().length < 30 && !rendered.media) {
       await ctx.close();
-      await db.execute({
-        sql: `INSERT INTO portfolios (url, name, status, reason, checked_at)
-              VALUES (?, ?, 'dead', 'renders blank', datetime('now'))
-              ON CONFLICT(url) DO UPDATE SET status='dead',
-                reason='renders blank', checked_at=excluded.checked_at`,
-        args: [url, name],
-      });
+      await recordFailure(url, name, "dead", "renders blank");
       return "dead (renders blank)";
     }
 
@@ -372,19 +306,14 @@ async function captureSite(browser, entry) {
             VALUES (?, ?, 'live', '', ?, ?, datetime('now'), datetime('now'))
             ON CONFLICT(url) DO UPDATE SET status='live', reason='',
               shot_key=excluded.shot_key, meta=excluded.meta,
-              checked_at=excluded.checked_at, captured_at=excluded.captured_at`,
+              checked_at=excluded.checked_at, captured_at=excluded.captured_at,
+              capture_attempts=0, retry_at=NULL`,
       args: [url, name, key, JSON.stringify(meta)],
     });
     return `live → ${key} (motion=${meta.motion} dark=${meta.darkMode} overflow=${meta.overflow390})`;
   } catch (e) {
     await ctx.close().catch(() => {});
-    await db.execute({
-      sql: `INSERT INTO portfolios (url, name, status, reason, checked_at)
-            VALUES (?, ?, 'error', ?, datetime('now'))
-            ON CONFLICT(url) DO UPDATE SET status='error',
-              reason=excluded.reason, checked_at=excluded.checked_at`,
-      args: [url, name, String(e.message ?? e).slice(0, 200)],
-    });
+    await recordFailure(url, name, "error", String(e.message ?? e).slice(0, 200));
     return `error (${String(e.message ?? e).slice(0, 80)})`;
   }
 }
@@ -409,14 +338,13 @@ if (args.includes("--upload-only")) {
 const feed = JSON.parse(
   fs.readFileSync(path.join(ROOT, "data", "feed.json"), "utf8")
 );
+// Rows that left the list are marked delisted; the queue only holds roster sites.
+const roster = await syncRoster(db, feed);
+console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
 let queue = feed.filter((p) => !ONLY || p.url.includes(ONLY));
 
 if (!FORCE) {
-  const done = await db.execute(
-    "SELECT url FROM portfolios WHERE status != 'pending'"
-  );
-  const seen = new Set(done.rows.map((r) => String(r.url)));
-  queue = queue.filter((p) => !seen.has(p.url));
+  queue = await dueForCapture(db, queue);
 }
 queue = queue.slice(0, LIMIT);
 console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
