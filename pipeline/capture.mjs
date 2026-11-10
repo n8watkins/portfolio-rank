@@ -11,10 +11,17 @@
 // (Turso when TURSO_* set, else local file).
 //
 // Usage:
-//   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]
+//   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force] [--refresh N]
 //   node pipeline/capture.mjs --upload-only   # backfill captures/ to R2 later
 //
-// Failed captures are retried later with backoff (see recordFailure).
+// Failed captures are retried later with backoff (see recordCaptureFailure).
+//
+// --refresh N also re-captures the N listed sites captured longest ago (the
+// nightly checks, sync-upstream.yml): their screenshots, text, facts and
+// page fingerprint are renewed, so a redesign is found
+// (scripts/detect-changes.mjs) and re-graded the same night. A refresh that
+// fails keeps the existing capture and records nothing: whether a site is
+// down is the weekly health check's call.
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
 import { createHash } from "crypto";
@@ -24,6 +31,7 @@ import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
+  ACTIVE,
   captureRetryAt,
   dueForCapture,
   ensureRosterSchema,
@@ -58,6 +66,7 @@ const LIMIT = Number(flag("limit", "0")) || Infinity;
 const CONCURRENCY = Number(flag("concurrency", "3"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
+const REFRESH = Number(flag("refresh", "0")) || 0;
 
 // ---------------------------------------------------------------------------
 // PNG diff: fraction of sampled pixels that differ noticeably
@@ -138,7 +147,7 @@ const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 16)
 // (roster.captureRetryAt), and the weekly health check pulls the retry
 // forward once the site passes. Whether a site is shown is decided by the
 // health check (pipeline/health.mjs), not by one capture attempt.
-async function recordFailure(url, name, status, reason) {
+async function recordCaptureFailure(url, name, status, reason) {
   const row = (
     await db.execute({ sql: "SELECT capture_attempts FROM portfolios WHERE url = ?", args: [url] })
   ).rows[0];
@@ -153,8 +162,10 @@ async function recordFailure(url, name, status, reason) {
   });
 }
 
-async function captureSite(browser, entry) {
+async function captureSite(browser, entry, { refresh = false } = {}) {
   const { url, name } = entry;
+  // A refresh never marks a site failed (see the header).
+  const recordFailure = refresh ? async () => {} : recordCaptureFailure;
   const key = keyOf(url);
   const dir = path.join(ROOT, "captures", key);
 
@@ -360,6 +371,23 @@ if (!FORCE) {
   queue = await dueForCapture(db, queue);
 }
 queue = queue.slice(0, LIMIT);
+// The nightly refresh: listed, healthy sites captured longest ago.
+if (REFRESH > 0 && !ONLY) {
+  const queued = new Set(queue.map((p) => p.url));
+  const listed = new Map(feed.map((p) => [p.url, p]));
+  const due = (
+    await db.execute({
+      sql: `SELECT url FROM portfolios WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+            ORDER BY captured_at, url LIMIT ?`,
+      args: [REFRESH + queue.length],
+    })
+  ).rows
+    .map((r) => String(r.url))
+    .filter((u) => !queued.has(u) && listed.has(u))
+    .slice(0, REFRESH);
+  for (const u of due) queue.push({ ...listed.get(u), refresh: true });
+  console.log(`refresh: re-capturing ${due.length} site(s) captured longest ago`);
+}
 console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
 
 const browser = await chromium.launch();
@@ -371,7 +399,7 @@ await Promise.all(
     while (idx < queue.length) {
       const entry = queue[idx++];
       const t = Date.now();
-      const result = await captureSite(browser, entry);
+      const result = await captureSite(browser, entry, { refresh: Boolean(entry.refresh) });
       if (result.startsWith("live")) ok++;
       else skipped++;
       console.log(

@@ -11,10 +11,14 @@ name: Weekly health check + cleanup
 #      same flow as the daily upstream sync
 #   4. delete screenshots and rows delisted for 30+ days (votes are kept)
 # See pipeline/health.mjs and AUTOMATION.md.
+# Cloudflare's end-of-day run starts this on Sunday nights (20:30 Pacific),
+# alongside the nightly checks; it does not wait for it.
 on:
   workflow_dispatch: {}
+  # Fallback only: Mondays 12:00 UTC, after Cloudflare's Sunday-night start;
+  # skips when Cloudflare started it in the last 30 hours (fallback-guard).
   schedule:
-    - cron: "0 16 * * 0" # Sundays 16:00 UTC, clear of the daily jobs
+    - cron: "0 12 * * 1"
 
 concurrency:
   group: health
@@ -25,7 +29,44 @@ permissions:
   issues: write # file an issue if a scheduled run fails
 
 jobs:
+  # The GitHub schedule is only the fallback: Cloudflare's end-of-day run
+  # (worker/night.ts) starts this workflow at 20:30 Pacific with a
+  # workflow_dispatch, because GitHub's schedule starts hours late. A
+  # scheduled run skips when a dispatched run started in the last WINDOW
+  # hours, so it only does the work when Cloudflare could not (no
+  # GITHUB_DISPATCH_TOKEN, or the Worker is down).
+  fallback-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.guard.outputs.run }}
+    steps:
+      - id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WORKFLOW: health.yml
+          WINDOW: "30"
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          since=$(date -u -d "$WINDOW hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since" --jq '.total_count')
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "::notice::Cloudflare's end-of-day run already started $WORKFLOW in the last $WINDOW hours; the GitHub schedule (fallback) skips."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No run started by Cloudflare in the last $WINDOW hours; the GitHub schedule runs as the fallback."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   health:
+    needs: fallback-guard
+    if: needs.fallback-guard.outputs.run == 'true'
     # Same pin as sync-upstream: Playwright's Chromium needs ubuntu 24.04.
     runs-on: ubuntu-24.04
     timeout-minutes: 120

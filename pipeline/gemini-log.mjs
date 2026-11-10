@@ -10,10 +10,14 @@
 //   GEMINI_PRICES       JSON {model: {in, out}} in USD per 1M tokens, for the
 //                       cost estimate. The defaults are Google's published
 //                       paid rates on 2026-11-10; thinking is billed as output.
-//   GEMINI_GRADING_BUDGET  JSON {model: requests per day} the rubric may use;
-//                       the rest of each quota is left for the vote job.
+// What each job may spend is decided by the budget accountant
+// (pipeline/budget.mjs, GEMINI_BUDGET), which reads this table. "Today" is
+// the Gemini quota day: midnight to midnight Pacific, when the free quota
+// resets.
 // GEMINI_CATCHUP (catch-up mode on 3.1) was removed on 2026-11-10: grades and
 // votes come from 3.5 only (GEMINI_FALLBACK, pipeline/gemini.mjs).
+
+import { quotaDay } from "./budget.mjs";
 
 export const DEFAULT_DAILY_QUOTA = {
   "gemini-3.5-flash-lite": 500,
@@ -26,24 +30,18 @@ export const DEFAULT_PRICES = {
   "gemini-3.1-flash-lite": { in: 0.25, out: 1.5 },
 };
 export const WARN_SHARE = 0.8;
-// What grading may spend per model per day: 3.5 keeps 100 of its 500 for the
-// daily vote job (30 votes plus retries). The 3.1 entry only matters for an
-// experiment run with GEMINI_FALLBACK=on; production grading never uses 3.1.
-export const DEFAULT_GRADING_BUDGET = {
-  "gemini-3.5-flash-lite": 400,
-  "gemini-3.1-flash-lite": 450,
-};
 
-const parseJsonEnv = (name, fallback) => {
+const parseJson = (raw, fallback) => {
   try {
-    return process.env[name] ? { ...fallback, ...JSON.parse(process.env[name]) } : fallback;
+    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
   } catch {
     return fallback;
   }
 };
-export const dailyQuota = () => parseJsonEnv("GEMINI_DAILY_QUOTA", DEFAULT_DAILY_QUOTA);
-export const prices = () => parseJsonEnv("GEMINI_PRICES", DEFAULT_PRICES);
-export const gradingBudget = () => parseJsonEnv("GEMINI_GRADING_BUDGET", DEFAULT_GRADING_BUDGET);
+const env = () => globalThis.process?.env ?? {};
+/** The daily free quota per model; `raw` is a GEMINI_DAILY_QUOTA JSON value (default: the environment's). */
+export const dailyQuota = (raw = env().GEMINI_DAILY_QUOTA) => parseJson(raw, DEFAULT_DAILY_QUOTA);
+export const prices = (raw = env().GEMINI_PRICES) => parseJson(raw, DEFAULT_PRICES);
 
 export async function ensureGeminiLog(db) {
   await db.execute(`CREATE TABLE IF NOT EXISTS gemini_requests (
@@ -78,16 +76,19 @@ export async function ensureGeminiLog(db) {
  * it keeps the request in memory (for the run summary) and inserts it into
  * gemini_requests; a failed insert is counted, never thrown.
  */
-export function createRequestLog({ db, job, runId = process.env.GITHUB_RUN_ID ?? null }) {
+export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null }) {
   const rows = [];
   let writeErrors = 0;
-  return {
+  const log = {
     rows,
+    // The job new requests are logged under; a run that moves from one kind
+    // of work to another (new grades, then re-grades) changes it.
+    job,
     get writeErrors() {
       return writeErrors;
     },
     async record(r) {
-      rows.push(r);
+      rows.push({ ...r, job: log.job });
       if (!db) return;
       try {
         await db.execute({
@@ -97,7 +98,7 @@ export function createRequestLog({ db, job, runId = process.env.GITHUB_RUN_ID ??
           args: [
             r.at,
             runId,
-            job,
+            log.job,
             r.model,
             r.status ?? 0,
             r.reason ?? "",
@@ -114,6 +115,7 @@ export function createRequestLog({ db, job, runId = process.env.GITHUB_RUN_ID ??
       }
     },
   };
+  return log;
 }
 
 const usd = (n) => `$${n.toFixed(4)}`;
@@ -160,22 +162,23 @@ export function runSummary(rows, priceTable = prices()) {
 }
 
 /**
- * Today's (UTC) requests per model against the daily free quota, as Markdown,
- * with a warning at 80%. Returns { markdown, warnings }.
+ * The quota day's requests per model (midnight to midnight Pacific, when the
+ * free quota resets) against the daily free quota, as Markdown, with a
+ * warning at 80%. Returns { markdown, warnings, used }.
  */
 export async function dailyTotals(db, { now = new Date(), quota = dailyQuota() } = {}) {
-  const day = now.toISOString().slice(0, 10);
+  const { day, start, end } = quotaDay(now);
   const res = await db.execute({
     sql: `SELECT model, COUNT(*) AS n,
                  SUM(CASE WHEN status = 200 THEN 1 ELSE 0 END) AS ok
           FROM gemini_requests WHERE at >= ? AND at < ? GROUP BY model ORDER BY model`,
-    args: [`${day}T00:00:00`, `${day}T99`],
+    args: [start.toISOString(), end.toISOString()],
   });
   const used = new Map(res.rows.map((r) => [String(r.model), { n: Number(r.n), ok: Number(r.ok) }]));
   const models = [...new Set([...Object.keys(quota), ...used.keys()])];
   const warnings = [];
   const lines = [
-    `### Gemini today (${day} UTC)`,
+    `### Gemini today (${day}, Pacific quota day)`,
     "",
     "| Model | Requests | Answered | Daily quota | Used |",
     "| --- | ---: | ---: | ---: | ---: |",

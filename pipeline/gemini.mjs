@@ -28,6 +28,9 @@
 // Every HTTP request waits its turn on one shared limiter (createLimiter), so
 // retries count against the rate too, and is reported to onRequest for the
 // request log (pipeline/gemini-log.mjs), thinking tokens included.
+// retryBudget caps the retries of one client in total (the end-of-day run
+// allows 20 a night, pipeline/budget.mjs); past it a call fails with
+// GeminiRetryBudgetError instead of retrying.
 //
 // generate(parts, schema, options) takes an optional systemInstruction,
 // thinkingLevel, maxOutputTokens and temperature. A model that rejects the
@@ -93,20 +96,40 @@ export function retryDelayFrom(body) {
 
 /**
  * One limiter per run, shared by every Gemini call: requests are spaced
- * evenly at `rpm` per minute.
+ * evenly at `rpm` per minute. `lastAt` (ms) continues the pace of an earlier
+ * limiter, so a run split into batches (pipeline/night.mjs) keeps one even
+ * pace; `last` is when the latest request was let through.
  */
-export function createLimiter({ rpm = DEFAULT_RPM, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+export function createLimiter({ rpm = DEFAULT_RPM, lastAt = null, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   const gap = Math.ceil(60000 / Math.max(rpm, 0.001));
-  let next = 0;
+  let next = lastAt == null ? 0 : lastAt + gap;
+  let last = lastAt;
   return {
     rpm,
+    gap,
+    get last() {
+      return last;
+    },
+    /** When the next request may go out (ms). */
+    get nextAt() {
+      return Math.max(now(), next);
+    },
     async take() {
       const t = now();
       const at = Math.max(t, next);
       next = at + gap;
+      last = at;
       if (at > t) await sleep(at - t);
     },
   };
+}
+
+/** Thrown when a run has used its whole retry budget (createGemini retryBudget). */
+export class GeminiRetryBudgetError extends GeminiUnavailableError {
+  constructor(message) {
+    super(message);
+    this.name = "GeminiRetryBudgetError";
+  }
 }
 
 export function createGemini({
@@ -123,6 +146,9 @@ export function createGemini({
   // one model a spent quota always ends the run.
   onDailyQuota = "fallback",
   slowdownMs = 60000,
+  // Retries this client may make in total (5xx, timeouts, rate limits); once
+  // spent, a call that would retry fails with GeminiRetryBudgetError.
+  retryBudget = Infinity,
   jitter = () => 0.8 + Math.random() * 0.4,
   timeoutMs = 120000,
   fetchImpl = globalThis.fetch,
@@ -238,6 +264,12 @@ export function createGemini({
     let slowdowns = 0;
     let idx = active;
     let oneOff = false; // this call alone moved to the backup after retries
+    const spendRetry = (model, reason) => {
+      if (counts.retries >= retryBudget) {
+        throw new GeminiRetryBudgetError(`gemini ${model} ${reason}: this run's retry budget (${retryBudget}) is used up`);
+      }
+      counts.retries++;
+    };
     for (let n = 0; ; n++) {
       const model = models[idx];
       const { body, thinking } = bodyFor(model, parts, schema, options);
@@ -249,7 +281,7 @@ export function createGemini({
       if (out.kind === "thinking") {
         log(`  gemini ${model} does not take thinking level ${options.thinkingLevel}; asking again without it`);
         noThinking.add(model);
-        counts.retries++;
+        spendRetry(model, out.reason);
         continue;
       }
       if (out.kind === "daily") {
@@ -276,16 +308,16 @@ export function createGemini({
           throw new GeminiUnavailableError(`gemini ${model}: still rate limited after ${maxSlowdowns} slowdowns`);
         }
         const wait = retryDelayFrom(out.body) ?? slowdownMs;
+        spendRetry(model, out.reason);
         log(`  gemini ${model} rate limited, waiting ${Math.round(wait / 1000)}s`);
-        counts.retries++;
         await sleep(wait);
         continue;
       }
       // transient: 5xx, timeout, network
       if (transient < retryDelaysMs.length) {
         const wait = Math.round(retryDelaysMs[transient] * jitter());
+        spendRetry(model, out.reason);
         transient++;
-        counts.retries++;
         log(`  gemini ${model} ${out.reason}, retrying in ${Math.round(wait / 1000)}s`);
         await sleep(wait);
         continue;

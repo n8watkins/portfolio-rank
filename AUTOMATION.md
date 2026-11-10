@@ -14,11 +14,12 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
         ▼
-  capture.mjs  ──►  screenshots ──► Cloudflare R2 (public)   + diagnostics, page text, facts ──► Turso
-        ▼
-  judge.mjs rubric  ──►  rubric v2: Gemini tier + 5 quality scores, code checks ──► Turso (portfolios.ai_rubric)
-        ▼
-  judge.mjs pairwise  ──►  Gemini ELO votes ──► Turso (votes, ratings)
+  capture.mjs (new + --refresh)  ──►  screenshots ──► Cloudflare R2   + diagnostics, page text, facts ──► Turso
+  evidence.mjs, detect-changes.mjs  ──►  old rows' text and facts, page changes (rating_resets)
+        ▼   (all of the above: the free checks on Actions, started by Cloudflare at 20:30 Pacific)
+  end-of-day Workflow (Cloudflare)  ──►  new and changed sites graded (rubric v2) ──► Turso (portfolios.ai_rubric)
+                                    ──►  AI ranking comparisons (RANKING_V2) ──► Turso (comparisons, site_ratings)
+                                    ──►  re-grades, on what is left of the day's quota
         ▼
   Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug] · /removed
 
@@ -63,7 +64,80 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
   Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
 
-## GitHub Actions (8 scheduled)
+## End-of-day run
+
+Owner decisions of 2026-11-10 ("people first, AI with the leftovers"); the reasons are in [docs/DECISIONS.md](docs/DECISIONS.md#gemini-budget-one-key).
+Gemini's free quota resets at midnight Pacific and unused requests are lost, so people's requests get the day and background AI gets what is left, once a night, just before the reset.
+GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare's.
+
+| When (Pacific) | Where | What |
+| --- | --- | --- |
+| All day, as they arrive | Worker | People's grade and re-grade requests ([pipeline/people.mjs](pipeline/people.mjs), for "grade my portfolio" when it ships): the whole day's quota minus the evening reserve, 3.5 only; a request 3.5 can't answer waits in a queue |
+| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available, and emails the person |
+| 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
+| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of the 150 sites captured longest ago, page evidence, fingerprint changes); on Sundays also `health.yml` (not waited for) |
+| Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
+| 23:30 | Workflow | Hard stop, 30 minutes before the reset; the summary and owner alerts |
+
+The cron: Cron Triggers run in UTC, so `wrangler.jsonc` has `30 3 * * *` (20:30 under daylight time) and `30 4 * * *` (20:30 under standard time); the handler starts the run only from the one that is 20:30 in Los Angeles, so the run starts at the same local time all year ([pipeline/budget.mjs](pipeline/budget.mjs) `isNightStart`, tested for every day of 2026 and 2027).
+The Workflow instance is `night-<Pacific date>` and the night is claimed in the `night_runs` table, so a night runs once: a failed or stopped run never restarts itself.
+
+### The stages
+
+| Order | Stage (job name in `gemini_requests`) | Works on | Cap a day | Time cap |
+| ---: | --- | --- | ---: | ---: |
+| 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts | 300 | 60 min |
+| 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`) | 100 | 30 min |
+| 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
+| 4 | Content (`content`) | not built yet | 100 | 30 min |
+| 5 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics | 300 | 60 min |
+| 6 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
+
+"AI ranking comparisons" are Gemini comparing sites.
+Human face-off votes use no Gemini and are never scheduled.
+Rows without page text and facts (captured before rubric v2) are measured by the free checks (`pipeline/evidence.mjs`, which needs a browser) and graded the same night.
+
+### The budget accountant
+
+[pipeline/budget.mjs](pipeline/budget.mjs) is the only place that decides how much Gemini a job may spend.
+It counts `gemini_requests` since midnight Pacific, retries included.
+
+- A background stage may spend min(its cap minus what it used today, the quota left minus the reserve).
+- The reserve is max(25, 2 x people's requests in the last hour): it grows with demand and is never spent by the background.
+- People may spend everything left minus the reserve until 20:30, and the reserve too from then on.
+- The run works in batches of 20 requests and re-reads the quota and people's demand before each one; when people sent a request in the last 10 minutes, it pauses 5 minutes.
+- Re-grade requests (people): once every 7 days, at once when the page changed after the last grade (`regradeAllowed`).
+- Settings: `GEMINI_BUDGET` (JSON over `DEFAULT_PLAN`: reserve, batch, caps, time caps, retry budget), a Worker variable and a repository variable for the manual fallbacks; `GEMINI_DAILY_QUOTA`; `GEMINI_RPM` (8 a minute).
+- `judge.mjs`, `compare.mjs` and `eval-rubric` ask the same accountant, so a manual run never takes the reserve.
+
+### No endless retries
+
+- Each request: the client's own retries for a busy 3.5 (10, 30 and 60 seconds) and for per-minute limits.
+- Each night: at most 20 retries in total; past that the run stops for the night.
+- Each stage: 5 failures in a row stop it for the night (the circuit breaker), and the next stage starts.
+- Each item: tried once a night; an item that fails on 3 nights in a row is parked in `night_item_failures` and listed in every summary until someone deletes its row.
+  A busy 3.5 is not the item's fault and never counts towards parking.
+- A spent daily quota stops the run as waiting for tomorrow, never as a failure; a rejected key fails it.
+
+### The summary and the admin view
+
+Each run writes its summary to `night_runs` and to the Worker's logs: the estimate at the start (requests and minutes at the pace), the actual at the end, each stage's requests, results and minutes, why it stopped, and the parked items.
+`GET /api/admin/quota` (only for the GitHub login in `ADMIN_GITHUB_LOGIN`) returns Gemini use by quota day, job and model for the last 30 days, what each stage and people may spend now, the last 14 runs, parked items, owner alerts and people's queue; the redesign's admin page will show it.
+
+### Owner alerts
+
+After every run, [pipeline/alerts.mjs](pipeline/alerts.mjs) checks: the quota used up before the run, a stage stopped by the circuit breaker, parked items, and traction (people's grade requests or human votes in a day past `ALERT_TRACTION`, default 50 and 300).
+A condition that holds sends one email a day, every day, until it clears; the state is the `owner_alerts` table.
+No email provider is chosen yet and the Worker has no email binding, so the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent until a sender is wired in `emailSender()` (with `OWNER_EMAIL`).
+
+### What stays on GitHub Actions, and why
+
+- Capture and the health check load sites in Playwright's Chromium, which a Worker can't run; they stay on Actions and the Workflow starts them with a `workflow_dispatch` (the Worker secret `GITHUB_DISPATCH_TOKEN`).
+  Without the secret, the start is skipped with one log line and the AI stages work with what is already captured.
+- Measuring page evidence for old rows needs a browser for client-rendered pages, so it runs in the free checks too.
+- Grading, comparisons and the board rebuild run on Cloudflare: they need only the database (libSQL over HTTP), the `SHOTS` bucket and `fetch` to Gemini.
+
+## GitHub Actions
 
 All run on GitHub-hosted runners. The repo is **public → unlimited free Actions
 minutes**; the only real budget is the Gemini free tier. Every scheduled job
@@ -72,28 +146,28 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | Workflow | Trigger | What it does | Secrets |
 |---|---|---|---|
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
-| **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
-| **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite chain only). With the variable `RANKING_V2` = `true` it runs the ranking v2 comparisons and board recompute instead ([RANKING.md](RANKING.md)) | TURSO, GEMINI, SHOTS_BASE_URL |
+| **`sync-upstream.yml`** | the end-of-day Workflow at 20:30 Pacific; fallback schedule 06:00 UTC + manual | The free checks: rebuild `feed.json` from upstream's merged README, open the sync PR if it changed, capture new sites and re-capture the oldest (`--refresh`), measure page evidence, record page changes. No Gemini, except as the fallback: the manual `grade` input, or a scheduled run (Cloudflare didn't start it) grades within the accountant's shares | TURSO, R2, SHOTS_BASE_URL (GEMINI only for `grade`) |
+| **`health.yml`** | the end-of-day Workflow on Sunday nights; fallback schedule Mondays 12:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
+| **`judge-vote.yml`** | manual only | Fallback: the ELO-era AI votes, or (repository variable `RANKING_V2`) the ranking v2 comparisons and recompute, within the accountant's share | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → private R2 bucket `portfolio-rank-backups` (~0.3 MB/run) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
-| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
-| **`health.yml`** | Sundays 16:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
+| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API | TURSO |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
-Schedules are staggered: backup (05:00) → sync+grade (06:00) → vote (13:00, clear
-of the sync window). `sync-upstream` and `judge-vote` share the `gemini`
-concurrency group, so grading and voting never overlap; a run that has to wait
-queues (its timeout only counts once it starts).
+The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
+Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without claiming it and this fallback does the night's work.
+`judge-vote.yml` lost its schedule: AI comparisons run in the end-of-day run, and the ELO-era AI votes (30 a day into the shared ELO pool) no longer run on their own, since the owner's decision keeps background comparisons for `RANKING_V2`.
+`grade-compare`, `backup`, `prewarm` and `upstream-removals` call no Gemini and nothing depends on their exact time, so they keep their GitHub schedules.
+`sync-upstream` and `judge-vote` share the `gemini` concurrency group, so a manual fallback run and the nightly checks never overlap on the runner.
 
 ## Budget model
 
-- **Gemini (free tier, shared):** grading self-limits to *new* sites/day; voting
-  capped at 30/day. Both abort cleanly on sustained 429s. See the AI judge
-  section below for the models.
+- **Gemini (free tier, shared):** the end-of-day run's accountant (above) for every job, people first.
 - **R2 (10 GB free):** ~570 MB of serve-frames (hero/mobile/full) + ~0.2 MB/day
   backups → far under the cap, $0.
 - **GitHub Actions:** unlimited (public repo).
 - **PSI/Lighthouse:** 25k runs/day — ample.
+- **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.
 
 ## AI judge (Gemini)
 
@@ -123,19 +197,20 @@ queues (its timeout only counts once it starts).
 - **Pacing:** one limiter per run spaces every request evenly, retries included: `--rpm`, else the `GEMINI_RPM` repository variable, else 8 per minute.
   `sync-upstream` (grading) and `judge-vote` (voting) share the `gemini` concurrency group, so they never run at the same time.
 - **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input, output and thinking tokens from `usageMetadata`, retry and fallback flags).
-  Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus today's (UTC) requests per model against the daily free quota, with a warning from 80%.
+  Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus the quota day's requests per model (midnight to midnight Pacific, when the free quota resets) against the daily free quota, with a warning from 80%.
+  Each row's `job` is the budget's job name (`grade-new`, `grade-changed`, `compare`, `regrade`, `people-grade`, ...; older rows say `rubric` and `pairwise`).
   The quotas default to 500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
   Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`), else Google's published paid rates on 2026-11-10 (3.5 Flash-Lite $0.30 in / $2.50 out, 3.1 Flash-Lite $0.25 / $1.50); thinking tokens are billed as output.
-- **Nightly budget:** grading has a daily budget on 3.5 (`GEMINI_GRADING_BUDGET`, JSON; default 400, which leaves 100 of its 500 for the 30 daily votes and their retries; the 3.1 entry, 450, only matters to an experiment with `GEMINI_FALLBACK=on`).
-  It counts every request today (from `gemini_requests`, retries included) and starts a grade only with room for its 4 possible requests; `--limit 1000` is the upper bound.
+- **Budget:** every grade, comparison and re-grade asks the budget accountant ([pipeline/budget.mjs](pipeline/budget.mjs), "End-of-day run" above); `GEMINI_GRADING_BUDGET` is gone.
+  `judge.mjs rubric` (the manual fallback) starts a grade only with room for its 4 possible requests in the "Grade new sites" share, then re-grades in the "Re-grades" share.
   Sites past the budget are deferred to tomorrow, which is not a failure.
-  The backlog is worked through on 3.5's budget alone over the coming days.
 - **No catch-up mode:** catch-up mode (grading on 3.1's budget once 3.5's was used) was removed on 2026-11-10; the code no longer reads `GEMINI_CATCHUP`, and the repository variable is `"false"`.
 - **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room 3.5's grading budget has left today; re-grades only ever run on 3.5.
   Lowest priority after that: 3.5 grades from an older rubric version (`rubric_version` below `pipeline/rubric.mjs` `RUBRIC_VERSION`; grades from before v2 count as 1), oldest first, only when the repository variable `RUBRIC_REGRADE` is `true` (off until the owner turns it on; about 2,000 grades, 4 to 5 days of 3.5's grading budget).
   Re-grading stops as soon as an answer comes from a model other than 3.5.
   The old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten, so each re-grade is a free 3.1-vs-3.5 pair; `--force` keeps history the same way, and `--no-regrade` turns the queue off.
   No new 3.1 grades are made, so the queue only shrinks: it holds the 3.1 grades written before 2026-11-10.
+- **Comparisons:** a spent 3.5 quota or budget in `compare.mjs` is deferred too: the run exits 0 and counts the rest as waiting (the same rule as `judge.mjs` since #63).
 - **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs (same rubric version only), exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).
 - **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows (or pairs) were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
   Skipped rows are counted on their own, never as attempted.
@@ -176,7 +251,10 @@ serve images.
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
-- `node pipeline/compare.mjs` - ranking v2 daily AI comparisons (off unless `RANKING_V2=true`)
+- `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
+- `node pipeline/capture.mjs --refresh N` - also re-capture the N sites captured longest ago (finds redesigns)
+- `node pipeline/evidence.mjs [--limit N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them
+- `node scripts/detect-changes.mjs` - record page fingerprint changes (`rating_resets`)
 - `node scripts/simulate-ranking.mjs [--grades csv] [--votes-log log] [--out dir]` - offline evaluation of ranking v2
 - `scripts/backup-db.mjs` — DB → R2 snapshot · `scripts/export-grades.mjs` — grades → CSV
 - `scripts/r2-check.mjs` — R2 connectivity · `scripts/r2-upload-one.mjs <key>` — single-site upload

@@ -132,7 +132,7 @@ The hook is `recordFingerprint(db, url, fingerprint, at)` in `lib/ranking/store.
 | `node scripts/recompute-ratings.mjs --read-only` | the same summary without writing anything (works with a read-only token) |
 | `node scripts/recompute-ratings.mjs --export FILE` | also write the input (sites, grades used for seeding, comparisons, resets) as an export |
 | `node scripts/recompute-ratings.mjs --from FILE` | recompute from an export, no database: anyone can check the board |
-| `node pipeline/compare.mjs` | the daily AI comparisons; does nothing unless `RANKING_V2` is `true` |
+| `node pipeline/compare.mjs` | the AI comparisons by hand (the end-of-day run on Cloudflare does them every night); does nothing unless `RANKING_V2` is `true` |
 | `node scripts/simulate-ranking.mjs [--grades CSV] [--votes-log LOG] [--out DIR]` | offline evaluation on the real roster with simulated judges |
 | `GET /api/leaderboard?view=merged\|people\|ai` | the recomputed board, read-only (empty until the first recompute) |
 
@@ -143,15 +143,15 @@ Each run records the input digest and the settings, so the same digest and setti
 
 | Variable | Default | What |
 | --- | --- | --- |
-| `RANKING_V2` | off | `true` runs the new comparison job and the recompute in the daily vote workflow instead of the ELO votes |
+| `RANKING_V2` | off | `true` runs the AI ranking comparisons and the recompute in the end-of-day run (a Worker variable in `wrangler.jsonc`; the repository variable of the same name only steers a manual `judge-vote.yml` run) |
 | `RANKING_BUDGET` | `{"one_on_one": 100, "batched": 100}` | daily comparisons on gemini-3.5-flash-lite |
 | `RANKING_BATCHED_COUNTS` | off | `true` counts batched results in the AI and Merged views |
 | `RANKING_AI_WEIGHT` | `0.5` | the AI's weight in Merged |
 
 AI comparisons use gemini-3.5-flash-lite only (owner decision 2026-11-10): when 3.5 is busy after its retries or its daily quota is spent, the rest waits for the next run.
 The job respects the `GEMINI_FALLBACK` switch (`pipeline/gemini.mjs`, off): if an owner turns it on, an answer from the backup model is stored with `experiment = 'backup-model'`, so it never counts in any board.
-The default grading budget (`GEMINI_GRADING_BUDGET`, 400 of 3.5's 500 daily requests) leaves 100 for votes.
-200 comparisons a day need that lowered to about 290 for 3.5 (retries included), which fits once catch-up grading is done; until then use a smaller `RANKING_BUDGET`.
+The comparisons run in the end-of-day run on what is left of the day's quota after people, new and changed sites, within their own cap ("AI ranking comparisons", 200 requests a day by default; `GEMINI_BUDGET`, [pipeline/budget.mjs](pipeline/budget.mjs)).
+`RANKING_BUDGET` still splits them between one-on-one and batched.
 
 ## Offline evaluation (2026-11-10)
 
@@ -170,6 +170,6 @@ These numbers come from a simulation and only say the machinery works as intende
 
 1. Run `node scripts/recompute-ratings.mjs --read-only` against production and check the boards.
 2. Run it once without `--read-only` to create the tables and the first boards.
-3. Set the repository variable `RANKING_V2` to `true` (and `RANKING_BUDGET` to what the Gemini quota allows): the daily vote workflow then runs the comparison job and the recompute instead of ELO votes.
+3. Set `RANKING_V2` to `"true"` in `wrangler.jsonc` (and `RANKING_BUDGET` if the split should change) through a pull request: from the next night, the end-of-day run makes the comparisons and rebuilds the boards.
 4. With the redesign, read the boards from `lib/ranking/board.ts` (or `/api/leaderboard`) on `/top`, and have `/api/rank` write human votes straight to `comparisons` with the order shown.
 5. After about two weeks, compare `ai_experiment` with `ai`; if batched agrees well enough with one-on-one, set `RANKING_BATCHED_COUNTS` to `true`.

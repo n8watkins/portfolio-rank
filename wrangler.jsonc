@@ -43,11 +43,37 @@
     "AUTH_URL": "https://portfoliorank.n8builds.dev",
     // Server errors go to Sentry (worker/sentry.ts). A DSN is public by design:
     // it only lets a sender add events to this one project.
-    "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136"
+    "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
+    // The end-of-day run (worker/night.ts, AUTOMATION.md "End of day").
+    // Ranking v2's AI comparisons run only when this is "true" (RANKING.md).
+    "RANKING_V2": "false",
+    // "true" re-grades 3.5 grades from an older rubric, lowest priority.
+    "RUBRIC_REGRADE": "false",
+    // Gemini requests a minute, for the whole run.
+    "GEMINI_RPM": "8",
+    // Sites the nightly checks re-capture (oldest first) to find redesigns.
+    "NIGHTLY_REFRESH": "150",
+    // The GitHub login allowed to read /api/admin/* (the admin quota view).
+    "ADMIN_GITHUB_LOGIN": "n8watkins"
+    // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
+    // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT.
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
   // AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN,
-  // PSI_API_KEY. See DEPLOY.md.
+  // PSI_API_KEY, GEMINI_API_KEY (the end-of-day run) and
+  // GITHUB_DISPATCH_TOKEN (starts the nightly checks on GitHub Actions; a
+  // fine-grained token for n8watkins/portfolio-rank with Actions read and
+  // write only). See DEPLOY.md.
+  // The end-of-day run: Cloudflare's clock instead of GitHub's schedule,
+  // which starts jobs hours late. Cron Triggers run in UTC; 03:30 is 20:30
+  // in Los Angeles under daylight time and 04:30 under standard time, and
+  // the handler starts the run only from the one that is 20:30 there
+  // (pipeline/budget.mjs nightCrons, isNightStart).
+  // "15 * * * *" finishes people's grade requests that waited for Gemini 3.5
+  // (pipeline/people.mjs; none exist until "grade my portfolio" ships).
+  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *"] },
+  // One instance a night ("night-<Pacific date>"), one step per batch.
+  "workflows": [{ "name": "portfolio-rank-night", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }],
   // Run next to the Turso database (aws-us-east-2): every request makes several
   // queries, so a Worker near the visitor would pay a cross-country round trip
   // for each. Static assets are still served from the edge.
