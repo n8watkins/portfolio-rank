@@ -10,18 +10,28 @@ import { createClient } from "@libsql/client";
 import {
   BACKUP_MODEL,
   createGemini,
+  createLimiter,
   FLASH_LITE_CHAIN,
   GeminiAuthError,
+  GeminiQuotaError,
+  GeminiUnavailableError,
+  isDailyQuota,
   PRIMARY_MODEL,
+  retryDelayFrom,
 } from "../pipeline/gemini.mjs";
 import { FLASH_LITE_RATER_ID, prepareAiVotes, raterIdFor } from "../pipeline/ai-votes.mjs";
 
 const KEY = "AQ.test-key-not-real";
-const answer = (obj) =>
-  new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }), {
+const answer = (obj, usage = { promptTokenCount: 1200, candidatesTokenCount: 80 }) =>
+  new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }], usageMetadata: usage }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+// Google's 429 bodies: a per-day quota vs a per-minute limit.
+const dailyQuota = () =>
+  status(429, JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } }));
+const perMinute = (delay = "7s") =>
+  status(429, JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier" }] }, { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: delay }] } }));
 const status = (code, body = "{}") => new Response(body, { status: code });
 
 // responses: model -> array of (Response | Error) consumed in order.
@@ -35,16 +45,20 @@ function fakeGemini(responses, opts = {}) {
     if (next instanceof Error) throw next;
     return next;
   };
+  const sleeps = [];
+  const records = [];
   const client = createGemini({
     apiKey: KEY,
     rpm: 60000,
-    retryDelaysMs: [0],
-    sleep: async () => {},
+    retryDelaysMs: [10000, 30000, 60000],
+    jitter: () => 1,
+    sleep: async (ms) => void sleeps.push(ms),
     log: () => {},
+    onRequest: (r) => void records.push(r),
     fetchImpl,
     ...opts,
   });
-  return { client, seen };
+  return { client, seen, sleeps, records };
 }
 
 test("sends the key in the x-goog-api-key header, never in the URL", async () => {
@@ -62,23 +76,114 @@ test("defaults to 3.5 Flash-Lite with 3.1 Flash-Lite as the backup", () => {
   assert.deepEqual(FLASH_LITE_CHAIN, ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
 });
 
-for (const [label, failure] of [
-  ["rate limited (429)", () => status(429)],
-  ["overloaded (503)", () => status(503)],
-  ["unreachable (network error)", () => new TypeError("fetch failed")],
-]) {
-  test(`falls back to the backup model when the primary is ${label}`, async () => {
-    const { client, seen } = fakeGemini({
-      [PRIMARY_MODEL]: [failure()],
-      [BACKUP_MODEL]: [answer({ tier: "A" })],
-    });
-    const { result, model } = await client.generate([{ text: "hi" }], {});
-    assert.deepEqual(result, { tier: "A" });
-    assert.equal(model, BACKUP_MODEL, "reports the model that actually answered");
-    assert.deepEqual(seen.map((s) => s.model), [PRIMARY_MODEL, BACKUP_MODEL]);
-    assert.match(client.summary(), /answered by gemini-3.1-flash-lite 1/);
+test("503s and network errors retry the same model with backoff, without falling back", async () => {
+  const { client, seen, sleeps } = fakeGemini({
+    [PRIMARY_MODEL]: [status(503), new TypeError("fetch failed"), answer({ tier: "A" })],
+    [BACKUP_MODEL]: [answer({ tier: "B" })],
   });
-}
+  const { result, model, fallback } = await client.generate([{ text: "hi" }], {});
+  assert.deepEqual([result, model, fallback], [{ tier: "A" }, PRIMARY_MODEL, false]);
+  assert.deepEqual(seen.map((x) => x.model), [PRIMARY_MODEL, PRIMARY_MODEL, PRIMARY_MODEL]);
+  assert.deepEqual(sleeps.filter((ms) => ms >= 1000), [10000, 30000]);
+});
+
+test("when the last retry still fails, that one call goes to the backup; the next call is back on 3.5", async () => {
+  const { client, seen, records } = fakeGemini({
+    [PRIMARY_MODEL]: [status(503), status(503), status(503), status(503), answer({ tier: "S" })],
+    [BACKUP_MODEL]: [answer({ tier: "A" })],
+  });
+  const first = await client.generate([{ text: "1" }], {});
+  assert.deepEqual([first.model, first.fallback], [BACKUP_MODEL, true]);
+  assert.deepEqual(seen.map((x) => x.model), [PRIMARY_MODEL, PRIMARY_MODEL, PRIMARY_MODEL, PRIMARY_MODEL, BACKUP_MODEL]);
+  const second = await client.generate([{ text: "2" }], {});
+  assert.equal(second.model, PRIMARY_MODEL);
+  assert.equal(client.activeModel, PRIMARY_MODEL);
+  assert.deepEqual(
+    records.map((r) => [r.model, r.status, r.retry, r.fallback]),
+    [
+      [PRIMARY_MODEL, 503, false, false],
+      [PRIMARY_MODEL, 503, true, false],
+      [PRIMARY_MODEL, 503, true, false],
+      [PRIMARY_MODEL, 503, true, false],
+      [BACKUP_MODEL, 200, true, true],
+      [PRIMARY_MODEL, 200, false, false],
+    ]
+  );
+  assert.equal(client.counts.fallbacks, 1);
+});
+
+test("a spent daily quota moves the rest of the run to the backup model", async () => {
+  const { client, seen } = fakeGemini({
+    [PRIMARY_MODEL]: [dailyQuota()],
+    [BACKUP_MODEL]: [answer({ tier: "A" }), answer({ tier: "B" })],
+  });
+  assert.equal((await client.generate([{ text: "1" }], {})).model, BACKUP_MODEL);
+  assert.equal(client.activeModel, BACKUP_MODEL);
+  assert.equal((await client.generate([{ text: "2" }], {})).model, BACKUP_MODEL);
+  assert.deepEqual(seen.map((x) => x.model), [PRIMARY_MODEL, BACKUP_MODEL, BACKUP_MODEL]);
+});
+
+test("a per-minute 429 slows down and retries 3.5, waiting Google's RetryInfo delay", async () => {
+  const { client, seen, sleeps } = fakeGemini({
+    [PRIMARY_MODEL]: [perMinute("7s"), answer({ tier: "A" })],
+    [BACKUP_MODEL]: [answer({ tier: "B" })],
+  });
+  const { model } = await client.generate([{ text: "hi" }], {});
+  assert.equal(model, PRIMARY_MODEL);
+  assert.deepEqual(seen.map((x) => x.model), [PRIMARY_MODEL, PRIMARY_MODEL]);
+  assert.ok(sleeps.includes(7000), `waited ${sleeps}`);
+});
+
+test("per-minute 429s that never clear stop the call as unavailable", async () => {
+  const { client } = fakeGemini({ [PRIMARY_MODEL]: Array.from({ length: 4 }, () => perMinute("1s")) }, { maxSlowdowns: 3 });
+  await assert.rejects(client.generate([{ text: "hi" }], {}), GeminiUnavailableError);
+});
+
+test("both daily quotas spent: GeminiQuotaError, so the run stops cleanly", async () => {
+  const { client } = fakeGemini({ [PRIMARY_MODEL]: [dailyQuota()], [BACKUP_MODEL]: [dailyQuota()] });
+  await assert.rejects(client.generate([{ text: "hi" }], {}), GeminiQuotaError);
+});
+
+test("the backup failing too after the retries: GeminiUnavailableError", async () => {
+  const { client, seen } = fakeGemini({
+    [PRIMARY_MODEL]: [status(503), status(503), status(503), status(503)],
+    [BACKUP_MODEL]: [status(503)],
+  });
+  await assert.rejects(client.generate([{ text: "hi" }], {}), GeminiUnavailableError);
+  assert.equal(seen.length, 5);
+});
+
+test("every request reports tokens and latency to onRequest", async () => {
+  const { client, records } = fakeGemini({ [PRIMARY_MODEL]: [answer({ tier: "A" }, { promptTokenCount: 900, candidatesTokenCount: 40 })] });
+  await client.generate([{ text: "hi" }], {});
+  assert.equal(records.length, 1);
+  assert.equal(records[0].inputTokens, 900);
+  assert.equal(records[0].outputTokens, 40);
+  assert.equal(records[0].status, 200);
+  assert.equal(typeof records[0].latencyMs, "number");
+});
+
+test("one limiter spaces every request evenly, retries included", async () => {
+  let t = 0;
+  const waits = [];
+  const limiter = createLimiter({ rpm: 6, now: () => t, sleep: async (ms) => { waits.push(ms); t += ms; } });
+  const { client } = fakeGemini(
+    { [PRIMARY_MODEL]: [status(503), answer({}), answer({})] },
+    { limiter, sleep: async (ms) => { t += ms; } }
+  );
+  await client.generate([{ text: "1" }], {});
+  await client.generate([{ text: "2" }], {});
+  // 6 per minute = one every 10s: the retry (after a 10s backoff) needed no
+  // extra wait; the next call waited for its slot.
+  assert.deepEqual(waits, [10000]);
+});
+
+test("429 bodies: daily quota vs per-minute, and the RetryInfo delay", async () => {
+  assert.equal(isDailyQuota(await dailyQuota().text()), true);
+  assert.equal(isDailyQuota(await perMinute().text()), false);
+  assert.equal(retryDelayFrom(await perMinute("43s").text()), 43000);
+  assert.equal(retryDelayFrom("{}"), null);
+});
 
 for (const [label, res] of [
   ["401", () => status(401, '{"error":{"status":"UNAUTHENTICATED"}}')],
@@ -103,15 +208,6 @@ test("a bad request fails the call without falling back", async () => {
     return true;
   });
   assert.deepEqual(seen.map((s) => s.model), [PRIMARY_MODEL]);
-});
-
-test("retries the whole chain when every model is unavailable, then gives up", async () => {
-  const { client, seen } = fakeGemini({
-    [PRIMARY_MODEL]: [status(429), status(429)],
-    [BACKUP_MODEL]: [status(503), status(429)],
-  });
-  await assert.rejects(client.generate([{ text: "hi" }], {}), /gemini unavailable/);
-  assert.deepEqual(seen.map((s) => s.model), [PRIMARY_MODEL, BACKUP_MODEL, PRIMARY_MODEL, BACKUP_MODEL]);
 });
 
 test("one logical rater id for the flash-lite chain, a separate one for other models", () => {
