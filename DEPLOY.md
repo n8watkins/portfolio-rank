@@ -26,6 +26,9 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **Sentry source maps:** add the `SENTRY_AUTH_TOKEN` secret (a Sentry auth token with project release access) and the `SENTRY_ORG` and `SENTRY_PROJECT` repository variables.
   The deploy then builds browser source maps, uploads them for the release (the commit SHA) and deletes them before publishing; without those settings it skips the step.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
+  The deploy log prints "A DurableObjectNamespace in the config referenced the class "DOQueueHandler", but no such Durable Object class is exported from the worker".
+  It is a false alarm: `opennextjs-cloudflare deploy` starts a local Miniflare proxy (wrangler's `getPlatformProxy`) only to read the config's variables, and that proxy runs none of our code.
+  The uploaded Worker does export the class (`worker/index.ts`), and CI proves it on every change (`scripts/check-worker-exports.mjs` on the dry-run bundle).
 - **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`.
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
   `prewarm.yml` calls the site's API at the `PROD_BASE_URL` repository variable (`https://portfoliorank.n8builds.dev`).
