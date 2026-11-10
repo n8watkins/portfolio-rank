@@ -1,4 +1,5 @@
 import { PreviewBar } from "@/components/preview/PreviewBar";
+import { RevealObserver } from "@/components/preview/RevealObserver";
 import { MobileTabBar } from "@/components/shell/MobileTabBar";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { SiteHeader } from "@/components/shell/SiteHeader";
@@ -27,6 +28,7 @@ export function AppShell({
       </main>
       <SiteFooter />
       <MobileTabBar current={current} action={action} signedIn={visitor.signedIn} />
+      <RevealObserver />
     </div>
   );
 }

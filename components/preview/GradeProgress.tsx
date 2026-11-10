@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, CircleCheck, Circle, LoaderCircle } from "lucide-react";
+import { ArrowRight, CircleCheck, Circle } from "lucide-react";
 import { SampleTag, btnPrimary, card } from "@/components/preview/bits";
 
 const STEPS = [
@@ -36,7 +36,9 @@ export function GradeProgress({ url, reportHref }: { url: string; reportHref: st
             {i < step ? (
               <CircleCheck className="h-5 w-5 shrink-0 text-up" aria-hidden />
             ) : i === step ? (
-              <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-accent motion-reduce:animate-none" aria-hidden />
+              <span className="grid h-5 w-5 shrink-0 place-items-center" aria-hidden>
+                <span className="attn-dot" />
+              </span>
             ) : (
               <Circle className="h-5 w-5 shrink-0 text-edge" aria-hidden />
             )}

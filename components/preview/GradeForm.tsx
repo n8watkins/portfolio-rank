@@ -46,10 +46,10 @@ export function GradeForm({ compact = false, id = "grade-url" }: { compact?: boo
         <button
           type="submit"
           className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-semibold transition active:scale-[0.97] ${
-            compact ? "h-10 border border-edge px-4 text-sm hover:border-mute" : "h-12 bg-fill px-6 text-[15px] text-on-fill hover:opacity-90"
+            compact ? "h-10 border border-edge px-4 text-sm hover:border-mute" : "group btn-sheen h-12 bg-fill px-6 text-[15px] text-on-fill"
           }`}
         >
-          {!compact && <Sparkles className="h-4 w-4" aria-hidden />}
+          {!compact && <Sparkles className="icon-twinkle h-4 w-4" aria-hidden />}
           {compact ? "Grade" : "Grade it"}
         </button>
       </div>

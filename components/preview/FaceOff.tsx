@@ -149,8 +149,8 @@ export function FaceOff({ pairs, voted }: { pairs: [Entry, Entry][]; voted: bool
               >
                 <Undo2 className="h-4 w-4" aria-hidden /> Undo
               </button>
-              <button type="button" onClick={next} autoFocus className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-fill px-4 text-sm font-semibold text-on-fill transition hover:opacity-90">
-                Next <ArrowRight className="h-4 w-4" aria-hidden />
+              <button type="button" onClick={next} autoFocus className="inline-flex h-11 items-center gap-1.5 btn-sheen group rounded-lg bg-fill px-4 text-sm font-semibold text-on-fill transition">
+                Next <ArrowRight className="nudge h-4 w-4" aria-hidden />
               </button>
             </div>
           </>

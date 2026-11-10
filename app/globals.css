@@ -1,90 +1,159 @@
 @import "tailwindcss";
 
-/* Colors are semantic tokens with a dark (default) and a light value. The
-   theme follows the system unless the visitor picks one: the init script in
-   app/layout.tsx sets data-theme="light" | "dark" on <html> before paint. */
+/* Calm palette (owner, 2026-11-10): neutral surfaces, one accent (amber),
+   and colour only where it carries meaning: up and down, pass and fail.
+   Dark is the default; light follows the system unless the visitor picks a
+   theme (the init script in app/layout.tsx sets data-theme before paint).
+   The amber fill is the same in both themes; only accent text darkens on
+   light so it keeps 4.5:1. */
 @theme {
-  --color-bg: #0a0a0b;
-  --color-card: #131316;
-  --color-raised: #1b1b20;
-  --color-edge: #26262b;
-  --color-ink: #ededf0;
-  --color-mute: #8b8b93;
+  --color-bg: #09090b;
+  --color-card: #111114;
+  --color-raised: #19191d;
+  --color-edge: #232328;
+  --color-edge-strong: #34343b;
+  --color-ink: #ececef;
+  --color-mute: #8d8d96;
   --color-accent: #fbbf24;
   --color-fill: #fbbf24;
-  --color-on-fill: #0a0a0b;
-  --color-accent-soft: rgba(251, 191, 36, 0.12);
-  --color-ai: #a78bfa;
-  --color-ai-soft: rgba(167, 139, 250, 0.14);
-  --color-people: #38bdf8;
-  --color-people-soft: rgba(56, 189, 248, 0.13);
+  --color-on-fill: #1a1405;
+  --color-accent-soft: rgba(251, 191, 36, 0.1);
   --color-up: #4ade80;
   --color-down: #f87171;
-  --color-sample: #f0abfc;
+  /* Former category colours, now neutral: AI, People and Sample are told
+     apart by icon and label, not hue. */
+  --color-ai: var(--color-ink);
+  --color-ai-soft: var(--color-raised);
+  --color-people: var(--color-ink);
+  --color-people-soft: var(--color-raised);
+  --color-sample: var(--color-mute);
 }
 
 :root {
   color-scheme: dark;
-  --glow-a: rgba(251, 191, 36, 0.13);
-  --glow-b: rgba(251, 191, 36, 0.07);
-  --glow-c: rgba(99, 102, 241, 0.07);
+  --glow: rgba(251, 191, 36, 0.09);
+  /* Depth: a faint top light on every card, a hairline highlight, and a
+     soft drop that grows on hover. */
+  --card-top: rgba(255, 255, 255, 0.035);
+  --card-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --card-drop: 0 1px 2px rgba(0, 0, 0, 0.45), 0 14px 32px -18px rgba(0, 0, 0, 0.7);
+  --card-drop-hover: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 44px -20px rgba(0, 0, 0, 0.85);
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --color-bg: #fafaf9;
+    --color-bg: #f6f6f7;
     --color-card: #ffffff;
-    --color-raised: #f4f4f2;
-    --color-edge: #e4e4e2;
+    --color-raised: #f0f0f2;
+    --color-edge: #e2e2e6;
+    --color-edge-strong: #cdcdd3;
     --color-ink: #18181b;
-    --color-mute: #5f5f68;
-    --color-accent: #b45309;
-  --color-fill: #f59e0b;
-  --color-on-fill: #1c1407;
-    --color-fill: #f59e0b;
-    --color-on-fill: #1c1407;
-    --color-accent-soft: #fef3c7;
-    --color-ai: #6d28d9;
-    --color-ai-soft: #ede9fe;
-    --color-people: #0369a1;
-    --color-people-soft: #e0f2fe;
+    --color-mute: #5c5c66;
+    --color-accent: #a16207;
+    --color-accent-soft: #fdf5e1;
     --color-up: #15803d;
     --color-down: #b91c1c;
-    --color-sample: #a21caf;
-    --glow-a: rgba(251, 191, 36, 0.16);
-    --glow-b: rgba(251, 191, 36, 0.08);
-    --glow-c: rgba(99, 102, 241, 0.05);
+    --glow: rgba(251, 191, 36, 0.1);
+    --card-top: rgba(255, 255, 255, 0);
+    --card-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
+    --card-drop: 0 1px 2px rgba(16, 16, 24, 0.05), 0 12px 28px -18px rgba(16, 16, 24, 0.16);
+    --card-drop-hover: 0 2px 6px rgba(16, 16, 24, 0.06), 0 22px 40px -22px rgba(16, 16, 24, 0.26);
   }
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-bg: #fafaf9;
+  --color-bg: #f6f6f7;
   --color-card: #ffffff;
-  --color-raised: #f4f4f2;
-  --color-edge: #e4e4e2;
+  --color-raised: #f0f0f2;
+  --color-edge: #e2e2e6;
+  --color-edge-strong: #cdcdd3;
   --color-ink: #18181b;
-  --color-mute: #5f5f68;
-  --color-accent: #b45309;
-  --color-fill: #f59e0b;
-  --color-on-fill: #1c1407;
-  --color-accent-soft: #fef3c7;
-  --color-ai: #6d28d9;
-  --color-ai-soft: #ede9fe;
-  --color-people: #0369a1;
-  --color-people-soft: #e0f2fe;
+  --color-mute: #5c5c66;
+  --color-accent: #a16207;
+  --color-accent-soft: #fdf5e1;
   --color-up: #15803d;
   --color-down: #b91c1c;
-  --color-sample: #a21caf;
-  --glow-a: rgba(251, 191, 36, 0.16);
-  --glow-b: rgba(251, 191, 36, 0.08);
-  --glow-c: rgba(99, 102, 241, 0.05);
+  --glow: rgba(251, 191, 36, 0.1);
+  --card-top: rgba(255, 255, 255, 0);
+  --card-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --card-drop: 0 1px 2px rgba(16, 16, 24, 0.05), 0 12px 28px -18px rgba(16, 16, 24, 0.16);
+  --card-drop-hover: 0 2px 6px rgba(16, 16, 24, 0.06), 0 22px 40px -22px rgba(16, 16, 24, 0.26);
 }
 
-@keyframes fade-up {
+/* ------------------------------------------------------------ depth */
+
+@layer components {
+  .card {
+    border-radius: 1rem;
+    border: 1px solid var(--color-edge);
+    background:
+      linear-gradient(180deg, var(--card-top), transparent 45%),
+      var(--color-card);
+    box-shadow: var(--card-hi), var(--card-drop);
+  }
+
+  /* A card that is a link: it lifts a little and its edge firms up. The lift
+     is `translate`, separate from `transform`, so it never fights an
+     entrance animation. */
+  .card-hover {
+    transition:
+      translate 200ms cubic-bezier(0.33, 1, 0.68, 1),
+      box-shadow 200ms ease,
+      border-color 200ms ease;
+  }
+  @media (hover: hover) {
+    .card-hover:hover {
+      translate: 0 -2px;
+      border-color: var(--color-edge-strong);
+      box-shadow: var(--card-hi), var(--card-drop-hover);
+    }
+  }
+
+  /* An icon tile, as on n8builds.dev: a tinted square with a ring. */
+  .icon-tile {
+    display: grid;
+    place-items: center;
+    border-radius: 0.75rem;
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 28%, transparent);
+  }
+
+  /* Primary buttons catch a sheen as the pointer arrives. */
+  .btn-sheen {
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 1px 2px rgba(0, 0, 0, 0.2),
+      0 6px 16px -8px rgba(251, 191, 36, 0.55);
+  }
+  .btn-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
+    translate: -120% 0;
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .btn-sheen:hover::after {
+      translate: 120% 0;
+      transition: translate 650ms ease-in-out;
+    }
+  }
+}
+
+/* ------------------------------------------------------------ motion */
+
+/* Entrance: content above the fold rises in from the server HTML (no JS).
+   Opacity starts at 1%, not 0, so it still counts as painted for LCP, and it
+   ends on `transform: none`. Stagger with style={{ "--d": "80ms" }}. */
+@keyframes rise {
   from {
-    opacity: 0;
+    opacity: 0.01;
     transform: translateY(14px);
   }
   to {
@@ -93,16 +162,106 @@
   }
 }
 
-/* backwards, not both: the transform must not outlive the animation, or every
-   faded-in element stays a containing block for its fixed descendants. */
-.fade-up {
-  animation: fade-up 0.5s ease-out backwards;
+.rise {
+  animation: rise 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) var(--d, 0ms) both;
+}
+
+/* Scroll reveal (components/preview/RevealObserver.tsx marks it revealed). */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.8s cubic-bezier(0.33, 1, 0.68, 1),
+    transform 0.8s cubic-bezier(0.33, 1, 0.68, 1);
+  transition-delay: var(--d, 0ms);
+}
+.reveal[data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Icons that move a little when their control is hovered or focused. */
+.nudge {
+  transition: translate 200ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+.group:hover .nudge,
+.group:focus-visible .nudge {
+  translate: 3px 0;
+}
+.group:hover .nudge-up,
+.group:focus-visible .nudge-up {
+  translate: 0 -2px;
+}
+.nudge-up {
+  transition: translate 200ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@keyframes icon-shake {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(10deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(3deg); }
+}
+@keyframes icon-twinkle {
+  0%, 100% { transform: scale(1) rotate(0); }
+  40% { transform: scale(1.22) rotate(-10deg); }
+  70% { transform: scale(0.95) rotate(6deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .group:hover .icon-shake,
+  .group:focus-visible .icon-shake {
+    animation: icon-shake 480ms ease-in-out;
+    transform-origin: 50% 60%;
+  }
+  .group:hover .icon-twinkle,
+  .group:focus-visible .icon-twinkle {
+    animation: icon-twinkle 520ms ease-in-out;
+  }
+}
+
+/* Attention without spinning: a dot with a soft ring that breathes. */
+@keyframes attn-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  80%, 100% { transform: scale(2.4); opacity: 0; }
+}
+.attn-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-accent);
+}
+.attn-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: attn-ring 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fade-up {
+  .rise,
+  .attn-dot::after {
     animation: none;
   }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .card-hover,
+  .nudge,
+  .nudge-up {
+    transition: none;
+  }
+}
+
+/* Legacy entrance used by older pages. */
+.fade-up {
+  animation: rise 0.5s ease-out backwards;
 }
 
 /* Top-ranked marquee: the track holds two copies of the items, so translating
@@ -217,22 +376,7 @@ dialog.modal[open]::backdrop {
 /* Ambient background: soft accent glows over the near-black bg, rendered in a
    fixed, behind-everything layer (see layout.tsx) so they stay put on scroll. */
 .app-bg {
-  background:
-    radial-gradient(
-      55rem 55rem at 78% -8%,
-      var(--glow-a),
-      transparent 60%
-    ),
-    radial-gradient(
-      45rem 45rem at 12% 6%,
-      var(--glow-b),
-      transparent 55%
-    ),
-    radial-gradient(
-      48rem 48rem at 50% 108%,
-      var(--glow-c),
-      transparent 62%
-    );
+  background: radial-gradient(60rem 38rem at 70% -12%, var(--glow), transparent 65%);
 }
 
 /* FAQ accordion: animate the answer's height via grid-template-rows 0fr→1fr

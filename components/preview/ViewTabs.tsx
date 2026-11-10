@@ -15,11 +15,11 @@ export type ViewKey = (typeof VIEWS)[number]["key"];
 export function ViewTabs({ panels, label }: { panels: Record<ViewKey, React.ReactNode>; label: string }) {
   const [view, setView] = useState<ViewKey>("merged");
   return (
-    <div>
+    <div className="flex flex-1 flex-col">
       <div
         role="tablist"
         aria-label={label}
-        className="inline-flex rounded-lg bg-raised p-1"
+        className="inline-flex w-fit rounded-lg border border-edge bg-raised p-1"
         onKeyDown={(e) => {
           const i = VIEWS.findIndex((v) => v.key === view);
           const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
@@ -39,7 +39,7 @@ export function ViewTabs({ panels, label }: { panels: Record<ViewKey, React.Reac
             aria-controls={`panel-${key}`}
             tabIndex={view === key ? 0 : -1}
             onClick={() => setView(key)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-mute transition aria-selected:bg-card aria-selected:text-ink aria-selected:shadow-sm"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-mute transition aria-selected:bg-card aria-selected:text-ink aria-selected:shadow-[var(--card-hi),var(--card-drop)]"
           >
             <Icon className="h-3.5 w-3.5" aria-hidden />
             {l}
@@ -47,7 +47,7 @@ export function ViewTabs({ panels, label }: { panels: Record<ViewKey, React.Reac
         ))}
       </div>
       {VIEWS.map(({ key }) => (
-        <div key={key} id={`panel-${key}`} role="tabpanel" aria-labelledby={`tab-${key}`} hidden={view !== key} className="mt-3">
+        <div key={key} id={`panel-${key}`} role="tabpanel" aria-labelledby={`tab-${key}`} hidden={view !== key} className="mt-3 flex-1 flex-col [&:not([hidden])]:flex">
           {panels[key]}
         </div>
       ))}

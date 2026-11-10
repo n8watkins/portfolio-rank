@@ -1,4 +1,4 @@
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { Clock, Sparkles, UserRound } from "lucide-react";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { NAV, type NavKey } from "@/components/shell/nav";
@@ -26,11 +26,23 @@ export function SiteHeader({
   signedIn: boolean;
   name: string;
 }) {
-  const ActionIcon = action.label === "Your report" ? LoaderCircle : Sparkles;
+  const ActionIcon = action.label === "Your report" ? Clock : action.done ? UserRound : Sparkles;
   return (
     <header className="sticky top-0 z-20 border-b border-edge bg-bg/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
-        <Wordmark />
+        <div className="flex items-center gap-3">
+          <Wordmark />
+          <a
+            href="https://n8builds.dev"
+            target="_blank"
+            rel="noopener"
+            className="hidden items-center gap-1.5 border-l border-edge pl-3 text-xs font-medium text-mute transition hover:text-ink xl:flex"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/n8-logo.png" alt="" className="h-4 w-4 rounded" />
+            by n8builds
+          </a>
+        </div>
         <nav aria-label="Main" className="hidden flex-1 items-center gap-1 lg:flex">
           {NAV.map((n) => (
             <a
@@ -50,11 +62,11 @@ export function SiteHeader({
             aria-current={current === "grade" ? "page" : undefined}
             className={
               action.done
-                ? "hidden h-9 items-center gap-2 rounded-lg border border-accent/50 px-3.5 text-sm font-semibold text-accent transition hover:border-accent lg:flex"
-                : "hidden h-9 items-center gap-2 rounded-lg bg-fill px-3.5 text-sm font-semibold text-on-fill transition hover:opacity-90 lg:flex"
+                ? "group hidden h-9 items-center gap-2 rounded-lg border border-edge-strong bg-card px-3.5 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-accent/60 lg:flex"
+                : "group btn-sheen hidden h-9 items-center gap-2 rounded-lg bg-fill px-3.5 text-sm font-semibold text-on-fill transition lg:flex"
             }
           >
-            <ActionIcon className="h-4 w-4" aria-hidden />
+            <ActionIcon className={action.done ? "h-4 w-4" : "icon-twinkle h-4 w-4"} aria-hidden />
             {action.label}
           </a>
           <AccountMenu signedIn={signedIn} name={name} yourHref={action.href} yourLabel={action.done ? action.label : "Grade your portfolio"} />

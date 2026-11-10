@@ -23,11 +23,11 @@ export function PreviewBar({ state }: { state: string }) {
   }, [state]);
 
   const select =
-    "h-7 rounded-md border border-sample/40 bg-transparent px-1.5 text-xs font-medium text-ink outline-none focus-visible:border-sample";
+    "h-7 rounded-md border border-edge-strong bg-card px-1.5 text-xs font-medium text-ink outline-none focus-visible:border-accent";
   return (
-    <div className="border-b border-sample/30 bg-sample/10">
+    <div className="border-b border-dashed border-edge-strong bg-raised">
       <div className="mx-auto flex max-w-6xl items-center gap-x-3 sm:gap-x-4 px-4 py-1.5 text-xs sm:px-6">
-        <p className="flex items-center gap-1.5 font-semibold text-sample">
+        <p className="flex items-center gap-1.5 font-semibold text-ink">
           <FlaskConical className="h-3.5 w-3.5" aria-hidden />
           Preview
           <span className="hidden font-normal text-mute md:inline">Sample data is marked. Not deployed.</span>

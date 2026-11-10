@@ -11,7 +11,8 @@ export const NAV: { key: NavKey; href: string; label: string }[] = [
 
 /** The one highlighted action: grade yours, or your portfolio once that's done. */
 export function primaryAction(v: Visitor, yourSlug: string): { href: string; label: string; done: boolean } {
-  if (v.queued) return { href: "/grade?status=queued", label: "Your report", done: true };
-  if (v.graded) return { href: `/grade/${yourSlug}`, label: "Your portfolio", done: true };
+  if (v.queued) return { href: "/me", label: "Your report", done: true };
+  if (v.graded) return { href: "/me", label: "Your portfolio", done: true };
+  void yourSlug;
   return { href: "/#grade", label: "Grade yours", done: false };
 }

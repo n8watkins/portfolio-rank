@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Ellipsis, LayoutGrid, Newspaper, Settings, Sparkles, Swords, Trophy, User, X } from "lucide-react";
+import { BookOpen, Ellipsis, LayoutGrid, Newspaper, Settings, Sparkles, Swords, Trophy, User, Vote, X } from "lucide-react";
 import type { NavKey } from "@/components/shell/nav";
 import { useTheme, type Theme } from "@/components/shell/ThemeToggle";
 import { MockSignIn } from "@/components/shell/MockSignIn";
@@ -89,6 +89,7 @@ export function MobileTabBar({
           <ul className="grid grid-cols-1 gap-1">
             {[
               { href: "/blog", label: "Blog", Icon: Newspaper },
+              { href: "/polls", label: "Polls", Icon: Vote },
               { href: "/how", label: "How grading works", Icon: BookOpen },
               { href: signedIn ? "/profile" : "#signin", label: signedIn ? "Account" : "Sign in", Icon: User },
               { href: "/settings", label: "Settings", Icon: Settings },

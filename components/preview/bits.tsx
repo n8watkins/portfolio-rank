@@ -5,7 +5,7 @@ export function SampleTag({ what = "Sample data", className = "" }: { what?: str
   return (
     <span
       title={`${what}: this feature doesn't exist yet, the numbers are made up for the preview.`}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-sample/40 px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-sample ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-edge-strong px-1.5 py-px align-middle text-[10px] font-semibold uppercase tracking-wide text-mute ${className}`}
     >
       <FlaskConical className="h-3 w-3" aria-hidden />
       Sample
@@ -35,10 +35,10 @@ export function Movement({ move, className = "" }: { move: number; className?: s
 
 export const TIER_STYLE: Record<string, string> = {
   S: "bg-fill text-on-fill",
-  A: "bg-accent-soft text-accent",
-  B: "bg-people-soft text-people",
-  C: "bg-raised text-ink",
-  D: "bg-raised text-mute",
+  A: "bg-accent-soft text-accent ring-1 ring-inset ring-accent/25",
+  B: "bg-raised text-ink ring-1 ring-inset ring-edge-strong",
+  C: "bg-raised text-ink ring-1 ring-inset ring-edge",
+  D: "bg-raised text-mute ring-1 ring-inset ring-edge",
 };
 
 export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "lg" }) {
@@ -50,9 +50,9 @@ export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "
   );
 }
 
-export const card = "rounded-2xl border border-edge bg-card";
+export const card = "card";
 export const btnPrimary =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-fill px-5 text-sm font-semibold text-on-fill transition hover:opacity-90 active:scale-[0.97]";
+  "group inline-flex h-11 items-center justify-center gap-2 btn-sheen rounded-lg bg-fill px-5 text-sm font-semibold text-on-fill transition active:scale-[0.97]";
 export const btnSecondary =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-edge px-4 text-sm font-semibold transition hover:border-mute active:scale-[0.97]";
+  "group inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-edge bg-card px-4 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong active:scale-[0.97]";
 export const sectionTitle = "text-lg font-bold tracking-tight";

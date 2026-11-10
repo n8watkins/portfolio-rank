@@ -18,7 +18,7 @@ function Dots({ value }: { value: number }) {
   return (
     <span className="flex gap-1" aria-hidden>
       {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className={`h-1.5 w-4 rounded-full ${i <= value ? "bg-ai" : "bg-raised"}`} />
+        <span key={i} className={`h-1.5 w-4 rounded-full ${i <= value ? "bg-accent" : "bg-edge"}`} />
       ))}
     </span>
   );
@@ -43,10 +43,10 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
 
         {/* Screenshot and the overall tier */}
         <section aria-labelledby="overall" className="mt-3 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <div className={`${card} overflow-hidden`}>
+          <div className={`${card} rise overflow-hidden`}>
             <Shot base={site.shot} alt={`Screenshot of ${site.domain}`} domain={site.domain} eager className="aspect-[16/10] w-full" />
           </div>
-          <div className={`${card} flex flex-col p-5 sm:p-6`}>
+          <div className={`${card} rise flex flex-col p-5 sm:p-6`} style={{ "--d": "80ms" } as React.CSSProperties}>
             <h1 id="overall" className="text-2xl font-bold tracking-tight">
               {site.name}
             </h1>
@@ -76,11 +76,11 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
 
         {/* Facts and AI judgment, visibly separate */}
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <section aria-labelledby="facts" className={`${card} p-5 sm:p-6`}>
+          <section aria-labelledby="facts" className={`${card} reveal flex flex-col p-5 sm:p-6`}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 id="facts" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-                  <Ruler className="h-5 w-5 text-people" aria-hidden /> Measured facts
+                  <Ruler className="h-5 w-5 text-mute" aria-hidden /> Measured facts
                 </h2>
                 <p className="mt-1 text-sm text-mute">Checked by code. Pass or fail, no opinion.</p>
               </div>
@@ -97,19 +97,25 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
                 </li>
               ))}
             </ul>
+            <p className="mt-auto flex items-center justify-between gap-3 border-t border-edge pt-4 text-sm">
+              <span className="text-mute">Checked {rep.gradedOn}</span>
+              <span className="font-semibold tabular-nums">
+                {rep.facts.filter((f) => f.pass).length} of {rep.facts.length} passed
+              </span>
+            </p>
           </section>
 
-          <section aria-labelledby="ai" className={`${card} p-5 sm:p-6`}>
+          <section aria-labelledby="ai" className={`${card} reveal p-5 sm:p-6`} style={{ "--d": "80ms" } as React.CSSProperties}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 id="ai" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-                  <Bot className="h-5 w-5 text-ai" aria-hidden /> AI judgment
+                  <Bot className="h-5 w-5 text-mute" aria-hidden /> AI judgment
                 </h2>
                 <p className="mt-1 text-sm text-mute">
                   Gemini&apos;s opinion of the page{rep.grade.real ? ` (${rep.grade.model})` : ""}, 1 to 5. Notes are sample text.
                 </p>
               </div>
-              <span className="shrink-0 rounded-full bg-ai-soft px-2 py-0.5 text-[11px] font-semibold text-ai">Gemini</span>
+              <span className="shrink-0 rounded-full border border-edge-strong px-2 py-0.5 text-[11px] font-semibold text-mute">Gemini</span>
             </div>
             <ul className="mt-4 divide-y divide-edge">
               {rep.subs.map((s) => (
@@ -132,7 +138,7 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
         </div>
 
         {/* Top 3 improvements */}
-        <section aria-labelledby="improve" className={`${card} mt-5 p-5 sm:p-6`}>
+        <section aria-labelledby="improve" className={`${card} reveal mt-5 p-5 sm:p-6`}>
           <h2 id="improve" className="text-lg font-bold tracking-tight">
             Fix these first
           </h2>

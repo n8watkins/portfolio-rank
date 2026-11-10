@@ -8,9 +8,9 @@ export function Newsletter({ className = "" }: { className?: string }) {
   const [done, setDone] = useState(false);
   const [email, setEmail] = useState("");
   return (
-    <section aria-labelledby="nl-title" className={`rounded-2xl border border-edge bg-card p-5 ${className}`}>
+    <section aria-labelledby="nl-title" className={`card flex flex-col p-5 ${className}`}>
       <div className="flex items-center gap-2">
-        <Mail className="h-4 w-4 text-accent" aria-hidden />
+        <Mail className="h-4 w-4 text-mute" aria-hidden />
         <h2 id="nl-title" className="text-base font-bold tracking-tight">
           The weekly ranking, in your inbox
         </h2>
@@ -22,7 +22,7 @@ export function Newsletter({ className = "" }: { className?: string }) {
         </p>
       ) : (
         <form
-          className="mt-4 flex gap-2"
+          className="mt-auto flex gap-2 pt-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (email.includes("@")) setDone(true);
@@ -40,7 +40,7 @@ export function Newsletter({ className = "" }: { className?: string }) {
             onChange={(e) => setEmail(e.target.value)}
             className="h-10 min-w-0 flex-1 rounded-lg border border-edge bg-bg px-3 text-sm outline-none placeholder:text-mute/80 focus:border-accent"
           />
-          <button type="submit" className="h-10 shrink-0 rounded-lg bg-fill px-4 text-sm font-semibold text-on-fill transition hover:opacity-90">
+          <button type="submit" className="btn-sheen h-10 shrink-0 rounded-lg bg-fill px-4 text-sm font-semibold text-on-fill transition">
             Subscribe
           </button>
         </form>

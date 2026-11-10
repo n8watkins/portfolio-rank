@@ -2,21 +2,13 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Shot } from "@/components/preview/Shot";
 import { TierBadge, card } from "@/components/preview/bits";
-import { leaderboard, roster } from "@/lib/preview/data";
+import { ROLES, leaderboard, roster } from "@/lib/preview/data";
 import { visitor } from "@/lib/preview/visitor";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Browse portfolios - PortfolioRank" };
 
 const PER_PAGE = 24;
-const ROLES: { key: string; label: string; re: RegExp }[] = [
-  { key: "fullstack", label: "Full stack", re: /full.?stack/i },
-  { key: "frontend", label: "Frontend", re: /front.?end|web dev/i },
-  { key: "backend", label: "Backend", re: /back.?end/i },
-  { key: "ai", label: "AI / ML", re: /\bai\b|machine learning|\bml\b|data scien|llm/i },
-  { key: "mobile", label: "Mobile", re: /mobile|android|ios|flutter|react native/i },
-  { key: "design", label: "Design / UX", re: /design|ux|\bui\b/i },
-];
 
 type SP = { state?: string; q?: string; role?: string; sort?: string; page?: string };
 
@@ -117,7 +109,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Promi
               const r = rankOf.get(s.url);
               return (
                 <li key={s.url}>
-                  <a href={r ? `/grade/${s.slug}` : s.url} className={`${card} group block overflow-hidden transition hover:border-mute`}>
+                  <a href={r ? `/grade/${s.slug}` : s.url} className={`${card} group block overflow-hidden card-hover`}>
                     <Shot base={s.shot} alt="" domain={s.domain} className="aspect-[16/10] w-full border-b border-edge" />
                     <div className="flex items-center gap-3 p-3.5">
                       <span className="min-w-0 flex-1">

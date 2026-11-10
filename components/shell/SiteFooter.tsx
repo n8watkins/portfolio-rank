@@ -1,4 +1,4 @@
-import { Coffee } from "lucide-react";
+import { ArrowUpRight, Coffee } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { Wordmark } from "@/components/shell/SiteHeader";
 
@@ -17,6 +17,7 @@ const COLS: { title: string; links: { href: string; label: string; ext?: boolean
     links: [
       { href: "/how", label: "How grading works" },
       { href: "/blog", label: "Blog" },
+      { href: "/polls", label: "Polls" },
       { href: "/removed", label: "Removed and why" },
     ],
   },
@@ -43,12 +44,25 @@ export function SiteFooter() {
             </a>
             .
           </p>
-          <a
-            href={SITE.kofi}
-            className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-edge px-3 text-sm font-semibold transition hover:border-mute"
-          >
-            <Coffee className="h-4 w-4 text-accent" aria-hidden /> Support on Ko-fi
-          </a>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href={SITE.n8builds}
+              target="_blank"
+              rel="noopener"
+              className="group inline-flex h-9 items-center gap-2 rounded-lg border border-edge bg-card px-3 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/n8-logo.png" alt="" className="h-4 w-4 rounded" />
+              An n8builds project
+              <ArrowUpRight className="h-3.5 w-3.5 text-mute transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
+            </a>
+            <a
+              href={SITE.kofi}
+              className="group inline-flex h-9 items-center gap-2 rounded-lg border border-edge bg-card px-3 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong"
+            >
+              <Coffee className="icon-shake h-4 w-4 text-mute" aria-hidden /> Ko-fi
+            </a>
+          </div>
         </div>
         {COLS.map((c) => (
           <div key={c.title}>
@@ -59,7 +73,7 @@ export function SiteFooter() {
                   <a
                     href={l.href}
                     {...(l.ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                    className="text-ink/85 transition hover:text-accent"
+                    className="text-ink/80 transition hover:text-ink"
                   >
                     {l.label}
                   </a>
@@ -71,8 +85,8 @@ export function SiteFooter() {
       </div>
       <div className="border-t border-edge">
         <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-mute sm:px-6">
-          Built by{" "}
-          <a href={SITE.n8builds} className="underline decoration-edge underline-offset-4 hover:text-ink">
+          PortfolioRank is built by Nathan Watkins at{" "}
+          <a href={SITE.n8builds} target="_blank" rel="noopener" className="font-medium text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
             n8builds.dev
           </a>
           . Grades are estimates, not a verdict on the developer.

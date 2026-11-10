@@ -54,6 +54,10 @@ export type Ranked = Site & {
   aiRank: number;
   peopleRank: number;
   disagree: boolean;
+  /** The ranks this site could hold given its uncertainty (score ± band). */
+  likely: [number, number];
+  /** Share of graded portfolios at or above this rank, rounded up. */
+  topPct: number;
 };
 
 function hashNum(s: string, salt = ""): number {
@@ -185,8 +189,13 @@ export function leaderboard(view: View): Ranked[] {
     const visitorUrl = sampleVisitorSite().url;
     const make = (v: View, scoreOf: Map<Site, number>, band: (s: Site) => number): Ranked[] => {
       const ranks = rankBy(pool, (s) => scoreOf.get(s)!);
+      const scores = pool.map((s) => scoreOf.get(s)!);
       return pool
         .map((s) => {
+          const sc = scoreOf.get(s)!;
+          const b = band(s);
+          const lo = scores.filter((x) => x > sc + b).length + 1;
+          const hi = scores.filter((x) => x >= sc - b).length;
           const ar = aiRanks.get(s)!.rank;
           const pr = peopleRanks.get(s)!.rank;
           return {
@@ -199,6 +208,8 @@ export function leaderboard(view: View): Ranked[] {
             aiRank: ar,
             peopleRank: pr,
             disagree: Math.abs(ar - pr) > n * 0.12,
+            likely: [lo, Math.max(lo, hi)] as [number, number],
+            topPct: Math.max(1, Math.ceil((ranks.get(s)!.rank / n) * 100)),
           };
         })
         .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
@@ -206,7 +217,7 @@ export function leaderboard(view: View): Ranked[] {
     boards = {
       ai: make("ai", ai, () => 0),
       people: make("people", people, (s) => 18 + Math.round(hashNum(s.url, "b") * 40)),
-      merged: make("merged", merged, (s) => Math.round((0.4 + hashNum(s.url, "mb") * 1.6) * 10) / 10),
+      merged: make("merged", merged, (s) => Math.round((0.2 + hashNum(s.url, "mb") * 0.7) * 10) / 10),
     };
   }
   return boards[view];
@@ -333,4 +344,121 @@ export function sampleVisitorSite(): Site {
   const pool = load().pool;
   const a = pool.filter((s) => s.grade!.tier === "A");
   return a[Math.floor(a.length * 0.6)] ?? pool[0];
+}
+
+// ---------------------------------------------------------------- stats, profile
+
+/** Live numbers for the home stats card. Portfolios and graded are real. */
+export function stats() {
+  const c = load();
+  return {
+    portfolios: c.roster.length,
+    graded: c.pool.length,
+    gradesThisWeek: 35, // sample
+    votesToday: 1284, // sample
+  };
+}
+
+/** Where AI and people disagree most, among the top 200 merged. */
+export function disagreements(limit = 3): Ranked[] {
+  const sorted = leaderboard("merged")
+    .slice(0, 200)
+    .filter((r) => r.disagree)
+    .sort((a, b) => Math.abs(b.aiRank - b.peopleRank) - Math.abs(a.aiRank - a.peopleRank));
+  // Mix both directions (AI higher, people higher) and avoid repeated ranks.
+  const out: Ranked[] = [];
+  const seen = new Set<number>();
+  const aiHigher = sorted.filter((r) => r.aiRank < r.peopleRank);
+  const peopleHigher = sorted.filter((r) => r.peopleRank < r.aiRank);
+  for (let i = 0; out.length < limit && i < sorted.length; i++) {
+    for (const r of [peopleHigher[i], aiHigher[i]]) {
+      if (r && out.length < limit && !seen.has(r.aiRank)) {
+        seen.add(r.aiRank);
+        out.push(r);
+      }
+    }
+  }
+  return out;
+}
+
+export const ROLES: { key: string; label: string; re: RegExp }[] = [
+  { key: "fullstack", label: "Full stack", re: /full.?stack/i },
+  { key: "frontend", label: "Frontend", re: /front.?end|web dev/i },
+  { key: "backend", label: "Backend", re: /back.?end/i },
+  { key: "ai", label: "AI / ML", re: /\bai\b|machine learning|\bml\b|data scien|llm/i },
+  { key: "mobile", label: "Mobile", re: /mobile|android|ios|flutter|react native/i },
+  { key: "design", label: "Design / UX", re: /design|ux|\bui\b/i },
+];
+
+type SubKey = "design" | "fiveSecond" | "story" | "writing" | "memorability";
+
+/** Share of a pool with a lower value, counting ties as half. */
+function betterThan(pool: Site[], key: SubKey, v: number): number {
+  let below = 0;
+  let same = 0;
+  for (const s of pool) {
+    const x = s.grade![key];
+    if (x < v) below++;
+    else if (x === v) same++;
+  }
+  return Math.round(((below + same / 2) / pool.length) * 100);
+}
+
+export type Standing = { label: string; criterion: string; value: number; vsAll: number; vsRole: number };
+
+export function profile(site: Site) {
+  const c = load();
+  const g = site.grade ?? sampleGrade(site.url);
+  const role = ROLES.find((r) => site.tagline && r.re.test(site.tagline)) ?? ROLES[0];
+  let peers = c.pool.filter((s) => s.tagline && role.re.test(s.tagline));
+  if (peers.length < 20) peers = c.pool;
+  const keys: [SubKey, string, string][] = [
+    ["design", "Design", "design"],
+    ["fiveSecond", "First 5 seconds", "five-second"],
+    ["story", "Project stories", "story"],
+    ["writing", "Writing", "writing"],
+    ["memorability", "Memorable", "memorable"],
+  ];
+  const standings: Standing[] = keys.map(([k, label, criterion]) => ({
+    label,
+    criterion,
+    value: g[k],
+    vsAll: betterThan(c.pool, k, g[k]),
+    vsRole: betterThan(peers, k, g[k]),
+  }));
+  const merged = leaderboard("merged").find((r) => r.url === site.url);
+  const now = merged?.rank ?? 200;
+  // Sample: eight weekly merged ranks ending at today's.
+  const history = [64, 51, 47, 40, 33, 22, 4, 0].map((d, i) => ({
+    week: ["Sep 20", "Sep 27", "Oct 4", "Oct 11", "Oct 18", "Oct 25", "Nov 1", "Nov 8"][i],
+    rank: now + d,
+  }));
+  return { grade: g, role: role.label, peers: peers.length, standings, history, total: c.pool.length };
+}
+
+const SUB_OF: Record<string, SubKey> = {
+  design: "design",
+  "five-second": "fiveSecond",
+  story: "story",
+  writing: "writing",
+  memorable: "memorability",
+};
+
+/** The report's fixes with an estimated effect on rank (sample model). */
+export function recommendations(site: Site) {
+  const rep = report(site);
+  return rep.improvements.map((m) => {
+    const key = SUB_OF[m.criterion];
+    if (key) {
+      const better = { ...rep.grade, [key]: Math.min(5, rep.grade[key] + 1) };
+      const pool = load().pool;
+      const total = rosterCount();
+      const above = (g: AiGrade) => pool.filter((x) => aiScore(x.grade!) > aiScore(g)).length;
+      // Sample: people weigh some criteria more than the AI score does.
+      const pull: Record<SubKey, number> = { design: 1.4, fiveSecond: 1.25, story: 1.15, writing: 0.8, memorability: 0.95 };
+      const gain = Math.max(0, Math.round(((above(rep.grade) - above(better)) / pool.length) * total * pull[key]));
+      return { ...m, effect: gain > 0 ? `about ${gain} places higher if ${(rep.subs.find((x) => x.criterion === m.criterion)?.label ?? m.criterion).toLowerCase()} goes up one grade` : "holds your place against climbers" };
+    }
+    return { ...m, effect: "turns a failed check into a pass, about 15 places higher" };
+  });
 }

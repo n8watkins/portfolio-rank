@@ -1,7 +1,7 @@
-import { Rss } from "lucide-react";
+import { ArrowRight, Rss } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Newsletter } from "@/components/preview/Newsletter";
-import { SampleTag, card } from "@/components/preview/bits";
+import { SampleTag } from "@/components/preview/bits";
 import { TAG_LABEL, posts } from "@/lib/preview/blog";
 import { visitor } from "@/lib/preview/visitor";
 
@@ -16,22 +16,25 @@ export default async function BlogIndex({ searchParams }: { searchParams: Promis
   const list = sp.tag ? all.filter((p) => p.tags.includes(sp.tag!)) : all;
   const [lead, ...rest] = list;
   const chip =
-    "inline-flex h-8 items-center rounded-full border border-edge px-3 text-sm font-medium transition hover:border-mute aria-[current=true]:border-accent aria-[current=true]:bg-accent-soft aria-[current=true]:text-accent";
+    "inline-flex h-8 items-center rounded-full border border-edge bg-card px-3 text-sm font-medium transition hover:border-edge-strong aria-[current=true]:border-accent/60 aria-[current=true]:bg-accent-soft aria-[current=true]:text-accent";
 
   return (
     <AppShell visitor={v} current="blog">
       <div className="py-8 sm:py-10">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="rise flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Blog</h1>
             <p className="mt-1.5 text-sm text-mute">Reports from the data, model watch, and building PortfolioRank in public.</p>
           </div>
-          <a href="/blog/rss.xml" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-edge px-3 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink">
+          <a
+            href="/blog/rss.xml"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-edge bg-card px-3 text-sm font-semibold text-mute shadow-[var(--card-hi)] transition hover:border-edge-strong hover:text-ink"
+          >
             <Rss className="h-4 w-4" aria-hidden /> RSS
           </a>
         </div>
 
-        <nav aria-label="Tags" className="mt-5 flex flex-wrap gap-2">
+        <nav aria-label="Tags" className="rise mt-5 flex flex-wrap gap-2" style={{ "--d": "60ms" } as React.CSSProperties}>
           <a href="/blog" aria-current={!sp.tag} className={chip}>
             All
           </a>
@@ -42,38 +45,59 @@ export default async function BlogIndex({ searchParams }: { searchParams: Promis
           ))}
         </nav>
 
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-          <div className="grid grid-cols-1 content-start gap-5">
-            {lead && (
-              <a href={`/blog/${lead.slug}`} className={`${card} group block p-6 transition hover:border-mute sm:p-7`}>
-                <Meta p={lead} />
-                <h2 className="mt-3 text-2xl font-bold leading-tight tracking-tight text-balance group-hover:text-accent sm:text-3xl">{lead.title}</h2>
-                <p className="mt-2 text-[15px] text-mute text-pretty">{lead.subtitle}</p>
-                <ul className="mt-4 grid grid-cols-1 gap-1.5 border-l-2 border-accent/50 pl-4 text-sm">
-                  {lead.tldr.slice(0, 3).map((t) => (
-                    <li key={t}>{t.replace(/`/g, "")}</li>
-                  ))}
-                </ul>
-              </a>
-            )}
-            {rest.map((p) => (
-              <a key={p.slug} href={`/blog/${p.slug}`} className={`${card} group block p-5 transition hover:border-mute`}>
-                <Meta p={p} />
-                <h2 className="mt-2 text-lg font-bold leading-snug tracking-tight group-hover:text-accent">{p.title}</h2>
-                <p className="mt-1 text-sm text-mute">{p.subtitle}</p>
-              </a>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 content-start gap-5">
-            {!v.subscribed && <Newsletter />}
-            <div className={`${card} p-5 text-sm`}>
+        {lead && (
+          <a
+            href={`/blog/${lead.slug}`}
+            className="card card-hover rise group mt-6 grid grid-cols-1 gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]"
+            style={{ "--d": "120ms" } as React.CSSProperties}
+          >
+            <span className="flex flex-col">
+              <Meta p={lead} />
+              <span className="mt-3 block text-2xl font-bold leading-tight tracking-tight text-balance transition group-hover:text-accent sm:text-3xl">{lead.title}</span>
+              <span className="mt-2 block text-[15px] text-mute text-pretty">{lead.subtitle}</span>
+              <span className="mt-auto flex items-center gap-1 pt-5 text-sm font-semibold text-accent">
+                Read the post <ArrowRight className="nudge h-4 w-4" aria-hidden />
+              </span>
+            </span>
+            <span className="block rounded-xl border border-edge bg-bg/40 p-4">
+              <span className="block text-xs font-bold uppercase tracking-wider text-mute">TL;DR</span>
+              <span className="mt-2 grid grid-cols-1 gap-2 text-sm">
+                {lead.tldr.map((t) => (
+                  <span key={t} className="flex gap-2.5">
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
+                    <span>{t.replace(/`/g, "")}</span>
+                  </span>
+                ))}
+              </span>
+            </span>
+          </a>
+        )}
+
+        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
+          {rest.map((p) => (
+            <a key={p.slug} href={`/blog/${p.slug}`} className="card card-hover reveal group flex flex-col p-5">
+              <Meta p={p} />
+              <span className="mt-3 block text-lg font-bold leading-snug tracking-tight transition group-hover:text-accent">{p.title}</span>
+              <span className="mt-1 block text-sm text-mute">{p.subtitle}</span>
+              <span className="mt-auto flex justify-end pt-4 text-mute">
+                <ArrowRight className="nudge h-4 w-4" aria-hidden />
+              </span>
+            </a>
+          ))}
+          {v.subscribed ? (
+            <div className="card reveal flex flex-col p-5 text-sm">
               <p className="font-semibold">How posts are made</p>
               <p className="mt-1 text-mute">
                 Reports are AI-written from PortfolioRank data and checked by a person before they go out. Every number traces to a source.
               </p>
             </div>
-          </div>
+          ) : (
+            <Newsletter className="reveal" />
+          )}
         </div>
+        {!v.subscribed && (
+          <p className="mt-5 text-center text-xs text-mute">Reports are AI-written from PortfolioRank data and checked by a person before they go out.</p>
+        )}
       </div>
     </AppShell>
   );
@@ -82,7 +106,7 @@ export default async function BlogIndex({ searchParams }: { searchParams: Promis
 function Meta({ p }: { p: ReturnType<typeof posts>[number] }) {
   return (
     <span className="flex flex-wrap items-center gap-2 text-xs text-mute">
-      <span className="font-semibold uppercase tracking-wider text-accent">{TAG_LABEL[p.tags[0]] ?? p.tags[0]}</span>
+      <span className="font-semibold uppercase tracking-wider text-ink">{TAG_LABEL[p.tags[0]] ?? p.tags[0]}</span>
       <span aria-hidden>·</span>
       {p.date}
       <span aria-hidden>·</span>
