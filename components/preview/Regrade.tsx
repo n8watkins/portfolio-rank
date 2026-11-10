@@ -8,14 +8,19 @@ import { btnPrimary, btnSecondary } from "@/components/preview/bits";
  * Re-grade with a cooldown (mocked). Grades refresh on request, at most once
  * a week, or sooner when we detect the site changed.
  */
-export function Regrade({ gradedOn }: { gradedOn: string }) {
+export function Regrade({ gradedOn, blocked = false }: { gradedOn: string; blocked?: boolean }) {
   const [phase, setPhase] = useState<"cooldown" | "checking" | "changed" | "queued">("cooldown");
   return (
     <div id="regrade" className="rounded-xl border border-edge bg-bg/40 p-4">
       <p className="flex items-center gap-2 text-sm font-semibold">
         <Clock className="h-4 w-4 text-mute" aria-hidden /> Graded {gradedOn}
       </p>
-      {phase === "queued" ? (
+      {blocked ? (
+        <p className="mt-2 text-sm text-mute">
+          Re-grades are off where you are: AI grading is off in the UK, the EU/EEA and Switzerland, because Google&apos;s free Gemini tier isn&apos;t allowed there. Your
+          last grade stays as it is.
+        </p>
+      ) : phase === "queued" ? (
         <p role="status" className="mt-2 flex items-center gap-2 text-sm">
           <span className="attn-dot" aria-hidden /> Re-grade queued. We&apos;ll email you when it&apos;s ready.
         </p>

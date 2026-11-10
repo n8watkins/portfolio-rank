@@ -1,4 +1,4 @@
-import { Clock, Sparkles, UserRound } from "lucide-react";
+import { Ban, Clock, Sparkles, UserRound } from "lucide-react";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { NAV, type NavKey } from "@/components/shell/nav";
@@ -20,11 +20,13 @@ export function SiteHeader({
   action,
   signedIn,
   name,
+  blocked = false,
 }: {
   current: NavKey;
   action: { href: string; label: string; done: boolean };
   signedIn: boolean;
   name: string;
+  blocked?: boolean;
 }) {
   const ActionIcon = action.label === "Your report" ? Clock : action.done ? UserRound : Sparkles;
   return (
@@ -57,6 +59,14 @@ export function SiteHeader({
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
+          {blocked && !action.done ? (
+            <span
+              title="AI grading is off in the UK, the EU/EEA and Switzerland."
+              className="hidden h-9 cursor-not-allowed items-center gap-2 rounded-lg border border-dashed border-edge-strong px-3.5 text-sm font-semibold text-mute lg:flex"
+            >
+              <Ban className="h-4 w-4" aria-hidden /> Grading off here
+            </span>
+          ) : (
           <a
             href={action.href}
             aria-current={current === "grade" ? "page" : undefined}
@@ -69,6 +79,7 @@ export function SiteHeader({
             <ActionIcon className={action.done ? "h-4 w-4" : "icon-twinkle h-4 w-4"} aria-hidden />
             {action.label}
           </a>
+          )}
           <AccountMenu signedIn={signedIn} name={name} yourHref={action.href} yourLabel={action.done ? action.label : "Grade your portfolio"} />
         </div>
       </div>
