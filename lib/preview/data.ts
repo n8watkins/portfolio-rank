@@ -462,3 +462,22 @@ export function recommendations(site: Site) {
     return { ...m, effect: "turns a failed check into a pass, about 15 places higher" };
   });
 }
+
+/** Rounds for "Guess the rank": real sites spread across the merged board. */
+export function guessRounds() {
+  const board = leaderboard("merged");
+  const at = [3, 41, 118, 260, 17, 402, 74, 560, 9, 190];
+  return at
+    .map((i) => board[Math.min(i, board.length - 1)])
+    .map((r) => ({
+      name: r.name,
+      domain: r.domain,
+      shot: r.shot,
+      slug: r.slug,
+      tagline: r.tagline,
+      merged: r.rank,
+      ai: r.aiRank,
+      people: r.peopleRank,
+      tier: r.grade!.tier,
+    }));
+}

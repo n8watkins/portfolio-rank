@@ -4,7 +4,7 @@ export type NavKey = "home" | "top" | "rank" | "browse" | "blog" | "grade" | "ot
 
 export const NAV: { key: NavKey; href: string; label: string }[] = [
   { key: "top", href: "/top", label: "Leaderboard" },
-  { key: "rank", href: "/rank", label: "Face-off" },
+  { key: "rank", href: "/play", label: "Play" },
   { key: "browse", href: "/browse", label: "Browse" },
   { key: "blog", href: "/blog", label: "Blog" },
 ];

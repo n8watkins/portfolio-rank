@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Ellipsis, LayoutGrid, Newspaper, Settings, Sparkles, Swords, Trophy, User, Vote, X } from "lucide-react";
+import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Settings, Sparkles, Trophy, User, Vote, X } from "lucide-react";
 import type { NavKey } from "@/components/shell/nav";
 import { useTheme, type Theme } from "@/components/shell/ThemeToggle";
 import { MockSignIn } from "@/components/shell/MockSignIn";
 
 const TABS: { key: NavKey; href: string; label: string; Icon: typeof Trophy }[] = [
   { key: "top", href: "/top", label: "Top", Icon: Trophy },
-  { key: "rank", href: "/rank", label: "Face-off", Icon: Swords },
+  { key: "rank", href: "/play", label: "Play", Icon: Gamepad2 },
   { key: "grade", href: "", label: "Grade", Icon: Sparkles },
   { key: "browse", href: "/browse", label: "Browse", Icon: LayoutGrid },
 ];
 
-/** Phones and tablets: Top, Face-off, Grade, Browse, More. */
+/** Phones and tablets: Top, Play, Grade, Browse, More. */
 export function MobileTabBar({
   current,
   action,
