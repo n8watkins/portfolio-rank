@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { faviconOf } from "@/lib/shot-url";
 
 type Row = {
   rank: number;
@@ -41,7 +42,7 @@ export function LeaderboardRest({ entries }: { entries: Row[] }) {
             </span>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`https://www.google.com/s2/favicons?domain=${domainOf(e.url)}&sz=64`}
+              src={faviconOf(domainOf(e.url))}
               alt=""
               loading="lazy"
               className="h-7 w-7 rounded-md bg-edge"

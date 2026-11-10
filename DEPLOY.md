@@ -6,12 +6,15 @@ The app runs on a Cloudflare Worker built with OpenNext (`@opennextjs/cloudflare
 The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps it, and the workers.dev address is off.
 
 - **Deploy by hand:** `npm run deploy` (builds, then `wrangler deploy`).
-  The build prerenders the home page, so run it with `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `SHOTS_BASE_URL` in the environment, or the first render after a deploy shows no ranking until ISR refreshes it (5 minutes).
+  The build prerenders the home page, so run it with `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `SHOTS_BASE_URL=/shots` in the environment, or the first render after a deploy shows no ranking until ISR refreshes it (5 minutes).
 - **Deploy from GitHub:** `.github/workflows/deploy.yml` builds on every push to main and deploys once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
 - **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
 - **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`.
   `SHOTS_BASE_URL` and `AUTH_URL` (the site's address) are plain variables in `wrangler.jsonc`; `lib/site.ts` holds the same address for canonical URLs, share links and the sitemap.
-- **Screenshots:** the `SHOTS` binding is the `portfolio-rank` R2 bucket the pipeline uploads to, so `/shots/<shot_key>/<file>` serves the same objects as the public bucket URL, with `Cache-Control: public, max-age=86400`.
+- **Screenshots and favicons:** the Worker answers `/shots/<shot_key>/<file>` and `/favicon/<domain>` itself, before the app (`worker/assets.ts`), from the edge cache when it can.
+  Screenshots come from the `SHOTS` binding (the `portfolio-rank` R2 bucket the pipeline uploads to); pages add `?v=<capture time>`, so a recapture gets a new URL and each version is served with `Cache-Control: public, max-age=31536000, immutable`.
+  Favicons come from Google's favicon service for roster domains only, with a placeholder when a site has none, cached for a week.
+  The bucket's public r2.dev address is for the pipeline (the `SHOTS_BASE_URL` repository secret); pages never link it.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
 - **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`.
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
@@ -58,7 +61,7 @@ daily GitHub Actions — see **AUTOMATION.md**.
    AUTH_SECRET=...        # openssl rand -base64 33
    AUTH_GITHUB_ID=...     # GitHub OAuth app (callback → /api/auth/callback/github)
    AUTH_GITHUB_SECRET=...
-   SHOTS_BASE_URL=https://pub-xxxx.r2.dev   # public R2 base; the app serves shots from here
+   SHOTS_BASE_URL=/shots   # the app links captures on its own domain (next dev: app/shots)
    ```
    The pipeline + GitHub Actions also need these as **repo secrets** (and in `.env.local`
    for local runs): `GEMINI_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,

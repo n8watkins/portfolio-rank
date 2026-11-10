@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LikeButton } from "@/components/LikeButton";
 import { useUndoToast } from "@/components/UndoToast";
+import { faviconOf } from "@/lib/shot-url";
 
 export type LikeItem = { url: string; name: string; domain: string };
 
@@ -56,7 +57,7 @@ export function ProfileLikes({ items }: { items: LikeItem[] }) {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`https://www.google.com/s2/favicons?domain=${p.domain}&sz=64`}
+              src={faviconOf(p.domain)}
               alt=""
               loading="lazy"
               className="h-7 w-7 shrink-0 rounded-md bg-edge"

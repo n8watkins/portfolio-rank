@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShareButton } from "@/components/ShareButton";
 import { listDeletedToast, useUndoToast } from "@/components/UndoToast";
+import { faviconOf } from "@/lib/shot-url";
 
 export type ListItem = { url: string; name: string; domain: string };
 
@@ -224,7 +225,7 @@ export function ListView({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`https://www.google.com/s2/favicons?domain=${p.domain}&sz=64`}
+                  src={faviconOf(p.domain)}
                   alt=""
                   loading="lazy"
                   className="h-7 w-7 shrink-0 rounded-md bg-edge"

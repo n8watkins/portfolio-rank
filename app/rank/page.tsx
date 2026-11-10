@@ -9,6 +9,7 @@ import { useStoredFlag } from "@/lib/client-state";
 import Link from "next/link";
 import { AuthButton } from "@/components/AuthButton";
 import { LikeButton } from "@/components/LikeButton";
+import { frameOf } from "@/lib/shot-url";
 
 type Entry = {
   name: string;
@@ -48,9 +49,11 @@ function Shot({ url, shot }: { url: string; shot?: string | null }) {
   if (shot && !failed) {
     return (
       <picture>
-        <source media="(max-width: 639px)" srcSet={`${shot}/mobile.jpg`} />
+        <source media="(max-width: 639px)" srcSet={frameOf(shot, "mobile.jpg")} />
         <img
-          src={`${shot}/hero.jpg`}
+          src={frameOf(shot, "hero.jpg")}
+          // The pair is the page: load it first.
+          fetchPriority="high"
           alt={`Screenshot of ${domainOf(url)}`}
           className={SHOT_CLASS}
           onError={() => setFailed(true)}

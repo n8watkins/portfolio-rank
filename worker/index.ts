@@ -8,10 +8,24 @@ import * as Sentry from "@sentry/cloudflare";
 // @ts-ignore
 import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
+import { serveImage } from "./assets";
 
 // The ISR revalidation queue's Durable Object (wrangler.jsonc durable_objects).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export { DOQueueHandler } from "../.open-next/worker.js";
 
-export default Sentry.withSentry((env: CloudflareEnv) => sentryOptions(env), openNext as Parameters<typeof Sentry.withSentry>[1]);
+type Handler = {
+  fetch: (request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) => Promise<Response>;
+};
+const app = openNext as Handler;
+
+// Screenshots and favicons skip the Next.js app (./assets.ts); the rest is the app.
+const worker = {
+  ...app,
+  async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
+    return (await serveImage(request, env, ctx)) ?? app.fetch(request, env, ctx);
+  },
+};
+
+export default Sentry.withSentry((env: CloudflareEnv) => sentryOptions(env), worker as Parameters<typeof Sentry.withSentry>[1]);

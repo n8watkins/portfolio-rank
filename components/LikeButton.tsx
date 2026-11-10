@@ -18,6 +18,7 @@ const SIGN_IN_PROMPT = {
  */
 export function LikeButton({
   url,
+  hydrate = false,
   name,
   initialLiked = false,
   count,
@@ -27,6 +28,8 @@ export function LikeButton({
   onChange,
 }: {
   url: string;
+  /** Look up whether the visitor likes it (for pages cached for everyone). */
+  hydrate?: boolean;
   /** The portfolio's name, so a screen reader hears "Like Jane Doe", not a row of "Like". */
   name?: string;
   initialLiked?: boolean;
@@ -50,6 +53,19 @@ export function LikeButton({
   useEffect(() => {
     if (typeof count === "number" && !touched.current) setN(count);
   }, [count]);
+  useEffect(() => {
+    if (!hydrate) return;
+    let live = true;
+    fetch(`/api/likes?urls=${encodeURIComponent(url)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (live && !touched.current && Array.isArray(d?.liked)) setLiked(d.liked.includes(url));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [hydrate, url]);
 
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();

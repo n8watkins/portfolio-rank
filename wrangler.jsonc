@@ -20,9 +20,8 @@
   },
   "r2_buckets": [
     // The screenshots the pipeline captures (pipeline/capture.mjs uploads them;
-    // app/shots/[key]/[file] serves them). The same bucket is public at
-    // SHOTS_BASE_URL. Locally (`next dev`, `npm run preview`) the binding is an
-    // empty simulated bucket.
+    // the Worker serves them at /shots/..., worker/assets.ts). Locally
+    // (`next dev`, `npm run preview`) the binding is an empty simulated bucket.
     { "binding": "SHOTS", "bucket_name": "portfolio-rank" },
     // ISR pages (OpenNext incremental cache).
     { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "portfolio-rank-opennext-cache" }
@@ -35,8 +34,11 @@
   // The revalidation queue renders pages again by calling the worker itself.
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
   "vars": {
-    // Public base URL of the screenshot bucket; pages link captures there.
-    "SHOTS_BASE_URL": "https://pub-680e930bd59047488d688e63d7477fee.r2.dev",
+    // Where pages link captures: our own domain, where the Worker serves the
+    // bucket with long edge and browser caching (worker/assets.ts). The
+    // bucket's r2.dev address is rate-limited, uncached and for the pipeline
+    // only (its SHOTS_BASE_URL repository secret).
+    "SHOTS_BASE_URL": "/shots",
     // Auth.js builds its callback URL (/api/auth/callback/github) from this.
     "AUTH_URL": "https://portfoliorank.n8builds.dev",
     // Server errors go to Sentry (worker/sentry.ts). A DSN is public by design:
