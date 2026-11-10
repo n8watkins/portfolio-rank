@@ -95,7 +95,7 @@ The live `/top` page showed 92 votes in `votes` on 2026-11-10.
 | Grades and captures | 10k | 20k | 20k | 110k | 110k | 10 a grade |
 | `votes` (people) | under 1k | 20k | 20k | 200k | 200k | 2 a vote |
 | Analytics events stored raw (5 a visitor) | 3k | 100k | 100k | 1.0M | 1.0M | 2 an event |
-| Poll votes | 0 | 1k | 1k | 10k | 10k | 2 a vote |
+| Poll votes (the vote row and its two indexes, the total, two rate-limit counters) | 0 | 4k | 4k | 35k | 35k | 7 a vote |
 | **Total** | **0.9M (9%)** | **1.5M (15%)** | **5.8M (58%)** | **7.1M (71%)** | **50M (over)** | |
 
 Popular crosses 10 million in month 2; modest crosses it in about year 2.

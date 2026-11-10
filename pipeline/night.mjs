@@ -35,7 +35,8 @@
 //   3. AI ranking comparisons (ranking v2, only when RANKING_V2 is on), then
 //      the boards are rebuilt. Human face-off votes use no Gemini and are
 //      never scheduled.
-//   4. Content (not built yet)
+//   4. Content: for now the weekly polls (pipeline/polls.mjs), at most one
+//      request a night and two a week; the content engine's posts join later
 //   5. Re-grades: 3.1 grades on 3.5, then (RUBRIC_REGRADE) older rubrics
 //   6. Experiments (none scheduled)
 //
@@ -65,6 +66,7 @@ import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE }
 import { planBatches, planPairs, pairKey } from "../lib/ranking/matchmaking.mjs";
 import { comparisonsToday, ensureRankingSchema, inputDigest, insertComparison, loadInput, syncVotes, writeResults } from "../lib/ranking/store.mjs";
 import { recompute } from "../lib/ranking/views.mjs";
+import { ensurePollsSchema, pollsContent, schedulePolls } from "./polls.mjs";
 
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
@@ -276,7 +278,8 @@ const handlers = {
     close: rebuildBoards,
     parkable: false,
   },
-  content: { off: () => "not built yet" },
+  // The weekly polls; the content engine's posts will join this stage.
+  content: pollsContent,
   regrade: { ...queues.regrade, parkable: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   experiment: { off: () => "nothing scheduled" },
 };
@@ -377,6 +380,7 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
   await ensureNightSchema(db);
   await ensureRubricHistory(db);
   await ensureRankingSchema(db);
+  await ensurePollsSchema(db);
   const claimed = await db.execute({
     sql: "INSERT INTO night_runs (night, started_at, status, run_id) VALUES (?, ?, 'running', ?) ON CONFLICT(night) DO NOTHING RETURNING night",
     args: [timeline.night, iso(now), ctx.runId ?? null],
@@ -418,6 +422,17 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
  */
 export async function planNight(ctx, state) {
   const s = structuredClone(state);
+  // Free and first: a poll for this week (and next, when it starts before
+  // tomorrow's run), made by code when nothing was written ahead. A failure
+  // here never stops the night.
+  try {
+    const polls = await schedulePolls(ctx);
+    s.polls = polls;
+    if (polls.made.length) ctx.log(`Polls: made by code for ${polls.made.join(", ")}`);
+  } catch (e) {
+    s.polls = { error: msg(e) };
+    ctx.log(`Polls: scheduling failed: ${msg(e)}`);
+  }
   const usage = await usageToday(ctx.db, { now: new Date(ctx.now()), plan: ctx.plan });
   let room = Math.max(0, (ctx.quota[ctx.plan.model] ?? 0) - (usage.byModel[ctx.plan.model] ?? 0) - Math.max(ctx.plan.reserve, ctx.plan.demandFactor * usage.peopleLastHour));
   const perStage = {};
@@ -655,6 +670,7 @@ export async function finishNight(ctx, state) {
     stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
     parked,
     humanVotes: HUMAN_VOTES_NOTE,
+    polls: s.polls ?? null,
   };
   const est = s.estimate ? `${s.estimate.requests} request(s), about ${s.estimate.minutes} min at ${ctx.rpm}/min` : "none (the AI stages never started)";
   const md = [

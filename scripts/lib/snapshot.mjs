@@ -9,13 +9,16 @@
 //             refetched on demand.
 //   matchups  the pair each rater was last served and their draw counts:
 //             a few minutes of state, rebuilt on the next visit.
-// Everything else is in, including comparisons (the source of truth for
+//   rate_limits  poll vote rate-limit windows: an hour of state.
+// Everything else is in, including the polls (lib/polls/schema.mjs: polls,
+// their totals, the vote rows behind the one-vote rule and the generation
+// log), comparisons (the source of truth for
 // ranking v2), likes and lists (people's own data), the Gemini request log
 // and its daily roll-up, grade history, the end-of-day runs and the people
 // queue. A table added later is included automatically.
 
 export const SNAPSHOT_FORMAT = 2;
-export const SKIP_TABLES = new Set(["cache", "matchups"]);
+export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits"]);
 
 const internal = (name) => name.startsWith("sqlite_") || name.startsWith("libsql_") || name.startsWith("_litestream");
 

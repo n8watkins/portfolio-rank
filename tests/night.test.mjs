@@ -135,7 +135,8 @@ test("stages run in priority order: new sites, then changed sites, then re-grade
   const r = await drive(ctx, clock);
   assert.equal(r.status, "complete");
   const jobs = await jobsInOrder(db);
-  assert.deepEqual(jobs, ["grade-new", "grade-new", "grade-new", "grade-changed", "grade-changed", "regrade", "regrade"]);
+  // Content writes the weekly polls (one request: nothing was scheduled ahead).
+  assert.deepEqual(jobs, ["grade-new", "grade-new", "grade-new", "grade-changed", "grade-changed", "content", "regrade", "regrade"]);
   // Graded on 3.5, the changed and 3.1 grades kept in history.
   const graded = (await db.execute("SELECT url, json_extract(ai_rubric, '$.model') AS m FROM portfolios WHERE ai_rubric IS NOT NULL")).rows;
   assert.ok(graded.every((g) => g.m === PRIMARY_MODEL));
@@ -149,15 +150,16 @@ test("stages run in priority order: new sites, then changed sites, then re-grade
   const byKey = Object.fromEntries(r.summary.stages.map((s) => [s.key, s]));
   assert.equal(byKey.compare.label, "AI ranking comparisons");
   assert.match(byKey.compare.result, /off: RANKING_V2 is not "true"/);
-  assert.equal(byKey.content.result, "not built yet");
+  assert.equal(byKey.content.label, "Content");
+  assert.equal(byKey.content.requests, 1);
   assert.equal(byKey.grade_new.done, 3);
   assert.match(r.markdown, /\| AI ranking comparisons \| 0 \|/);
   assert.match(r.markdown, /Human votes \(the face-off\) use no Gemini and are never scheduled/);
   // Estimate at the start and the actual at the end.
-  assert.equal(r.summary.estimate.requests, 7);
+  assert.equal(r.summary.estimate.requests, 8);
   assert.equal(r.summary.estimate.minutes, 1);
-  assert.equal(r.summary.actual.requests, 7);
-  assert.match(r.markdown, /Estimated: 7 request\(s\), about 1 min at 8\/min\. Actual: 7 request\(s\)/);
+  assert.equal(r.summary.actual.requests, 8);
+  assert.match(r.markdown, /Estimated: 8 request\(s\), about 1 min at 8\/min\. Actual: 8 request\(s\)/);
 });
 
 test("requests are paced evenly across batches", async () => {
@@ -165,7 +167,7 @@ test("requests are paced evenly across batches", async () => {
   const { ctx, clock } = context(db, { gemini: mockGemini([ok()]), budget: { batch: 2 }, rpm: 6 });
   await drive(ctx, clock);
   const times = await requestTimes(db);
-  assert.equal(times.length, 5);
+  assert.equal(times.length, 6); // 5 grades and the weekly polls
   for (let k = 1; k < times.length; k++) assert.ok(times[k] - times[k - 1] >= 10000, `request ${k} waits the 10 s gap`);
 });
 
@@ -173,7 +175,7 @@ test("caps: a stage stops at its request cap and the next one starts", async () 
   const { db } = await setup({ fresh: 5, old31: 2 });
   const { ctx, clock } = context(db, { gemini: mockGemini([ok()]), budget: { stages: { grade_new: { cap: 2 } } } });
   const r = await drive(ctx, clock);
-  assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "regrade", "regrade"]);
+  assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "content", "regrade", "regrade"]);
   assert.match(r.summary.stages.find((s) => s.key === "grade_new").result, /cap reached \(2 requests today\)/);
 });
 
@@ -347,7 +349,7 @@ test("AI ranking comparisons (RANKING_V2 on): within the budget, stored once, th
   const gemini = mockGemini((n) => (n % 2 ? ok({ winner: "B", reason: "b" }) : ok({ winner: "A", reason: "a" })));
   const { ctx, clock } = context(db, { gemini, rankingV2: true, rankingBudget: { one_on_one: 3, batched: 0 } });
   const r = await drive(ctx, clock);
-  assert.deepEqual(await jobsInOrder(db), ["compare", "compare", "compare"]);
+  assert.deepEqual(await jobsInOrder(db), ["compare", "compare", "compare", "content"]);
   const rows = (await db.execute("SELECT source, model, method FROM comparisons WHERE rater_type = 'ai' ORDER BY id")).rows;
   assert.equal(rows.length, 3);
   assert.deepEqual(rows.map((x) => String(x.source)), ["ai-night:2026-11-10:0:0:0", "ai-night:2026-11-10:0:0:1", "ai-night:2026-11-10:0:0:2"]);
