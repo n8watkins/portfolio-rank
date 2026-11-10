@@ -10,10 +10,16 @@ import { AddToListButton } from "@/components/AddToListButton";
 import { BASE_ELO } from "@/lib/elo";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
-import { auth } from "@/auth";
 import { SITE_URL } from "@/lib/site";
 
-export const dynamic = "force-dynamic";
+// Rendered on first visit and then served from the cache, re-rendered at most
+// every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
+// is the visitor's own and loads in the browser (LikeButton hydrate).
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  return [];
+}
 
 const AXIS_LABELS: Record<string, string> = {
   visual_design: "Visual design",
@@ -139,17 +145,6 @@ export default async function PortfolioPage({
       })
     ).rows[0]?.n ?? 0
   );
-  // Read-only identity: only signed-in raters can like, and resolving via
-  // auth() (vs getRater) avoids mutating the anon cookie during render.
-  const session = await auth();
-  const liked =
-    !!session?.raterId &&
-    (
-      await db().execute({
-        sql: "SELECT 1 FROM likes WHERE rater_id = ? AND url = ?",
-        args: [session.raterId, url],
-      })
-    ).rows.length > 0;
 
   const rubricRow = (
     await db().execute({
@@ -204,7 +199,7 @@ export default async function PortfolioPage({
               <LikeButton
                 url={url}
                 name={portfolio.name}
-                initialLiked={liked}
+                hydrate
                 count={saveCount}
                 showCount
               />
@@ -224,6 +219,7 @@ export default async function PortfolioPage({
           <img
             src={shot}
             alt={`Screenshot of ${domainOf(url)}`}
+            fetchPriority="high"
             className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
           />
         </div>

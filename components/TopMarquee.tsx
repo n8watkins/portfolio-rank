@@ -68,7 +68,11 @@ export async function TopMarquee() {
                   <img
                     src={it.shot}
                     alt={`${it.name} - ranked #${it.rank}`}
-                    loading="lazy"
+                    // The first few cards are on screen at load (the first is
+                    // often the largest paint); the rest scroll in later.
+                    loading={i < 4 ? "eager" : "lazy"}
+                    fetchPriority={i === 0 ? "high" : "auto"}
+                    decoding="async"
                     className="aspect-[16/10] w-full bg-edge object-cover object-top"
                   />
                   <span className="absolute left-2 top-2 rounded-md bg-bg/80 px-1.5 py-0.5 text-xs font-bold text-accent backdrop-blur">

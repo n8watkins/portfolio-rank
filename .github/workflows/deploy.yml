@@ -28,7 +28,8 @@ jobs:
       # the build reads the database and links screenshots like the live site.
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }}
+      # Pages link captures on our own domain (wrangler.jsonc vars).
+      SHOTS_BASE_URL: /shots
       # Browser errors go to Sentry (lib/error-reporting.ts). Only this build
       # sets the DSN, so local, CI and test builds send nothing.
       NEXT_PUBLIC_SENTRY_DSN: https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136

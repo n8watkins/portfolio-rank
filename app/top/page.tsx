@@ -5,8 +5,11 @@ import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { LeaderboardRest } from "@/components/LeaderboardRest";
 import { hiddenUrls } from "@/lib/roster";
+import { faviconOf } from "@/lib/shot-url";
 
-export const dynamic = "force-dynamic";
+// Rendered at most once a minute (ISR) instead of on every visit: the
+// leaderboard moves slowly and every render costs several database queries.
+export const revalidate = 60;
 
 export const metadata = {
   title: "Leaderboard - PortfolioRank",
@@ -134,6 +137,7 @@ export default async function TopPage() {
                 <img
                   src={champShot!}
                   alt={`${champ.name} - #1`}
+                  fetchPriority="high"
                   className="aspect-[16/9] w-full bg-edge object-cover object-top"
                 />
                 <span className="absolute left-3 top-3 rounded-full bg-accent px-3 py-1 text-sm font-bold text-bg shadow">
@@ -171,7 +175,7 @@ export default async function TopPage() {
                       </span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`https://www.google.com/s2/favicons?domain=${domainOf(e.url)}&sz=64`}
+                        src={faviconOf(domainOf(e.url))}
                         alt=""
                         className="h-8 w-8 rounded-md bg-edge"
                       />
