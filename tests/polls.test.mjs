@@ -312,3 +312,22 @@ test("the weekly cap: at most 2 requests in any 7 days, one try a night, failure
   const row = (await db2.execute("SELECT status, requests FROM poll_generations")).rows[0];
   assert.deepEqual([String(row.status), Number(row.requests)], ["failed", 1]);
 });
+
+test("the nightly backup holds the polls, and a restore keeps the totals without counting votes twice", async () => {
+  const { takeSnapshot, restoreSnapshot } = await import("../scripts/lib/snapshot.mjs");
+  const db = await freshDb();
+  const week = await seedPoll(db);
+  await castVote(db, { pollId: week.id, option: 1, voter: "anon:a", browser: "anon:a", now: new Date(T0) });
+  await rateLimit(db, "poll-vote:b:anon:a", { limit: 20, windowMs: 3600000, now: T0 });
+  const snap = await takeSnapshot(db);
+  for (const t of ["polls", "poll_options", "poll_votes", "poll_generations"]) assert.ok(t in snap.tables, `${t} is backed up`);
+  assert.ok(!("rate_limits" in snap.tables), "rate limit windows are not");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "polls-restore-"));
+  const restored = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
+  await restoreSnapshot(restored, JSON.parse(JSON.stringify(snap)), { migrate });
+  const poll = await readPoll(restored, week.id, { now: new Date(T0) });
+  assert.deepEqual(poll.options.map((o) => o.votes), [0, 1]);
+  // The trigger came back too: a new vote counts once.
+  await castVote(restored, { pollId: week.id, option: 0, voter: "anon:b", browser: "anon:b", now: new Date(T0) });
+  assert.deepEqual((await readPoll(restored, week.id, { now: new Date(T0) })).options.map((o) => o.votes), [1, 1]);
+});
