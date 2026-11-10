@@ -12,11 +12,11 @@ name: Daily AI vote (pairwise-metrics)
 # judge.mjs exits 1 (and this job files an issue) when there was work and no
 # vote was cast, or when most pairs had to be skipped for missing screenshots.
 #
-# Budget: shares the free-tier Gemini quota (~500/day) with sync-upstream's
-# rubric grading, which on steady-state days only touches NEW sites - so a 30-vote
-# cap leaves ample headroom. Cron is set CLEAR of sync's 06:00-11:30 window and
-# the job uses its OWN concurrency group, so a long sync run can't queue this into
-# a timeout.
+# Budget: shares the free-tier Gemini quota with sync-upstream's rubric grading
+# (which keeps GEMINI_RESERVE requests a day free for this job). Cron is set
+# clear of sync's 06:00-11:30 window; both jobs share the "gemini"
+# concurrency group, so they never overlap (a queued run waits, it doesn't
+# time out: timeout-minutes counts from when the job starts).
 on:
   workflow_dispatch:
     inputs:
@@ -31,8 +31,10 @@ on:
   schedule:
     - cron: "0 13 * * *" # 13:00 UTC - clear of sync-upstream's 06:00-11:30 window
 
+# Shares the "gemini" group with sync-upstream (which grades), so voting and
+# grading never run at the same time and never split the pace or the quota.
 concurrency:
-  group: ai-vote # own group: write-light, must NOT queue behind the ingest lock
+  group: gemini
   cancel-in-progress: false
 
 permissions:
@@ -71,11 +73,14 @@ jobs:
           fi
 
       - name: Cast daily AI pairwise votes
+        env:
+          GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
+          GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
+          GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
         run: >-
           node pipeline/judge.mjs pairwise
           --votes "${{ github.event.inputs.votes || '30' }}"
           --tiers "${{ github.event.inputs.tiers || 'S,A,B' }}"
-          --rpm 8
 
       - name: Notify on failure
         if: failure()

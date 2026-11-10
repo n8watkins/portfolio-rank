@@ -63,7 +63,7 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
   Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
 
-## GitHub Actions (7 scheduled)
+## GitHub Actions (8 scheduled)
 
 All run on GitHub-hosted runners. The repo is **public → unlimited free Actions
 minutes**; the only real budget is the Gemini free tier. Every scheduled job
@@ -74,15 +74,16 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
 | **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
 | **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite chain only) | TURSO, GEMINI, SHOTS_BASE_URL |
+| **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → private R2 bucket `portfolio-rank-backups` (~0.3 MB/run) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
 | **`health.yml`** | Sundays 16:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
 Schedules are staggered: backup (05:00) → sync+grade (06:00) → vote (13:00, clear
-of the sync window). `sync-upstream` holds the `ingest` concurrency lock for DB
-writes; `judge-vote` uses its own `ai-vote` group (write-light) so it never
-queues behind a long sync.
+of the sync window). `sync-upstream` and `judge-vote` share the `gemini`
+concurrency group, so grading and voting never overlap; a run that has to wait
+queues (its timeout only counts once it starts).
 
 ## Budget model
 
@@ -100,11 +101,23 @@ queues behind a long sync.
 
 - **Key:** sent in the `x-goog-api-key` header, never as `?key=` in the URL.
   Newer AI Studio keys ("AQ." style) are rejected in the URL, and a URL key leaks into logs.
-- **Models:** `gemini-3.5-flash-lite` first, `gemini-3.1-flash-lite` as the backup (owner's choice, 2026-11-10).
-  A call moves to the backup only when 3.5 is rate limited (429), overloaded (5xx) or unreachable.
+- **Models:** `gemini-3.5-flash-lite` for everything until its quota is used up; `gemini-3.1-flash-lite` only then (owner's decision, 2026-11-10).
+  An overloaded (5xx), timed-out or unreachable 3.5 is retried, same model, after 10, 30 and 60 seconds (jittered); if the last retry still fails, that one call goes to 3.1 and the next call is back on 3.5.
+  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) moves the rest of the run to 3.1.
+  Any other 429 (per-minute) means slow down: wait Google's `RetryInfo` delay (or 60 seconds) and retry 3.5, up to 5 times.
+  When no model can answer (both daily quotas spent, or still failing after the retries), the run stops cleanly; with nothing judged it exits 1, and the next run picks up the rest.
   A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request never falls back.
-  When both models are unavailable, the chain is retried after 15, 30 and 45 seconds.
   `--model M` uses only `M`, with no fallback.
+- **Pacing:** one limiter per run spaces every request evenly, retries included: `--rpm`, else the `GEMINI_RPM` repository variable, else 8 per minute.
+  `sync-upstream` (grading) and `judge-vote` (voting) share the `gemini` concurrency group, so they never run at the same time.
+- **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input and output tokens from `usageMetadata`, retry and fallback flags).
+  Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus today's (UTC) requests per model against the daily free quota, with a warning from 80%.
+  The quotas default to 1,500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
+  Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`); the built-in rates are placeholders until that variable is set.
+- **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room today's 3.5 quota has left, keeping `GEMINI_RESERVE` (default 100) requests for the daily vote.
+  Re-grading stops as soon as an answer comes from a model other than 3.5.
+  The old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten, so each re-grade is a free 3.1-vs-3.5 pair; `--force` keeps history the same way, and `--no-regrade` turns the queue off.
+- **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs, exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).
 - **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows (or pairs) were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
   Skipped rows are counted on their own, never as attempted.
   The counts (queued, judged, abstained, errors, skipped) go to the run's job summary.
