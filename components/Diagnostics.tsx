@@ -198,7 +198,7 @@ function ShareImage({ src }: { src: string }) {
   const [broken, setBroken] = useState(false);
   if (broken) {
     return (
-      <div className="flex aspect-[1.91/1] w-full items-center justify-center bg-edge px-4 text-center text-xs text-mute">
+      <div className="flex aspect-[1.91/1] w-full items-center justify-center bg-edge px-4 text-center text-xs text-ink">
         The share image exists, but its host doesn&apos;t let it show here.
       </div>
     );
