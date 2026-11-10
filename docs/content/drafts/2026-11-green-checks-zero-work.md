@@ -114,7 +114,7 @@ The job just can't be allowed to say it's fine when it isn't.
 - **Purpose:** The evidence. Make the three-month flat line impossible to miss.
 - **Kind:** Data chart made by code.
 - **Spec:** Line or bar chart, x = date (from a few weeks before Jul 28 through Nov 10, 2026), y = AI grades written per day, pulled from grade timestamps in the database. Shade Jul 28 to Nov 10 in muted red and label it "Key dead, every run green". Mark Nov 10 with the 35-grade test batch and a "Fix shipped" annotation. Optional second line: scheduled runs per day, all green, to show runs kept happening while grades were zero. One accent color, gray gridlines, readable at phone width. [check: needs real daily counts from the database; pre-Jul 28 volume is not in the brief, do not estimate it]
-- **Alt text:** Chart of AI grades per day: activity until late July, then a flat line at zero from July 28 to November 10 while scheduled runs kept passing, then a jump to 35 grades on November 10 after the fix.
+- **Alt text:** Chart of AI grades per day: zero every day from July 28 to November 10 while scheduled runs kept passing, then 35 grades on November 10 after the fix. Earlier weeks are not shown.
 
 #### IMAGE 3: `?key=` vs header code snippet
 

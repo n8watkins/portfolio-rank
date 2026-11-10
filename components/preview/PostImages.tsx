@@ -27,7 +27,7 @@ export function GradesTimeline() {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-labelledby="gt-t gt-d">
       <title id="gt-t">AI grades written per day</title>
-      <desc id="gt-d">Zero grades every day from July 28 to November 10 while scheduled runs kept passing, then 35 grades on November 10 after the fix. Volume before July 28 is not yet pulled.</desc>
+      <desc id="gt-d">Zero AI grades every day from July 28 to November 10 while scheduled runs kept passing, then 35 grades on November 10 after the fix. Earlier weeks are not shown.</desc>
       <defs>
         <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="8" className="stroke-edge-strong" strokeWidth="2" />
