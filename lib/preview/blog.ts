@@ -128,7 +128,8 @@ const SAMPLES: Post[] = [
 let cache: Post[] | null = null;
 
 export function posts(): Post[] {
-  if (!cache) {
+  // Re-read in dev so edits to the draft show without a restart.
+  if (!cache || process.env.NODE_ENV === "development") {
     const draft = parseDraft(
       path.join(process.cwd(), "docs/content/drafts/2026-11-green-checks-zero-work.md"),
       "green-checks-zero-work",
