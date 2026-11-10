@@ -32,6 +32,7 @@ export function pipelineDb(root) {
       })
     : createClient({
         url: `file:${process.env.LOCAL_DB_FILE ?? path.join(root, "data", "portfoliorank.db")}`,
+        timeout: 5000, // wait for another connection's lock instead of SQLITE_BUSY
       });
 }
 

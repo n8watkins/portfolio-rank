@@ -16,6 +16,11 @@ export function db(): Client {
       : createClient({
           // LOCAL_DB_FILE lets the end-to-end tests use a throwaway file.
           url: `file:${process.env.LOCAL_DB_FILE ?? path.join(process.cwd(), "data", "portfoliorank.db")}`,
+          // A local file is shared by several connections (the client's pool,
+          // and the test process in the end-to-end tests). Without a busy
+          // timeout a write that meets another connection's lock fails at
+          // once with SQLITE_BUSY and the request answers 500.
+          timeout: 5000,
         });
   }
   return client;

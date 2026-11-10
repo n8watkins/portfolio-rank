@@ -11,20 +11,9 @@ import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
-const client = createClient({ url: DB_URL });
-// The server writes to the same SQLite file; retry while it holds the lock.
-const db = {
-  async execute(stmt) {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await client.execute(stmt);
-      } catch (e) {
-        if (!String(e?.message).includes("SQLITE_BUSY") || attempt > 50) throw e;
-        await sleep(50);
-      }
-    }
-  },
-};
+// The server writes to the same SQLite file: wait for its locks (the server
+// waits for ours the same way, lib/db.ts) instead of failing with SQLITE_BUSY.
+const db = createClient({ url: DB_URL, timeout: 10000 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let browser;
 let seq = Math.floor(Math.random() * 1e6);
