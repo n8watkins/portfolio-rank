@@ -5,9 +5,12 @@ name: Daily AI vote (pairwise-metrics)
 # portfolios using
 # the R2 hero image + cached objective metrics (PSI/Lighthouse + inspect polish)
 # and casts ELO-moving votes, concentrating on graded S/A/B sites so the
-# leaderboard (min 3 votes to qualify) fills. Heroes come from the public R2
-# bucket (no local captures on the runner). Write-light: one votes row + one ELO
-# upsert per vote, in a short transaction.
+# leaderboard (/top lists sites with 1+ vote) fills. Only sites on the current
+# list, not confirmed down and not graded "not a portfolio" are paired.
+# Heroes come from the public R2 bucket (no local captures on the runner).
+# Write-light: one votes row + one ELO upsert per vote, in a short transaction.
+# judge.mjs exits 1 (and this job files an issue) when there was work and no
+# vote was cast, or when most pairs had to be skipped for missing screenshots.
 #
 # Budget: shares the free-tier Gemini quota (~500/day) with sync-upstream's
 # rubric grading, which on steady-state days only touches NEW sites - so a 30-vote
