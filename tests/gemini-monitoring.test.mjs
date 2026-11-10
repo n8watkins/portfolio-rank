@@ -49,8 +49,8 @@ test("requests are written to gemini_requests and summarized per model with an e
   assert.equal(rows.length, 3);
   assert.deepEqual([rows[1].job, rows[1].run_id, rows[1].retry, rows[1].input_tokens, rows[1].thoughts_tokens], ["rubric", "42", 1, 1000000, 50000]);
   const md = runSummary(log.rows, { [PRIMARY_MODEL]: { in: 0.1, out: 0.4 } });
-  assert.match(md, new RegExp(`\\| ${PRIMARY_MODEL} \\| 2 \\| 1 \\| 1 \\| 0 \\| 0 \\| 1 \\| 0 \\| 1000000 \\| 100000 \\| 50000 \\| \\$0\\.1600 \\|`));
-  assert.match(md, new RegExp(`\\| ${BACKUP_MODEL} \\| 1 \\| 0 \\| 0 \\| 1 \\| 0 \\| 0 \\| 1 \\|`));
+  assert.match(md, new RegExp(`\\| ${PRIMARY_MODEL} \\| 2 \\| 1 \\| 0 \\| 1 \\| 0 \\| 0 \\| 1 \\| 0 \\| 1000000 \\| 100000 \\| 50000 \\| \\$0\\.1600 \\|`));
+  assert.match(md, new RegExp(`\\| ${BACKUP_MODEL} \\| 1 \\| 0 \\| 0 \\| 0 \\| 1 \\| 0 \\| 0 \\| 1 \\|`));
 });
 
 test("a failing request log never breaks the run", async () => {

@@ -83,7 +83,8 @@ test("the request: rules in the system instruction, one image, site data delimit
   assert.match(SYSTEM_INSTRUCTION, /untrusted data/);
   assert.match(SYSTEM_INSTRUCTION, /at most 12 words/);
   assert.equal(options.thinkingLevel, THINKING_LEVEL);
-  assert.ok(options.maxOutputTokens <= 1000);
+  // Room for the answer and thinking (maxOutputTokens counts both), yet bounded.
+  assert.ok(options.maxOutputTokens >= 2048 && options.maxOutputTokens <= 4096);
 });
 
 test("page text is normalized and capped on a word boundary", () => {

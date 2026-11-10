@@ -31,8 +31,12 @@ export const CHARS_PER_TOKEN = 4;
 // The lowest thinking level Flash-Lite allows ("minimal"; 3.x models cannot
 // turn thinking off). Thinking tokens are billed as output.
 export const THINKING_LEVEL = "minimal";
-// A hard cap on the answer: a v2 answer is about 150 tokens.
-export const MAX_OUTPUT_TOKENS = 600;
+// The cap on the answer counts thinking tokens too, and "minimal" does not
+// guarantee no thinking (docs/MODEL-LIMITS.md), so it is sized for a v2
+// answer (about 150 tokens) plus thinking with plenty of room: a cut-off
+// answer is a failed grade (finishReason MAX_TOKENS, pipeline/gemini.mjs),
+// and only tokens actually produced are billed, so a roomy cap costs nothing.
+export const MAX_OUTPUT_TOKENS = 2048;
 export const TEMPERATURE = 0.2;
 
 /**

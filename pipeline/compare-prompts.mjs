@@ -11,7 +11,10 @@
 /** Characters of page text sent per site (one-on-one; batched sends half, it shows more sites). */
 export const PAGE_TEXT_ONE_ON_ONE = 1200;
 export const PAGE_TEXT_BATCHED = 600;
-export const MAX_OUTPUT_TOKENS = 400;
+// Counts thinking tokens too (docs/MODEL-LIMITS.md): an order of up to 26
+// sites with a short reason is under 300 tokens, the rest is room for
+// thinking, since a cut-off answer is never stored (pipeline/gemini.mjs).
+export const MAX_OUTPUT_TOKENS = 1024;
 export const THINKING_LEVEL = "minimal";
 
 export const SYSTEM_INSTRUCTION = [

@@ -280,7 +280,7 @@ export async function usageHistory(db, { now = new Date(), days = 30, quota = {}
   for (let i = 1; i < days; i++) first = quotaDay(new Date(first.start.getTime() - 3600000));
   const res = await db.execute({
     sql: `SELECT substr(at, 1, 13) AS hour, job, model, COUNT(*) AS n,
-                 SUM(CASE WHEN status = 200 THEN 1 ELSE 0 END) AS ok
+                 SUM(CASE WHEN status = 200 AND COALESCE(finish_reason, 'STOP') = 'STOP' THEN 1 ELSE 0 END) AS ok
           FROM gemini_requests WHERE at >= ? AND at < ?
           GROUP BY hour, job, model`,
     args: [first.start.toISOString(), today.end.toISOString()],
