@@ -43,13 +43,13 @@ test("requests are written to gemini_requests and summarized per model with an e
   const log = createRequestLog({ db, job: "rubric", runId: "42" });
   const at = "2026-11-10T13:00:00.000Z";
   await log.record({ at, model: PRIMARY_MODEL, status: 503, reason: "HTTP 503", latencyMs: 900 });
-  await log.record({ at, model: PRIMARY_MODEL, status: 200, reason: "ok", retry: true, latencyMs: 1200, inputTokens: 1_000_000, outputTokens: 100_000 });
+  await log.record({ at, model: PRIMARY_MODEL, status: 200, reason: "ok", retry: true, latencyMs: 1200, inputTokens: 1_000_000, outputTokens: 100_000, thoughtsTokens: 50_000 });
   await log.record({ at, model: BACKUP_MODEL, status: 429, reason: "HTTP 429 daily quota", fallback: true });
-  const rows = (await db.execute("SELECT job, run_id, model, status, retry, fallback, input_tokens FROM gemini_requests ORDER BY id")).rows;
+  const rows = (await db.execute("SELECT job, run_id, model, status, retry, fallback, input_tokens, thoughts_tokens FROM gemini_requests ORDER BY id")).rows;
   assert.equal(rows.length, 3);
-  assert.deepEqual([rows[1].job, rows[1].run_id, rows[1].retry, rows[1].input_tokens], ["rubric", "42", 1, 1000000]);
+  assert.deepEqual([rows[1].job, rows[1].run_id, rows[1].retry, rows[1].input_tokens, rows[1].thoughts_tokens], ["rubric", "42", 1, 1000000, 50000]);
   const md = runSummary(log.rows, { [PRIMARY_MODEL]: { in: 0.1, out: 0.4 } });
-  assert.match(md, new RegExp(`\\| ${PRIMARY_MODEL} \\| 2 \\| 1 \\| 1 \\| 0 \\| 0 \\| 1 \\| 0 \\| 1000000 \\| 100000 \\| \\$0\\.1400 \\|`));
+  assert.match(md, new RegExp(`\\| ${PRIMARY_MODEL} \\| 2 \\| 1 \\| 1 \\| 0 \\| 0 \\| 1 \\| 0 \\| 1000000 \\| 100000 \\| 50000 \\| \\$0\\.1600 \\|`));
   assert.match(md, new RegExp(`\\| ${BACKUP_MODEL} \\| 1 \\| 0 \\| 0 \\| 1 \\| 0 \\| 0 \\| 1 \\|`));
 });
 
@@ -154,7 +154,7 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, catchUp = 
     });
   }
   const summary = path.join(dir, "summary.md");
-  const child = spawn(process.execPath, ["--import", "./tests/helpers/mock-fetch.mjs", "pipeline/judge.mjs", "rubric", "--rpm", "60000"], {
+  const child = spawn(process.execPath, ["--import", "./tests/helpers/mock-fetch.mjs", "pipeline/judge.mjs", "rubric", "--rpm", "60000", "--no-browser"], {
     env: {
       ...process.env,
       TURSO_DATABASE_URL: `file:${file}`,

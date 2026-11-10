@@ -3,7 +3,10 @@
 // answers from MOCK_GEMINI (a JSON array of steps, consumed in order; the last
 // one repeats), screenshots from MOCK_SHOTS ("ok", "missing" or "error").
 // Every Gemini request is appended to MOCK_LOG (one JSON line each) so the
-// test can see what was sent.
+// test can see what was sent: the model, the key header, the number of
+// images, the system instruction, the thinking level and the last text part.
+// Any other URL is the portfolio itself: MOCK_PAGE (HTML) when set, else an
+// error, so no test reaches a real site.
 import fs from "node:fs";
 
 const steps = JSON.parse(process.env.MOCK_GEMINI ?? '[{"status":200,"json":{}}]');
@@ -17,9 +20,23 @@ globalThis.fetch = async (input, init = {}) => {
     const step = steps[Math.min(i++, steps.length - 1)];
     if (process.env.MOCK_LOG) {
       const model = url.match(/models\/([^:]+):/)?.[1];
+      let req = {};
+      try {
+        req = JSON.parse(String(init.body ?? "{}"));
+      } catch {
+        /* not JSON */
+      }
+      const parts = req.contents?.[0]?.parts ?? [];
       fs.appendFileSync(
         process.env.MOCK_LOG,
-        `${JSON.stringify({ model, hasKeyHeader: Boolean(init.headers?.["x-goog-api-key"]) })}\n`
+        `${JSON.stringify({
+          model,
+          hasKeyHeader: Boolean(init.headers?.["x-goog-api-key"]),
+          images: parts.filter((p) => p.inline_data || p.inlineData).length,
+          system: req.systemInstruction?.parts?.[0]?.text ?? null,
+          thinking: req.generationConfig?.thinkingConfig?.thinkingLevel ?? null,
+          text: parts.filter((p) => typeof p.text === "string").at(-1)?.text ?? null,
+        })}\n`
       );
     }
     if (step.throw) throw new Error(step.throw);
@@ -35,6 +52,12 @@ globalThis.fetch = async (input, init = {}) => {
     if (shots === "missing") return new Response("", { status: 404 });
     if (shots === "error") return new Response("", { status: 503 });
     return new Response(JPEG, { status: 200, headers: { "content-type": "image/jpeg" } });
+  }
+  if (process.env.MOCK_PAGE) {
+    return new Response(init.method === "HEAD" ? null : process.env.MOCK_PAGE, {
+      status: 200,
+      headers: { "content-type": "text/html" },
+    });
   }
   throw new Error(`mock-fetch: unexpected request to ${url}`);
 };

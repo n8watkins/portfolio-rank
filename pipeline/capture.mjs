@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // Phase 0 capture pipeline: gate every portfolio (dead/parked/blank), then
-// Playwright-capture the live ones — desktop hero, mobile, full-page, 3-frame
-// motion strip — plus diagnostics (console errors, page weight, broken assets,
-// 390px overflow, dark-mode support, DOM-shape hash). Artifacts land in
-// captures/<key>/ and upload to R2 when R2_* env vars exist; results upsert
-// into the `portfolios` table (Turso when TURSO_* set, else local file).
+// Playwright-capture the live ones - desktop hero, mobile, full-page - plus
+// diagnostics (console errors, page weight, broken assets, 390px overflow,
+// dark-mode support, motion from a frame difference, DOM-shape hash), the
+// page's visible text (capped) and the facts code can check
+// (pipeline/facts.mjs: resume, GitHub, contact, project links that load, own
+// domain, footer year, pages, template), which the AI grade reads
+// (pipeline/rubric.mjs). Images land in captures/<key>/ and upload to R2
+// when R2_* env vars exist; results upsert into the `portfolios` table
+// (Turso when TURSO_* set, else local file).
 //
 // Usage:
 //   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force]
@@ -18,6 +22,8 @@ import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
+import { measurePage } from "./facts.mjs";
+import { normalizePageText } from "./rubric.mjs";
 import {
   captureRetryAt,
   dueForCapture,
@@ -104,8 +110,7 @@ if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
   });
 }
 
-// Only the frames the app actually serves go to R2; the 3 motion-strip PNGs
-// (~77% of capture bytes) are AI-judge input only and stay local.
+// Only the frames the app serves go to R2 (the AI grade uses hero.jpg too).
 const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg", "full.jpg"]);
 
 async function uploadDir(key, dir) {
@@ -223,16 +228,12 @@ async function captureSite(browser, entry) {
     }
     const heroSettled = quiet >= 2;
 
-    // 3-frame motion strip (PNG for diffing), hero from the settled frame.
+    // Motion: two frames 3 seconds apart, diffed in memory. The AI grade gets
+    // the result as a fact, not the frames. Hero from the settled frame.
     const f0 = await page.screenshot({ type: "png" });
-    await page.waitForTimeout(1500);
-    const f1 = await page.screenshot({ type: "png" });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(3000);
     const f2 = await page.screenshot({ type: "png" });
     const motion = lively >= 2 || pngDiff(f0, f2) > 0.02;
-    fs.writeFileSync(path.join(dir, "strip0.png"), f0);
-    fs.writeFileSync(path.join(dir, "strip1.png"), f1);
-    fs.writeFileSync(path.join(dir, "strip2.png"), f2);
     fs.writeFileSync(
       path.join(dir, "hero.jpg"),
       await page.screenshot({ type: "jpeg", quality: 75 })
@@ -269,6 +270,15 @@ async function captureSite(browser, entry) {
     const domHash = createHash("sha1").update(domSig.tags).digest("hex");
     const classHash = createHash("sha1").update(domSig.classes).digest("hex");
 
+    // Page text and facts from the settled, rendered page (single-page apps
+    // included), plus a capped check of its project and demo links.
+    const settled = await page.evaluate(readRenderedPage).catch(() => rendered);
+    const pageText = normalizePageText(settled.text);
+    const facts = await measurePage(
+      { html: settled.html, text: settled.text, url, finalUrl: page.url(), name, motion, source: "rendered" },
+      { userAgent: UA }
+    ).catch(() => null);
+
     // Mobile: 390px hero + horizontal-overflow check.
     const mpage = await ctx.newPage();
     await mpage.setViewportSize({ width: 390, height: 844 });
@@ -302,13 +312,17 @@ async function captureSite(browser, entry) {
 
     await db.execute({
       sql: `INSERT INTO portfolios
-              (url, name, status, reason, shot_key, meta, checked_at, captured_at)
-            VALUES (?, ?, 'live', '', ?, ?, datetime('now'), datetime('now'))
+              (url, name, status, reason, shot_key, meta, checked_at, captured_at,
+               page_text, facts, facts_at)
+            VALUES (?, ?, 'live', '', ?, ?, datetime('now'), datetime('now'), ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET status='live', reason='',
               shot_key=excluded.shot_key, meta=excluded.meta,
               checked_at=excluded.checked_at, captured_at=excluded.captured_at,
-              capture_attempts=0, retry_at=NULL`,
-      args: [url, name, key, JSON.stringify(meta)],
+              capture_attempts=0, retry_at=NULL,
+              page_text=excluded.page_text,
+              facts=COALESCE(excluded.facts, portfolios.facts),
+              facts_at=COALESCE(excluded.facts_at, portfolios.facts_at)`,
+      args: [url, name, key, JSON.stringify(meta), pageText, facts ? JSON.stringify(facts) : null, facts?.measured_at ?? null],
     });
     return `live → ${key} (motion=${meta.motion} dark=${meta.darkMode} overflow=${meta.overflow390})`;
   } catch (e) {

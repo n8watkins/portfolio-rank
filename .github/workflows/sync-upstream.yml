@@ -146,7 +146,8 @@ jobs:
       - name: Capture new portfolios
         run: node pipeline/capture.mjs --concurrency 4
       # Grades needs_review and newest-captured sites first, then the backlog,
-      # then re-grades older grades with 3.5, inside the per-model daily
+      # then re-grades 3.1 grades with 3.5, then (RUBRIC_REGRADE) grades from
+      # an older rubric version, inside the per-model daily
       # grading budget (GEMINI_GRADING_BUDGET; 3.5 keeps room for the vote
       # job). Catch-up mode (GEMINI_CATCHUP, on unless "false") moves to 3.1's
       # budget once 3.5's is used, so both quotas work through the backlog.
@@ -157,6 +158,9 @@ jobs:
           GEMINI_GRADING_BUDGET: ${{ vars.GEMINI_GRADING_BUDGET }}
           GEMINI_CATCHUP: ${{ vars.GEMINI_CATCHUP || 'true' }}
           GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
+          # Re-grade 3.5 grades from an older rubric version, lowest priority
+          # (pipeline/rubric.mjs). Off until the owner sets it to "true".
+          RUBRIC_REGRADE: ${{ vars.RUBRIC_REGRADE || 'false' }}
         run: node pipeline/judge.mjs rubric --limit 1000
 
       - name: Notify on failure

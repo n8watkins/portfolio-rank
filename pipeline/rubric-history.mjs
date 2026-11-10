@@ -1,7 +1,13 @@
 // Grades are never overwritten silently. When a site is re-graded (by the
-// re-grade queue, or --force), its previous grade moves to rubric_history
+// re-grade queues, or --force), its previous grade moves to rubric_history
 // first. Every re-grade of a 3.1 Flash-Lite grade by 3.5 Flash-Lite therefore
 // yields a free 3.1-vs-3.5 pair, which scripts/grade-compare.mjs reports on.
+//
+// Two re-grade queues, both after new and ungraded sites:
+//   regradeQueue         grades not made by the primary model (3.1 -> 3.5)
+//   versionRegradeQueue  grades by the primary model from an older rubric
+//                        version (pipeline/rubric.mjs RUBRIC_VERSION); lowest
+//                        priority, and only when RUBRIC_REGRADE is "true"
 
 import { ACTIVE } from "./roster.mjs";
 
@@ -66,7 +72,7 @@ export function replaceGradeStatements(url, oldJson, newRubric, now = new Date()
 export async function regradeQueue(db, { primary, limit }) {
   if (limit <= 0) return [];
   const res = await db.execute({
-    sql: `SELECT url, name, shot_key, meta, ai_rubric FROM portfolios
+    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
           WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
             AND json_valid(ai_rubric)
             AND json_extract(ai_rubric, '$.error') IS NULL
@@ -75,6 +81,29 @@ export async function regradeQueue(db, { primary, limit }) {
           ORDER BY COALESCE(json_extract(ai_rubric, '$.judged_at'), ''), url
           LIMIT ?`,
     args: [primary, limit],
+  });
+  return res.rows;
+}
+
+/**
+ * The rubric-version re-grade queue (lowest priority): listed, healthy,
+ * captured sites whose grade was made by `primary` with a rubric older than
+ * `version` (grades from before versions were recorded count as 1), oldest
+ * grade first. Grades by other models are on regradeQueue already.
+ */
+export async function versionRegradeQueue(db, { primary, version, limit }) {
+  if (limit <= 0) return [];
+  const res = await db.execute({
+    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
+          WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+            AND json_valid(ai_rubric)
+            AND json_extract(ai_rubric, '$.error') IS NULL
+            AND json_extract(ai_rubric, '$.tier') IS NOT NULL
+            AND json_extract(ai_rubric, '$.model') = ?
+            AND COALESCE(json_extract(ai_rubric, '$.rubric_version'), 1) < ?
+          ORDER BY COALESCE(json_extract(ai_rubric, '$.judged_at'), ''), url
+          LIMIT ?`,
+    args: [primary, version, limit],
   });
   return res.rows;
 }

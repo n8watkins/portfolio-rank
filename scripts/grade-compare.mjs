@@ -4,13 +4,15 @@
 // reads the database only (no Gemini, no writes) and prints, and writes to
 // the job summary: the number of pairs, exact tier agreement, agreement
 // within one tier, the mean absolute difference per axis, and how often
-// is_portfolio disagrees. Run weekly by .github/workflows/grade-compare.yml.
+// is_portfolio disagrees. Only pairs graded with the same rubric version
+// count. Run weekly by .github/workflows/grade-compare.yml.
 //
 // Usage: node scripts/grade-compare.mjs [--from MODEL] [--to MODEL]
 import fs from "fs";
 import path from "path";
 import { pipelineDb } from "../pipeline/roster.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
+import { versionOf } from "../pipeline/rubric.mjs";
 
 export const AXES = ["visual_design", "five_second_test", "storytelling", "writing", "memorability", "motion"];
 const TIER = { S: 5, A: 4, B: 3, C: 2, D: 1 };
@@ -36,7 +38,9 @@ export function buildPairs(history, current, { from = BACKUP_MODEL, to = PRIMARY
     const next = history[i + 1]?.url === h.url ? history[i + 1].rubric : current.get(h.url);
     const a = parse(h.rubric);
     const b = parse(next);
-    if (a && b && b.model === to) pairs.push({ url: h.url, a, b });
+    // Only same-rubric pairs measure the model: a v1 grade against a v2 grade
+    // differs by rubric too (pipeline/rubric.mjs RUBRIC_VERSION).
+    if (a && b && b.model === to && versionOf(a) === versionOf(b)) pairs.push({ url: h.url, a, b });
   }
   return pairs;
 }
