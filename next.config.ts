@@ -35,6 +35,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // `next dev` would otherwise append its own block to AGENTS.md on every
+  // start, leaving a change in the working tree; AGENTS.md is ours.
+  agentRules: false,
   // Browser source maps only for the deploy that uploads them to Sentry; the
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
