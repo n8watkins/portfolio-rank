@@ -23,12 +23,12 @@
 // fails keeps the existing capture and records nothing: whether a site is
 // down is the weekly health check's call.
 import { chromium } from "playwright";
-import { PNG } from "pngjs";
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
+import { pngDiff } from "./png-diff.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -67,37 +67,6 @@ const CONCURRENCY = Number(flag("concurrency", "3"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
 const REFRESH = Number(flag("refresh", "0")) || 0;
-
-// ---------------------------------------------------------------------------
-// PNG diff: fraction of sampled pixels that differ noticeably
-// ---------------------------------------------------------------------------
-function pngDiff(bufA, bufB, centerOnly = false) {
-  const a = PNG.sync.read(bufA);
-  const b = PNG.sync.read(bufB);
-  if (a.width !== b.width || a.height !== b.height) return 1;
-  // Optionally restrict to the middle third — where preloader spinners and
-  // percent counters live — so their few changing pixels aren't drowned out.
-  const x0 = centerOnly ? Math.floor(a.width / 3) : 0;
-  const x1 = centerOnly ? Math.floor((2 * a.width) / 3) : a.width;
-  const y0 = centerOnly ? Math.floor(a.height / 3) : 0;
-  const y1 = centerOnly ? Math.floor((2 * a.height) / 3) : a.height;
-  const region = (x1 - x0) * (y1 - y0);
-  const step = Math.max(1, Math.floor(Math.sqrt(region / 40000)));
-  let diff = 0,
-    samples = 0;
-  for (let y = y0; y < y1; y += step) {
-    for (let x = x0; x < x1; x += step) {
-      const o = (y * a.width + x) * 4;
-      const d =
-        Math.abs(a.data[o] - b.data[o]) +
-        Math.abs(a.data[o + 1] - b.data[o + 1]) +
-        Math.abs(a.data[o + 2] - b.data[o + 2]);
-      if (d > 30) diff++;
-      samples++;
-    }
-  }
-  return diff / samples;
-}
 
 // ---------------------------------------------------------------------------
 // DB + R2
