@@ -71,7 +71,8 @@
   // (pipeline/budget.mjs nightCrons, isNightStart).
   // "15 * * * *" finishes people's grade requests that waited for Gemini 3.5
   // (pipeline/people.mjs; none exist until "grade my portfolio" ships).
-  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *"] },
+  // "0 16 * * 1" is the weekly model watch, Mondays (worker/model-watch.ts).
+  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * 1"] },
   // One instance a night ("night-<Pacific date>"), one step per batch.
   "workflows": [{ "name": "portfolio-rank-night", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }],
   // Run next to the Turso database (aws-us-east-2): every request makes several
