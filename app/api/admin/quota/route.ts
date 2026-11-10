@@ -4,12 +4,14 @@ import { requireAdmin } from "@/lib/admin";
 import { DEFAULT_PLAN, QUOTA_TZ, STAGES, backgroundAllowance, budgetPlan, peopleAllowance, reserveFor, usageHistory, usageToday } from "@/pipeline/budget.mjs";
 import { dailyQuota } from "@/pipeline/gemini-log.mjs";
 import { parkedItems, recentNights } from "@/pipeline/night.mjs";
+import { activeAlerts } from "@/pipeline/alerts.mjs";
 
 // The admin quota view's data (no page yet; the redesign's admin page reads
 // it): Gemini use by job and model for today's quota day and the last 30,
 // what each background stage and people may spend right now, the latest
-// end-of-day runs and the parked items. Read-only, and only for the GitHub
-// login in ADMIN_GITHUB_LOGIN.
+// end-of-day runs, the parked items, the owner alerts that hold and people's
+// queued requests. Read-only, and only for the GitHub login in
+// ADMIN_GITHUB_LOGIN.
 //   GET /api/admin/quota[?days=30]
 export const dynamic = "force-dynamic";
 
@@ -37,11 +39,17 @@ export async function GET(req: Request) {
   const quota = dailyQuota(process.env.GEMINI_DAILY_QUOTA);
   const client = db();
   const emptyUsage = { day: "", start: "", end: "", byModel: {}, byJob: {}, peopleLastHour: 0, peopleRecent: 0 };
-  const [history, usage, nights, parked] = await Promise.all([
+  const [history, usage, nights, parked, alerts, peopleQueue] = await Promise.all([
     orEmpty(() => usageHistory(client, { now, days, quota }), null),
     orEmpty(() => usageToday(client, { now, plan }), emptyUsage),
     orEmpty(() => recentNights(client, { limit: 14 }), []),
     orEmpty(() => parkedItems(client), []),
+    orEmpty(() => activeAlerts(client), []),
+    orEmpty(
+      async () =>
+        Object.fromEntries((await client.execute("SELECT status, COUNT(*) AS n FROM people_requests GROUP BY status")).rows.map((r) => [String(r.status), Number(r.n)])),
+      {}
+    ),
   ]);
   return NextResponse.json(
     {
@@ -62,6 +70,8 @@ export async function GET(req: Request) {
       days: history?.days ?? [],
       nights,
       parked,
+      alerts,
+      peopleQueue,
     },
     { headers: PRIVATE }
   );

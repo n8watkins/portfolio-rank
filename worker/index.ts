@@ -10,7 +10,7 @@ import * as Sentry from "@sentry/cloudflare";
 import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
-import { startTonight, type NightEnv } from "./night";
+import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -32,9 +32,11 @@ const worker = {
     return (await serveImage(request, env, ctx)) ?? app.fetch(request, env, ctx);
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
-  // of which is 20:30 in Los Angeles; that one starts tonight's run.
+  // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
+  // finishes people's grade requests that waited for Gemini 3.5.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
-    await startTonight(controller.scheduledTime, env as NightEnv);
+    if (controller.cron === PEOPLE_QUEUE_CRON) await drainPeople(env as NightEnv);
+    else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };
 

@@ -26,6 +26,8 @@ import { DEFAULT_RPM } from "../pipeline/gemini.mjs";
 import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
+import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
+import { drainPeopleQueue } from "../pipeline/people.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
@@ -40,6 +42,9 @@ export type NightEnv = CloudflareEnv & {
   RANKING_BUDGET?: string;
   RANKING_BATCHED_COUNTS?: string;
   RANKING_AI_WEIGHT?: string;
+  ALERT_TRACTION?: string;
+  // Where owner alerts go, once an email provider is set up.
+  OWNER_EMAIL?: string;
 };
 
 type NightParams = { trigger: "cron" | "manual"; scheduledTime?: number };
@@ -47,6 +52,8 @@ type NightParams = { trigger: "cron" | "manual"; scheduledTime?: number };
 type NightState = { skip?: boolean; reason?: string; done?: boolean; night: string; timeline: ReturnType<typeof nightTimeline>; checks: unknown } & Record<string, unknown>;
 
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+/** The hourly Cron Trigger that finishes queued people's requests (wrangler.jsonc). */
+export const PEOPLE_QUEUE_CRON = "15 * * * *";
 const CHECKS_POLL = "1 minute";
 
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
@@ -87,6 +94,9 @@ function engine(env: NightEnv, runId: string) {
         RANKING_AI_WEIGHT: env.RANKING_AI_WEIGHT,
       }),
     },
+    // Owner alerts and people's "your grade is ready": off until an email
+    // provider is chosen (pipeline/alerts.mjs emailSender).
+    email: emailSender(env),
     runId,
   };
 }
@@ -154,14 +164,43 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       if (r.pauseMs) await step.sleep(`people are grading, pause ${i}`, r.pauseMs);
     }
 
-    // 3. The summary.
+    // 3. The summary, then the owner alerts (one email per condition per
+    // day while it holds).
     const done = await step.do("write the summary", ONCE_MORE, async () => {
       const { status, summary } = await finishNight(engine(this.env, runId), state);
-      return { status, stopped: summary.stopped, requests: summary.actual.requests, estimate: summary.estimate?.requests ?? 0 };
+      return {
+        status,
+        stopped: summary.stopped,
+        requests: summary.actual.requests,
+        estimate: summary.estimate?.requests ?? 0,
+        night: summary.night,
+        quotaLeft: summary.estimate?.quotaLeft ?? null,
+        stages: summary.stages.map((x: { key: string; label: string; result: string }) => ({ key: x.key, label: x.label, result: x.result })),
+        parked: summary.parked,
+      };
     });
-    log("night.done", { night: state.night, ...done });
-    return done;
+    await step.do("owner alerts", ONCE_MORE, async () => {
+      const ctx = engine(this.env, runId);
+      const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
+      const conditions = [...nightConditions(night, ctx.plan), ...(await tractionConditions(ctx.db, { now: new Date(Date.parse(String(state.startedAt))), levels: tractionLevels(this.env.ALERT_TRACTION) }))];
+      const r = await reconcileAlerts(ctx.db, { conditions, email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
+      log("night.alerts", r);
+      return r;
+    });
+    log("night.done", { night: state.night, status: done.status, stopped: done.stopped, requests: done.requests, estimate: done.estimate });
+    return { status: done.status, stopped: done.stopped, requests: done.requests, estimate: done.estimate };
   }
+}
+
+/**
+ * The hourly cron: finishes people's grade requests that waited for 3.5
+ * (busy, or the quota was spent), while there is quota for people.
+ */
+export async function drainPeople(env: NightEnv) {
+  const ctx = engine(env, "people-queue");
+  const r = await drainPeopleQueue(ctx, { limit: 10 });
+  if (r.done || r.failed || r.queued) log("people.queue", r);
+  return r;
 }
 
 /**

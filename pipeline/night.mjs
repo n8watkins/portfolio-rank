@@ -234,16 +234,25 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
     return "sentinel";
   }
   if (!image) return "skipped";
+  const now = new Date(ctx.now());
+  const rubric = await gradeFromEvidence(gemini, { row, image, now });
+  await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
+  return "ok";
+}
+
+/**
+ * A rubric v2 grade from stored evidence (row: url, name, page_text, facts,
+ * meta) and the hero image, on 3.5 only. Shared with people's requests
+ * (pipeline/people.mjs). Throws Gemini errors and malformed answers.
+ */
+export async function gradeFromEvidence(gemini, { row, image, now }) {
   const stored = parseJson(row.facts);
   const motion = parseJson(row.meta)?.motion;
   const facts = stored && stored.motion == null && typeof motion === "boolean" ? { ...stored, motion } : stored;
-  const now = new Date(ctx.now());
-  const request = buildRubricRequest({ name: String(row.name ?? ""), url, pageText: String(row.page_text ?? ""), facts, image, now });
+  const request = buildRubricRequest({ name: String(row.name ?? ""), url: String(row.url), pageText: String(row.page_text ?? ""), facts, image, now });
   const { result, model, usage } = await gemini.generate(request.parts, RESPONSE_SCHEMA, request.options);
   if (model !== PRIMARY_MODEL) throw new Error(`answered by ${model}, not ${PRIMARY_MODEL}`);
-  const rubric = gradeRecord({ parsed: parseRubricResponse(result), model, usage, facts, source: "r2", now });
-  await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
-  return "ok";
+  return gradeRecord({ parsed: parseRubricResponse(result), model, usage, facts, source: "r2", now });
 }
 
 // ---------------------------------------------------------------------------

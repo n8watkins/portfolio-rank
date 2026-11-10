@@ -61,5 +61,6 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
     ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Re-grades (3.1 and older rubric)", "Experiments"]
   );
   assert.equal(typeof body.now.people, "number");
-  assert.ok(Array.isArray(body.nights) && Array.isArray(body.parked));
+  assert.ok(Array.isArray(body.nights) && Array.isArray(body.parked) && Array.isArray(body.alerts));
+  assert.equal(typeof body.peopleQueue, "object");
 });
