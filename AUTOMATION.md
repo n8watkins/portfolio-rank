@@ -103,7 +103,7 @@ queues (its timeout only counts once it starts).
   Newer AI Studio keys ("AQ." style) are rejected in the URL, and a URL key leaks into logs.
 - **Models:** `gemini-3.5-flash-lite` for everything until its quota is used up; `gemini-3.1-flash-lite` only then (owner's decision, 2026-11-10).
   An overloaded (5xx), timed-out or unreachable 3.5 is retried, same model, after 10, 30 and 60 seconds (jittered); if the last retry still fails, that one call goes to 3.1 and the next call is back on 3.5.
-  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) moves the rest of the run to 3.1.
+  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) moves the rest of a vote run to 3.1, and stops a grading run (see the nightly budget).
   Any other 429 (per-minute) means slow down: wait Google's `RetryInfo` delay (or 60 seconds) and retry 3.5, up to 5 times.
   When no model can answer (both daily quotas spent, or still failing after the retries), the run stops cleanly; with nothing judged it exits 1, and the next run picks up the rest.
   A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request never falls back.
@@ -112,7 +112,11 @@ queues (its timeout only counts once it starts).
   `sync-upstream` (grading) and `judge-vote` (voting) share the `gemini` concurrency group, so they never run at the same time.
 - **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input and output tokens from `usageMetadata`, retry and fallback flags).
   Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus today's (UTC) requests per model against the daily free quota, with a warning from 80%.
-  The quotas default to 1,500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
+  The quotas default to 500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
+- **Nightly budget:** grading counts every 3.5 request today (from `gemini_requests`, retries included) and stops at the quota minus `GEMINI_RESERVE` (default 100, kept for the 30 daily votes and their retries), starting a grade only with room for its 4 possible requests; `--limit 300` is the upper bound.
+  Sites past the budget are deferred to tomorrow, which is not a failure.
+  Grading prefers waiting for tomorrow's 3.5 quota over spending 3.1: a spent 3.5 daily quota stops the rubric run (3.1 grades would be re-graded by 3.5 later anyway); a single grade that still fails on 3.5 after its retries goes to 3.1.
+  The vote job does move to 3.1 when 3.5's daily quota is spent.
   Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`); the built-in rates are placeholders until that variable is set.
 - **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room today's 3.5 quota has left, keeping `GEMINI_RESERVE` (default 100) requests for the daily vote.
   Re-grading stops as soon as an answer comes from a model other than 3.5.
