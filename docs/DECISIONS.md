@@ -146,7 +146,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Screenshots, rendered text and health checks run on Actions (free for a public repository), started on time by the Cloudflare cron or on demand by the Worker with a `workflow_dispatch`.
   Live "grade my portfolio" shows the free fact checks at once (a plain fetch from the Worker) and starts an Actions job for the screenshot and the AI grade, then notifies.
   Cloudflare Browser Rendering is parked as a later upgrade.
-  The database moves from Turso to Cloudflare D1 in a later lane, so new code reaches the database only through `lib/db.ts` and the pipeline's `db` parameter.
+  PortfolioRank stays on Turso; new code reaches the database only through `lib/db.ts` and the pipeline's `db` parameter, never its own client, so a later switch stays easy.
 - **Kill switches** (agent, 2026-11-10). Status: planned.
   One setting each pauses grading, comparisons, publishing and email; today `GEMINI_BUDGET` caps can be set to 0 per stage.
 

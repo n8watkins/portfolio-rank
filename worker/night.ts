@@ -57,7 +57,7 @@ const CHECKS_POLL = "1 minute";
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 
 function engine(env: NightEnv, runId: string) {
-  // The app's database module, so a later move of the database changes one place.
+  // The app's database module (Turso over the network), never a client of its own.
   const db = database();
   const plan = budgetPlan(env.GEMINI_BUDGET);
   return {
