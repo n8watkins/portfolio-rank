@@ -73,6 +73,8 @@ Depends on: phases 1 and 3; uses phase 2 for "you'd rank about #340".
 
 ## Phase 5: Blog and newsletter
 
+The content engine's design, with the owner decisions it needs, is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
+
 | Step | Status |
 | --- | --- |
 | Post template | done (#55) |
