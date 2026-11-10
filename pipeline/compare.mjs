@@ -12,7 +12,10 @@
 //      date, so the plan can be reproduced
 //   3. asks gemini-3.5-flash-lite only (owner decision 2026-11-10: AI
 //      comparisons never use 3.1; when 3.5 is busy after its retries or its
-//      quota is spent, the rest waits for the next run)
+//      quota is spent, the rest waits for the next run). The GEMINI_FALLBACK
+//      switch (pipeline/gemini.mjs, off by default) is respected: when an
+//      owner turns it on, an answer from the backup model is stored as an
+//      experiment ("backup-model"), so it never counts in any board
 //   4. stores every answer in `comparisons` with the rater, model, prompt
 //      version, method, order shown, matchmaking seed and slot kind
 //
@@ -23,7 +26,7 @@
 // RANKING_BATCHED_COUNTS is "true" (experiment only until then).
 //
 // Usage: node pipeline/compare.mjs [--rpm R] [--one-on-one N] [--batched N]
-import { createGemini, createLimiter, DEFAULT_RPM, GeminiAuthError, GeminiUnavailableError } from "./gemini.mjs";
+import { createGemini, createLimiter, DEFAULT_RPM, fallbackEnabled, GeminiAuthError, GeminiUnavailableError, judgeModels, PRIMARY_MODEL } from "./gemini.mjs";
 import { createRequestLog, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
 import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
@@ -67,14 +70,15 @@ const db = pipelineDb(ROOT);
 await ensureGeminiLog(db);
 await ensureRankingSchema(db);
 const requestLog = createRequestLog({ db, job: "compare" });
-// One model, no backup: a spent daily quota stops the run ("stop"), and an
-// overloaded 3.5 is retried on 3.5 only.
+// 3.5 alone unless GEMINI_FALLBACK is on: a spent daily quota stops the run
+// ("stop"), and an overloaded 3.5 is retried on 3.5 only.
+const FALLBACK = fallbackEnabled();
 const gemini = createGemini({
   apiKey: process.env.GEMINI_API_KEY,
-  models: [config.model],
+  models: judgeModels(),
   limiter: createLimiter({ rpm: RPM }),
   onRequest: (r) => requestLog.record(r),
-  onDailyQuota: "stop",
+  onDailyQuota: FALLBACK ? "fallback" : "stop",
 });
 
 // Hero screenshots from the public R2 bucket. Only a success or a definite
@@ -105,7 +109,7 @@ async function run() {
 
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
-  const done = await comparisonsToday(db, { now, model: config.model });
+  const done = await comparisonsToday(db, { now });
   const want = {
     one_on_one: Math.max(0, Number(flag("one-on-one", config.budget.one_on_one)) - done.one_on_one),
     batched: Math.max(0, Number(flag("batched", config.budget.batched)) - done.batched),
@@ -168,6 +172,8 @@ async function run() {
         match_seed: seed,
         match_kind: job.kind,
         run_id: RUN_ID,
+        // Only the primary model's answers rate sites (pipeline/gemini.mjs).
+        experiment: model === PRIMARY_MODEL ? null : "backup-model",
       });
       if (parsed.ranking) counts.ok++;
       else counts.abstained++;

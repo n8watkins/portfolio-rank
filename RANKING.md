@@ -149,6 +149,7 @@ Each run records the input digest and the settings, so the same digest and setti
 | `RANKING_AI_WEIGHT` | `0.5` | the AI's weight in Merged |
 
 AI comparisons use gemini-3.5-flash-lite only (owner decision 2026-11-10): when 3.5 is busy after its retries or its daily quota is spent, the rest waits for the next run.
+The job respects the `GEMINI_FALLBACK` switch (`pipeline/gemini.mjs`, off): if an owner turns it on, an answer from the backup model is stored with `experiment = 'backup-model'`, so it never counts in any board.
 The default grading budget (`GEMINI_GRADING_BUDGET`, 400 of 3.5's 500 daily requests) leaves 100 for votes.
 200 comparisons a day need that lowered to about 290 for 3.5 (retries included), which fits once catch-up grading is done; until then use a smaller `RANKING_BUDGET`.
 

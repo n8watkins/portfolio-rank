@@ -180,7 +180,7 @@ test("recompute: unlisted sites are rated but not shown", () => {
   assert.equal(boards.ai[0].comparisons, 2);
 });
 
-const pool = (n, sigma = (i) => 4) =>
+const pool = (n, sigma = () => 4) =>
   Array.from({ length: n }, (_, i) => ({ url: `https://s${String(i).padStart(3, "0")}.dev`, mu: 15 + (20 * i) / n, sigma: sigma(i) }));
 
 test("matchmaking: the same seed gives the same plan; 1 in 5 random; no duplicate pairs; per-site cap", () => {

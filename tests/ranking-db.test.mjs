@@ -61,6 +61,7 @@ function run(script, dir, dbFile, args = [], env = {}) {
       GITHUB_STEP_SUMMARY: summary,
       MOCK_LOG: log,
       RANKING_V2: "",
+      GEMINI_FALLBACK: "off",
       RANKING_BUDGET: "",
       RANKING_BATCHED_COUNTS: "",
       ...env,
@@ -253,4 +254,19 @@ test("compare job: a spent 3.5 quota stops the run and never falls back to 3.1",
   assert.ok(r.requests.length >= 1);
   assert.ok(r.requests.every((q) => q.model === "gemini-3.5-flash-lite"), "never 3.1");
   assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM comparisons")).rows[0].n), 0);
+});
+
+test("compare job: with GEMINI_FALLBACK on, an answer from the backup model is stored as an experiment and never rates sites", async () => {
+  const { dir, dbFile, db } = await setup();
+  const quota = { status: 429, raw: JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } }) };
+  const r = await run("pipeline/compare.mjs", dir, dbFile, ["--rpm", "60000"], {
+    RANKING_V2: "true",
+    GEMINI_FALLBACK: "on",
+    RANKING_BUDGET: JSON.stringify({ one_on_one: 1, batched: 0 }),
+    MOCK_GEMINI: JSON.stringify([quota, { json: { winner: "A", reason: "a" } }]),
+  });
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(r.requests.map((q) => q.model), ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
+  const [row] = (await db.execute("SELECT model, experiment FROM comparisons")).rows;
+  assert.deepEqual([row.model, row.experiment], ["gemini-3.1-flash-lite", "backup-model"]);
 });
