@@ -31,7 +31,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Pacing and a request log** (agent, 2026-11-10). Status: built (#54).
   One limiter per run spaces every request (8 a minute by default), every request is a row in `gemini_requests`, and each run's summary shows today's totals against the quotas with a warning from 80%.
   Why: real numbers instead of estimates, and one place to see when a quota is about to run out.
-- **No catch-up mode; the backlog is graded on 3.5's daily budget** (owner, 2026-11-10). Status: built (#63); since #PRNUM the budget is the end-of-day run's "Grade new sites" share.
+- **No catch-up mode; the backlog is graded on 3.5's daily budget** (owner, 2026-11-10). Status: built (#63); since #69 the budget is the end-of-day run's "Grade new sites" share.
   The repository variable `GEMINI_CATCHUP` is `"false"` and the code no longer reads it; ungraded sites are worked through over the coming days, within 3.5's grading budget.
   Why: catch-up mode wrote 3.1 grades, which the "3.5 only" decision rules out.
 - **Conditional re-grades of 3.1 grades on 3.5** (owner, 2026-11-10). Status: built (#54); the stop rule is planned.
@@ -101,43 +101,43 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 
 ## Gemini budget, one key
 
-- **People first, AI with the leftovers** (owner, 2026-11-10). Status: building (#PRNUM).
+- **People first, AI with the leftovers** (owner, 2026-11-10). Status: building (#69).
   People's "grade my portfolio" and re-grade requests run as they arrive, with the whole day's 3.5 quota available to them minus an evening reserve of about 25.
   Background AI runs once a night at the end of the quota day, on whatever is left, in priority order with caps: new sites, changed sites, AI ranking comparisons (when `RANKING_V2` is on), content, then re-grades and experiments.
   3.5 only (`GEMINI_FALLBACK` off), at today's pace.
   Why: the free quota resets at midnight Pacific and unused requests are lost, so people never wait behind background work and the background never wastes a day.
   This replaces the fixed daily split and its flex rules (see Superseded).
-- **The quota day is the Pacific day** (agent, 2026-11-10). Status: building (#PRNUM).
+- **The quota day is the Pacific day** (agent, 2026-11-10). Status: building (#69).
   Every count of "today" (the accountant, job summaries, comparisons per day) runs midnight to midnight in America/Los_Angeles, 23 or 25 hours on the DST days.
   Why: that is when Google resets the free quota; counting UTC days split one quota day in two.
-- **One budget accountant** (owner, 2026-11-10). Status: building (#PRNUM).
+- **One budget accountant** (owner, 2026-11-10). Status: building (#69).
   `pipeline/budget.mjs` reads today's use per job and model from `gemini_requests`; a job asks "how many can I spend now?" and gets min(its cap, quota left minus the reserve).
   The reserve grows with demand: max(25, 2 x people's requests in the last hour).
   Why: one key serves every job, so only one ledger can keep them from starving each other or people.
-- **The end-of-day run starts from Cloudflare, not GitHub's schedule** (owner, 2026-11-10). Status: building (#PRNUM).
+- **The end-of-day run starts from Cloudflare, not GitHub's schedule** (owner, 2026-11-10). Status: building (#69).
   A Cron Trigger on the Worker starts a Workflow at 20:30 Pacific (two UTC crons, one for each DST offset; only the one at 20:30 local starts it).
   The free checks first (feed, capture of new sites, a re-capture of the oldest to find redesigns, page evidence, fingerprint changes) on GitHub Actions, started with a `workflow_dispatch` and waited for until 21:15; then the AI stages on Cloudflare until a hard stop at 23:30.
   GitHub's schedules for those workflows stay as a fallback that skips when Cloudflare started them.
   Why: GitHub starts scheduled jobs 4 to 10 hours late; capture and the health check need a browser, so they stay on Actions, while AI-only work runs on Cloudflare Workflows, durable and paced.
-- **The end-of-day run never takes from people and never retries without end** (owner, 2026-11-10). Status: building (#PRNUM).
+- **The end-of-day run never takes from people and never retries without end** (owner, 2026-11-10). Status: building (#69).
   Batches of 20 requests, with the quota and people's demand re-read before each; people grading in the last 10 minutes pause it.
   Each stage has a request cap and a wall-clock cap; at most 20 retries a night; 5 failures in a row stop a stage; an item is tried once a night and parked after failing 3 nights in a row; a failed or stopped run never restarts the same night.
   The summary records the estimate at the start and the actual at the end.
   Why: an unattended job must have bounded cost and bounded damage.
-- **Quota exhausted is "deferred, not failed" everywhere** (owner, 2026-11-10). Status: building (#PRNUM).
+- **Quota exhausted is "deferred, not failed" everywhere** (owner, 2026-11-10). Status: building (#69).
   `compare.mjs` now exits 0 when 3.5's quota is spent, like `judge.mjs` since #63.
-- **Re-grades on request, with a cooldown** (owner, 2026-11-10). Status: the rule is building (#PRNUM, `regradeAllowed`); the request flow comes with "grade my portfolio".
+- **Re-grades on request, with a cooldown** (owner, 2026-11-10). Status: the rule is building (#69, `regradeAllowed`); the request flow comes with "grade my portfolio".
   Once every 7 days, sooner when the page fingerprint changed after the last grade.
-- **People's requests wait for 3.5, never 3.1** (owner, 2026-11-10). Status: building (#PRNUM, `pipeline/people.mjs`); used once "grade my portfolio" ships.
+- **People's requests wait for 3.5, never 3.1** (owner, 2026-11-10). Status: building (#69, `pipeline/people.mjs`); used once "grade my portfolio" ships.
   A busy 3.5 is retried as usual, then the request is queued and finished by an hourly cron when 3.5 is available, and the person is emailed when it is done.
-- **The ELO-era AI votes stop running on a schedule** (agent, 2026-11-10, following "comparisons when `RANKING_V2` is on"). Status: building (#PRNUM).
+- **The ELO-era AI votes stop running on a schedule** (agent, 2026-11-10, following "comparisons when `RANKING_V2` is on"). Status: building (#69).
   `judge-vote.yml` is manual only; until `RANKING_V2` is on, no AI votes are added to the ELO board.
   Why: the owner's order runs AI comparisons in the background only as ranking v2; keeping the old 30 votes would need a second runner outside the budget.
   Owner: say if they should continue meanwhile.
-- **Owner alerts repeat until resolved** (owner, 2026-11-10). Status: building (#PRNUM); email off until a provider is chosen.
+- **Owner alerts repeat until resolved** (owner, 2026-11-10). Status: building (#69); email off until a provider is chosen.
   Quota used up before the end-of-day run, a stage stopped by its circuit breaker, parked items, and traction past configurable levels ("PortfolioRank is doing well").
   One email per condition per day, every day, until it clears.
-- **Admin quota data, admin only** (owner, 2026-11-10). Status: building (#PRNUM).
+- **Admin quota data, admin only** (owner, 2026-11-10). Status: building (#69).
   `GET /api/admin/quota`, for the GitHub login in `ADMIN_GITHUB_LOGIN`: today's and the last 30 days' use by job and model, the allowances now, the runs, parked items, alerts.
   The redesign's admin page will read it.
 - **A paid key comes later, with a hard cap** (owner, 2026-11-10). Status: planned.
@@ -228,7 +228,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Daily split on 3.5: 100 / 100 / 100 / 100 plus buffer** (owner, 2026-11-10; never built): 100 each for people's grades, one-on-one ranking, batched ranking and content, then 50 for the backlog and 50 for retries.
   Replaced the same day by "People first, AI with the leftovers".
 - **Shares flex at 18:00 UTC, with a priority order** (agent, 2026-11-10; never built): replaced by the end-of-day run on what is left after people.
-- **A grading budget of 400 a day (`GEMINI_GRADING_BUDGET`)** (#54): replaced by the accountant's per-stage caps (#PRNUM).
+- **A grading budget of 400 a day (`GEMINI_GRADING_BUDGET`)** (#54): replaced by the accountant's per-stage caps (#69).
 
 - **AI votes in the same ELO pool as people's, with equal weight** (2026-06): replaced by the three views and OpenSkill (2026-11-10). Today's code still works this way until the ranking lane lands.
 - **Grades from 3.5 only, waiting for tomorrow instead of using 3.1** (grading audit recommendation, 2026-11-10): replaced the same day by catch-up mode with conditional re-grades, then adopted later that day as the owner's "3.5 only" decision.

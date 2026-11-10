@@ -24,7 +24,7 @@ An automatic PortfolioRank: every listed portfolio graded on one rubric, a leade
 | Audit fix: vote fishing and claim overspend | done (#58) |
 | Audit fix: lint on every PR | building (#59) |
 | Audit fixes still open: the leftover script that can delete every vote, red and flaky browser tests, phone speed (image serving, home page size), phone header, Add to list on phones, signed-out pages, the medium quick fixes | to do |
-| Grade the ungraded backlog on 3.5's daily budget (no catch-up on 3.1) | building (runs nightly; from #PRNUM in the end-of-day run on Cloudflare) |
+| Grade the ungraded backlog on 3.5's daily budget (no catch-up on 3.1) | building (runs nightly; from #69 in the end-of-day run on Cloudflare) |
 | Full re-grade on rubric v2 (`RUBRIC_REGRADE=true`) | needs owner, after the backlog |
 | Stop rule for 3.1-to-3.5 re-grades (stop when the weekly report shows no meaningful difference) | to do |
 | Grades and AI votes from 3.5 only: 3.1 fallback off (`GEMINI_FALLBACK`), catch-up mode removed (`GEMINI_CATCHUP=false`) | building (#63) |
@@ -37,7 +37,7 @@ Depends on: nothing; everything else depends on it.
 | --- | --- |
 | OpenSkill ratings seeded from the grade; merged, AI and People views; confidence bands and ties shown as ties | to do |
 | Matchmaking: close matches, 1 in 5 random, random order, recorded seed; settled sites compared less | to do |
-| Daily AI comparisons on 3.5: 100 one-on-one, 100 batched (batched experiment-only for two weeks), in the end-of-day run on what is left after people | built, waits for `RANKING_V2` (#65, #PRNUM) |
+| Daily AI comparisons on 3.5: 100 one-on-one, 100 batched (batched experiment-only for two weeks), in the end-of-day run on what is left after people | built, waits for `RANKING_V2` (#65, #69) |
 | Experiments table: every comparison tagged with method, model and prompt version | to do |
 | Placement experiment (one request vs ten), ending in a report | to do |
 | Analytics: rank movement, contradictions, AI vs people gaps, position bias; change detection that re-grades a redesigned site | to do |
@@ -62,7 +62,7 @@ Depends on: can start alongside phase 2; the leaderboard tabs fill in when ranki
 | Step | Status |
 | --- | --- |
 | Live capture on Cloudflare Browser Rendering, the free checks, PageSpeed, then the v2 grade | to do |
-| Queue with live progress; past the daily share, "we'll email your report" | the queue that waits for 3.5 and emails when done is building (#PRNUM); live progress to do |
+| Queue with live progress; past the daily share, "we'll email your report" | the queue that waits for 3.5 and emails when done is building (#69); live progress to do |
 | Report page, share image, "add me to the leaderboard" request | to do |
 | Guardrails: Turnstile, per-person, per-network and site-wide caps, strict address checks, cache by address, private screenshots, untrusted page text | to do |
 | Security review: cost abuse, SSRF through redirects and the browser, prompt injection, report privacy | to do |
@@ -89,12 +89,12 @@ Depends on: the blog shell and model watch can start any time; most stories need
 
 | Step | Status |
 | --- | --- |
-| One Gemini budget for the single key: people first, background at the end of the quota day, enforced in one place (`pipeline/budget.mjs`) | building (#PRNUM) |
-| End-of-day run started by a Cloudflare Cron Trigger: free checks on Actions, then the AI stages on a Workflow, with caps, batches, a hard stop and bounded retries | building (#PRNUM) |
+| One Gemini budget for the single key: people first, background at the end of the quota day, enforced in one place (`pipeline/budget.mjs`) | building (#69) |
+| End-of-day run started by a Cloudflare Cron Trigger: free checks on Actions, then the AI stages on a Workflow, with caps, batches, a hard stop and bounded retries | building (#69) |
 | Worker secrets `GEMINI_API_KEY` and `GITHUB_DISPATCH_TOKEN` for the end-of-day run | needs owner |
-| Owner alerts that repeat daily until resolved | building (#PRNUM); email waits for the provider |
+| Owner alerts that repeat daily until resolved | building (#69); email waits for the provider |
 | Kill switches: one setting each for grading, comparisons, publishing and email | to do (stage caps in `GEMINI_BUDGET` can be 0 meanwhile) |
-| One admin page: quotas used, grades queued, posts queued, emails sent, removals pending | the quota data API is building (#PRNUM); the page comes with the redesign |
+| One admin page: quotas used, grades queued, posts queued, emails sent, removals pending | the quota data API is building (#69); the page comes with the redesign |
 | OpenPing watching health, the daily Gemini totals and the content pipeline | to do |
 | Paid Gemini key with a budget alert and hard cap, before any launch post | needs owner, later |
 
