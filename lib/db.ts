@@ -140,6 +140,16 @@ export function ensureSchema(): Promise<void> {
       } catch {
         /* column already present */
       }
+      // served = 1 if the vote was for the pair most recently drawn by its
+      // rater (matchups). Only served practice votes can be claimed, so
+      // practice votes from before the draw cap applied to visitors can't be.
+      try {
+        await db().execute(
+          "ALTER TABLE votes ADD COLUMN served INTEGER NOT NULL DEFAULT 0"
+        );
+      } catch {
+        /* column already present */
+      }
       // Roster and health columns written by the pipeline (pipeline/roster.mjs
       // adds the same ones): delisted_at when a URL left data/feed.json,
       // health live/suspect/down from the weekly health check, retry_at for
@@ -164,16 +174,26 @@ export function ensureSchema(): Promise<void> {
           /* column already present */
         }
       }
-      // The matchup most recently served to each signed-in rater, and how many
-      // they drew in the current hour: an official vote must be for this pair,
-      // and redrawing is capped so nobody can fish for a chosen site.
+      // The matchup most recently served to each rater (practice visitors
+      // too), and how many they drew in the current hour and day: a vote must
+      // be for this pair, and redrawing is capped so nobody can fish for a
+      // chosen site.
       await db().execute(`CREATE TABLE IF NOT EXISTS matchups (
         rater_id TEXT PRIMARY KEY,
         pair_key TEXT,
         issued_at INTEGER,
         window_start INTEGER NOT NULL,
-        draws INTEGER NOT NULL
+        draws INTEGER NOT NULL,
+        day_start INTEGER,
+        day_draws INTEGER NOT NULL DEFAULT 0
       )`);
+      for (const column of ["day_start INTEGER", "day_draws INTEGER NOT NULL DEFAULT 0"]) {
+        try {
+          await db().execute(`ALTER TABLE matchups ADD COLUMN ${column}`);
+        } catch {
+          /* column already present */
+        }
+      }
       // One vote per (rater, matchup), enforced by the DB so concurrent inserts
       // can't slip past a check-then-insert race. NULL pair_keys (legacy rows)
       // are distinct under SQLite, so the index won't reject them.

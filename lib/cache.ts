@@ -38,27 +38,43 @@ function once<T>(k: string, run: () => Promise<T>): Promise<T> {
   return p;
 }
 
+export type CacheOptions<T> = {
+  /** How long a result stays fresh. */
+  ttlMs: number;
+  /**
+   * Marks a result as a failure. A failure is stored too, but stays fresh only
+   * `failureTtlMs`, and a failed refresh never replaces a good result.
+   */
+  isFailure?: (data: T) => boolean;
+  failureTtlMs?: number;
+  /**
+   * Take the cross-isolate lease before filling a miss, so an expensive
+   * lookup runs once however many isolates miss at the same moment; the
+   * others get `busy()` at once.
+   */
+  leaseOnMiss?: { busy: () => T };
+};
+
 /**
  * Read-through cache in the `cache` table (`<namespace>:<key>` → JSON, `at` =
  * when it was measured).
  *
  * - Fresh hit: returned as is.
- * - Stale hit (older than `ttlMs`): returned at once with `stale: true`, and a
+ * - Stale hit (older than its TTL): returned at once with `stale: true`, and a
  *   refresh runs in the background (Workers `ctx.waitUntil`), at most one per
- *   key across isolates. A failed refresh keeps the old result and is retried
- *   after the lease expires.
- * - Miss: computed while the caller waits (concurrent misses share one call).
- *
- * `shouldCache` decides whether a computed result is stored (failures usually
- * aren't).
+ *   key across isolates. A failed refresh keeps the old good result and is
+ *   retried after the lease expires.
+ * - Miss: computed while the caller waits (concurrent misses in an isolate
+ *   share one call; with `leaseOnMiss`, across isolates too).
  */
 export async function cached<T extends object>(
   namespace: string,
   key: string,
-  ttlMs: number,
-  compute: () => Promise<T>,
-  shouldCache: (data: T) => boolean = () => true
+  options: CacheOptions<T>,
+  compute: () => Promise<T>
 ): Promise<T & CacheMeta> {
+  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss } = options;
+  const ttlOf = (data: T) => (isFailure(data) ? failureTtlMs : ttlMs);
   await ensureSchema();
   const k = `${namespace}:${key}`;
 
@@ -72,18 +88,23 @@ export async function cached<T extends object>(
   };
 
   const fill = async (): Promise<T & CacheMeta> => {
-    const data = await compute();
-    const at = shouldCache(data) ? await store(data) : Date.now();
-    return { ...data, measuredAt: new Date(at).toISOString() };
+    if (leaseOnMiss && !(await takeLease(k))) return leaseOnMiss.busy();
+    try {
+      const data = await compute();
+      const at = await store(data);
+      return { ...data, measuredAt: new Date(at).toISOString() };
+    } finally {
+      if (leaseOnMiss) await releaseLease(k).catch(() => {});
+    }
   };
 
-  // A refresh that fails (or isn't worth storing) keeps the old result and
-  // holds the lease until it expires, so a failing lookup is retried at most
-  // once per LEASE_MS instead of on every request.
-  const refresh = async (): Promise<void> => {
+  // A refresh that fails keeps a good old result and holds the lease until it
+  // expires, so a failing lookup is retried at most once per LEASE_MS instead
+  // of on every request. A stored failure is simply replaced.
+  const refresh = async (hadFailure: boolean): Promise<void> => {
     if (!(await takeLease(k))) return;
     const data = await compute();
-    if (!shouldCache(data)) return;
+    if (isFailure(data) && !hadFailure) return;
     await store(data);
     await releaseLease(k);
   };
@@ -96,8 +117,8 @@ export async function cached<T extends object>(
   const at = Number(row.at);
   const data = JSON.parse(String(row.v)) as T;
   const measuredAt = new Date(at).toISOString();
-  if (Date.now() - at < ttlMs) return { ...data, measuredAt };
+  if (Date.now() - at < ttlOf(data)) return { ...data, measuredAt };
 
-  if (!inflight.has(k)) runInBackground(once(k, refresh));
+  if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(data))));
   return { ...data, measuredAt, stale: true };
 }

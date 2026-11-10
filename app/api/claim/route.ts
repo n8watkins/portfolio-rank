@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { readAnonId } from "@/lib/matchup";
-import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, getRater } from "@/lib/rater";
+import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, accountTooNew, getRater } from "@/lib/rater";
 
 // Fold a visitor's practice votes into their signed-in identity: each becomes
 // an official human vote and moves ELO, except pairs they've already voted on
@@ -11,9 +11,13 @@ import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, getRater } from "@/lib/
 //
 // Guards against minting official votes:
 // - only a practice cookie the server signed counts (a forged value claims nothing),
-// - practice votes were themselves cast on server-served pairs (matchup tokens),
+// - only practice votes cast on the pair the server last drew for that visitor
+//   count (served = 1; visitors' redraws are capped, so nobody can fish),
 // - an account converts at most ANON_VOTE_LIMIT practice votes in its lifetime,
-//   and claiming counts against the same daily cap as live voting,
+//   and claiming counts against the same daily cap as live voting - both
+//   re-checked inside each conversion's transaction, so concurrent claims
+//   can't overspend,
+// - accounts younger than MIN_GITHUB_ACCOUNT_AGE_DAYS (when set) claim nothing,
 // - each converted vote stores the delta it applied and the time it was
 //   claimed, so undo reverts it exactly.
 // Idempotent: converted votes stop matching rater_type='anon', and the spent
@@ -25,6 +29,11 @@ export async function POST() {
     return NextResponse.json({ error: "signin_required" }, { status: 401 });
   }
 
+  // Leaves the practice votes (and the cookie) for when the account is old enough.
+  if (accountTooNew(rater)) {
+    return NextResponse.json({ claimed: 0, dropped: 0, error: "account_too_new" });
+  }
+
   const jar = await cookies();
   const raw = jar.get(ANON_COOKIE)?.value;
   const anonId = readAnonId(raw);
@@ -33,24 +42,9 @@ export async function POST() {
     return NextResponse.json({ claimed: 0, dropped: 0 });
   }
 
-  const [dailyRes, claimedRes] = await Promise.all([
-    db().execute({
-      sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-1 day')",
-      args: [rater.id],
-    }),
-    db().execute({
-      sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND claimed = 1",
-      args: [rater.id],
-    }),
-  ]);
-  let budget = Math.min(
-    DAILY_VOTE_LIMIT - Number(dailyRes.rows[0].n),
-    ANON_VOTE_LIMIT - Number(claimedRes.rows[0].n)
-  );
-
   const anon = await db().execute({
     sql: `SELECT id, winner, loser FROM votes
-          WHERE rater_id = ? AND rater_type = 'anon' ORDER BY id`,
+          WHERE rater_id = ? AND rater_type = 'anon' AND served = 1 ORDER BY id`,
     args: [`anon:${anonId}`],
   });
 
@@ -61,7 +55,6 @@ export async function POST() {
 
   let claimed = 0;
   for (const row of anon.rows) {
-    if (budget <= 0) break; // out of budget - leave the rest as practice votes
     const voteId = Number(row.id);
     const winner = String(row.winner);
     const loser = String(row.loser);
@@ -69,6 +62,21 @@ export async function POST() {
 
     const tx = await db().transaction("write");
     try {
+      // The budget is read inside the write transaction (libSQL serializes
+      // them), so two claims racing each other can't both spend it.
+      const budget = await tx.execute({
+        sql: `SELECT
+                (SELECT COUNT(*) FROM votes WHERE rater_id = ? AND created_at > datetime('now', '-1 day')) AS today,
+                (SELECT COUNT(*) FROM votes WHERE rater_id = ? AND claimed = 1) AS claimed`,
+        args: [rater.id, rater.id],
+      });
+      if (
+        Number(budget.rows[0].today) >= DAILY_VOTE_LIMIT ||
+        Number(budget.rows[0].claimed) >= ANON_VOTE_LIMIT
+      ) {
+        await tx.rollback();
+        break; // out of budget - leave the rest as practice votes
+      }
       const dup = await tx.execute({
         sql: "SELECT 1 FROM votes WHERE rater_id = ? AND pair_key = ? LIMIT 1",
         args: [rater.id, key],
@@ -102,7 +110,6 @@ export async function POST() {
       await tx.execute({ sql: upsert, args: [loser, updated.loser, l.votes + 1] });
       await tx.commit();
       claimed++;
-      budget--;
     } catch (e) {
       await tx.rollback().catch(() => {});
       throw e;

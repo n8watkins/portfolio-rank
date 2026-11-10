@@ -2,16 +2,26 @@
 // Even roster URLs are third-party servers: their owner controls redirects and
 // response size, so a naive fetch is an SSRF + memory-exhaustion primitive.
 
-// Hostnames that must never be fetched: loopback, link-local (incl. the cloud
-// metadata endpoint 169.254.169.254), and RFC1918 / unique-local IP literals.
-// IPv6 forms covered: `\[?::` catches ::1 (loopback), :: (unspecified), and
-// crucially ::ffff:<v4> (IPv4-mapped - e.g. [::ffff:127.0.0.1], which a redirect
-// could use to smuggle loopback past a v4-only check); `f[cd]` = ULA (fc00::/7);
-// `fe[89ab]` = link-local (fe80::/10).
-const BLOCKED_HOST =
-  /^(localhost|.*\.local|0\.0\.0\.0|127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::|\[?f[cd]|\[?fe[89ab])/i;
+// Hostnames that must never be fetched. The URL parser has already turned
+// decimal, octal and hex IPv4 forms (http://2130706433/) into dotted quads and
+// lower-cased the host, so these patterns see the canonical form.
+// - names: localhost and *.localhost, *.local (mDNS), *.internal, *.home.arpa;
+// - IPv4: 0/8 ("this network", 0.0.0.0 reaches loopback), 10/8, 100.64/10
+//   (carrier-grade NAT), 127/8, 169.254/16 (link-local, incl. the cloud
+//   metadata endpoint 169.254.169.254), 172.16/12, 192.0.0/24, 192.168/16,
+//   198.18/15 (benchmarking), and 224/3 (multicast and reserved);
+// - IPv6: `[::` catches ::1, :: and ::ffff:<v4> (IPv4-mapped, which a redirect
+//   could use to smuggle loopback past a v4-only check), fc00::/7 (ULA),
+//   fe80::/10 (link-local), ff00::/8 (multicast) and 64:ff9b::/96 (NAT64,
+//   which maps onto IPv4 addresses).
+// On Workers, global_fetch_strictly_public (wrangler.jsonc) also refuses names
+// that resolve to private addresses, which a hostname check can't see.
+const BLOCKED_HOSTNAME = /^(localhost|.*\.localhost|.*\.local|.*\.internal|.*\.home\.arpa)\.?$/;
+const BLOCKED_IPV4 =
+  /^(0|10|127|22[4-9]|2[3-5]\d)\.|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|^169\.254\.|^172\.(1[6-9]|2\d|3[01])\.|^192\.0\.0\.|^192\.168\.|^198\.1[89]\./;
+const BLOCKED_IPV6 = /^\[(::|f[cd]|fe[89ab]|ff|64:ff9b:)/;
 
-function isPublicHttpUrl(raw: string): boolean {
+export function isPublicHttpUrl(raw: string): boolean {
   let u: URL;
   try {
     u = new URL(raw);
@@ -19,7 +29,10 @@ function isPublicHttpUrl(raw: string): boolean {
     return false;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-  return !BLOCKED_HOST.test(u.hostname);
+  if (u.username || u.password) return false;
+  const host = u.hostname;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return !BLOCKED_IPV4.test(host);
+  return !(BLOCKED_HOSTNAME.test(host) || BLOCKED_IPV6.test(host));
 }
 
 /**

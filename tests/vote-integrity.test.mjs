@@ -188,3 +188,48 @@ test("a practice token cannot be used by a different visitor", async () => {
   const r = await call(a2, "POST", "/api/rank", { winner: s.body.a.url, loser: s.body.b.url, token: s.body.token });
   assert.equal(r.status, 403);
 });
+
+test("practice visitors cannot redraw matchups without limit either", async () => {
+  const anon = jar();
+  let limited = null;
+  for (let i = 0; i < 100 && !limited; i++) {
+    const r = await call(anon, "GET", "/api/rank");
+    if (r.status === 429) limited = r.body;
+    else assert.equal(r.status, 200);
+  }
+  assert.ok(limited, "100 practice draws in a row were all served");
+  assert.equal(limited.error, "signin_required");
+});
+
+test("a practice vote must be for the pair drawn last, not an older one", async () => {
+  const anon = jar();
+  const first = await call(anon, "GET", "/api/rank");
+  await call(anon, "GET", "/api/rank"); // a newer draw replaces it
+  const { a, b, token } = first.body;
+  const r = await call(anon, "POST", "/api/rank", { winner: a.url, loser: b.url, token });
+  assert.equal(r.status, 403, JSON.stringify(r.body));
+});
+
+test("concurrent claims can't convert more than the lifetime allowance", async () => {
+  // Two practice visitors cast 6 votes each (12 > the allowance of 10), then
+  // the same account claims both at once.
+  const visitors = [jar(), jar()];
+  await Promise.all(
+    visitors.map(async (anon) => {
+      for (let i = 0; i < 6; i++) {
+        const s = await call(anon, "GET", "/api/rank");
+        const v = await call(anon, "POST", "/api/rank", { winner: s.body.a.url, loser: s.body.b.url, token: s.body.token });
+        assert.equal(v.status, 200, JSON.stringify(v.body));
+        await sleep(PACE);
+      }
+    })
+  );
+  const me = await signedIn();
+  const claims = await Promise.all(
+    visitors.map((anon) => call(jar(`${me.cookie}; ${anon.header()}`), "POST", "/api/claim"))
+  );
+  const total = claims.reduce((n, c) => n + (c.body?.claimed ?? 0), 0);
+  assert.ok(total <= 10, `claimed ${total}`);
+  const rows = await db.execute({ sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND claimed = 1", args: [me.raterId] });
+  assert.ok(Number(rows.rows[0].n) <= 10, `${rows.rows[0].n} claimed rows`);
+});

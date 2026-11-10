@@ -124,3 +124,48 @@ test("a stale inspection returns at once too", async () => {
   assert.equal(h.body.stale, true);
   assert.equal(h.body.title, "seeded");
 });
+
+test("a failed PageSpeed run is cached for an hour, then retried", async () => {
+  const url = feed[104].url;
+  calls = 0;
+  failNext = true;
+  try {
+    const first = await get("psi", url);
+    assert.equal(first.body.ok, false);
+    for (let i = 0; i < 3; i++) assert.equal((await get("psi", url)).body.ok, false);
+    assert.equal(calls, 1, "a failure was asked again within the hour");
+  } finally {
+    failNext = false;
+  }
+  await age("psi", url, 61 * 60 * 1000);
+  const stale = await get("psi", url);
+  assert.equal(stale.body.stale, true);
+  await sleep(SLOW_MS + 1500);
+  assert.equal(calls, 2);
+  // The retry succeeded, so the good result replaced the failure.
+  assert.equal((await get("psi", url)).body.ok, true);
+});
+
+test("a miss while another isolate holds the lease answers in_progress without calling PageSpeed", async () => {
+  const url = feed[105].url;
+  await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '', ?)", args: [`lease:psi:${url}`, Date.now()] });
+  calls = 0;
+  const h = await get("psi", url);
+  assert.ok(h.ms < 1000, `took ${h.ms}ms`);
+  assert.equal(h.body.error, "in_progress");
+  assert.equal(calls, 0);
+  await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`lease:psi:${url}`] });
+});
+
+test("a site the health check found dead is never sent to PageSpeed", async () => {
+  const url = feed[106].url;
+  await db.execute({
+    sql: "INSERT OR REPLACE INTO portfolios (url, status) VALUES (?, 'dead')",
+    args: [url],
+  });
+  calls = 0;
+  const h = await get("psi", url);
+  assert.equal(h.body.error, "site_down");
+  assert.equal(calls, 0);
+  await db.execute({ sql: "DELETE FROM portfolios WHERE url = ?", args: [url] });
+});
