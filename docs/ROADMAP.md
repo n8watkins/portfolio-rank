@@ -80,7 +80,7 @@ Depends on: phases 1 and 3; uses phase 2 for "you'd rank about #340".
 | Pipeline: find, pick, compute facts, write, check, publish; 1-2 posts a week; fail-closed checks and the naming rule | to do |
 | Images: charts, screenshots, stock, Workers AI illustrations, Gemini review of each slot | to do |
 | Admin page: queue, unpublish, edit, feature, block a topic; weekly "what went out" email | to do |
-| Newsletter: sign-up with email confirmation, one-click unsubscribe, weekly digest | to do, after the email provider and postal address |
+| Newsletter: sign-up with email confirmation, one-click unsubscribe, weekly digest | to do, after the email provider |
 | Model watch: daily check of Google's model list and free tier, updates to the owner | to do |
 
 Depends on: the blog shell and model watch can start any time; most stories need phase 2 data; the newsletter needs the email gate from phase 4.
@@ -100,7 +100,7 @@ Depends on: phase 1's request log; the budget must exist before phase 4 opens to
 ## Risks to keep in view
 
 - **People being written about**: the naming rule and a clear removal process ([legal/removal.md](legal/removal.md)).
-- **Privacy and email law**: no privacy page exists today; the newsletter needs consent, a postal address in every email and easy unsubscribe.
+- **Privacy and email law**: no privacy page exists today; the newsletter needs consent and easy unsubscribe (no postal address while it stays non-commercial).
 - **Google's free tier** may use requests to improve its products; say so on the privacy page.
 - **Automatic publishing mistakes**: facts from code, the checks, labels and fast unpublish.
 - **Search and spam signals**: fewer, data-rich posts.
@@ -115,7 +115,7 @@ Depends on: phase 1's request log; the budget must exist before phase 4 opens to
 Decisions only the owner can make, oldest first.
 
 1. **Email provider**: Amazon SES or Cloudflare Email Service (already set up on `n8builds.dev` for Wren)?
-2. **Postal address for the newsletter footer** (CAN-SPAM requires one in every commercial email): a PO box, a virtual mailbox, or another address?
+2. **Postal address**: decided 2026-11-10, not needed while the newsletter stays editorial; add a PO box or virtual mailbox if ads, sponsors or paid features ever arrive.
 3. **Legal placeholders**: contact email, legal name or business name, jurisdiction, backup retention period, minimum age (see the `[owner: ...]` markers in [legal/](legal/)).
 4. **Full re-grade on rubric v2**: turn on `RUBRIC_REGRADE` once catch-up is done (about 2,000 grades, 4-5 days of 3.5's budget)?
 5. **Redesign preview**: approve the shell, adaptive home, leaderboard tabs and grade report when the preview is ready.

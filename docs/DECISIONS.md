@@ -180,6 +180,9 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: the same hard-cap pattern as Wren's demo budget; no bug or abuse can send unbounded email.
 - **Email provider: undecided** between Amazon SES and Cloudflare Email Service (owner, 2026-11-10). Status: open question.
   The grader plan and cost page assumed SES (about $0.10 per 1,000 emails); Cloudflare Email Service is already set up for `n8builds.dev` for Wren.
+- **No postal address in emails for now** (owner, 2026-11-10). Status: decided.
+  The newsletter is editorial and PortfolioRank sells nothing, so it isn't commercial email under CAN-SPAM; if ads, sponsors or paid features ever arrive, a PO box or virtual mailbox goes in the footer.
+  Why: no address needed today, and none to get spammed at.
 - **Queue and email past the daily cap** (owner, 2026-11-10). Status: planned.
   Every "grade my portfolio" request goes through a queue; with quota left it runs at once and the person watches, past the cap it waits and the report is emailed when ready (on the Batch API at half price once billing is on).
   Why: an email costs about 1/50 of a grade, so the queue lets free quota and Batch carry the load instead of refusing people.

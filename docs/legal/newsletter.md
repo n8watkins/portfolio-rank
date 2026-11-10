@@ -34,7 +34,7 @@ Each email carries:
 
 - who it's from and an honest subject line;
 - the unsubscribe link;
-- a postal address, which US law (CAN-SPAM) requires in every commercial email: [owner: postal address, a PO box or virtual mailbox is fine].
+- no postal address for now: the newsletter is editorial and PortfolioRank sells nothing, so it is not commercial email. If PortfolioRank ever adds ads, sponsors or paid features, a PO box or virtual mailbox goes in the footer (owner decision, 2026-11-10).
 
 ## Limits
 
