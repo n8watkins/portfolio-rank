@@ -3,7 +3,8 @@ import { Inter } from "next/font/google";
 import { ClaimVotes } from "@/components/ClaimVotes";
 import { UndoToastProvider } from "@/components/UndoToast";
 import { SignInProvider } from "@/components/SignInModal";
-import { SITE_URL } from "@/lib/site";
+import { IS_STAGING, SITE_URL } from "@/lib/site";
+import { StagingRibbon } from "@/components/StagingRibbon";
 import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 import "./globals.css";
 
@@ -20,6 +21,8 @@ export const metadata: Metadata = {
   // The share image is app/opengraph-image.tsx (and twitter-image.tsx).
   openGraph: { type: "website", siteName: "PortfolioRank", title: TITLE, description: DESCRIPTION, url: "/" },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  // The staging site is never indexed (lib/site.ts IS_STAGING).
+  ...(IS_STAGING ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default function RootLayout({
@@ -39,6 +42,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
+        {IS_STAGING && <StagingRibbon />}
         <ClaimVotes />
         <UndoToastProvider>
           <SignInProvider>{children}</SignInProvider>

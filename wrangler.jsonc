@@ -34,6 +34,8 @@
   // The revalidation queue renders pages again by calling the worker itself.
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
   "vars": {
+    // "production", or "staging" in env.staging below (worker/staging.ts).
+    "SITE_ENV": "production",
     // Where pages link captures: our own domain, where the Worker serves the
     // bucket with long edge and browser caching (worker/assets.ts). The
     // bucket's r2.dev address is rate-limited, uncached and for the pipeline
@@ -80,5 +82,50 @@
   // for each. Static assets are still served from the edge.
   "placement": { "mode": "targeted", "region": "aws:us-east-2" },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
-  "upload_source_maps": true
+  "upload_source_maps": true,
+  // The staging site (DEPLOY.md "Staging"): the same code as the Worker
+  // "portfolio-rank-staging" (`--env staging`) at its own address, with its
+  // own Turso database (its TURSO_* secrets) and its own ISR cache bucket.
+  // Wrangler does not inherit bindings, vars, routes or workflows into an
+  // environment, so each is repeated here on purpose.
+  // It never spends the production Gemini quota: no Cron Triggers, and no
+  // GEMINI_API_KEY or GITHUB_DISPATCH_TOKEN secret, so a manual end-of-day run
+  // skips. It reads the production screenshot bucket (the Worker only ever
+  // reads SHOTS; captures are uploaded by the pipeline on GitHub Actions).
+  "env": {
+    "staging": {
+      "workers_dev": false,
+      "routes": [{ "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }],
+      "preview_urls": false,
+      "r2_buckets": [
+        { "binding": "SHOTS", "bucket_name": "portfolio-rank" },
+        { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "portfolio-rank-staging-opennext-cache" }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
+      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" }],
+      "vars": {
+        // "staging": robots.txt disallows everything and every response says
+        // noindex (worker/staging.ts); Sentry tags events "staging".
+        "SITE_ENV": "staging",
+        "SHOTS_BASE_URL": "/shots",
+        // The staging GitHub OAuth app's callback is
+        // https://staging.portfoliorank.n8builds.dev/api/auth/callback/github.
+        "AUTH_URL": "https://staging.portfoliorank.n8builds.dev",
+        "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
+        "RANKING_V2": "false",
+        "RUBRIC_REGRADE": "false",
+        "GEMINI_RPM": "8",
+        "NIGHTLY_REFRESH": "150",
+        "ADMIN_GITHUB_LOGIN": "n8watkins"
+      },
+      // No crons at all: the end-of-day run, the people queue and model watch
+      // all call Gemini.
+      "triggers": { "crons": [] },
+      // Bound so the code and its types match production; nothing starts it.
+      "workflows": [{ "name": "portfolio-rank-night-staging", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }]
+    }
+  }
 }

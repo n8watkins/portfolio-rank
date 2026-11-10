@@ -45,6 +45,9 @@ jobs:
       - run: npm run build:worker
       - name: Bundle the Worker
         run: npx wrangler deploy --dry-run --outdir "${{ runner.temp }}/worker-bundle"
+      # The staging environment (wrangler.jsonc env.staging) bundles too.
+      - name: Bundle the staging Worker
+        run: npx wrangler deploy --dry-run --env staging --outdir "${{ runner.temp }}/worker-bundle-staging"
       # The bundle exports every Durable Object and Workflow class wrangler.jsonc
       # binds (the deploy's DOQueueHandler warning is a false alarm; DEPLOY.md).
       - name: Bound classes are exported

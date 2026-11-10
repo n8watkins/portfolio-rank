@@ -11,6 +11,7 @@ import * as Sentry from "@sentry/cloudflare";
 import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
+import { markStaging, stagingRobots } from "./staging";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 
@@ -27,11 +28,15 @@ type Handler = {
 };
 const app = openNext as Handler;
 
-// Screenshots and favicons skip the Next.js app (./assets.ts); the rest is the app.
+// Screenshots and favicons skip the Next.js app (./assets.ts); the rest is the
+// app. On staging, robots.txt disallows everything and every response says
+// noindex (./staging.ts).
 const worker = {
   ...app,
   async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
-    return (await serveImage(request, env, ctx)) ?? app.fetch(request, env, ctx);
+    const robots = stagingRobots(request, env);
+    if (robots) return robots;
+    return markStaging((await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx)), env);
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
