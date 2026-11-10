@@ -14,7 +14,7 @@
 //              same math and pair_key convention as human votes.
 //
 // Usage:
-//   node pipeline/judge.mjs rubric   [--limit N] [--only substr] [--force] [--rpm R] [--model M]
+//   node pipeline/judge.mjs rubric   [--limit N] [--only substr] [--force] [--rpm R] [--model M] [--no-browser]
 //   node pipeline/judge.mjs pairwise [--votes N] [--rpm R] [--model M]
 //
 // Budget: every Gemini request is recorded in gemini_requests and summarized
@@ -47,6 +47,7 @@ import {
 } from "./rubric.mjs";
 import { measurePage } from "./facts.mjs";
 import { httpGate, UA, visibleText } from "./gate.mjs";
+import { createRenderer } from "./render.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
 import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
@@ -307,9 +308,17 @@ const parseJson = (v) => {
   }
 };
 
+// Below this much server-rendered text a page is treated as client-rendered
+// and loaded in a browser instead (an offline sample of 30 sites found 40%
+// of them under 200 characters over plain HTTP).
+const RENDER_BELOW_CHARS = 200;
+// Started on first use only; --no-browser keeps grading on plain HTTP.
+const renderer = args.includes("--no-browser") ? null : createRenderer();
+
 // The page text and measured facts for a grade: stored by capture.mjs, or,
-// for rows captured before facts existed, measured now over plain HTTP (free)
-// and stored. Motion always comes from the capture (meta.motion).
+// for rows captured before facts existed, measured now (free) and stored:
+// over plain HTTP, or in a browser when the server sends little text.
+// Motion always comes from the capture (meta.motion).
 async function pageEvidence(row) {
   const url = String(row.url);
   const m = parseJson(row.meta)?.motion;
@@ -322,9 +331,16 @@ async function pageEvidence(row) {
   if (gate?.status !== "live") {
     return { pageText: "", facts: motion == null ? null : { source: "capture", motion } };
   }
-  const text = visibleText(gate.html);
+  let page = { html: gate.html, text: visibleText(gate.html), finalUrl: gate.finalUrl, source: "http" };
+  if (page.text.length < RENDER_BELOW_CHARS && renderer) {
+    const r = await renderer.render(url).catch(() => null);
+    if (r && r.status < 400 && String(r.text ?? "").trim().length > page.text.length) {
+      page = { html: r.html, text: String(r.text), finalUrl: r.finalUrl, source: "rendered" };
+    }
+  }
+  const { text } = page;
   const facts = await measurePage(
-    { html: gate.html, text, url, finalUrl: gate.finalUrl, name: String(row.name ?? ""), motion, source: "http" },
+    { html: page.html, text, url, finalUrl: page.finalUrl, name: String(row.name ?? ""), motion, source: page.source },
     { userAgent: UA }
   );
   const pageText = normalizePageText(text);
@@ -755,7 +771,7 @@ try {
   if (roster.delisted || roster.relisted) {
     console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
   }
-  const counts = MODE === "rubric" ? await runRubric() : await runPairwise();
+  const counts = MODE === "rubric" ? await runRubric().finally(() => renderer?.close()) : await runPairwise();
   const outcome = judgeOutcome({ mode: MODE, ...counts });
   await writeSummary(outcome, counts.stopped);
   console.log(outcome.verdict);

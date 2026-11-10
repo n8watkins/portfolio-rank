@@ -16,10 +16,10 @@
 // run looks broken (most sites failing at once) so the workflow files an issue.
 import fs from "fs";
 import path from "path";
-import { readRenderedPage, UA } from "./gate.mjs";
 import { healthSummary, runHealthCheck } from "./health.mjs";
 import { planExclusions, readJson } from "./exclusions.mjs";
 import { loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
+import { createRenderer } from "./render.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -44,30 +44,8 @@ const roster = await syncRoster(db, feed);
 console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
 
 // The browser second opinion (single-page apps, JavaScript redirects, cold starts).
-let browser = null;
-let render;
-if (!args.includes("--no-browser")) {
-  const { chromium } = await import("playwright");
-  browser = await chromium.launch();
-  render = async (url) => {
-    // Certificate errors stay errors: a visitor would see a warning page.
-    const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 800 } });
-    try {
-      const page = await ctx.newPage();
-      const res = await page.goto(url, { waitUntil: "load", timeout: 30000 });
-      await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
-      await page.waitForTimeout(1000);
-      return {
-        status: res?.status() ?? 0,
-        finalUrl: page.url(),
-        title: await page.title().catch(() => ""),
-        ...(await page.evaluate(readRenderedPage).catch(() => ({ text: "", media: false }))),
-      };
-    } finally {
-      await ctx.close().catch(() => {});
-    }
-  };
-}
+const renderer = args.includes("--no-browser") ? null : createRenderer();
+const render = renderer?.render;
 
 let exitCode = 0;
 try {
@@ -92,7 +70,7 @@ try {
     );
   }
 } finally {
-  await browser?.close();
+  await renderer?.close();
 }
 if (!process.env.GITHUB_STEP_SUMMARY) console.log(`\n${summaryOut.join("\n")}`);
 process.exit(exitCode);
