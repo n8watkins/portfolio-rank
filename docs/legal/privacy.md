@@ -74,13 +74,21 @@ To be removed, or to stay listed but never be named in posts, see [removal.md](r
 
 ## Google Gemini and the free tier
 
+Public by design.
+PortfolioRank only works with portfolios their owners published for the public to see.
+Before any page text reaches the AI, we remove email addresses and phone numbers.
+Names, public photos and the portfolio's own content stay, because that's what a portfolio is for.
+Nothing is blocked by region.
+
 PortfolioRank uses Google's Gemini API to grade portfolios and, later, to write blog posts from the site's data.
-What goes to Gemini: screenshots and page text of portfolio sites, the measured facts, and aggregate numbers from the site.
+What goes to Gemini: screenshots and page text of portfolio sites (with email addresses and phone numbers swapped for placeholders), the measured facts, and aggregate numbers from the site.
 What never goes to Gemini: anything about voters, accounts or newsletter subscribers.
 
-PortfolioRank currently uses Gemini's **free tier**.
+PortfolioRank currently uses Gemini's **free tier**, for everyone, everywhere.
 Under Google's terms for unpaid services, Google may use what is sent to improve its products, and human reviewers may read it.
+So don't put private details into anything you send for grading.
 Because only public web pages and aggregate data are sent, I'm comfortable with that, but you should know.
+When "grade my portfolio" launches, you'll be able to use your own Gemini API key instead of mine.
 If PortfolioRank moves to a paid Gemini plan, this section will be updated.
 
 ## Who else handles data

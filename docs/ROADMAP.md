@@ -67,6 +67,7 @@ Depends on: can start alongside phase 2; the leaderboard tabs fill in when ranki
 | Guardrails: Turnstile, per-person, per-network and site-wide caps, strict address checks, cache by address, private screenshots, untrusted page text | to do |
 | Security review: cost abuse, SSRF through redirects and the browser, prompt injection, report privacy | to do |
 | Email provider chosen and set up (domain, sender), behind the shared email gate | needs owner |
+| Free-tier notice where a visitor starts AI work ("the AI runs on Google Gemini's free tier; don't submit private details") and a bring-your-own-key option for the grade (DECISIONS.md, "Free tier everywhere") | to do |
 
 Depends on: phases 1 and 3; uses phase 2 for "you'd rank about #340".
 
@@ -97,7 +98,9 @@ Depends on: the blog shell and model watch can start any time; most stories need
 | Kill switches: one setting each for grading, comparisons, publishing and email | to do (stage caps in `GEMINI_BUDGET` can be 0 meanwhile) |
 | One admin page: quotas used, grades queued, posts queued, emails sent, removals pending | the quota data API is building (#69); the page comes with the redesign |
 | OpenPing watching health, the daily Gemini totals and the content pipeline | to do |
-| Paid Gemini key with a budget alert and hard cap, before any launch post | needs owner, later |
+| Paid Gemini key with a budget alert and hard cap: revisit at the public launch or when traffic grows (DECISIONS.md, "Free tier everywhere") | needs owner, later |
+| Turso reads: vote counters, a paged and edge-cached board API, nightly log roll-ups and retention (docs/COSTS.md section C) | done (#PRNUM) |
+| Nightly backup of every table, with a tested restore (`scripts/restore-db.mjs`) | done (#PRNUM); the owner's restore drill (ASSUMPTIONS.md section G) to do |
 
 Depends on: phase 1's request log; the budget must exist before phase 4 opens to the public.
 
@@ -105,7 +108,7 @@ Depends on: phase 1's request log; the budget must exist before phase 4 opens to
 
 - **People being written about**: the naming rule and a clear removal process ([legal/removal.md](legal/removal.md)).
 - **Privacy and email law**: no privacy page exists today; the newsletter needs consent and easy unsubscribe (no postal address while it stays non-commercial).
-- **Google's free tier** may use requests to improve its products; say so on the privacy page.
+- **Google's free tier** may use requests to improve its products, and its terms allow only paid use where people in the EEA, Switzerland or the UK can reach a client; the owner accepts that risk for now (DECISIONS.md, "Free tier everywhere"): contact details are stripped from page text, the privacy page says so, and visitors get a notice and their own-key option.
 - **Automatic publishing mistakes**: facts from code, the checks, labels and fast unpublish.
 - **Search and spam signals**: fewer, data-rich posts.
 - **Gaming the grade**: published criteria, untrusted page text, facts checked by code.

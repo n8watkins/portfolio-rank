@@ -150,6 +150,29 @@ Watching:
 
 With 1, 2, 4 and 6 to 8 in place, the popular scenario stays under about 3 million writes and 220 million reads a month in its first year, inside Turso Free.
 
+### Status (2026-11-10, #PRNUM)
+
+Built:
+
+- Fix 1: `vote_totals` and `star_counts` are kept by triggers on `votes` (every writer, same transaction); `/top` and portfolio pages read them, and `/top` renders at most every 5 minutes instead of every minute.
+- Fix 2: the recompute stores each site's rank among the shown sites (`site_ratings.shown_rank`); `/api/leaderboard` reads one page through the `(view, shown_rank)` index plus two single-row lookups, and each answer is kept in the data center's Cache API for 5 minutes.
+- Also for reads: the hidden-site set (a scan of `portfolios`) is kept per isolate for 5 minutes instead of being read on every render and vote.
+- Fix 6: `gemini_requests` keeps 90 Pacific days raw, then one `gemini_daily` row per day, model, job and outcome; `night_runs` keeps 180 days.
+- Fix 9: `comparisons` stay whole; only `reason` is cleared after 90 days.
+
+Not yet: fixes 3 (incremental recompute), 4 and 5 (write only changed `site_ratings` and `rank_history` rows), 7 and 8 (no analytics events or polls are stored yet), and 10 (the owner's monthly look).
+
+Estimated reads a month, before and after:
+
+| Scenario | As built before | With these fixes |
+| --- | --- | --- |
+| Today | about 2M | about 1M |
+| Modest, month 6 | about 600M (over) | about 40M |
+| Popular, month 1 | about 5.2B (over) | about 140M |
+
+The largest remaining lines are home and portfolio pages (ISR renders) and the nightly recompute.
+One line grows instead: the nightly backup now reads every table, so in the popular scenario it reaches about 100M a month by month 12 (mostly `comparisons`); when it passes about 50M, back up `comparisons` incrementally (only rows newer than the last snapshot) or weekly in full.
+
 ## GitHub Actions for browser work
 
 | | Today | Modest | Popular |
