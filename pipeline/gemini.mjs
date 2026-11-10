@@ -274,5 +274,12 @@ export function createGemini({
     get activeModel() {
       return models[active];
     },
+    /** Move the rest of the run to the next model (a caller's own budget is spent). */
+    useNextModel() {
+      if (active + 1 >= models.length) return null;
+      active++;
+      counts.fallbacks++;
+      return models[active];
+    },
   };
 }

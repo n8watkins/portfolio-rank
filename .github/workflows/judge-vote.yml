@@ -13,7 +13,7 @@ name: Daily AI vote (pairwise-metrics)
 # vote was cast, or when most pairs had to be skipped for missing screenshots.
 #
 # Budget: shares the free-tier Gemini quota with sync-upstream's rubric grading
-# (which keeps GEMINI_RESERVE requests a day free for this job). Cron is set
+# (whose 3.5 grading budget, GEMINI_GRADING_BUDGET, leaves room for this job). Cron is set
 # clear of sync's 06:00-11:30 window; both jobs share the "gemini"
 # concurrency group, so they never overlap (a queued run waits, it doesn't
 # time out: timeout-minutes counts from when the job starts).

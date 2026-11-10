@@ -137,7 +137,7 @@ test("the comparison report: tier agreement, per-axis difference, is_portfolio d
   assert.match(md, /\| visual_design \| 1\.00 \|/);
 });
 
-async function judgeRun({ newSites = 1, oldGrades = 0, quota, reserve = 0 }) {
+async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, catchUp = false }) {
   const { dir, file, db } = tempDb();
   await ensureRosterSchema(db);
   await db.batch([
@@ -162,8 +162,9 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, reserve = 0 }) {
       GEMINI_API_KEY: "test-key-not-real",
       SHOTS_BASE_URL: "https://shots.test",
       GITHUB_STEP_SUMMARY: summary,
-      GEMINI_RESERVE: String(reserve),
-      GEMINI_DAILY_QUOTA: JSON.stringify({ [PRIMARY_MODEL]: quota }),
+      GEMINI_GRADING_BUDGET: JSON.stringify(budget),
+      GEMINI_DAILY_QUOTA: JSON.stringify(quota),
+      GEMINI_CATCHUP: String(catchUp),
       MOCK_GEMINI: JSON.stringify([{ json: grade(null, "A", 4) }]),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -176,8 +177,13 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, reserve = 0 }) {
 }
 
 test("judge.mjs re-grades 3.1 grades with 3.5 while the budget lasts, keeps history, and logs every request", async () => {
-  // Quota 5, nothing reserved: 1 new grade, then 4 of the 5 old grades.
-  const { code, out, db, md } = await judgeRun({ newSites: 1, oldGrades: 5, quota: 5 });
+  // A 3.5 budget of 5: 1 new grade, then 4 of the 5 old grades.
+  const { code, out, db, md } = await judgeRun({
+    newSites: 1,
+    oldGrades: 5,
+    quota: { [PRIMARY_MODEL]: 5 },
+    budget: { [PRIMARY_MODEL]: 5, [BACKUP_MODEL]: 0 },
+  });
   assert.equal(code, 0, out);
   const hist = (await db.execute("SELECT model, replaced_by_model FROM rubric_history")).rows;
   assert.equal(hist.length, 4);
@@ -195,8 +201,12 @@ test("judge.mjs re-grades 3.1 grades with 3.5 while the budget lasts, keeps hist
 });
 
 test("with today's 3.5 budget used up, grading waits for tomorrow instead of failing or using 3.1", async () => {
-  // Quota 10 with 8 reserved for votes: no room for a grade (up to 4 requests).
-  const { code, out, db, md } = await judgeRun({ newSites: 2, quota: 10, reserve: 8 });
+  // A 3.5 budget of 2 leaves no room for a grade (up to 4 requests); catch-up off.
+  const { code, out, db, md } = await judgeRun({
+    newSites: 2,
+    quota: { [PRIMARY_MODEL]: 500 },
+    budget: { [PRIMARY_MODEL]: 2, [BACKUP_MODEL]: 450 },
+  });
   assert.equal(code, 0, out);
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests")).rows[0].n, 0);
   assert.match(md, /today's budget is used; 2 waiting for tomorrow/);
@@ -205,4 +215,23 @@ test("with today's 3.5 budget used up, grading waits for tomorrow instead of fai
 test("the default daily quotas are 500 for 3.5 and 500 for 3.1", async () => {
   const { DEFAULT_DAILY_QUOTA } = await import("../pipeline/gemini-log.mjs");
   assert.deepEqual(DEFAULT_DAILY_QUOTA, { [PRIMARY_MODEL]: 500, [BACKUP_MODEL]: 500 });
+});
+
+test("catch-up mode grades with 3.5 first, then 3.1 once 3.5's budget is used; 3.1 grades queue for a 3.5 re-grade", async () => {
+  const { code, out, db } = await judgeRun({
+    newSites: 3,
+    quota: { [PRIMARY_MODEL]: 500, [BACKUP_MODEL]: 500 },
+    budget: { [PRIMARY_MODEL]: 4, [BACKUP_MODEL]: 8 },
+    catchUp: true,
+  });
+  assert.equal(code, 0, out);
+  assert.match(out, /catch-up mode continues on gemini-3\.1-flash-lite/);
+  const byModel = Object.fromEntries(
+    (await db.execute("SELECT model, COUNT(*) AS n FROM gemini_requests GROUP BY model")).rows.map((r) => [r.model, r.n])
+  );
+  assert.deepEqual(byModel, { [PRIMARY_MODEL]: 1, [BACKUP_MODEL]: 2 });
+  const models = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows.map((r) => r.m).sort();
+  assert.deepEqual(models, [BACKUP_MODEL, BACKUP_MODEL, PRIMARY_MODEL]);
+  // Both 3.1 grades are on the 3.5 re-grade queue.
+  assert.equal((await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 10 })).length, 2);
 });

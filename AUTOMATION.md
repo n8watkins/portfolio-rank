@@ -103,7 +103,7 @@ queues (its timeout only counts once it starts).
   Newer AI Studio keys ("AQ." style) are rejected in the URL, and a URL key leaks into logs.
 - **Models:** `gemini-3.5-flash-lite` for everything until its quota is used up; `gemini-3.1-flash-lite` only then (owner's decision, 2026-11-10).
   An overloaded (5xx), timed-out or unreachable 3.5 is retried, same model, after 10, 30 and 60 seconds (jittered); if the last retry still fails, that one call goes to 3.1 and the next call is back on 3.5.
-  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) moves the rest of a vote run to 3.1, and stops a grading run (see the nightly budget).
+  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) moves the rest of the run to 3.1, except a grading run outside catch-up mode, which stops and waits for tomorrow.
   Any other 429 (per-minute) means slow down: wait Google's `RetryInfo` delay (or 60 seconds) and retry 3.5, up to 5 times.
   When no model can answer (both daily quotas spent, or still failing after the retries), the run stops cleanly; with nothing judged it exits 1, and the next run picks up the rest.
   A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request never falls back.
@@ -113,12 +113,15 @@ queues (its timeout only counts once it starts).
 - **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input and output tokens from `usageMetadata`, retry and fallback flags).
   Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus today's (UTC) requests per model against the daily free quota, with a warning from 80%.
   The quotas default to 500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
-- **Nightly budget:** grading counts every 3.5 request today (from `gemini_requests`, retries included) and stops at the quota minus `GEMINI_RESERVE` (default 100, kept for the 30 daily votes and their retries), starting a grade only with room for its 4 possible requests; `--limit 300` is the upper bound.
-  Sites past the budget are deferred to tomorrow, which is not a failure.
-  Grading prefers waiting for tomorrow's 3.5 quota over spending 3.1: a spent 3.5 daily quota stops the rubric run (3.1 grades would be re-graded by 3.5 later anyway); a single grade that still fails on 3.5 after its retries goes to 3.1.
-  The vote job does move to 3.1 when 3.5's daily quota is spent.
   Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`); the built-in rates are placeholders until that variable is set.
-- **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room today's 3.5 quota has left, keeping `GEMINI_RESERVE` (default 100) requests for the daily vote.
+- **Nightly budget:** grading has a daily budget per model (`GEMINI_GRADING_BUDGET`, JSON; default 400 for 3.5, which leaves 100 of its 500 for the 30 daily votes and their retries, and 450 for 3.1).
+  It counts every request today (from `gemini_requests`, retries included) and starts a grade only with room for its 4 possible requests; `--limit 1000` is the upper bound.
+  Sites past the budget are deferred to tomorrow, which is not a failure.
+- **Catch-up mode** (repository variable `GEMINI_CATCHUP`, on unless set to `false`; turn it off once the backlog and the one-time full re-grade are done): grading uses 3.5's budget first and then 3.1's, so both quotas work through the backlog (about 850 grades a day).
+  Every 3.1 grade goes on the re-grade queue for 3.5, which keeps the old grade for the comparison report.
+  With catch-up off, grading waits for tomorrow's 3.5 quota instead of spending 3.1; a single grade that still fails on 3.5 after its retries goes to 3.1 either way.
+  The vote job moves to 3.1 when 3.5's daily quota is spent in both modes.
+- **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room 3.5's grading budget has left today; re-grades only ever run on 3.5.
   Re-grading stops as soon as an answer comes from a model other than 3.5.
   The old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten, so each re-grade is a free 3.1-vs-3.5 pair; `--force` keeps history the same way, and `--no-regrade` turns the queue off.
 - **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs, exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).

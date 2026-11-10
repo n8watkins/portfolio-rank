@@ -10,6 +10,9 @@
 //   GEMINI_PRICES       JSON {model: {in, out}} in USD per 1M tokens, for the
 //                       cost estimate. The defaults are placeholders, not
 //                       Google's prices: set the current paid rates.
+//   GEMINI_GRADING_BUDGET  JSON {model: requests per day} the rubric may use;
+//                       the rest of each quota is left for the vote job.
+//   GEMINI_CATCHUP      "true" (default) or "false": catch-up mode, see judge.mjs.
 
 export const DEFAULT_DAILY_QUOTA = {
   "gemini-3.5-flash-lite": 500,
@@ -20,6 +23,12 @@ export const DEFAULT_PRICES = {
   "gemini-3.1-flash-lite": { in: 0.1, out: 0.4 },
 };
 export const WARN_SHARE = 0.8;
+// What grading may spend per model per day: 3.5 keeps 100 of its 500 for the
+// daily vote job (30 votes plus retries), which falls back to 3.1.
+export const DEFAULT_GRADING_BUDGET = {
+  "gemini-3.5-flash-lite": 400,
+  "gemini-3.1-flash-lite": 450,
+};
 
 const parseJsonEnv = (name, fallback) => {
   try {
@@ -30,6 +39,9 @@ const parseJsonEnv = (name, fallback) => {
 };
 export const dailyQuota = () => parseJsonEnv("GEMINI_DAILY_QUOTA", DEFAULT_DAILY_QUOTA);
 export const prices = () => parseJsonEnv("GEMINI_PRICES", DEFAULT_PRICES);
+export const gradingBudget = () => parseJsonEnv("GEMINI_GRADING_BUDGET", DEFAULT_GRADING_BUDGET);
+/** Catch-up mode: on unless GEMINI_CATCHUP is "false". */
+export const catchUpMode = () => String(process.env.GEMINI_CATCHUP ?? "true").toLowerCase() !== "false";
 
 export async function ensureGeminiLog(db) {
   await db.execute(`CREATE TABLE IF NOT EXISTS gemini_requests (

@@ -30,7 +30,7 @@ import {
   GeminiUnavailableError,
   PRIMARY_MODEL,
 } from "./gemini.mjs";
-import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
+import { catchUpMode, createRequestLog, dailyTotals, ensureGeminiLog, gradingBudget, runSummary } from "./gemini-log.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements } from "./rubric-history.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
@@ -71,6 +71,11 @@ const FORCE = args.includes("--force");
 // One pace for every Gemini request in the run, retries included: --rpm,
 // else the GEMINI_RPM repository variable, else DEFAULT_RPM.
 const RPM = Number(flag("rpm", process.env.GEMINI_RPM || String(DEFAULT_RPM)));
+// Catch-up mode (repository variable GEMINI_CATCHUP, on unless "false"):
+// while the backlog and the one-time full re-grade are being worked through,
+// grading uses 3.5's daily budget first and then 3.1's, so both quotas work.
+// Every 3.1 grade goes on the re-grade queue for 3.5 afterwards.
+const CATCHUP = catchUpMode();
 // pairwise: concentrate votes on these graded tiers (NULL/other tiers excluded).
 const TIERS = (flag("tiers", "S,A,B") || "")
   .split(",")
@@ -119,10 +124,11 @@ const gemini = createGemini({
   models: MODELS,
   limiter: createLimiter({ rpm: RPM }),
   onRequest: (r) => requestLog.record(r),
-  // Grading waits for tomorrow's 3.5 quota rather than spending 3.1 (whose
-  // grades would be re-graded by 3.5 later anyway); a single grade that keeps
-  // failing on 3.5 after the retries still goes to 3.1. Votes fall back.
-  onDailyQuota: MODE === "rubric" ? "stop" : "fallback",
+  // Outside catch-up mode, grading waits for tomorrow's 3.5 quota rather
+  // than spending 3.1 (whose grades would be re-graded by 3.5 later anyway);
+  // a single grade that keeps failing on 3.5 after the retries still goes to
+  // 3.1. In catch-up mode, and for votes, a spent 3.5 quota moves to 3.1.
+  onDailyQuota: MODE === "rubric" && !CATCHUP ? "stop" : "fallback",
 });
 
 // Inline image part; skips files that would blow the request size cap.
@@ -375,10 +381,10 @@ async function gradeRow(row) {
   return { status: "ok", rubric, model };
 }
 
-// Grading stays inside today's 3.5 quota (500 by default), keeping RESERVE
-// requests free for the daily vote job (30 votes plus their retries). Every
-// request counts, retries included; rows beyond the budget wait for tomorrow.
-const RESERVE = Number(process.env.GEMINI_RESERVE ?? 100);
+// Grading stays inside a daily budget per model (GEMINI_GRADING_BUDGET;
+// 3.5's leaves room in its 500 for the daily vote job). Every request counts,
+// retries included, plus what earlier runs spent today (gemini_requests).
+// Rows beyond the budget wait for tomorrow.
 
 async function runRubric() {
   await ensureRubricHistory(db);
@@ -403,14 +409,27 @@ async function runRubric() {
   let stopped = null;
   let deferred = 0;
 
-  // Today's 3.5 requests before this run (from gemini_requests), plus this
-  // run's own, against the quota minus RESERVE.
-  const quota = dailyQuota()[PRIMARY_MODEL] ?? 0;
-  const usedBefore = (await dailyTotals(db)).used.get(PRIMARY_MODEL)?.n ?? 0;
-  const room = () => quota - RESERVE - usedBefore - (gemini.requests[PRIMARY_MODEL] ?? 0);
+  // Today's requests per model before this run, plus this run's own, against
+  // the grading budget.
+  const budget = gradingBudget();
+  const { used } = await dailyTotals(db);
+  const room = (model = gemini.activeModel) =>
+    (budget[model] ?? 0) - (used.get(model)?.n ?? 0) - (gemini.requests[model] ?? 0);
   // Each grade can take up to 4 requests (3 retries); start one only with room for that.
   const PER_GRADE = 4;
   const budgeted = MODELS[0] === PRIMARY_MODEL;
+  // In catch-up mode a spent 3.5 budget moves grading to 3.1; otherwise it waits.
+  const haveRoom = (need) => {
+    if (room() >= need) return true;
+    if (CATCHUP && gemini.activeModel === PRIMARY_MODEL) {
+      const next = gemini.useNextModel();
+      if (next) {
+        console.log(`  ${PRIMARY_MODEL} grading budget used; catch-up mode continues on ${next}`);
+        return room() >= need;
+      }
+    }
+    return false;
+  };
 
   // Returns false when the run must stop (Gemini unavailable or out of quota).
   async function handle(row, label, { regrade = false } = {}) {
@@ -466,25 +485,25 @@ async function runRubric() {
   }
 
   for (const [i, row] of queue.entries()) {
-    if (budgeted && room() < PER_GRADE) {
+    if (budgeted && !haveRoom(PER_GRADE)) {
       deferred = queue.length - i;
-      stopped = `today's ${PRIMARY_MODEL} budget is used (${quota} a day, ${RESERVE} kept for votes); ${deferred} site(s) wait for tomorrow`;
+      stopped = `today's grading budget is used (${JSON.stringify(budget)}); ${deferred} site(s) wait for tomorrow`;
       break;
     }
     if (!(await handle(row, `[${i + 1}/${queue.length}]`))) break;
   }
 
-  // Re-grade queue, lowest priority: grades not made by the primary model,
-  // re-done by it while today's quota has room (keeping RESERVE for votes).
+  // Re-grade queue, lowest priority: grades not made by 3.5, re-done by 3.5
+  // within its grading budget. Re-grading only ever runs on 3.5.
   let regradeQueued = 0;
-  if (!stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted) {
-    const left = room();
-    const budget = Math.min(LIMIT === Infinity ? left : LIMIT - queue.length, left);
-    const rows = await regradeQueue(db, { primary: PRIMARY_MODEL, limit: Math.max(0, budget) });
+  if (!stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted && gemini.activeModel === PRIMARY_MODEL) {
+    const left = room(PRIMARY_MODEL);
+    const n = Math.min(LIMIT === Infinity ? left : LIMIT - queue.length, left);
+    const rows = await regradeQueue(db, { primary: PRIMARY_MODEL, limit: Math.max(0, n) });
     regradeQueued = rows.length;
     if (rows.length) console.log(`re-grade: ${rows.length} grade(s) not made by ${PRIMARY_MODEL} (room today: ${left})`);
     for (const [i, row] of rows.entries()) {
-      if (room() < 1) {
+      if (gemini.activeModel !== PRIMARY_MODEL || room(PRIMARY_MODEL) < 1) {
         deferred += rows.length - i;
         break;
       }
