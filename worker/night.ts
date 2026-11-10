@@ -31,6 +31,7 @@ import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
+import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
@@ -192,7 +193,8 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       const ctx = engine(this.env, runId);
       const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
       const conditions = [...nightConditions(night, ctx.plan), ...(await tractionConditions(ctx.db, { now: new Date(Date.parse(String(state.startedAt))), levels: tractionLevels(this.env.ALERT_TRACTION) }))];
-      const r = await reconcileAlerts(ctx.db, { conditions, email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
+      // The weekly model watch owns its own alerts (./model-watch.ts); the night never clears them.
+      const r = await reconcileAlerts(ctx.db, { conditions, scope: (key: string) => !isModelWatchAlert(key), email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
       log("night.alerts", r);
       return r;
     });
