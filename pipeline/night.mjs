@@ -373,8 +373,13 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
     args: [timeline.night, iso(now), ctx.runId ?? null],
   });
   if (!claimed.rows.length) {
-    const prev = (await db.execute({ sql: "SELECT started_at, status FROM night_runs WHERE night = ?", args: [timeline.night] })).rows[0];
-    return { skip: true, reason: `tonight's run (${timeline.night}) already started at ${prev?.started_at} (${prev?.status}); it never restarts the same night` };
+    const prev = (await db.execute({ sql: "SELECT started_at, status, run_id FROM night_runs WHERE night = ?", args: [timeline.night] })).rows[0];
+    // The same Workflow instance retrying this step after its claim was
+    // written goes on; anything else is a second run the same night.
+    const sameRun = ctx.runId && prev && String(prev.run_id) === String(ctx.runId) && String(prev.status) === "running";
+    if (!sameRun) {
+      return { skip: true, reason: `tonight's run (${timeline.night}) already started at ${prev?.started_at} (${prev?.status}); it never restarts the same night` };
+    }
   }
   ctx.log(`night ${timeline.night}: started at ${pacificTime(now)} Pacific (${trigger}); AI work starts by ${pacificTime(timeline.checksDeadline)}, hard stop ${pacificTime(timeline.hardStop)}`);
   return {

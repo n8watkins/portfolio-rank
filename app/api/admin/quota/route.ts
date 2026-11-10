@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { db, ensureSchema } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin";
+import { DEFAULT_PLAN, QUOTA_TZ, STAGES, backgroundAllowance, budgetPlan, peopleAllowance, reserveFor, usageHistory, usageToday } from "@/pipeline/budget.mjs";
+import { dailyQuota } from "@/pipeline/gemini-log.mjs";
+import { parkedItems, recentNights } from "@/pipeline/night.mjs";
+
+// The admin quota view's data (no page yet; the redesign's admin page reads
+// it): Gemini use by job and model for today's quota day and the last 30,
+// what each background stage and people may spend right now, the latest
+// end-of-day runs and the parked items. Read-only, and only for the GitHub
+// login in ADMIN_GITHUB_LOGIN.
+//   GET /api/admin/quota[?days=30]
+export const dynamic = "force-dynamic";
+
+const PRIVATE = { "cache-control": "private, no-store" };
+
+// A table that doesn't exist yet (no request logged, no night run) reads as empty.
+async function orEmpty<T>(read: () => Promise<T>, empty: T): Promise<T> {
+  try {
+    return await read();
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message))) return empty;
+    throw e;
+  }
+}
+
+export async function GET(req: Request) {
+  const who = await requireAdmin();
+  if ("error" in who) {
+    return NextResponse.json({ error: who.error }, { status: who.error === "signin_required" ? 401 : 403, headers: PRIVATE });
+  }
+  await ensureSchema();
+  const days = Math.min(Math.max(Number(new URL(req.url).searchParams.get("days")) || 30, 1), 90);
+  const now = new Date();
+  const plan = budgetPlan(process.env.GEMINI_BUDGET);
+  const quota = dailyQuota(process.env.GEMINI_DAILY_QUOTA);
+  const client = db();
+  const emptyUsage = { day: "", start: "", end: "", byModel: {}, byJob: {}, peopleLastHour: 0, peopleRecent: 0 };
+  const [history, usage, nights, parked] = await Promise.all([
+    orEmpty(() => usageHistory(client, { now, days, quota }), null),
+    orEmpty(() => usageToday(client, { now, plan }), emptyUsage),
+    orEmpty(() => recentNights(client, { limit: 14 }), []),
+    orEmpty(() => parkedItems(client), []),
+  ]);
+  return NextResponse.json(
+    {
+      timezone: QUOTA_TZ,
+      model: plan.model,
+      quota,
+      plan: { reserve: plan.reserve, demandFactor: plan.demandFactor, batch: plan.batch, start: `${plan.startHour}:${String(plan.startMinute).padStart(2, "0")}`, stages: plan.stages, defaults: DEFAULT_PLAN.stages },
+      now: {
+        day: usage.day,
+        used: usage.byModel,
+        peopleLastHour: usage.peopleLastHour,
+        reserve: reserveFor(usage, plan),
+        people: peopleAllowance(usage, { plan, quota, now }),
+        // "AI ranking comparisons" is Gemini comparing sites; human face-off votes use no Gemini.
+        background: STAGES.map((s) => ({ key: s.key, job: s.job, label: s.label, ...backgroundAllowance(s.key, usage, { plan, quota }) })),
+      },
+      today: history?.today ?? null,
+      days: history?.days ?? [],
+      nights,
+      parked,
+    },
+    { headers: PRIVATE }
+  );
+}

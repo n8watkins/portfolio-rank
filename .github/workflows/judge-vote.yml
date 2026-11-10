@@ -1,4 +1,11 @@
-name: Daily AI vote (pairwise-metrics)
+name: AI votes and comparisons (manual fallback)
+
+# Manual only since 2026-11-10: AI ranking comparisons run in Cloudflare's
+# end-of-day run (pipeline/night.mjs, when the Worker var RANKING_V2 is
+# "true"), on what is left of the day's quota after people. The ELO-era AI
+# votes below no longer run on a schedule; run them by hand if needed. Both
+# steps ask the budget accountant (pipeline/budget.mjs) how much they may
+# spend, so a manual run never takes the reserve kept for people.
 
 # Each day, gemini-3.5-flash-lite (only: no fallback to a lower model; when
 # 3.5 stays busy after its retries or its daily quota is used up, the rest
@@ -29,8 +36,6 @@ on:
         description: "Comma-separated tiers to concentrate on"
         required: false
         default: "S,A,B"
-  schedule:
-    - cron: "0 13 * * *" # 13:00 UTC - clear of sync-upstream's 06:00-11:30 window
 
 # Shares the "gemini" group with sync-upstream (which grades), so voting and
 # grading never run at the same time and never split the pace or the quota.
@@ -78,6 +83,7 @@ jobs:
       - name: Cast daily AI pairwise votes
         if: vars.RANKING_V2 != 'true'
         env:
+          GEMINI_BUDGET: ${{ vars.GEMINI_BUDGET }}
           GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
           GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
           GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
@@ -99,6 +105,7 @@ jobs:
       - name: Daily AI comparisons (ranking v2)
         if: vars.RANKING_V2 == 'true'
         env:
+          GEMINI_BUDGET: ${{ vars.GEMINI_BUDGET }}
           RANKING_V2: ${{ vars.RANKING_V2 }}
           RANKING_BUDGET: ${{ vars.RANKING_BUDGET }}
           RANKING_BATCHED_COUNTS: ${{ vars.RANKING_BATCHED_COUNTS }}

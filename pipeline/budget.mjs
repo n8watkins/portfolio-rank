@@ -219,6 +219,10 @@ export function nightTimeline(startedAt, plan = DEFAULT_PLAN) {
  *   peopleLastHour, peopleRecent } (people's requests in the last hour and
  * in the last plan.activeMinutes).
  */
+/**
+ * @param {{ execute: Function }} db
+ * @param {{ now?: Date, plan?: typeof DEFAULT_PLAN }} [options]
+ */
 export async function usageToday(db, { now = new Date(), plan = DEFAULT_PLAN } = {}) {
   const at = new Date(now);
   const { day, start, end } = quotaDay(at);
@@ -259,6 +263,7 @@ export async function usageToday(db, { now = new Date(), plan = DEFAULT_PLAN } =
 }
 
 /** The reserve the background must leave: it grows with people's demand in the last hour. */
+/** @type {(usage: { peopleLastHour?: number }, plan?: typeof DEFAULT_PLAN) => number} */
 export const reserveFor = (usage, plan = DEFAULT_PLAN) => Math.max(plan.reserve, plan.demandFactor * (usage.peopleLastHour ?? 0));
 
 /**
@@ -266,8 +271,11 @@ export const reserveFor = (usage, plan = DEFAULT_PLAN) => Math.max(plan.reserve,
  * min(its cap minus what it used today, the quota left minus the reserve).
  * Returns { allowed, remaining, reserve, used, cap, limitedBy } where
  * limitedBy is "cap" or "quota" when allowed is 0.
+ * @param {string} stageKey
+ * @param {{ byModel: Record<string, number>, byJob: Record<string, Record<string, number>>, peopleLastHour?: number }} usage
+ * @param {{ plan?: typeof DEFAULT_PLAN, quota?: Record<string, number> }} [options]
  */
-export function backgroundAllowance(stageKey, usage, { plan = DEFAULT_PLAN, quota } = {}) {
+export function backgroundAllowance(stageKey, usage, { plan = DEFAULT_PLAN, quota = {} } = {}) {
   const stage = STAGES.find((s) => s.key === stageKey);
   if (!stage) throw new Error(`unknown stage ${stageKey}`);
   const model = plan.model;
@@ -285,8 +293,10 @@ export function backgroundAllowance(stageKey, usage, { plan = DEFAULT_PLAN, quot
  * How many requests people may spend now: everything left, minus the
  * reserve until the end-of-day run starts (the reserve is for people who
  * come late), then all of it.
+ * @param {{ byModel: Record<string, number> }} usage
+ * @param {{ plan?: typeof DEFAULT_PLAN, quota?: Record<string, number>, now?: Date }} [options]
  */
-export function peopleAllowance(usage, { plan = DEFAULT_PLAN, quota, now = new Date() } = {}) {
+export function peopleAllowance(usage, { plan = DEFAULT_PLAN, quota = {}, now = new Date() } = {}) {
   const model = plan.model;
   const remaining = (quota?.[model] ?? 0) - (usage.byModel[model] ?? 0);
   const p = pacificParts(now);
@@ -322,6 +332,8 @@ export function regradeAllowed({ lastGradedAt, pageChangedAt = null, now = new D
  * included): { timezone, quota, today, days } where each day is
  * { day, total: {model: n}, jobs: [{ job, label, model, requests, ok }] },
  * newest first.
+ * @param {{ execute: Function }} db
+ * @param {{ now?: Date, days?: number, quota?: Record<string, number> }} [options]
  */
 export async function usageHistory(db, { now = new Date(), days = 30, quota = {} } = {}) {
   const today = quotaDay(now);

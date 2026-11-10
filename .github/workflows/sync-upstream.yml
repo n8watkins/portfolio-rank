@@ -1,20 +1,41 @@
 name: Sync upstream + ingest
 
-# Fully hands-off intake of the *accepted* community portfolios:
+# The nightly free checks, the first part of the end-of-day run (owner
+# decisions 2026-11-10; AUTOMATION.md "End of day"). No Gemini:
 #   1. rebuild feed.json from emmabostian/developer-portfolios' merged README
 #      (trust gate = "Emma merged it"; open PRs are NOT pulled),
 #   2. if upstream actually changed, open (or refresh) one pull request with it
 #      and let it auto-merge once the required checks pass,
-#   3. screenshot + AI-grade whatever is new.
-# capture.mjs reads feed.json, marks database rows that left it as delisted
-# (pipeline/roster.mjs), and captures new sites plus failed captures whose
-# retry date has come; judge.mjs skips already-graded and delisted sites - so
-# this only ever does the *new* work. The feed may shrink by at most 5% per
-# run (generate_feed.py --max-shrink).
+#   3. screenshot whatever is new, re-capture the sites captured longest ago
+#      (--refresh), measure page text and facts for rows waiting for a grade,
+#      and record page fingerprint changes.
+# Cloudflare's end-of-day Workflow starts this at 20:30 Pacific and waits for
+# it, then grades new and changed sites on Cloudflare the same night
+# (pipeline/night.mjs). capture.mjs reads feed.json, marks database rows that
+# left it as delisted (pipeline/roster.mjs), and captures new sites plus
+# failed captures whose retry date has come. The feed may shrink by at most
+# 5% per run (generate_feed.py --max-shrink).
+# Grading here (the "grade" input) is the manual fallback only.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      refresh:
+        description: "Sites to re-capture, captured longest ago first (finds redesigns)"
+        required: false
+        default: "150"
+      rubric_regrade:
+        description: "Also measure evidence for grades from an older rubric (the Worker's RUBRIC_REGRADE)"
+        required: false
+        default: "false"
+      grade:
+        description: "Also AI-grade here (manual fallback; the end-of-day run on Cloudflare grades every night)"
+        type: boolean
+        required: false
+        default: false
+  # Fallback only: skips when Cloudflare started this in the last 20 hours
+  # (the fallback-guard job). 06:00 UTC is after Cloudflare's 03:30/04:30.
   schedule:
-    - cron: "0 6 * * *" # daily 06:00 UTC
+    - cron: "0 6 * * *"
 
 # One group for every job that calls Gemini (this one grades, judge-vote
 # votes): they never run at the same time, so the shared per-minute pace and
@@ -32,7 +53,44 @@ permissions:
   issues: write # file an issue if a scheduled run fails
 
 jobs:
+  # The GitHub schedule is only the fallback: Cloudflare's end-of-day run
+  # (worker/night.ts) starts this workflow at 20:30 Pacific with a
+  # workflow_dispatch, because GitHub's schedule starts hours late. A
+  # scheduled run skips when a dispatched run started in the last WINDOW
+  # hours, so it only does the work when Cloudflare could not (no
+  # GITHUB_DISPATCH_TOKEN, or the Worker is down).
+  fallback-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.guard.outputs.run }}
+    steps:
+      - id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WORKFLOW: sync-upstream.yml
+          WINDOW: "20"
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          since=$(date -u -d "$WINDOW hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since" --jq '.total_count')
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "::notice::Cloudflare's end-of-day run already started $WORKFLOW in the last $WINDOW hours; the GitHub schedule (fallback) skips."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No run started by Cloudflare in the last $WINDOW hours; the GitHub schedule runs as the fallback."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   sync:
+    needs: fallback-guard
+    if: needs.fallback-guard.outputs.run == 'true'
     # Pinned: ubuntu-latest moved to 26.04 on 2026-10-22, and Playwright 1.60
     # can't install Chromium there ("does not support chromium on
     # ubuntu26.04-x64"), so capture failed and new portfolios got no screenshots
@@ -143,20 +201,30 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Capture new portfolios
-        run: node pipeline/capture.mjs --concurrency 4
-      # Grades needs_review and newest-captured sites first, then the backlog,
-      # then re-grades 3.1 grades with 3.5, then (RUBRIC_REGRADE) grades from
-      # an older rubric version, inside 3.5's daily grading budget
-      # (GEMINI_GRADING_BUDGET; 3.5 keeps room for the vote job).
-      # Grades come from gemini-3.5-flash-lite only (owner, 2026-11-10): when
-      # 3.5 stays busy after its retries or its budget or quota is used up,
-      # the rest waits for the next run. There is no catch-up mode on 3.1.
-      - name: AI-grade new + backlog (budget-capped)
+      - name: Capture new portfolios, re-capture the oldest
+        env:
+          REFRESH: ${{ inputs.refresh || '150' }}
+        run: node pipeline/capture.mjs --concurrency 4 --refresh "$REFRESH"
+      # Page text and facts for rows waiting for a grade that have none
+      # (captured before rubric v2): the end-of-day grading on Cloudflare
+      # reads only stored evidence.
+      - name: Measure page evidence for the grading queue
+        env:
+          RUBRIC_REGRADE: ${{ inputs.rubric_regrade || vars.RUBRIC_REGRADE || 'false' }}
+        run: node pipeline/evidence.mjs --limit 300
+      # Fingerprint changes become "Grade changed sites" tonight.
+      - name: Record page changes
+        run: node scripts/detect-changes.mjs
+      # Manual fallback only (the "grade" input): grades needs_review and
+      # newest-captured sites first, then the backlog, then re-grades, inside
+      # the budget accountant's shares (pipeline/budget.mjs). Grades come
+      # from gemini-3.5-flash-lite only (owner, 2026-11-10).
+      - name: AI-grade new + backlog (manual fallback)
+        if: inputs.grade == true
         env:
           GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
           GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
-          GEMINI_GRADING_BUDGET: ${{ vars.GEMINI_GRADING_BUDGET }}
+          GEMINI_BUDGET: ${{ vars.GEMINI_BUDGET }}
           # Pinned, not a repository variable: the 3.1 fallback is for
           # labelled experiments only and never grades production sites.
           GEMINI_FALLBACK: "off"

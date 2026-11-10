@@ -10,6 +10,8 @@ export E2E_BASE_URL="http://localhost:$PORT"
 export AUTH_SECRET="${AUTH_SECRET:-$(node -e 'process.stdout.write(require("crypto").randomBytes(33).toString("base64"))')}"
 export AUTH_GITHUB_ID="${AUTH_GITHUB_ID:-e2e}" AUTH_GITHUB_SECRET="${AUTH_GITHUB_SECRET:-e2e}"
 export AUTH_URL="$E2E_BASE_URL"
+# The admin API (tests/admin-quota.test.mjs) answers this login only.
+export ADMIN_GITHUB_LOGIN="e2e-admin"
 # A local stand-in for Google PageSpeed, served by tests/psi-cache.test.mjs.
 export E2E_PSI_PORT="${E2E_PSI_PORT:-7692}"
 export PSI_API_BASE="http://127.0.0.1:$E2E_PSI_PORT/runPagespeed"
