@@ -33,6 +33,10 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
   // The revalidation queue renders pages again by calling the worker itself.
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
+  // Email (grade reports, owner alerts) goes through Cloudflare Email Service
+  // from EMAIL_FROM, an address on n8builds.dev, which is onboarded for
+  // sending; every send passes the shared gate's caps (lib/email/gate.mjs).
+  "send_email": [{ "name": "SEND_EMAIL" }],
   "vars": {
     // "production", or "staging" in env.staging below (worker/staging.ts).
     "SITE_ENV": "production",
@@ -56,16 +60,27 @@
     // Sites the nightly checks re-capture (oldest first) to find redesigns.
     "NIGHTLY_REFRESH": "150",
     // The GitHub login allowed to read /api/admin/* (the admin quota view).
-    "ADMIN_GITHUB_LOGIN": "n8watkins"
+    "ADMIN_GITHUB_LOGIN": "n8watkins",
+    // "Grade my portfolio" (lib/grader, AUTOMATION.md): its API and crons do
+    // nothing until this is "true", which waits for the redesign's UI.
+    "GRADER_ENABLED": "false",
+    // The sender of every email (lib/email/gate.mjs).
+    "EMAIL_FROM": "portfoliorank@n8builds.dev"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
-    // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT.
+    // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
+    // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
+    // Optional: OWNER_EMAIL (owner alerts go there, the owner's verified
+    // address), TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
+    // pages render; the secret is TURNSTILE_SECRET_KEY).
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
   // AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN,
-  // PSI_API_KEY, GEMINI_API_KEY (the end-of-day run) and
-  // GITHUB_DISPATCH_TOKEN (starts the nightly checks on GitHub Actions; a
-  // fine-grained token for n8watkins/portfolio-rank with Actions read and
-  // write only). See DEPLOY.md.
+  // PSI_API_KEY, GEMINI_API_KEY (the end-of-day run and people's queued
+  // grades), GITHUB_DISPATCH_TOKEN (starts the nightly checks and the
+  // grader's captures on GitHub Actions; a fine-grained token for
+  // n8watkins/portfolio-rank with Actions read and write only) and
+  // TURNSTILE_SECRET_KEY (poll votes and grade requests; skipped without
+  // it). See DEPLOY.md.
   // The end-of-day run: Cloudflare's clock instead of GitHub's schedule,
   // which starts jobs hours late. Cron Triggers run in UTC; 03:30 is 20:30
   // in Los Angeles under daylight time and 04:30 under standard time, and
@@ -74,7 +89,10 @@
   // "15 * * * *" finishes people's grade requests that waited for Gemini 3.5
   // (pipeline/people.mjs; none exist until "grade my portfolio" ships).
   // "0 16 * * 1" is the weekly model watch, Mondays (worker/model-watch.ts).
-  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * 1"] },
+  // "*/5 * * * *" is the grader's tick (worker/grader.ts): report emails,
+  // captures that didn't start, requests waiting for a later day, cleanup;
+  // it returns at once while GRADER_ENABLED is not "true".
+  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * 1", "*/5 * * * *"] },
   // One instance a night ("night-<Pacific date>"), one step per batch.
   "workflows": [{ "name": "portfolio-rank-night", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }],
   // Run next to the Turso database (aws-us-east-2): every request makes several
@@ -106,6 +124,7 @@
       },
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
       "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" }],
+      "send_email": [{ "name": "SEND_EMAIL" }],
       "vars": {
         // "staging": robots.txt disallows everything and every response says
         // noindex (worker/staging.ts); Sentry tags events "staging".
@@ -119,7 +138,9 @@
         "RUBRIC_REGRADE": "false",
         "GEMINI_RPM": "8",
         "NIGHTLY_REFRESH": "150",
-        "ADMIN_GITHUB_LOGIN": "n8watkins"
+        "ADMIN_GITHUB_LOGIN": "n8watkins",
+        "GRADER_ENABLED": "false",
+        "EMAIL_FROM": "portfoliorank@n8builds.dev"
       },
       // No crons at all: the end-of-day run, the people queue and model watch
       // all call Gemini.
