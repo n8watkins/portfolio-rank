@@ -28,6 +28,9 @@ export GRADER_TEST_GEMINI_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/gemini"
 export GRADER_TEST_SHOTS_DIR="$PWD/data/e2e-shots"
 export GITHUB_DISPATCH_TOKEN="e2e-dispatch-token"
 export EMAIL_TRANSPORT=outbox
+# Not "production": the local Cloudflare context would otherwise fill it in
+# from wrangler.jsonc, and the outbox refuses to run on a deployed Worker.
+export SITE_ENV=test
 unset GEMINI_API_KEY TURNSTILE_SECRET_KEY SEND_EMAIL
 DB="$PWD/data/e2e.db"
 rm -f "$DB"*
