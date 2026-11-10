@@ -154,7 +154,7 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, catchUp = 
     });
   }
   const summary = path.join(dir, "summary.md");
-  const child = spawn(process.execPath, ["--import", "./tests/helpers/mock-fetch.mjs", "pipeline/judge.mjs", "rubric", "--rpm", "60000"], {
+  const child = spawn(process.execPath, ["--import", "./tests/helpers/mock-fetch.mjs", "pipeline/judge.mjs", "rubric", "--rpm", "60000", "--no-browser"], {
     env: {
       ...process.env,
       TURSO_DATABASE_URL: `file:${file}`,

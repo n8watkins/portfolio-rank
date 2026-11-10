@@ -14,9 +14,9 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
         ▼
-  capture.mjs  ──►  screenshots ──► Cloudflare R2 (public)   + diagnostics ──► Turso
+  capture.mjs  ──►  screenshots ──► Cloudflare R2 (public)   + diagnostics, page text, facts ──► Turso
         ▼
-  judge.mjs rubric  ──►  Gemini tier + 6-axis grades ──► Turso (portfolios.ai_rubric)
+  judge.mjs rubric  ──►  rubric v2: Gemini tier + 5 quality scores, code checks ──► Turso (portfolios.ai_rubric)
         ▼
   judge.mjs pairwise  ──►  Gemini ELO votes ──► Turso (votes, ratings)
         ▼
@@ -90,14 +90,22 @@ queues (its timeout only counts once it starts).
 - **Gemini (free tier, shared):** grading self-limits to *new* sites/day; voting
   capped at 30/day. Both abort cleanly on sustained 429s. See the AI judge
   section below for the models.
-- **R2 (10 GB free):** ~570 MB of serve-frames (hero/mobile/full; motion strips
-  stay local) + ~0.2 MB/day backups → far under the cap, $0.
+- **R2 (10 GB free):** ~570 MB of serve-frames (hero/mobile/full) + ~0.2 MB/day
+  backups → far under the cap, $0.
 - **GitHub Actions:** unlimited (public repo).
 - **PSI/Lighthouse:** 25k runs/day — ample.
 
 ## AI judge (Gemini)
 
 `pipeline/judge.mjs` calls Gemini through `pipeline/gemini.mjs`.
+
+- **Rubric v2** (owner rule 2026-11-10: "code checks facts; Gemini judges quality"; criteria in GRADING_CRITERIA.md section 6, defined once in `pipeline/rubric.mjs`):
+  `capture.mjs` stores each site's visible text (at most 4,000 characters, `portfolios.page_text`) and the facts code can check (`pipeline/facts.mjs`, `portfolios.facts`: resume, GitHub, contact, project links that load, own domain, footer year, pages and sections, template, motion, portfolio signals).
+  A grade sends one image (the settled top of the page, local capture or R2 `hero.jpg`), the facts and the page text in a `<site_data>` block the system instruction marks as untrusted, with thinking at `minimal` and a strict JSON schema.
+  Rows captured before v2 get their text and facts measured when graded (plain HTTP, or a browser when the server sends under 200 characters; `--no-browser` turns that off) and stored.
+  Every grade records `rubric_version`, the model, token usage (input, output, thinking), the facts, the code checks, `quality_score` and `checks_score`.
+- **Rubric eval:** `npm run eval:rubric -- --sample 30` estimates v1 and v2 tokens and cost offline for a seeded sample of graded sites (no Gemini); add `--live` to grade the sample with v2 on 3.5 only and compare with the stored grades (it checks today's quota first, logs as job `eval-rubric`, and never writes grades).
+  Run it with the database and key through `pass-env run -- npm run eval:rubric -- --sample 30 --live`.
 
 - **Key:** sent in the `x-goog-api-key` header, never as `?key=` in the URL.
   Newer AI Studio keys ("AQ." style) are rejected in the URL, and a URL key leaks into logs.
@@ -110,10 +118,10 @@ queues (its timeout only counts once it starts).
   `--model M` uses only `M`, with no fallback.
 - **Pacing:** one limiter per run spaces every request evenly, retries included: `--rpm`, else the `GEMINI_RPM` repository variable, else 8 per minute.
   `sync-upstream` (grading) and `judge-vote` (voting) share the `gemini` concurrency group, so they never run at the same time.
-- **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input and output tokens from `usageMetadata`, retry and fallback flags).
+- **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input, output and thinking tokens from `usageMetadata`, retry and fallback flags).
   Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus today's (UTC) requests per model against the daily free quota, with a warning from 80%.
   The quotas default to 500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
-  Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`); the built-in rates are placeholders until that variable is set.
+  Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`), else Google's published paid rates on 2026-11-10 (3.5 Flash-Lite $0.30 in / $2.50 out, 3.1 Flash-Lite $0.25 / $1.50); thinking tokens are billed as output.
 - **Nightly budget:** grading has a daily budget per model (`GEMINI_GRADING_BUDGET`, JSON; default 400 for 3.5, which leaves 100 of its 500 for the 30 daily votes and their retries, and 450 for 3.1).
   It counts every request today (from `gemini_requests`, retries included) and starts a grade only with room for its 4 possible requests; `--limit 1000` is the upper bound.
   Sites past the budget are deferred to tomorrow, which is not a failure.
@@ -122,9 +130,10 @@ queues (its timeout only counts once it starts).
   With catch-up off, grading waits for tomorrow's 3.5 quota instead of spending 3.1; a single grade that still fails on 3.5 after its retries goes to 3.1 either way.
   The vote job moves to 3.1 when 3.5's daily quota is spent in both modes.
 - **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room 3.5's grading budget has left today; re-grades only ever run on 3.5.
+  Lowest priority after that: 3.5 grades from an older rubric version (`rubric_version` below `pipeline/rubric.mjs` `RUBRIC_VERSION`; grades from before v2 count as 1), oldest first, only when the repository variable `RUBRIC_REGRADE` is `true` (off until the owner turns it on; about 2,000 grades, 4 to 5 days of 3.5's grading budget).
   Re-grading stops as soon as an answer comes from a model other than 3.5.
   The old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten, so each re-grade is a free 3.1-vs-3.5 pair; `--force` keeps history the same way, and `--no-regrade` turns the queue off.
-- **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs, exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).
+- **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs (same rubric version only), exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).
 - **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows (or pairs) were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
   Skipped rows are counted on their own, never as attempted.
   The counts (queued, judged, abstained, errors, skipped) go to the run's job summary.
@@ -149,7 +158,9 @@ serve images.
 ## Local pipeline scripts
 
 - `pipeline/capture.mjs [--upload-only] [--only s] [--force]` — Playwright capture + R2 upload
-- `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs` tests its Gemini client offline)
+- `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
+- `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
+- `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days

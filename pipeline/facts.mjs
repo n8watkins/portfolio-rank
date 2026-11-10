@@ -99,7 +99,7 @@ export function isPrivateHost(hostname) {
 export function footerYear(text, now = new Date()) {
   const max = now.getUTCFullYear() + 1;
   let best = null;
-  for (const m of String(text ?? "").matchAll(/(?:©|&copy;|\(c\)|copyright)\s*(?:\d{4}\s*[-–—]\s*)?((?:19|20)\d{2})/gi)) {
+  for (const m of String(text ?? "").matchAll(/(?:©|&copy;|\(c\)|copyright)\s*(?:\d{4}\s*[-\u2013\u2014]\s*)?((?:19|20)\d{2})/gi)) {
     const y = Number(m[1]);
     if (y <= max && (best == null || y > best)) best = y;
   }
@@ -184,7 +184,8 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
   const template = TEMPLATE_MARKERS.find(([re]) => re.test(raw))?.[1] ??
     (/brittany\s*chiang/i.test(raw) && !/brittany/i.test(name) ? "Brittany Chiang v4 clone" : null);
   const generator = raw.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? "";
-  const builder = BUILDERS.find(([re]) => re.test(raw) || re.test(generator))?.[1] ?? null;
+  const builder =
+    BUILDERS.find(([re, label]) => re.test(raw) || generator.toLowerCase().includes(label.toLowerCase()))?.[1] ?? null;
   const words = String(text ?? "").split(/\s+/).filter(Boolean).length;
   return {
     v: FACTS_VERSION,

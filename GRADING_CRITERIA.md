@@ -1,7 +1,8 @@
 # Grading Criteria
 
 > Status (2026-11-10): gates, the weekly health check, PSI scorecards, polish/behavior checks, the Gemini rubric and human+AI ELO are live; see AUTOMATION.md for how they run.
-> Not built yet: originality scoring (section 5) and weighting human votes above AI votes (section 7).
+> Rubric v2 (section 6): code measures the facts, Gemini judges quality from one screenshot and the page text.
+> Not built yet: originality clustering (section 5) and weighting human votes above AI votes (section 7).
 > Each section says where the running system differs from the plan.
 
 Every criterion below is assessed **automatically** — by deterministic scripts, free APIs, or
@@ -18,8 +19,9 @@ Data source: `feed.json` from github.com/n8watkins/developer-portfolios (~1,700+
 | Engineering | PageSpeed Insights API | free (25k/day) | all sites in 1 day |
 | Polish | HTML-parse script | free | all sites in hours |
 | Behavior | Playwright (same run as screenshots) | free | all sites |
-| Originality | not built (capture stores DOM/class hashes only) | free | none yet |
-| Design & content | Gemini Flash-Lite (free-tier daily budget) | free tier | rubric for new sites, pairwise ongoing |
+| Originality | known-template fingerprints only (clustering not built) | free | all captured sites |
+| Facts for the rubric | capture script (`pipeline/facts.mjs`) | free | all captured sites |
+| Design & content | Gemini Flash-Lite (free-tier daily budget), quality only | free tier | rubric for new sites, pairwise ongoing |
 | Overall design rank | Human ELO votes + AI ELO votes | free | forever-refining |
 
 ## 1. Gates (pass/fail)
@@ -73,7 +75,7 @@ Score = % of checks passed.
 - Page weight (bytes) + request count (CDP network log)
 - Broken assets on homepage (404s in network log)
 - Dark-mode support (emulate `prefers-color-scheme: dark`, pixel-diff screenshots)
-- Motion detected (frame-diff across 3 captures) — feeds AI judge, not scored directly
+- Motion detected (frame difference over 3 seconds), a fact the AI grade reads (section 6), not scored directly
 
 ## 5. Originality (dataset-relative, not built)
 
@@ -84,19 +86,63 @@ Planned:
 - A second signal: fingerprints of known templates (HTML5UP, Start Bootstrap, popular Next.js/Astro portfolio starters).
 
 Today `pipeline/capture.mjs` stores `domHash` and `classHash` in each site's `meta`, but nothing clusters them and no score or badge uses them.
+The second signal is built: `pipeline/facts.mjs` records known template fingerprints (and the site builder) in `facts.template`, scored as the "Not a known template" check in section 6.
 
-## 6. Design & content (Gemini Flash, 500/day budget)
+## 6. Design & content (rubric v2: code checks facts, Gemini judges quality)
 
-**Rubric pass** (1 call per site, images only, no extracted text):
-locally, the settled viewport, the same viewport 3 seconds later and the full page; in CI from R2, the hero and the full page plus the stored motion flag.
-Each axis is scored 1-5 with a one-line justification (stored in `portfolios.ai_rubric`, shown on the detail page), plus a tier (S/A/B/C/D) and `is_portfolio`.
+Owner rule (2026-11-10): anything code can check is measured for free and stored; Gemini only judges quality and gets the measured facts as a few lines of context.
+The rubric lives in one pure module, `pipeline/rubric.mjs` (version, criteria, prompt, response schema, parser), used by the nightly grader, the eval and the docs.
 
-- Visual design — hierarchy, typography, color, use of space
-- 5-second test — clear who they are and what they do from the hero alone
-- Project storytelling — problem/outcome vs bare tech lists
-- Writing quality — typos, clarity, voice
-- Memorability — would you remember this site tomorrow
-- Use of motion — tasteful / gratuitous / absent (from frame strip)
+**Facts** (`pipeline/facts.mjs`, free): measured by `pipeline/capture.mjs` from the rendered page and stored in `portfolios.facts`, with the visible page text (at most 4,000 characters) in `portfolios.page_text`.
+Rows captured before v2 get both measured when they are next graded: over plain HTTP, or in a browser when the server sends under 200 characters of text (client-rendered sites).
+Project and demo links (other sites and GitHub repositories, never social profiles or private addresses) are checked with HEAD, then GET, at most 8 per site with an 8-second timeout.
+A 401, 403, 429 or 999 answer is a bot wall and counts as blocked, not broken.
+
+**Rubric pass** (1 call per site): one image (the settled top of the page), the facts and the page text.
+The name, address, facts and page text travel in one `<site_data>` block that the system instruction declares untrusted data, never instructions, and any marker inside the data is removed so it cannot close the block.
+Thinking is at the lowest level the model allows (`minimal`; a model that rejects it is asked again without it), each note is one short clause, and the answer is capped by a strict JSON schema and `maxOutputTokens`.
+Each grade in `portfolios.ai_rubric` stores the tier (S/A/B/C/D), `is_portfolio`, the five scores with notes, `quality_score`, the code `checks` and `checks_score`, the `facts`, `rubric_version`, the model that answered and its token `usage` (input, output, thinking).
+Motion is no longer an AI axis: the capture's frame difference is a fact, and the "3 seconds later" frame and the shrunken full-page image are no longer sent.
+
+<!-- rubric:start (generated by scripts/rubric-docs.mjs from pipeline/rubric.mjs; do not edit by hand) -->
+Rubric version 2 (`pipeline/rubric.mjs`).
+
+| Id | Criterion | Measured by | Weight | What | Evidence |
+| --- | --- | --- | ---: | --- | --- |
+| `visual_design` | Visual design | Gemini | 30% | Hierarchy, typography, color and use of space. | top-of-page screenshot |
+| `five_second_test` | Five-second test | Gemini | 20% | Clear who the person is and what they do within five seconds of landing. | top-of-page screenshot and the start of the page text |
+| `storytelling` | Project presentation | Gemini | 25% | Projects shown with the problem, their role, the outcome and links, rather than bare tech lists. | page text, with project-link health as context |
+| `writing` | Writing | Gemini | 15% | Clarity, voice, concision and typos. | page text |
+| `memorability` | Memorability | Gemini | 10% | Would a recruiter remember this site tomorrow. | screenshot and page text |
+| `resume` | Resume link | code | 10% | A link to a resume or CV. | links on the page |
+| `github` | GitHub link | code | 10% | A link to a GitHub profile. | links on the page |
+| `contact` | Contact path | code | 20% | A mailto link, a contact form, a contact page or a LinkedIn/social profile. | links and forms on the page |
+| `project_links` | Project links load | code | 25% | Project and demo links answer (up to 8 checked, HEAD then GET, 8 s timeout); passes when at least one was checked and none is broken. | HTTP checks of the page's outbound project links |
+| `own_domain` | Own domain | code | 10% | Served from the person's own domain, not a free hosting subdomain (vercel.app, github.io, netlify.app and similar). | final URL after redirects |
+| `fresh_footer` | Fresh footer year | code | 10% | The footer copyright year is at most 2 years old; unknown when the page shows no year. | page text |
+| `original` | Not a known template | code | 15% | No fingerprint of a known template (HTML5 UP, Start Bootstrap, BootstrapMade, Colorlib, a Brittany Chiang clone and others). | page HTML |
+| `motion` | Motion detected | code | context | The top of the page changes on its own (frame difference over 3 seconds). | screenshots during capture |
+| `pages` | Pages and sections | code | context | Internal pages linked from the home page and in-page sections in the navigation. | links on the page |
+| `portfolio_signals` | Portfolio-likeness | code | context | How many of six portfolio signals the page has: projects, about, contact, resume, GitHub, the person's name in the title or heading. | page HTML (pipeline/signals.mjs) |
+
+Gemini criteria are scored 1 to 5 and make up `quality_score` (weighted mean, 1-5).
+Code criteria pass or fail and make up `checks_score` (weighted share passed, 0-100); unknown checks are left out of the share.
+Criteria with weight "context" are measured, stored and shown to Gemini, but not scored.
+Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and at most 4,000 characters of page text, with thinking at "minimal".
+<!-- rubric:end -->
+
+**Cost per grade** (offline estimate on 30 sampled sites, `npm run eval:rubric -- --sample 30`, at 3.5 Flash-Lite's paid rates of $0.30 in and $2.50 out per 1M tokens):
+
+| Rubric | Images | Input tokens | Output tokens | Cost per grade |
+| --- | ---: | ---: | ---: | ---: |
+| v1 (until 2026-11-10) | 3 (2 from R2) | about 3,580 | about 400 | about $0.0021 |
+| v2 | 1 | about 2,240 | about 130 | about $0.0010 |
+
+The free tier counts requests, not tokens, so a grade is still one request; the savings matter at paid rates and for per-minute token limits.
+`npm run eval:rubric -- --sample 30 --live` grades the sample with v2 and compares it with the stored grades (it uses up to 60 of the day's 3.5 requests).
+
+**Re-grades:** grades from an older rubric version are re-graded at the lowest priority, after new and ungraded sites and after the 3.1-to-3.5 re-grades, inside the daily grading budget, and only when the repository variable `RUBRIC_REGRADE` is `true` (off until the owner turns it on).
+The old grade moves to `rubric_history`; the weekly 3.1-vs-3.5 report only pairs grades from the same rubric version.
 
 **Pairwise pass** (1 call = 2 sites): "which is better overall?" from the two hero screenshots plus cached Lighthouse and polish signals.
 The answer is a vote in the same ELO system as humans, tagged `rater_type='ai'`.
@@ -118,7 +164,8 @@ The pool is graded S/A/B sites that are on the list, not confirmed down and not 
 
 - **Primary sort = ELO** (design, human-weighted).
 - Everything else is a scorecard + badges, not blended into one number:
-  Engineering (PSI composite), Polish (% checklist), Content (rubric avg),
+  Engineering (PSI composite), Polish (% checklist), Content (the rubric's `quality_score`),
+  Checks (the rubric's `checks_score`, section 6),
   badges: *Blazing fast*, *Original* (planned, see section 5), *Dark mode*, *Active builder*, *Motion*.
 - Disagreements ("gorgeous but slow") are surfaced, not averaged away — that's the
   interesting content.

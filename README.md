@@ -29,7 +29,8 @@ the dataset a real frontend and a ranking system:
 - **Face-off voting** - two portfolios side by side, pick the better one; ELO decides
   the leaderboard
 - **AI bootstrap** - Gemini judges design/content pairwise to seed rankings before
-  human votes accumulate, and grades each site on a 6-axis rubric
+  human votes accumulate, and grades each site on a rubric where code checks the
+  facts (resume, links that load, own domain) and Gemini judges only quality
 - **Objective scorecards** - real Lighthouse scores (via PageSpeed Insights) and polish
   checks for every site
 - **Its own cleanup** - every site on the list is checked weekly; sites confirmed down

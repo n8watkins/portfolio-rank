@@ -74,7 +74,7 @@ const V1_AXES = [
   ["storytelling", "projects framed as problem/outcome vs bare tech lists"],
   ["writing", "typos, clarity, voice"],
   ["memorability", "would you remember this site tomorrow"],
-  ["motion", "tasteful / gratuitous / absent — judge from the difference between the two viewport frames"],
+  ["motion", "tasteful / gratuitous / absent - judge from the difference between the two viewport frames"],
 ];
 function v1PromptText(name, url, images) {
   const desc =
