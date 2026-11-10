@@ -12,7 +12,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 
 ## Gemini
 
-- **Grades and ranking comparisons from 3.5 Flash-Lite only, never a lower model** (owner, 2026-11-10). Status: building (#PR).
+- **Grades and ranking comparisons from 3.5 Flash-Lite only, never a lower model** (owner, 2026-11-10). Status: building (#63).
   `gemini-3.5-flash-lite` makes every grade and every AI vote.
   An overloaded, timed-out or unreachable 3.5 is retried on 3.5 after 10, 30 and 60 seconds; if it is still busy, or its daily quota or grading budget is used up, the item is left for the next run, with no fallback to 3.1.
   A run that stops this way says why in its job summary; it fails only when it did nothing for a reason other than a spent budget or quota.
@@ -31,7 +31,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Pacing and a request log** (agent, 2026-11-10). Status: built (#54).
   One limiter per run spaces every request (8 a minute by default), every request is a row in `gemini_requests`, and each run's summary shows today's totals against the quotas with a warning from 80%.
   Why: real numbers instead of estimates, and one place to see when a quota is about to run out.
-- **No catch-up mode; the backlog is graded on 3.5's daily budget** (owner, 2026-11-10). Status: building (#PR).
+- **No catch-up mode; the backlog is graded on 3.5's daily budget** (owner, 2026-11-10). Status: building (#63).
   The repository variable `GEMINI_CATCHUP` is `"false"` and the code no longer reads it; ungraded sites are worked through over the coming days, within 3.5's grading budget.
   Why: catch-up mode wrote 3.1 grades, which the "3.5 only" decision rules out.
 - **Conditional re-grades of 3.1 grades on 3.5** (owner, 2026-11-10). Status: built (#54); the stop rule is planned.
@@ -87,7 +87,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Three leaderboard views, merged by default** (owner, 2026-11-10). Status: planned.
   Merged (AI and people) is the default, with AI-only and People-only tabs; big gaps between AI and people are flagged and become reports.
   Why: about 85% of today's leaderboard votes are AI votes counted like people's; separate views let the AI compare all day without drowning people out.
-- **AI comparisons use 3.5 only** (owner, 2026-11-10). Status: building (#PR) for today's daily votes; planned for the new ranking.
+- **AI comparisons use 3.5 only** (owner, 2026-11-10). Status: building (#63) for today's daily votes; planned for the new ranking.
   Why: the AI view needs one consistent judge; 3.1 is for labelled experiments only (see "Grades and ranking comparisons from 3.5 Flash-Lite only").
 - **Matchmaking: close matches, 1 in 5 random** (owner, 2026-11-10). Status: planned.
   Four of every five comparisons pair sites with similar ratings, favouring the least certain; one pairs a site with a random one from anywhere; which site is shown first is random, and pairs come from a recorded seed so a day can be reproduced.

@@ -27,7 +27,7 @@ An automatic PortfolioRank: every listed portfolio graded on one rubric, a leade
 | Grade the ungraded backlog on 3.5's daily budget (no catch-up on 3.1) | building (runs nightly) |
 | Full re-grade on rubric v2 (`RUBRIC_REGRADE=true`) | needs owner, after the backlog |
 | Stop rule for 3.1-to-3.5 re-grades (stop when the weekly report shows no meaningful difference) | to do |
-| Grades and AI votes from 3.5 only: 3.1 fallback off (`GEMINI_FALLBACK`), catch-up mode removed (`GEMINI_CATCHUP=false`) | building (#PR) |
+| Grades and AI votes from 3.5 only: 3.1 fallback off (`GEMINI_FALLBACK`), catch-up mode removed (`GEMINI_CATCHUP=false`) | building (#63) |
 
 Depends on: nothing; everything else depends on it.
 
