@@ -2,7 +2,7 @@
 // running production build (scripts/test-e2e.sh, which sets
 // ADMIN_GITHUB_LOGIN=e2e-admin): only that GitHub login may read it, and it
 // reports Gemini use by Pacific quota day, job and model.
-import { test } from "node:test";
+import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
 import { encode } from "@auth/core/jwt";
@@ -23,6 +23,18 @@ async function cookieFor(login, id) {
   });
   return `authjs.session-token=${token}`;
 }
+
+before(async () => {
+  // Wait for the server (the runner starts it just before the tests).
+  for (let i = 0; i < 60; i++) {
+    try {
+      await fetch(BASE + "/");
+      return;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`no server at ${BASE}`);
+});
 
 const get = (cookie) => fetch(`${BASE}/api/admin/quota`, { headers: cookie ? { cookie } : {} });
 
