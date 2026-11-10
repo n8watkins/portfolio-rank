@@ -6,9 +6,11 @@ name: Sync upstream + ingest
 #   2. if upstream actually changed, open (or refresh) one pull request with it
 #      and let it auto-merge once the required checks pass,
 #   3. screenshot + AI-grade whatever is new.
-# capture.mjs reads feed.json and skips URLs already in the DB; judge.mjs skips
-# already-graded sites - so this only ever does the *new* work. Removed-upstream
-# links simply drop out of feed.json (the app filters to the roster).
+# capture.mjs reads feed.json, marks database rows that left it as delisted
+# (pipeline/roster.mjs), and captures new sites plus failed captures whose
+# retry date has come; judge.mjs skips already-graded and delisted sites - so
+# this only ever does the *new* work. The feed may shrink by at most 5% per
+# run (generate_feed.py --max-shrink).
 on:
   workflow_dispatch: {}
   schedule:
@@ -57,8 +59,10 @@ jobs:
           curl -fsSL \
             https://raw.githubusercontent.com/emmabostian/developer-portfolios/master/README.md \
             -o /tmp/upstream-README.md
+          # --max-shrink: a truncated or broken upstream README fails the run
+          # here instead of dropping hundreds of sites from the list.
           python3 pipeline/generate_feed.py /tmp/upstream-README.md data/feed.json \
-            --exclude data/excluded.json --add data/additions.json
+            --exclude data/excluded.json --add data/additions.json --max-shrink 0.05
 
       # 2) Keep your fork mirror current too - only if a PAT is provided.
       - name: Sync fork mirror (optional)
