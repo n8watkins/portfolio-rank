@@ -21,7 +21,7 @@ The step-by-step October plan (key, failure handling, submissions, Playwright) i
 - Deploys are by hand (`npm run deploy`, DEPLOY.md) until the `CLOUDFLARE_API_TOKEN` repository secret exists.
   The roster is bundled at build time, so the daily sync commit reaches the live site only after a deploy.
 - A new `GEMINI_API_KEY` secret was set on 2026-11-10.
-  The judge now sends it in the `x-goog-api-key` header and uses `gemini-3.5-flash-lite` with `gemini-3.1-flash-lite` as the backup (AUTOMATION.md, "AI judge").
+  The judge now sends it in the `x-goog-api-key` header and grades and votes with `gemini-3.5-flash-lite` only, with no fallback to 3.1 (AUTOMATION.md, "AI judge"; docs/DECISIONS.md).
   This replaced PR #10, which was closed.
 - The site has no analytics.
 - Security: the locked `next` 15.5.28 has no open advisories in GitHub's advisory database (checked 2026-10-27).

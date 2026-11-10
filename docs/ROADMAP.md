@@ -24,10 +24,10 @@ An automatic PortfolioRank: every listed portfolio graded on one rubric, a leade
 | Audit fix: vote fishing and claim overspend | done (#58) |
 | Audit fix: lint on every PR | building (#59) |
 | Audit fixes still open: the leftover script that can delete every vote, red and flaky browser tests, phone speed (image serving, home page size), phone header, Add to list on phones, signed-out pages, the medium quick fixes | to do |
-| Catch up: grade the ungraded backlog on both quotas | building (runs nightly in catch-up mode) |
-| Full re-grade on rubric v2 (`RUBRIC_REGRADE=true`) | needs owner, after catch-up |
+| Grade the ungraded backlog on 3.5's daily budget (no catch-up on 3.1) | building (runs nightly) |
+| Full re-grade on rubric v2 (`RUBRIC_REGRADE=true`) | needs owner, after the backlog |
 | Stop rule for 3.1-to-3.5 re-grades (stop when the weekly report shows no meaningful difference) | to do |
-| Turn catch-up mode off (`GEMINI_CATCHUP=false`) | to do, after the backlog and re-grade |
+| Grades and AI votes from 3.5 only: 3.1 fallback off (`GEMINI_FALLBACK`), catch-up mode removed (`GEMINI_CATCHUP=false`) | building (#63) |
 
 Depends on: nothing; everything else depends on it.
 
@@ -117,7 +117,7 @@ Decisions only the owner can make, oldest first.
 1. **Email provider**: Amazon SES or Cloudflare Email Service (already set up on `n8builds.dev` for Wren)?
 2. **Postal address**: decided 2026-11-10, not needed while the newsletter stays editorial; add a PO box or virtual mailbox if ads, sponsors or paid features ever arrive.
 3. **Legal placeholders**: contact email, legal name or business name, jurisdiction, backup retention period, minimum age (see the `[owner: ...]` markers in [legal/](legal/)).
-4. **Full re-grade on rubric v2**: turn on `RUBRIC_REGRADE` once catch-up is done (about 2,000 grades, 4-5 days of 3.5's budget)?
+4. **Full re-grade on rubric v2**: turn on `RUBRIC_REGRADE` once the backlog is graded (about 2,000 grades, 4-5 days of 3.5's budget)?
 5. **Redesign preview**: approve the shell, adaptive home, leaderboard tabs and grade report when the preview is ready.
 6. **Favourite drafts**: pick which first drafts go out first, and anything to change in the voice.
 7. **Grade my portfolio, from the grader plan** (recommendations, not yet confirmed):

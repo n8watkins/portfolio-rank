@@ -109,35 +109,39 @@ queues (its timeout only counts once it starts).
 
 - **Key:** sent in the `x-goog-api-key` header, never as `?key=` in the URL.
   Newer AI Studio keys ("AQ." style) are rejected in the URL, and a URL key leaks into logs.
-- **Models:** `gemini-3.5-flash-lite` for everything until its quota is used up; `gemini-3.1-flash-lite` only then (owner's decision, 2026-11-10).
-  An overloaded (5xx), timed-out or unreachable 3.5 is retried, same model, after 10, 30 and 60 seconds (jittered); if the last retry still fails, that one call goes to 3.1 and the next call is back on 3.5.
-  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) moves the rest of the run to 3.1, except a grading run outside catch-up mode, which stops and waits for tomorrow.
+- **Models:** grades and AI votes come from `gemini-3.5-flash-lite` only, never from a lower model (owner's decision, 2026-11-10).
+  An overloaded (5xx), timed-out or unreachable 3.5 is retried, same model, after 10, 30 and 60 seconds (jittered); if the last retry still fails, that item is left for the next run and the run stops.
+  A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) stops the run; the rest waits for tomorrow's quota.
   Any other 429 (per-minute) means slow down: wait Google's `RetryInfo` delay (or 60 seconds) and retry 3.5, up to 5 times.
-  When no model can answer (both daily quotas spent, or still failing after the retries), the run stops cleanly; with nothing judged it exits 1, and the next run picks up the rest.
-  A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request never falls back.
-  `--model M` uses only `M`, with no fallback.
+  Why a run stopped early goes to its job summary ("Stopped early: ..."), including that there was no fallback.
+  A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request fails the call.
+  `gemini-3.1-flash-lite` is only for explicitly labelled experiments (such as the 3.1-vs-3.5 comparison) and non-ranking analysis, never written into grades or ratings.
+- **`GEMINI_FALLBACK`:** `off` by default; `on` brings back the per-call fallback to 3.1 from #54 (a call that still fails after its retries goes once to 3.1, and a spent 3.5 quota moves the run to 3.1).
+  It exists for labelled experiments run by hand only: the run prints an "experiment mode" warning, and every answer keeps the model that gave it.
+  `sync-upstream.yml` and `judge-vote.yml` pin it to `"off"` in their env, so no repository variable can turn it on for production grades or votes.
+  `--model M` uses only `M`, with no fallback; for `pairwise`, any model other than 3.5 also needs `--allow-model`.
 - **Pacing:** one limiter per run spaces every request evenly, retries included: `--rpm`, else the `GEMINI_RPM` repository variable, else 8 per minute.
   `sync-upstream` (grading) and `judge-vote` (voting) share the `gemini` concurrency group, so they never run at the same time.
 - **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input, output and thinking tokens from `usageMetadata`, retry and fallback flags).
   Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus today's (UTC) requests per model against the daily free quota, with a warning from 80%.
   The quotas default to 500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
   Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`), else Google's published paid rates on 2026-11-10 (3.5 Flash-Lite $0.30 in / $2.50 out, 3.1 Flash-Lite $0.25 / $1.50); thinking tokens are billed as output.
-- **Nightly budget:** grading has a daily budget per model (`GEMINI_GRADING_BUDGET`, JSON; default 400 for 3.5, which leaves 100 of its 500 for the 30 daily votes and their retries, and 450 for 3.1).
+- **Nightly budget:** grading has a daily budget on 3.5 (`GEMINI_GRADING_BUDGET`, JSON; default 400, which leaves 100 of its 500 for the 30 daily votes and their retries; the 3.1 entry, 450, only matters to an experiment with `GEMINI_FALLBACK=on`).
   It counts every request today (from `gemini_requests`, retries included) and starts a grade only with room for its 4 possible requests; `--limit 1000` is the upper bound.
   Sites past the budget are deferred to tomorrow, which is not a failure.
-- **Catch-up mode** (repository variable `GEMINI_CATCHUP`, on unless set to `false`; turn it off once the backlog and the one-time full re-grade are done): grading uses 3.5's budget first and then 3.1's, so both quotas work through the backlog (about 850 grades a day).
-  Every 3.1 grade goes on the re-grade queue for 3.5, which keeps the old grade for the comparison report.
-  With catch-up off, grading waits for tomorrow's 3.5 quota instead of spending 3.1; a single grade that still fails on 3.5 after its retries goes to 3.1 either way.
-  The vote job moves to 3.1 when 3.5's daily quota is spent in both modes.
+  The backlog is worked through on 3.5's budget alone over the coming days.
+- **No catch-up mode:** catch-up mode (grading on 3.1's budget once 3.5's was used) was removed on 2026-11-10; the code no longer reads `GEMINI_CATCHUP`, and the repository variable is `"false"`.
 - **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room 3.5's grading budget has left today; re-grades only ever run on 3.5.
   Lowest priority after that: 3.5 grades from an older rubric version (`rubric_version` below `pipeline/rubric.mjs` `RUBRIC_VERSION`; grades from before v2 count as 1), oldest first, only when the repository variable `RUBRIC_REGRADE` is `true` (off until the owner turns it on; about 2,000 grades, 4 to 5 days of 3.5's grading budget).
   Re-grading stops as soon as an answer comes from a model other than 3.5.
   The old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten, so each re-grade is a free 3.1-vs-3.5 pair; `--force` keeps history the same way, and `--no-regrade` turns the queue off.
+  No new 3.1 grades are made, so the queue only shrinks: it holds the 3.1 grades written before 2026-11-10.
 - **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs (same rubric version only), exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).
 - **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows (or pairs) were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
   Skipped rows are counted on their own, never as attempted.
-  The counts (queued, judged, abstained, errors, skipped) go to the run's job summary.
-  Running out of daily quota after some successes still exits 0.
+  The counts (queued, judged, abstained, errors, skipped, deferred) go to the run's job summary.
+  A spent 3.5 quota or grading budget is planned waiting, not a failure: the rest is counted as deferred and the run exits 0, even with nothing judged.
+  A 3.5 that stays busy through its retries stops the run too; it exits 0 if it judged something, and 1 if it judged nothing.
 - **Which model judged:** each rubric stores the model that actually answered in `ai_rubric.model`, and each AI vote stores it in `votes.model`.
 - **One AI voter:** every vote the flash-lite chain casts uses one logical rater id, `ai:flash-lite`, whichever model answered.
   `rater_id` is a voter's identity: the unique `(rater_id, pair_key)` index allows one vote per voter per matchup, and the judge skips pairs its rater id already voted on.

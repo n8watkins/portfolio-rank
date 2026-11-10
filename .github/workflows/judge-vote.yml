@@ -1,7 +1,8 @@
 name: Daily AI vote (pairwise-metrics)
 
-# Each day, gemini-3.5-flash-lite (falling back to gemini-3.1-flash-lite when
-# 3.5 is rate limited or down; see AUTOMATION.md) compares pairs of higher-tier
+# Each day, gemini-3.5-flash-lite (only: no fallback to a lower model; when
+# 3.5 stays busy after its retries or its daily quota is used up, the rest
+# waits for the next run; see AUTOMATION.md) compares pairs of higher-tier
 # portfolios using
 # the R2 hero image + cached objective metrics (PSI/Lighthouse + inspect polish)
 # and casts ELO-moving votes, concentrating on graded S/A/B sites so the
@@ -77,6 +78,9 @@ jobs:
           GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
           GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
           GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
+          # Pinned, not a repository variable: votes move ratings, so they
+          # come from 3.5 only; the 3.1 fallback is for experiments.
+          GEMINI_FALLBACK: "off"
           # Inputs reach the shell as variables, never pasted into the script.
           VOTES: ${{ github.event.inputs.votes || '30' }}
           TIERS: ${{ github.event.inputs.tiers || 'S,A,B' }}

@@ -1,27 +1,30 @@
 // Gemini REST client for the AI judge (pipeline/judge.mjs): JSON-mode
-// generateContent with pacing, retries and a backup model.
+// generateContent with pacing and retries.
 //
 // The key always travels in the x-goog-api-key header, never in the URL:
 // newer AI Studio keys ("AQ." style) are rejected as a ?key= query parameter,
 // and a URL key also leaks into proxy and error logs.
 //
-// Model policy (owner decision 2026-11-10): use 3.5 Flash-Lite for everything
-// until its quota is used up; 3.1 Flash-Lite only then.
+// Model policy (owner decision 2026-11-10, revised the same day): grades and
+// ranking comparisons are made by 3.5 Flash-Lite only, never by a lower
+// model. The default model list is [PRIMARY_MODEL] alone:
 //   - 503/5xx, timeouts and network errors: retry the SAME model after
-//     10s, 30s and 60s (jittered). If the last retry still fails, that one
-//     call goes to the backup model, and the answer records which model gave it.
+//     10s, 30s and 60s (jittered). If the last retry still fails, the call
+//     fails (GeminiUnavailableError) and the item waits for the next run.
 //   - 429 with a per-day quota (RESOURCE_EXHAUSTED on a PerDay quota): the
-//     model is spent for the day, so this call and every later call in the
-//     run use the backup model (onDailyQuota "fallback", the vote job), or
-//     the run stops and waits for tomorrow (onDailyQuota "stop", grading:
-//     3.1 grades get re-graded by 3.5 later anyway).
+//     model is spent for the day (GeminiQuotaError); the run stops and the
+//     rest waits for tomorrow's quota.
 //   - Any other 429 (per-minute limits): slow down and retry the same model,
 //     waiting the RetryInfo delay when Google gives one.
 //   - A rejected key (400 API_KEY_INVALID, 401, 403) is fatal
-//     (GeminiAuthError); any other 4xx fails the call. Neither falls back.
-//   - When no model can answer, GeminiUnavailableError (or
-//     GeminiQuotaError when every model's daily quota is spent): the judge
-//     stops cleanly and the next run picks up where it left off.
+//     (GeminiAuthError); any other 4xx fails the call.
+// The backup path is kept for labelled experiments only (the 3.1-vs-3.5
+// comparison, non-ranking analysis): a caller passes models:
+// FLASH_LITE_CHAIN, which the judge does only with GEMINI_FALLBACK=on
+// (fallbackEnabled below; every workflow pins it "off"). With a chain, a
+// call that still fails after the retries goes once to the next model, and
+// a spent daily quota moves the rest of the run to it (onDailyQuota
+// "fallback") or stops it ("stop").
 // Every HTTP request waits its turn on one shared limiter (createLimiter), so
 // retries count against the rate too, and is reported to onRequest for the
 // request log (pipeline/gemini-log.mjs), thinking tokens included.
@@ -32,11 +35,23 @@
 // and is not sent one again for the rest of the run, so a level one model
 // lacks never fails a grade.
 
-// Owner's choice (2026-11-10): 3.5 Flash-Lite first, 3.1 Flash-Lite as backup.
 // Stable IDs per https://ai.google.dev/gemini-api/docs/models.
+// PRIMARY_MODEL makes every grade and every AI vote. BACKUP_MODEL is for
+// labelled experiments only and never writes grades or ratings in production.
 export const PRIMARY_MODEL = "gemini-3.5-flash-lite";
 export const BACKUP_MODEL = "gemini-3.1-flash-lite";
 export const FLASH_LITE_CHAIN = [PRIMARY_MODEL, BACKUP_MODEL];
+
+/**
+ * GEMINI_FALLBACK: "off" (default) or "on". Off, the judge uses 3.5 alone and
+ * an item 3.5 can't answer waits for the next run. On (experiments only),
+ * it uses FLASH_LITE_CHAIN with its per-call fallback to 3.1.
+ */
+export const fallbackEnabled = (env = process.env) =>
+  /^(on|true|1|yes)$/i.test(String(env.GEMINI_FALLBACK ?? "off").trim());
+
+/** The models a judge run uses when --model doesn't name one. */
+export const judgeModels = (env = process.env) => (fallbackEnabled(env) ? FLASH_LITE_CHAIN : [PRIMARY_MODEL]);
 
 export const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 export const DEFAULT_RPM = 8;
@@ -96,15 +111,16 @@ export function createLimiter({ rpm = DEFAULT_RPM, now = () => Date.now(), sleep
 
 export function createGemini({
   apiKey,
-  models = FLASH_LITE_CHAIN,
+  // 3.5 alone unless a caller (an experiment) passes the chain.
+  models = [PRIMARY_MODEL],
   rpm = DEFAULT_RPM,
   limiter,
   retryDelaysMs = [10000, 30000, 60000],
   // Per-minute 429s: how many times to slow down before giving up on a call.
   maxSlowdowns = 5,
-  // "fallback": a spent daily quota moves the run to the next model.
-  // "stop": it ends the run instead (GeminiQuotaError), for work that would
-  // rather wait for tomorrow's quota than be done by the backup.
+  // With a chain only: "fallback" moves the run to the next model when a
+  // daily quota is spent, "stop" ends it instead (GeminiQuotaError). With
+  // one model a spent quota always ends the run.
   onDailyQuota = "fallback",
   slowdownMs = 60000,
   jitter = () => 0.8 + Math.random() * 0.4,
@@ -241,7 +257,11 @@ export function createGemini({
           throw new GeminiQuotaError(`gemini ${model}: daily quota used up; waiting for tomorrow's quota`);
         }
         if (idx + 1 >= models.length) {
-          throw new GeminiQuotaError(`gemini ${model}: daily quota used up and no backup model left`);
+          throw new GeminiQuotaError(
+            models.length > 1
+              ? `gemini ${model}: daily quota used up and no backup model left`
+              : `gemini ${model}: daily quota used up; waiting for tomorrow's quota`
+          );
         }
         log(`  gemini ${model} daily quota used up; using ${models[idx + 1]} for the rest of this run`);
         counts.fallbacks++;
@@ -278,7 +298,7 @@ export function createGemini({
         transient = retryDelaysMs.length; // one attempt on the backup, no further retries
         continue;
       }
-      throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason}`);
+      throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason} after ${retryDelaysMs.length} retries`);
     }
   }
 
@@ -300,13 +320,6 @@ export function createGemini({
     answered,
     counts,
     get activeModel() {
-      return models[active];
-    },
-    /** Move the rest of the run to the next model (a caller's own budget is spent). */
-    useNextModel() {
-      if (active + 1 >= models.length) return null;
-      active++;
-      counts.fallbacks++;
       return models[active];
     },
   };

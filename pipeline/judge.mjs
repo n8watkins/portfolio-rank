@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Phase 1 AI bootstrap (GRADING_CRITERIA.md §6): Gemini Flash-Lite judges
-// captured portfolios (3.5 Flash-Lite, falling back to 3.1 Flash-Lite; see
-// pipeline/gemini.mjs and pipeline/ai-votes.mjs).
+// captured portfolios with 3.5 Flash-Lite only (no fallback to a lower model;
+// see pipeline/gemini.mjs and pipeline/ai-votes.mjs).
 //
 //   rubric   - 1 call/site, rubric v2 (pipeline/rubric.mjs): the top-of-page
 //              screenshot, the facts measured by code (pipeline/facts.mjs)
@@ -30,12 +30,14 @@ import {
   createGemini,
   createLimiter,
   DEFAULT_RPM,
-  FLASH_LITE_CHAIN,
+  fallbackEnabled,
   GeminiAuthError,
+  GeminiQuotaError,
   GeminiUnavailableError,
+  judgeModels,
   PRIMARY_MODEL,
 } from "./gemini.mjs";
-import { catchUpMode, createRequestLog, dailyTotals, ensureGeminiLog, gradingBudget, runSummary } from "./gemini-log.mjs";
+import { createRequestLog, dailyTotals, ensureGeminiLog, gradingBudget, runSummary } from "./gemini-log.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import {
   RESPONSE_SCHEMA,
@@ -75,10 +77,13 @@ const flag = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 ? args[i + 1] : fallback;
 };
-// flash-lite has the biggest free-tier daily budget. The default is the
-// flash-lite chain (3.5, then 3.1 when 3.5 is rate limited, overloaded or
-// unreachable); --model M uses only M, with no fallback.
-const MODELS = flag("model") ? [flag("model")] : FLASH_LITE_CHAIN;
+// Owner decision (2026-11-10): grades and AI votes come from 3.5 Flash-Lite
+// only. When 3.5 stays busy after its retries, or its daily quota or grading
+// budget is used up, the item waits for the next run; nothing falls back to
+// 3.1. GEMINI_FALLBACK=on brings back the 3.5 -> 3.1 chain for labelled
+// experiments only (every workflow pins it "off"); --model M uses only M.
+const FALLBACK = !flag("model") && fallbackEnabled();
+const MODELS = flag("model") ? [flag("model")] : judgeModels();
 const RATER_ID = raterIdFor(MODELS);
 const LIMIT = Number(flag("limit", "0")) || Infinity;
 const VOTES = Number(flag("votes", "20"));
@@ -87,11 +92,6 @@ const FORCE = args.includes("--force");
 // One pace for every Gemini request in the run, retries included: --rpm,
 // else the GEMINI_RPM repository variable, else DEFAULT_RPM.
 const RPM = Number(flag("rpm", process.env.GEMINI_RPM || String(DEFAULT_RPM)));
-// Catch-up mode (repository variable GEMINI_CATCHUP, on unless "false"):
-// while the backlog and the one-time full re-grade are being worked through,
-// grading uses 3.5's daily budget first and then 3.1's, so both quotas work.
-// Every 3.1 grade goes on the re-grade queue for 3.5 afterwards.
-const CATCHUP = catchUpMode();
 // Re-grade 3.5 grades from an older rubric version (lowest priority, inside
 // the grading budget). Off unless the RUBRIC_REGRADE repository variable is
 // "true": the owner decides when the one-time re-grade starts.
@@ -106,8 +106,10 @@ const TIERS = (flag("tiers", "S,A,B") || "")
 const SHOTS_BASE = (process.env.SHOTS_BASE_URL || "").replace(/\/+$/, "");
 
 if (MODE === "pairwise") {
-  if (RATER_ID !== FLASH_LITE_RATER_ID && !args.includes("--allow-model")) {
-    console.error("pairwise voting is flash-lite only (pass --allow-model to override)");
+  // Ranking comparisons are 3.5 only: --model with anything else (3.1
+  // included) is an experiment and must say so with --allow-model.
+  if ((MODELS[0] !== PRIMARY_MODEL || RATER_ID !== FLASH_LITE_RATER_ID) && !args.includes("--allow-model")) {
+    console.error(`pairwise voting is ${PRIMARY_MODEL} only (pass --allow-model for a labelled experiment)`);
     process.exit(1);
   }
   if (!SHOTS_BASE) {
@@ -144,12 +146,18 @@ const gemini = createGemini({
   models: MODELS,
   limiter: createLimiter({ rpm: RPM }),
   onRequest: (r) => requestLog.record(r),
-  // Outside catch-up mode, grading waits for tomorrow's 3.5 quota rather
-  // than spending 3.1 (whose grades would be re-graded by 3.5 later anyway);
-  // a single grade that keeps failing on 3.5 after the retries still goes to
-  // 3.1. In catch-up mode, and for votes, a spent 3.5 quota moves to 3.1.
-  onDailyQuota: MODE === "rubric" && !CATCHUP ? "stop" : "fallback",
+  // A spent 3.5 quota ends the run; the rest waits for tomorrow. Only an
+  // experiment (GEMINI_FALLBACK=on) moves to 3.1 instead.
+  onDailyQuota: FALLBACK ? "fallback" : "stop",
 });
+if (FALLBACK) {
+  console.log(
+    `::warning::GEMINI_FALLBACK is on: experiment mode, ${MODELS.join(" > ")}. Answers from a lower model are labelled with it; never use this for production grades or votes.`
+  );
+}
+// Why a run stopped early, for the job summary: a spent quota is planned
+// waiting; anything else is an error.
+const NO_FALLBACK = FALLBACK ? "" : " (no fallback to a lower model: GEMINI_FALLBACK is off)";
 
 // Inline image part; skips files that would blow the request size cap.
 function imagePart(file, budgetBytes = 5 * 1024 * 1024) {
@@ -419,18 +427,10 @@ async function runRubric() {
   // Each grade can take up to 4 requests (3 retries); start one only with room for that.
   const PER_GRADE = 4;
   const budgeted = MODELS[0] === PRIMARY_MODEL;
-  // In catch-up mode a spent 3.5 budget moves grading to 3.1; otherwise it waits.
-  const haveRoom = (need) => {
-    if (room() >= need) return true;
-    if (CATCHUP && gemini.activeModel === PRIMARY_MODEL) {
-      const next = gemini.useNextModel();
-      if (next) {
-        console.log(`  ${PRIMARY_MODEL} grading budget used; catch-up mode continues on ${next}`);
-        return room() >= need;
-      }
-    }
-    return false;
-  };
+  // A spent 3.5 grading budget means waiting for tomorrow, never 3.1.
+  const haveRoom = (need) => room() >= need;
+  // Set when 3.5's daily quota answers 429: planned waiting, not an error.
+  let quotaSpent = false;
 
   // Returns false when the run must stop (Gemini unavailable or out of quota).
   async function handle(row, label, { regrade = false } = {}) {
@@ -469,12 +469,19 @@ async function runRubric() {
       return true;
     } catch (e) {
       if (e instanceof GeminiAuthError) throw e;
+      if (e instanceof GeminiQuotaError) {
+        // Today's quota is used up: this row and the rest wait for tomorrow.
+        quotaSpent = true;
+        stopped = `${e.message}${NO_FALLBACK}`;
+        console.log(`${label} ${url} - waits for tomorrow: ${e.message}`);
+        return false;
+      }
       errors++;
       console.log(`${label} ${url} - ERROR ${String(e.message).slice(0, 160)}`);
       if (e instanceof GeminiUnavailableError) {
-        // Out of quota, or the models stayed unavailable through every retry:
-        // stop cleanly; the next run picks up the rest.
-        stopped = e.message;
+        // 3.5 stayed unavailable through every retry: stop cleanly; this row
+        // and the rest wait for the next run.
+        stopped = `${e.message}; the rest waits for the next run${NO_FALLBACK}`;
         return false;
       }
       if (++consecutiveErrors >= 5) {
@@ -488,10 +495,13 @@ async function runRubric() {
   for (const [i, row] of queue.entries()) {
     if (budgeted && !haveRoom(PER_GRADE)) {
       deferred = queue.length - i;
-      stopped = `today's grading budget is used (${JSON.stringify(budget)}); ${deferred} site(s) wait for tomorrow`;
+      stopped = `today's ${PRIMARY_MODEL} grading budget is used (${budget[PRIMARY_MODEL] ?? 0} requests); ${deferred} site(s) wait for tomorrow${NO_FALLBACK}`;
       break;
     }
-    if (!(await handle(row, `[${i + 1}/${queue.length}]`))) break;
+    if (!(await handle(row, `[${i + 1}/${queue.length}]`))) {
+      if (quotaSpent) deferred = queue.length - i;
+      break;
+    }
   }
 
   // Re-grade queues, after new and ungraded sites: first grades not made by
@@ -524,6 +534,7 @@ async function runRubric() {
         break;
       }
       if (!(await handle(row, `[${name} ${i + 1}/${rows.length}]`, { regrade: true }))) {
+        if (quotaSpent) deferred += rows.length - i;
         stop = true;
         break;
       }
@@ -600,6 +611,7 @@ async function runPairwise() {
   let skipped = 0;
   let abstained = 0;
   let queued = 0;
+  let deferred = 0;
   let consecutiveErrors = 0;
   let stopped = null;
   for (let round = 0; cast < VOTES && round < VOTES * 5; round++) {
@@ -668,11 +680,20 @@ async function runPairwise() {
       // every round on a small tiered pool and burns the budget for 0 votes.
       seen.add(pairKey(a.url, b.url));
       if (/UNIQUE constraint failed/i.test(String(e.message))) continue; // dup, not an error
+      if (e instanceof GeminiQuotaError) {
+        // Today's 3.5 quota is used up: the votes still to cast wait for
+        // tomorrow (planned waiting, not an error), and this pair was not judged.
+        queued--;
+        deferred = VOTES - cast;
+        stopped = `${e.message}; ${deferred} vote(s) wait for tomorrow${NO_FALLBACK}`;
+        break;
+      }
       errors++;
       console.log(`  ERROR ${a.url} vs ${b.url}: ${String(e.message).slice(0, 120)}`);
       if (e instanceof GeminiUnavailableError) {
-        // Out of quota, or unavailable through every retry: stop cleanly.
-        stopped = e.message;
+        // 3.5 stayed unavailable through every retry: stop cleanly; the
+        // next run casts the rest.
+        stopped = `${e.message}; the rest waits for the next run${NO_FALLBACK}`;
         break;
       }
       if (++consecutiveErrors >= 5) {
@@ -685,7 +706,8 @@ async function runPairwise() {
     `pairwise done: ${cast} vote(s) cast, ${abstained} abstained, ${skipped} pair(s) skipped, ${gemini.summary()}`
   );
   if (stopped) console.log(`  stopped early: ${stopped}`);
-  return { queued, ok: cast, errors, skipped, abstained, stopped };
+  // Planned work includes the deferred votes; judgeOutcome takes them out.
+  return { queued: queued + deferred, ok: cast, errors, skipped, abstained, deferred, stopped };
 }
 
 // Mirrors POST /api/rank: insert + ELO upsert in one write transaction, with
