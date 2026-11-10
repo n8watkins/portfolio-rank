@@ -16,6 +16,13 @@ export ADMIN_GITHUB_LOGIN="e2e-admin"
 export E2E_PSI_PORT="${E2E_PSI_PORT:-7692}"
 export PSI_API_BASE="http://127.0.0.1:$E2E_PSI_PORT/runPagespeed"
 unset PSI_API_KEY
+# Games, badges, claims, live stats and reports (lib/games), off in
+# production until the redesign ships, are tested switched on, with a local
+# stand-in for the GitHub API served by tests/games-api.test.mjs.
+export GAMES_V2=true
+export E2E_GH_PORT="${E2E_GH_PORT:-7693}"
+export GITHUB_API_BASE="http://127.0.0.1:$E2E_GH_PORT"
+unset GITHUB_API_TOKEN EMAIL_FROM
 DB="$PWD/data/e2e.db"
 rm -f "$DB"*
 export LOCAL_DB_FILE="$DB" E2E_DB_URL="file:$DB"

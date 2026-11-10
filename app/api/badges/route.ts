@@ -60,7 +60,8 @@ export async function POST(req: Request) {
   if (over) return rateLimited(over);
   const recorded = await recordEvent(db(), player.id, kind, { url });
   const badges = recorded
-    ? (await checkBadges(db(), player.id, { pool: await getPool(), signedIn: player.signedIn, earlyUntil: earlyUntil() })).awarded
+    ? // A fresh check, so the badge this event earns shows now (events are rate limited above).
+      (await checkBadges(db(), player.id, { pool: await getPool(), force: true, signedIn: player.signedIn, earlyUntil: earlyUntil() })).awarded
     : [];
   return NextResponse.json({ recorded, badges }, { headers: PRIVATE });
 }
