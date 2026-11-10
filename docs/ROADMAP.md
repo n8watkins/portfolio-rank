@@ -61,13 +61,15 @@ Depends on: can start alongside phase 2; the leaderboard tabs fill in when ranki
 
 | Step | Status |
 | --- | --- |
-| The free checks at once from the Worker (plain fetch), then a GitHub Actions job started by the Worker for the screenshot and the v2 grade, then a notification (Browser Rendering parked) | to do |
-| Queue with live progress; past the daily share, "we'll email your report" | the queue that waits for 3.5 and emails when done is building (#69); live progress to do |
-| Report page, share image, "add me to the leaderboard" request | to do |
-| Guardrails: Turnstile, per-person, per-network and site-wide caps, strict address checks, cache by address, private screenshots, untrusted page text | to do |
-| Security review: cost abuse, SSRF through redirects and the browser, prompt injection, report privacy | to do |
-| Cloudflare Email Service wired as the sender (binding, sender address), behind the shared email gate with caps under the beta daily limit; owner alerts to the verified address | to do (provider decided 2026-11-10) |
-| Free-tier notice where a visitor starts AI work ("the AI runs on Google Gemini's free tier; don't submit private details") and a bring-your-own-key option for the grade (DECISIONS.md, "Free tier everywhere") | to do |
+| Back end, behind `GRADER_ENABLED` (off): `POST /api/grade` with the free checks at once from the Worker, then `grade.yml` on GitHub Actions dispatched on demand for the screenshot and the v2 grade on 3.5 (Browser Rendering parked) | building (#81) |
+| Queue with live progress (`GET /api/grade/<id>`); past the daily share or with 3.5 unavailable, it waits and "we'll email your report" | building (#81) |
+| Report data: facts and AI judgment apart, strengths, three fixes, estimated rank, similar portfolios, who does your weakest axes better; unlisted, shareable by link, deletable by its owner | building (#81) |
+| Report page, progress page and settings in the redesign; share image; "add me to the leaderboard" request | to do (with the redesign) |
+| Guardrails: Turnstile, per-visitor, per-network and site-wide caps reserved atomically, strict address checks, free checks cached by address, private screenshots, untrusted page text, re-grade cooldown | building (#81); Turnstile switches on with its secret (needs owner) |
+| Security: cost abuse, SSRF through redirects and the browser (filtering proxy on the runner), report privacy, public Actions logs | building (#81, with tests); a full security review before `GRADER_ENABLED` goes on |
+| Cloudflare Email Service wired as the sender (binding, sender address), behind the shared email gate with caps under the beta daily limit; owner alerts to the verified address | building (#81); `OWNER_EMAIL` needs owner |
+| Free-tier notice where a visitor starts AI work (in the redesign) and a bring-your-own-key option for the grade (DECISIONS.md, "Free tier everywhere") | own-key back end building (#81); the notice is in the redesign preview |
+| Switch it on: `GRADER_ENABLED` to `"true"` once the redesign's grade pages ship | needs owner, after the redesign |
 
 Depends on: phases 1 and 3; uses phase 2 for "you'd rank about #340".
 
@@ -124,17 +126,17 @@ Depends on: phase 1's request log; the budget must exist before phase 4 opens to
 Decisions only the owner can make, oldest first.
 
 1. **Email provider**: decided 2026-11-10, Cloudflare Email Service for all email (DECISIONS.md); SES is dropped.
-   Owner alerts and "your grade is ready" emails are built against an interface and stay off until the sender is wired.
+   The sender is wired (#81): the Worker's `send_email` binding from `portfoliorank@n8builds.dev`, behind the shared gate; owner alerts wait for `OWNER_EMAIL` (DEPLOY.md).
 2. **Postal address**: decided 2026-11-10, not needed while the newsletter stays editorial; add a PO box or virtual mailbox if ads, sponsors or paid features ever arrive.
 3. **Legal placeholders**: contact email, legal name or business name, jurisdiction, backup retention period, minimum age (see the `[owner: ...]` markers in [legal/](legal/)).
 4. **Full re-grade on rubric v2**: turn on `RUBRIC_REGRADE` once the backlog is graded (about 2,000 grades, 4-5 days of 3.5's budget)?
 5. **Redesign preview**: approve the shell, adaptive home, leaderboard tabs and grade report when the preview is ready.
 6. **Favourite drafts**: pick which first drafts go out first, and anything to change in the voice.
-7. **Grade my portfolio, from the grader plan** (recommendations, not yet confirmed):
-   anyone can grade, 1 a day with Turnstile and 5 a day signed in with GitHub;
-   graded sites join the leaderboard only by an opt-in request the owner approves;
-   reports are shareable by link, not listed, and deletable by their owner;
-   screenshots on Browser Rendering with a site-wide cap.
+7. **Grade my portfolio: the caps** (built with agent numbers, #81; change them with `GRADER_CAPS`):
+   3 a day per visitor, 6 per network, 100 site-wide, Turnstile on every request;
+   reports are shareable by link, not listed, and deletable by their owner (decided);
+   screenshots on GitHub Actions (decided), Browser Rendering parked.
+   Still open: should graded sites join the leaderboard only by an opt-in request the owner approves (question 8)?
 8. **Leaderboard requests**: since publishing is fully automatic, should "add me to the leaderboard" requests also be automatic, or wait for the owner?
 9. **Required checks**: add the Worker build and browser tests to the required checks on `main` (a GitHub setting).
 10. **Minimum GitHub account age for votes** (`MIN_GITHUB_ACCOUNT_AGE_DAYS`, off today) and a limit for anonymous visitors (Turnstile or a firewall rule).
