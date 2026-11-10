@@ -23,20 +23,20 @@ No reason needed, no questions asked.
 
 - **Public:** open a "Remove my portfolio" issue on [GitHub](https://github.com/n8watkins/portfolio-rank/issues/new/choose).
   Issues are public, so anyone can see the request.
-- **Private:** email [owner: contact email] with your site's address and which of the three you want.
+- **Private:** email nate@n8builds.dev with your site's address and which of the three you want.
 
 I don't ask you to prove the site is yours for "remove me" or "don't name me": both only take something away, so there's nothing to abuse.
 For "fix my listing", I check the request comes from the site's owner, for example from an email on the site's domain or the GitHub account the site links to.
 
 ## What happens, and when
 
-- I act on requests within [owner: e.g. 7 days].
+- I act on requests within 14 days.
 - **Remove me:** the site goes into PortfolioRank's exclusion list, so the next daily update drops it.
   Its screenshots and stored page data are deleted 30 days later.
   Past votes stay in the vote log, which the leaderboard is computed from, but your site is no longer shown anywhere.
-  [owner: confirm, or delete the votes too]
+  They're anonymous: a vote says which two sites were compared, never anything about the site's owner.
 - **Don't name me:** your site is added to a do-not-name list that every post and newsletter is checked against before it goes out; a draft that names you is dropped.
-- **Already published:** any post or newsletter archive page that names you is edited to remove your name, link and screenshot within the same [owner: e.g. 7 days].
+- **Already published:** any post or newsletter archive page that names you is edited to remove your name, link and screenshot within the same 14 days.
   Emails that were already sent can't be recalled.
 - The [removed page](https://portfoliorank.n8builds.dev/removed) counts removal requests but never says whose they were.
 
