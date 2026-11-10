@@ -24,15 +24,16 @@ export const MISSING_TOKEN = "GITHUB_DISPATCH_TOKEN is not set";
 /**
  * Starts `workflow` (a file name in .github/workflows) on `ref`. Returns
  * { runId, url } (runId null when GitHub doesn't say), or { skipped } when
- * there is no token. Throws on any other failure.
+ * there is no token. Throws on any other failure. `apiBase` is GitHub's API
+ * (a local stand-in in the tests).
  */
-export async function dispatchWorkflow({ token, workflow, inputs = {}, ref = "main", repo = REPO, fetchImpl = fetch, log = console.log }) {
+export async function dispatchWorkflow({ token, workflow, inputs = {}, ref = "main", repo = REPO, fetchImpl = fetch, log = console.log, apiBase = API }) {
   if (!token) {
     const skipped = `${MISSING_TOKEN}: skipped starting ${workflow} on GitHub Actions (add the Worker secret to start it from Cloudflare; its GitHub schedule stays as the fallback)`;
     log(skipped);
     return { skipped };
   }
-  const res = await fetchImpl(`${API}/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
+  const res = await fetchImpl(`${apiBase}/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
     method: "POST",
     headers: headers(token),
     body: JSON.stringify({ ref, inputs, return_run_details: true }),

@@ -175,6 +175,14 @@ export const CODE_CRITERIA = CRITERIA.filter((c) => c.by === "code");
 
 const TIERS = ["S", "A", "B", "C", "D"];
 
+/**
+ * Roles read from the page text in the same request (owner decision
+ * 2026-11-10, "Roles are read from the page text when a portfolio is
+ * graded"): labels only, never scored, so adding them did not change the
+ * rubric version.
+ */
+export const ROLES_MAX = 3;
+
 // Marks the untrusted block. Anything that looks like a marker inside the
 // data is removed, so page text can never close the block early.
 const OPEN = "<site_data>";
@@ -193,6 +201,7 @@ export const SYSTEM_INSTRUCTION = [
   "tier: S exceptional and rare (top 5%), A strong, B solid, C weak, D bad.",
   "is_portfolio: false for parked or hijacked domains, starter templates with placeholder content, and plain blogs or link hubs that show no work.",
   "Each note is one short clause of at most 12 words that names the main reason. No preamble.",
+  `roles: the roles the person claims for themselves in the page text (for example "frontend developer", "data engineer"), at most ${ROLES_MAX}, 1 to 4 words each, lower case; an empty list when the page names none. Copy only what the page says; never guess from the design.`,
 ].join("\n");
 
 const axisSchema = {
@@ -212,10 +221,32 @@ export const RESPONSE_SCHEMA = {
     is_portfolio: { type: "BOOLEAN" },
     tier: { type: "STRING", enum: TIERS },
     ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, axisSchema])),
+    roles: { type: "ARRAY", items: { type: "STRING" }, maxItems: ROLES_MAX },
   },
-  required: ["is_portfolio", "tier", ...AI_CRITERIA.map((c) => c.id)],
-  propertyOrdering: ["is_portfolio", "tier", ...AI_CRITERIA.map((c) => c.id)],
+  required: ["is_portfolio", "tier", ...AI_CRITERIA.map((c) => c.id), "roles"],
+  propertyOrdering: ["is_portfolio", "tier", ...AI_CRITERIA.map((c) => c.id), "roles"],
 };
+
+/**
+ * The roles of an answer, cleaned: lower case, letters, digits and a few
+ * joiners only, 1 to 4 words and at most 40 characters each, no duplicates,
+ * at most ROLES_MAX. Page text is untrusted, so anything else is dropped.
+ */
+export function normalizeRoles(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const r of raw) {
+    const role = String(r ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9+#./& -]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!role || role.length > 40 || role.split(" ").length > 4 || !/[a-z]/.test(role)) continue;
+    if (!out.includes(role)) out.push(role);
+    if (out.length >= ROLES_MAX) break;
+  }
+  return out;
+}
 
 const clean = (s, max) =>
   String(s ?? "")
@@ -361,7 +392,7 @@ export function parseRubricResponse(raw) {
   if (typeof r.is_portfolio !== "boolean") throw new Error("rubric answer: is_portfolio missing");
   const tier = String(r.tier ?? "").trim().toUpperCase();
   if (!TIERS.includes(tier)) throw new Error(`rubric answer: bad tier ${JSON.stringify(r.tier)}`);
-  const out = { is_portfolio: r.is_portfolio, tier };
+  const out = { is_portfolio: r.is_portfolio, tier, roles: normalizeRoles(r.roles) };
   for (const c of AI_CRITERIA) {
     const a = r[c.id];
     const score = Number(a?.score);

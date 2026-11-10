@@ -46,8 +46,11 @@ export type NightEnv = CloudflareEnv & {
   RANKING_BATCHED_COUNTS?: string;
   RANKING_AI_WEIGHT?: string;
   ALERT_TRACTION?: string;
-  // Where owner alerts go, once an email provider is set up.
+  // Where owner alerts go: the owner's verified address (free sends).
   OWNER_EMAIL?: string;
+  // Hashes addresses for the email gate's per-recipient cap.
+  AUTH_SECRET?: string;
+  EMAIL_CAPS?: string;
 };
 
 type NightParams = { trigger: "cron" | "manual"; scheduledTime?: number };
@@ -97,9 +100,9 @@ function engine(env: NightEnv, runId: string) {
         RANKING_AI_WEIGHT: env.RANKING_AI_WEIGHT,
       }),
     },
-    // Owner alerts and people's "your grade is ready": off until an email
-    // provider is chosen (pipeline/alerts.mjs emailSender).
-    email: emailSender(env),
+    // Owner alerts through the shared email gate (pipeline/alerts.mjs
+    // emailSender); null until the send_email binding and OWNER_EMAIL exist.
+    email: emailSender(env, { db }),
     runId,
   };
 }

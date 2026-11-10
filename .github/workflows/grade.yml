@@ -1,0 +1,63 @@
+name: Grade my portfolio
+
+# "Grade my portfolio" captures and grades (AUTOMATION.md "Grade my
+# portfolio"). The Worker starts this on demand with a workflow_dispatch
+# after a visitor asks for a grade (lib/grader/dispatch.mjs); the owner
+# accepted GitHub's Actions terms grey area for it (docs/DECISIONS.md).
+#
+# No inputs: this repository is public, so a run's inputs and log are
+# public, and a job id is the only key to its report. The run claims every
+# job waiting in the database instead (scripts/grade-jobs.mjs), and logs
+# only counts. The visitor's own Gemini key never comes here: own-key grades
+# run on the Worker after the capture lands.
+#
+# Each capture runs in Chromium behind a filtering proxy that refuses
+# private addresses (pipeline/net-guard-node.mjs); screenshots go to the
+# SHOTS bucket's private prefix (private/grades/<id>/); free-tier grades use
+# gemini-3.5-flash-lite only, through the budget accountant's people
+# allowance, and wait for 3.5 instead of falling back.
+on:
+  workflow_dispatch:
+
+# One run at a time; GitHub keeps one pending run per group and cancels an
+# older pending one, which loses nothing because every run claims all the
+# waiting jobs. Not the "gemini" group: a visitor must never wait behind the
+# nightly checks.
+concurrency:
+  group: grade-capture
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    # Pinned like sync-upstream.yml: Playwright can't install Chromium on ubuntu 26.04 yet.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Capture and grade the waiting requests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
+          GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
+          GEMINI_BUDGET: ${{ vars.GEMINI_BUDGET }}
+          # Pinned: people's grades are 3.5 only, never the 3.1 fallback.
+          GEMINI_FALLBACK: "off"
+        run: node scripts/grade-jobs.mjs --minutes 12 --max 15

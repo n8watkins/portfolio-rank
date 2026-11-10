@@ -193,6 +193,8 @@ export function createGemini({
   retryBudget = Infinity,
   jitter = () => 0.8 + Math.random() * 0.4,
   timeoutMs = 120000,
+  // Google's API; a local stand-in in tests.
+  apiBase = GEMINI_API_BASE,
   fetchImpl = globalThis.fetch,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
   now = () => Date.now(),
@@ -227,7 +229,7 @@ export function createGemini({
     const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null, finishReason: null, detail: null };
     let res;
     try {
-      res = await fetchImpl(`${GEMINI_API_BASE}/models/${model}:generateContent`, {
+      res = await fetchImpl(`${apiBase}/models/${model}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body,

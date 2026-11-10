@@ -72,8 +72,9 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 
 | When (Pacific) | Where | What |
 | --- | --- | --- |
-| All day, as they arrive | Worker | People's grade and re-grade requests ([pipeline/people.mjs](pipeline/people.mjs), for "grade my portfolio" when it ships): the whole day's quota minus the evening reserve, 3.5 only; a request 3.5 can't answer waits in a queue |
-| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available, and emails the person |
+| All day, as they arrive | Worker and `grade.yml` | People's grade requests ("Grade my portfolio" below, [pipeline/people.mjs](pipeline/people.mjs)): the whole day's quota minus the evening reserve, 3.5 only; a request 3.5 can't answer waits in a queue |
+| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available; their report emails go out on the grader's next tick |
+| Every 5 minutes | Worker cron | The grader's tick ([worker/grader.ts](worker/grader.ts)): report emails, captures that didn't start, requests waiting for a later day, cleanup; nothing while `GRADER_ENABLED` is off |
 | 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
 | 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of the 150 sites captured longest ago, page evidence, fingerprint changes); on Sundays also `health.yml` (not waited for) |
 | Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
@@ -130,7 +131,8 @@ Each run writes its summary to `night_runs` and to the Worker's logs: the estima
 
 After every run, [pipeline/alerts.mjs](pipeline/alerts.mjs) checks: the quota used up before the run, a stage stopped by the circuit breaker, parked items, and traction (people's grade requests or human votes in a day past `ALERT_TRACTION`, default 50 and 300).
 A condition that holds sends one email a day, every day, until it clears; the state is the `owner_alerts` table.
-The provider is Cloudflare Email Service (docs/DECISIONS.md), and alerts will go to the owner's verified address, which is free and doesn't count against the monthly sends; the Worker has no email binding yet, so the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent until a sender is wired in `emailSender()` (with `OWNER_EMAIL`).
+They go through Cloudflare Email Service and the shared email gate ("Grade my portfolio", Email) to `OWNER_EMAIL`, the owner's verified address, which is free and doesn't count against the monthly sends.
+Until `OWNER_EMAIL` is set the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent; a send the gate refuses or the provider fails stays unsent and is tried on the next run.
 
 ### What stays on GitHub Actions, and why
 
@@ -174,6 +176,112 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 - **Results feed:** `pollResults(db, { since })` in [lib/polls/store.mjs](lib/polls/store.mjs) returns closed polls with totals, the winning option and the margin in points, for the content engine and the AI vs people comparisons; the public `past` list carries the same totals.
 - **Turso reads:** a public read is a handful of indexed rows, at most once a minute per data center; a vote is one insert (plus the trigger's update) and two rate-limit upserts.
 
+## Grade my portfolio
+
+Owner decisions of 2026-11-10 ([docs/DECISIONS.md](docs/DECISIONS.md#grade-my-portfolio)): anyone can grade a portfolio with no account, on Gemini's free tier or their own key.
+The back end is built and off: every route answers 404 and the five-minute cron does nothing until the Worker variable `GRADER_ENABLED` is `"true"`, which waits for the redesign's `/grade` and `/grade/[id]` pages.
+
+```
+visitor ── POST /api/grade ──► Worker: address checks, rate limit, Turnstile, own key checked (free)
+                               free checks at once (plain fetch, cached a day per address)
+                               re-grade cooldown, daily caps (one transaction), job row
+                               workflow_dispatch grade.yml (no inputs)
+                                      │
+GitHub Actions grade.yml ◄────────────┘  claims every waiting job, captures it in Chromium
+                                         behind a filtering proxy, uploads the screenshots
+                                         to private/grades/<id>/ in the SHOTS bucket
+          ├─ free tier ─► people queue (pipeline/people.mjs): 3.5 only, people's allowance
+          │               busy or out of quota: waits; the hourly drain finishes it
+          └─ own key ───► "awaiting_key": the visitor's browser sends the key once
+                          (POST /api/grade/<id>/finish) and the Worker grades on it
+report ◄── GET /api/grade/<id> (progress, then the report) ── email: one-time link
+```
+
+### The request
+
+`POST /api/grade { url, turnstileToken?, geminiKey? }` ([app/api/grade/route.ts](app/api/grade/route.ts)), in this order, each step refusing before the next costs anything:
+
+1. The flag, the `Origin` header (the site's own) and a JSON body of at most 8 KB.
+2. The address ([lib/grader/url.mjs](lib/grader/url.mjs)): http or https (https when no scheme is given), ports 80 and 443 only, no user name or password, a public host name with a dot (never an IP literal, a local name or a private range, [lib/net-guard.mjs](lib/net-guard.mjs)), at most 500 characters; the query and fragment are dropped, so `?x=1` makes no new address for the caches, the caps or the cooldown.
+3. A rate limit on attempts, before any work: 20 an hour per visitor and 60 per network (`rate_limits`).
+4. Cloudflare Turnstile (action `grade`) when the `TURNSTILE_SECRET_KEY` secret is set; skipped without it ([lib/turnstile.ts](lib/turnstile.ts)).
+5. An own key, if sent, is checked with a free metadata call (`models.get` for `gemini-3.5-flash-lite`, no generate quota).
+6. The free checks ([lib/grader/quick.ts](lib/grader/quick.ts)): one plain fetch from the Worker through `safeFetch` (every redirect hop re-checked, 10-second timeout, 1.5 MB cap, and `global_fetch_strictly_public` refuses names that resolve to private addresses), then the facts code can check (`pipeline/facts.mjs`, project links checked through the same fetch) and a fingerprint of the HTML's structure.
+   Cached per address for a day (failures for 10 minutes) in the `cache` table.
+   A page that is unreachable, answers an error, is parked or isn't HTML gets a 422 with the reason and counts against nothing.
+7. The re-grade cooldown ([lib/grader/jobs.mjs](lib/grader/jobs.mjs) `regradeCheck`, the budget's `regradeAllowed`): one grade per address every 7 days, sooner when the free checks' fingerprint changed since, and never two at once.
+   Only the browser that owns the earlier report is told its id.
+   Grading a listed site reuses nothing from the leaderboard's grade: it is always captured and graded fresh.
+8. The daily caps ([lib/grader/caps.mjs](lib/grader/caps.mjs)), reserved in one write transaction so all three counters are taken or none: 3 a day per visitor (the signed-in account or the signed `pr_anon` browser cookie), 6 per network (the IPv4 address or the IPv6 /64, stored only as a keyed hash) and 100 site-wide, per Pacific day like the Gemini quota (`GRADER_CAPS` overrides them).
+   Past the site-wide share a request is not refused: it waits for a later day (`waiting`, at most 200 at once) and its report is emailed.
+9. The job: a row in `grade_jobs` whose id is 128 random bits, the report's only key; the browser gets the signed `pr_grades` cookie that makes it the report's owner.
+10. The capture is handed to GitHub Actions ([lib/grader/dispatch.mjs](lib/grader/dispatch.mjs)): a `workflow_dispatch` of `grade.yml` with the Worker secret `GITHUB_DISPATCH_TOKEN`.
+    Without the token the job is `unavailable` with a clear reason and the free checks are the answer.
+
+The answer is 202 with the job (the same shape as `GET /api/grade/<id>`), or 400, 403, 404, 409 (`in_progress`, `cooldown` with `nextAt`), 422, 429 (`rate_limited`, `daily_limit` with the scope and `resetAt`) or 503 (`busy`).
+
+### The capture on GitHub Actions
+
+`grade.yml` runs [scripts/grade-jobs.mjs](scripts/grade-jobs.mjs) on a standard runner (free for this public repository), one run at a time (`grade-capture` concurrency group, never the nightly `gemini` group).
+
+- **No inputs, public-safe logs:** the repository is public, so a run's inputs and log are public; the dispatch carries no inputs, the run claims every waiting job from the database (two runs never take the same one, a claim older than 20 minutes is taken over), and the log prints counts only, never an address, a job id or page text.
+  A burst of requests rides on one run: a request within 45 seconds of a dispatch that hasn't been claimed yet doesn't dispatch again.
+- **No private network:** Chromium's every request goes through a local filtering proxy ([pipeline/net-guard-node.mjs](pipeline/net-guard-node.mjs)) that resolves each host itself, refuses any that resolves to a private, loopback, link-local or metadata address, connects to the very address it checked (so DNS can't switch in between), allows only ports 80 and 443, refuses WebSocket upgrades and caps the page weight at 60 MB.
+  Chromium runs with no secrets in its environment, service workers blocked, downloads off, dialogs dismissed and pop-ups closed.
+  The link checks use `guardedFetch`, which follows redirects by hand and checks every hop the same way.
+- **The capture** ([pipeline/grade-capture.mjs](pipeline/grade-capture.mjs)): the settled top of the page at 1440 x 900 and at 390 x 844, the rendered text, the facts, motion, dark mode, overflow and the page fingerprint, as the nightly capture does for listed sites.
+  The screenshots go to the `SHOTS` bucket under `private/grades/<id>/`, which the site's public `/shots` route never serves; the report serves them at `/api/grade/<id>/shot/<file>` with private caching.
+- **Retries:** a capture GitHub hasn't started within 10 minutes is dispatched again by the grader's tick or when someone checks the progress, at most 3 times, then the job fails with a reason.
+
+### The grade
+
+- **Free tier:** the captured job goes through the people queue ([lib/grader/queue.mjs](lib/grader/queue.mjs), [pipeline/people.mjs](pipeline/people.mjs)) on the runner: `gemini-3.5-flash-lite` only, the same rubric as the leaderboard (`pipeline/rubric.mjs`, contact details stripped from the page text first), logged as `people-grade` in `gemini_requests`, inside the budget accountant's people allowance (the whole day minus the evening reserve).
+  A busy 3.5 is retried (10, 30, 60 seconds); then, or with today's quota spent, the job is `queued` and the Worker's hourly people-queue cron finishes it when 3.5 is available, with no fallback to 3.1.
+  The same request also reads the roles the page claims (at most three).
+- **Own key:** the job waits as `awaiting_key`; the visitor's browser, which keeps the key, sends it once in the JSON body of `POST /api/grade/<id>/finish { geminiKey }`, and the Worker grades on it at once with the same model and rubric (the grade says `own_key: true`).
+  The key is never stored, logged, put in a URL or sent as a header to us (Workers Logs records request headers), and goes to Google only in the `x-goog-api-key` header; its requests are not written to `gemini_requests`, since they spend the visitor's quota.
+  A rejected key, a spent quota or a busy Gemini leaves the job waiting with the reason; `{ freeTier: true }` hands it to the free tier instead.
+- **The report** ([lib/grader/report.mjs](lib/grader/report.mjs)), built once when the grade is written: the measured facts and the AI's judgments apart, up to three strengths and three fixes (code, weighted by what each costs), the estimated rank and "top N%" among the listed graded portfolios (on the same level the leaderboard is seeded with, `lib/ranking/engine.mjs` `seedFromGrade`), up to four similar portfolios (same tier, closest level, shared roles first) and portfolios scoring 5 on the visitor's two weakest axes.
+  The pool of graded portfolios is cached for an hour, so a report view never scans the `portfolios` table.
+
+### Reading and owning a report
+
+| Request | Answer |
+| --- | --- |
+| `GET /api/grade/<id>` | `{ id, url, domain, status, reason, ownKey, mine, steps, checks, shots, email: { requested, sent }, report }`; poll it every few seconds while `status` is `capturing`, `grading` or `queued` |
+| `GET /api/grade/<id>/shot/hero.jpg` (and `mobile.jpg`) | the screenshot, private caching |
+| `POST /api/grade/<id>/email { email, turnstileToken? }` | `{ requested, sent }`: the one-time link goes out when the report is ready |
+| `GET /api/grade/link?t=<token>` | 303 to `/grade/<id>`; the first open makes this browser the owner |
+| `POST /api/grade/<id>/finish { geminiKey }` or `{ freeTier: true }` | finishes an own-key grade |
+| `DELETE /api/grade/<id>` | 204, the report's owner only; the screenshots go too |
+
+`status` is one of `capturing`, `waiting`, `unavailable`, `grading`, `queued`, `awaiting_key`, `done` and `failed`; `steps` is the progress list (`checks`, `capture`, `grade`, each `done`, `running`, `waiting`, `pending`, `needs_key`, `off` or `failed`).
+Reports are unlisted: the id is the only way in, every answer says `X-Robots-Tag: noindex, nofollow` and `Cache-Control: private, no-store`, and nothing returns the page text, the visitor or the network.
+Reports and their screenshots are deleted after 180 days.
+
+### Email
+
+- **"Get it by email", no account needed:** the address waits in `grade_emails` until the report is ready (also after waiting in a queue or for a later day), then the grader's tick sends a one-time link and erases the address, keeping only a keyed hash so the same address isn't added twice; at most 2 addresses a report.
+- **The link** ([lib/grader/links.mjs](lib/grader/links.mjs)): signed with `AUTH_SECRET`, expires in 7 days, works once (only a hash of its nonce is stored); opening it makes that browser the report's owner, and a used or expired link still leads to the report without granting anything.
+- **One gate** ([lib/email/gate.mjs](lib/email/gate.mjs)): every email (grade reports, owner alerts, the newsletter later) is counted in `email_sends` and stops at hard daily caps: 100 in all, 80 grade reports, 20 owner alerts and 3 to any one address (`EMAIL_CAPS` overrides them), under Cloudflare Email Service's beta daily limit.
+  A refused or failed send counts too, so a broken provider can't become a retry storm; the log keeps a keyed hash, never the address.
+  A report email the gate keeps refusing is given up after 3 days and its address erased.
+- **The sender:** Cloudflare Email Service through the Worker's `send_email` binding `SEND_EMAIL`, from `EMAIL_FROM` (`portfoliorank@n8builds.dev`; n8builds.dev is onboarded for sending, as for Wren).
+  Owner alerts go to `OWNER_EMAIL`, the owner's verified address, which is free.
+
+### The grader's tick
+
+A Cron Trigger every five minutes (`*/5 * * * *`, [worker/grader.ts](worker/grader.ts)) sends the report emails that are due, dispatches captures that didn't start again, starts requests that waited for a later day while that day's share has room, and once an hour deletes reports past 180 days with their screenshots, expired links, old cap counters and addresses waiting longer than 30 days.
+While `GRADER_ENABLED` is not `"true"` it returns before reading anything.
+
+### Tables
+
+`grade_jobs`, `grade_caps` (a day of counters, left out of the backup), `grade_emails`, `grade_links`, `email_sends` and `email_outbox` (test runs only, left out of the backup), in [lib/grader/schema.mjs](lib/grader/schema.mjs).
+
+### Testing
+
+`tests/grader.test.mjs` (caps, cooldown, claims, dispatch, links, the email gate, report emails, the report, own keys and the people queue, with a mocked GitHub and Gemini), `tests/grader-capture.test.mjs` (the proxy and guarded fetch against private addresses, and a real Chromium capture through the proxy) and `tests/grader-api.test.mjs` (every route on the production build, with local stand-ins for the sites, GitHub and Gemini that `scripts/test-e2e.sh` turns on; `lib/grader/server.ts` ignores them on the deployed Workers).
+
 ## Model watch
 
 Owner decision of 2026-11-10: model watch is news only; nothing switches on its own.
@@ -198,7 +306,7 @@ It goes to the owner through the owner alerts, keys `model-watch:*`:
 - `model-watch:source:<source>` (kind `problem`): a source could not be read.
 
 The weekly run reconciles only the `model-watch:*` keys and the end-of-day run never clears them.
-Email is off until the Cloudflare Email Service sender is wired ("Owner alerts" above); the alerts are recorded and shown, and `GET /api/admin/quota` returns `modelWatch` (the latest report with its text, and the last 8 runs).
+They are emailed like every owner alert once `OWNER_EMAIL` is set ("Owner alerts" above); `GET /api/admin/quota` returns `modelWatch` (the latest report with its text, and the last 8 runs).
 By hand: `pass-env run -- node scripts/model-watch.mjs [--dry-run]`.
 
 ## GitHub Actions
@@ -216,6 +324,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API | TURSO |
+| **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
 The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
