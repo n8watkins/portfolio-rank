@@ -37,18 +37,17 @@ import {
   judgeModels,
   PRIMARY_MODEL,
 } from "./gemini.mjs";
-import { createRequestLog, dailyTotals, ensureGeminiLog, gradingBudget, runSummary } from "./gemini-log.mjs";
+import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
+import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import {
   RESPONSE_SCHEMA,
   RUBRIC_VERSION,
   buildRubricRequest,
   gradeRecord,
-  normalizePageText,
   parseRubricResponse,
 } from "./rubric.mjs";
-import { measurePage } from "./facts.mjs";
-import { httpGate, UA, visibleText } from "./gate.mjs";
+import { pageEvidence } from "./evidence.mjs";
 import { createRenderer } from "./render.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
@@ -140,7 +139,10 @@ function eloUpdate(winnerElo, loserElo, k = 32) {
 // ---------------------------------------------------------------------------
 // Every request is recorded in gemini_requests (pipeline/gemini-log.mjs).
 await ensureGeminiLog(db);
-const requestLog = createRequestLog({ db, job: MODE });
+// Logged as the budget's job names: new grades, then re-grades (switched in
+// runRubric), and the ELO-era votes as "pairwise" (counted as AI ranking
+// comparisons).
+const requestLog = createRequestLog({ db, job: MODE === "rubric" ? "grade-new" : MODE });
 const gemini = createGemini({
   apiKey: process.env.GEMINI_API_KEY,
   models: MODELS,
@@ -306,62 +308,8 @@ function signalLines(label, url, sig) {
 // ---------------------------------------------------------------------------
 // rubric mode (rubric v2: pipeline/rubric.mjs)
 // ---------------------------------------------------------------------------
-const parseJson = (v) => {
-  if (v == null) return null;
-  try {
-    const o = JSON.parse(String(v));
-    return o && typeof o === "object" ? o : null;
-  } catch {
-    return null;
-  }
-};
-
-// Below this much server-rendered text a page is treated as client-rendered
-// and loaded in a browser instead (an offline sample of 30 sites found 40%
-// of them under 200 characters over plain HTTP).
-const RENDER_BELOW_CHARS = 200;
 // Started on first use only; --no-browser keeps grading on plain HTTP.
 const renderer = args.includes("--no-browser") ? null : createRenderer();
-
-// The page text and measured facts for a grade: stored by capture.mjs, or,
-// for rows captured before facts existed, measured now (free) and stored:
-// over plain HTTP, or in a browser when the server sends little text.
-// Motion always comes from the capture (meta.motion).
-async function pageEvidence(row) {
-  const url = String(row.url);
-  const m = parseJson(row.meta)?.motion;
-  const motion = typeof m === "boolean" ? m : null;
-  const stored = parseJson(row.facts);
-  if (row.page_text != null && stored) {
-    return { pageText: String(row.page_text), facts: stored.motion == null && motion != null ? { ...stored, motion } : stored };
-  }
-  const gate = await httpGate(url).catch(() => null);
-  if (gate?.status !== "live") {
-    return { pageText: "", facts: motion == null ? null : { source: "capture", motion } };
-  }
-  let page = { html: gate.html, text: visibleText(gate.html), finalUrl: gate.finalUrl, source: "http" };
-  if (page.text.length < RENDER_BELOW_CHARS && renderer) {
-    const r = await renderer.render(url).catch(() => null);
-    if (r && r.status < 400 && String(r.text ?? "").trim().length > page.text.length) {
-      page = { html: r.html, text: String(r.text), finalUrl: r.finalUrl, source: "rendered" };
-    }
-  }
-  const { text } = page;
-  const facts = await measurePage(
-    { html: page.html, text, url, finalUrl: page.finalUrl, name: String(row.name ?? ""), motion, source: page.source },
-    { userAgent: UA }
-  );
-  const pageText = normalizePageText(text);
-  try {
-    await db.execute({
-      sql: "UPDATE portfolios SET page_text = ?, facts = ?, facts_at = ? WHERE url = ?",
-      args: [pageText, JSON.stringify(facts), facts.measured_at, url],
-    });
-  } catch {
-    /* the grade still uses them; the next grade measures again */
-  }
-  return { pageText, facts };
-}
 
 // Grade one site. Returns { status: "ok", rubric, model } | { status:
 // "skipped" } (screenshot unavailable, retried next run) | { status:
@@ -382,7 +330,7 @@ async function gradeRow(row) {
     image = hero;
     source = "r2";
   }
-  const { pageText, facts } = await pageEvidence(row);
+  const { pageText, facts } = await pageEvidence(db, row, { renderer });
   const request = buildRubricRequest({ name: String(row.name ?? ""), url, pageText, facts, image });
   const { result, model, usage } = await gemini.generate(request.parts, RESPONSE_SCHEMA, request.options);
   const parsed = parseRubricResponse(result);
@@ -418,16 +366,28 @@ async function runRubric() {
   let stopped = null;
   let deferred = 0;
 
-  // Today's requests per model before this run, plus this run's own, against
-  // the grading budget.
-  const budget = gradingBudget();
-  const { used } = await dailyTotals(db);
-  const room = (model = gemini.activeModel) =>
-    (budget[model] ?? 0) - (used.get(model)?.n ?? 0) - (gemini.requests[model] ?? 0);
+  // What the budget accountant (pipeline/budget.mjs) allows the two kinds of
+  // work right now: new grades as "Grade new sites", re-grades as
+  // "Re-grades", each within its cap and the quota left minus the reserve
+  // kept for people. This run's own requests count against them.
+  const plan = budgetPlan();
+  const usage = await usageToday(db, { plan });
+  const quota = dailyQuota();
+  const shareNew = backgroundAllowance("grade_new", usage, { plan, quota });
+  const shareRegrade = backgroundAllowance("regrade", usage, { plan, quota });
+  const allowed = { grade_new: shareNew.allowed, regrade: shareRegrade.allowed };
+  // The quota left minus the reserve: both kinds of work share it.
+  const quotaRoom = shareNew.remaining - shareNew.reserve;
+  const spent = () => Object.values(gemini.requests).reduce((a, b) => a + b, 0);
+  let regradeFrom = null; // requests made before the re-grades started
+  const room = () =>
+    regradeFrom == null
+      ? allowed.grade_new - spent()
+      : Math.min(allowed.regrade - (spent() - regradeFrom), quotaRoom - spent());
   // Each grade can take up to 4 requests (3 retries); start one only with room for that.
   const PER_GRADE = 4;
   const budgeted = MODELS[0] === PRIMARY_MODEL;
-  // A spent 3.5 grading budget means waiting for tomorrow, never 3.1.
+  // A spent 3.5 budget means waiting for tomorrow, never 3.1.
   const haveRoom = (need) => room() >= need;
   // Set when 3.5's daily quota answers 429: planned waiting, not an error.
   let quotaSpent = false;
@@ -495,7 +455,7 @@ async function runRubric() {
   for (const [i, row] of queue.entries()) {
     if (budgeted && !haveRoom(PER_GRADE)) {
       deferred = queue.length - i;
-      stopped = `today's ${PRIMARY_MODEL} grading budget is used (${budget[PRIMARY_MODEL] ?? 0} requests); ${deferred} site(s) wait for tomorrow${NO_FALLBACK}`;
+      stopped = `today's ${PRIMARY_MODEL} budget for new grades is used (${allowed.grade_new} request(s) allowed this run); ${deferred} site(s) wait for tomorrow${NO_FALLBACK}`;
       break;
     }
     if (!(await handle(row, `[${i + 1}/${queue.length}]`))) {
@@ -512,7 +472,7 @@ async function runRubric() {
   const regradeOn = () =>
     !stopped && !FORCE && !ONLY && !args.includes("--no-regrade") && budgeted && gemini.activeModel === PRIMARY_MODEL;
   const slots = () => {
-    const left = room(PRIMARY_MODEL);
+    const left = room();
     return Math.max(0, Math.min(LIMIT === Infinity ? left : LIMIT - queue.length - regradeQueued, left));
   };
   const queues = [
@@ -521,14 +481,18 @@ async function runRubric() {
       ? [["rubric re-grade", () => versionRegradeQueue(db, { primary: PRIMARY_MODEL, version: RUBRIC_VERSION, limit: slots() }), `grade(s) from a rubric older than v${RUBRIC_VERSION}`]]
       : []),
   ];
+  if (regradeOn()) {
+    regradeFrom = spent();
+    requestLog.job = "regrade";
+  }
   for (const [name, load, what] of queues) {
     if (!regradeOn()) break;
     const rows = await load();
     regradeQueued += rows.length;
-    if (rows.length) console.log(`${name}: ${rows.length} ${what} (room today: ${room(PRIMARY_MODEL)})`);
+    if (rows.length) console.log(`${name}: ${rows.length} ${what} (room today: ${room()})`);
     let stop = false;
     for (const [i, row] of rows.entries()) {
-      if (gemini.activeModel !== PRIMARY_MODEL || room(PRIMARY_MODEL) < 1) {
+      if (gemini.activeModel !== PRIMARY_MODEL || room() < 1) {
         deferred += rows.length - i;
         stop = true;
         break;
@@ -614,7 +578,18 @@ async function runPairwise() {
   let deferred = 0;
   let consecutiveErrors = 0;
   let stopped = null;
+  // The budget accountant's share for AI ranking comparisons
+  // (pipeline/budget.mjs); votes past it wait for tomorrow.
+  const plan = budgetPlan();
+  const allowance =
+    MODELS[0] === PRIMARY_MODEL ? backgroundAllowance("compare", await usageToday(db, { plan }), { plan, quota: dailyQuota() }).allowed : Infinity;
+  const spent = () => Object.values(gemini.requests).reduce((a, b) => a + b, 0);
   for (let round = 0; cast < VOTES && round < VOTES * 5; round++) {
+    if (spent() >= allowance) {
+      deferred = VOTES - cast;
+      stopped = `today's budget for AI ranking comparisons is used (${allowance} request(s) allowed this run); ${deferred} vote(s) wait for tomorrow${NO_FALLBACK}`;
+      break;
+    }
     // Uncertainty-prioritized: sample a handful, face off the two least-voted
     // whose ratings are close (same selection spirit as GET /api/rank).
     const sample = [...pool].sort(() => Math.random() - 0.5).slice(0, 12);

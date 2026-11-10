@@ -162,7 +162,8 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, env = {} }
       GEMINI_API_KEY: "test-key-not-real",
       SHOTS_BASE_URL: "https://shots.test",
       GITHUB_STEP_SUMMARY: summary,
-      GEMINI_GRADING_BUDGET: JSON.stringify(budget),
+      // The accountant's caps for new grades and re-grades (pipeline/budget.mjs), no reserve.
+      GEMINI_BUDGET: JSON.stringify({ reserve: 0, stages: { grade_new: { cap: budget[PRIMARY_MODEL] }, regrade: { cap: budget[PRIMARY_MODEL] } } }),
       GEMINI_DAILY_QUOTA: JSON.stringify(quota),
       MOCK_GEMINI: JSON.stringify([{ json: grade(null, "A", 4) }]),
       ...env,
@@ -191,8 +192,10 @@ test("judge.mjs re-grades 3.1 grades with 3.5 while the budget lasts, keeps hist
   const models = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows.map((r) => r.m);
   assert.equal(models.filter((m) => m === PRIMARY_MODEL).length, 5);
   assert.equal(models.filter((m) => m === BACKUP_MODEL).length, 1);
-  const logged = (await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'rubric' AND status = 200")).rows[0].n;
-  assert.equal(logged, 5);
+  const logged = Object.fromEntries(
+    (await db.execute("SELECT job, COUNT(*) AS n FROM gemini_requests WHERE status = 200 GROUP BY job")).rows.map((r) => [r.job, Number(r.n)])
+  );
+  assert.deepEqual(logged, { "grade-new": 1, regrade: 4 }, "each request is logged under the budget's job name");
   assert.match(md, /### Gemini requests this run/);
   assert.match(md, /### Gemini today/);
   assert.match(md, /\*\*Warning:\*\*/); // 5 of 5 used
@@ -233,7 +236,7 @@ test("once 3.5's grading budget is used the rest waits for tomorrow: no catch-up
   assert.deepEqual(models, [PRIMARY_MODEL]);
   assert.match(md, /OK: 1 of 1 site\(s\) judged/);
   assert.match(md, /\| 1 \| 1 \| 0 \| 0 \| 0 \| 2 \|/);
-  assert.match(md, /Stopped early: today's gemini-3\.5-flash-lite grading budget is used \(4 requests\); 2 site\(s\) wait for tomorrow \(no fallback to a lower model: GEMINI_FALLBACK is off\)/);
+  assert.match(md, /Stopped early: today's gemini-3\.5-flash-lite budget for new grades is used \(4 request\(s\) allowed this run\); 2 site\(s\) wait for tomorrow \(no fallback to a lower model: GEMINI_FALLBACK is off\)/);
 });
 
 test("existing 3.1 grades are re-graded on 3.5, and nothing new is written by 3.1, even when 3.5 is busy", async () => {

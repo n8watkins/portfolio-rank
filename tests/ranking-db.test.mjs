@@ -241,7 +241,7 @@ test("compare job: stores one-on-one and batched comparisons with their full rec
   assert.equal(input.comparisons.length, 4);
 });
 
-test("compare job: a spent 3.5 quota stops the run and never falls back to 3.1", async () => {
+test("compare job: a spent 3.5 quota is deferred, not failed, and never falls back to 3.1", async () => {
   const { dir, dbFile, db } = await setup();
   const quota = { status: 429, raw: JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }] } }) };
   const r = await run("pipeline/compare.mjs", dir, dbFile, ["--rpm", "60000"], {
@@ -249,9 +249,13 @@ test("compare job: a spent 3.5 quota stops the run and never falls back to 3.1",
     RANKING_BUDGET: JSON.stringify({ one_on_one: 3, batched: 0 }),
     MOCK_GEMINI: JSON.stringify([quota]),
   });
-  assert.equal(r.code, 1, r.out);
+  // Same rule as judge.mjs (#63): nothing compared because the quota is
+  // spent is waiting for tomorrow, so the run passes.
+  assert.equal(r.code, 0, r.out);
   assert.match(r.out, /daily quota/);
-  assert.ok(r.requests.length >= 1);
+  assert.match(r.summary, /waiting for tomorrow|wait for tomorrow/);
+  assert.match(r.summary, /\| 0 \| 0 \| 0 \| 0 \| 0 \| 3 \|/, "three comparisons deferred, none failed");
+  assert.equal(r.requests.length, 1, "one request, then it stops");
   assert.ok(r.requests.every((q) => q.model === "gemini-3.5-flash-lite"), "never 3.1");
   assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM comparisons")).rows[0].n), 0);
 });

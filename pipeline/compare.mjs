@@ -21,13 +21,21 @@
 //
 // Daily budgets come from lib/ranking/config.mjs (RANKING_BUDGET overrides,
 // default 100 one-on-one and 100 batched) and count what was already stored
-// today, so a second run on the same day only does the rest. Batched results
+// today, so a second run on the same day only does the rest. The budget
+// accountant (pipeline/budget.mjs) caps the run further: AI ranking
+// comparisons get at most their stage cap and never the reserve kept for
+// people. A spent 3.5 quota or budget is waiting for tomorrow, not a failure
+// (the same rule as judge.mjs since #63): the rest is counted as deferred.
+//
+// The end-of-day run on Cloudflare (pipeline/night.mjs) does this work every
+// night; this script is the manual fallback (judge-vote.yml, by hand). Batched results
 // are stored like any other but count in the AI and Merged views only when
 // RANKING_BATCHED_COUNTS is "true" (experiment only until then).
 //
 // Usage: node pipeline/compare.mjs [--rpm R] [--one-on-one N] [--batched N]
-import { createGemini, createLimiter, DEFAULT_RPM, fallbackEnabled, GeminiAuthError, GeminiUnavailableError, judgeModels, PRIMARY_MODEL } from "./gemini.mjs";
-import { createRequestLog, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
+import { createGemini, createLimiter, DEFAULT_RPM, fallbackEnabled, GeminiAuthError, GeminiQuotaError, GeminiUnavailableError, judgeModels, PRIMARY_MODEL } from "./gemini.mjs";
+import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
+import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
 import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
@@ -114,7 +122,14 @@ async function run() {
     one_on_one: Math.max(0, Number(flag("one-on-one", config.budget.one_on_one)) - done.one_on_one),
     batched: Math.max(0, Number(flag("batched", config.budget.batched)) - done.batched),
   };
-  console.log(`today: ${done.one_on_one} one-on-one and ${done.batched} batched stored; this run: up to ${want.one_on_one} and ${want.batched}`);
+  // The accountant's share right now: one request per comparison planned,
+  // one-on-one first.
+  const plan = budgetPlan();
+  const share = backgroundAllowance("compare", await usageToday(db, { plan, now }), { plan, quota: dailyQuota() });
+  const overBudget = Math.max(0, want.one_on_one + want.batched - share.allowed);
+  want.batched = Math.max(0, want.batched - overBudget);
+  want.one_on_one = Math.min(want.one_on_one, share.allowed);
+  console.log(`today: ${done.one_on_one} one-on-one and ${done.batched} batched stored; budget allows ${share.allowed} request(s) (quota left ${share.remaining}, reserve ${share.reserve}); this run: up to ${want.one_on_one} and ${want.batched}`);
 
   // Comparable sites: on the list, captured, not graded "not a portfolio".
   const rows = (
@@ -138,14 +153,14 @@ async function run() {
   const batches = planBatches({ sites: pool, n: want.batched, size: config.batchSize, seed });
   console.log(`pool ${pool.length} site(s); planned ${pairs.length} pair(s) and ${batches.length} batch(es) with seed ${seed}`);
 
-  const counts = { queued: 0, ok: 0, abstained: 0, errors: 0, skipped: 0 };
-  let stopped = null;
+  const counts = { queued: 0, ok: 0, abstained: 0, errors: 0, skipped: 0, deferred: overBudget };
+  let stopped = overBudget ? `today's budget for AI ranking comparisons leaves room for ${share.allowed}; ${overBudget} wait for tomorrow` : null;
   let consecutiveErrors = 0;
   const jobs = [
     ...pairs.map((p) => ({ ...p, method: "one_on_one" })),
     ...batches.map((b) => ({ ...b, method: "batched" })),
   ];
-  for (const job of jobs) {
+  for (const [i, job] of jobs.entries()) {
     counts.queued++;
     const sites = await Promise.all(job.shown.map(async (url) => ({ ...info.get(url), url, image: await hero(info.get(url).key) })));
     if (sites.some((s) => !s.image)) {
@@ -179,6 +194,14 @@ async function run() {
       else counts.abstained++;
     } catch (e) {
       if (e instanceof GeminiAuthError) throw e;
+      if (e instanceof GeminiQuotaError) {
+        // Today's 3.5 quota is used up: this comparison and the rest wait
+        // for tomorrow. Planned waiting, not a failure.
+        counts.queued += jobs.length - i - 1;
+        counts.deferred += jobs.length - i;
+        stopped = `${e.message}; ${jobs.length - i} comparison(s) wait for tomorrow`;
+        break;
+      }
       counts.errors++;
       console.log(`  ERROR ${job.method} ${job.shown.join(" | ")}: ${String(e.message).slice(0, 160)}`);
       if (e instanceof GeminiUnavailableError) {
@@ -191,8 +214,10 @@ async function run() {
       }
     }
   }
-  console.log(`compare done: ${counts.ok} stored, ${counts.abstained} skipped by the model, ${counts.errors} error(s), ${counts.skipped} without screenshots; ${gemini.summary()}`);
-  return { ...counts, stopped };
+  console.log(`compare done: ${counts.ok} stored, ${counts.abstained} skipped by the model, ${counts.errors} error(s), ${counts.skipped} without screenshots, ${counts.deferred} deferred; ${gemini.summary()}`);
+  if (stopped) console.log(`  stopped early: ${stopped}`);
+  // judgeOutcome counts deferred work as planned waiting.
+  return { ...counts, queued: counts.queued + overBudget, stopped };
 }
 
 async function writeSummary(outcome, stopped) {
