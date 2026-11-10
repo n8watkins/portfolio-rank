@@ -30,35 +30,39 @@ export default function SettingsPage() {
         </a>
       </header>
 
-      <div className="py-6">
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="mt-2 text-sm text-mute">Saved on this device.</p>
-      </div>
-
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-edge bg-card p-5">
-        <div className="min-w-0">
-          <p className="font-semibold">Auto-open both sites when voting</p>
-          <p className="mt-1 text-sm text-mute">
-            Opens each new pair&apos;s two sites in new tabs so you can review the
-            real pages before picking. You may need to allow pop-ups for this
-            site.
-          </p>
+      <main id="main" tabIndex={-1}>
+        <div className="py-6">
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="mt-2 text-sm text-mute">Saved on this device.</p>
         </div>
-        <button
-          role="switch"
-          aria-checked={autoOpen}
-          onClick={toggleAutoOpen}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-            autoOpen ? "bg-accent" : "bg-edge"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-bg transition-all ${
-              autoOpen ? "left-[1.375rem]" : "left-0.5"
+
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-edge bg-card p-5">
+          <div className="min-w-0">
+            <p id="autoopen-label" className="font-semibold">Auto-open both sites when voting</p>
+            <p id="autoopen-desc" className="mt-1 text-sm text-mute">
+              Opens each new pair&apos;s two sites in new tabs so you can review the
+              real pages before picking. You may need to allow pop-ups for this
+              site.
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={autoOpen}
+            aria-labelledby="autoopen-label"
+            aria-describedby="autoopen-desc"
+            onClick={toggleAutoOpen}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition after:absolute after:-inset-y-2.5 after:inset-x-0 ${
+              autoOpen ? "bg-accent" : "bg-edge"
             }`}
-          />
-        </button>
-      </div>
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-bg transition-all ${
+                autoOpen ? "left-[1.375rem]" : "left-0.5"
+              }`}
+            />
+          </button>
+        </div>
+      </main>
     </div>
   );
 }

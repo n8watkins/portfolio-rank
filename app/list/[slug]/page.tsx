@@ -133,15 +133,17 @@ export default async function ListPage({
         </a>
       </header>
 
-      <ListView
-        listId={list.id}
-        slug={list.slug}
-        initialName={list.name}
-        initialPublic={list.isPublic}
-        isOwner={list.isOwner}
-        items={list.items}
-        shareUrl={`${SITE_URL}/list/${list.slug}`}
-      />
+      <main id="main" tabIndex={-1}>
+        <ListView
+          listId={list.id}
+          slug={list.slug}
+          initialName={list.name}
+          initialPublic={list.isPublic}
+          isOwner={list.isOwner}
+          items={list.items}
+          shareUrl={`${SITE_URL}/list/${list.slug}`}
+        />
+      </main>
     </div>
   );
 }

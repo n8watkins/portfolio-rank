@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
-import { SignInModal } from "@/components/SignInModal";
+import { useSignIn } from "@/components/SignInModal";
 
 type SessionInfo = { login?: string; user?: { image?: string | null } } | null;
 
@@ -11,8 +11,31 @@ type SessionInfo = { login?: string; user?: { image?: string | null } } | null;
 export function AuthButton() {
   const [session, setSession] = useState<SessionInfo>(null);
   const [loaded, setLoaded] = useState(false);
-  const [modal, setModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const openSignIn = useSignIn();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  // The account menu is a disclosure: a click anywhere outside or Escape closes
+  // it (Escape hands focus back to its button). No full-screen click catcher,
+  // which an ancestor's backdrop-filter would shrink to the header.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMenuOpen(false);
+      toggleRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -35,12 +58,13 @@ export function AuthButton() {
 
   if (session?.login) {
     return (
-      <div className="relative">
+      <div ref={menuRef} className="relative">
         <button
+          ref={toggleRef}
           onClick={() => setMenuOpen((o) => !o)}
           className="flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs font-semibold text-ink transition hover:border-accent"
-          aria-haspopup="menu"
           aria-expanded={menuOpen}
+          aria-controls="account-menu"
         >
           {session.user?.image && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -51,17 +75,13 @@ export function AuthButton() {
             />
           )}
           <span className="max-w-[7rem] truncate">{session.login}</span>
-          <span className={`transition ${menuOpen ? "rotate-180" : ""}`}>⌄</span>
+          <span className="sr-only">, account menu</span>
+          <span aria-hidden className={`transition ${menuOpen ? "rotate-180" : ""}`}>⌄</span>
         </button>
         {menuOpen && (
           <>
-            {/* click-away backdrop */}
             <div
-              className="fixed inset-0 z-20"
-              onClick={() => setMenuOpen(false)}
-            />
-            <div
-              role="menu"
+              id="account-menu"
               className="absolute right-0 z-30 mt-1 w-40 overflow-hidden rounded-lg border border-edge bg-card text-sm shadow-lg"
             >
               <a
@@ -98,12 +118,11 @@ export function AuthButton() {
   return (
     <>
       <button
-        onClick={() => setModal(true)}
+        onClick={() => openSignIn()}
         className="rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
       >
         Sign in
       </button>
-      <SignInModal open={modal} onClose={() => setModal(false)} />
     </>
   );
 }

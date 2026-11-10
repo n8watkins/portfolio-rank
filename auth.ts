@@ -17,6 +17,9 @@ declare module "next-auth" {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [GitHub],
   trustHost: true,
+  // Sign-in and its errors open the site's own dialog (components/SignInModal),
+  // never Auth.js's unstyled stock pages.
+  pages: { signIn: "/?signin=1", error: "/?signin=1" },
   // Error type and a masked message only; see lib/log.ts.
   logger: authLogger,
   callbacks: {

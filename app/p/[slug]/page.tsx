@@ -174,112 +174,115 @@ export default async function PortfolioPage({
         </a>
       </header>
 
-      <div className="mb-4 rounded-xl border border-edge bg-card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight">
-              {portfolio.name}
-            </h1>
-            <p className="mt-1 text-sm text-mute">
-              {portfolio.tagline ?? "Developer"} · {domainOf(url)}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="mr-1 text-right">
-              <p className="text-xl font-bold tabular-nums">{rating.elo}</p>
-              <p className="text-xs text-mute">
-                ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
+      <main id="main" tabIndex={-1}>
+        <div className="mb-4 rounded-xl border border-edge bg-card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight">
+                {portfolio.name}
+              </h1>
+              <p className="mt-1 text-sm text-mute">
+                {portfolio.tagline ?? "Developer"} · {domainOf(url)}
               </p>
-              {stars > 0 && (
-                <p className="text-xs font-semibold text-accent">
-                  ⭐ {stars} loved
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="mr-1 text-right">
+                <p className="text-xl font-bold tabular-nums">{rating.elo}</p>
+                <p className="text-xs text-mute">
+                  ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
                 </p>
-              )}
-            </div>
-            <Socials url={url} />
-            {/* count+showCount → the ♥ label carries a live "saved" total that
-                updates when this same button toggles (no stale server value). */}
-            <LikeButton
-              url={url}
-              initialLiked={liked}
-              count={saveCount}
-              showCount
-            />
-            <AddToListButton url={url} />
-            <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
-            >
-              Visit site ↗
-            </a>
-          </div>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={shot}
-          alt={`Screenshot of ${domainOf(url)}`}
-          className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
-        />
-      </div>
-
-      <DetailDiagnostics url={url} />
-
-      {grade && (
-        <div className="mt-4 rounded-xl border border-edge bg-card p-5">
-          <div className="flex items-center gap-3">
-            <span
-              className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
-                grade.showTier ? "bg-accent text-bg" : "bg-edge text-mute"
-              }`}
-            >
-              {grade.showTier ? grade.tier : "AI"}
-            </span>
-            <div>
-              <p className="font-semibold">AI design review</p>
-              <p className="text-xs text-mute">
-                by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
-                a verdict
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {grade.axes.map((ax) => (
-              <div key={ax.key} className="rounded-lg border border-edge p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{ax.label}</span>
-                  <span className="text-sm font-bold tabular-nums">
-                    {ax.score}/5
-                  </span>
-                </div>
-                <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
-                  <div
-                    className="h-1.5 rounded-full bg-accent"
-                    style={{ width: `${(ax.score / 5) * 100}%` }}
-                  />
-                </div>
-                {ax.note && (
-                  <p className="mt-1.5 text-xs text-mute">{ax.note}</p>
+                {stars > 0 && (
+                  <p className="text-xs font-semibold text-accent">
+                    ⭐ {stars} loved
+                  </p>
                 )}
               </div>
-            ))}
+              <Socials url={url} />
+              {/* count+showCount → the ♥ label carries a live "saved" total that
+                  updates when this same button toggles (no stale server value). */}
+              <LikeButton
+                url={url}
+                name={portfolio.name}
+                initialLiked={liked}
+                count={saveCount}
+                showCount
+              />
+              <AddToListButton url={url} />
+              <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+              >
+                Visit site ↗
+              </a>
+            </div>
           </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shot}
+            alt={`Screenshot of ${domainOf(url)}`}
+            className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
+          />
         </div>
-      )}
 
-      <p className="py-8 text-center text-xs text-mute">
-        Diagnostics run live against the site and are cached. Think something
-        is wrong?{" "}
-        <a
-          href="https://github.com/n8watkins/portfolio-rank/issues"
-          className="underline underline-offset-4 hover:text-ink"
-        >
-          Open an issue
-        </a>
-        .
-      </p>
+        <DetailDiagnostics url={url} />
+
+        {grade && (
+          <div className="mt-4 rounded-xl border border-edge bg-card p-5">
+            <div className="flex items-center gap-3">
+              <span
+                className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
+                  grade.showTier ? "bg-accent text-bg" : "bg-edge text-ink"
+                }`}
+              >
+                {grade.showTier ? grade.tier : "AI"}
+              </span>
+              <div>
+                <p className="font-semibold">AI design review</p>
+                <p className="text-xs text-mute">
+                  by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
+                  a verdict
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {grade.axes.map((ax) => (
+                <div key={ax.key} className="rounded-lg border border-edge p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{ax.label}</span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {ax.score}/5
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
+                    <div
+                      className="h-1.5 rounded-full bg-accent"
+                      style={{ width: `${(ax.score / 5) * 100}%` }}
+                    />
+                  </div>
+                  {ax.note && (
+                    <p className="mt-1.5 text-xs text-mute">{ax.note}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p className="py-8 text-center text-xs text-mute">
+          Diagnostics run live against the site and are cached. Think something
+          is wrong?{" "}
+          <a
+            href="https://github.com/n8watkins/portfolio-rank/issues"
+            className="underline underline-offset-4 hover:text-ink"
+          >
+            Open an issue
+          </a>
+          .
+        </p>
+      </main>
     </div>
   );
 }

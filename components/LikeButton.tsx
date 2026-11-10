@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SignInModal } from "@/components/SignInModal";
+import { useSignIn } from "@/components/SignInModal";
 
 type Variant = "button" | "icon";
+
+const SIGN_IN_PROMPT = {
+  title: "Sign in to like portfolios",
+  body: "Likes are saved to your profile so you can find them later. Sign in to start liking.",
+};
 
 /**
  * Heart toggle for liking (= personal bookmark, separate from the ⭐ super-vote).
@@ -13,6 +18,7 @@ type Variant = "button" | "icon";
  */
 export function LikeButton({
   url,
+  name,
   initialLiked = false,
   count,
   showCount = false,
@@ -21,6 +27,8 @@ export function LikeButton({
   onChange,
 }: {
   url: string;
+  /** The portfolio's name, so a screen reader hears "Like Jane Doe", not a row of "Like". */
+  name?: string;
   initialLiked?: boolean;
   count?: number;
   showCount?: boolean;
@@ -32,7 +40,7 @@ export function LikeButton({
   const [liked, setLiked] = useState(initialLiked);
   const [n, setN] = useState(count ?? 0);
   const [busy, setBusy] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
+  const openSignIn = useSignIn();
   const touched = useRef(false);
 
   // Adopt a late-arriving initial state (e.g. grid hydrate) until first click.
@@ -68,7 +76,7 @@ export function LikeButton({
         committed = !next;
         setLiked(!next);
         setN((c) => Math.max(0, c + (next ? -1 : 1)));
-        setSignInOpen(true);
+        openSignIn(SIGN_IN_PROMPT);
       } else if (res.ok) {
         const data = await res.json();
         if (typeof data.liked === "boolean") {
@@ -96,53 +104,39 @@ export function LikeButton({
 
   if (variant === "icon") {
     return (
-      <>
-        <button
-          onClick={toggle}
-          disabled={busy}
-          aria-pressed={liked}
-          aria-label={liked ? "Unlike" : "Like"}
-          title={liked ? "Liked - click to remove" : "Like (save to your profile)"}
-          className={`rounded-full bg-bg/80 px-2 py-1 text-sm backdrop-blur transition hover:bg-bg ${
-            liked ? "text-rose-400" : "text-mute hover:text-rose-400"
-          } ${className}`}
-        >
-          {heart}
-          {showCount && n > 0 && (
-            <span className="ml-1 text-xs tabular-nums">{n}</span>
-          )}
-        </button>
-        <SignInModal
-          open={signInOpen}
-          onClose={() => setSignInOpen(false)}
-          title="Sign in to like portfolios"
-          body="Likes are saved to your profile so you can find them later. Sign in to start liking."
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
       <button
         onClick={toggle}
         disabled={busy}
         aria-pressed={liked}
-        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-          liked
-            ? "border-rose-400/50 bg-rose-400/10 text-rose-400"
-            : "border-edge text-mute hover:border-rose-400/50 hover:text-rose-400"
+        aria-label={name ? `Like ${name}` : "Like"}
+        title={liked ? "Liked - click to remove" : "Like (save to your profile)"}
+        // The ::after pad grows the tap target to 44px without moving anything.
+        className={`${/\b(absolute|fixed|sticky)\b/.test(className) ? "" : "relative"} rounded-full bg-bg/80 px-2 py-1 text-sm backdrop-blur transition after:absolute after:-inset-2 hover:bg-bg ${
+          liked ? "text-rose-400" : "text-mute hover:text-rose-400"
         } ${className}`}
       >
-        <span className="text-base leading-none">{heart}</span>
-        {label}
+        <span aria-hidden>{heart}</span>
+        {showCount && n > 0 && (
+          <span className="ml-1 text-xs tabular-nums">{n}</span>
+        )}
       </button>
-      <SignInModal
-        open={signInOpen}
-        onClose={() => setSignInOpen(false)}
-        title="Sign in to like portfolios"
-        body="Likes are saved to your profile so you can find them later. Sign in to start liking."
-      />
-    </>
+    );
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      aria-pressed={liked}
+      aria-label={name ? `Like ${name}${showCount && n > 0 ? `, ${n} ${n === 1 ? "like" : "likes"}` : ""}` : undefined}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+        liked
+          ? "border-rose-400/50 bg-rose-400/10 text-rose-400"
+          : "border-edge text-mute hover:border-rose-400/50 hover:text-rose-400"
+      } ${className}`}
+    >
+      <span aria-hidden className="text-base leading-none">{heart}</span>
+      {label}
+    </button>
   );
 }
