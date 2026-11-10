@@ -257,7 +257,7 @@ The design, with the decisions still open, is [CONTENT-ENGINE.md](CONTENT-ENGINE
   Sources in order of preference: charts made by code, our own screenshots (naming rule applies), Unsplash and Pexels stock with automatic credit, and Cloudflare Workers AI illustrations on the free allowance; Gemini's paid image model is not used.
   Gemini proposes each image slot with alt text, code makes or fetches 2-3 candidates, Gemini picks the best for fit and accuracy, one retry, else a chart or no image.
   Why: charts and screenshots are free and exact; the review catches wrong charts and odd generated images without a human.
-- **Model watch is news only, weekly** (owner, 2026-11-10; weekly by the owner the same day). Status: building.
+- **Model watch is news only, weekly** (owner, 2026-11-10; weekly by the owner the same day). Status: built (#74).
   Every Monday a Worker cron reads Google's model list (`models.list`, no generate quota), the deprecations page and the release notes, compares them with last week's snapshot and reports new models, retirements with dates, Flash-Lite changes and the status of the models in use through the owner alerts and the admin quota API ([AUTOMATION.md](../AUTOMATION.md#model-watch)).
   It never changes a setting: a new model runs as an experiment first, and switching the judge is a config change by the owner.
   A model in use that is deprecated, missing or within 90 days of its shutdown date raises an alert every week until resolved.

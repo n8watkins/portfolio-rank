@@ -127,7 +127,7 @@ If the quota is gone, the work waits for the next night; it never falls back to 
 | 8. Publish | Code stores the post with `publish_at` set to the next morning (08:00 Pacific), marks it for the newsletter, and records it for the owner's weekly summary | 0 | |
 
 A post costs about **9 Gemini requests** when nothing fails and **about 19** at worst.
-Two posts a week plus the pick is about 20 to 40 requests a week, a small part of the "Content" stage's 100 a night, which the polls lane shares ([DECISIONS.md](DECISIONS.md#polls)).
+Two posts a week plus the pick is about 20 to 40 requests a week, a small part of the "Content" stage's 100 a night, which polls share (one poll a week, at most 2 requests a week; [AUTOMATION.md](../AUTOMATION.md#polls)).
 At paid rates (MODEL-LIMITS.md, about $0.004 a request with a longer prompt) that is under $0.20 a week.
 
 A typical week:
@@ -153,8 +153,8 @@ Only PortfolioRank's own tables, read-only, plus the two outside searches above.
 | Rankings | `site_ratings`, `rank_history`, `comparisons` (ranking v2) | top sites, biggest climbers, redesigns that paid off, AI vs people disagreements (aggregate) | after `RANKING_V2` is switched on ([RANKING.md](../RANKING.md)) |
 | Grades | `portfolios` (rubric, facts, page text), `rubric_history` | what high scorers share, trends in roles and stacks, 3.1 vs 3.5 | now |
 | Experiments | `comparisons` tagged by method, the Sunday grade comparison, the planned experiments table | "Can one AI request replace ten?", "3.5 vs 3.1: do they grade the same?" | 3.1 vs 3.5 now; the others as experiments finish |
-| Polls | the polls lane's closed polls and their totals | "Developers voted: does a portfolio need a resume?" | when polls ship |
-| Model watch | `model_watch_runs` (the weekly report) | "Google released a new Flash-Lite. We re-ran the judge." (only after an experiment has run) | when model watch merges |
+| Polls | closed polls with totals, winner and margin (`pollResults` in [lib/polls/store.mjs](../lib/polls/store.mjs)) | "Developers voted: does a portfolio need a resume?" | back end built (#76); votes once the poll card ships |
+| Model watch | `model_watch_runs` (the weekly report) | "Google released a new Flash-Lite. We re-ran the judge." (only after an experiment has run) | built (#74) |
 | Our own running | `gemini_daily`, `night_runs` | build-in-public posts (what the free quota does in a month) | now |
 
 The fact builders are the only code that reads these tables for content.
