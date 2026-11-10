@@ -73,7 +73,10 @@ jobs:
             exit 1
           fi
 
+      # Ranking v2 (RANKING.md) replaces this step when the repository
+      # variable RANKING_V2 is "true"; until then this step runs as before.
       - name: Cast daily AI pairwise votes
+        if: vars.RANKING_V2 != 'true'
         env:
           GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
           GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
@@ -88,6 +91,28 @@ jobs:
           node pipeline/judge.mjs pairwise
           --votes "$VOTES"
           --tiers "$TIERS"
+
+      # Ranking v2, off until the owner sets RANKING_V2 to "true": the day's
+      # one-on-one and batched comparisons on gemini-3.5-flash-lite only
+      # (budgets from RANKING_BUDGET, default 100 + 100), then the People, AI
+      # and Merged boards rebuilt from every stored comparison.
+      - name: Daily AI comparisons (ranking v2)
+        if: vars.RANKING_V2 == 'true'
+        env:
+          RANKING_V2: ${{ vars.RANKING_V2 }}
+          RANKING_BUDGET: ${{ vars.RANKING_BUDGET }}
+          RANKING_BATCHED_COUNTS: ${{ vars.RANKING_BATCHED_COUNTS }}
+          GEMINI_RPM: ${{ vars.GEMINI_RPM || '8' }}
+          GEMINI_DAILY_QUOTA: ${{ vars.GEMINI_DAILY_QUOTA }}
+          GEMINI_PRICES: ${{ vars.GEMINI_PRICES }}
+        run: node pipeline/compare.mjs
+
+      - name: Rebuild the boards (ranking v2)
+        if: vars.RANKING_V2 == 'true' && !cancelled()
+        env:
+          RANKING_BATCHED_COUNTS: ${{ vars.RANKING_BATCHED_COUNTS }}
+          RANKING_AI_WEIGHT: ${{ vars.RANKING_AI_WEIGHT }}
+        run: node scripts/recompute-ratings.mjs
 
       - name: Notify on failure
         if: failure()
