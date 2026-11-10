@@ -18,7 +18,7 @@ export function PlayPage({ v, mode, reveal }: { v: Visitor; mode: "faceoff" | "g
   );
   return (
     <AppShell visitor={v} current="rank">
-      <div className="mx-auto max-w-5xl py-4 sm:py-8">
+      <div className="mx-auto max-w-6xl py-4 sm:py-8">
         <div className="rise mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-6">
           <h1 className="sr-only">Play</h1>
           <nav aria-label="Game mode" className="grid w-full grid-cols-2 gap-1 rounded-xl border border-edge bg-raised p-1 sm:inline-grid sm:w-auto">

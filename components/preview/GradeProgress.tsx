@@ -21,7 +21,7 @@ export function GradeProgress({ url, reportHref }: { url: string; reportHref: st
   }, [step]);
   const done = step >= STEPS.length;
   return (
-    <section aria-labelledby="progress" className={`${card} p-5 sm:p-7`}>
+    <section aria-labelledby="progress" className={`${card} flex w-full flex-col p-5 sm:p-7`}>
       <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-mute">
         Grading <SampleTag what="Simulated progress" />
       </p>

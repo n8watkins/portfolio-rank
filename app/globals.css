@@ -38,6 +38,11 @@
   --card-hi: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --card-drop: 0 1px 2px rgba(0, 0, 0, 0.45), 0 14px 32px -18px rgba(0, 0, 0, 0.7);
   --card-drop-hover: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 44px -20px rgba(0, 0, 0, 0.85);
+  --band: rgba(255, 255, 255, 0.04);
+  --stat-1: #8aa4e8;
+  --stat-2: #a99be6;
+  --stat-3: #fbbf24;
+  --stat-4: #6fcf97;
 }
 
 @media (prefers-color-scheme: light) {
@@ -59,6 +64,11 @@
     --card-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
     --card-drop: 0 1px 2px rgba(16, 16, 24, 0.05), 0 12px 28px -18px rgba(16, 16, 24, 0.16);
     --card-drop-hover: 0 2px 6px rgba(16, 16, 24, 0.06), 0 22px 40px -22px rgba(16, 16, 24, 0.26);
+    --band: #ececef;
+    --stat-1: #3b5bb5;
+    --stat-2: #6a55c7;
+    --stat-3: #a16207;
+    --stat-4: #1f8a4c;
   }
 }
 
@@ -80,6 +90,61 @@
   --card-hi: inset 0 1px 0 rgba(255, 255, 255, 1);
   --card-drop: 0 1px 2px rgba(16, 16, 24, 0.05), 0 12px 28px -18px rgba(16, 16, 24, 0.16);
   --card-drop-hover: 0 2px 6px rgba(16, 16, 24, 0.06), 0 22px 40px -22px rgba(16, 16, 24, 0.26);
+  --band: #ececef;
+  --stat-1: #3b5bb5;
+  --stat-2: #6a55c7;
+  --stat-3: #a16207;
+  --stat-4: #1f8a4c;
+}
+
+/* ------------------------------------------------------------ layout */
+
+/* One content width for every page: roomy on big screens (owner, round 3). */
+@layer components {
+  .wrap {
+    width: 100%;
+    max-width: 1360px;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .wrap {
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .wrap {
+      padding-inline: 2.5rem;
+    }
+  }
+
+  /* Section bands: full-width rows with their own background, so a page
+     reads as a few distinct parts rather than one grid. */
+  .band {
+    position: relative;
+    isolation: isolate;
+  }
+  .band-raised {
+    background: linear-gradient(180deg, transparent, var(--band) 14%, var(--band) 86%, transparent);
+  }
+  .band-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(48rem 18rem at 50% 0, var(--glow), transparent 70%);
+  }
+  .band-rule::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: min(1280px, calc(100% - 2rem));
+    height: 1px;
+    translate: -50% 0;
+    background: linear-gradient(90deg, transparent, var(--color-edge-strong) 50%, transparent);
+  }
 }
 
 /* ------------------------------------------------------------ depth */
@@ -166,6 +231,21 @@
   animation: rise 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) var(--d, 0ms) both;
 }
 
+/* Every page's content fades in once on load (AppShell's <main>). */
+@keyframes page-in {
+  from {
+    opacity: 0.01;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-in {
+  animation: page-in 0.45s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
 /* Scroll reveal (components/preview/RevealObserver.tsx marks it revealed). */
 .reveal {
   opacity: 0;
@@ -220,6 +300,77 @@
   }
 }
 
+/* Live stats: icons pop in, then bump and the number flashes on a tick. */
+@keyframes stat-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6) rotate(-12deg);
+  }
+}
+@keyframes stat-bump {
+  0%, 100% { transform: none; }
+  35% { transform: translateY(-3px) scale(1.12); }
+}
+@keyframes stat-tick {
+  0% { color: var(--color-accent); transform: translateY(-2px); }
+  100% { color: inherit; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stat-in {
+    animation: stat-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .stat-bump {
+    animation: stat-bump 0.5s ease-out;
+  }
+  .stat-tick {
+    display: block;
+    animation: stat-tick 0.9s ease-out;
+  }
+}
+
+/* Game moments (Play): the picked card pops and glows, the other steps
+   back, results pop in and bars fill. Off under reduced motion. */
+@keyframes win-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.025); }
+  100% { transform: scale(1.01); }
+}
+@keyframes win-glow {
+  0% { box-shadow: var(--card-hi), var(--card-drop), 0 0 0 0 rgba(251, 191, 36, 0.55); }
+  100% { box-shadow: var(--card-hi), var(--card-drop), 0 0 0 18px rgba(251, 191, 36, 0); }
+}
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(0.92); }
+  60% { opacity: 1; transform: scale(1.04); }
+  100% { transform: none; }
+}
+@keyframes bar-fill {
+  from { width: 0; }
+}
+.lose-dim {
+  transform: scale(0.985);
+  filter: saturate(0.6);
+  opacity: 0.85;
+  transition: transform 300ms ease, filter 300ms ease, opacity 300ms ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .win-pop {
+    animation: win-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both, win-glow 900ms ease-out;
+  }
+  .pop-in {
+    animation: pop-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .bar-fill {
+    animation: bar-fill 800ms cubic-bezier(0.33, 1, 0.68, 1) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lose-dim {
+    transform: none;
+    transition: none;
+  }
+}
+
 /* Attention without spinning: a dot with a soft ring that breathes. */
 @keyframes attn-ring {
   0% { transform: scale(1); opacity: 0.55; }
@@ -244,6 +395,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rise,
+  .page-in,
   .attn-dot::after {
     animation: none;
   }

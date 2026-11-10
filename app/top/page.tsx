@@ -1,8 +1,8 @@
 import { Bot, Merge, Split, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Shot } from "@/components/preview/Shot";
-import { fmtScore, rankLabel } from "@/components/preview/RankRow";
-import { Movement, SampleTag, TierBadge } from "@/components/preview/bits";
+import { fmtScore } from "@/components/preview/RankRow";
+import { Movement, RankBadge, SampleTag, TierBadge } from "@/components/preview/bits";
 import { hasRealGrades, leaderboard, type Ranked, type View } from "@/lib/preview/data";
 import { visitor } from "@/lib/preview/visitor";
 
@@ -86,7 +86,9 @@ export default async function TopPage({ searchParams }: { searchParams: Promise<
             {rows.map((r) => (
               <li key={r.url} className="border-b border-edge last:border-b-0">
                 <a href={`/grade/${r.slug}`} className="group flex items-center gap-3 px-3 py-2.5 transition hover:bg-raised md:gap-4 md:px-4">
-                  <span className={`w-9 shrink-0 text-right text-sm font-bold tabular-nums md:w-10 ${r.rank <= 3 ? "text-accent" : "text-mute"}`}>{rankLabel(r)}</span>
+                  <span className="flex w-9 shrink-0 justify-end md:w-10">
+                    <RankBadge rank={r.rank} tied={r.tied} size={r.rank <= 3 ? "lg" : "md"} />
+                  </span>
                   <Shot base={r.shot} alt="" domain={r.domain} className="aspect-[16/10] w-16 shrink-0 rounded-md border border-edge max-sm:hidden md:w-24" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">

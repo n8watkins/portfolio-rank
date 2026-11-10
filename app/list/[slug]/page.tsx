@@ -129,7 +129,7 @@ export default async function ListPage({
           href="/top"
           className="text-xs font-semibold text-mute transition hover:text-ink"
         >
-          🏆 Leaderboard
+          Leaderboard
         </a>
       </header>
 

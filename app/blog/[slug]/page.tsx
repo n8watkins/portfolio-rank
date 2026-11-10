@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ImageIcon, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Inline } from "@/components/preview/Inline";
+import { GradesTimeline, KeyCodeCompare } from "@/components/preview/PostImages";
+import { leaderboard } from "@/lib/preview/data";
 import { Newsletter } from "@/components/preview/Newsletter";
 import { SampleTag, btnPrimary, card } from "@/components/preview/bits";
 import { TAG_LABEL, postBySlug } from "@/lib/preview/blog";
@@ -18,6 +20,7 @@ export default async function PostPage({ params, searchParams }: { params: Promi
   const v = await visitor(await searchParams);
   const p = postBySlug((await params).slug);
   if (!p) notFound();
+  const top3 = leaderboard("merged").slice(0, 3);
 
   return (
     <AppShell visitor={v} current="blog">
@@ -97,7 +100,14 @@ export default async function PostPage({ params, searchParams }: { params: Promi
                 );
               case "image":
                 return (
-                  <figure key={i} className={`${card} my-2 overflow-hidden`}>
+                  <figure key={i} className={`${card} reveal my-2 overflow-hidden`}>
+                    {b.n === 2 ? (
+                      <div className="p-3 sm:p-5">
+                        <GradesTimeline />
+                      </div>
+                    ) : b.n === 3 ? (
+                      <KeyCodeCompare />
+                    ) : (
                     <div className={`grid grid-cols-1 place-items-center bg-raised p-6 text-center ${b.n === 1 ? "aspect-[16/9]" : "aspect-[2/1]"}`}>
                       <div className="max-w-sm">
                         <ImageIcon className="mx-auto h-6 w-6 text-mute" aria-hidden />
@@ -105,7 +115,34 @@ export default async function PostPage({ params, searchParams }: { params: Promi
                         {b.kind && <p className="mt-1 text-xs text-mute">{b.kind.split(".")[0]}. Not made yet.</p>}
                       </div>
                     </div>
-                    {b.alt && <figcaption className="border-t border-edge px-4 py-3 text-sm text-mute">{b.alt}</figcaption>}
+                    )}
+                    {b.alt && (
+                      <figcaption className="flex items-start justify-between gap-3 border-t border-edge px-4 py-3 text-sm text-mute">
+                        <span>{b.alt}</span>
+                        {(b.n === 2 || b.n === 3) && (
+                          <span className="shrink-0 rounded-full border border-edge-strong px-1.5 text-[10px] font-semibold uppercase tracking-wide">
+                            {b.n === 2 ? "Chart by code" : "Real code"}
+                          </span>
+                        )}
+                      </figcaption>
+                    )}
+                  </figure>
+                );
+              case "shots":
+                return (
+                  <figure key={i} className={`${card} reveal my-2 overflow-hidden`}>
+                    <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-3 sm:p-4">
+                      {top3.map((r, k) => (
+                        <a key={r.url} href={`/grade/${r.slug}`} className="group block overflow-hidden rounded-lg border border-edge">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`${r.shot}/hero.jpg`} alt={`#${k + 1}: ${r.domain}`} loading="lazy" className="aspect-[16/10] w-full bg-raised object-cover object-top transition group-hover:scale-[1.02]" />
+                          <span className="block border-t border-edge px-3 py-2 text-xs">
+                            <strong>#{k + 1}</strong> <span className="text-mute">{r.domain}</span>
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                    <figcaption className="border-t border-edge px-4 py-3 text-sm text-mute">The top three on the merged leaderboard today. Real screenshots from our captures.</figcaption>
                   </figure>
                 );
               case "cta":

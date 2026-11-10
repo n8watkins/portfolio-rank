@@ -1,5 +1,5 @@
 import { Shot } from "@/components/preview/Shot";
-import { Movement } from "@/components/preview/bits";
+import { Movement, RankBadge } from "@/components/preview/bits";
 import type { Ranked, View } from "@/lib/preview/data";
 
 export function fmtScore(view: View, score: number) {
@@ -14,9 +14,11 @@ export function rankLabel(r: { rank: number; tied: boolean }) {
 export function RankRow({ r, view }: { r: Ranked; view: View }) {
   return (
     <li>
-      <a href={`/grade/${r.slug}`} className="group flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-raised">
-        <span className={`w-9 shrink-0 text-right text-sm font-bold tabular-nums ${r.rank === 1 ? "text-accent" : "text-mute"}`}>{rankLabel(r)}</span>
-        <Shot base={r.shot} alt="" domain={r.domain} className="aspect-[16/10] w-16 shrink-0 rounded-md border border-edge transition group-hover:border-edge-strong" />
+      <a href={`/grade/${r.slug}`} className="group flex items-center gap-3.5 rounded-xl px-2 py-3 transition hover:bg-raised">
+        <span className="flex w-9 shrink-0 justify-end">
+          <RankBadge rank={r.rank} tied={r.tied} />
+        </span>
+        <Shot base={r.shot} alt="" domain={r.domain} className="aspect-[16/10] w-[4.5rem] shrink-0 rounded-md border border-edge transition group-hover:border-edge-strong max-sm:hidden" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.tagline ?? r.domain}</span>

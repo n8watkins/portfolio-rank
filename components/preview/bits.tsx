@@ -56,3 +56,26 @@ export const btnPrimary =
 export const btnSecondary =
   "group inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-edge bg-card px-4 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong active:scale-[0.97]";
 export const sectionTitle = "text-lg font-bold tracking-tight";
+
+const MEDAL: Record<number, { name: string; ring: string; fill: string }> = {
+  1: { name: "Gold", ring: "#e9b949", fill: "linear-gradient(145deg, #fde68a, #e9b949 55%, #b7861c)" },
+  2: { name: "Silver", ring: "#b9bec8", fill: "linear-gradient(145deg, #f4f5f7, #c3c8d1 55%, #8d94a1)" },
+  3: { name: "Bronze", ring: "#c48a5c", fill: "linear-gradient(145deg, #f3c9a4, #c48a5c 55%, #8f5a33)" },
+};
+
+/** Rank 1-3 get a gold, silver or bronze medal; the rest a plain number. */
+export function RankBadge({ rank, tied, size = "md" }: { rank: number; tied?: boolean; size?: "md" | "lg" }) {
+  const m = MEDAL[rank];
+  if (!m)
+    return <span className="text-sm font-bold tabular-nums text-mute">{tied ? `=${rank}` : rank}</span>;
+  const s = size === "lg" ? "h-9 w-9 text-sm" : "h-7 w-7 text-xs";
+  return (
+    <span
+      className={`medal inline-grid shrink-0 place-items-center rounded-full font-bold tabular-nums text-[#1a1405] ${s}`}
+      style={{ background: m.fill, boxShadow: `0 0 0 2px var(--color-card), 0 0 0 3.5px ${m.ring}, 0 4px 10px -4px ${m.ring}` }}
+      aria-label={`${m.name}, rank ${tied ? "=" : ""}${rank}`}
+    >
+      {tied ? `=${rank}` : rank}
+    </span>
+  );
+}

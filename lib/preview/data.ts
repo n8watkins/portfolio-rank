@@ -299,15 +299,16 @@ export function report(site: Site): Report {
     { label: "GitHub linked", pass: h("gh") > 0.15, detail: h("gh") > 0.15 ? "Profile reachable" : "No GitHub link found", criterion: "github" },
     { label: "Project links work", pass: broken === 0, detail: broken === 0 ? `All ${projects} open` : `${broken} of ${projects} broken`, criterion: "links" },
     { label: "Own domain", pass: ownDomain, detail: ownDomain ? site.domain.split("/")[0] : "On a shared host", criterion: "domain" },
-    { label: "Contact on page", pass: h("ct") > 0.2, detail: h("ct") > 0.2 ? "Email or form found" : "No way to reach you", criterion: "contact" },
-    { label: "Phone speed", pass: speed >= 70, detail: `${speed}/100 on phones`, criterion: "speed" },
+    { label: "Contact path", pass: h("ct") > 0.2, detail: h("ct") > 0.2 ? "Email or form found" : "No way to reach you", criterion: "contact" },
+    { label: "Fresh footer year", pass: h("fy") > 0.25, detail: h("fy") > 0.25 ? "2026" : "2022, looks stale", criterion: "footer" },
+    { label: "Not a known template", pass: h("tp") > 0.12, detail: h("tp") > 0.12 ? "No template fingerprint" : "Matches a popular template", criterion: "original" },
   ];
   const subs: SubGrade[] = [
-    { label: "Design", value: grade.design, note: note("design", grade.design), criterion: "design" },
-    { label: "First 5 seconds", value: grade.fiveSecond, note: note("fiveSecond", grade.fiveSecond), criterion: "five-second" },
-    { label: "Project stories", value: grade.story, note: note("story", grade.story), criterion: "story" },
+    { label: "Visual design", value: grade.design, note: note("design", grade.design), criterion: "design" },
+    { label: "Five-second test", value: grade.fiveSecond, note: note("fiveSecond", grade.fiveSecond), criterion: "five-second" },
+    { label: "Project presentation", value: grade.story, note: note("story", grade.story), criterion: "story" },
     { label: "Writing", value: grade.writing, note: note("writing", grade.writing), criterion: "writing" },
-    { label: "Memorable", value: grade.memorability, note: note("memorability", grade.memorability), criterion: "memorable" },
+    { label: "Memorability", value: grade.memorability, note: note("memorability", grade.memorability), criterion: "memorable" },
   ];
   const improvements: Report["improvements"] = [];
   if (broken) improvements.push({ title: `Fix ${broken} broken project ${broken === 1 ? "link" : "links"}`, why: "A recruiter who clicks a dead demo rarely clicks the next one.", criterion: "links" });
@@ -316,16 +317,16 @@ export function report(site: Site): Report {
     if (improvements.length >= 3) break;
     if (s.value >= 5) continue;
     const tips: Record<string, [string, string]> = {
-      "Project stories": ["Tell the story of your top 3 projects", "One line each: the problem, what you built, what changed."],
-      "First 5 seconds": ["Say who you are and what you want above the fold", "Name, role and the kind of work you want, before any scroll."],
-      Design: ["Pick one type scale and one spacing step", "Most of the 'template look' is uneven sizes and gaps."],
+      "Project presentation": ["Tell the story of your top 3 projects", "One line each: the problem, what you built, what changed."],
+      "Five-second test": ["Say who you are and what you want above the fold", "Name, role and the kind of work you want, before any scroll."],
+      "Visual design": ["Pick one type scale and one spacing step", "Most of the 'template look' is uneven sizes and gaps."],
       Writing: ["Cut the intro to two sentences", "Specific beats long: name a stack, a number, a result."],
-      Memorable: ["Add one thing only you would put there", "A side project, a photo, a voice. Something to remember you by."],
+      Memorability: ["Add one thing only you would put there", "A side project, a photo, a voice. Something to remember you by."],
     };
     const [title, why] = tips[s.label];
     improvements.push({ title, why, criterion: s.criterion });
   }
-  if (improvements.length < 3 && speed < 85) improvements.push({ title: "Make it load faster on phones", why: `Phone speed is ${speed}; compress the hero image first.`, criterion: "speed" });
+  if (improvements.length < 3 && !facts[0].pass) improvements.push({ title: "Link your resume", why: "Recruiters look for it first; a PDF that opens is enough.", criterion: "resume" });
   if (improvements.length < 3 && !ownDomain) improvements.push({ title: "Put it on your own domain", why: "About $12 a year, and it reads as yours.", criterion: "domain" });
   return {
     site,
@@ -382,8 +383,8 @@ export function disagreements(limit = 3): Ranked[] {
 }
 
 export const ROLES: { key: string; label: string; re: RegExp }[] = [
-  { key: "fullstack", label: "Full stack", re: /full.?stack/i },
-  { key: "frontend", label: "Frontend", re: /front.?end|web dev/i },
+  { key: "fullstack", label: "Full stack", re: /full.?stack|\bme[ar]n\b/i },
+  { key: "frontend", label: "Frontend", re: /front.?end|^(?!.*full.?stack).*\bweb dev/i },
   { key: "backend", label: "Backend", re: /back.?end/i },
   { key: "ai", label: "AI / ML", re: /\bai\b|machine learning|\bml\b|data scien|llm/i },
   { key: "mobile", label: "Mobile", re: /mobile|android|ios|flutter|react native/i },
@@ -413,11 +414,11 @@ export function profile(site: Site) {
   let peers = c.pool.filter((s) => s.tagline && role.re.test(s.tagline));
   if (peers.length < 20) peers = c.pool;
   const keys: [SubKey, string, string][] = [
-    ["design", "Design", "design"],
-    ["fiveSecond", "First 5 seconds", "five-second"],
-    ["story", "Project stories", "story"],
+    ["design", "Visual design", "design"],
+    ["fiveSecond", "Five-second test", "five-second"],
+    ["story", "Project presentation", "story"],
     ["writing", "Writing", "writing"],
-    ["memorability", "Memorable", "memorable"],
+    ["memorability", "Memorability", "memorable"],
   ];
   const standings: Standing[] = keys.map(([k, label, criterion]) => ({
     label,

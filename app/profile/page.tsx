@@ -85,7 +85,7 @@ export default async function ProfilePage() {
           ← Portfolio<span className="text-accent">Rank</span>
         </a>
         <a href="/rank" className="text-xs font-semibold text-accent">
-          ⚔️ Keep ranking
+          Keep ranking
         </a>
       </header>
 

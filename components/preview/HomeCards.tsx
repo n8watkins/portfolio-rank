@@ -1,5 +1,6 @@
 import { Activity, ArrowRight, BookOpen, Split, Swords, TrendingUp } from "lucide-react";
 import { Shot } from "@/components/preview/Shot";
+import { LiveStatsClient } from "@/components/preview/LiveStatsClient";
 import { Movement, SampleTag, sectionTitle } from "@/components/preview/bits";
 import { climbers, disagreements, faceoffPairs, stats } from "@/lib/preview/data";
 
@@ -12,11 +13,11 @@ export function Climbers({ className = "" }: { className?: string }) {
         </h2>
         <SampleTag />
       </div>
-      <ol>
-        {climbers(5).map((r) => (
+      <ol className="flex flex-1 flex-col justify-between">
+        {climbers(7).map((r) => (
           <li key={r.url}>
-            <a href={`/grade/${r.slug}`} className="group flex items-center gap-3 rounded-xl px-1 py-2 transition hover:bg-raised">
-              <Shot base={r.shot} alt="" domain={r.domain} className="aspect-square w-9 shrink-0 rounded-lg border border-edge" />
+            <a href={`/grade/${r.slug}`} className="group flex items-center gap-3 rounded-xl px-1 py-2.5 transition hover:bg-raised">
+              <Shot base={r.shot} alt="" domain={r.domain} className="aspect-square w-10 shrink-0 rounded-lg border border-edge" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{r.name}</span>
                 <span className="block text-xs text-mute tabular-nums">Now #{r.rank} merged</span>
@@ -34,10 +35,10 @@ export function Climbers({ className = "" }: { className?: string }) {
 export function LiveStats({ className = "" }: { className?: string }) {
   const s = stats();
   const items = [
-    { label: "Portfolios", value: s.portfolios.toLocaleString(), sample: false },
-    { label: "Graded by AI", value: s.graded.toLocaleString(), sample: false },
-    { label: "Grades this week", value: s.gradesThisWeek.toLocaleString(), sample: true },
-    { label: "Votes today", value: s.votesToday.toLocaleString(), sample: true },
+    { key: "portfolios", label: "Portfolios", value: s.portfolios, sample: false },
+    { key: "graded", label: "Graded by AI", value: s.graded, sample: false },
+    { key: "grades", label: "Grades this week", value: s.gradesThisWeek, sample: true },
+    { key: "votes", label: "Votes today", value: s.votesToday, sample: true },
   ];
   return (
     <section aria-labelledby="stats" className={`card p-4 sm:p-5 ${className}`}>
@@ -49,20 +50,7 @@ export function LiveStats({ className = "" }: { className?: string }) {
           <span className="attn-dot" aria-hidden /> updating
         </span>
       </div>
-      <dl className="grid grid-cols-2 gap-2">
-        {items.map((i) => (
-          <div key={i.label} className="rounded-xl border border-edge bg-bg/40 px-3 py-2.5">
-            <dt className="flex items-center gap-1.5 text-xs text-mute">
-              {i.label}
-              {i.sample && <span className="sr-only">(sample)</span>}
-            </dt>
-            <dd className="mt-0.5 text-xl font-bold tabular-nums">
-              {i.value}
-              {i.sample && <span className="ml-1 align-super text-[10px] font-semibold text-mute" aria-hidden>*</span>}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      <LiveStatsClient initial={items} />
       <div className="mt-3 flex items-center justify-between gap-2 px-1 text-xs text-mute">
         <span>* sample numbers</span>
         <a href="/how" className="group inline-flex items-center gap-1 font-semibold text-ink hover:text-accent">

@@ -170,7 +170,7 @@ export default async function PortfolioPage({
           href="/top"
           className="text-xs font-semibold text-mute transition hover:text-ink"
         >
-          🏆 Leaderboard
+          Leaderboard
         </a>
       </header>
 
@@ -193,7 +193,7 @@ export default async function PortfolioPage({
                 </p>
                 {stars > 0 && (
                   <p className="text-xs font-semibold text-accent">
-                    ⭐ {stars} loved
+                    {stars} loved
                   </p>
                 )}
               </div>

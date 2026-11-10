@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, Flame, Merge, Target, Trophy, Users } from "lucide-react";
 import { isModalOpen } from "@/components/Modal";
 import { isTextField } from "@/lib/dom";
+import { useCountUp } from "@/components/preview/useCountUp";
 
 export type Round = {
   name: string;
@@ -94,6 +95,16 @@ export function GuessRank({ rounds, total, reveal = false }: { rounds: Round[]; 
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:gap-5">
+      <ol className="flex gap-1" aria-label={`Round ${(i % rounds.length) + 1} of ${rounds.length}`}>
+        {rounds.map((_, k) => (
+          <li
+            key={k}
+            className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
+              k < i % rounds.length || (k === i % rounds.length && shown) ? "bg-fill" : k === i % rounds.length ? "bg-edge-strong" : "bg-edge"
+            }`}
+          />
+        ))}
+      </ol>
       {/* Scoreboard */}
       <dl className="grid grid-cols-4 gap-2 sm:gap-3">
         {[
@@ -106,14 +117,16 @@ export function GuessRank({ rounds, total, reveal = false }: { rounds: Round[]; 
             <dt className="flex items-center gap-1.5 text-xs text-mute">
               <Icon className={`h-3.5 w-3.5 ${label === "Streak" && streak > 1 ? "text-accent" : ""}`} aria-hidden /> {label}
             </dt>
-            <dd className="mt-0.5 text-lg font-bold tabular-nums sm:text-xl">{value}</dd>
+            <dd key={label === "Score" ? String(value) : label} className={`mt-0.5 text-lg font-bold tabular-nums sm:text-xl ${label === "Score" && shown ? "pop-in" : ""}`}>
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         {/* The portfolio */}
-        <figure className="card flex flex-col overflow-hidden">
+        <figure key={i} className="card pop-in flex flex-col overflow-hidden">
           <div className="relative aspect-[390/290] w-full md:aspect-[16/10]">
             <picture>
               <source media="(max-width: 767px)" srcSet={`${r.shot}/mobile.jpg`} />
@@ -187,12 +200,13 @@ export function GuessRank({ rounds, total, reveal = false }: { rounds: Round[]; 
             </>
           ) : (
             <>
-              <p role="status" className="flex items-baseline justify-between gap-3">
-                <span className="text-lg font-bold tracking-tight">{verdict(p)}</span>
+              <p role="status" className="pop-in flex items-baseline justify-between gap-3">
+                <span className="text-xl font-bold tracking-tight">{verdict(p)}</span>
                 <span className="text-sm tabular-nums">
-                  <strong className="text-xl">+{p}</strong> <span className="text-mute">points</span>
+                  <Points value={p} k={i} /> <span className="text-mute">points</span>
                 </span>
               </p>
+              <Meter guess={guess} actual={r.merged} total={total} />
               <p className="mt-1 text-sm text-mute">
                 You guessed #{guess}; it&apos;s #{r.merged} merged. {off === 0 ? "Exactly right." : `Off by ${off} ${off === 1 ? "place" : "places"}.`}
               </p>
@@ -227,6 +241,43 @@ export function GuessRank({ rounds, total, reveal = false }: { rounds: Round[]; 
             </>
           )}
         </section>
+      </div>
+    </div>
+  );
+}
+
+function Points({ value, k }: { value: number; k: number }) {
+  const n = useCountUp(value, k, 900);
+  return <strong className="text-2xl">+{n}</strong>;
+}
+
+/** Your guess and the real rank on the same scale as the slider, both labelled. */
+function Meter({ guess, actual, total }: { guess: number; actual: number; total: number }) {
+  const g = toPos(guess, total) / 10;
+  const a = toPos(actual, total) / 10;
+  const lo = Math.min(g, a);
+  const hi = Math.max(g, a);
+  const close = Math.abs(a - g) < 16;
+  const clamp = (v: number) => Math.min(90, Math.max(10, v));
+  return (
+    <div className="mt-5 rounded-xl border border-edge bg-bg/40 px-4 pb-3 pt-4" aria-hidden>
+      <div className="relative h-5 text-[11px] font-semibold tabular-nums">
+        <span className="absolute -translate-x-1/2 whitespace-nowrap text-accent" style={{ left: `${clamp(a)}%` }}>
+          real #{actual}
+        </span>
+      </div>
+      <div className="relative h-6">
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-edge" />
+        <div className="bar-fill absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-accent/45" style={{ left: `${lo}%`, width: `${Math.max(0.5, hi - lo)}%` }} />
+        <span className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-mute" style={{ left: `${g}%` }} />
+        <span className="pop-in absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-fill shadow" style={{ left: `${a}%` }} />
+      </div>
+      <div className="relative h-5 text-[11px] tabular-nums text-mute">
+        <span className="absolute left-0">#1</span>
+        <span className="absolute right-0">#{total}</span>
+        <span className="absolute -translate-x-1/2 whitespace-nowrap font-semibold text-ink" style={{ left: `${clamp(g)}%` }}>
+          {close ? "" : "you "}#{guess}
+        </span>
       </div>
     </div>
   );

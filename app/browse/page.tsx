@@ -45,12 +45,12 @@ export default async function BrowsePage({ searchParams }: { searchParams: Promi
   return (
     <AppShell visitor={v} current="browse">
       <div className="py-8 sm:py-10">
-        <h1 className="text-3xl font-bold tracking-tight">Browse</h1>
+        <h1 className="rise text-3xl font-bold tracking-tight">Browse</h1>
         <p className="mt-1.5 text-sm text-mute">
           All {roster().length.toLocaleString()} portfolios. Search, filter by role, and share the link: filters live in the address.
         </p>
 
-        <form action="/browse" className="mt-5 flex flex-col gap-3 md:flex-row md:items-center">
+        <form action="/browse" className="rise mt-5 flex gap-2">
           <label htmlFor="q" className="sr-only">
             Search portfolios
           </label>
@@ -66,21 +66,14 @@ export default async function BrowsePage({ searchParams }: { searchParams: Promi
             />
           </div>
           {role && <input type="hidden" name="role" value={role.key} />}
-          <div className="flex items-center gap-2">
-            <label htmlFor="sort" className="text-sm text-mute">
-              Sort
-            </label>
-            <select id="sort" name="sort" defaultValue={sort} className="h-11 rounded-lg border border-edge bg-card px-3 text-sm outline-none focus:border-accent">
-              <option value="rank">Top ranked</option>
-              <option value="az">A to Z</option>
-            </select>
-            <button type="submit" className="h-11 rounded-lg border border-edge px-4 text-sm font-semibold transition hover:border-mute">
-              Apply
-            </button>
-          </div>
+          {sort === "az" && <input type="hidden" name="sort" value="az" />}
+          <button type="submit" className="h-11 shrink-0 rounded-lg border border-edge bg-card px-4 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong">
+            Search
+          </button>
         </form>
 
-        <nav aria-label="Filter by role" className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <nav aria-label="Filter by role" className="flex flex-wrap gap-2">
           <a href={href(sp, { role: undefined, page: undefined })} aria-current={!role} className={`${chip} border-edge`}>
             All roles
           </a>
@@ -90,6 +83,22 @@ export default async function BrowsePage({ searchParams }: { searchParams: Promi
             </a>
           ))}
         </nav>
+        <nav aria-label="Sort" className="inline-flex w-fit shrink-0 rounded-lg border border-edge bg-raised p-1">
+          {[
+            { key: "rank", label: "Top ranked" },
+            { key: "az", label: "A to Z" },
+          ].map((o) => (
+            <a
+              key={o.key}
+              href={href(sp, { sort: o.key === "rank" ? undefined : o.key, page: undefined })}
+              aria-current={sort === o.key ? "page" : undefined}
+              className="inline-flex h-8 items-center rounded-md px-3 text-sm font-medium text-mute transition hover:text-ink aria-[current=page]:bg-card aria-[current=page]:text-ink aria-[current=page]:shadow-[var(--card-hi),var(--card-drop)]"
+            >
+              {o.label}
+            </a>
+          ))}
+        </nav>
+        </div>
 
         <p className="mt-5 text-sm text-mute" aria-live="polite">
           {list.length.toLocaleString()} {list.length === 1 ? "portfolio" : "portfolios"}

@@ -173,7 +173,7 @@ export function AddToListButton({
           opening ? "cursor-progress opacity-70" : ""
         }`}
       >
-        <span aria-hidden>📑</span> {label}
+        {label}
       </button>
 
       <Modal open={open && signedIn} onClose={() => setOpen(false)} title="Save to a list">

@@ -35,7 +35,7 @@ const COLS: { title: string; links: { href: string; label: string; ext?: boolean
 export function SiteFooter() {
   return (
     <footer className="mt-20 border-t border-edge">
-      <div className="mx-auto grid grid-cols-1 max-w-6xl gap-10 px-4 py-10 sm:px-6 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+      <div className="wrap grid grid-cols-1 gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div className="max-w-xs">
           <Wordmark />
           <p className="mt-3 text-sm text-mute">
@@ -53,7 +53,7 @@ export function SiteFooter() {
               className="group inline-flex h-9 items-center gap-2 rounded-lg border border-edge bg-card px-3 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/n8-logo.png" alt="" className="h-4 w-4 rounded" />
+              <img src="/n8-icon.png" alt="" className="h-4 w-4 rounded" />
               An n8builds project
               <ArrowUpRight className="h-3.5 w-3.5 text-mute transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
             </a>
@@ -85,7 +85,7 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="border-t border-edge">
-        <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-mute sm:px-6">
+        <p className="wrap py-5 text-xs text-mute">
           PortfolioRank is built by Nathan Watkins at{" "}
           <a href={SITE.n8builds} target="_blank" rel="noopener" className="font-medium text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
             n8builds.dev

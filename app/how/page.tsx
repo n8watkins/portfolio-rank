@@ -1,123 +1,147 @@
+import {
+  Bot,
+  CalendarClock,
+  Eye,
+  FileText,
+  FolderGit2,
+  Globe,
+  Layers,
+  Link2,
+  Mail,
+  Megaphone,
+  Merge,
+  Palette,
+  PenLine,
+  Ruler,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { visitor } from "@/lib/preview/visitor";
 
+export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "How it works - PortfolioRank",
-  description:
-    "How PortfolioRank ranks developer portfolios: ELO from head-to-head votes, AI bootstrapping, and objective scorecards.",
+  title: "How grading works - PortfolioRank",
+  description: "Code checks the facts, Gemini judges quality, and people vote in face-offs.",
 };
 
-export const dynamic = "force-dynamic";
+// Rubric v2 (GRADING_CRITERIA.md section 6, pipeline/rubric.mjs).
+const CODE = [
+  { id: "resume", Icon: FileText, name: "Resume link", weight: 10, what: "A link to a resume or CV." },
+  { id: "github", Icon: FolderGit2, name: "GitHub link", weight: 10, what: "A link to a GitHub profile." },
+  { id: "contact", Icon: Mail, name: "Contact path", weight: 20, what: "An email link, a contact form or a social profile." },
+  { id: "links", Icon: Link2, name: "Project links load", weight: 25, what: "Up to 8 project and demo links answer; none is broken." },
+  { id: "domain", Icon: Globe, name: "Own domain", weight: 10, what: "Your own domain, not a free hosting subdomain." },
+  { id: "footer", Icon: CalendarClock, name: "Fresh footer year", weight: 10, what: "The copyright year is at most 2 years old." },
+  { id: "original", Icon: Layers, name: "Not a known template", weight: 15, what: "No fingerprint of a popular template." },
+];
 
-// Preview branch: the page sits in the shared shell; its content is unchanged
-// (it becomes /criteria in the redesign).
+const AI = [
+  { id: "design", Icon: Palette, name: "Visual design", weight: 30, what: "Hierarchy, type, colour and space." },
+  { id: "five-second", Icon: Eye, name: "Five-second test", weight: 20, what: "Who you are and what you do, at a glance." },
+  { id: "story", Icon: Megaphone, name: "Project presentation", weight: 25, what: "Problem, your role, the outcome and links." },
+  { id: "writing", Icon: PenLine, name: "Writing", weight: 15, what: "Clear, concise, in your own voice." },
+  { id: "memorable", Icon: Sparkles, name: "Memorability", weight: 10, what: "Would a recruiter remember it tomorrow?" },
+];
+
 export default async function HowPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
   const v = await visitor(await searchParams);
   return (
     <AppShell visitor={v} current="other">
-      <div className="mx-auto max-w-3xl">
-        <div className="py-6">
-          <h1 className="text-3xl font-bold tracking-tight">How it works</h1>
-          <p className="mt-2 text-mute">
-            A 1,700-portfolio list, turned into a ranking you can trust - by a mix
-            of a crowd, an AI, and some boring-but-honest measurements.
+      <div className="mx-auto max-w-5xl py-10 sm:py-14">
+        <header className="rise max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Rubric v2</p>
+          <h1 className="mt-1.5 text-3xl font-bold tracking-tight sm:text-4xl">How grading works</h1>
+          <p className="mt-3 text-[15px] text-mute text-pretty sm:text-base">
+            Code checks the facts. Gemini judges quality from one screenshot and your page text. People vote in face-offs. A grade describes the page, not the developer.
           </p>
+        </header>
+
+        <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <Group
+            Icon={Ruler}
+            title="Checked by code"
+            line="Pass or fail. Free, and the same answer every time."
+            items={CODE.map((c) => ({ ...c, scale: "pass / fail" }))}
+            d={60}
+          />
+          <Group
+            Icon={Bot}
+            title="Judged by Gemini"
+            line="Scored 1 to 5, with a one-line note each."
+            items={AI.map((c) => ({ ...c, scale: "1-5" }))}
+            d={120}
+          />
         </div>
 
-        {/* Walkthrough video - placeholder until recorded. */}
-        <div className="mb-10 flex aspect-video w-full items-center justify-center rounded-xl border border-dashed border-edge bg-card text-sm text-mute">
-          🎬 Walkthrough video coming soon
-        </div>
-
-        <article className="mb-10">
-          <h2 className="text-xl font-bold tracking-tight">
-            📈 How the ELO ranking works
+        <section aria-labelledby="ranking" className="card reveal mt-5 p-6 sm:p-7">
+          <h2 id="ranking" className="text-lg font-bold tracking-tight">
+            From grades to rank
           </h2>
-          <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
-            <p>
-              The leaderboard uses <strong className="text-ink">ELO</strong> - the
-              same system that ranks chess players. Instead of scoring each
-              portfolio in a vacuum, it only ever asks one question:{" "}
-              <em>&ldquo;which of these two is better?&rdquo;</em> Every answer
-              nudges the two sites&apos; ratings.
-            </p>
-            <p>
-              Everyone starts at <strong className="text-ink">1200</strong>. When
-              you pick a winner, it gains points and the loser drops by the same
-              amount - but <em>how many</em> points depends on the upset. Beat a
-              site rated far above you and you jump a lot; beat one far below and
-              you barely move (you were supposed to win). That self-correcting math
-              is why a handful of votes can sort thousands of sites sensibly.
-            </p>
-            <p>
-              Two twists specific to here:{" "}
-              <strong className="text-ink">AI seeds, humans refine.</strong> Before
-              any people vote, Gemini casts the first rounds so the board
-              isn&apos;t empty on day one; then real votes take over.{" "}
-              <strong className="text-ink">Superstars</strong> let you spend an
-              earned ⭐ to make a vote count double - for the rare site you think is
-              genuinely exceptional.
-            </p>
-            <p>
-              And because every vote is logged, the entire ranking is{" "}
-              <em>recomputable</em> - if a bad actor is ever found, their votes can
-              be removed and the board rebuilt from scratch.
-            </p>
-          </div>
-        </article>
-
-        <article className="mb-10">
-          <h2 className="text-xl font-bold tracking-tight">
-            🤖 How the AI judging works
-          </h2>
-          <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
-            <p>
-              Ranking 1,700 sites by hand is a non-starter, so an AI does the first
-              pass. Each site gets a screenshot captured by a real browser; Gemini
-              then looks at it and scores six things - visual design, the
-              5-second test (is it clear who you are?), project storytelling,
-              writing, memorability, and motion.
-            </p>
-            <p>
-              For the leaderboard, the AI also votes head-to-head, the same way you
-              do - but it weighs more than looks. Its comparison folds in the{" "}
-              <strong className="text-ink">objective scorecard</strong> (Lighthouse
-              performance + accessibility, plus polish signals like a custom
-              domain and a working share card). A gorgeous page that&apos;s slow or
-              inaccessible loses ground it would&apos;ve won on looks alone.
-            </p>
-            <p>
-              The honest caveat:{" "}
-              <strong className="text-ink">
-                an AI judging a screenshot judges how something looks
-              </strong>{" "}
-              - not whether the projects are real or the code is good. That&apos;s
-              exactly why it only <em>seeds</em> the ranking and humans get the
-              final say. The model and prompt are fixed (one model, for
-              consistency) and every AI vote is tagged, so its influence can always
-              be separated out.
-            </p>
-          </div>
-        </article>
-
-        <article>
-          <h2 className="text-xl font-bold tracking-tight">
-            📊 The objective scorecards
-          </h2>
-          <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
-            <p>
-              Opinions aside, every portfolio also gets measured. We run Google
-              <strong className="text-ink"> Lighthouse</strong> (performance,
-              accessibility, best-practices, SEO) and a{" "}
-              <strong className="text-ink">polish checklist</strong> (HTTPS, custom
-              domain, social share card, favicon, links to GitHub/resume/contact,
-              freshness). These are facts, not votes - they live on each
-              portfolio&apos;s own page so &ldquo;gorgeous but slow&rdquo; is shown,
-              not averaged away.
-            </p>
-          </div>
-        </article>
+          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[
+              { Icon: Bot, t: "AI", d: "The Gemini scores and the code checks, weighted as above." },
+              { Icon: Users, t: "People", d: "Face-off votes, as an ELO rating. Every vote moves two sites." },
+              { Icon: Merge, t: "Merged", d: "Both together. Near-equal sites show as a likely range." },
+            ].map(({ Icon, t, d }) => (
+              <li key={t} className="flex gap-3">
+                <span className="icon-tile h-9 w-9 shrink-0">
+                  <Icon className="h-4 w-4" aria-hidden />
+                </span>
+                <span>
+                  <span className="block font-semibold">{t}</span>
+                  <span className="block text-sm text-mute">{d}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-5 border-t border-edge pt-4 text-sm text-mute">
+            Gemini sees the top of your page and up to 4,000 characters of its text, and nothing else. It runs on Google&apos;s free tier, so keep private details off
+            the page you grade.
+          </p>
+        </section>
       </div>
     </AppShell>
+  );
+}
+
+function Group({
+  Icon,
+  title,
+  line,
+  items,
+  d,
+}: {
+  Icon: typeof Bot;
+  title: string;
+  line: string;
+  items: { id: string; Icon: typeof Bot; name: string; weight: number; what: string; scale: string }[];
+  d: number;
+}) {
+  return (
+    <section aria-label={title} className="card rise flex flex-col p-6 sm:p-7" style={{ "--d": `${d}ms` } as React.CSSProperties}>
+      <h2 className="flex items-center gap-2.5 text-lg font-bold tracking-tight">
+        <span className="icon-tile h-9 w-9">
+          <Icon className="h-4 w-4" aria-hidden />
+        </span>
+        {title}
+      </h2>
+      <p className="mt-2 text-sm text-mute">{line}</p>
+      <ul className="mt-4 divide-y divide-edge">
+        {items.map((c) => (
+          <li key={c.id} id={c.id} className="flex scroll-mt-24 items-start gap-3 py-3">
+            <c.Icon className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">{c.name}</span>
+              <span className="block text-sm text-mute">{c.what}</span>
+            </span>
+            <span className="shrink-0 text-right text-xs tabular-nums text-mute">
+              <span className="block font-semibold text-ink">{c.weight}%</span>
+              {c.scale}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

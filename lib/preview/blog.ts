@@ -11,7 +11,8 @@ export type Block =
   | { t: "quote"; title: string; text: string }
   | { t: "ol"; items: string[] }
   | { t: "image"; n: number; label: string; alt?: string; kind?: string }
-  | { t: "cta"; text: string };
+  | { t: "cta"; text: string }
+  | { t: "shots" };
 
 export type Post = {
   slug: string;
@@ -104,7 +105,12 @@ const SAMPLES: Post[] = [
     date: "Nov 3, 2026",
     minutes: 4,
     status: "sample",
-    blocks: [{ t: "p", text: "Sample post: this report doesn't exist yet. It shows how a data report would sit in the blog index and on home." }],
+    blocks: [
+      { t: "p", text: "Sample post: this report doesn't exist yet. It shows how a data report would sit in the blog index and on home, with real screenshots where the template asks for them." },
+      { t: "h", text: "The top three, side by side" },
+      { t: "shots" },
+      { t: "p", text: "The finished report would compare the measured facts and AI grades of the top 10% with everyone else." },
+    ],
   },
   {
     slug: "where-ai-and-people-disagree",
