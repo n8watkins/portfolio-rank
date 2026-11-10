@@ -41,42 +41,44 @@ export default async function Home() {
     <div className="mx-auto max-w-6xl px-4 sm:px-6">
       <Header stars={stars} />
 
-      <section className="py-10 text-center sm:py-14">
-        <h1 className="fade-up mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-          The best developer portfolios.{" "}
-          <span className="text-accent">Ranked.</span>
-        </h1>
-        <p
-          className="fade-up mx-auto mt-4 max-w-xl text-sm text-mute sm:text-lg"
-          style={{ animationDelay: "80ms" }}
-        >
-          {portfolios.length.toLocaleString()} community-curated portfolios.
-          Your votes decide who rises.
-        </p>
-        <div
-          className="fade-up mt-6 flex items-center justify-center gap-3"
-          style={{ animationDelay: "160ms" }}
-        >
-          <a
-            href="/rank"
-            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85"
+      <main id="main" tabIndex={-1}>
+        <section className="py-10 text-center sm:py-14">
+          <h1 className="fade-up mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+            The best developer portfolios.{" "}
+            <span className="text-accent">Ranked.</span>
+          </h1>
+          <p
+            className="fade-up mx-auto mt-4 max-w-xl text-sm text-mute sm:text-lg"
+            style={{ animationDelay: "80ms" }}
           >
-            ⚔️ Start ranking
-          </a>
-          <a
-            href="#browse"
-            className="rounded-lg border border-edge px-5 py-2.5 text-sm font-semibold transition hover:border-mute"
+            {portfolios.length.toLocaleString()} community-curated portfolios.
+            Your votes decide who rises.
+          </p>
+          <div
+            className="fade-up mt-6 flex items-center justify-center gap-3"
+            style={{ animationDelay: "160ms" }}
           >
-            Browse
-          </a>
-        </div>
-      </section>
+            <a
+              href="/rank"
+              className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85"
+            >
+              ⚔️ Start ranking
+            </a>
+            <a
+              href="#browse"
+              className="rounded-lg border border-edge px-5 py-2.5 text-sm font-semibold transition hover:border-mute"
+            >
+              Browse
+            </a>
+          </div>
+        </section>
 
-      <TopMarquee />
+        <TopMarquee />
 
-      <PortfolioGrid portfolios={portfolios} />
+        <PortfolioGrid portfolios={portfolios} />
 
-      <FAQ />
+        <FAQ />
+      </main>
 
       <footer className="mt-20 border-t border-edge py-10 text-center text-sm text-mute">
         <p>

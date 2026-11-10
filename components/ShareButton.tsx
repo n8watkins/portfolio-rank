@@ -60,8 +60,10 @@ export function ShareButton({
       try {
         await navigator.share({ title, url: href });
         return;
-      } catch {
-        // user dismissed the sheet, or share failed - fall through to copy
+      } catch (e) {
+        // Dismissing the share sheet is a choice, not a failure: don't copy.
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        // The share itself failed - fall through to copying the link.
       }
     }
     if (await copyToClipboard(href)) {
@@ -80,6 +82,9 @@ export function ShareButton({
       title="Share"
     >
       {copied ? "✓ Copied!" : `↗ ${label}`}
+      <span role="status" className="sr-only">
+        {copied ? "Link copied" : ""}
+      </span>
     </button>
   );
 }

@@ -14,7 +14,7 @@ export function EdgePage({
   actions: ReactNode;
 }) {
   return (
-    <main className="mx-auto flex min-h-[80vh] max-w-md flex-col items-center justify-center px-4 py-16 text-center">
+    <main id="main" tabIndex={-1} className="mx-auto flex min-h-[80vh] max-w-md flex-col items-center justify-center px-4 py-16 text-center">
       <a href="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/pr-logo.svg" alt="" className="h-8 w-8" />
