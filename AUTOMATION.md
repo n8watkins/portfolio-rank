@@ -73,7 +73,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 |---|---|---|---|
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
 | **`sync-upstream.yml`** | daily 06:00 UTC + manual | Rebuild `feed.json` from upstream's merged README, commit if changed, then **capture + AI-grade** new sites (serve-frames → R2) | TURSO, GEMINI, R2 |
-| **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite chain only) | TURSO, GEMINI, SHOTS_BASE_URL |
+| **`judge-vote.yml`** | daily 13:00 UTC + manual | Gemini **pairwise-metrics voting**: compare S/A/B pairs by hero (from R2) + cached Lighthouse/polish signals, cast ELO votes (≤30/day, flash-lite chain only). With the variable `RANKING_V2` = `true` it runs the ranking v2 comparisons and board recompute instead ([RANKING.md](RANKING.md)) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of `votes`/`ratings`/`ai_rubric` → private R2 bucket `portfolio-rank-backups` (~0.3 MB/run) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API, so the voting robot's comparisons have real metrics | TURSO |
@@ -150,6 +150,12 @@ queues (its timeout only counts once it starts).
   The first pairwise run moves the earlier `ai:gemini-3.1-flash-lite` votes to `ai:flash-lite` with `model = 'gemini-3.1-flash-lite'`, so the new judge does not re-vote those pairs.
   A model outside the chain (`--model M --allow-model`) is a different judge and votes as `ai:M`.
 
+## Ranking v2 (built, not switched on)
+
+The OpenSkill leaderboards (People, AI and Merged), the comparison log, the matchmaking and the stability analytics are described in [RANKING.md](RANKING.md).
+Their tables are additive (`comparisons`, `site_ratings`, `rank_history`, `site_fingerprints`, `rating_resets`, `ranking_runs`) and nothing on the site reads them yet.
+The daily comparison job (`pipeline/compare.mjs`) does nothing until the repository variable `RANKING_V2` is `true`.
+
 ## Required repo secrets
 
 `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `GEMINI_API_KEY`,
@@ -169,5 +175,8 @@ serve images.
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
+- `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
+- `node pipeline/compare.mjs` - ranking v2 daily AI comparisons (off unless `RANKING_V2=true`)
+- `node scripts/simulate-ranking.mjs [--grades csv] [--votes-log log] [--out dir]` - offline evaluation of ranking v2
 - `scripts/backup-db.mjs` — DB → R2 snapshot · `scripts/export-grades.mjs` — grades → CSV
 - `scripts/r2-check.mjs` — R2 connectivity · `scripts/r2-upload-one.mjs <key>` — single-site upload
