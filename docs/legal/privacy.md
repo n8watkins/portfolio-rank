@@ -100,7 +100,7 @@ If PortfolioRank moves to a paid Gemini plan, this section will be updated.
 | GitHub | Sign-in, and the scheduled jobs that update the site |
 | Google | Gemini (grades, writing) and PageSpeed Insights (speed scores) |
 | Sentry | Error reports |
-| [owner: email provider, Amazon SES or Cloudflare Email Service] | Sending the newsletter and queued reports |
+| Cloudflare Email Service | Sending the newsletter and queued reports |
 
 None of them get your data to sell, and neither do I.
 

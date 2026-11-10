@@ -66,7 +66,7 @@ Depends on: can start alongside phase 2; the leaderboard tabs fill in when ranki
 | Report page, share image, "add me to the leaderboard" request | to do |
 | Guardrails: Turnstile, per-person, per-network and site-wide caps, strict address checks, cache by address, private screenshots, untrusted page text | to do |
 | Security review: cost abuse, SSRF through redirects and the browser, prompt injection, report privacy | to do |
-| Email provider chosen and set up (domain, sender), behind the shared email gate | needs owner |
+| Cloudflare Email Service wired as the sender (binding, sender address), behind the shared email gate with caps under the beta daily limit; owner alerts to the verified address | to do (provider decided 2026-11-10) |
 | Free-tier notice where a visitor starts AI work ("the AI runs on Google Gemini's free tier; don't submit private details") and a bring-your-own-key option for the grade (DECISIONS.md, "Free tier everywhere") | to do |
 
 Depends on: phases 1 and 3; uses phase 2 for "you'd rank about #340".
@@ -121,8 +121,8 @@ Depends on: phase 1's request log; the budget must exist before phase 4 opens to
 
 Decisions only the owner can make, oldest first.
 
-1. **Email provider**: Amazon SES or Cloudflare Email Service (already set up on `n8builds.dev` for Wren)?
-   Owner alerts and "your grade is ready" emails are built against an interface and stay off until then.
+1. **Email provider**: decided 2026-11-10, Cloudflare Email Service for all email (DECISIONS.md); SES is dropped.
+   Owner alerts and "your grade is ready" emails are built against an interface and stay off until the sender is wired.
 2. **Postal address**: decided 2026-11-10, not needed while the newsletter stays editorial; add a PO box or virtual mailbox if ads, sponsors or paid features ever arrive.
 3. **Legal placeholders**: contact email, legal name or business name, jurisdiction, backup retention period, minimum age (see the `[owner: ...]` markers in [legal/](legal/)).
 4. **Full re-grade on rubric v2**: turn on `RUBRIC_REGRADE` once the backlog is graded (about 2,000 grades, 4-5 days of 3.5's budget)?

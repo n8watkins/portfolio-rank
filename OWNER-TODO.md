@@ -8,12 +8,13 @@ Decisions and their reasons live in `docs/DECISIONS.md`; the plan in `docs/ROADM
 
 - [ ] **Wave A**: start the back-end lanes the assumptions review doesn't affect (polls back end, content-engine design doc, model watch). Recommended: yes.
 - [ ] **Grade my portfolio**: wait for the assumptions review. It found that a public grader needs Gemini's paid tier (EU, Switzerland and UK users; personal data on the free tier) and that capturing visitors' sites on GitHub's runners may break GitHub's terms.
+  The Gemini part is decided (2026-11-10): free tier everywhere, no region blocking, a clear notice and a bring-your-own-key option (docs/DECISIONS.md); the GitHub runners question is still open.
 - [ ] **Redesign preview** at http://localhost:7690 (branch `preview/redesign`): approve, or send changes.
 - [ ] Guess the rank scoring (100 points for exact, zero at 4x off, "close" within 2x) and whether players guess the merged rank only or pick a view.
 - [ ] Polls in the main nav. Recommended: no, footer and the phone "More" menu.
 - [ ] Staging site (a copy of the live site to check changes first). Recommended: yes.
 - [ ] Pause the daily AI face-off votes until the new ranking switches on. Recommended: yes.
-- [ ] Email provider for reports, alerts and the newsletter. Recommended: Cloudflare Email Service (already set up on n8builds.dev).
+- [x] Email provider for reports, alerts and the newsletter: Cloudflare Email Service for all email (decided 2026-11-10; SES dropped).
 - [ ] Require CI checks before merging (repository ruleset). Recommended: yes.
 
 ## Keys and tokens

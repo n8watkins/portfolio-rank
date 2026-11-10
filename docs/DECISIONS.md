@@ -255,8 +255,13 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: planned.
   Newsletter, queued grade reports and owner updates all pass one module that counts every send and stops at a daily cap.
   Why: the same hard-cap pattern as Wren's demo budget; no bug or abuse can send unbounded email.
-- **Email provider: undecided** between Amazon SES and Cloudflare Email Service (owner, 2026-11-10). Status: open question.
-  The grader plan and cost page assumed SES (about $0.10 per 1,000 emails); Cloudflare Email Service is already set up for `n8builds.dev` for Wren.
+- **All email goes through Cloudflare Email Service** (owner, 2026-11-10). Status: decided; the sender is not wired yet.
+  Newsletter, queued grade reports and owner alerts all send through Cloudflare Email Service, still behind the one gate with hard caps.
+  Workers Paid includes 3,000 emails a month per account, shared with Wren, then $0.35 per 1,000.
+  Sends to the owner's verified address are free and don't count, so owner alerts go there.
+  Sending is in beta and new accounts start with a conservative daily limit, which the gate's caps must stay under.
+  Amazon SES is dropped.
+  Why: it is already set up on `n8builds.dev` for Wren, runs where the Worker runs, and the included sends cover today's volume.
 - **No postal address in emails for now** (owner, 2026-11-10). Status: decided.
   The newsletter is editorial and PortfolioRank sells nothing, so it isn't commercial email under CAN-SPAM; if ads, sponsors or paid features ever arrive, a PO box or virtual mailbox goes in the footer.
   Why: no address needed today, and none to get spammed at.
