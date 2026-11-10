@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { ClaimVotes } from "@/components/ClaimVotes";
 import { UndoToastProvider } from "@/components/UndoToast";
 import { SignInProvider } from "@/components/SignInModal";
 import { SITE_URL } from "@/lib/site";
@@ -8,7 +7,7 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
-const TITLE = "PortfolioRank - the best developer portfolios, ranked";
+const TITLE = "PortfolioRank - how good is your portfolio?";
 const DESCRIPTION =
   "1,700+ community-curated developer portfolios, soon ranked by your votes and AI. Browse, compare, get inspired.";
 
@@ -21,13 +20,21 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
+// Runs before first paint: ?theme=light|dark|system (preview switcher) wins and
+// is remembered, else the saved choice, else the system (no attribute).
+const THEME_INIT = `(function(){try{var q=new URLSearchParams(location.search).get("theme");var k="pr-theme";if(q==="light"||q==="dark"||q==="system"){localStorage.setItem(k,q)}var t=q||localStorage.getItem(k);if(t==="light"||t==="dark"){document.documentElement.dataset.theme=t}}catch(e){}})()`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the theme script sets data-theme before React loads.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+      </head>
       <body className={`${inter.className} bg-bg text-ink antialiased`}>
         {/* Ambient gradient backdrop - fixed, behind all content. */}
         <div aria-hidden className="app-bg pointer-events-none fixed inset-0 -z-10" />
@@ -38,7 +45,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <ClaimVotes />
+        {/* Preview branch: no sessions, so ClaimVotes (practice-vote claiming) is not mounted. */}
         <UndoToastProvider>
           <SignInProvider>{children}</SignInProvider>
         </UndoToastProvider>

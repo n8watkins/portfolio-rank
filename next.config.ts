@@ -19,7 +19,8 @@ const securityHeaders = [
       "default-src 'self'",
       // Cloudflare Web Analytics: the zone injects its beacon, which reports to
       // cloudflareinsights.com. Browser errors go to Sentry's ingest host.
-      "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+      // React's dev build needs eval for its debugging tools; production never gets it.
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
@@ -32,6 +33,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Preview branch: keep the dev badge out of the review screenshots.
+  devIndicators: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

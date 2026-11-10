@@ -1,25 +1,21 @@
+import { AppShell } from "@/components/shell/AppShell";
+import { visitor } from "@/lib/preview/visitor";
+
 export const metadata = {
   title: "How it works - PortfolioRank",
   description:
     "How PortfolioRank ranks developer portfolios: ELO from head-to-head votes, AI bootstrapping, and objective scorecards.",
 };
 
-export default function HowPage() {
-  return (
-    <div className="mx-auto max-w-3xl px-4 pb-20 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <a href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </a>
-        <a
-          href="/top"
-          className="text-xs font-semibold text-mute transition hover:text-ink"
-        >
-          🏆 Leaderboard
-        </a>
-      </header>
+export const dynamic = "force-dynamic";
 
-      <main id="main" tabIndex={-1}>
+// Preview branch: the page sits in the shared shell; its content is unchanged
+// (it becomes /criteria in the redesign).
+export default async function HowPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
+  const v = await visitor(await searchParams);
+  return (
+    <AppShell visitor={v} current="other">
+      <div className="mx-auto max-w-3xl">
         <div className="py-6">
           <h1 className="text-3xl font-bold tracking-tight">How it works</h1>
           <p className="mt-2 text-mute">
@@ -121,7 +117,7 @@ export default function HowPage() {
             </p>
           </div>
         </article>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

@@ -1,12 +1,85 @@
 @import "tailwindcss";
 
+/* Colors are semantic tokens with a dark (default) and a light value. The
+   theme follows the system unless the visitor picks one: the init script in
+   app/layout.tsx sets data-theme="light" | "dark" on <html> before paint. */
 @theme {
   --color-bg: #0a0a0b;
   --color-card: #131316;
+  --color-raised: #1b1b20;
   --color-edge: #26262b;
   --color-ink: #ededf0;
   --color-mute: #8b8b93;
   --color-accent: #fbbf24;
+  --color-fill: #fbbf24;
+  --color-on-fill: #0a0a0b;
+  --color-accent-soft: rgba(251, 191, 36, 0.12);
+  --color-ai: #a78bfa;
+  --color-ai-soft: rgba(167, 139, 250, 0.14);
+  --color-people: #38bdf8;
+  --color-people-soft: rgba(56, 189, 248, 0.13);
+  --color-up: #4ade80;
+  --color-down: #f87171;
+  --color-sample: #f0abfc;
+}
+
+:root {
+  color-scheme: dark;
+  --glow-a: rgba(251, 191, 36, 0.13);
+  --glow-b: rgba(251, 191, 36, 0.07);
+  --glow-c: rgba(99, 102, 241, 0.07);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-bg: #fafaf9;
+    --color-card: #ffffff;
+    --color-raised: #f4f4f2;
+    --color-edge: #e4e4e2;
+    --color-ink: #18181b;
+    --color-mute: #5f5f68;
+    --color-accent: #b45309;
+  --color-fill: #f59e0b;
+  --color-on-fill: #1c1407;
+    --color-fill: #f59e0b;
+    --color-on-fill: #1c1407;
+    --color-accent-soft: #fef3c7;
+    --color-ai: #6d28d9;
+    --color-ai-soft: #ede9fe;
+    --color-people: #0369a1;
+    --color-people-soft: #e0f2fe;
+    --color-up: #15803d;
+    --color-down: #b91c1c;
+    --color-sample: #a21caf;
+    --glow-a: rgba(251, 191, 36, 0.16);
+    --glow-b: rgba(251, 191, 36, 0.08);
+    --glow-c: rgba(99, 102, 241, 0.05);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #fafaf9;
+  --color-card: #ffffff;
+  --color-raised: #f4f4f2;
+  --color-edge: #e4e4e2;
+  --color-ink: #18181b;
+  --color-mute: #5f5f68;
+  --color-accent: #b45309;
+  --color-fill: #f59e0b;
+  --color-on-fill: #1c1407;
+  --color-accent-soft: #fef3c7;
+  --color-ai: #6d28d9;
+  --color-ai-soft: #ede9fe;
+  --color-people: #0369a1;
+  --color-people-soft: #e0f2fe;
+  --color-up: #15803d;
+  --color-down: #b91c1c;
+  --color-sample: #a21caf;
+  --glow-a: rgba(251, 191, 36, 0.16);
+  --glow-b: rgba(251, 191, 36, 0.08);
+  --glow-c: rgba(99, 102, 241, 0.05);
 }
 
 @keyframes fade-up {
@@ -63,6 +136,36 @@ html {
   scroll-padding-top: 5rem;
 }
 
+/* Phones: the bottom tab bar covers the last 64 px, so focused elements and
+   the page end stay clear of it. */
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: 5rem;
+  }
+}
+
+/* The More sheet on phones (components/shell/MobileTabBar.tsx) slides up. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+dialog.sheet[open] {
+  animation: sheet-in 0.18s ease-out;
+}
+
+dialog.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet[open] {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
@@ -117,17 +220,17 @@ dialog.modal[open]::backdrop {
   background:
     radial-gradient(
       55rem 55rem at 78% -8%,
-      rgba(251, 191, 36, 0.13),
+      var(--glow-a),
       transparent 60%
     ),
     radial-gradient(
       45rem 45rem at 12% 6%,
-      rgba(251, 191, 36, 0.07),
+      var(--glow-b),
       transparent 55%
     ),
     radial-gradient(
       48rem 48rem at 50% 108%,
-      rgba(99, 102, 241, 0.07),
+      var(--glow-c),
       transparent 62%
     );
 }

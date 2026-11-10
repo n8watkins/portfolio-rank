@@ -121,7 +121,7 @@ export function Modal({
           type="button"
           onClick={() => onCloseRef.current()}
           aria-label="Close"
-          className="absolute right-1.5 top-1.5 grid h-11 w-11 place-items-center rounded-lg text-mute transition hover:bg-white/10 hover:text-ink"
+          className="absolute right-1.5 top-1.5 grid h-11 w-11 place-items-center rounded-lg text-mute transition hover:bg-raised hover:text-ink"
         >
           <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden>
             <path d="M3.5 3.5l9 9m0-9l-9 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
