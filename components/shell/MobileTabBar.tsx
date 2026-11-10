@@ -90,7 +90,7 @@ export function MobileTabBar({
             {[
               { href: "/blog", label: "Blog", Icon: Newspaper },
               { href: "/polls", label: "Polls", Icon: Vote },
-              { href: "/how", label: "How grading works", Icon: BookOpen },
+              { href: "/about", label: "About", Icon: BookOpen },
               { href: signedIn ? "/profile" : "#signin", label: signedIn ? "Account" : "Sign in", Icon: User },
               { href: "/settings", label: "Settings", Icon: Settings },
             ].map(({ href, label, Icon }) => (

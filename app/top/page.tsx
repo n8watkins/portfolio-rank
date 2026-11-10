@@ -1,9 +1,9 @@
-import { Bot, Merge, Split, Users } from "lucide-react";
+import { Bot, Check, Merge, Sparkles, Split, Users, X } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Shot } from "@/components/preview/Shot";
 import { fmtScore } from "@/components/preview/RankRow";
 import { Movement, RankBadge, SampleTag, TierBadge } from "@/components/preview/bits";
-import { hasRealGrades, leaderboard, type Ranked, type View } from "@/lib/preview/data";
+import { hasRealGrades, leaderboard, scorecard, type Ranked, type View } from "@/lib/preview/data";
 import { visitor } from "@/lib/preview/visitor";
 
 export const dynamic = "force-dynamic";
@@ -85,14 +85,14 @@ export default async function TopPage({ searchParams }: { searchParams: Promise<
           <ol>
             {rows.map((r) => (
               <li key={r.url} className="border-b border-edge last:border-b-0">
-                <a href={`/grade/${r.slug}`} className="group flex items-center gap-3 px-3 py-2.5 transition hover:bg-raised md:gap-4 md:px-4">
+                <a href={`/grade/${r.slug}`} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised md:gap-5 md:px-5 md:py-4">
                   <span className="flex w-9 shrink-0 justify-end md:w-10">
                     <RankBadge rank={r.rank} tied={r.tied} size={r.rank <= 3 ? "lg" : "md"} />
                   </span>
-                  <Shot base={r.shot} alt="" domain={r.domain} className="aspect-[16/10] w-16 shrink-0 rounded-md border border-edge max-sm:hidden md:w-24" />
+                  <Shot base={r.shot} alt="" domain={r.domain} className="aspect-[16/10] w-20 shrink-0 rounded-lg border border-edge transition group-hover:border-edge-strong max-sm:hidden md:w-44 lg:w-52" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{r.name}</span>
+                      <span className="truncate font-semibold md:text-[15px]">{r.name}</span>
                       {r.disagree && (
                         <span
                           className="inline-flex shrink-0 items-center gap-1 rounded-full border border-edge-strong px-1.5 py-0.5 text-[11px] font-medium text-mute"
@@ -107,6 +107,7 @@ export default async function TopPage({ searchParams }: { searchParams: Promise<
                       )}
                     </span>
                     <span className="block truncate text-xs text-mute">{r.tagline ?? r.domain}</span>
+                    <Why url={r.url} />
                   </span>
                   {view !== "ai" && <Movement move={r.move} className="nudge-up hidden w-12 justify-end md:inline-flex" />}
                   {view === "ai" && (
@@ -143,5 +144,46 @@ export default async function TopPage({ searchParams }: { searchParams: Promise<
         )}
       </div>
     </AppShell>
+  );
+}
+
+const CHIP: Record<string, string> = {
+  "Own domain": "Own domain",
+  "Resume linked": "Resume",
+  "GitHub linked": "GitHub",
+  "Contact path": "Contact",
+  "Project links work": "Projects work",
+  "Fresh footer year": "Recent",
+};
+
+/** Why it's good, at a glance: the basics as chips and one AI highlight. */
+function Why({ url }: { url: string }) {
+  const c = scorecard(url);
+  // The strongest criterion; among ties, a different one per site so rows don't repeat.
+  const top = Math.max(...c.subs.map((s) => s.value));
+  const tied = c.subs.filter((s) => s.value === top);
+  const best = tied[[...url].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % tied.length];
+  return (
+    <span className="mt-2 hidden md:block">
+      <span className="flex flex-wrap gap-1.5" aria-label="Basics">
+        {c.facts
+          .filter((f) => CHIP[f.label])
+          .map((f) => (
+            <span
+              key={f.label}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${f.pass ? "border-up/30 text-ink" : "border-edge text-mute line-through decoration-mute/60"}`}
+            >
+              {f.pass ? <Check className="h-3 w-3 text-up" aria-label="has" /> : <X className="h-3 w-3" aria-label="missing" />}
+              {CHIP[f.label]}
+            </span>
+          ))}
+      </span>
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs text-mute">
+        <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
+        <span className="truncate">
+          <span className="font-medium text-ink">{best.label}:</span> {best.note}
+        </span>
+      </span>
+    </span>
   );
 }

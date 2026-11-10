@@ -2,13 +2,12 @@ import { Target, Swords } from "lucide-react";
 import { AppShell } from "@/components/shell/AppShell";
 import { FaceOff, type Entry } from "@/components/preview/FaceOff";
 import { GuessPercentile } from "@/components/preview/GuessPercentile";
-import { SampleTag } from "@/components/preview/bits";
 import { faceoffPairs, quizSet, scorecard } from "@/lib/preview/data";
 import type { Visitor } from "@/lib/preview/visitor";
 
 const MODES = [
-  { key: "faceoff", href: "/play", label: "Face-off", hint: "Which is better?", Icon: Swords },
-  { key: "guess", href: "/play?mode=guess", label: "Guess the percentile", hint: "Five a day, or random", Icon: Target },
+  { key: "faceoff", href: "/play", label: "Face-off", hint: "Two portfolios side by side. Pick the one you'd hire from, then see how everyone voted.", Icon: Swords },
+  { key: "guess", href: "/play?mode=guess", label: "Guess the percentile", hint: "Five portfolios. Guess where each lands among all of them. A new Daily 5 every day.", Icon: Target },
 ] as const;
 
 /** Play: both game modes behind one entry. /rank opens the face-off. */
@@ -41,26 +40,35 @@ export function PlayPage({
   return (
     <AppShell visitor={v} current="rank">
       <div className="mx-auto max-w-6xl py-4 sm:py-8">
-        <div className="rise mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-6">
-          <h1 className="sr-only">Play</h1>
-          <nav aria-label="Game mode" className="grid w-full grid-cols-2 gap-1 rounded-xl border border-edge bg-raised p-1 sm:inline-grid sm:w-auto">
-            {MODES.map(({ key, href, label, hint, Icon }) => (
+        <h1 className="sr-only">Play</h1>
+        <nav aria-label="Game mode" className="rise mb-3 grid grid-cols-2 gap-3 sm:gap-4">
+          {MODES.map(({ key, href, label, hint, Icon }) => {
+            const img = key === "faceoff" ? pairs[0][0].shot : quizSet(seed, withSlug)[0].shot;
+            return (
               <a
                 key={key}
                 href={href}
                 aria-current={mode === key ? "page" : undefined}
-                className="group flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-mute transition hover:text-ink aria-[current=page]:bg-card aria-[current=page]:text-ink aria-[current=page]:shadow-[var(--card-hi),var(--card-drop)] sm:px-4"
+                className="card card-hover group relative flex items-stretch overflow-hidden aria-[current=page]:ring-2 aria-[current=page]:ring-accent"
               >
-                <Icon className={`h-4 w-4 shrink-0 ${key === "faceoff" ? "icon-shake" : "icon-twinkle"}`} aria-hidden />
-                <span>
-                  <span className="block text-sm font-semibold">{label}</span>
-                  <span className="hidden text-xs text-mute sm:block">{hint}</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`${img}/hero.jpg`} alt="" className="hidden w-40 shrink-0 border-r border-edge object-cover object-top md:block lg:w-56" />
+                <span className="flex min-w-0 flex-1 items-start gap-3 p-3 sm:p-5">
+                  <span className="icon-tile hidden h-11 w-11 shrink-0 sm:grid">
+                    <Icon className={`h-5 w-5 ${key === "faceoff" ? "icon-shake" : "icon-twinkle"}`} aria-hidden />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2 text-base font-bold sm:text-lg">
+                      <Icon className="h-4 w-4 shrink-0 text-accent sm:hidden" aria-hidden /> {label}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-mute sm:text-sm">{hint}</span>
+                  </span>
                 </span>
               </a>
-            ))}
-          </nav>
-          <SampleTag what={mode === "guess" ? "Scores and People ranks" : "Vote shares"} className="max-sm:hidden" />
-        </div>
+            );
+          })}
+        </nav>
+        <p className="rise mb-5 text-xs text-mute sm:mb-7">Preview data: vote shares, scores and People ranks are made up until the real ones exist.</p>
 
         <div className="rise" style={{ "--d": "80ms" } as React.CSSProperties}>
           {mode === "guess" ? (

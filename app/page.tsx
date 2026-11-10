@@ -4,6 +4,7 @@ import { GradeForm } from "@/components/preview/GradeForm";
 import { Showcase } from "@/components/preview/Showcase";
 import { NewsletterFeature } from "@/components/preview/NewsletterFeature";
 import { PlayBand } from "@/components/preview/PlayBand";
+import { AboutCard, PortfolioOfTheDay } from "@/components/preview/PortfolioOfTheDay";
 import { Climbers, FaceOffTeaser, LiveStats } from "@/components/preview/HomeCards";
 import { PastPollsMini } from "@/components/preview/PastPolls";
 import { PollCard } from "@/components/preview/PollCard";
@@ -138,6 +139,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
         <div className="wrap">
           <SectionHead eyebrow="Play" title="Test your eye" href="/play" link="All games" />
           <PlayBand />
+        </div>
+      </div>
+
+      {/* Portfolio of the day and About */}
+      <div className="band pb-14 lg:pb-20">
+        <div className="wrap reveal grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
+          <PortfolioOfTheDay />
+          <AboutCard />
         </div>
       </div>
 

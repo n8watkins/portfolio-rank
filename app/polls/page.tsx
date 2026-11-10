@@ -21,7 +21,8 @@ export default async function PollsPage({ searchParams }: { searchParams: Promis
     <AppShell visitor={v} current="other">
       <div className="py-8 sm:py-10">
         <div className="rise">
-          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Community</p>
+          <h1 className="mt-1.5 flex items-center gap-3 text-3xl font-bold tracking-tight sm:text-4xl">
             Polls <SampleTag what="Polls and counts" />
           </h1>
           <p className="mt-1.5 text-sm text-mute">One question a week about what makes a portfolio work. Vote without an account; results show right after.</p>
@@ -59,7 +60,33 @@ export default async function PollsPage({ searchParams }: { searchParams: Promis
           </section>
         </div>
 
-        <h2 className="mt-12 text-lg font-bold tracking-tight">Past polls</h2>
+        <section aria-labelledby="your-votes" className="card reveal mt-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="your-votes" className="text-lg font-bold tracking-tight">
+              Your votes
+            </h2>
+            <span className="text-xs text-mute">Saved in this browser · sample</span>
+          </div>
+          <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {past.slice(0, 4).map((p, k) => {
+              const win = p.options.reduce((a, b) => (b.votes > a.votes ? b : a));
+              const mine = p.options[k % p.options.length];
+              const same = mine.label === win.label;
+              return (
+                <li key={p.id} className="rounded-xl border border-edge bg-bg/40 p-3 text-sm">
+                  <p className="truncate font-medium">{p.question}</p>
+                  <p className="mt-1 text-mute">
+                    You: <span className="text-ink">{mine.site ? mine.site.domain : mine.label}</span>
+                  </p>
+                  <p className={`mt-1 text-xs font-semibold ${same ? "text-up" : "text-mute"}`}>{same ? "With the majority" : "Against the majority"}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <h2 className="mt-12 text-2xl font-bold tracking-tight">Past polls</h2>
+        <p className="mt-1 text-sm text-mute">Results fill in as you scroll. The crown marks the winner.</p>
         <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {past.map((p) => (
             <PastPoll key={p.id} poll={p} className="reveal" />

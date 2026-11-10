@@ -42,13 +42,13 @@ export function EmailReport({ domain, reportHref, initialSent = null }: { domain
     );
 
   return (
-    <section aria-labelledby="mail-me" className="card p-5 sm:p-6">
+    <section aria-labelledby="mail-me" className="card min-w-0 p-5 sm:p-6">
       <h2 id="mail-me" className="flex items-center gap-2 font-semibold">
         <Mail className="h-4 w-4 text-mute" aria-hidden /> Get it by email, no account needed
       </h2>
       <p className="mt-1 text-sm text-mute">We send a one-time link to your report. You can close this page.</p>
       <form
-        className="mt-3 flex gap-2"
+        className="mt-3 flex flex-col gap-2 sm:flex-row"
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
@@ -74,7 +74,7 @@ export function EmailReport({ domain, reportHref, initialSent = null }: { domain
           }}
           aria-invalid={!!error}
           aria-describedby={error ? "report-email-error" : undefined}
-          className="h-11 min-w-0 flex-1 rounded-lg border border-edge bg-card px-3 text-sm outline-none focus:border-accent"
+          className="h-11 min-w-0 shrink-0 rounded-lg border border-edge bg-card px-3 text-sm outline-none focus:border-accent sm:flex-1"
         />
         <button type="submit" className="h-11 shrink-0 rounded-lg border border-edge bg-card px-4 text-sm font-semibold shadow-[var(--card-hi)] hover:border-edge-strong">
           Email me the link

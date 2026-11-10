@@ -120,7 +120,7 @@ export function YourPortfolio({ v }: { v: Visitor }) {
             {rep.improvements.map((m, i) => (
               <li key={m.title} className="flex gap-2">
                 <span className="text-mute tabular-nums">{i + 1}.</span>
-                <a href={`/how#${m.criterion}`} className="hover:text-accent">
+                <a href={`/about#${m.criterion}`} className="hover:text-accent">
                   {m.title}
                 </a>
               </li>
@@ -204,7 +204,7 @@ export function Improvements({ items }: { items: { title: string; why: string; c
           <li key={m.title} className="flex gap-2.5">
             <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-raised text-[11px] font-bold tabular-nums ring-1 ring-edge">{i + 1}</span>
             <span className="min-w-0">
-              <a href={`/how#${m.criterion}`} className="font-medium hover:text-accent">
+              <a href={`/about#${m.criterion}`} className="font-medium hover:text-accent">
                 {m.title}
               </a>
               <span className="block text-mute">{m.why}</span>

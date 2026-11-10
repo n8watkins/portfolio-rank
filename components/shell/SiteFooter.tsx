@@ -1,4 +1,4 @@
-import { ArrowUpRight, Coffee } from "lucide-react";
+import { Coffee } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { Wordmark } from "@/components/shell/SiteHeader";
 
@@ -16,7 +16,8 @@ const COLS: { title: string; links: { href: string; label: string; ext?: boolean
   {
     title: "Learn",
     links: [
-      { href: "/how", label: "How grading works" },
+      { href: "/about", label: "About" },
+      { href: "/about#grading", label: "How grading works" },
       { href: "/blog", label: "Blog" },
       { href: "/polls", label: "Polls" },
       { href: "/removed", label: "Removed and why" },
@@ -45,23 +46,13 @@ export function SiteFooter() {
             </a>
             .
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <a
-              href={SITE.n8builds}
-              target="_blank"
-              rel="noopener"
-              className="group inline-flex h-9 items-center gap-2 rounded-lg border border-edge bg-card px-3 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong"
-            >
+          <div className="mt-5 flex items-center gap-4">
+            <a href={SITE.n8builds} target="_blank" rel="noopener" aria-label="n8builds.dev" className="opacity-90 transition hover:opacity-100">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/n8-icon.png" alt="" className="h-4 w-4 rounded" />
-              An n8builds project
-              <ArrowUpRight className="h-3.5 w-3.5 text-mute transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
+              <img src="/n8-icon.png" alt="n8builds" className="h-9 w-9 rounded-lg" />
             </a>
-            <a
-              href={SITE.kofi}
-              className="group inline-flex h-9 items-center gap-2 rounded-lg border border-edge bg-card px-3 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong"
-            >
-              <Coffee className="icon-shake h-4 w-4 text-mute" aria-hidden /> Ko-fi
+            <a href={SITE.kofi} className="group inline-flex items-center gap-1.5 text-sm text-mute transition hover:text-ink">
+              <Coffee className="icon-shake h-4 w-4" aria-hidden /> Support on Ko-fi
             </a>
           </div>
         </div>
@@ -86,9 +77,9 @@ export function SiteFooter() {
       </div>
       <div className="border-t border-edge">
         <p className="wrap py-5 text-xs text-mute">
-          PortfolioRank is built by Nathan Watkins at{" "}
+          Built by{" "}
           <a href={SITE.n8builds} target="_blank" rel="noopener" className="font-medium text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
-            n8builds.dev
+            n8builds
           </a>
           . Grades are estimates, not a verdict on the developer.
         </p>

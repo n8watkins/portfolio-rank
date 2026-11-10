@@ -1,8 +1,8 @@
 import { Activity, ArrowRight, BookOpen, Split, Swords, TrendingUp } from "lucide-react";
 import { Shot } from "@/components/preview/Shot";
-import { LiveStatsClient } from "@/components/preview/LiveStatsClient";
+import { LiveCarousel } from "@/components/preview/LiveCarousel";
 import { Movement, SampleTag, sectionTitle } from "@/components/preview/bits";
-import { climbers, disagreements, faceoffPairs, stats } from "@/lib/preview/data";
+import { climbers, disagreements, faceoffPairs, liveStats } from "@/lib/preview/data";
 
 export function Climbers({ className = "" }: { className?: string }) {
   return (
@@ -32,14 +32,8 @@ export function Climbers({ className = "" }: { className?: string }) {
 }
 
 /** Live stats: portfolios and graded are real counts, the rest sample. */
-export function LiveStats({ className = "" }: { className?: string }) {
-  const s = stats();
-  const items = [
-    { key: "portfolios", label: "Portfolios", value: s.portfolios, sample: false },
-    { key: "graded", label: "Graded by AI", value: s.graded, sample: false },
-    { key: "grades", label: "Grades this week", value: s.gradesThisWeek, sample: true },
-    { key: "votes", label: "Votes today", value: s.votesToday, sample: true },
-  ];
+export async function LiveStats({ className = "" }: { className?: string }) {
+  const items = await liveStats();
   return (
     <section aria-labelledby="stats" className={`card p-4 sm:p-5 ${className}`}>
       <div className="mb-3 flex items-center justify-between px-1">
@@ -50,11 +44,11 @@ export function LiveStats({ className = "" }: { className?: string }) {
           <span className="attn-dot" aria-hidden /> updating
         </span>
       </div>
-      <LiveStatsClient initial={items} />
-      <div className="mt-3 flex items-center justify-between gap-2 px-1 text-xs text-mute">
+      <LiveCarousel stats={items} />
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-edge px-1 pt-3 text-xs text-mute">
         <span>* sample numbers</span>
-        <a href="/how" className="group inline-flex items-center gap-1 font-semibold text-ink hover:text-accent">
-          <BookOpen className="h-3.5 w-3.5" aria-hidden /> How grading works
+        <a href="/about" className="group inline-flex items-center gap-1 font-semibold text-ink hover:text-accent">
+          <BookOpen className="h-3.5 w-3.5" aria-hidden /> About PortfolioRank
           <ArrowRight className="nudge h-3.5 w-3.5" aria-hidden />
         </a>
       </div>

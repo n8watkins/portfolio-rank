@@ -39,6 +39,13 @@ export function PlayCta({ slug, name }: { slug: string; name: string }) {
           </a>
         ))}
       </div>
+      <p className="mt-4 text-sm text-mute">
+        Is this your site?{" "}
+        <a href={`/claim/${encodeURIComponent(slug)}`} className="font-semibold text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent">
+          Claim it
+        </a>{" "}
+        to remove it, hide its grade or ask for a re-grade.
+      </p>
     </section>
   );
 }

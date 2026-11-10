@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, FlaskConical, Minus } from "lucide-react";
+import { ArrowDown, ArrowUp, FlaskConical, Minus, Trophy } from "lucide-react";
 
 /** Marks a value or block as made-up preview data. */
 export function SampleTag({ what = "Sample data", className = "" }: { what?: string; className?: string }) {
@@ -68,14 +68,16 @@ export function RankBadge({ rank, tied, size = "md" }: { rank: number; tied?: bo
   const m = MEDAL[rank];
   if (!m)
     return <span className="text-sm font-bold tabular-nums text-mute">{tied ? `=${rank}` : rank}</span>;
-  const s = size === "lg" ? "h-9 w-9 text-sm" : "h-7 w-7 text-xs";
+  const s = size === "lg" ? "h-10 w-10" : "h-8 w-8";
   return (
     <span
-      className={`medal inline-grid shrink-0 place-items-center rounded-full font-bold tabular-nums text-[#1a1405] ${s}`}
-      style={{ background: m.fill, boxShadow: `0 0 0 2px var(--color-card), 0 0 0 3.5px ${m.ring}, 0 4px 10px -4px ${m.ring}` }}
-      aria-label={`${m.name}, rank ${tied ? "=" : ""}${rank}`}
+      className={`medal inline-grid shrink-0 place-items-center rounded-full ${s}`}
+      style={{ background: m.fill, boxShadow: `0 0 0 2px var(--color-card), 0 0 0 3.5px ${m.ring}, 0 6px 14px -4px ${m.ring}` }}
+      role="img"
+      aria-label={`${m.name} trophy, rank ${tied ? "=" : ""}${rank}`}
+      title={`#${rank}`}
     >
-      {tied ? `=${rank}` : rank}
+      <Trophy className={size === "lg" ? "h-5 w-5" : "h-4 w-4"} style={{ color: "#2a1d06" }} strokeWidth={2.2} aria-hidden />
     </span>
   );
 }

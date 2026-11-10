@@ -562,3 +562,64 @@ export function scorecard(url: string): Scorecard {
     subs: rep.subs.map(({ label, value, note }) => ({ label, value, note })),
   };
 }
+
+/** Sites ranked just above and below this one in the merged view. */
+export function similarTo(url: string, count = 4): Ranked[] {
+  const board = leaderboard("merged");
+  const i = board.findIndex((r) => r.url === url);
+  if (i < 0) return board.slice(0, count);
+  const out: Ranked[] = [];
+  for (let d = 1; out.length < count && d < 12; d++) {
+    for (const j of [i - d, i + d]) if (board[j] && out.length < count) out.push(board[j]);
+  }
+  return out;
+}
+
+/** A few higher-ranked sites, each with the one criterion it does better. */
+export function doingBetter(url: string, count = 3) {
+  const board = leaderboard("merged");
+  const i = board.findIndex((r) => r.url === url);
+  const mine = scorecard(url);
+  const out: { r: Ranked; label: string; theirs: number; yours: number; note: string }[] = [];
+  for (let j = Math.max(0, i - 40); j < Math.max(0, i) && out.length < count; j += 7) {
+    const r = board[j];
+    const theirs = scorecard(r.url);
+    const gap = theirs.subs
+      .map((s, k) => ({ ...s, yours: mine.subs[k].value }))
+      .filter((s) => s.value > s.yours)
+      .sort((a, b) => b.value - b.yours - (a.value - a.yours))[0];
+    if (gap) out.push({ r, label: gap.label, theirs: gap.value, yours: gap.yours, note: gap.note });
+  }
+  return out;
+}
+
+export type LiveStat = { key: string; label: string; value: number | string; suffix?: string; sample: boolean; tone: 1 | 2 | 3 | 4 };
+
+/** Many numbers for the Live carousel. Real where the roster and grades know them. */
+export async function liveStats(): Promise<LiveStat[]> {
+  const c = load();
+  const own = c.roster.filter((s) => !/\.(vercel\.app|netlify\.app|github\.io|framer\.website|web\.app|pages\.dev|onrender\.com|herokuapp\.com)/.test(s.url)).length;
+  const roleCounts = ROLES.map((r) => ({ r, n: c.roster.filter((s) => s.tagline && r.re.test(s.tagline)).length })).sort((a, b) => b.n - a.n);
+  const tierVal: Record<string, number> = { S: 5, A: 4, B: 3, C: 2, D: 1 };
+  const avg = c.pool.reduce((n, s) => n + tierVal[s.grade!.tier], 0) / c.pool.length;
+  const avgTier = ["D", "C", "B", "A", "S"][Math.round(avg) - 1];
+  let stars: number | null = null;
+  try {
+    const res = await fetch("https://api.github.com/repos/n8watkins/portfolio-rank", { next: { revalidate: 3600 } });
+    if (res.ok) stars = (await res.json()).stargazers_count ?? null;
+  } catch {}
+  return [
+    { key: "portfolios", label: "Portfolios listed", value: c.roster.length, sample: false, tone: 1 },
+    { key: "graded", label: "Graded by AI", value: c.pool.length, sample: false, tone: 2 },
+    { key: "domain", label: "On their own domain", value: Math.round((own / c.roster.length) * 100), suffix: "%", sample: false, tone: 4 },
+    { key: "role", label: "Most common role", value: roleCounts[0].r.label, sample: false, tone: 3 },
+    { key: "tier", label: "Average AI tier", value: avgTier, sample: false, tone: 2 },
+    { key: "contributors", label: "List contributors", value: "1,700+", sample: false, tone: 1 },
+    { key: "stars", label: "PortfolioRank stars", value: stars ?? 128, sample: stars === null, tone: 3 },
+    { key: "grades", label: "Graded this week", value: 35, sample: true, tone: 3 },
+    { key: "votes", label: "Votes today", value: 1284, sample: true, tone: 4 },
+    { key: "quizzes", label: "Quizzes played", value: 642, sample: true, tone: 2 },
+    { key: "resume", label: "Link a resume", value: 68, suffix: "%", sample: true, tone: 1 },
+    { key: "changed", label: "Sites changed this month", value: 214, sample: true, tone: 4 },
+  ];
+}

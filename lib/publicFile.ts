@@ -17,8 +17,10 @@ export async function readPublicFile(path: string): Promise<ArrayBuffer> {
 
   if (assets) {
     const response = await assets.fetch(new URL(path, 'https://assets.local'))
-    if (!response.ok) throw new Error(`${path}: static asset answered ${response.status}`)
-    return response.arrayBuffer()
+    if (response.ok) return response.arrayBuffer()
+    // `next dev` gets an ASSETS binding from wrangler but no built assets, so
+    // it answers 404 for everything: read public/ from disk there instead.
+    if (process.env.NODE_ENV !== 'development') throw new Error(`${path}: static asset answered ${response.status}`)
   }
 
   const [{ readFile }, { join }] = await Promise.all([import('node:fs/promises'), import('node:path')])

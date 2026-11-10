@@ -101,6 +101,9 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                   Add me to the leaderboard
                 </a>
               )}
+              <a href={`/claim/${site.slug}?step=${v.signedIn ? "verified" : "signin"}`} className={btnSecondary}>
+                {v.signedIn ? "Owner settings" : "Claim it"}
+              </a>
             </div>
           </div>
           <Regrade gradedOn={rep.gradedOn} />
@@ -164,7 +167,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                       <p className="mt-1.5 text-sm">
                         <span className="text-mute">Expected effect:</span> {m.effect} <SampleTag />
                       </p>
-                      <a href={`/how#${m.criterion}`} className="group mt-1.5 inline-flex items-center gap-1 text-sm font-semibold text-accent">
+                      <a href={`/about#${m.criterion}`} className="group mt-1.5 inline-flex items-center gap-1 text-sm font-semibold text-accent">
                         The criterion <ArrowRight className="nudge h-3.5 w-3.5" aria-hidden />
                       </a>
                     </div>
@@ -197,7 +200,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                     {prof.standings.map((s) => (
                       <tr key={s.label} className="border-t border-edge">
                         <th scope="row" className="px-3 py-2.5 text-left font-medium">
-                          <a href={`/how#${s.criterion}`} className="hover:text-accent">
+                          <a href={`/about#${s.criterion}`} className="hover:text-accent">
                             {s.label}
                           </a>
                         </th>

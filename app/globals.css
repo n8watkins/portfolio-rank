@@ -103,7 +103,7 @@
 @layer components {
   .wrap {
     width: 100%;
-    max-width: 1360px;
+    max-width: 1600px;
     margin-inline: auto;
     padding-inline: 1rem;
   }
@@ -115,6 +115,11 @@
   @media (min-width: 1024px) {
     .wrap {
       padding-inline: 2.5rem;
+    }
+  }
+  @media (min-width: 1536px) {
+    .wrap {
+      padding-inline: 4rem;
     }
   }
 
@@ -471,6 +476,12 @@
   .sheen-auto::after {
     animation: sheen-auto 6.5s ease-in-out 1.5s infinite;
   }
+}
+
+/* Bars and winner crowns wait until their block scrolls into view. */
+.reveal:not([data-revealed]) .bar-fill,
+.reveal:not([data-revealed]) .pop-in {
+  animation-play-state: paused;
 }
 
 /* Attention without spinning: a dot with a soft ring that breathes. */
