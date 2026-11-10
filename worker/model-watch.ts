@@ -15,7 +15,7 @@ const log = (event: string, data: Record<string, unknown> = {}) => console.log(J
 
 export async function watchModels(env: NightEnv, now = new Date()) {
   const db = database();
-  const email = emailSender(env);
+  const email = emailSender(env, { db });
   const r = await runModelWatch({
     db,
     apiKey: env.GEMINI_API_KEY,
