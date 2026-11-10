@@ -67,9 +67,11 @@ export function replaceGradeStatements(url, oldJson, newRubric, now = new Date()
 /**
  * The re-grade queue: listed, healthy, captured sites whose current grade was
  * not made by `primary` (older grades without a model count too), oldest
- * grade first. Error sentinels are not grades and are left alone.
+ * grade first. Error sentinels are not grades and are left alone. `where`
+ * (an SQL fragment starting with AND, on the portfolios table) narrows it,
+ * with its arguments in `whereArgs`.
  */
-export async function regradeQueue(db, { primary, limit }) {
+export async function regradeQueue(db, { primary, limit, where = "", whereArgs = [] }) {
   if (limit <= 0) return [];
   const res = await db.execute({
     sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
@@ -78,9 +80,10 @@ export async function regradeQueue(db, { primary, limit }) {
             AND json_extract(ai_rubric, '$.error') IS NULL
             AND json_extract(ai_rubric, '$.tier') IS NOT NULL
             AND COALESCE(json_extract(ai_rubric, '$.model'), '') != ?
+            ${where}
           ORDER BY COALESCE(json_extract(ai_rubric, '$.judged_at'), ''), url
           LIMIT ?`,
-    args: [primary, limit],
+    args: [primary, ...whereArgs, limit],
   });
   return res.rows;
 }
@@ -91,7 +94,7 @@ export async function regradeQueue(db, { primary, limit }) {
  * `version` (grades from before versions were recorded count as 1), oldest
  * grade first. Grades by other models are on regradeQueue already.
  */
-export async function versionRegradeQueue(db, { primary, version, limit }) {
+export async function versionRegradeQueue(db, { primary, version, limit, where = "", whereArgs = [] }) {
   if (limit <= 0) return [];
   const res = await db.execute({
     sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
@@ -101,9 +104,10 @@ export async function versionRegradeQueue(db, { primary, version, limit }) {
             AND json_extract(ai_rubric, '$.tier') IS NOT NULL
             AND json_extract(ai_rubric, '$.model') = ?
             AND COALESCE(json_extract(ai_rubric, '$.rubric_version'), 1) < ?
+            ${where}
           ORDER BY COALESCE(json_extract(ai_rubric, '$.judged_at'), ''), url
           LIMIT ?`,
-    args: [primary, version, limit],
+    args: [primary, version, ...whereArgs, limit],
   });
   return res.rows;
 }

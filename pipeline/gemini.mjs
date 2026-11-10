@@ -110,6 +110,10 @@ export function createLimiter({ rpm = DEFAULT_RPM, lastAt = null, now = () => Da
     get last() {
       return last;
     },
+    /** When the next request may go out (ms). */
+    get nextAt() {
+      return Math.max(now(), next);
+    },
     async take() {
       const t = now();
       const at = Math.max(t, next);
