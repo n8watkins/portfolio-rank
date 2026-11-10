@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cached, type CacheMeta } from "@/lib/cache";
-import { hiddenUrls, isKnownPortfolio } from "@/lib/roster";
+import { isHidden, isKnownPortfolio } from "@/lib/roster";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
 // set PSI_API_KEY (free, no billing) for the 25k/day quota.
@@ -85,7 +85,7 @@ export async function GET(req: Request) {
   }
   // A site the health check found down, dead or parked has nothing to
   // measure: don't spend PageSpeed quota on it.
-  if ((await hiddenUrls()).has(url)) {
+  if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
   // A result stays fresh for 30 days; a failure (quota, timeout, a site that

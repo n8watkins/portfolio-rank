@@ -7,9 +7,10 @@ import { LeaderboardRest } from "@/components/LeaderboardRest";
 import { hiddenUrls } from "@/lib/roster";
 import { faviconOf } from "@/lib/shot-url";
 
-// Rendered at most once a minute (ISR) instead of on every visit: the
-// leaderboard moves slowly and every render costs several database queries.
-export const revalidate = 60;
+// Rendered at most once every 5 minutes (ISR) instead of on every visit: the
+// leaderboard moves slowly and every render costs database reads (Turso
+// bills every row scanned; docs/COSTS.md section C).
+export const revalidate = 300;
 
 export const metadata = {
   title: "Leaderboard - PortfolioRank",
@@ -56,18 +57,21 @@ export default async function TopPage() {
       return { ...r, rank: i + 1, name: p.name, tagline: p.tagline };
     });
 
+  // Counters kept by triggers on votes (lib/schema.mjs COUNTERS): a few
+  // rows, not a count over the whole vote log on every render.
   const totalVotes = Number(
-    (await db().execute("SELECT COUNT(*) AS n FROM votes")).rows[0]?.n ?? 0
+    (await db().execute("SELECT n FROM vote_totals WHERE k = 'all'")).rows[0]?.n ?? 0
   );
 
   const mostLoved = (
     await db().execute(
-      "SELECT winner AS url, COUNT(*) AS n FROM votes WHERE starred = 1 GROUP BY winner ORDER BY n DESC LIMIT 5"
+      "SELECT url, n FROM star_counts WHERE n > 0 ORDER BY n DESC, url LIMIT 10"
     )
   ).rows
     .map((r) => ({ url: String(r.url), stars: Number(r.n) }))
     .filter((r) => byUrl.has(r.url))
-    .map((r) => ({ ...r, name: byUrl.get(r.url)!.name }));
+    .map((r) => ({ ...r, name: byUrl.get(r.url)!.name }))
+    .slice(0, 5);
 
   const champ = ranked[0];
   const champBase = champ ? (await shotBases([champ.url])).get(champ.url) : undefined;

@@ -132,7 +132,8 @@ export default async function PortfolioPage({
   const stars = Number(
     (
       await db().execute({
-        sql: "SELECT COUNT(*) AS n FROM votes WHERE winner = ? AND starred = 1",
+        // Kept by triggers on votes (lib/schema.mjs COUNTERS), not counted over the vote log.
+        sql: "SELECT n FROM star_counts WHERE url = ?",
         args: [url],
       })
     ).rows[0]?.n ?? 0
