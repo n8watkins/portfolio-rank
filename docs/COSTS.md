@@ -112,6 +112,9 @@ Popular crosses 10 million in month 2; modest crosses it in about year 2.
 | Gemini ledger, budgets and reports (indexed) | under 1M | under 1M | 5M | 5M |
 | **Total** | **about 2M** | **about 600M (over)** | **about 5.2B (over)** | **about 120M to 220M** |
 
+The games back end (`GAMES_V2`, off; AUTOMATION.md "Games, badges, claims, live stats and reports") was built to these rules: a quiz or guess reads a few rows by primary key, the quiz pool reads the board at most every 3 hours, a badge check reads only the player's own rows (votes, plays, guesses, lists; typically under 100, capped at about 3,000) and is reused for 15 seconds, and the live stats read the list once an hour and a few indexed rows a minute per data center.
+At the popular scenario's 100,000 visitors a month, with a quarter checking badges five times at about 100 rows, that is about 13 million reads a month, inside the "with fixes" total.
+
 ### Storage (limit 5 GB)
 
 | Table | Size per row | Today, per month | Popular, per month |

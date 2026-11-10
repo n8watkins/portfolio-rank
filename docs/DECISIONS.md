@@ -266,12 +266,55 @@ The design, with the decisions still open, is [CONTENT-ENGINE.md](CONTENT-ENGINE
   Only Google's own sources; "what's trending" outside them is not read.
   Why: when Google retires 3.5 Flash-Lite, every grade and comparison method needs warning and a re-run plan.
 
+## Games, badges and claims
+
+The back end for all of these is built behind the `GAMES_V2` flag, off until the redesign ships ([AUTOMATION.md](../AUTOMATION.md#games-badges-claims-live-stats-and-reports-built-off)).
+The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
+
+- **Guess the percentile, checked on the server** (owner, 2026-11-10). Status: building (back end).
+  Quizzes of 5 portfolios: a Daily 5 that is the same for everyone each Pacific day, drawn from graded listed sites spread across the board; random quizzes; challenge links that replay the same 5.
+  A hit is within 10 points; points are 100 minus 4 per point off.
+  The real percentile is never sent before the guess; results are stored per visitor or account.
+  Why: a fair, shareable game that teaches people what good looks like.
+- **Percentiles from the ranking views, with a grade fallback** (owner, 2026-11-10). Status: building.
+  A "top X%" is the shown rank over the sites shown in that view (Merged, AI, People); before any recompute, every view uses the rating the AI grade seeds and People has none.
+  Why: one source of truth with the leaderboard, and a game that works before ranking v2 is switched on.
+- **The Daily 5 is stored at its first request** (agent, 2026-11-10). Status: building.
+  It is drawn from the date alone, then kept, so a recompute later that day doesn't change it mid-day.
+  Why: "the same for everyone" has to hold all day, not only until the nightly run.
+- **About 20 badges, each one rule over a counter** (owner, 2026-11-10). Status: building.
+  First vote; 10, 100 and 1,000 votes; first quiz; perfect quiz; Daily 5 three days running; 7-day streak; first grade; 10 grades; first list; a list with 10 sites; first share; agreed with the crowd 10 times; poll voter; 4 polls in a row; hidden gem; night owl; 50 portfolios visited; early supporter.
+  Awarded once and kept; tied to the account; a guest's progress is kept by the signed cookie and merged at sign-in.
+  Why: small, honest rewards for using the site, with no streak anxiety beyond what the badge says.
+- **Badge counters are read from what the site already stores** (agent, 2026-11-10). Status: building.
+  Votes, quizzes, polls, lists and likes are counted from their own tables with capped reads; only shares, grades requested and portfolios visited have counters of their own.
+  "Agreed with the crowd" means a face-off vote whose winner ranks higher on the People board; night owl is midnight to 5 a.m. Pacific; early supporter is anyone active on or before `EARLY_SUPPORTER_UNTIL` (the owner sets the date).
+  Why: no second copy of the vote log to drift, and an undone vote can't be farmed into a badge.
+- **Save to list from games reuses the lists API** (owner, 2026-11-10). Status: decided; nothing new to build.
+- **Claim your portfolio with GitHub** (owner, 2026-11-10). Status: building.
+  Verified automatically when the portfolio links to `github.com/<login>` or the GitHub profile's Website is the portfolio's domain; otherwise a `portfoliorank-verify` meta tag checked by fetch, or a manual review the owner decides.
+  Claimed owners can remove the portfolio, hide its grade or ask for a re-grade (the grade service's cooldown applies); every claim and action goes in an audit log.
+  Why: owners get control over their own listing without emailing anyone.
+- **Guards on automatic claims** (agent, 2026-11-10). Status: building.
+  A GitHub link doesn't count on a site the capture found built from a known template (template footers link the template's author), nor on a page that redirected elsewhere; an account verifies at most 3 portfolios by itself, more go to review.
+  Why: a template author must not be able to remove every clone of their template.
+- **An owner's removal is immediate on the site, permanent through the exclusions pull request** (owner, 2026-11-10; the timing is the agent's). Status: building.
+  The site hides it at once; the weekly health workflow adds it to `data/excluded.json` with reason "owner request", without the name, through its bot pull request; `/removed` counts these without details.
+  Why: the owner's existing removal flow, with no wait for the person asking.
+- **Live stats in one cached endpoint** (owner, 2026-11-10). Status: building.
+  Portfolios listed, graded, graded this week, votes today, quizzes played, % own domain, % resume link, most common role, average tier, sites changed this month, newest entry, community list contributors and the repository's stars (GitHub API, cached daily).
+  Why: one request for the home page's numbers, cheap on Turso (an hour's cache for the list, a day's for GitHub).
+- **Report download as a print-ready page, not a PDF made on the Worker** (owner asked for a Worker PDF if feasible; agent's call, 2026-11-10). Status: building.
+  A Worker PDF library either ships standard fonts only (Latin-1, so many names break) or a megabyte-scale font, and lays out the screenshot and notes worse than the browser's own "Save as PDF".
+  The page is for signed-in visitors, or opened once through a link sent by email (valid 24 hours, stored only as a hash).
+  Why: correct for every name and language, with no new dependency.
+
 ## Newsletter and email
 
 - **A weekly newsletter** (owner, 2026-11-10). Status: planned.
   Sign-up on every post and on the site, confirm by email (double opt-in), one-click unsubscribe, a weekly digest of new posts, the top 5 and the biggest climber.
   Why: a way to bring readers back that doesn't depend on search or social.
-- **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: planned.
+- **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (`lib/email.ts`, a daily cap; off until the sender is wired).
   Newsletter, queued grade reports and owner updates all pass one module that counts every send and stops at a daily cap.
   Why: the same hard-cap pattern as Wren's demo budget; no bug or abuse can send unbounded email.
 - **All email goes through Cloudflare Email Service** (owner, 2026-11-10). Status: decided; the sender is not wired yet.
