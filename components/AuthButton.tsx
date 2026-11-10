@@ -119,7 +119,7 @@ export function AuthButton() {
     <>
       <button
         onClick={() => openSignIn()}
-        className="rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
+        className="whitespace-nowrap rounded-lg border border-edge px-3 py-1.5 text-xs font-semibold text-mute transition hover:border-mute hover:text-ink sm:text-sm"
       >
         Sign in
       </button>
