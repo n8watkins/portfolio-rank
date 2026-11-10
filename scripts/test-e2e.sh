@@ -16,11 +16,26 @@ export ADMIN_GITHUB_LOGIN="e2e-admin"
 export E2E_PSI_PORT="${E2E_PSI_PORT:-7692}"
 export PSI_API_BASE="http://127.0.0.1:$E2E_PSI_PORT/runPagespeed"
 unset PSI_API_KEY
+# "Grade my portfolio" (tests/grader-api.test.mjs): on, with local stand-ins
+# for the portfolio sites, GitHub's API and Gemini served by that test, the
+# screenshots in a local folder and emails kept in the email_outbox table.
+# lib/grader/server.ts ignores the stand-ins on the deployed Workers.
+export GRADER_ENABLED=true
+export E2E_GRADER_MOCK_PORT="${E2E_GRADER_MOCK_PORT:-7693}"
+export GRADER_TEST_SITE="http://127.0.0.1:$E2E_GRADER_MOCK_PORT"
+export GRADER_TEST_GITHUB_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/github"
+export GRADER_TEST_GEMINI_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/gemini"
+export GRADER_TEST_SHOTS_DIR="$PWD/data/e2e-shots"
+export GITHUB_DISPATCH_TOKEN="e2e-dispatch-token"
+export EMAIL_TRANSPORT=outbox
+unset GEMINI_API_KEY TURNSTILE_SECRET_KEY SEND_EMAIL
 DB="$PWD/data/e2e.db"
 rm -f "$DB"*
+rm -rf "$GRADER_TEST_SHOTS_DIR"
 export LOCAL_DB_FILE="$DB" E2E_DB_URL="file:$DB"
+export E2E_SERVER_LOG="${TMPDIR:-/tmp}/portfolio-rank-e2e.log"
 [ "${E2E_SKIP_BUILD:-}" = 1 ] || npx next build
-node node_modules/next/dist/bin/next start -p "$PORT" > "${TMPDIR:-/tmp}/portfolio-rank-e2e.log" 2>&1 &
+node node_modules/next/dist/bin/next start -p "$PORT" > "$E2E_SERVER_LOG" 2>&1 &
 server=$!
-trap 'kill $server 2>/dev/null || true; rm -f "$DB"*' EXIT
+trap 'kill $server 2>/dev/null || true; rm -f "$DB"*; rm -rf "$GRADER_TEST_SHOTS_DIR"' EXIT
 node --test --test-concurrency=1 "tests/*.test.mjs"
