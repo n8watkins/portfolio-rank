@@ -1,11 +1,14 @@
 import type { NextConfig } from "next";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
-// Defense-in-depth response headers applied to every route. HSTS is not set
-// here (nor by the Cloudflare zone today); these cover clickjacking, MIME sniffing, referrer leakage, and a
+// Defense-in-depth response headers applied to every route: HSTS (the site is
+// HTTPS-only), clickjacking, MIME sniffing, referrer leakage, and a
 // baseline CSP. The CSP is deliberately permissive on images (we embed remote
 // screenshots/og-images and mShots) but locks scripts to same-origin.
 const securityHeaders = [
+  // A year of HTTPS-only, for this host and anything under it. Not preloaded:
+  // that is a separate, hard-to-undo decision for the n8builds.dev zone.
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -32,6 +35,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Browser source maps only for the deploy that uploads them to Sentry; the
+  // deploy deletes them before publishing, so they're never public.
+  productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

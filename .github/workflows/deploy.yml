@@ -34,6 +34,13 @@ jobs:
       # sets the DSN, so local, CI and test builds send nothing.
       NEXT_PUBLIC_SENTRY_DSN: https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136
       NEXT_PUBLIC_SENTRY_RELEASE: ${{ github.sha }}
+      # Readable browser stack traces in Sentry: with the SENTRY_AUTH_TOKEN
+      # secret and the SENTRY_ORG / SENTRY_PROJECT repository variables set,
+      # the build emits source maps, uploads them and deletes them before the
+      # deploy. Without them, nothing changes.
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
       - uses: actions/checkout@v7
 
@@ -44,8 +51,29 @@ jobs:
 
       - run: npm ci
 
+      # Additive schema changes (lib/schema.mjs) land before the code that
+      # needs them (and before the build prerenders from the database),
+      # instead of on a live request.
+      - name: Migrate the database
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
+        run: node scripts/migrate.mjs
+
       - name: Build
-        run: npm run build:worker
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then
+            export SENTRY_UPLOAD_SOURCEMAPS=1
+          fi
+          npm run build:worker
+
+      - name: Upload source maps to Sentry
+        if: env.SENTRY_AUTH_TOKEN != '' && env.SENTRY_ORG != '' && env.SENTRY_PROJECT != ''
+        run: |
+          npx -y @sentry/cli@3.8.2 sourcemaps inject .open-next/assets/_next/static
+          npx -y @sentry/cli@3.8.2 sourcemaps upload --release "$NEXT_PUBLIC_SENTRY_RELEASE" .open-next/assets/_next/static
+
+      # Never publish source maps (they'd expose the original source).
+      - name: Remove source maps from the published assets
+        run: find .open-next/assets -name '*.map' -delete
 
       - name: Waiting for setup
         if: env.CLOUDFLARE_API_TOKEN == ''
