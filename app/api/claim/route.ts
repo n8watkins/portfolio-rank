@@ -4,6 +4,8 @@ import { BASE_ELO, eloUpdate, pairKey } from "@/lib/elo";
 import { db, ensureSchema } from "@/lib/db";
 import { readAnonId } from "@/lib/matchup";
 import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, accountTooNew, getRater } from "@/lib/rater";
+import { mergeGuest } from "@/lib/games/merge.mjs";
+import { gamesEnabled } from "@/lib/games/server";
 
 // Fold a visitor's practice votes into their signed-in identity: each becomes
 // an official human vote and moves ELO, except pairs they've already voted on
@@ -22,11 +24,20 @@ import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, accountTooNew, getRater
 //   claimed, so undo reverts it exactly.
 // Idempotent: converted votes stop matching rater_type='anon', and the spent
 // cookie is cleared at the end.
+// With GAMES_V2 on, the guest's quizzes, badges and badge counters move to
+// the account first (lib/games/merge.mjs).
 export async function POST() {
   await ensureSchema();
   const rater = await getRater();
   if (rater.type !== "human") {
     return NextResponse.json({ error: "signin_required" }, { status: 401 });
+  }
+
+  // Games progress (quizzes, badges) moves to the account whatever its age
+  // (lib/games/merge.mjs); the cookie stays for the votes below.
+  if (gamesEnabled()) {
+    const guest = readAnonId((await cookies()).get(ANON_COOKIE)?.value);
+    if (guest) await mergeGuest(db(), { guest: `anon:${guest}`, account: rater.id });
   }
 
   // Leaves the practice votes (and the cookie) for when the account is old enough.

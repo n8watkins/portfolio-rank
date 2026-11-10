@@ -2,6 +2,9 @@ import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
 import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
 
+// A site its verified owner removed (lib/games/claims.mjs ownerAction).
+const OWNER_REMOVED = "removed_at IS NOT NULL";
+
 const known = new Set((feed as { url: string }[]).map((p) => p.url));
 
 /** True if the URL is an actual portfolio from the list. */
@@ -23,6 +26,8 @@ let hiddenCache: { at: number; urls: Promise<Set<string>> } | null = null;
  *   Captures are retried with backoff, and a passing health check shows the
  *   site again, so one transient error no longer hides a site for good.
  * "Suspect" sites stay visible: one failed check proves nothing.
+ * - removed by their verified owner (lib/games/claims.mjs), until the
+ *   weekly exclusions pull request takes them off the list for good.
  * The rule itself is lib/hidden.mjs, shared with the ranking recompute.
  */
 export async function hiddenUrls(): Promise<Set<string>> {
@@ -30,7 +35,9 @@ export async function hiddenUrls(): Promise<Set<string>> {
   if (hiddenCache && now - hiddenCache.at < HIDDEN_TTL_MS) return hiddenCache.urls;
   const urls = (async () => {
     await ensureSchema();
-    const res = await db().execute(`SELECT url FROM portfolios WHERE ${HIDDEN_WHERE}`);
+    const res = await db().execute(
+      `SELECT url FROM portfolios WHERE ${HIDDEN_WHERE} UNION SELECT url FROM portfolio_owner WHERE ${OWNER_REMOVED}`
+    );
     return new Set(res.rows.map((r) => String(r.url)));
   })();
   const entry = { at: now, urls };
@@ -48,6 +55,9 @@ export async function hiddenUrls(): Promise<Set<string>> {
  */
 export async function isHidden(url: string): Promise<boolean> {
   await ensureSchema();
-  const res = await db().execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND (${HIDDEN_WHERE})`, args: [url] });
+  const res = await db().execute({
+    sql: `SELECT 1 FROM portfolios WHERE url = ?1 AND (${HIDDEN_WHERE}) UNION ALL SELECT 1 FROM portfolio_owner WHERE url = ?1 AND ${OWNER_REMOVED}`,
+    args: [url],
+  });
   return res.rows.length > 0;
 }

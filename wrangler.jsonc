@@ -56,7 +56,11 @@
     // Sites the nightly checks re-capture (oldest first) to find redesigns.
     "NIGHTLY_REFRESH": "150",
     // The GitHub login allowed to read /api/admin/* (the admin quota view).
-    "ADMIN_GITHUB_LOGIN": "n8watkins"
+    "ADMIN_GITHUB_LOGIN": "n8watkins",
+    // Games, badges, claims, live stats and report downloads (lib/games):
+    // every one of their routes answers 404 until this is "true", which
+    // happens with the redesign.
+    "GAMES_V2": "false"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT.
   },
@@ -119,7 +123,8 @@
         "RUBRIC_REGRADE": "false",
         "GEMINI_RPM": "8",
         "NIGHTLY_REFRESH": "150",
-        "ADMIN_GITHUB_LOGIN": "n8watkins"
+        "ADMIN_GITHUB_LOGIN": "n8watkins",
+        "GAMES_V2": "false"
       },
       // No crons at all: the end-of-day run, the people queue and model watch
       // all call Gemini.
