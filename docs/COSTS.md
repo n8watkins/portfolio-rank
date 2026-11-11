@@ -216,3 +216,11 @@ At the cap outside claims are cut, exactly as when `TAVILY_API_KEY` is missing.
 The credit is given back when Tavily answers with an error.
 The month's use and the cap show in `GET /api/admin/quota` as `tavily`.
 The weekly cap (40 searches) and the per-post cap (10) still apply on top of the monthly one.
+
+## Pexels
+
+The blog image library uses Pexels as a licensed stock source (one search per image slot, at most 2 per post).
+The account is nathancwatkins23@gmail.com, with one API key, stored in pass as `portfolio-rank/PEXELS_API_KEY` (also set on the Worker as `PEXELS_API_KEY`).
+Pexels is free and its limits are 200 requests an hour and 20,000 a month.
+Expected use is about 16 searches a month (at most 2 searches per post, 2 posts a week), well under both limits.
+The engine will count Pexels searches per month and show them on the admin quota page, like Tavily.
