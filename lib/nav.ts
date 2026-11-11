@@ -26,8 +26,7 @@ export const ROUTES: Record<
   play: "/rank",
   faceoff: "/rank",
   guess: null, // "/play?mode=guess"
-  // "/browse" when the grid moves off home.
-  browse: "/#browse",
+  browse: "/browse",
   blog: null, // "/blog"
   polls: null, // "/polls"
   // "/about" and "/about#grading" when the about page ships.
@@ -35,7 +34,7 @@ export const ROUTES: Record<
   grading: "/how",
   // "/grade" when the grade pages ship (with GRADER_ENABLED on).
   grade: null,
-  me: null, // "/me", the "Your portfolio" page
+  me: "/me",
   removed: "/removed",
   profile: "/profile",
   votes: "/votes",
