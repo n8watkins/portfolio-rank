@@ -1,51 +1,48 @@
 import type { Metadata } from "next";
-import { ArrowRight, Bot, CircleCheck, Code2, Swords, Users } from "lucide-react";
+import { ArrowRight, Bot, ChevronRight, CircleCheck, Code2, Swords, Trophy } from "lucide-react";
 import { TierBadge } from "@/components/ui/badges";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
-import { VERDICT } from "@/lib/grader/present.mjs";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 
-// How grading works, in plain words: the tiers, what "top X%" means, what
-// is checked and how people's votes combine with the grade. The lists come
-// from the rubric (pipeline/rubric.mjs) and the report's own wording
-// (lib/grader/present.mjs), so this page follows them when they change.
+// How grading works, kept short: the tiers, what "top X%" means, what is
+// checked and how votes combine. The criteria come from the rubric
+// (pipeline/rubric.mjs), so this page follows it when it changes.
 
 export const metadata: Metadata = {
   title: "How grading works - PortfolioRank",
-  description:
-    "What the S, A, B, C and D grades mean, what a top 10% place says, what code checks and what the AI judges, and how people's votes move the ranking.",
+  description: "What S, A, B, C and D mean, what a top 10% place says, what is checked and how people's votes move the ranking.",
 };
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
-const TIERS: { tier: keyof typeof VERDICT; name: string; note: string }[] = [
-  { tier: "S", name: "Exceptional", note: "Rare on purpose: about one portfolio in twenty." },
-  { tier: "A", name: "Strong", note: "Would stand out in most hiring pipelines." },
-  { tier: "B", name: "Solid", note: "The most common grade. Usually one or two fixes from an A." },
-  { tier: "C", name: "Weak", note: "The page doesn't yet make a case for you." },
-  { tier: "D", name: "Needs work", note: "A visitor leaves without knowing who you are." },
+const TIERS = [
+  { tier: "S", name: "Exceptional", note: "About 1 in 20." },
+  { tier: "A", name: "Strong", note: "Stands out." },
+  { tier: "B", name: "Solid", note: "The most common grade." },
+  { tier: "C", name: "Weak", note: "Works, says little." },
+  { tier: "D", name: "Needs work", note: "Hard to tell who you are." },
 ];
 
+/** The bands a report names, best first: `of` is the band's share in twentieths, drawn as a little bar. */
 const BANDS = [
-  { band: "Top 5%", meaning: "Fewer than 1 in 20 graded portfolios rank above it." },
-  { band: "Top 10%", meaning: "Ahead of nine in ten." },
-  { band: "Top 25%", meaning: "Ahead of three in four." },
-  { band: "Top half", meaning: "Ahead of most." },
-  { band: "Below that", meaning: "Room to climb: the report lists the three fixes worth the most." },
+  { band: "Top 5%", of: 1, note: "1 in 20" },
+  { band: "Top 10%", of: 2, note: "1 in 10" },
+  { band: "Top 25%", of: 5, note: "1 in 4" },
+  { band: "Top half", of: 10, note: "1 in 2" },
 ];
 
-// The facts that count, in the report's own words where it has them.
+// The facts that count, in short words.
 const FACT_NAMES: Record<string, string> = {
-  contact: "A way to contact you",
-  resume: "A resume or CV link",
-  github: "A GitHub link",
-  project_links: "Project and demo links that load",
-  own_domain: "Your own domain, not a free subdomain",
-  fresh_footer: "A footer year that isn't years old",
-  original: "Not a known template",
+  contact: "Contact",
+  resume: "Resume",
+  github: "GitHub",
+  project_links: "Working project links",
+  own_domain: "Own domain",
+  fresh_footer: "Up-to-date footer",
+  original: "Not a template",
 };
 
 const pct = (w: number) => `${Math.round(w * 100)}%`;
@@ -60,9 +57,8 @@ export default function GradingPage() {
           <h1 id="grading" className="rise mt-2 text-4xl font-bold tracking-tight text-balance sm:text-5xl" style={d(40)}>
             How grading works
           </h1>
-          <p className="rise mx-auto mt-4 max-w-2xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Every portfolio gets a grade from S to D and a place among all graded portfolios. Code checks the facts, an AI judges how the page looks and reads, and
-            people&apos;s votes in face-offs have the last word on the leaderboard.
+          <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
+            Code checks the facts. AI judges the look and the words. People&apos;s votes decide the leaderboard.
           </p>
         </div>
       </section>
@@ -71,49 +67,39 @@ export default function GradingPage() {
         {/* The tiers */}
         <section aria-labelledby="tiers" className="mt-12">
           <SectionHeader id="tiers" eyebrow="The grade" title="Five tiers, S to D" className="mb-5" />
-          <ul className="card divide-y divide-edge">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-5 sm:gap-3">
             {TIERS.map(({ tier, name, note }) => (
-              <li key={tier} className="flex items-center gap-4 p-4 sm:p-5">
+              <li key={tier} className="card flex items-center gap-3 px-4 py-3 sm:flex-col sm:items-start sm:p-4">
                 <TierBadge tier={tier} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">
-                    {tier}: {name}
-                  </p>
-                  <p className="mt-0.5 text-sm text-mute">
-                    {VERDICT[tier]} {note}
-                  </p>
-                </div>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{name}</span>
+                  <span className="block text-sm text-mute">{note}</span>
+                </span>
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-mute">
-            The tier is the AI&apos;s overall call on the page, made with the measured facts in front of it. There is no S+: an S already means the very top.
-          </p>
+          <p className="mt-3 text-sm text-mute">The AI makes the call, with the facts in front of it. No S+: S is the top.</p>
         </section>
 
         {/* Top X% */}
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="space-y-3 text-[15px] leading-relaxed text-mute">
-              <p>
-                A report also says where the portfolio lands among every portfolio graded so far: <strong className="text-ink">Top 10%</strong> means only one in
-                ten graded portfolios placed higher.
-              </p>
-              <p>
-                The tier sets the starting place and the AI&apos;s five scores order portfolios within a tier, so two B grades can sit far apart. The number
-                moves as more portfolios are graded.
-              </p>
-            </div>
-            <dl className="card divide-y divide-edge">
-              {BANDS.map(({ band, meaning }) => (
-                <div key={band} className="flex items-baseline gap-4 px-4 py-3 sm:px-5">
-                  <dt className="w-24 shrink-0 font-semibold tabular-nums">{band}</dt>
-                  <dd className="text-sm text-mute">{meaning}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+          <p className="text-[15px] text-mute">
+            Only 1 in 10 graded portfolios placed higher. Tier first, then the AI&apos;s scores break ties.
+          </p>
+          <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {BANDS.map((b) => (
+              <li key={b.band} className="card p-4">
+                <span className="block text-lg font-bold tabular-nums">{b.band}</span>
+                <span className="mt-2 flex gap-0.5" aria-hidden>
+                  {Array.from({ length: 20 }, (_, i) => (
+                    <span key={i} className={`h-2 flex-1 rounded-full ${i < b.of ? "bg-fill" : "bg-edge"}`} />
+                  ))}
+                </span>
+                <span className="mt-1.5 block text-sm text-mute">{b.note}</span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         {/* What's checked */}
@@ -122,12 +108,11 @@ export default function GradingPage() {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">
-                <Code2 className="h-4 w-4 text-mute" aria-hidden /> Checked by code
+                <Code2 className="h-4 w-4 text-mute" aria-hidden /> Code: yes or no
               </h3>
-              <p className="mt-1 text-sm text-mute">Yes or no, the same for everyone. They are what a hiring manager looks for first.</p>
-              <ul className="mt-4 grid gap-2.5 text-sm">
+              <ul className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5 text-sm">
                 {facts.map((c) => (
-                  <li key={c.id} className="flex items-center gap-2.5">
+                  <li key={c.id} className="flex items-center gap-2">
                     <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden />
                     {FACT_NAMES[c.id] ?? c.name}
                   </li>
@@ -136,50 +121,52 @@ export default function GradingPage() {
             </div>
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">
-                <Bot className="h-4 w-4 text-mute" aria-hidden /> Judged by AI, 1 to 5
+                <Bot className="h-4 w-4 text-mute" aria-hidden /> AI: 1 to 5, from a screenshot and the text
               </h3>
-              <p className="mt-1 text-sm text-mute">Gemini reads one screenshot of the top of the page and its text.</p>
-              <ul className="mt-4 grid gap-3 text-sm">
+              <ul className="mt-4 grid gap-2.5 text-sm">
                 {AI_CRITERIA.map((c) => (
-                  <li key={c.id}>
-                    <span className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">{c.name}</span>
-                      <span className="shrink-0 text-xs text-mute tabular-nums">{pct(c.weight)} of the score</span>
+                  <li key={c.id} className="flex items-center gap-3">
+                    <span className="min-w-0 flex-1 font-medium">{c.name}</span>
+                    <span className="h-1.5 w-24 overflow-hidden rounded-full bg-edge" aria-hidden>
+                      <span className="block h-full rounded-full bg-fill" style={{ width: `${(c.weight / 0.3) * 100}%` }} />
                     </span>
-                    <span className="mt-0.5 block text-mute">{c.what}</span>
+                    <span className="w-9 shrink-0 text-right text-xs text-mute tabular-nums">{pct(c.weight)}</span>
                   </li>
                 ))}
               </ul>
             </div>
           </div>
-          <p className="mt-3 text-sm text-mute">
-            The AI judges how a page looks and reads, not whether the projects or the code behind them are good. A grade describes the page, not the developer.
-          </p>
+          <p className="mt-3 text-sm text-mute">A grade describes the page, not the developer.</p>
         </section>
 
         {/* People's votes */}
         <section aria-labelledby="votes" className="mt-14">
           <SectionHeader id="votes" eyebrow="The ranking" title="How people's votes combine" className="mb-5" />
-          <ol className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <ol className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
             {[
-              { Icon: Bot, title: "The grade sets the start", body: "A new portfolio starts where its grade puts it: an A starts above a B. Until people vote, that is all the ranking knows." },
-              { Icon: Swords, title: "Face-offs move it", body: "Each face-off vote says which of two portfolios is better. Beating one rated higher moves a portfolio more than beating one rated lower." },
-              { Icon: Users, title: "People count most", body: "The AI also votes, but a person's vote counts twice as much. The more votes, the surer the place: the leaderboard shows how settled each one is." },
+              { Icon: Bot, title: "Grade", body: "Sets the start" },
+              { Icon: Swords, title: "Face-offs", body: "Move it up or down" },
+              { Icon: Trophy, title: "Leaderboard", body: "Settles with more votes" },
             ].map(({ Icon, title, body }, i) => (
-              <li key={title} className="card p-5">
-                <span className="flex items-center gap-2.5">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-fill text-sm font-bold text-on-fill">{i + 1}</span>
-                  <Icon className="h-4 w-4 text-mute" aria-hidden />
+              <li key={title} className="contents">
+                {i > 0 && <ChevronRight className="mx-auto h-5 w-5 self-center text-mute max-md:rotate-90" aria-hidden />}
+                <span className="card flex items-center gap-3 p-4">
+                  <span className="icon-tile h-10 w-10 shrink-0">
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span>
+                    <span className="block font-semibold">{title}</span>
+                    <span className="block text-sm text-mute">{body}</span>
+                  </span>
                 </span>
-                <p className="mt-3 font-semibold">{title}</p>
-                <p className="mt-1 text-sm text-mute">{body}</p>
               </li>
             ))}
           </ol>
-          <p className="mt-3 text-sm text-mute">
-            Your report&apos;s Top X% compares grades only, so it can differ from the leaderboard, where votes count. Changed your site? Grade it again after{" "}
-            {REGRADE_COOLDOWN_DAYS} days.
-          </p>
+          <ul className="mt-4 grid gap-1.5 text-sm text-mute">
+            <li>A person&apos;s vote counts twice an AI vote.</li>
+            <li>Beating a higher-ranked portfolio moves you more.</li>
+            <li>Your report&apos;s Top X% uses grades only. Re-grade after {REGRADE_COOLDOWN_DAYS} days.</li>
+          </ul>
         </section>
 
         <div className="mt-14 flex flex-wrap items-center justify-center gap-3">
