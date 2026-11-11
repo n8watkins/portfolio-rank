@@ -7,7 +7,6 @@ import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { useSignIn } from "@/components/SignInModal";
 import { SHELL_SIGN_IN } from "@/components/shell/AccountMenu";
-import { ThemeChooser } from "@/components/shell/ThemeToggle";
 
 type Tab = { key: NavKey; href: string | null; label: string; Icon: typeof Trophy };
 
@@ -138,9 +137,6 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
                 );
               })}
           </ul>
-          <div className="mt-3 border-t border-edge pt-3">
-            <ThemeChooser />
-          </div>
         </div>
       </dialog>
     </>

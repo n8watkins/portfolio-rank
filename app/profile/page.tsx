@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "My profile - PortfolioRank",
+  // Personal: never in search results.
+  robots: { index: false },
 };
 
 const byUrl = new Map((feed as Portfolio[]).map((p) => [p.url, p]));
