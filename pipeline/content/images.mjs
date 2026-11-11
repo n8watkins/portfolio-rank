@@ -127,7 +127,7 @@ async function pexels(query, { key, fetchImpl, page = 1 }) {
 async function illustrations(prompt, { ai, n }) {
   const out = [];
   for (let i = 0; i < n; i++) {
-    const r = await ai.run(FLUX_MODEL, { prompt: `${prompt}. Flat vector illustration, dark background, amber and grey accents, no text, no letters, no logos, no real people.`, steps: 4, seed: Math.floor(Math.random() * 1e9) });
+    const r = await ai.run(FLUX_MODEL, { prompt: `${prompt}. Flat vector illustration, dark background, amber and grey accents, no text, no letters, no logos, no real people.`, steps: 4 });
     if (r?.image) out.push({ source: "workers-ai", base64: r.image, mime: "image/jpeg" });
   }
   return out;
