@@ -558,7 +558,7 @@ test("images: seeded bad images are rejected; people never in the hero; no keys 
 
   // Illustrations: a fake Workers AI; the review rejects every candidate (garbled text), so the slot falls back.
   let generated = 0;
-  const ai = { run: async () => (generated++, { image: Buffer.from("jpeg").toString("base64") }) };
+  const ai = { run: async (_model, input) => (assert.deepEqual(Object.keys(input).sort(), ["prompt", "steps"], "flux-1-schnell rejects other fields such as seed (error 5006)"), generated++, { image: Buffer.from("jpeg").toString("base64") }) };
   const slots = [
     { slot: "hero", purpose: "p", kind: "illustration", prompt: "a desk", alt: "a" },
     { slot: "inline-1", purpose: "p", kind: "illustration", prompt: "a desk", alt: "a" },
