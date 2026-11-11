@@ -79,16 +79,32 @@ test("the header's settings menu sets System, Light or Dark, applies at once and
   await gear.click();
   const menu = page.getByRole("menu", { name: "Settings" });
   await menu.waitFor();
-  // Focus starts on the first choice; the current one is checked.
+  // Theme is one row; Right opens its submenu on the current choice.
+  const row = menu.getByRole("menuitem", { name: /^Theme/ });
+  assert.ok(await row.evaluate((el) => el === document.activeElement));
+  assert.equal(await menu.getByRole("menuitemradio").count(), 0);
+  await page.keyboard.press("ArrowRight");
+  const sub = page.getByRole("menu", { name: "Theme" });
+  await sub.waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "System");
-  assert.equal(await menu.getByRole("menuitemradio", { name: "System" }).getAttribute("aria-checked"), "true");
-  await menu.getByRole("menuitemradio", { name: "Light" }).click();
+  assert.equal(await sub.getByRole("menuitemradio", { name: "System" }).getAttribute("aria-checked"), "true");
+  // On a wide screen it opens beside the menu, not inside it.
+  const [m, s] = [await menu.boundingBox(), await sub.boundingBox()];
+  assert.ok(s.x + s.width <= m.x + 1, JSON.stringify({ m, s }));
+  // Left goes back to the row.
+  await page.keyboard.press("ArrowLeft");
+  assert.ok(await row.evaluate((el) => el === document.activeElement));
+  await row.click();
+  await sub.getByRole("menuitemradio", { name: "Light" }).click();
   assert.equal(await theme(page), "light");
   // The menu stays open so the change is seen in place.
   assert.equal(await menu.getByRole("menuitemradio", { name: "Light" }).getAttribute("aria-checked"), "true");
   const lightBg = await bg(page);
   assert.notEqual(lightBg, darkBg);
   assert.equal(await menu.getByRole("menuitem", { name: "All settings" }).getAttribute("href"), "/settings");
+  // Escape steps back to the row, then closes the menu.
+  await page.keyboard.press("Escape");
+  assert.ok(await row.evaluate((el) => el === document.activeElement));
   await page.keyboard.press("Escape");
   await menu.waitFor({ state: "detached" });
   assert.ok(await gear.evaluate((el) => el === document.activeElement));
@@ -100,6 +116,7 @@ test("the header's settings menu sets System, Light or Dark, applies at once and
   assert.equal(await bg(page), lightBg);
 
   await gear.click();
+  await row.click();
   await menu.getByRole("menuitemradio", { name: "Dark" }).click();
   assert.equal(await theme(page), "dark");
   await menu.getByRole("menuitemradio", { name: "System" }).click();
@@ -155,8 +172,15 @@ test("phones: a bottom tab bar with More, which holds settings and sign-in; the 
   await menu.waitFor();
   const box = await menu.boundingBox();
   assert.ok(box.x >= 0 && box.x + box.width <= 390, JSON.stringify(box));
-  await menu.getByRole("menuitemradio", { name: "Dark" }).click();
+  // On a phone the theme choices open inline, under their row.
+  await menu.getByRole("menuitem", { name: /^Theme/ }).click();
+  const sub = page.getByRole("menu", { name: "Theme" });
+  await sub.waitFor();
+  const s = await sub.boundingBox();
+  assert.ok(s.x >= box.x && s.x + s.width <= box.x + box.width, JSON.stringify({ box, s }));
+  await sub.getByRole("menuitemradio", { name: "Dark" }).click();
   assert.equal(await theme(page), "dark");
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
   // Sign in from the sheet opens the site's sign-in dialog.
@@ -186,9 +210,9 @@ test("signed in: the avatar opens an account menu that works from the keyboard",
   const menu = page.getByRole("menu", { name: "Account" });
   await menu.waitFor();
   const items = menu.getByRole("menuitem");
-  assert.deepEqual((await items.allTextContents()).map((t) => t.trim()), ["Profile, likes and lists", "My votes", "All settings", "Sign out"]);
-  // The theme is in the account menu too.
-  assert.equal(await menu.getByRole("menuitemradio").count(), 3);
+  assert.deepEqual((await items.allTextContents()).map((t) => t.trim()), ["Profile, likes and lists", "My votes", "ThemeSystem", "All settings", "Sign out"]);
+  // The theme is one row, its choices in a submenu.
+  assert.equal(await menu.getByRole("menuitemradio").count(), 0);
   // Focus starts on the first item; arrows wrap, Home and End jump.
   const focused = () => page.evaluate(() => document.activeElement?.textContent?.trim());
   assert.equal(await focused(), "Profile, likes and lists");

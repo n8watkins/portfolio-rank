@@ -20,6 +20,24 @@ Questions or requests: nate@n8builds.dev.
   I don't store your IP address in PortfolioRank's database.
   Where the site limits how often a network can do something (poll votes, and later grade requests), it stores only a one-way hash of the address, never the address itself, and deletes it within 30 days.
 
+## Cookies and browser storage
+
+There is no cookie banner because nothing here tracks you: every cookie is needed for something you asked for.
+The same list is on the site's Settings page, which can also forget your saved preferences.
+
+Cookies:
+
+- **Sign-in session**: keeps you signed in, only after you sign in with GitHub, plus two short-lived helpers used during sign-in.
+- **Browser id**: a random, signed id so a vote, poll answer or quiz counts once, set the first time you vote, play or grade.
+- **Your reports**: which grade reports this browser asked for, so only you see a report's owner tools.
+- **Print pass**: a one-hour pass to print a portfolio's report.
+- **Face-off intro seen**: so the how-to-play card doesn't show again.
+
+Saved only in your browser (local storage), never sent to the site: your theme (only if you pick Light or Dark), the auto-open setting, whether the face-off shows scores, and which reports already celebrated.
+A few notes last only while the tab is open, such as whether the sign-in reminder was shown, and, if you grade with your own Gemini key, that key until the grade is done.
+
+The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.
+
 ## If you vote without signing in
 
 You get a few practice votes before signing in.

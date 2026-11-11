@@ -3,6 +3,7 @@ import { cached } from "@/lib/cache";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, shotBases } from "@/lib/shots";
 import { hiddenUrls } from "@/lib/roster";
+import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
@@ -197,6 +198,8 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
     { key: "portfolios", label: "Portfolios listed", value: n(listed), tone: 1 },
+    // Beside it, the people who listed them (the community list's contributors).
+    { key: "contributors", label: "Contributors to the list", value: CONTRIBUTOR_COUNT_LABEL, tone: 3 },
     // The same count as the AI ranks on this page (listed, graded, not hidden).
     { key: "graded", label: "Graded by AI", value: n(pool.length), tone: 2 },
     site.ownDomainPct == null ? null : { key: "own", label: "On their own domain", value: `${site.ownDomainPct}%`, tone: 4 },

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Check, History, LogOut, Monitor, Moon, Settings, Sparkles, Sun, User } from "lucide-react";
+import { Check, ChevronRight, History, LogOut, Monitor, Moon, Settings, Sparkles, Sun, User } from "lucide-react";
 import { useSignIn, type SignInPrompt } from "@/components/SignInModal";
 import { ROUTES, type PrimaryAction } from "@/lib/nav";
 import { useClientSession, type ClientSession } from "@/lib/session-client";
@@ -29,7 +29,8 @@ export function Avatar({ user, className = "h-9 w-9 text-sm" }: { user: ClientSe
   );
 }
 
-const ITEMS = "[role=menuitem],[role=menuitemradio]";
+// The menu's own items; the theme submenu's choices (data-sub) move on their own keys.
+const ITEMS = "[role=menuitem]:not([data-sub]),[role=menuitemradio]:not([data-sub])";
 const item =
   "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none transition hover:bg-raised focus-visible:bg-raised";
 const panel = "absolute right-0 top-11 z-30 w-60 rounded-xl border border-edge bg-card p-1.5 shadow-xl shadow-black/20";
@@ -52,6 +53,8 @@ function useMenu() {
       if (!wrap.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
+      // A submenu handles its own keys (React listens on the document too, so stopping propagation can't keep them from here).
+      if (e.key !== "Tab" && (e.target as HTMLElement | null)?.closest?.("[data-submenu]")) return;
       const list = items();
       const i = list.indexOf(document.activeElement as HTMLElement);
       if (e.key === "Escape") {
@@ -98,24 +101,95 @@ function useMenu() {
 
 const THEME_ICON: Record<Theme, typeof Sun> = { system: Monitor, light: Sun, dark: Moon };
 
-/** System, Light and Dark as menu radios; choosing one keeps the menu open, so the change is seen in place. */
+const wide = () => window.matchMedia("(min-width: 640px)").matches;
+
+/**
+ * One "Theme" row that opens a submenu: a panel beside the menu on wider
+ * screens (hover or click), the three choices inline under the row on
+ * phones. Choosing keeps the menu open, so the change is seen in place.
+ * Keys: Right, Enter or Space open it; Left or Escape go back to the row.
+ */
 function ThemeItems() {
   const [theme, set] = useTheme();
+  const [open, setOpen] = useState(false);
+  const row = useRef<HTMLButtonElement>(null);
+  const sub = useRef<HTMLDivElement>(null);
+  const leave = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const radios = () => Array.from(sub.current?.querySelectorAll<HTMLElement>("[role=menuitemradio]") ?? []);
+  const show = (focus: boolean) => {
+    setOpen(true);
+    if (focus) requestAnimationFrame(() => (radios().find((r) => r.getAttribute("aria-checked") === "true") ?? radios()[0])?.focus());
+  };
+  const back = () => {
+    setOpen(false);
+    row.current?.focus();
+  };
+  const Current = THEME_ICON[theme];
   return (
-    <div role="group" aria-labelledby="menu-theme">
-      <p id="menu-theme" className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-mute">
-        Theme
-      </p>
-      {THEMES.map((t) => {
-        const Icon = THEME_ICON[t];
-        return (
-          <button key={t} type="button" role="menuitemradio" aria-checked={theme === t} onClick={() => set(t)} className={item}>
-            <Icon className="h-4 w-4 text-mute" aria-hidden />
-            <span className="flex-1">{THEME_LABEL[t]}</span>
-            {theme === t && <Check className="h-4 w-4 text-accent" aria-hidden />}
-          </button>
-        );
-      })}
+    <div
+      className="relative"
+      onPointerEnter={(e) => {
+        if (e.pointerType !== "mouse" || !wide()) return;
+        clearTimeout(leave.current);
+        show(false);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType !== "mouse" || !wide()) return;
+        leave.current = setTimeout(() => setOpen(false), 250);
+      }}
+    >
+      <button
+        ref={row}
+        type="button"
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // Beside the menu a click only opens (a hover may have already); inline on phones it toggles.
+        onClick={() => (open && !wide() ? setOpen(false) : show(true))}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            show(true);
+          }
+        }}
+        className={item}
+      >
+        <Current className="h-4 w-4 text-mute" aria-hidden />
+        <span className="flex-1">Theme</span>
+        <span className="text-xs text-mute">{THEME_LABEL[theme]}</span>
+        <ChevronRight className={`h-4 w-4 text-mute transition ${open ? "max-sm:-rotate-90" : "max-sm:rotate-90"}`} aria-hidden />
+      </button>
+      {open && (
+        <div
+          ref={sub}
+          data-submenu
+          role="menu"
+          aria-label="Theme"
+          onKeyDown={(e) => {
+            const list = radios();
+            const i = list.indexOf(document.activeElement as HTMLElement);
+            if (e.key === "ArrowLeft" || e.key === "Escape") back();
+            else if (e.key === "ArrowDown") list[(i + 1) % list.length]?.focus();
+            else if (e.key === "ArrowUp") list[(i - 1 + list.length) % list.length]?.focus();
+            else return;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="max-sm:mb-1 max-sm:ml-6 max-sm:border-l max-sm:border-edge max-sm:pl-1.5 sm:absolute sm:right-full sm:top-0 sm:mr-2 sm:w-40 sm:rounded-xl sm:border sm:border-edge sm:bg-card sm:p-1.5 sm:shadow-xl sm:shadow-black/20"
+        >
+          {THEMES.map((t) => {
+            const Icon = THEME_ICON[t];
+            return (
+              <button key={t} type="button" role="menuitemradio" data-sub aria-checked={theme === t} onClick={() => set(t)} className={item}>
+                <Icon className="h-4 w-4 text-mute" aria-hidden />
+                <span className="flex-1">{THEME_LABEL[t]}</span>
+                {theme === t && <Check className="h-4 w-4 text-accent" aria-hidden />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Coffee } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
 import { Wordmark } from "@/components/shell/Wordmark";
+import { CONTRIBUTOR_COUNT_LABEL, PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 
 type Link = { href: string | null; label: string; ext?: boolean };
 
@@ -43,14 +44,14 @@ export function SiteFooter() {
         <div className="max-w-xs">
           <Wordmark />
           <p className="mt-3 text-sm text-mute">
-            The best developer portfolios, ranked by people and AI. List curated by{" "}
+            The best developer portfolios, ranked by people and AI. {PORTFOLIO_COUNT_LABEL} portfolios, listed by{" "}
             <a
               href="https://github.com/emmabostian/developer-portfolios"
               target="_blank"
               rel="noopener noreferrer"
               className="underline decoration-edge-strong underline-offset-4 transition hover:text-ink"
             >
-              Emma Bostian and 1,700+ contributors
+              Emma Bostian and {CONTRIBUTOR_COUNT_LABEL} contributors
             </a>
             .
           </p>
