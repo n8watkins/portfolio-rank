@@ -75,9 +75,9 @@
     // The content engine's kill switch (docs/CONTENT-ENGINE.md): "off",
     // "dry-run" (private drafts only) or "publish"; only the owner sets publish.
     "CONTENT_MODE": "off",
-    // How the content engine writes a post: "single" (one request) or "staged"
-    // (outline, sections, finish; pipeline/content/staged.mjs).
-    "WRITER_MODE": "single"
+    // How the content engine writes a post: "staged" (outline, sections, finish;
+    // pipeline/content/staged.mjs) or "single" (one request).
+    "WRITER_MODE": "staged"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
     // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
@@ -156,9 +156,9 @@
         "GAMES_V2": "false",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         "CONTENT_MODE": "off",
-    // How the content engine writes a post: "single" (one request) or "staged"
-    // (outline, sections, finish; pipeline/content/staged.mjs).
-    "WRITER_MODE": "single"
+    // How the content engine writes a post: "staged" (outline, sections, finish;
+    // pipeline/content/staged.mjs) or "single" (one request).
+    "WRITER_MODE": "staged"
       },
       // No crons at all: the end-of-day run, the people queue and model watch
       // all call Gemini.

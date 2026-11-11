@@ -892,6 +892,7 @@ test("preview: tight type, 60% centred images with captions, the data in a colla
 test("WRITER_MODE: staged or single, single when unset or unknown", () => {
   assert.equal(writerMode("staged"), "staged");
   assert.equal(writerMode(" Single "), "single");
+  assert.equal(DEFAULT_WRITER_MODE, "staged");
   assert.equal(writerMode(undefined), DEFAULT_WRITER_MODE);
   assert.equal(writerMode("turbo"), DEFAULT_WRITER_MODE);
 });

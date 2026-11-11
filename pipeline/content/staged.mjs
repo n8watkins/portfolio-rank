@@ -17,7 +17,7 @@ import { OPTIONS, RESPONSE_SCHEMA, sheetForWriter, PLACEHOLDER } from "./writer.
 /** Writer modes (the Worker variable WRITER_MODE). */
 export const WRITER_MODES = ["single", "staged"];
 /** The mode used when WRITER_MODE is unset or unknown. */
-export const DEFAULT_WRITER_MODE = "single";
+export const DEFAULT_WRITER_MODE = "staged";
 export class OutlineError extends Error {}
 export const SECTIONS = 3;
 export const SECTIONS_PER_REQUEST = 2;
