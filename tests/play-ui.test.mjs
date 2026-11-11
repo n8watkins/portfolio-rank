@@ -93,7 +93,7 @@ test("face-off: pick with a key, the crowd's lean is announced, Undo takes it ba
   assert.match(await page.getByRole("status").filter({ hasText: "You picked" }).textContent(), /\d+% of people would pick it\. (With the crowd|The underdog|A dead heat for the crowd)\./);
   // The share shows on the cards; the next step has focus.
   assert.equal(await page.getByText("of people would pick this").count(), 2);
-  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Next pair");
+  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Next pair");
   assert.match(await page.getByText(/^\d+ \/ 10$/).textContent(), /^1 \/ 10$/);
   await page.getByRole("button", { name: "Undo" }).click();
   await page.getByText("Undid your last vote. Here's a fresh pair.").first().waitFor();
@@ -128,6 +128,7 @@ test("guess the percentile: no percentile before the guess, five rounds, the end
   await page.getByRole("button", { name: "Random quiz" }).click();
   const quiz = (await (await created).json()).quiz;
   assert.equal(new URL(page.url()).search, `?mode=guess&quiz=${quiz.id}`);
+  assert.equal(quiz.rounds.length, 5);
   for (let k = 0; k < 5; k++) {
     await page.getByRole("button", { name: /^Lock in top \d+%$/ }).waitFor();
     // Nothing on the page tells the answer yet: no Merged/AI/People, no report link.
@@ -146,7 +147,10 @@ test("guess the percentile: no percentile before the guess, five rounds, the end
     await status.waitFor();
     assert.match(await status.textContent(), /You said top (10|75)%/);
     await page.getByRole("link", { name: /^Details for / }).waitFor();
-    await page.getByRole("button", { name: k === 4 ? "See your result" : "Next portfolio" }).click();
+    // The last round leads to the result; every other one to the next portfolio.
+    const last = k === quiz.rounds.length - 1;
+    await page.getByRole("button", { name: last ? "See your result" : "Next portfolio" }).click();
+    if (last) break;
   }
   const head = page.getByRole("heading", { name: /^(\d of 5 within 15 points|Perfect: 5 of 5!)$/ });
   await head.waitFor();
