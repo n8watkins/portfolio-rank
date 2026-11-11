@@ -11,6 +11,7 @@ import * as Sentry from "@sentry/cloudflare";
 import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
+import { healthCheck } from "./health";
 import { markStaging, stagingRobots } from "./staging";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
@@ -36,6 +37,8 @@ const app = openNext as Handler;
 const worker = {
   ...app,
   async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
+    const health = healthCheck(request);
+    if (health) return health;
     const robots = stagingRobots(request, env);
     if (robots) return robots;
     return markStaging((await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx)), env);
