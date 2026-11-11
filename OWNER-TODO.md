@@ -26,17 +26,22 @@ New values go into pass-env with `pass-env set <entry>` in your own terminal; ag
 - [x] `TURSO_AUTH_TOKEN`, `PSI_API_KEY`: replaced 2026-11-04.
 - [x] `AUTH_SECRET` on the Worker; R2, Turso and sync secrets in Actions: set.
 - [ ] `GITHUB_DISPATCH_TOKEN`: fine-grained token for this repo only, Actions read and write; `pass-env set portfolio-rank/GITHUB_DISPATCH_TOKEN`; the agent sends it to the Worker. Lets Cloudflare start the screenshot jobs on time.
-- [ ] Turso login in pass-env, for the recompute and restore commands: `pass-env set portfolio-rank/TURSO_DATABASE_URL` and `pass-env set portfolio-rank/TURSO_AUTH_TOKEN`.
+- [x] Turso login in pass-env, for the recompute and restore commands: `portfolio-rank/TURSO_DATABASE_URL` and `portfolio-rank/TURSO_AUTH_TOKEN` are set and read production (checked read-only 2026-11-10).
 - [ ] Before the public grader launches: a paid Gemini key (billing on this project, with a budget alert).
 - [ ] Optional: `SENTRY_AUTH_TOKEN` secret and `SENTRY_ORG` / `SENTRY_PROJECT` variables for readable error traces.
-- Turnstile keys need nothing from you: the agent can create the widget through Cloudflare.
+- [x] Turnstile widget `PortfolioRank`: created, and `TURNSTILE_SECRET_KEY` is on both Workers.
+  The site key `0x4AAAAAAF8GDSY7kmBfRpoD` goes into `wrangler.jsonc` with the redesign (`DEPLOY.md`, "Grade my portfolio: owner steps", step 1).
 
 ## Commands to run once
 
-- [ ] Staging setup: a Turso login, the staging database filled from last night's backup, and a staging GitHub OAuth app (`DEPLOY.md`, "Setting staging up", steps 1 to 4; an agent can do steps 3 and 5 once the pass entries exist).
+- [x] Staging database: created, filled from the 2026-11-10 backup and wired to the staging Worker and the deploy workflow (`DEPLOY.md`, "Setting staging up", steps 1 to 3 and 5).
+- [ ] Staging GitHub OAuth app (`DEPLOY.md`, "Setting staging up", step 4); an agent then sends the two values to the staging Worker (step 5).
+  Until it exists the staging smoke check fails at sign-in, and that stops production deploys from main.
+- [ ] Refresh the staging copy once a full backup exists (any from 2026-11-11 on): the 2026-11-10 one held only votes, ratings and part of portfolios.
+  Delete `portfolio-rank-staging` in Turso and recreate it with a new token (step 2); an agent runs steps 3 and 5 again.
 
 - [ ] Restore test: restore last night's backup into a scratch database and compare counts (steps in `docs/ASSUMPTIONS.md`, section G, once merged).
-- [ ] Ratings recompute, when the new leaderboard switches on: `pass-env run -- node scripts/recompute-ratings.mjs --read-only`, then without `--read-only`.
+- [ ] Ratings recompute, when the new leaderboard switches on: `pass-env run -e TURSO_DATABASE_URL=portfolio-rank/TURSO_DATABASE_URL -e TURSO_AUTH_TOKEN=portfolio-rank/TURSO_AUTH_TOKEN -- node scripts/recompute-ratings.mjs --read-only`, then without `--read-only`.
 - [ ] Turn on the full re-grade (`RUBRIC_REGRADE=true`) after the 3.5-only nightly runs look clean.
 - [ ] Re-read the Gemini free-tier limits for this project in AI Studio (the 500 a day per model isn't in Google's public docs).
 

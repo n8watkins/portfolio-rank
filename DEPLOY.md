@@ -44,7 +44,8 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 The back end ships switched off (`GRADER_ENABLED` is `"false"` in `wrangler.jsonc`, AUTOMATION.md "Grade my portfolio").
 These steps can be done any time before it is switched on; each one is safe on its own.
 
-1. **Turnstile widget** (an agent couldn't create it: the Cloudflare connection lacks write access to Turnstile).
+1. **Turnstile widget** (done 2026-11-10: the widget `PortfolioRank` exists and `TURNSTILE_SECRET_KEY` is on both Workers; the site key `0x4AAAAAAF8GDSY7kmBfRpoD` goes into `wrangler.jsonc` with the redesign).
+   An agent couldn't create it: the Cloudflare connection lacks write access to Turnstile.
    In the Cloudflare dashboard, open Turnstile, Add widget: name `PortfolioRank`, hostnames `portfoliorank.n8builds.dev`, `staging.portfoliorank.n8builds.dev` and `localhost`, widget mode **Managed**, no pre-clearance.
    The pages render it with `appearance: "interaction-only"` and execution on page load, so most visitors never see it; the actions are `grade`, `grade-email` and `poll-vote`.
    Keep the secret in pass and send it to both Workers without it ever being shown:
@@ -104,7 +105,11 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
 
 ### Setting staging up (once)
 
-Done already: the Worker, its custom domain, the cache bucket and `AUTH_SECRET`.
+Done already: the Worker, its custom domain, the cache bucket, `AUTH_SECRET` and `TURNSTILE_SECRET_KEY`.
+Steps 1 to 3 and the database part of step 5 are done too (2026-11-10): the database holds the backup of 2026-11-10, and the Worker and the repository have the `TURSO_*` and `STAGING_TURSO_*` secrets.
+That backup predates full backups (#72), so it filled only `votes`, `ratings` and eight columns of `portfolios` (no `meta`); refresh the copy from a newer backup ("Keeping the copy fresh" above) to get every table.
+Left: step 4, the `AUTH_GITHUB_*` part of step 5, and step 6.
+Until then the staging smoke check fails at "GitHub sign-in" (no client id), and that failure stops production deploys from main.
 The owner runs the steps that need a Turso login or a new OAuth app; an agent can run the restore and `pass-env pipe` steps once the pass entries exist.
 
 1. Log in to Turso in your own terminal: `! turso auth login`.
@@ -118,8 +123,10 @@ The owner runs the steps that need a Turso login or a new OAuth app; an agent ca
 3. Copy last night's backup into it before anything else touches the database (the restore refuses a database with any table):
    ```bash
    npx wrangler r2 object get portfolio-rank-backups/backups/portfoliorank-$(date -u +%F).json.gz --remote --file=/tmp/pr-staging.json.gz
-   pass-env run -e RESTORE_DATABASE_URL=portfolio-rank/STAGING_TURSO_DATABASE_URL -e RESTORE_AUTH_TOKEN=portfolio-rank/STAGING_TURSO_AUTH_TOKEN -- node scripts/restore-db.mjs /tmp/pr-staging.json.gz
+   pass-env run -e RESTORE_DATABASE_URL=portfolio-rank/STAGING_TURSO_DATABASE_URL -e RESTORE_AUTH_TOKEN=portfolio-rank/STAGING_TURSO_AUTH_TOKEN -e TURSO_DATABASE_URL=portfolio-rank/TURSO_DATABASE_URL -- node scripts/restore-db.mjs /tmp/pr-staging.json.gz
    ```
+   The backup is scheduled for 05:00 UTC (it often starts hours later) and names the file by that UTC date, so before it lands the newest file is the previous day's: change the date in the first command.
+   Passing the production `TURSO_DATABASE_URL` only arms the script's check that refuses to restore into production; nothing connects to it.
    Every table prints `N of N`, and the last line is `restored the snapshot of <time>`.
    Then delete `/tmp/pr-staging.json.gz`: it holds every vote with its rater id.
 4. Create the staging OAuth app at https://github.com/settings/applications/new: name `PortfolioRank (staging)`, homepage `https://staging.portfoliorank.n8builds.dev`, callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, device flow off.
