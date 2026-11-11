@@ -96,6 +96,13 @@ export default function HowPage() {
               consistency) and every AI vote is tagged, so its influence can always
               be separated out.
             </p>
+            <p>
+              What each grade means and what goes into it:{" "}
+              <a href="/grading" className="font-semibold text-accent hover:underline">
+                how grading works
+              </a>
+              .
+            </p>
           </div>
         </article>
 

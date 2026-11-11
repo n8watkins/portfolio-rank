@@ -29,9 +29,9 @@ export const ROUTES: Record<
   browse: "/browse",
   blog: null, // "/blog"
   polls: null, // "/polls"
-  // "/about" and "/about#grading" when the about page ships.
+  // "/about" when the about page ships.
   about: "/how",
-  grading: "/how",
+  grading: "/grading",
   // The grade pages, while "grade my portfolio" is on (GRADER_ENABLED, read
   // at build time by next.config.ts so server and browser agree).
   grade: process.env.NEXT_PUBLIC_GRADER_ENABLED === "true" ? "/grade" : null,

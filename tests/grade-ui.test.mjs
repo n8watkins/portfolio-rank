@@ -13,6 +13,7 @@ import { createClient } from "@libsql/client";
 import { encode } from "@auth/core/jwt";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
+import { CELEBRATIONS, celebrationLevel } from "../lib/grader/present.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -136,6 +137,19 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   await p.getByText("Strong and clear, with a few rough edges.").waitFor();
   assert.match(await p.getByText(/^Top \d+/).first().textContent(), /Top \d+%/);
 
+  // The owner's result is celebrated by its level, once per report in this browser.
+  const stored = JSON.parse(String((await db.execute({ sql: "SELECT report FROM grade_jobs WHERE id = ?", args: [id] })).rows[0].report));
+  const level = celebrationLevel({ tier: "A", percentile: stored.percentile });
+  if (level) {
+    const banner = p.getByRole("status").filter({ hasText: `${CELEBRATIONS[level].title}!` });
+    await banner.waitFor();
+    await banner.getByRole("button", { name: "Dismiss" }).click();
+    await p.reload();
+    await p.getByRole("img", { name: "Tier A" }).first().waitFor();
+    await p.waitForTimeout(800);
+    assert.equal(await banner.count(), 0);
+  }
+
   const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
   assert.match(await hiring.textContent(), /Can they reach you\?.*1 to fix/s);
   assert.match(await hiring.textContent(), /Resume: .*Recruiters look for a resume first.*Fix: Link a PDF/s);
@@ -184,6 +198,10 @@ test("nothing to fix: the calm empty state, and a stranger sees no owner tools",
   await empty.waitFor();
   assert.match(await empty.textContent(), /Every check passes and every score is high/);
   assert.equal(await p.getByRole("region", { name: "Your report" }).count(), 0);
+  // A shared link is not celebrated: that is for the owner.
+  await p.waitForTimeout(800);
+  assert.equal(await p.locator("canvas[data-celebration]").count(), 0);
+  assert.equal(await p.getByRole("status").filter({ hasText: "S tier!" }).count(), 0);
   // No sideways scroll on a phone.
   assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
@@ -272,4 +290,21 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   await owner.page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute("aria-checked") === "false");
   assert.deepEqual([...errors, ...owner.errors], []);
   await owner.context.close();
+});
+
+test("how grading works: the five tiers, the bands, what's checked, how votes combine; in the sitemap", async () => {
+  for (const width of [1440, 390]) {
+    const { page: p, context, errors } = await freshPage(width);
+    await p.goto(`${BASE}/grading`);
+    await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
+    for (const t of ["S", "A", "B", "C", "D"]) await p.getByRole("img", { name: `Tier ${t}` }).first().waitFor();
+    for (const name of ["Five tiers, S to D", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
+    assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+  assert.match(sitemap, /\/grading<\/loc>/);
+  assert.doesNotMatch(sitemap, /\/grade\/[A-Za-z0-9_-]{22}/);
 });

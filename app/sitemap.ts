@@ -3,6 +3,7 @@ import { SITE_URL } from "@/lib/site";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { hiddenUrls } from "@/lib/roster";
+import { graderEnabled } from "@/lib/grader/server";
 
 const BASE = SITE_URL;
 
@@ -16,7 +17,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/top`, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/browse`, changeFrequency: "daily", priority: 0.7 },
     { url: `${BASE}/rank`, changeFrequency: "daily", priority: 0.6 },
+    // Reports (/grade/<id>) and claims are unlisted and never indexed.
+    ...(graderEnabled() ? [{ url: `${BASE}/grade`, changeFrequency: "monthly" as const, priority: 0.7 }] : []),
     { url: `${BASE}/how`, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${BASE}/grading`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/removed`, changeFrequency: "weekly", priority: 0.3 },
   ];
   const hidden = await hiddenUrls().catch(() => new Set<string>());
