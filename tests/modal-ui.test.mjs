@@ -1,4 +1,4 @@
-// Browser tests for the shared dialog (components/Modal.tsx) and the /rank
+// Browser tests for the shared dialog (components/Modal.tsx) and the face-off
 // keyboard shortcuts, against the production build scripts/test-e2e.sh starts.
 // They guard the November 2026 audit's sign-in findings: the dialog used to
 // open trapped inside the header or a card, and arrow keys voted behind it.
@@ -92,14 +92,16 @@ test("/?signin opens the dialog and tidies the address; signed-out profile uses 
   await context.close();
 });
 
-test("/rank arrow keys stand down under a dialog and with modifiers, and don't scroll", async () => {
+test("face-off arrow keys stand down under a dialog and with modifiers, and don't scroll", async () => {
   const { page, context } = await freshPage();
   let votes = 0;
   page.on("request", (r) => r.method() === "POST" && new URL(r.url()).pathname === "/api/rank" && votes++);
+  // The old address still opens the face-off.
   await page.goto(BASE + "/rank");
-  // First visit: the sign-in nudge opens by itself.
-  await page.locator("dialog[open]").waitFor();
+  assert.equal(new URL(page.url()).pathname, "/play");
   await page.getByRole("button", { name: /^Pick / }).first().waitFor();
+  await page.getByRole("banner").getByRole("button", { name: "Sign in" }).click();
+  await page.locator("dialog[open]").waitFor();
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("Escape");
@@ -108,11 +110,11 @@ test("/rank arrow keys stand down under a dialog and with modifiers, and don't s
   await page.keyboard.press("Control+ArrowLeft");
   await page.waitForTimeout(300);
   assert.equal(votes, 0);
-  assert.equal(new URL(page.url()).pathname, "/rank");
+  assert.equal(new URL(page.url()).pathname, "/play");
 
   const before = await page.evaluate(() => scrollY);
   await page.keyboard.press("ArrowLeft");
-  await page.getByRole("status").filter({ hasText: /wins/ }).waitFor();
+  await page.getByRole("status").filter({ hasText: /You picked/ }).waitFor();
   assert.equal(votes, 1);
   assert.equal(await page.evaluate(() => scrollY), before);
   await context.close();

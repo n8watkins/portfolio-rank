@@ -75,6 +75,10 @@ const nextConfig: NextConfig = {
       { source: "/claim", headers: noindex },
     ];
   },
+  // The face-off moved into Play; old links and bookmarks still land on it.
+  async redirects() {
+    return [{ source: "/rank", destination: "/play", permanent: true }];
+  },
 };
 
 export default nextConfig;

@@ -23,7 +23,7 @@ test("an unknown path answers 404 with PortfolioRank's not-found page", async ()
   assert.equal(res.status, 404);
   const html = await res.text();
   assert.match(html, /<h1[^>]*>That page isn(?:'|&#x27;|&#39;)t here\.<\/h1>/);
-  assert.match(html, /href="\/rank"/);
+  assert.match(html, /href="\/play"/);
 });
 
 test("the CSP lets Cloudflare Web Analytics and Sentry through", async () => {

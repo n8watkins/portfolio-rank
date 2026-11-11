@@ -14,7 +14,7 @@ export default function NotFound() {
           <Link href="/" className={primaryButton}>
             Browse portfolios
           </Link>
-          <a href="/rank" className={secondaryButton}>
+          <a href="/play" className={secondaryButton}>
             Rank portfolios
           </a>
         </>
