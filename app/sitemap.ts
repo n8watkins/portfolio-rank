@@ -16,7 +16,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: BASE, changeFrequency: "daily", priority: 1 },
     { url: `${BASE}/top`, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/browse`, changeFrequency: "daily", priority: 0.7 },
-    { url: `${BASE}/rank`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${BASE}/play`, changeFrequency: "daily", priority: 0.6 },
     // Reports (/grade/<id>) and claims are unlisted and never indexed.
     ...(graderEnabled() ? [{ url: `${BASE}/grade`, changeFrequency: "monthly" as const, priority: 0.7 }] : []),
     { url: `${BASE}/how`, changeFrequency: "monthly", priority: 0.5 },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Modal } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
 
@@ -28,10 +28,18 @@ export function AddToListButton({
   url,
   label = "Add to list",
   className = "",
+  buttonClassName,
+  ariaLabel,
+  children,
 }: {
   url: string;
   label?: string;
   className?: string;
+  /** Replaces the trigger's own look (the games' Save button). */
+  buttonClassName?: string;
+  ariaLabel?: string;
+  /** Replaces the trigger's icon and label. */
+  children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -169,11 +177,17 @@ export function AddToListButton({
         onClick={onOpen}
         aria-haspopup="dialog"
         aria-busy={opening}
-        className={`inline-flex items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink ${
-          opening ? "cursor-progress opacity-70" : ""
-        }`}
+        aria-label={ariaLabel}
+        className={`${
+          buttonClassName ??
+          "inline-flex items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-sm font-semibold text-mute transition hover:border-mute hover:text-ink"
+        } ${opening ? "cursor-progress opacity-70" : ""}`}
       >
-        <span aria-hidden>📑</span> {label}
+        {children ?? (
+          <>
+            <span aria-hidden>📑</span> {label}
+          </>
+        )}
       </button>
 
       <Modal open={open && signedIn} onClose={() => setOpen(false)} title="Save to a list">

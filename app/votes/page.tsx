@@ -76,7 +76,7 @@ export default async function VotesPage() {
         {res.rows.length === 0 ? (
           <p className="pb-16 text-sm text-mute">
             No votes yet -{" "}
-            <a href="/rank" className="text-accent underline underline-offset-2">
+            <a href="/play" className="text-accent underline underline-offset-2">
               go rank some portfolios
             </a>
             .

@@ -22,10 +22,11 @@ export const ROUTES: Record<
   string | null
 > = {
   top: "/top",
-  // "/play" when the Play page ships (Face-off and Guess the percentile).
-  play: "/rank",
-  faceoff: "/rank",
-  guess: null, // "/play?mode=guess"
+  play: "/play",
+  faceoff: "/play",
+  // "/play?mode=guess" once GAMES_V2 is on in production: until then the
+  // quiz is hidden and its APIs answer 404 (lib/games/server.ts).
+  guess: null,
   browse: "/browse",
   blog: null, // "/blog"
   polls: null, // "/polls"

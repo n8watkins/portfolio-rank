@@ -8,6 +8,7 @@ import { rateLimit } from "@/lib/polls/store.mjs";
 import { heroOf, shotBases } from "@/lib/shots";
 import { buildPool } from "@/lib/games/pool.mjs";
 import { progress } from "@/lib/games/quiz.mjs";
+import { HIT } from "@/lib/games/pool.mjs";
 
 // Request-side helpers for the games, badges, claims, live stats and report
 // APIs: the GAMES_V2 flag, who is playing, the cached quiz pool and the
@@ -104,7 +105,8 @@ export async function publicQuiz(quiz: { id: string; kind: string; day: string |
     kind: quiz.kind,
     day: quiz.day,
     challenge: `/play?mode=guess&quiz=${encodeURIComponent(quiz.id)}`,
-    hit: 10,
+    /** Points off that still count as a hit (lib/games/pool.mjs HIT). */
+    hit: HIT,
     rounds: quiz.urls.map((url, index) => {
       const p = byUrl.get(url);
       const shot = shots.get(url) ?? null;
