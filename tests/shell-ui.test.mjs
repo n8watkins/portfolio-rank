@@ -31,6 +31,17 @@ async function freshPage(width, height = 900, options = {}) {
   return { page, context, errors };
 }
 
+/** Waits for every finite animation on the page (entrances), never the looping ones. */
+const settled = (page) =>
+  page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => {}))
+    )
+  );
+
 const theme = (page) => page.evaluate(() => document.documentElement.dataset.theme ?? "system");
 const bg = (page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
@@ -186,6 +197,9 @@ test("email sign-up: input and button are separate, side by side when wide, stac
   for (const width of [320, 390, 768, 1440]) {
     const { page, context, errors } = await freshPage(width, 900);
     await page.goto(BASE + "/ui-kit");
+    // Measure the settled layout: mid-way through main's entrance (.page-in, a
+    // fractional translate) a 44px box can measure 43.99997px.
+    await settled(page);
     for (const form of await page.locator("form").filter({ has: page.getByLabel("Your email") }).all()) {
       const input = form.getByLabel("Your email");
       const button = form.getByRole("button", { name: "Subscribe" });
@@ -198,8 +212,7 @@ test("email sign-up: input and button are separate, side by side when wide, stac
       assert.equal(nested, false, `button sits in a bordered wrapper at ${width}px`);
       const i = await input.boundingBox();
       const b = await button.boundingBox();
-      // Rounded: a box mid-way through the page's entrance can measure 43.99997px.
-      assert.ok(Math.round(i.height) >= 44 && Math.round(b.height) >= 44, `44px targets at ${width}px: ${JSON.stringify({ i, b })}`);
+      assert.ok(i.height >= 44 && b.height >= 44, `44px targets at ${width}px: ${JSON.stringify({ i, b })}`);
       const formWidth = (await form.boundingBox()).width;
       if (formWidth >= 384) {
         // Within a pixel: layout lands on half pixels.
