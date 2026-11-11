@@ -2,7 +2,6 @@
 
 import { useCallback, useRef, useState } from "react";
 import { Turnstile, prefetchTurnstile, type TurnstileHandle } from "@/components/ui/Turnstile";
-import { ROUTES } from "@/lib/nav";
 
 /** Where a visitor's own Gemini key waits for its one use (this tab only, never sent to us but for that grade). */
 export const ownKeySlot = (id: string) => `pr-gemini-key:${id}`;
@@ -24,8 +23,8 @@ const FALLBACK: Record<string, string> = {
 
 /**
  * Starts a grade (POST /api/grade): the Turnstile check, the request and its
- * answers in plain words. On success the visitor goes to their portfolio
- * page, which shows the progress. The widget is invisible unless Cloudflare
+ * answers in plain words. On success the visitor goes to the report's page,
+ * which shows the progress. The widget is invisible unless Cloudflare
  * wants an interaction; it loads when the form is first used, never on page
  * load.
  */
@@ -106,7 +105,5 @@ export function useGradeRequest() {
   return { arm, submit, busy, turnstile };
 }
 
-/** After a grade starts (or one is already running for this browser): the visitor's page. */
-export function goToMine() {
-  if (ROUTES.me) location.assign(ROUTES.me);
-}
+/** After a grade starts (or one is already running or recent for this address): its progress and report page. */
+export const reportHref = (id: string) => `/grade/${encodeURIComponent(id)}`;

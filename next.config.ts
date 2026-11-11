@@ -1,5 +1,24 @@
 import type { NextConfig } from "next";
+import { readFileSync } from "node:fs";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+import { parseJsonc } from "./scripts/check-worker-exports.mjs";
+
+// "Grade my portfolio" is switched by the Worker variable GRADER_ENABLED. The
+// shell's links to the grade pages (lib/nav.ts ROUTES.grade) are part of
+// pages prerendered at build time, so the build reads the same switch: the
+// variable when the build environment sets it (the test runs), else
+// wrangler.jsonc's value for the Worker being built (staging or production).
+// Flipping it in wrangler.jsonc ships with a deploy, which rebuilds.
+function graderSwitch(): string {
+  if (process.env.GRADER_ENABLED !== undefined) return /^true$/i.test(process.env.GRADER_ENABLED) ? "true" : "false";
+  try {
+    const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
+    const vars = process.env.NEXT_PUBLIC_SITE_ENV === "staging" ? config.env?.staging?.vars : config.vars;
+    return /^true$/i.test(String(vars?.GRADER_ENABLED ?? "")) ? "true" : "false";
+  } catch {
+    return "false";
+  }
+}
 
 // Defense-in-depth response headers applied to every route: HSTS (the site is
 // HTTPS-only), clickjacking, MIME sniffing, referrer leakage, and a
@@ -45,8 +64,16 @@ const nextConfig: NextConfig = {
   // Browser source maps only for the deploy that uploads them to Sentry; the
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
+  env: { NEXT_PUBLIC_GRADER_ENABLED: graderSwitch() },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // Grade reports are unlisted (shareable by link only) and claims are
+    // personal: never indexed, whatever a page's own metadata says.
+    const noindex = [{ key: "X-Robots-Tag", value: "noindex, nofollow" }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/grade/:path+", headers: noindex },
+      { source: "/claim", headers: noindex },
+    ];
   },
 };
 

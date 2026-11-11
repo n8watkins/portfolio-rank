@@ -1,0 +1,275 @@
+// Browser tests for "grade my portfolio" (app/grade, app/grade/[id], app/claim)
+// against the production build scripts/test-e2e.sh starts with GRADER_ENABLED
+// and GAMES_V2 on. A grade starts from the /grade form for real, with a local
+// stand-in for the portfolio site and GitHub's dispatch API (as
+// tests/grader-api.test.mjs does); the test then finishes it in the database
+// the way the grade workflow would.
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { readFileSync } from "node:fs";
+import { chromium } from "playwright";
+import { createClient } from "@libsql/client";
+import { encode } from "@auth/core/jwt";
+import { AI_CRITERIA } from "../pipeline/rubric.mjs";
+import { buildReport } from "../lib/grader/report.mjs";
+
+const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
+const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
+const MOCK_PORT = Number(process.env.E2E_GRADER_MOCK_PORT ?? 7693);
+const grading = process.env.GRADER_ENABLED === "true";
+const games = process.env.GAMES_V2 === "true";
+const db = createClient({ url: DB_URL, timeout: 10000 });
+const feed = JSON.parse(readFileSync("data/feed.json", "utf8"));
+const RUN = Math.random().toString(36).slice(2, 8);
+// A listed portfolio no other test grades or claims.
+const LISTED = feed[171].url;
+let browser;
+let mock;
+let ipSeq = 1;
+
+const page = (title) => `<!doctype html><html><head><title>${title}</title></head><body>
+<h1>${title}</h1><p>I build calm, fast interfaces.</p>
+<a href="https://github.com/grade-ui">GitHub</a> <a href="mailto:ui@example.com">Email</a>
+<footer>© 2026 ${title}</footer></body></html>`;
+
+before(async () => {
+  mock = http.createServer((req, res) => {
+    const url = new URL(req.url, `http://127.0.0.1:${MOCK_PORT}`);
+    req.resume();
+    req.on("end", () => {
+      if (url.pathname === "/site") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(page("Grade UI Tester"));
+      if (url.pathname.endsWith("/dispatches")) return res.writeHead(200, { "content-type": "application/json" }).end('{"workflow_run_id":1}');
+      res.writeHead(404).end();
+    });
+  });
+  await new Promise((r) => mock.listen(MOCK_PORT, "127.0.0.1", r));
+  for (let i = 0; i < 60; i++) {
+    try {
+      if ((await fetch(BASE + "/api/rank")).ok) break;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  browser = await chromium.launch();
+});
+after(async () => {
+  await browser?.close();
+  mock?.close();
+});
+
+async function freshPage(width, height = 900, options = {}) {
+  // Each visitor its own network, so the per-network daily cap never mixes tests.
+  const context = await browser.newContext({ viewport: { width, height }, extraHTTPHeaders: { "cf-connecting-ip": `198.51.100.${ipSeq++}` }, ...options });
+  const p = await context.newPage();
+  const errors = [];
+  p.on("pageerror", (e) => errors.push(String(e)));
+  p.on("console", (m) => m.type() === "error" && !/Failed to load resource|turnstile|challenges\.cloudflare/i.test(m.text()) && errors.push(m.text()));
+  return { page: p, context, errors };
+}
+
+/** Starts a grade from the /grade form and returns its id once the progress page shows. */
+async function startGrade(p, address) {
+  await p.goto(BASE + "/grade");
+  await p.getByRole("heading", { level: 1, name: /How good is your portfolio/ }).waitFor();
+  const form = p.locator("#grade form");
+  await form.getByLabel("Your portfolio address").fill(address);
+  await form.getByRole("button", { name: "Grade it" }).click();
+  await p.waitForURL(/\/grade\/[A-Za-z0-9_-]{22}$/, { timeout: 20000 });
+  return new URL(p.url()).pathname.split("/").pop();
+}
+
+const pool = feed.slice(300, 312).map((f, i) => ({
+  url: f.url,
+  name: f.name,
+  mu: i < 6 ? 40 - i : 20 - i,
+  tier: i < 6 ? "A" : "B",
+  quality: 4,
+  axes: Object.fromEntries(AI_CRITERIA.map((c) => [c.id, 5])),
+  roles: ["designer"],
+}));
+
+/** The grade workflow's part: the capture lands and Gemini grades it. */
+async function finish(id, { perfect = false } = {}) {
+  const grade = {
+    is_portfolio: true,
+    tier: perfect ? "S" : "A",
+    roles: ["designer"],
+    rubric_version: 2,
+    model: "gemini-3.5-flash-lite",
+    checks: perfect
+      ? { github: true, contact: true, resume: true, own_domain: true, fresh_footer: true, project_links: true, original: true }
+      : { github: true, contact: true, resume: false, own_domain: true, fresh_footer: true, project_links: true, original: true },
+    facts: { footer_year: 2026, project_links: { checked: 2, ok: 2, broken: 0 } },
+    ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: perfect ? 5 : c.id === "storytelling" ? 3 : 4, note: `${c.name} note` }])),
+    judged_at: new Date().toISOString(),
+  };
+  const report = buildReport(grade, pool, {});
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: "UPDATE grade_jobs SET status = 'done', reason = NULL, result = ?, report = ?, done_at = ?, captured_at = ? WHERE id = ?",
+    args: [JSON.stringify(grade), JSON.stringify(report), now, now, id],
+  });
+}
+
+let reportId = null;
+
+test("grade yours: the form, the progress page, then the report as approved", { skip: !grading }, async () => {
+  const { page: p, context, errors } = await freshPage(1440);
+  const id = await startGrade(p, `grade-ui-${RUN}.dev`);
+  reportId = id;
+
+  // Progress, live from GET /api/grade/<id>.
+  await p.getByRole("heading", { level: 1, name: `grade-ui-${RUN}.dev` }).waitFor();
+  const bar = p.getByRole("progressbar", { name: "Grade progress" });
+  assert.equal(await bar.getAttribute("aria-valuenow"), "1", "the free checks are done at once");
+  await p.getByText("Opening the page and taking screenshots").waitFor();
+  await p.getByText(/Grades run on Google Gemini's free tier/).waitFor();
+  await p.getByRole("heading", { name: "Get it by email, no account needed" }).waitFor();
+  const res = await p.request.get(`${BASE}/grade/${id}`);
+  assert.equal(res.headers()["x-robots-tag"], "noindex, nofollow", "reports are never indexed");
+  assert.match(await p.locator('meta[name="robots"]').getAttribute("content"), /noindex/);
+
+  await finish(id);
+  // The page notices on its next look and turns into the report.
+  await p.getByRole("heading", { level: 1, name: "Grade UI Tester" }).waitFor({ timeout: 15000 });
+  await p.getByRole("img", { name: "Tier A" }).first().waitFor();
+  await p.getByText("Strong and clear, with a few rough edges.").waitFor();
+  assert.match(await p.getByText(/^Top \d+/).first().textContent(), /Top \d+%/);
+
+  const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
+  assert.match(await hiring.textContent(), /Can they reach you\?.*1 to fix/s);
+  assert.match(await hiring.textContent(), /Resume: .*Recruiters look for a resume first.*Fix: Link a PDF/s);
+  assert.equal(await p.getByRole("region", { name: "How it looks and reads" }).getByRole("listitem").count(), AI_CRITERIA.length);
+  const fixes = p.getByRole("region", { name: "Fix these first" });
+  await fixes.getByText("Biggest win").waitFor();
+  assert.match(await fixes.textContent(), /Expected:/);
+  await p.getByRole("region", { name: "Portfolios doing it better" }).getByRole("link", { name: "See its report" }).waitFor();
+  assert.equal(await p.getByRole("region", { name: "Similar portfolios" }).getByRole("link").count(), 4);
+
+  // Share is the primary action; the PDF is the browser's own print.
+  await p.getByRole("button", { name: "Share your result" }).waitFor();
+  await p.getByRole("button", { name: "Download PDF" }).waitFor();
+  // Not on the list: the request goes to the community list's form.
+  assert.match(await p.getByRole("link", { name: /Add me to the leaderboard/ }).getAttribute("href"), /submit-portfolio\.yml&url=/);
+  // The owner's own panel.
+  await p.getByRole("region", { name: "Your report" }).getByRole("button", { name: "Delete" }).waitFor();
+
+  // The print view: the report alone, no shell, no buttons.
+  await p.emulateMedia({ media: "print" });
+  assert.equal(await p.getByRole("banner").isVisible(), false);
+  assert.equal(await p.getByRole("button", { name: "Share your result" }).isVisible(), false);
+  assert.equal(await p.getByRole("region", { name: "Your report" }).isVisible(), false);
+  assert.ok(await p.getByText(/Graded by Gemini \(gemini-3\.5-flash-lite\)/).isVisible());
+  await p.emulateMedia({ media: "screen" });
+
+  // The share image says the grade, for the report's link only.
+  const og = await p.request.get(`${BASE}/grade/${id}/opengraph-image`);
+  assert.equal(og.status(), 200);
+  assert.equal(og.headers()["content-type"], "image/png");
+  assert.match(og.headers()["cache-control"], /^private/);
+
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("nothing to fix: the calm empty state, and a stranger sees no owner tools", { skip: !grading }, async () => {
+  const owner = await freshPage(390, 844);
+  const id = await startGrade(owner.page, `perfect-ui-${RUN}.dev`);
+  await finish(id, { perfect: true });
+  await owner.context.close();
+
+  const { page: p, context, errors } = await freshPage(390, 844);
+  await p.goto(`${BASE}/grade/${id}`);
+  const empty = p.getByRole("region", { name: "Nothing urgent to fix" });
+  await empty.waitFor();
+  assert.match(await empty.textContent(), /Every check passes and every score is high/);
+  assert.equal(await p.getByRole("region", { name: "Your report" }).count(), 0);
+  // No sideways scroll on a phone.
+  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("the report by email: a one-time link makes another browser the owner, once", { skip: !grading }, async () => {
+  assert.ok(reportId, "the first test made a report");
+  const reader = await freshPage(1440);
+  await reader.page.goto(`${BASE}/grade/${reportId}`);
+  await reader.page.getByRole("button", { name: /Email me the report/ }).click();
+  await reader.page.getByLabel("Your email").fill("reader@example.com");
+  await reader.page.getByRole("button", { name: "Email me the link" }).click();
+  await reader.page.getByText(/Check your inbox for the link/).waitFor();
+  await reader.context.close();
+  const mail = (await db.execute("SELECT text FROM email_outbox WHERE kind = 'grade-report' AND to_addr = 'reader@example.com' ORDER BY id DESC LIMIT 1")).rows[0];
+  const link = String(mail.text).match(/(\/api\/grade\/link\?t=\S+)/)[1];
+
+  const other = await freshPage(1440);
+  await other.page.goto(BASE + link);
+  await other.page.waitForURL(new RegExp(`/grade/${reportId}$`));
+  await other.page.getByRole("region", { name: "Your report" }).waitFor();
+  await other.context.close();
+
+  const late = await freshPage(1440);
+  await late.page.goto(BASE + link);
+  await late.page.getByText(/That email link was already used/).waitFor();
+  assert.equal(await late.page.getByRole("region", { name: "Your report" }).count(), 0);
+  await late.context.close();
+});
+
+test("the owner deletes the report: it's gone for everyone", { skip: !grading }, async () => {
+  const { page: p, context } = await freshPage(1440);
+  const id = await startGrade(p, `delete-ui-${RUN}.dev`);
+  await finish(id);
+  await p.reload();
+  const panel = p.getByRole("region", { name: "Your report" });
+  await panel.getByRole("button", { name: "Delete", exact: true }).click();
+  await panel.getByRole("button", { name: "Delete the report" }).click();
+  await p.waitForURL(/\/grade\?deleted=1$/);
+  await p.getByText(/The report and its screenshots are deleted/).waitFor();
+  assert.equal((await p.request.get(`${BASE}/grade/${id}`)).status(), 404);
+  await context.close();
+});
+
+test("a listed site's report offers the claim; the verified owner hides the grade", { skip: !grading || !games }, async () => {
+  const { page: p, context, errors } = await freshPage(1440);
+  const id = await startGrade(p, LISTED);
+  await finish(id);
+  await p.reload();
+  await p.getByText("On the leaderboard").waitFor();
+  const claim = p.getByRole("link", { name: /Claim your portfolio/ });
+  assert.equal(await claim.getAttribute("href"), `/claim?url=${encodeURIComponent(LISTED)}`);
+  await context.close();
+
+  // A GitHub account, verified by the site owner's review (as tests/games-api.test.mjs does).
+  const gh = String(800000000 + Math.floor(Math.random() * 1e6));
+  const token = (login) => encode({ token: { raterId: `gh:${login === "e2e-admin" ? gh + 1 : gh}`, login, sub: gh }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
+  const call = (cookie, path, body) =>
+    fetch(BASE + path, { method: body ? "POST" : "GET", headers: { cookie: `authjs.session-token=${cookie}`, origin: BASE, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
+  const mine = await token("claim-ui");
+  assert.equal((await call(mine, "/api/owner/claims", { url: LISTED, method: "manual" })).claim.status, "review");
+  const admin = await token("e2e-admin");
+  const queued = (await call(admin, "/api/admin/claims")).claims.find((c) => c.url === LISTED && c.owner === `gh:${gh}`);
+  assert.equal((await call(admin, "/api/admin/claims", { id: queued.id, decision: "verified" })).claim.status, "verified");
+
+  const owner = await freshPage(1440);
+  await owner.context.addCookies([{ name: "authjs.session-token", value: mine, url: BASE }]);
+  await owner.page.goto(`${BASE}/claim?url=${encodeURIComponent(LISTED)}`);
+  const domain = new URL(LISTED).hostname.replace(/^www\./, "");
+  await owner.page.getByRole("heading", { level: 1, name: `Manage ${domain}` }).waitFor();
+  const hide = owner.page.getByRole("switch", { name: "Hide the grade" });
+  assert.equal(await hide.getAttribute("aria-checked"), "false");
+  await hide.click();
+  await owner.page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute("aria-checked") === "true");
+  assert.equal((await call(mine, "/api/owner/claims")).claims.find((c) => c.url === LISTED).state.hideGrade, true);
+  // Removal asks for the domain first.
+  await owner.page.getByRole("button", { name: "Remove", exact: true }).click();
+  const confirm = owner.page.getByRole("button", { name: "Remove my portfolio" });
+  assert.ok(await confirm.isDisabled());
+  await owner.page.getByLabel(/to confirm/).fill(domain);
+  assert.ok(await confirm.isEnabled());
+  await owner.page.getByRole("button", { name: "Keep it" }).click();
+  // Put it back as it was.
+  await owner.page.getByRole("switch", { name: "Hide the grade" }).click();
+  await owner.page.waitForFunction(() => document.querySelector('[role="switch"]')?.getAttribute("aria-checked") === "false");
+  assert.deepEqual([...errors, ...owner.errors], []);
+  await owner.context.close();
+});

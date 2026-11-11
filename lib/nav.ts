@@ -32,8 +32,9 @@ export const ROUTES: Record<
   // "/about" and "/about#grading" when the about page ships.
   about: "/how",
   grading: "/how",
-  // "/grade" when the grade pages ship (with GRADER_ENABLED on).
-  grade: null,
+  // The grade pages, while "grade my portfolio" is on (GRADER_ENABLED, read
+  // at build time by next.config.ts so server and browser agree).
+  grade: process.env.NEXT_PUBLIC_GRADER_ENABLED === "true" ? "/grade" : null,
   me: "/me",
   removed: "/removed",
   profile: "/profile",

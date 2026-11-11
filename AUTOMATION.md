@@ -344,6 +344,16 @@ The answer is 202 with the job (the same shape as `GET /api/grade/<id>`), or 400
 Reports are unlisted: the id is the only way in, every answer says `X-Robots-Tag: noindex, nofollow` and `Cache-Control: private, no-store`, and nothing returns the page text, the visitor or the network.
 Reports and their screenshots are deleted after 180 days.
 
+### The pages
+
+- `/grade` is the form ("Grade yours" in the header and the phone tab bar); a grade started there or from home goes to `/grade/<id>`.
+- `/grade/<id>` shows the progress while the grade runs (polling `GET /api/grade/<id>`, "get it by email", the own-key step) and then the report ([app/grade/[id]/page.tsx](app/grade/[id]/page.tsx), wording in [lib/grader/present.mjs](lib/grader/present.mjs)): the result, what a hiring manager sees, the five Gemini axes, the fixes with their expected effect, one portfolio doing it better, similar portfolios, and the owner's re-grade, delete and claim.
+- "Download PDF" is the browser's own print on the page's print styles; the share image is `/grade/<id>/opengraph-image`, privately cached.
+- Every `/grade/<id>` answer says noindex (the page's metadata and an `X-Robots-Tag` from next.config.ts).
+- `/claim?url=<listed portfolio>` (GAMES_V2) runs the claim and the owner actions in the browser on `/api/owner/claims` and `/api/owner/actions`.
+- The shell links to `/grade` only while `GRADER_ENABLED` is on: next.config.ts reads it at build time (the variable, else wrangler.jsonc's value for the Worker being built) into `ROUTES.grade`.
+- `tests/grade-ui.test.mjs` covers the form, progress, report, empty state, print view, share image, the emailed one-time link, owner delete and the claim on the production build.
+
 ### Email
 
 - **"Get it by email", no account needed:** the address waits in `grade_emails` until the report is ready (also after waiting in a queue or for a later day), then the grader's tick sends a one-time link and erases the address, keeping only a keyed hash so the same address isn't added twice; at most 2 addresses a report.

@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { CircleAlert, CircleCheck, Clock, KeyRound, Swords } from "lucide-react";
-import { EmailSignupForm } from "@/components/ui/EmailSignupForm";
-import { Turnstile, type TurnstileHandle } from "@/components/ui/Turnstile";
+import { EmailLink } from "@/components/grade/EmailLink";
+import { STATE_WORD, useGradeJob, waitingLine } from "@/components/grade/useGradeJob";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
-import { ownKeySlot } from "@/components/grade/useGradeRequest";
 import { ROUTES } from "@/lib/nav";
 import type { Job } from "@/lib/me";
-
-const ACTIVE = new Set(["capturing", "waiting", "grading", "queued", "awaiting_key"]);
-const EVERY = 4000;
 
 function StepIcon({ state }: { state: Job["steps"][number]["state"] }) {
   if (state === "done") return <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden />;
@@ -29,32 +24,6 @@ function StepIcon({ state }: { state: Job["steps"][number]["state"] }) {
   );
 }
 
-const STATE_WORD: Record<string, string> = {
-  done: "done",
-  running: "in progress",
-  waiting: "waiting",
-  pending: "not started",
-  needs_key: "needs your key",
-  failed: "failed",
-  off: "not available",
-};
-
-/** What the visitor is waiting for, in one line. */
-function why(job: Job): string {
-  switch (job.status) {
-    case "waiting":
-      return job.reason ?? "Today's grading is full, so yours starts tomorrow.";
-    case "queued":
-      return "Today's AI grading is used up, so yours is first in line tomorrow morning.";
-    case "grading":
-      return "Gemini is looking at your page now. This takes about a minute.";
-    case "awaiting_key":
-      return "The screenshot is ready. Your Gemini key finishes the grade.";
-    default:
-      return "Opening your page and taking screenshots. This takes a minute or two.";
-  }
-}
-
 /**
  * A grade on its way (/me): the real steps, refreshed every few seconds;
  * the page reloads with the report once it's done. "Get it by email" for
@@ -62,64 +31,8 @@ function why(job: Job): string {
  * on the visitor's key.
  */
 export function Queued({ job: initial }: { job: Job }) {
-  const router = useRouter();
-  const [job, setJob] = useState(initial);
+  const { job, finish, busy, keyError } = useGradeJob(initial);
   const [key, setKey] = useState("");
-  const [keyError, setKeyError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const token = useRef<string | null>(null);
-  const widget = useRef<TurnstileHandle>(null);
-  const [emailArmed, setEmailArmed] = useState(false);
-
-  useEffect(() => {
-    if (!ACTIVE.has(job.status)) {
-      router.refresh();
-      return;
-    }
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/grade/${job.id}`, { cache: "no-store" });
-        if (res.ok) setJob(await res.json());
-        else if (res.status === 404) router.refresh();
-      } catch {}
-    }, EVERY);
-    return () => clearTimeout(t);
-  }, [job, router]);
-
-  const finish = async (body: Record<string, unknown>) => {
-    setBusy(true);
-    setKeyError("");
-    try {
-      const res = await fetch(`/api/grade/${job.id}/finish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const b = await res.json().catch(() => ({}));
-      if (res.ok) {
-        try {
-          sessionStorage.removeItem(ownKeySlot(job.id));
-        } catch {}
-        setJob(b as Job);
-      } else setKeyError(typeof b.message === "string" ? b.message : "Gemini didn't accept that key. Check it, or use the free tier.");
-    } catch {
-      setKeyError("We couldn't reach PortfolioRank. Check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // The key the visitor gave on the grade form, kept in this tab for its one use.
-  const sent = useRef(false);
-  useEffect(() => {
-    if (job.status !== "awaiting_key" || sent.current) return;
-    let stored: string | null = null;
-    try {
-      stored = sessionStorage.getItem(ownKeySlot(job.id));
-    } catch {}
-    if (stored) {
-      sent.current = true;
-      void finish({ geminiKey: stored });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.status, job.id]);
-
   const steps = job.steps;
   const done = steps.filter((s) => s.state === "done").length;
   const later = job.status === "waiting" || job.status === "queued";
@@ -152,7 +65,7 @@ export function Queued({ job: initial }: { job: Job }) {
       <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-raised p-3.5 text-sm">
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
         <p>
-          {why(job)}{" "}
+          {waitingLine(job)}{" "}
           {job.email.requested ? (
             <>
               <strong>We&apos;ll email you</strong> when it&apos;s ready. You can close this page.
@@ -209,40 +122,8 @@ export function Queued({ job: initial }: { job: Job }) {
       )}
 
       {later && !job.email.requested && (
-        <div className="mt-4" onFocus={() => setEmailArmed(true)} onPointerEnter={() => setEmailArmed(true)}>
-          <EmailSignupForm
-            label="Email me the report"
-            button="Email me"
-            busyLabel="Saving..."
-            helper="Only for this report. We erase the address once the email is sent."
-            success="Done. We'll email you the link when your report is ready."
-            onSubmit={async (email) => {
-              for (let k = 0; k < 30 && emailArmed && !token.current; k++) await new Promise((r) => setTimeout(r, 150));
-              try {
-                const res = await fetch(`/api/grade/${job.id}/email`, {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ email, ...(token.current ? { turnstileToken: token.current } : {}) }),
-                });
-                token.current = null;
-                widget.current?.reset();
-                if (res.ok) return { ok: true };
-                const b = await res.json().catch(() => ({}));
-                return {
-                  ok: false,
-                  error:
-                    b.error === "bad_email"
-                      ? "Enter an email address like you@example.com."
-                      : b.error === "unavailable"
-                        ? "Email isn't available right now. Keep this page and come back later."
-                        : "That didn't work. Try again in a moment.",
-                };
-              } catch {
-                return { ok: false, error: "We couldn't reach PortfolioRank. Check your connection and try again." };
-              }
-            }}
-          />
-          {emailArmed && <Turnstile ref={widget} action="grade-email" onToken={(t) => (token.current = t)} onExpire={() => (token.current = null)} className="empty:hidden" />}
+        <div className="mt-4">
+          <EmailLink jobId={job.id} label="Email me the report" button="Email me" />
         </div>
       )}
 
