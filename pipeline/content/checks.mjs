@@ -173,7 +173,8 @@ export function checkTemplate(draft, sheet) {
   const words = wordCount(fill(assembleBody(draft), sheet.facts));
   const lo = Math.floor(WORDS.min * (1 - WORDS.slack));
   const hi = Math.ceil(WORDS.max * (1 + WORDS.slack));
-  if (words < lo || words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted`);
+  if (words < lo) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: add about ${500 - words} words, for example one more ### section of several paragraphs`);
+  if (words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: cut about ${words - 500} words`);
   return result("template", p);
 }
 
