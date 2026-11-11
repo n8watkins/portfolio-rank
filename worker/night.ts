@@ -57,6 +57,8 @@ export type NightEnv = CloudflareEnv & {
   // The content engine's optional keys (docs/CONTENT-ENGINE.md): without
   // Tavily, outside claims are cut; without Unsplash or Pexels, no stock photos.
   TAVILY_API_KEY?: string;
+  // Tavily credits PortfolioRank may use a month (lib/content/tavily-credits.mjs); 200 when missing.
+  TAVILY_MONTHLY_CREDITS?: string;
   UNSPLASH_ACCESS_KEY?: string;
   PEXELS_API_KEY?: string;
 };
@@ -117,6 +119,7 @@ function engine(env: NightEnv, runId: string) {
     // SHOTS bucket under content/<SITE_ENV>/, which /shots does not serve.
     content: {
       env: String(env.SITE_ENV ?? "production"),
+      tavilyMonthlyCredits: env.TAVILY_MONTHLY_CREDITS,
       keys: { tavily: env.TAVILY_API_KEY, unsplash: env.UNSPLASH_ACCESS_KEY, pexels: env.PEXELS_API_KEY },
       ai: env.AI ?? null,
       store: async (key: string, bytes: Uint8Array, contentType: string) => {

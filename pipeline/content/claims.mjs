@@ -112,11 +112,13 @@ async function loadPage(url, fetchImpl) {
 
 /**
  * Checks the outside claims of a draft. `draftText` is the unfilled draft;
- * `budget` is { gemini: requests left, tavily: searches left }. Returns
+ * `budget` is { gemini: requests left, tavily: searches left }; `credits`
+ * ({ reserve, release }, lib/content/tavily-credits.mjs) counts each search
+ * against the month's Tavily cap, and at the cap claims are cut. Returns
  * { supported: [{ sentence, url, title }], cut: [{ sentence, reason }],
  *   requests, searches }.
  */
-export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate }) {
+export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits }) {
   const out = { supported: [], cut: [], requests: 0, searches: 0 };
   if (budget.gemini < 1) {
     out.unchecked = true;
@@ -141,10 +143,15 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
       out.cut.push({ sentence: s, reason: "Tavily cap reached" });
       continue;
     }
+    if (credits && !(await credits.reserve())) {
+      out.cut.push({ sentence: s, reason: "Tavily monthly credit cap reached, so outside claims are cut" });
+      continue;
+    }
     try {
       out.searches++;
       searched.push({ sentence: s, results: await tavilySearch(s, { apiKey: tavilyKey, fetchImpl }) });
     } catch (e) {
+      await credits?.release().catch(() => {});
       out.cut.push({ sentence: s, reason: `search failed: ${String(e?.message ?? e).slice(0, 80)}` });
     }
   }

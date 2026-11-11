@@ -5,6 +5,7 @@ import { DEFAULT_PLAN, QUOTA_TZ, STAGES, backgroundAllowance, budgetPlan, people
 import { dailyQuota } from "@/pipeline/gemini-log.mjs";
 import { parkedItems, recentNights } from "@/pipeline/night.mjs";
 import { activeAlerts } from "@/pipeline/alerts.mjs";
+import { creditUsage, monthlyCap } from "@/lib/content/tavily-credits.mjs";
 import { modelWatchSummary } from "@/pipeline/model-watch.mjs";
 
 // The admin quota view's data (no page yet; the redesign's admin page reads
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
   const quota = dailyQuota(process.env.GEMINI_DAILY_QUOTA);
   const client = db();
   const emptyUsage = { day: "", start: "", end: "", byModel: {}, byJob: {}, peopleLastHour: 0, peopleRecent: 0 };
-  const [history, usage, nights, parked, alerts, peopleQueue, modelWatch] = await Promise.all([
+  const [history, usage, nights, parked, alerts, peopleQueue, modelWatch, tavily] = await Promise.all([
     orEmpty(() => usageHistory(client, { now, days, quota }), null),
     orEmpty(() => usageToday(client, { now, plan }), emptyUsage),
     orEmpty(() => recentNights(client, { limit: 14 }), []),
@@ -52,6 +53,8 @@ export async function GET(req: Request) {
       {}
     ),
     orEmpty(() => modelWatchSummary(client), { latest: null, runs: [] }),
+    // Tavily credits used this month against the cap (200 of the shared 1,000).
+    orEmpty(() => creditUsage(client, { cap: monthlyCap(process.env.TAVILY_MONTHLY_CREDITS), now }), { month: "", used: 0, cap: monthlyCap(process.env.TAVILY_MONTHLY_CREDITS) }),
   ]);
   return NextResponse.json(
     {
@@ -75,6 +78,7 @@ export async function GET(req: Request) {
       alerts,
       peopleQueue,
       modelWatch,
+      tavily,
     },
     { headers: PRIVATE }
   );

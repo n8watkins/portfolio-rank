@@ -288,6 +288,11 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   6. The weekly newsletter still sends in a week with no post, with the top 5 and the biggest climber.
   7. The owner switches `CONTENT_MODE` from `dry-run` to `publish` by hand; it never switches itself.
   8. `gemini-3.5-flash-lite` for every content request; trends are counted by code; reading portfolio text with 3.1 can come later as a labelled experiment.
+- **Tavily is capped at 200 credits a month** (owner, 2026-11-10). Status: built.
+  PortfolioRank and Wren share one free Tavily account (1,000 credits a month, 100 requests a minute across both keys); PortfolioRank gets 200 (`TAVILY_MONTHLY_CREDITS`), Wren 750, and 50 stay spare.
+  A counter in the database (`tavily_credits`, schema version 8) is reserved before each search and released if Tavily errors; at the cap outside claims are cut, as when the key is missing, and `GET /api/admin/quota` shows the month's use.
+  Why: one account, two apps, and a search that is blocked here costs nothing, while a claim cut costs only a draft's outside claim.
+  The cost breakdown is in [COSTS.md](COSTS.md#tavily-credits).
   Why: the recommendations kept the engine small, positive and fail-closed, which is what the owner asked for.
 - **Content engine back end** (agent, 2026-11-10, under the decisions above). Status: built, `CONTENT_MODE` "off".
   Tables `posts` and `content_runs`, fact builders with code-drawn charts, the writer with placeholders, the code checks, outside claims through Tavily, the topic filter, images (charts, our screenshots, Unsplash and Pexels, Workers AI with Gemini's review), the caps, the kill switch, the weekly summary and `GET /api/admin/content` for reviewing drafts before the blog exists ([CONTENT-ENGINE.md](CONTENT-ENGINE.md#what-is-built)).

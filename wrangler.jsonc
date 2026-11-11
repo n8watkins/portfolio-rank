@@ -42,6 +42,9 @@
   "vars": {
     // "production", or "staging" in env.staging below (worker/staging.ts).
     "SITE_ENV": "production",
+    // Tavily credits PortfolioRank may use a month. Wren and PortfolioRank share one free
+    // account of 1,000: 750 there, 200 here, 50 spare (lib/content/tavily-credits.mjs).
+    "TAVILY_MONTHLY_CREDITS": "200",
     // Where pages link captures: our own domain, where the Worker serves the
     // bucket with long edge and browser caching (worker/assets.ts). The
     // bucket's r2.dev address is rate-limited, uncached and for the pipeline
@@ -142,6 +145,7 @@
         // "staging": robots.txt disallows everything and every response says
         // noindex (worker/staging.ts); Sentry tags events "staging".
         "SITE_ENV": "staging",
+        "TAVILY_MONTHLY_CREDITS": "200",
         "SHOTS_BASE_URL": "/shots",
         // The staging GitHub OAuth app's callback is
         // https://staging.portfoliorank.n8builds.dev/api/auth/callback/github.
