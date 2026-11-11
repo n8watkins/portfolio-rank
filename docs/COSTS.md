@@ -238,14 +238,13 @@ Staging's limits are 0.
 - Before each call, one image and the call's estimated neurons are reserved for the UTC day ([lib/content/neurons.mjs](../lib/content/neurons.mjs), table `ai_image_calls`, one row per call) in one statement that only succeeds while the day's images, the last hour's images and the day's neurons all stay within their limits; without room the call is skipped, never retried, and a reservation is never given back.
 - The account's free allowance is 10,000 neurons a day, shared by every app on the account, and resets at 00:00 UTC ([pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)).
   The account is on Workers Paid, so anything above it would be billed at $0.011 per 1,000 neurons.
-- The allowance is split into slices so the account never passes 10,000 (owner, 2026-11-10); PortfolioRank uses at most half of its slice:
+- The allowance is split into slices so the account never passes 10,000 (owner, 2026-11-10; the account-wide table is `LIMITS.md` in the owner's ops notes):
 
   | Slice | Neurons a UTC day | Enforced by |
   | --- | ---: | --- |
-  | PortfolioRank images | 5,000 (used: at most 2,500, 40 images) | `MAX_AI_IMAGES_PER_DAY`, `AI_NEURON_CEILING`, the `ai_image_calls` counter in this repository, and the AI Gateway's 2 an hour and $1 a month Workers AI spend limit |
-  | demo-kit | 2,000 | demo-kit's own guard |
+  | PortfolioRank images | 2,500 at most (40 images, about 2,320) | `MAX_AI_IMAGES_PER_DAY`, `AI_NEURON_CEILING`, the `ai_image_calls` counter in this repository, and the AI Gateway's 2 an hour and $1 a month Workers AI spend limit |
   | Everything else on the account | 1,000 | each app's own guard |
-  | Buffer, never used | 2,000 | nobody spends it |
+  | Buffer, never used | 6,500 | nobody spends it; demo-kit uses no Workers AI (local voice and render) |
   | **Total** | **10,000** | the free allowance |
 
 | Model | Size and steps | Neurons an image (tiles rounded up) | Use |
