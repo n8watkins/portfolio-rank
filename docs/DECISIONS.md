@@ -200,6 +200,15 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Pages: home `/`, grade `/grade` and `/grade/[id]`, leaderboard `/top` with three tabs, face-off `/rank`, browse `/browse` (the full grid moves off home, paged on the server), portfolio `/p/[slug]`, blog `/blog`, criteria `/criteria` (absorbs "How it works"), `/removed`.
   Desktop header: Leaderboard, Face-off, Browse, Blog and one highlighted "Grade yours"; phones get a bottom tab bar (Top, Face-off, Grade, Browse, More).
   Why: the site is gaining grading, three views, a blog and a newsletter, and today's four different headers and do-everything home can't hold them; home also ships all 2,000 portfolios, the main reason for its phone speed of 58.
+- **The shell links only to pages that exist** (agent, 2026-11-10). Status: building (Wave B step 1).
+  Every link in the header, footer, phone tab bar and More sheet goes through `ROUTES` in `lib/nav.ts`; a page that is not built yet is `null` there and its links are hidden, and a page lane ships its page by setting its route.
+  Until then Play points at `/rank`, Browse at the grid on home, About at `/how`, and "Grade yours" (the highlighted header action and the phone tab bar's Grade tab) stays hidden until the grade pages ship.
+  Why: the shell can go live before the page lanes without a single link to a 404.
+- **The maker's mark beside the logo** (owner, 2026-11-10). Status: building (Wave B step 1).
+  The n8 icon and "n8builds.dev" (no "by"), linking to n8builds.dev; when the header is too narrow for the name, only the icon shows.
+- **Light-theme amber and green text darkened a step for contrast** (agent, 2026-11-10). Status: building (Wave B step 1).
+  `--color-accent` is `#9a5d06` and `--color-up` `#157a3a` in the light theme (the preview had `#a16207` and `#15803d`, 4.3-4.4:1 on the raised surface); the amber fill is unchanged, and `tests/tokens.test.mjs` checks every text token reaches 4.5:1 on every surface in both themes.
+  Why: WCAG AA for small text, at a difference the eye can't see.
 - **Adaptive home** (owner, 2026-11-10). Status: planned.
   The top of home and a "Your portfolio" entry change with the visitor: first visit sees "How good is your portfolio?"; someone graded before sees their card; a signed-in listed developer sees their rank in each view and movement; a queued report shows its progress.
   Everything about your own site lives on one "Your portfolio" page, and things already done (newsletter box for subscribers, the practice-vote intro) are hidden.

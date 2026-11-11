@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
@@ -121,20 +120,8 @@ export default async function ListPage({
   if (!list) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a
-          href="/top"
-          className="text-xs font-semibold text-mute transition hover:text-ink"
-        >
-          🏆 Leaderboard
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+    <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      <div>
         <ListView
           listId={list.id}
           initialName={list.name}
@@ -143,7 +130,7 @@ export default async function ListPage({
           items={list.items}
           shareUrl={`${SITE_URL}/list/${list.slug}`}
         />
-      </main>
+      </div>
     </div>
   );
 }

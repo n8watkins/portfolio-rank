@@ -1,6 +1,4 @@
 import feed from "@/data/feed.json";
-import { SITE } from "@/lib/site";
-import { Header } from "@/components/Header";
 import { PortfolioGrid } from "@/components/PortfolioGrid";
 import { TopMarquee } from "@/components/TopMarquee";
 import { FAQ } from "@/components/FAQ";
@@ -17,32 +15,15 @@ export type Portfolio = {
   tagline?: string;
 };
 
-async function getStarCount(): Promise<number | null> {
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${SITE.githubRepo}`,
-      { next: { revalidate: 3600 } }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.stargazers_count ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function Home() {
   // Hide sites confirmed down or failing (lib/roster.hiddenUrls; the voting
   // pool and leaderboards filter them too).
   const hidden = await hiddenUrls();
   const portfolios = (feed as Portfolio[]).filter((p) => !hidden.has(p.url));
-  const stars = await getStarCount();
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6">
-      <Header stars={stars} />
-
-      <main id="main" tabIndex={-1}>
+      <div>
         <section className="py-10 text-center sm:py-14">
           <h1 className="fade-up mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
             The best developer portfolios.{" "}
@@ -61,7 +42,7 @@ export default async function Home() {
           >
             <a
               href="/rank"
-              className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85"
+              className="rounded-lg bg-fill px-5 py-2.5 text-sm font-semibold text-on-fill transition hover:opacity-85"
             >
               ⚔️ Start ranking
             </a>
@@ -79,82 +60,7 @@ export default async function Home() {
         <PortfolioGrid portfolios={portfolios} />
 
         <FAQ aiJudges={AI_JUDGES} />
-      </main>
-
-      <footer className="mt-20 border-t border-edge py-10 text-center text-sm text-mute">
-        <p>
-          List curated by{" "}
-          <a
-            href="https://github.com/emmabostian/developer-portfolios"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
-          >
-            Emma Bostian &amp; contributors
-          </a>
-          . Built by{" "}
-          <a
-            href={SITE.n8builds}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
-          >
-            n8builds.dev
-          </a>
-          .
-        </p>
-        <p className="mt-2">
-          Want your portfolio here?{" "}
-          <a
-            href={SITE.submit}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
-          >
-            Submit it
-          </a>{" "}
-          - takes 30 seconds with a GitHub account.
-        </p>
-        <p className="mt-2 text-xs">
-          On the list and want off?{" "}
-          <a
-            href={SITE.remove}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
-          >
-            Remove my portfolio
-          </a>
-          . See what was{" "}
-          <a
-            href="/removed"
-            className="underline decoration-edge underline-offset-4 transition hover:text-ink"
-          >
-            removed and why
-          </a>
-          .
-        </p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <a
-            href={SITE.kofi}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
-          >
-            ☕ Support on Ko-fi
-          </a>
-          <a
-            href={SITE.n8builds}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm font-semibold transition hover:border-mute"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/n8-logo.png" alt="" className="h-4 w-4 rounded" />
-            n8builds.dev
-          </a>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }

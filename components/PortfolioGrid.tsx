@@ -128,7 +128,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             href={SITE.submit}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+            className="rounded-lg bg-fill px-4 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
           >
             + Submit yours
           </a>
@@ -146,7 +146,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             }}
             className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               role === r.label
-                ? "border-accent bg-accent text-bg"
+                ? "border-accent bg-fill text-on-fill"
                 : "border-edge text-mute hover:border-mute hover:text-ink"
             }`}
           >
@@ -167,7 +167,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
             }}
             className={`rounded-md px-2 py-1 text-xs font-semibold transition ${
               letter === l
-                ? "bg-accent text-bg"
+                ? "bg-fill text-on-fill"
                 : "text-mute hover:bg-edge hover:text-ink"
             }`}
           >

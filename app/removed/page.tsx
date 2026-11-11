@@ -1,4 +1,3 @@
-import Link from "next/link";
 import excluded from "@/data/excluded.json";
 import { SITE } from "@/lib/site";
 
@@ -44,19 +43,7 @@ export default function RemovedPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 pb-20 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a
-          href="/top"
-          className="text-xs font-semibold text-mute transition hover:text-ink"
-        >
-          🏆 Leaderboard
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+      <div>
         <div className="py-6">
           <h1 className="text-3xl font-bold tracking-tight">Removed portfolios</h1>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
@@ -116,7 +103,7 @@ export default function RemovedPage() {
             owner&apos;s request (not listed by name).
           </p>
         ) : null}
-      </main>
+      </div>
     </div>
   );
 }

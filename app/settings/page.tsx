@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useStoredFlag } from "@/lib/client-state";
 
 export default function SettingsPage() {
@@ -9,19 +8,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-16 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a
-          href="/rank"
-          className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent"
-        >
-          ⚔️ Rank
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+      <div>
         <div className="py-6">
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="mt-2 text-sm text-mute">Saved on this device.</p>
@@ -53,7 +40,7 @@ export default function SettingsPage() {
             />
           </button>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
