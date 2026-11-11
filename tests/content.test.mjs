@@ -385,8 +385,22 @@ test("writer: a failed check is revised; a draft that keeps failing is dropped a
   const [dropped] = await listPosts(db, { status: "dropped" });
   assert.equal(dropped.checks.passed, false);
   assert.ok(dropped.checks.failures.some((f) => /38%/.test(f)));
+  assert.deepEqual(dropped.checks.proposedImages.map((i) => i.slot), ["hero", "inline-1", "inline-2"]);
   const runs = (await db.execute("SELECT status FROM content_runs WHERE step = 'draft' ORDER BY id")).rows.map((x) => x.status);
   assert.deepEqual(runs, ["ok", "dropped"]);
+});
+
+test("writer: an echoed or run-in Try this heading is repaired by code, not dropped (seen from the real model)", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const d = goodDraft(sheet);
+  const echoed = { ...d, body: d.body.replace("\n\n### Try this", " ### Try this with 3 numbered steps a reader can do today") };
+  const g = fakeGemini({ write: echoed, claims: { claims: [] }, review: REVIEW_OK });
+  const { ctx } = contentCtx(db);
+  const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
+  assert.equal(r.status, "ok");
+  assert.equal(g.calls.filter((c) => c.kind === "write").length, 1, "no revision needed");
+  const [post] = await listPosts(db, { status: "draft" });
+  assert.match(post.body, /\n### Try this\n1\. /);
 });
 
 test("writer: a review that finds the draft off topic or hostile fails it", async () => {
