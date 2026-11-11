@@ -22,7 +22,7 @@ after(async () => {
 
 test("search and filters come from the address, update it, and clear", async () => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.goto(BASE + "/?q=dev&role=Frontend");
+  await page.goto(BASE + "/browse?q=dev&role=Frontend");
   const search = page.locator("#browse-search");
   await page.waitForFunction(() => document.querySelector("#browse-search")?.value === "dev");
   assert.equal(await page.getByRole("button", { name: "Frontend" }).getAttribute("aria-pressed"), "true");
@@ -40,9 +40,9 @@ test("search and filters come from the address, update it, and clear", async () 
   await page.close();
 });
 
-test("home and the leaderboard don't scroll sideways on a 320px phone", async () => {
+test("home, browse and the leaderboard don't scroll sideways on a 320px phone", async () => {
   const page = await browser.newPage({ viewport: { width: 320, height: 640 } });
-  for (const path of ["/", "/top"]) {
+  for (const path of ["/", "/browse", "/top"]) {
     await page.goto(BASE + path);
     await page.locator("h1").first().waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320, path);

@@ -9,7 +9,21 @@ import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Movement, RankBadge, TierBadge } from "@/components/ui/badges";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
+import { Showcase } from "@/components/home/Showcase";
 import { KitSignup, KitIconButtons } from "./parts";
+
+// Flat stand-in frames for the deck, so the browser tests need no captures.
+const frame = (hue: number) =>
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900"><rect width="1440" height="900" fill="hsl(${hue} 45% 45%)"/></svg>`)}`;
+const DECK = ["Ada", "Grace", "Linus", "Margaret"].map((name, i) => ({
+  url: `https://${name.toLowerCase()}.example/`,
+  name,
+  domain: `${name.toLowerCase()}.example`,
+  hero: frame(30 + i * 70),
+  tier: "A",
+  rank: i + 1,
+  href: `/p/${encodeURIComponent(`https://${name.toLowerCase()}.example/`)}`,
+}));
 
 // The shared building blocks on one page, for screenshots and the browser
 // tests. Only in `next dev` and the test build (SITE_ENV=test); everywhere
@@ -99,6 +113,11 @@ export default async function UiKit({ searchParams }: { searchParams: Promise<{ 
         <EmptyState icon={Inbox} title="No lists yet" className="mt-4" action={<button type="button" className={btnSecondary}>New list</button>}>
           Lists you make show up here, with a link to share each one.
         </EmptyState>
+      </section>
+
+      <section aria-labelledby="kit-deck" className="mt-12 max-w-2xl">
+        <SectionHeader id="kit-deck" title="Hero card deck" className="mb-4" />
+        <Showcase items={DECK} />
       </section>
     </div>
   );

@@ -65,15 +65,15 @@ test("Sign in opens a real modal: top layer, focus inside, Escape closes and ret
 
 test("a card's heart opens the dialog without following the card's link, at phone width", async () => {
   const { page, context } = await freshPage(390, 844);
-  await page.goto(BASE + "/");
+  await page.goto(BASE + "/browse");
   await page.locator("#browse").getByRole("button", { name: /^Like / }).first().click();
   await page.locator("dialog[open]").waitFor();
   assert.equal((await dialogState(page)).name, "Sign in to like portfolios");
-  assert.equal(new URL(page.url()).pathname, "/");
+  assert.equal(new URL(page.url()).pathname, "/browse");
   // The close button closes it and the page stays put.
   await page.getByRole("button", { name: "Close" }).click();
   await page.locator("dialog[open]").waitFor({ state: "detached" });
-  assert.equal(new URL(page.url()).pathname, "/");
+  assert.equal(new URL(page.url()).pathname, "/browse");
   await context.close();
 });
 
