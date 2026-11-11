@@ -46,7 +46,7 @@ New values go into pass-env with `pass-env set <entry>` in your own terminal; ag
 
 - [ ] Restore test: restore last night's backup into a scratch database and compare counts (steps in `docs/ASSUMPTIONS.md`, section G, once merged).
 - [ ] Ratings recompute, when the new leaderboard switches on: `pass-env run -e TURSO_DATABASE_URL=portfolio-rank/TURSO_DATABASE_URL -e TURSO_AUTH_TOKEN=portfolio-rank/TURSO_AUTH_TOKEN -- node scripts/recompute-ratings.mjs --read-only`, then without `--read-only`.
-- [ ] Turn on the full re-grade (`RUBRIC_REGRADE=true`) after the 3.5-only nightly runs look clean.
+- [x] Turn on the full re-grade (`RUBRIC_REGRADE=true`) after the 3.5-only nightly runs look clean (done 2026-11-11: night 2026-11-10 ran 403 of 418 requests, 0 failed, nothing parked).
 - [ ] Re-read the Gemini free-tier limits for this project in AI Studio (the 500 a day per model isn't in Google's public docs).
 
 ## Whenever convenient
