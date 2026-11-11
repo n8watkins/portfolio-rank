@@ -24,13 +24,21 @@ export function AppShell({
   const name = "Jordan";
   return (
     <div className="flex min-h-dvh flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
-      <PreviewBar state={visitor.state} />
-      <SiteHeader current={current} action={action} signedIn={visitor.signedIn} name={name} />
+      <div className="print:hidden">
+        <PreviewBar state={visitor.state} />
+      </div>
+      <div className="contents print:hidden">
+        <SiteHeader current={current} action={action} signedIn={visitor.signedIn} name={name} />
+      </div>
       <main id="main" tabIndex={-1} className={`page-in flex-1 ${bleed ? "w-full" : "wrap"}`}>
         {children}
       </main>
-      <SiteFooter />
-      <MobileTabBar current={current} action={action} signedIn={visitor.signedIn} />
+      <div className="print:hidden">
+        <SiteFooter />
+      </div>
+      <div className="print:hidden">
+        <MobileTabBar current={current} action={action} signedIn={visitor.signedIn} />
+      </div>
       <RevealObserver />
     </div>
   );

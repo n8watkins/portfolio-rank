@@ -623,3 +623,20 @@ export async function liveStats(): Promise<LiveStat[]> {
     { key: "changed", label: "Sites changed this month", value: 214, sample: true, tone: 4 },
   ];
 }
+
+// Screenshot quality (0-100) per capture, from scripts run over the local
+// captures (detail, contrast, not blank, no cookie bar). Unknown counts as 40.
+import shotQualityMap from "@/data/preview/shot-quality.json";
+const SHOT_Q = shotQualityMap as Record<string, number>;
+
+export function shotQuality(url: string): number {
+  return SHOT_Q[shotKey(url)] ?? 40;
+}
+
+/** Top merged sites with strong screenshots, for showcases. */
+export function showcaseSites(count = 6, min = 60): Ranked[] {
+  return leaderboard("merged")
+    .slice(0, 80)
+    .filter((r) => shotQuality(r.url) >= min)
+    .slice(0, count);
+}

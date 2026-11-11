@@ -67,6 +67,11 @@ export default async function PollsPage({ searchParams }: { searchParams: Promis
             </h2>
             <span className="text-xs text-mute">Saved in this browser · sample</span>
           </div>
+          {!v.voted ? (
+            <p className="mt-3 rounded-xl border border-dashed border-edge-strong p-4 text-sm text-mute">
+              You haven&apos;t voted in a poll yet. Vote in this week&apos;s above; your picks, and whether you sided with the majority, collect here.
+            </p>
+          ) : (
           <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {past.slice(0, 4).map((p, k) => {
               const win = p.options.reduce((a, b) => (b.votes > a.votes ? b : a));
@@ -83,6 +88,7 @@ export default async function PollsPage({ searchParams }: { searchParams: Promis
               );
             })}
           </ul>
+          )}
         </section>
 
         <h2 className="mt-12 text-2xl font-bold tracking-tight">Past polls</h2>

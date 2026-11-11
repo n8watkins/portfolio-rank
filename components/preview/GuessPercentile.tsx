@@ -12,16 +12,18 @@ import { Burst } from "@/components/preview/Burst";
 import type { QuizRound } from "@/lib/preview/data";
 
 const QUICK = [1, 10, 25, 50, 75];
-const HIT = 10; // within 10 points counts
+// Generous on purpose (owner, round 6): casual players should feel they're winning.
+const HIT = 15; // within 15 points is a hit
+const NEAR = 25; // within 25 is "so close"
 
-/** 100 for exact, 0 when 25 or more points off. */
-const points = (g: number, a: number) => Math.max(0, Math.round(100 - Math.abs(g - a) * 4));
+/** 100 for exact, 2.5 less per point off, never under 20. */
+const points = (g: number, a: number) => Math.max(20, Math.round(100 - Math.abs(g - a) * 2.5));
 
 function verdict(d: number) {
-  if (d <= 3) return "Spot on";
-  if (d <= HIT) return "Close";
-  if (d <= 20) return "In the area";
-  return "Way off";
+  if (d <= 4) return "Spot on";
+  if (d <= HIT) return "Nice, a hit";
+  if (d <= NEAR) return "So close";
+  return "Missed this one";
 }
 
 type Result = { guess: number; actual: number };
@@ -51,7 +53,7 @@ export function GuessPercentile({
   preset?: "reveal" | "end";
   details?: "simple" | "advanced";
 }) {
-  const sampleEnd: Result[] = rounds.map((r, k) => ({ guess: Math.min(100, Math.max(1, r.merged + [4, -7, 15, 2, -9][k])), actual: r.merged }));
+  const sampleEnd: Result[] = rounds.map((r, k) => ({ guess: Math.min(100, Math.max(1, r.merged + [4, -11, 21, 2, -9][k])), actual: r.merged }));
   const [i, setI] = useState(preset === "end" ? 5 : 0);
   const [guess, setGuess] = useState(preset === "reveal" ? Math.min(100, rounds[0].merged + 6) : 25);
   const [shown, setShown] = useState(preset === "reveal");
@@ -87,6 +89,7 @@ export function GuessPercentile({
   });
 
   const hits = results.filter((x) => Math.abs(x.guess - x.actual) <= HIT).length;
+  const nears = results.filter((x) => Math.abs(x.guess - x.actual) > HIT && Math.abs(x.guess - x.actual) <= NEAR).length;
 
   if (finished) {
     const link = `/play?mode=guess&quiz=${seed}`;
@@ -105,18 +108,29 @@ export function GuessPercentile({
               </span>
             </p>
             <h2 id="result" className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              {hits} of 5 within {HIT} points
+              {hits === 5 ? "Perfect: 5 of 5!" : `${hits} of 5 within ${HIT} points`}
             </h2>
+            {nears > 0 && (
+              <p className="pop-in mt-1 font-semibold text-accent" style={{ animationDelay: "300ms" }}>
+                {nears === 1 ? "And one so close." : `And ${nears} so close.`}
+              </p>
+            )}
             <p className="mt-1 text-mute">
               Score <strong className="text-ink tabular-nums">{total}</strong> of 500
             </p>
             <ol className="mt-5 grid grid-cols-5 gap-2" aria-label="Each guess">
               {results.map((x, k) => {
-                const ok = Math.abs(x.guess - x.actual) <= HIT;
+                const off = Math.abs(x.guess - x.actual);
+                const ok = off <= HIT;
+                const near = !ok && off <= NEAR;
                 return (
-                  <li key={k} className={`rounded-xl border p-2 text-center ${ok ? "border-up/40 bg-up/10" : "border-edge bg-raised"}`}>
-                    <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full ${ok ? "bg-up text-white" : "bg-edge-strong text-card"}`}>
-                      {ok ? <Check className="h-4 w-4" aria-label="Within 10" /> : <X className="h-4 w-4" aria-label="Missed" />}
+                  <li
+                    key={k}
+                    className={`pop-in rounded-xl border p-2 text-center ${ok ? "border-up/40 bg-up/10" : near ? "border-accent/40 bg-accent-soft" : "border-edge bg-raised"}`}
+                    style={{ animationDelay: `${k * 90}ms` }}
+                  >
+                    <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full ${ok ? "bg-up text-white" : near ? "bg-fill text-on-fill" : "bg-edge-strong text-card"}`}>
+                      {ok ? <Check className="h-4 w-4" aria-label="Hit" /> : near ? <Target className="h-4 w-4" aria-label="So close" /> : <X className="h-4 w-4" aria-label="Missed" />}
                     </span>
                     <span className="mt-1.5 block text-[11px] tabular-nums text-mute">
                       {x.guess} / {x.actual}
@@ -125,7 +139,7 @@ export function GuessPercentile({
                 );
               })}
             </ol>
-            <p className="mt-2 text-xs text-mute">Each box: your guess / the real top %.</p>
+            <p className="mt-2 text-xs text-mute">Each box: your guess / the real top %. Green within {HIT}, amber within {NEAR}.</p>
             <div className="mt-6 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -283,7 +297,7 @@ export function GuessPercentile({
               <button type="button" onClick={submit} className="group btn-sheen mt-auto inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-fill text-[15px] font-semibold text-on-fill max-lg:mt-5">
                 <Target className="icon-twinkle h-4 w-4" aria-hidden /> Lock in top {guess}%
               </button>
-              <p className="mt-2 text-center text-xs text-mute">Within {HIT} points counts as a hit.</p>
+              <p className="mt-2 text-center text-xs text-mute">Within {HIT} points is a hit; every guess scores at least 20.</p>
             </>
           ) : (
             <>

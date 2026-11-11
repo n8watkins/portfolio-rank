@@ -13,7 +13,7 @@ import { RankRow } from "@/components/preview/RankRow";
 import { ViewTabs, type ViewKey } from "@/components/preview/ViewTabs";
 import { YourPortfolio } from "@/components/preview/YourPortfolio";
 import { SampleTag, sectionTitle } from "@/components/preview/bits";
-import { hasRealGrades, leaderboard, rosterCount } from "@/lib/preview/data";
+import { hasRealGrades, leaderboard, rosterCount, showcaseSites } from "@/lib/preview/data";
 import { TAG_LABEL, posts } from "@/lib/preview/blog";
 import { visitor } from "@/lib/preview/visitor";
 
@@ -27,8 +27,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
   const sp = await searchParams;
   const v = await visitor(sp);
   const heroVariant = sp.hero === "b" ? "b" : "a";
-  const showcase = leaderboard("merged")
-    .slice(0, 6)
+  // Strong screenshots only: the hero is the first impression.
+  const showcase = showcaseSites(6)
     .map((r) => ({ name: r.name, domain: r.domain, shot: r.shot, slug: r.slug, tier: r.grade!.tier, rank: r.rank }));
   const total = rosterCount();
   const tops = Object.fromEntries(

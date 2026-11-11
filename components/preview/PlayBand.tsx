@@ -1,12 +1,12 @@
 import { ArrowRight, CalendarCheck, Swords, Target } from "lucide-react";
-import { faceoffPairs, quizSet } from "@/lib/preview/data";
+import { quizSet, showcaseSites } from "@/lib/preview/data";
 
 /**
  * Home: the two games, big and explained. Each has a <video> slot for a
  * short hover clip later; until then the screenshot is its poster.
  */
 export function PlayBand() {
-  const [a, b] = faceoffPairs(2)[1];
+  const [a, b] = showcaseSites(8, 55).slice(2, 4);
   const today = new Date().toISOString().slice(0, 10);
   const q = quizSet(`daily-${today}`)[0];
   const modes = [

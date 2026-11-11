@@ -157,6 +157,12 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                 <span className="rounded-full border border-edge-strong px-2 py-0.5 text-[11px] font-semibold text-mute">Gemini</span>
               </div>
               <p className="mt-1 text-sm text-mute">In order: the first one moves you most.</p>
+              {recs.length === 0 && (
+                <p className="mt-4 rounded-xl border border-up/30 bg-up/10 p-4 text-sm">
+                  <span className="block font-semibold">Nothing urgent to fix.</span>
+                  <span className="block text-mute">Every check passes and every score is high. Votes in face-offs are what move you now.</span>
+                </p>
+              )}
               <ol className="mt-4 grid grid-cols-1 gap-3">
                 {recs.map((m, i) => (
                   <li key={m.title} className="flex gap-3 rounded-xl border border-edge bg-bg/40 p-3.5">
@@ -224,6 +230,18 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                 </h2>
                 <SampleTag />
               </div>
+              {!v.listed ? (
+                <div className="mt-3 flex flex-1 flex-col items-start justify-center gap-3 rounded-xl border border-dashed border-edge-strong p-5 text-sm">
+                  <p>
+                    <span className="block font-semibold">Not in face-offs yet</span>
+                    <span className="block text-mute">Add your portfolio to the leaderboard and people start voting on it. Results show up here.</span>
+                  </p>
+                  <a href={`/grade/${site.slug}#join`} className="btn-sheen inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold">
+                    Add me to the leaderboard
+                  </a>
+                </div>
+              ) : (
+              <>
               <p className="mt-1 text-sm text-mute">
                 Won {wins} of the last {fights.length}.
               </p>
@@ -245,6 +263,8 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
               <a href="/rank" className="group mt-2 inline-flex items-center gap-1 text-sm font-semibold text-accent">
                 Vote in a face-off <ArrowRight className="nudge h-4 w-4" aria-hidden />
               </a>
+              </>
+              )}
             </section>
         </div>
         <Badges state={v.state} signedIn={v.signedIn} />

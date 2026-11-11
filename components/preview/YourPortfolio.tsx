@@ -196,6 +196,12 @@ export function Queued({ standalone = false }: { standalone?: boolean }) {
 
 /** The top three fixes, each linked to its criterion. */
 export function Improvements({ items }: { items: { title: string; why: string; criterion: string }[] }) {
+  if (items.length === 0)
+    return (
+      <p className="mb-5 mt-4 rounded-xl border border-up/30 bg-up/10 p-3 text-sm">
+        <span className="font-semibold">Nothing urgent to fix.</span> <span className="text-mute">Get it into face-offs to climb.</span>
+      </p>
+    );
   return (
     <div className="mb-5 mt-4">
       <p className="text-sm font-semibold">Fix these first</p>

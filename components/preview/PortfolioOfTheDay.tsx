@@ -3,13 +3,15 @@ import { Shot } from "@/components/preview/Shot";
 import { Details } from "@/components/preview/Details";
 import { SiteActions } from "@/components/preview/SiteActions";
 import { TierBadge } from "@/components/preview/bits";
-import { leaderboard, scorecard, topPct } from "@/lib/preview/data";
+import { leaderboard, scorecard, shotQuality, topPct } from "@/lib/preview/data";
 
 /** One top-100 portfolio a day, the same for everyone. */
 export function PortfolioOfTheDay() {
   const board = leaderboard("merged");
   const day = Math.floor(Date.now() / 86_400_000);
-  const r = board[(day * 37) % 100];
+  // A different top-100 site each day, from those with a strong screenshot.
+  const pool = board.slice(0, 100).filter((x) => shotQuality(x.url) >= 55);
+  const r = pool[(day * 37) % pool.length];
   const card = scorecard(r.url);
   const best = [...card.subs].sort((a, b) => b.value - a.value).slice(0, 2);
   return (

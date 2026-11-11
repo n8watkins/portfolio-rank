@@ -3,7 +3,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Shot } from "@/components/preview/Shot";
 import { fmtScore } from "@/components/preview/RankRow";
 import { Movement, RankBadge, SampleTag, TierBadge } from "@/components/preview/bits";
-import { hasRealGrades, leaderboard, scorecard, type Ranked, type View } from "@/lib/preview/data";
+import { hasRealGrades, leaderboard, scorecard, shotQuality, type Ranked, type View } from "@/lib/preview/data";
 import { visitor } from "@/lib/preview/visitor";
 
 export const dynamic = "force-dynamic";
@@ -89,7 +89,15 @@ export default async function TopPage({ searchParams }: { searchParams: Promise<
                   <span className="flex w-9 shrink-0 justify-end md:w-10">
                     <RankBadge rank={r.rank} tied={r.tied} size={r.rank <= 3 ? "lg" : "md"} />
                   </span>
-                  <Shot base={r.shot} alt="" domain={r.domain} className="aspect-[16/10] w-20 shrink-0 rounded-lg border border-edge transition group-hover:border-edge-strong max-sm:hidden md:w-44 lg:w-52" />
+                  <span className="grid w-20 shrink-0 place-items-center max-sm:hidden md:w-44 lg:w-52">
+                    {/* Weak screenshots (blank, low contrast, cookie bars) stay small. */}
+                    <Shot
+                      base={r.shot}
+                      alt=""
+                      domain={r.domain}
+                      className={`aspect-[16/10] rounded-lg border border-edge transition group-hover:border-edge-strong ${shotQuality(r.url) >= 40 ? "w-full" : "w-3/5"}`}
+                    />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="truncate font-semibold md:text-[15px]">{r.name}</span>

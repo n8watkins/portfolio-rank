@@ -2,20 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Pause, Play } from "lucide-react";
-import { useCountUp } from "@/components/preview/useCountUp";
+import { Odometer } from "@/components/preview/Odometer";
 import type { LiveStat } from "@/lib/preview/data";
 
 const PER = 4;
 const EVERY = 4500;
 
-function Value({ s, k }: { s: LiveStat; k: number }) {
-  const n = useCountUp(typeof s.value === "number" ? s.value : 0, k, 900);
-  return (
-    <>
-      {typeof s.value === "number" ? n.toLocaleString() : s.value}
-      {s.suffix}
-    </>
-  );
+function Value({ s }: { s: LiveStat }) {
+  const text = (typeof s.value === "number" ? s.value.toLocaleString("en-US") : s.value) + (s.suffix ?? "");
+  return /\d/.test(text) ? <Odometer value={text} /> : <span className="pop-in inline-block">{text}</span>;
 }
 
 /** The Live card: pages of four numbers that slide in turn; pausable, still under reduced motion. */
@@ -44,7 +39,7 @@ export function LiveCarousel({ stats }: { stats: LiveStat[] }) {
               {s.sample && <span className="sr-only">(sample)</span>}
             </dt>
             <dd className="mt-1.5 truncate text-2xl font-bold tabular-nums">
-              <Value s={s} k={page} />
+              <Value s={s} />
               {s.sample && (
                 <span className="ml-1 align-super text-[10px] font-semibold text-mute" aria-hidden>
                   *

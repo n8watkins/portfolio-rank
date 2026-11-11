@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { ArrowRight, BadgeCheck, CircleCheck, CircleX, Code2, EyeOff, LifeBuoy, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRight, BadgeCheck, CircleCheck, CircleX, Code2, EyeOff, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { CopyButton } from "@/components/preview/CopyButton";
 import { AppShell } from "@/components/shell/AppShell";
 import { Shot } from "@/components/preview/Shot";
 import { SampleTag, btnPrimary, btnSecondary } from "@/components/preview/bits";
@@ -15,8 +16,7 @@ type Step = "signin" | "verify" | "fallback" | "verified" | "confirm-remove" | "
 /**
  * Claim a portfolio (preview, sample data). Ownership is verified
  * automatically when the site links to github.com/<login> or the GitHub
- * profile's Website field points at the site's domain; otherwise a meta tag
- * or a manual review. A claimed site can be removed, its grade hidden, or a
+ * profile's Website field points at the site's domain; otherwise a meta tag. A claimed site can be removed, its grade hidden, or a
  * re-grade requested.
  */
 export default async function ClaimPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ state?: string; step?: string }> }) {
@@ -29,6 +29,9 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
   const at = step === "signin" ? 0 : step === "verify" || step === "fallback" ? 1 : 2;
   const href = (s: Step) => `/claim/${site.slug}?step=${s}`;
   const domain = site.domain.split("/")[0];
+  // One token per login and site (the real one would be random and stored).
+  const token = "pr-" + [...(login + site.slug)].reduce((h, c) => (h * 33 + c.charCodeAt(0)) >>> 0, 5381).toString(36);
+  const tag = `<meta name="portfoliorank-verify" content="${token}">`;
 
   return (
     <AppShell visitor={v} current="other">
@@ -82,7 +85,7 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
                   <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden /> your GitHub profile&apos;s Website field points to {domain}.
                 </li>
                 <li className="flex gap-2">
-                  <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> Neither? Add a small meta tag, or ask for a manual review.
+                  <Code2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> Neither? Add a one-line meta tag to your site.
                 </li>
               </ul>
             </>
@@ -113,30 +116,21 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
                   Manage your portfolio <ArrowRight className="nudge h-4 w-4" aria-hidden />
                 </a>
               ) : (
-                <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border border-edge p-4">
-                    <p className="flex items-center gap-2 font-semibold">
-                      <Code2 className="h-4 w-4 text-mute" aria-hidden /> Add a meta tag
-                    </p>
-                    <p className="mt-1 text-sm text-mute">Put this in your site&apos;s &lt;head&gt;, deploy, then check again.</p>
-                    <pre className="mt-3 overflow-x-auto rounded-lg bg-raised p-3 font-mono text-[12px]">{`<meta name="portfoliorank-verify" content="pr-7f3a9c" />`}</pre>
-                    <a href={href("verify")} className={`${btnSecondary} mt-3`}>
+                <div className="mt-6 rounded-xl border border-edge p-5">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <Code2 className="h-4 w-4 text-mute" aria-hidden /> Verify with a meta tag
+                  </p>
+                  <p className="mt-1 text-sm text-mute">
+                    Add this line inside the &lt;head&gt; of {domain}&apos;s home page, deploy, then check again. The token is unique to you and this site.
+                  </p>
+                  <pre className="mt-3 overflow-x-auto rounded-lg bg-raised p-3 font-mono text-[12.5px]">{tag}</pre>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <CopyButton text={tag} label="Copy tag" />
+                    <a href={href("verify")} className="group btn-sheen inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-sm font-semibold">
                       <RefreshCw className="h-4 w-4" aria-hidden /> Check again
                     </a>
                   </div>
-                  <div className="rounded-xl border border-edge p-4">
-                    <p className="flex items-center gap-2 font-semibold">
-                      <LifeBuoy className="h-4 w-4 text-mute" aria-hidden /> Ask for a manual review
-                    </p>
-                    <p className="mt-1 text-sm text-mute">Tell us how we can confirm it&apos;s yours. A person replies within a few days.</p>
-                    <label htmlFor="why" className="sr-only">
-                      How we can confirm it&apos;s yours
-                    </label>
-                    <textarea id="why" rows={3} placeholder="For example: the email on my site is..." className="mt-3 w-full rounded-lg border border-edge bg-card p-2.5 text-sm outline-none focus:border-accent" />
-                    <button type="button" className={`${btnSecondary} mt-2`}>
-                      Send for review
-                    </button>
-                  </div>
+                  <p className="mt-3 text-xs text-mute">You can remove the tag once you&apos;re verified.</p>
                 </div>
               )}
             </>
