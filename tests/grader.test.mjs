@@ -31,9 +31,9 @@ import { drainPeopleQueue } from "../pipeline/people.mjs";
 const SECRET = "test-secret-not-real";
 const T0 = Date.parse("2026-11-10T20:00:00Z"); // noon Pacific
 
-async function tempDb() {
+async function tempDb({ busyTimeoutMs = 5000 } = {}) {
   // A busy timeout like lib/db.ts: concurrent writers wait for the lock instead of failing.
-  const db = createClient({ url: `file:${path.join(fs.mkdtempSync(path.join(os.tmpdir(), "grader-")), "db.sqlite")}`, timeout: 5000 });
+  const db = createClient({ url: `file:${path.join(fs.mkdtempSync(path.join(os.tmpdir(), "grader-")), "db.sqlite")}`, timeout: busyTimeoutMs });
   await migrate(db);
   return db;
 }
@@ -114,7 +114,12 @@ test("caps: all three counters are taken together or not at all, per Pacific day
 });
 
 test("caps: concurrent requests can't pass the site-wide cap together (cost abuse)", async () => {
-  const db = await tempDb();
+  // No busy wait here: the local driver waits for a lock synchronously, so a
+  // transaction waiting on another one of this same process blocks the very
+  // thread that would release the lock, and each of the 20 stalled the whole
+  // timeout (95 seconds in all). Failing at once leaves the waiting to
+  // reserveCaps' own retries, which yield the thread.
+  const db = await tempDb({ busyTimeoutMs: 0 });
   const caps = { ...DEFAULT_CAPS, visitor: 100, network: 100, site: 5 };
   const results = await Promise.all(Array.from({ length: 20 }, (_, i) => reserveCaps(db, { visitor: `v${i}`, network: `n${i}`, now: new Date(T0), caps }).catch(() => ({ ok: false, scope: "busy" }))));
   assert.equal(results.filter((r) => r.ok).length, 5);

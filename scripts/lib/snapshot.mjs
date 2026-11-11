@@ -12,6 +12,8 @@
 //   rate_limits  poll vote rate-limit windows: an hour of state.
 //   grade_caps   the grader's daily cap counters: a day of state.
 //   email_outbox emails kept by test runs instead of being sent.
+//   badge_checks the last badge check per player: a minute of state, redone
+//             from the tables it summarises.
 // Everything else is in, including the polls (lib/polls/schema.mjs: polls,
 // their totals, the vote rows behind the one-vote rule and the generation
 // log), comparisons (the source of truth for
@@ -20,7 +22,7 @@
 // queue. A table added later is included automatically.
 
 export const SNAPSHOT_FORMAT = 2;
-export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits", "grade_caps", "email_outbox"]);
+export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits", "grade_caps", "email_outbox", "badge_checks"]);
 
 const internal = (name) => name.startsWith("sqlite_") || name.startsWith("libsql_") || name.startsWith("_litestream");
 

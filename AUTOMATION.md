@@ -176,6 +176,77 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 - **Results feed:** `pollResults(db, { since })` in [lib/polls/store.mjs](lib/polls/store.mjs) returns closed polls with totals, the winning option and the margin in points, for the content engine and the AI vs people comparisons; the public `past` list carries the same totals.
 - **Turso reads:** a public read is a handful of indexed rows, at most once a minute per data center; a vote is one insert (plus the trigger's update) and two rate-limit upserts.
 
+## Games, badges, claims, live stats and reports (built, off)
+
+Owner decisions of 2026-11-10 ([docs/DECISIONS.md](docs/DECISIONS.md#games-badges-and-claims)).
+The back end is built in [lib/games](lib/games); the screens come with the redesign (branch `preview/redesign`).
+Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (`wrangler.jsonc`, `"false"` today); the end-to-end tests run with it on.
+
+- **Who plays:** the signed-in account (`gh:<id>`), else the guest's signed `pr_anon` cookie (issued on a guest's first write).
+  At sign-in, `/api/claim` moves a guest's quizzes, badges and badge counters to the account ([lib/games/merge.mjs](lib/games/merge.mjs)); where both have the same quiz, the account's answers stand.
+- **The quiz pool** ([lib/games/pool.mjs](lib/games/pool.mjs)): every graded site the boards show, with its shown rank in Merged, AI and People.
+  A "top X%" is the shown rank over the sites shown in that view.
+  Before the first recompute (no `site_ratings`), all views fall back to the rating each AI grade seeds, and People has no percentile.
+  Sites whose owners removed them or hid their grade are never quizzed.
+  The pool is rebuilt at most every 3 hours (the `cache` table) and kept 5 minutes per isolate.
+- **Quizzes** ([lib/games/quiz.mjs](lib/games/quiz.mjs)): five portfolios, one drawn from each fifth of the board, in shuffled order.
+  The Daily 5 (`daily-YYYY-MM-DD`, Pacific day) is drawn from the date alone and stored at its first request, so it is the same for everyone all day.
+  A random quiz (`r-` and 10 random characters) is stored too, so its challenge link replays the same five.
+  A guess is checked on the server: a hit is within 15 points, points are 100 minus 2.5 per point off (never below 20), each round counts once, and the fifth answer finishes the play.
+  No response carries a percentile before its guess.
+- **Badges** ([lib/games/badges.mjs](lib/games/badges.mjs)): 20, each a target on one counter.
+  Counters come from votes, quiz plays and guesses, poll votes (last 5 weeks), lists and likes (signed in only), plus `player_counters` (shares, and grade requests `POST /api/grade` accepted, counted through `recordEvent(db, player, "grade")`) and `player_visits` (up to 50).
+  Night owl is a vote between midnight and 5 a.m. Pacific.
+  Hidden gem compares a saved site's percentile when a check first saw it saved with its percentile now.
+  Early supporter goes to anyone active on or before `EARLY_SUPPORTER_UNTIL` (a Worker variable, `YYYY-MM-DD`; unset gives none).
+  Awards are idempotent (the `badges` primary key) and stay when a counter drops.
+  A check is reused for 15 seconds (`badge_checks`), and each read is capped (1,000 votes, plays and guesses).
+- **Your eye:** the share of a player's face-off votes whose winner ranks higher on the People board (or the AI board), plus quiz guesses within 15 points of that view's percentile.
+- **Save to list:** the games use the existing lists API (`/api/lists`, `/api/lists/<id>/items`); nothing new.
+- **Claims** ([lib/games/claims.mjs](lib/games/claims.mjs)): signed in with GitHub, a claim is verified automatically when the portfolio's home page links to `github.com/<login>` (not for a site built from a known template, and only if the page didn't redirect elsewhere) or the GitHub profile's Website field is the portfolio's domain (GitHub API by numeric id, cached a day; `GITHUB_API_TOKEN` optional).
+  Otherwise the owner adds `<meta name="portfoliorank-verify" content="<token>">` and asks again with `method: "meta"`, or asks for manual review, which the admin decides through `/api/admin/claims`.
+  An account verifies at most 3 portfolios by itself; more go to review.
+- **Owner actions:** remove, hide or show the grade, and re-grade.
+  A removed site is hidden from the site at once (`lib/roster.ts`), then added to `data/excluded.json` as `owner_request` with reason "owner request" by the weekly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
+  A hidden grade is left out of the portfolio page, the print report (except for the owner) and the quiz pool.
+  A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
+  Every claim step and action is written to `claim_log`, the audit log.
+- **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, sites changed this month from `rating_resets`, the newest entry) come from one pass over the listed portfolios, cached an hour.
+  Stars and the community list's contributors come from the GitHub API, cached a day.
+  Votes today (Pacific, through the `votes_created_idx` index), all votes and quizzes finished are read on each edge-cache miss.
+- **Report download** (`printView` and `renderReportHtml` in [lib/grader/report.mjs](lib/grader/report.mjs)): a print-optimised HTML page with a "Save as PDF" button, not a PDF made on the Worker (a Worker PDF library ships Latin-1 fonts only, or a megabyte-scale font).
+  It shows a listed portfolio's grade with the same facts and judgments as a "grade my portfolio" report.
+  Signed-in visitors open any listed report; others get a one-time link by email, which lets that browser open that one report for an hour.
+- **Report links by email:** the same machinery as grade reports ("Grade my portfolio", Email below).
+  The link is a `report-link` one-time link ([lib/grader/links.mjs](lib/grader/links.mjs)): signed, valid 24 hours, works once, only a hash of its nonce stored, and it never opens a grade report (nor a grade link a print report).
+  The email goes through the shared gate ([lib/email/gate.mjs](lib/email/gate.mjs), kind `report-link`); a refused send answers 503 `email_unavailable` with the reason (`unavailable`, `capped` or `failed`), and the unused link simply expires.
+- **Abuse guards:** every write checks the `Origin` header; rate limits per browser and per hashed IP live in `rate_limits` (new quizzes 30 an hour per browser, guesses 300, badge events 120, claims 10 an account, owner actions 20, report emails 5 an hour); the email gate adds its daily caps, including 3 emails a day to one address; Turnstile guards report emails when `TURNSTILE_SECRET_KEY` is set (action `report-email`, [lib/turnstile.ts](lib/turnstile.ts)).
+- **Turso reads:** a quiz or guess reads a few rows by primary key; a badge check reads at most about 3,000 rows and is reused for 15 seconds; live stats cost about 2,100 rows an hour plus a few indexed rows a minute per data center.
+
+The API:
+
+| Request | Answer |
+| --- | --- |
+| `GET /api/games/quiz` | `{ quiz }`: today's Daily 5 with the visitor's progress; 503 `no_portfolios` |
+| `POST /api/games/quiz` | 201 `{ quiz }`: a new random quiz; 403, 429 |
+| `GET /api/games/quiz/<id>` | `{ quiz }` (a challenge link or a past Daily 5); 404 |
+| `POST /api/games/quiz/<id>/guess` `{ index, guess }` | `{ result: { index, guess, merged, ai, people, points, hit }, finished, badges }`; `finished` is null or `{ score, hits, perfect }`; 409 `already_guessed` with `result`; 400, 403, 404, 429 |
+| `GET /api/games/eye` | `{ eye: { crowd, ai, votes, guesses } }`, each `{ agree, of, pct }` |
+| `GET /api/badges` | `{ badges: [{ id, name, how, hue, counter, target, progress, earned, earnedAt, new }], counters, eye, signedIn }` |
+| `POST /api/badges` `{ kind: "share" }` or `{ kind: "visit", url }` | `{ recorded, badges }` |
+| `GET /api/owner/claims` | `{ claims: [{ url, status, method, meta, state }] }`; 401 |
+| `POST /api/owner/claims` `{ url, method?, note? }` | `{ claim }` with status `verified`, `pending`, `review` or `rejected`; 400, 401, 403, 429 |
+| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt }, regrade? }`; 400 `confirm_required`, 401, 403 `not_owner`, 429 |
+| `GET /api/admin/claims`, `POST /api/admin/claims` `{ id, decision, note? }` | the review queue, and a decision; admin login only |
+| `GET /api/stats/live` | the live numbers; public, 60 s, edge cache |
+| `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` with `reason` |
+| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden), 404, 410 (link used, expired or forged) |
+
+A quiz is `{ id, kind, day, challenge, hit, rounds: [{ index, url, name, tagline, domain, path, shot, hero }], progress: { results, finished, score, hits } }`.
+
+The tables are in [lib/games/schema.mjs](lib/games/schema.mjs) (schema version 5).
+`tests/games.test.mjs` covers the rules without a server and `tests/games-api.test.mjs` every route on the production build, with `GAMES_V2=true` and a local stand-in for the GitHub API on its own port (`GAMES_TEST_GITHUB_API`, which `lib/grader/server.ts` ignores on the deployed Workers).
+
 ## Grade my portfolio
 
 Owner decisions of 2026-11-10 ([docs/DECISIONS.md](docs/DECISIONS.md#grade-my-portfolio)): anyone can grade a portfolio with no account, on Gemini's free tier or their own key.
@@ -263,7 +334,8 @@ Reports and their screenshots are deleted after 180 days.
 
 - **"Get it by email", no account needed:** the address waits in `grade_emails` until the report is ready (also after waiting in a queue or for a later day), then the grader's tick sends a one-time link and erases the address, keeping only a keyed hash so the same address isn't added twice; at most 2 addresses a report.
 - **The link** ([lib/grader/links.mjs](lib/grader/links.mjs)): signed with `AUTH_SECRET`, expires in 7 days, works once (only a hash of its nonce is stored); opening it makes that browser the report's owner, and a used or expired link still leads to the report without granting anything.
-- **One gate** ([lib/email/gate.mjs](lib/email/gate.mjs)): every email (grade reports, owner alerts, the newsletter later) is counted in `email_sends` and stops at hard daily caps: 100 in all, 80 grade reports, 20 owner alerts and 3 to any one address (`EMAIL_CAPS` overrides them), under Cloudflare Email Service's beta daily limit.
+  The same module makes the games' print report links (scope `report-link`, a day); each scope is signed apart, so a link of one never opens the other, and both live in `grade_links` with its `scope` column.
+- **One gate** ([lib/email/gate.mjs](lib/email/gate.mjs)): every email (grade reports, the games' report links, owner alerts, the newsletter later) is counted in `email_sends` and stops at hard daily caps: 100 in all, 80 grade reports, 40 report links, 20 owner alerts and 3 to any one address (`EMAIL_CAPS` overrides them), under Cloudflare Email Service's beta daily limit.
   A refused or failed send counts too, so a broken provider can't become a retry storm; the log keeps a keyed hash, never the address.
   A report email the gate keeps refusing is given up after 3 days and its address erased.
 - **The sender:** Cloudflare Email Service through the Worker's `send_email` binding `SEND_EMAIL`, from `EMAIL_FROM` (`portfoliorank@n8builds.dev`; n8builds.dev is onboarded for sending, as for Wren).
@@ -276,7 +348,7 @@ While `GRADER_ENABLED` is not `"true"` it returns before reading anything.
 
 ### Tables
 
-`grade_jobs`, `grade_caps` (a day of counters, left out of the backup), `grade_emails`, `grade_links`, `email_sends` and `email_outbox` (test runs only, left out of the backup), in [lib/grader/schema.mjs](lib/grader/schema.mjs).
+`grade_jobs`, `grade_caps` (a day of counters, left out of the backup), `grade_emails`, `grade_links` (every one-time link, the games' too; expired ones are also deleted by the nightly retention), `email_sends` and `email_outbox` (test runs only, left out of the backup), in [lib/grader/schema.mjs](lib/grader/schema.mjs).
 
 ### Testing
 
@@ -422,6 +494,7 @@ serve images.
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
+- `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the weekly health workflow runs it)
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
