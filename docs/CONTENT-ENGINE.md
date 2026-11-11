@@ -89,7 +89,7 @@ A separate PortfolioRank key (`portfolio-rank/TAVILY_API_KEY` in `pass-env`, a W
 ### 5. Safe images
 
 See "Images" below.
-In short: only four sources, every one with a known licence; code records the source, licence and credit of every image; generated illustrations are reviewed and labelled; a slot with no good image gets a chart or nothing.
+In short: only our charts and screenshots, the owner-approved image library, Pexels and one fresh illustration, every one with a known licence; code records the source, licence, credit and approval of every image; generated illustrations are checked and labelled; a slot with no good image gets a chart or nothing.
 
 ### 6. Caps, a kill switch and a dry run
 
@@ -168,21 +168,46 @@ Page text from portfolios is untrusted and never goes to the writer as instructi
 ## Images
 
 Every post has a hero and 2 or 3 inline images (POST_TEMPLATE.md).
-Gemini proposes each slot (what it should show, which kind, alt text) while writing; code then fills it from one source, in this order of preference:
+While writing, Gemini gives each slot a brief at no extra request: the kind (chart, screenshot or picture), what it shows, the mood, 5 keywords and the alt text.
+Code then fills each slot once ([pipeline/content/images.mjs](../pipeline/content/images.mjs)), from the first step that works:
 
-| Source | How | Licence and credit | Review |
-| --- | --- | --- | --- |
-| **Charts made by code** | SVG from the fact sheet, PNG for share cards through the same `next/og` renderer the site already uses for its cards | ours | none needed: drawn from the checked facts; alt text from the slot spec |
-| **Real screenshots** | the captures we already store in R2 (`hero.jpg`) | ours; only of named, positive sites, never of anyone on the removal list | code checks the naming rule |
-| **Free-licence stock** | Unsplash and Pexels search APIs | Unsplash: hotlink the image URL, call the download endpoint, credit photographer and Unsplash ([docs](https://unsplash.com/documentation)); Pexels: credit the photographer and link Pexels ([docs](https://www.pexels.com/api/documentation/)) | Gemini picks among 3 candidates for fit |
-| **Workers AI illustrations** | `@cf/black-forest-labs/flux-1-schnell` on the free allowance (about 170 a day at 1024 x 1024, [ASSUMPTIONS.md](ASSUMPTIONS.md) B4) | generated; captioned "AI-generated illustration" | Gemini looks at 3 candidates and rejects text errors, odd hands or faces, anything resembling a real person, brand logos and fake screenshots of real products |
+| Step | Source | How | Licence and credit | Check |
+| ---: | --- | --- | --- | --- |
+| 1 | **Charts made by code** and **our screenshots** | SVG from the fact sheet; the captures in R2 (`hero.jpg`), only of named, positive sites | ours | none needed: drawn from the checked facts; code checks the naming rule |
+| 2 | **The image library** | the approved image whose tags best match the brief's keywords, not used in the last 10 posts | generated, ours; captioned "AI-generated illustration" | the owner approved it |
+| 3 | **Pexels** | one search with the keywords, the top 3, one Gemini look to choose; at most 1 search a slot and 2 a post, counted per month | credit the photographer and link Pexels ([docs](https://www.pexels.com/api/documentation/)) | Gemini rejects text, odd hands or faces, look-alikes of real people, logos and fake screenshots |
+| 4 | **One fresh illustration** | Flux Schnell in the house style, center-cropped to 16:9; Lucid Origin only if Schnell errors; at most 1 a post, within the 40 AI images a day | generated; captioned "AI-generated illustration"; it joins the library as pending (or rejected-auto) | one Gemini check on the cropped image ([pipeline/content/workers-ai.mjs](../pipeline/content/workers-ai.mjs)) |
+| 5 | **Fallback** | the best library match even if used recently, then an unused chart | as above | as above |
 
 Rules for all images:
 
 - Never an image found through a web or news search, and never a screenshot of a site that isn't a listed portfolio.
-- Code stores each image's source, licence, credit line and the review's verdict with the post.
-- A slot that gets no good image after one retry becomes a chart, or is dropped; a post can publish with fewer images, never with a bad one.
-- Gemini's paid image model is not used.
+- Hard limits: 1 hero and up to 3 inline images, at most 3 Gemini image checks a post, and no retries anywhere: every failure moves to the next step, and a slot with nothing left is dropped; a post can publish with fewer images, never with a bad one.
+- Code stores each image's source, licence, credit, caption and approval (owner-approved library image, automatic check, or drawn by code) with the post.
+- Never pay: Workers AI only runs within the free daily allowance (below), and Gemini's paid image model is not used.
+
+### The image library
+
+Owner decisions of 2026-11-10 ([DECISIONS.md](DECISIONS.md#content-engine)).
+A library of house-style illustrations ([pipeline/content/house-style.mjs](../pipeline/content/house-style.mjs)): strictly flat 2D vector, warm greys with one amber accent, no text, no people, no logos.
+
+- **The queue:** 26 tech-first themes x 5 subjects = 130 images, made in rounds (the first subject of every theme, then the second, and so on), each with alt text and tags for matching.
+- **Every night:** the end-of-day run's "Image library" stage ([pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs)), after Content, makes up to `LIBRARY_PER_NIGHT` (40) images: one Flux Schnell call each (Lucid Origin only if Schnell errors), a center crop to 16:9 (1024 x 576), one Gemini check of the cropped image with no retry (it rejects any text-like marks, people, logos, 3D and off-style images), then R2 under the private prefix `private/library/<SITE_ENV>/` and a row in `image_library`.
+  The queue is done in about 4 nights.
+- **Statuses:** `pending` (passed the check, waiting for the owner), `approved`, `rejected` (dropped by the owner), `rejected-auto` (failed the check, kept for the owner to see), `retired`.
+  Only approved images are ever used.
+  A queue item gets one image, ever; one whose model calls both errored has no row and comes up on a later night.
+- **Review:** `/admin/images` (only for `ADMIN_GITHUB_LOGIN`; a 404 for anyone else) lists the pending images with keep and drop, the failed ones (keep one anyway if the check was wrong), and the library with usage counts and a retire button.
+  Decisions are POSTs to `/api/admin/library` that must come from the site with a JSON body (CSRF), checked on the server.
+- **One batch by hand:** the page's "Make 5 now" button (`POST /api/admin/library/generate`, production only) runs the night stage's work for up to 5 queue items, with the same 40-images-a-day limit, the "library" stage's Gemini cap and no retries.
+  Setting `LIBRARY_PER_NIGHT` to "0" stops the nightly work; `LIBRARY_MODEL` "flux2dev" switches the library to Flux 2 Dev (multipart input, 1024 x 576 and 16 steps so it fits the 2,500-neuron guard, 2,400 neurons an image, so one a day).
+- **The never-pay guard** ([lib/content/neurons.mjs](../lib/content/neurons.mjs)): **at most 40 AI images a UTC day** (`MAX_AI_IMAGES_PER_DAY`), counted per image, for the library and the posts together.
+  Behind it, at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`; 40 Schnell images are about 2,320), half of PortfolioRank's 5,000 slice of the account's free 10,000 ([COSTS.md](COSTS.md#workers-ai)); Cloudflare resets the allowance at 00:00 UTC.
+  Before every call, one image and the call's estimated neurons are reserved for the day (`ai_image_days`) in one statement that only succeeds while both stay within their limits; a failed reservation skips the call, with no retry, and a reservation is never given back.
+  Either setting above its maximum (or not a whole number) is rejected and turns Workers AI off; staging's limits are 0.
+  Estimates round partial tiles up: Schnell 58, Lucid Origin 1,512 (768 x 432, 20 steps), Flux 2 Dev 2,400 (1024 x 576, 16 steps).
+  "AI images today: N of 40" shows on `/admin/images` and in `GET /api/admin/quota`.
+- **Seed:** the round-1 and round-2 sample images were not imported; the nightly run makes the same subjects in the final house style.
 
 **Owner decision (2026-11-10): stock photos with people in them.**
 Allowed, but never as the hero and never next to a named developer, so a stranger's face can't be read as that developer.
@@ -253,7 +278,7 @@ Each step is one pull request with its risks turned into tests (the security rev
 4. **Fact builders** for "3.1 vs 3.5" and "Leaderboard movement", with charts drawn from the facts; tests on fixture databases, including that no negative fact ever carries a name, with no Gemini.
 5. **Writer and code checks:** the write request with placeholders, number filling and the stray-number scan, the naming check, link checks, the template checks, the revision loop and the drop; tested with seeded bad drafts and a mocked Gemini.
 6. **Outside claims and the topic filter:** claim listing, Tavily search, the support judgement, the verbatim quote rule, the deny list and the final review; tested with injected instructions in fake search results.
-7. **Images:** charts, screenshots, Unsplash and Pexels with credits, Workers AI candidates and the review; tested with seeded bad images.
+7. **Images:** charts, screenshots, the approved image library, Pexels with credits, one fresh illustration with one check, the never-pay neuron guard; tested with seeded bad images.
 8. **The night stage:** wire the "Content" stage into the end-of-day run through the accountant (find and pick on Sunday, one post a night on the publishing nights), the caps, and the weekly owner summary.
 9. **Dry run:** one week in `dry-run`; the owner switches to `publish`.
 10. **After launch:** the newsletter hook is picked up when the newsletter ships; more story kinds as their data arrives (polls, experiments, model watch); news tie-ins once the core runs cleanly.
@@ -286,9 +311,10 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |
 | Outside claims through Tavily, the verbatim quote rule | [pipeline/content/claims.mjs](../pipeline/content/claims.mjs) |
 | The topic filter: deny list, pick, final review | [pipeline/content/topic.mjs](../pipeline/content/topic.mjs) |
-| Images: charts, R2 screenshots, Unsplash and Pexels, Workers AI with Gemini's review | [pipeline/content/images.mjs](../pipeline/content/images.mjs) |
+| Images: charts, R2 screenshots, the image library, Pexels, one fresh illustration with one check | [pipeline/content/images.mjs](../pipeline/content/images.mjs) |
 | The night stage, the schedule, the caps, the weekly owner summary | [pipeline/content/engine.mjs](../pipeline/content/engine.mjs), wired in [pipeline/night.mjs](../pipeline/night.mjs) and [worker/night.ts](../worker/night.ts) |
 | Admin review of drafts (JSON) | `GET /api/admin/content` ([app/api/admin/content/route.ts](../app/api/admin/content/route.ts)) |
+| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/images/page.tsx](../app/admin/images/page.tsx), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
 
 How it runs, in short:
 
@@ -298,9 +324,9 @@ How it runs, in short:
 - Outside claims are cut by code (exact sentences), not by a rewrite; a rewrite happens only when a code check or the review fails.
 - The writer gets each fact's placeholder, label and display, never its raw value or query; code assembles the TL;DR block, the image markers and the call to action, and puts each sentence on its own line.
 - The number check allows years, list numbers, the Gemini model names, the rubric's "1 to 5", the post's allowed names and addresses, and the sentences of supported outside claims; the template's 250 to 400 words get 10% slack.
-- Generated images and charts are stored in the `SHOTS` bucket under `content/<SITE_ENV>/<post id>/`, which `/shots` does not serve; the blog lane serves them.
-  Stock photos are hotlinked, as Unsplash requires, with the Unsplash download endpoint called when one is used.
-- Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `UNSPLASH_ACCESS_KEY` and `PEXELS_API_KEY` a stock slot falls back to a spare chart or is dropped; without the `AI` binding the same for illustrations.
+- Charts are stored in the `SHOTS` bucket under `content/<SITE_ENV>/<post id>/` and illustrations under `private/library/<SITE_ENV>/`, which `/shots` does not serve; the blog lane serves them.
+  Pexels photos are hotlinked with their credit.
+- Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `PEXELS_API_KEY` the Pexels step is skipped; without the `AI` binding (or with no neuron room) the fresh illustration is skipped.
 - The weekly summary is an owner alert of kind "info" (`content-weekly`) on Sunday nights while the engine is on.
 - The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs); `WRITER_MODE` ("staged" by default, or "single"; [pipeline/content/staged.mjs](../pipeline/content/staged.mjs)) picks how the first draft is written: staged is an outline, two section requests and a finish request (4 requests, 5 after an outline retry), single is one request.
-- Tests: [tests/content.test.mjs](../tests/content.test.mjs) and [tests/admin-content.test.mjs](../tests/admin-content.test.mjs).
+- Tests: [tests/content.test.mjs](../tests/content.test.mjs), [tests/admin-content.test.mjs](../tests/admin-content.test.mjs), [tests/image-library.test.mjs](../tests/image-library.test.mjs) and [tests/admin-library.test.mjs](../tests/admin-library.test.mjs).

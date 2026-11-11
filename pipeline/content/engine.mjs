@@ -13,7 +13,8 @@
 //          review), revise at most twice, images, store.
 //
 // Caps (gate 6): 1 draft a night, 2 revision rounds, Tavily 10 a post and
-// 40 a week, 9 Workers AI candidates a post, 2 published posts in any 7
+// 40 a week, 1 fresh illustration, 2 Pexels searches and 3 image checks a
+// post (images.mjs), 2 published posts in any 7
 // days (lib/content/store.mjs storePost), and the stage's Gemini cap and
 // time cap from the budget accountant. All requests go to 3.5 Flash-Lite
 // through the night's client (job "content"); a draft never takes more
@@ -34,6 +35,8 @@ import { creditsFor, monthlyCap } from "../../lib/content/tavily-credits.mjs";
 import { TAVILY_PER_POST, TAVILY_PER_WEEK, checkClaims } from "./claims.mjs";
 import { buildPickRequest, buildReviewRequest, choosePicks, reviewCheck } from "./topic.mjs";
 import { fillImages } from "./images.mjs";
+import { aiLimits } from "../../lib/content/neurons.mjs";
+import { pexelsCap } from "../../lib/content/pexels-searches.mjs";
 import { OutlineError, STAGED_REQUESTS, stagedWrite } from "./staged.mjs";
 
 export const MAX_REVISIONS = 2;
@@ -252,14 +255,18 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
     ctx: {
       postId,
       env: ctx.content?.env ?? "local",
+      db,
+      now: ctx.now,
       fetchImpl: ctx.fetchImpl,
-      keys: { unsplash: ctx.content?.keys?.unsplash, pexels: ctx.content?.keys?.pexels },
+      keys: { pexels: ctx.content?.keys?.pexels },
+      pexelsCap: pexelsCap(ctx.content?.pexelsMonthlySearches),
       ai: ctx.content?.ai ?? null,
+      limits: aiLimits(ctx.content?.aiEnv ?? {}),
       store: ctx.content?.store ?? (async (key) => key),
       generate: g.generate,
     },
   }).catch(async (e) => {
-    if (e instanceof ContentBudgetError) return { images: [], dropped: (draft.images ?? []).map((i) => i.slot), requests: 0, aiImages: 0, notes: [msg(e)], body };
+    if (e instanceof ContentBudgetError) return { images: [], dropped: (draft.images ?? []).map((i) => i.slot), requests: 0, aiImages: 0, pexels: 0, notes: [msg(e)], body };
     throw e;
   });
   checks.images = img.notes;
@@ -268,7 +275,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
   const publishAt = nextMorning(now);
   const post = postOf({ id: postId, kind, sheet, draft, body: img.body, images: img.images, supported, checks, night, ctx, requests: g.used.n });
   const stored = await storePost(db, post, { mode, publishAt, now });
-  await recordRun(db, { night, now, step: "draft", mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped } });
+  await recordRun(db, { night, now, step: "draft", mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
   log(`${stored.status}${stored.capped ? " (held back by the weekly cap)" : ""} after ${history.length} round(s), ${g.used.n} request(s), ${img.images.length} image(s)`);
   return { status: "ok", postId, stored: stored.status, requests: g.used.n };
 }

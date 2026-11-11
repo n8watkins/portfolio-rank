@@ -30,7 +30,6 @@ New values go into pass-env with `pass-env set <entry>` in your own terminal; ag
 - [ ] Before the public grader launches: a paid Gemini key (billing on this project, with a budget alert).
 - [ ] Content engine keys (all optional; the engine runs without them, cutting outside claims and skipping stock photos), each from a free tier, set with `pass-env set <entry>`; the agent sends them to the Worker as secrets of the same name without the prefix:
   - `portfolio-rank/TAVILY_API_KEY`: a new PortfolioRank key (not Wren's) from https://app.tavily.com (free plan: 1,000 credits a month; the engine uses about 100).
-  - `portfolio-rank/UNSPLASH_ACCESS_KEY`: the Access Key of a new application at https://unsplash.com/oauth/applications (demo mode: 50 requests an hour, enough for a few posts a week).
   - `portfolio-rank/PEXELS_API_KEY`: from https://www.pexels.com/api/ (free: 200 requests an hour, 20,000 a month).
 - [ ] Content engine dry run: switch `CONTENT_MODE` to `dry-run` in `wrangler.jsonc` when you want the week of private drafts to start, review them at `/api/admin/content`, then switch to `publish` by hand (docs/CONTENT-ENGINE.md).
 - [ ] Optional: `SENTRY_AUTH_TOKEN` secret and `SENTRY_ORG` / `SENTRY_PROJECT` variables for readable error traces.

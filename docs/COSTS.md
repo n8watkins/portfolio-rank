@@ -34,7 +34,7 @@ Shared assumptions:
 | Workflows, Queues, KV | $0 | $0 | $0 | inside the included amounts |
 | R2 storage (10 GB free) | $0 (0.7 GB) | $0 (grows 0.33 GB a month) | $0 for 3 months, then about $0.05 per month added (grows 3.3 GB a month) | $0.015 per GB-month |
 | R2 operations | $0 | $0 | $0 (Class A about 40k, Class B under 4M) | 1M Class A and 10M Class B free |
-| Workers AI illustrations | $0 | $0 | $0 | 10,000 neurons a day free |
+| Workers AI illustrations | $0 | $0 | $0 | 10,000 neurons a day free; PortfolioRank capped at 40 images (2,500 neurons) a day by code ([Workers AI](#workers-ai)) |
 | Web Analytics | $0 | $0 | $0 | on every plan, no price listed |
 | GitHub Actions (public repository) | $0 | $0 | $0 | standard runners free |
 | Turso (Free plan) | $0 | $0 with the fixes in section C (without them reads exceed Free around month 5) | $0 with the fixes; without them Free blocks in the first week and Developer costs about $5 to $10 | section C |
@@ -223,4 +223,38 @@ The blog image library uses Pexels as a licensed stock source (one search per im
 The account is nathancwatkins23@gmail.com, with one API key, stored in pass as `portfolio-rank/PEXELS_API_KEY` (also set on the Worker as `PEXELS_API_KEY`).
 Pexels is free and its limits are 200 requests an hour and 20,000 a month.
 Expected use is about 16 searches a month (at most 2 searches per post, 2 posts a week), well under both limits.
-The engine will count Pexels searches per month and show them on the admin quota page, like Tavily.
+The engine counts Pexels searches per UTC month (`pexels_searches`) and shows them in `GET /api/admin/quota` as `pexels`, like Tavily; `PEXELS_MONTHLY_SEARCHES` (500 by default) only stops a runaway.
+
+## Workers AI
+
+Owner decisions 2026-11-10: never pay; every image comes from free daily allowances only ([DECISIONS.md](DECISIONS.md#content-engine)).
+
+**The limit: at most 40 AI images a UTC day** (`MAX_AI_IMAGES_PER_DAY`, counted per image, that is per Workers AI call, whether it succeeds or not).
+That covers the library's nightly batch and each post's one fresh image together.
+Behind it, a neuron guard: at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`); 40 Schnell images are about 2,320.
+Both settings can be lowered, never raised: a value above 40 or 2,500, or one that isn't a whole number, is rejected and fails closed (no Workers AI call at all; the night stage says why and `GET /api/admin/quota` shows it as `aiImages.problem`).
+Staging's limits are 0.
+
+- Before each call, one image and the call's estimated neurons are reserved for the UTC day ([lib/content/neurons.mjs](../lib/content/neurons.mjs), table `ai_image_days`) in one statement that only succeeds while both stay within their limits; without room the call is skipped, never retried, and a reservation is never given back.
+- The account's free allowance is 10,000 neurons a day, shared by every app on the account, and resets at 00:00 UTC ([pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)).
+  The account is on Workers Paid, so anything above it would be billed at $0.011 per 1,000 neurons.
+- The allowance is split into slices so the account never passes 10,000 (owner, 2026-11-10); PortfolioRank uses at most half of its slice:
+
+  | Slice | Neurons a UTC day | Enforced by |
+  | --- | ---: | --- |
+  | PortfolioRank images | 5,000 (used: at most 2,500, 40 images) | `MAX_AI_IMAGES_PER_DAY`, `AI_NEURON_CEILING` and the `ai_image_days` counter in this repository |
+  | demo-kit | 2,000 | demo-kit's own guard |
+  | Everything else on the account | 1,000 | each app's own guard |
+  | Buffer, never used | 2,000 | nobody spends it |
+  | **Total** | **10,000** | the free allowance |
+
+| Model | Size and steps | Neurons an image (tiles rounded up) | Use |
+| --- | --- | ---: | --- |
+| Flux Schnell | 1024 x 1024, 4 steps | 58 | the library (up to 40 a night) and 1 per post |
+| Lucid Origin | 768 x 432, 20 steps | 1,512 | only when Schnell errors, if the day has room |
+| Flux 2 Dev | 1024 x 576, 16 steps | 2,400 | off; `LIBRARY_MODEL` "flux2dev" (one a day at most) |
+
+A normal day is 40 images or fewer: up to 39 or 40 library images plus a post's one on a drafting night (the Content stage runs first, so a post never waits for the library).
+A Lucid fallback only runs while it fits the 2,500 neurons, so on a busy day it is skipped and the slot falls back to the library or a chart.
+Each library image also takes one Gemini check (the night's "Image library" stage, 40 a day, inside the free Gemini quota with the other stages).
+"AI images today: N of 40" shows on `/admin/images` and in `GET /api/admin/quota` as `aiImages`, with the neurons.

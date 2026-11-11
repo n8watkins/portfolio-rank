@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { sameOrigin } from "@/lib/polls/server";
 
 /**
  * The signed-in admin's GitHub login, or why not: "signin_required" when no
@@ -14,3 +15,18 @@ export async function requireAdmin(): Promise<{ login: string } | { error: "sign
   if (!admin || login.toLowerCase() !== admin) return { error: "forbidden" };
   return { login };
 }
+
+/**
+ * A state-changing admin request: the same checks as requireAdmin, plus
+ * CSRF protection. The Origin header must be this site's (lib/polls/server
+ * sameOrigin), and the body must be JSON: a cross-site form can send neither
+ * without a CORS preflight, which this site never allows.
+ */
+export async function requireAdminPost(req: Request): Promise<{ login: string } | { error: "bad_origin" | "bad_request" | "signin_required" | "forbidden" }> {
+  if (!sameOrigin(req)) return { error: "bad_origin" };
+  if (!/^application\/json\b/i.test(req.headers.get("content-type") ?? "")) return { error: "bad_request" };
+  return requireAdmin();
+}
+
+/** The HTTP status for an admin error. */
+export const adminErrorStatus = (error: string) => (error === "signin_required" ? 401 : error === "bad_request" ? 400 : 403);

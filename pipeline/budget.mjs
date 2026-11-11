@@ -38,6 +38,7 @@ export const STAGES = [
   { key: "grade_changed", job: "grade-changed", label: "Grade changed sites" },
   { key: "compare", job: "compare", label: "AI ranking comparisons" },
   { key: "content", job: "content", label: "Content" },
+  { key: "library", job: "library", label: "Image library" },
   { key: "regrade", job: "regrade", label: "Re-grades (3.1 and older rubric)" },
   { key: "experiment", job: "experiment", label: "Experiments" },
 ];
@@ -92,6 +93,8 @@ export const DEFAULT_PLAN = {
     grade_changed: { cap: 100, minutes: 30 },
     compare: { cap: 200, minutes: 45 },
     content: { cap: 100, minutes: 30 },
+    // One Gemini check per library image (pipeline/content/library-stage.mjs).
+    library: { cap: 40, minutes: 25 },
     regrade: { cap: 300, minutes: 60 },
     experiment: { cap: 50, minutes: 15 },
   },
