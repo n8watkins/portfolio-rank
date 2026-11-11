@@ -340,8 +340,8 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   "AI images today: N of 40" shows on `/admin/images` and in `GET /api/admin/quota`.
   Why: the account is on Workers Paid, which bills neurons past the free allowance automatically; a count of images is easy to read and to check.
 - **Account-wide Workers AI slices with a strict buffer** (owner, 2026-11-10). Status: built (#94) for PortfolioRank's slice.
-  The account must never pass the free 10,000 neurons a UTC day: PortfolioRank images 5,000, demo-kit 2,000, everything else 1,000, and a 2,000 buffer never used ([COSTS.md](COSTS.md#workers-ai)).
-  PortfolioRank uses at most 2,500 of its 5,000 (the 40-image limit above).
+  The account must never pass the free 10,000 neurons a UTC day: PortfolioRank images at most 2,500 (the 40-image limit above), everything else 1,000, and a 6,500 buffer never used ([COSTS.md](COSTS.md#workers-ai)).
+  Demo-kit uses no Workers AI: its voice and render run locally.
   Why: each app guards only its own counter, so the slices plus an unused buffer keep the account's total under the free allowance even when one app misjudges its use.
 - **Schnell for everything; Flux 2 Dev later, optional** (owner, 2026-11-10). Status: built (#94).
   Flux Schnell makes the library and the per-post images; it is square, so code center-crops to 16:9 and the Gemini check sees the cropped image and rejects any text-like marks (Schnell tends to draw fake text).
