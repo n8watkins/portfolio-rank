@@ -30,11 +30,11 @@ export default function SettingsPage() {
             aria-describedby="autoopen-desc"
             onClick={toggleAutoOpen}
             className={`relative h-6 w-11 shrink-0 rounded-full transition after:absolute after:-inset-y-2.5 after:inset-x-0 ${
-              autoOpen ? "bg-accent" : "bg-edge"
+              autoOpen ? "bg-fill" : "bg-mute"
             }`}
           >
             <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-bg transition-all ${
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-card shadow-sm transition-all ${
                 autoOpen ? "left-[1.375rem]" : "left-0.5"
               }`}
             />

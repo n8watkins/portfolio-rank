@@ -54,16 +54,17 @@ export function SiteFooter() {
             </a>
             .
           </p>
-          <div className="mt-5 flex items-center gap-4">
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
             <a
               href={SITE.n8builds}
               target="_blank"
               rel="noopener"
               aria-label="n8builds.dev, the maker of PortfolioRank"
-              className="rounded-lg opacity-90 transition hover:opacity-100"
+              className="inline-flex min-h-11 items-center gap-2.5 rounded-lg text-sm font-medium text-ink/80 transition hover:text-ink"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/n8-icon.png" alt="" width={36} height={36} loading="lazy" className="h-9 w-9 rounded-lg" />
+              <img src="/n8-icon.png" alt="" width={28} height={28} loading="lazy" className="h-7 w-7 rounded-md" />
+              n8builds.dev
             </a>
             <a
               href={SITE.kofi}
@@ -107,7 +108,7 @@ export function SiteFooter() {
             rel="noopener"
             className="font-medium text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent"
           >
-            n8builds
+            n8builds.dev
           </a>
           . Grades are estimates, not a verdict on the developer.
         </p>

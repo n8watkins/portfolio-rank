@@ -52,7 +52,7 @@ test("Sign in opens a real modal: top layer, focus inside, Escape closes and ret
     modal: true,
     parentIsBody: true,
     focusInside: true,
-    name: "Make your votes count",
+    name: "Sign in to PortfolioRank",
     scrollLocked: true,
   });
   await page.keyboard.press("Escape");

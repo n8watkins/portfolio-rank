@@ -3,9 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import { History, LogOut, Settings, Sparkles, User } from "lucide-react";
-import { useSignIn } from "@/components/SignInModal";
+import { useSignIn, type SignInPrompt } from "@/components/SignInModal";
 import { ROUTES, type PrimaryAction } from "@/lib/nav";
 import { useClientSession, type ClientSession } from "@/lib/session-client";
+
+/** What the shell's Sign in (header and phone More sheet) asks. */
+export const SHELL_SIGN_IN: SignInPrompt = {
+  title: "Sign in to PortfolioRank",
+  body: "Your votes count officially, and your likes and lists follow you to every device.",
+  skipLabel: "Not now",
+};
 
 /** The account's picture, or its first letter on amber. */
 export function Avatar({ user, className = "h-9 w-9 text-sm" }: { user: ClientSession; className?: string }) {
@@ -78,7 +85,7 @@ export function AccountMenu({ action }: { action: PrimaryAction | null }) {
     return (
       <button
         type="button"
-        onClick={() => openSignIn({ title: "Sign in to PortfolioRank", skipLabel: "Not now" })}
+        onClick={() => openSignIn(SHELL_SIGN_IN)}
         className="h-9 shrink-0 whitespace-nowrap rounded-lg border border-edge px-3 text-sm font-semibold transition hover:border-mute"
       >
         Sign in

@@ -205,7 +205,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Until then Play points at `/rank`, Browse at the grid on home, About at `/how`, and "Grade yours" (the highlighted header action and the phone tab bar's Grade tab) stays hidden until the grade pages ship.
   Why: the shell can go live before the page lanes without a single link to a 404.
 - **The maker's mark beside the logo** (owner, 2026-11-10). Status: building (Wave B step 1).
-  The n8 icon and "n8builds.dev" (no "by"), linking to n8builds.dev; when the header is too narrow for the name, only the icon shows.
+  The n8 icon always comes with "n8builds.dev" (no "by"), linking to n8builds.dev: beside the logo in the header (only the icon when the header is too narrow for the name) and in the footer's brand area; the footer's last line reads "Built by n8builds.dev."
 - **Light-theme amber and green text darkened a step for contrast** (agent, 2026-11-10). Status: building (Wave B step 1).
   `--color-accent` is `#9a5d06` and `--color-up` `#157a3a` in the light theme (the preview had `#a16207` and `#15803d`, 4.3-4.4:1 on the raised surface); the amber fill is unchanged, and `tests/tokens.test.mjs` checks every text token reaches 4.5:1 on every surface in both themes.
   Why: WCAG AA for small text, at a difference the eye can't see.

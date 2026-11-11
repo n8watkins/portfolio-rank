@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Globe } from "lucide-react";
 import { faviconOf } from "@/lib/shot-url";
 
 /** A capture below this score (0-100: detail, contrast, not blank, no cookie bar) shows the fallback. */
@@ -40,6 +41,11 @@ export function ScreenshotFrame({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const [iconFailed, setIconFailed] = useState(false);
+  // Same for the site's icon in the fallback.
+  const checkIcon = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth === 0) setIconFailed(true);
+  }, []);
   // An image that failed before hydration never fires onError: check on mount.
   const check = useCallback((img: HTMLImageElement | null) => {
     if (img?.complete && img.naturalWidth < 100) setFailed(true);
@@ -50,8 +56,23 @@ export function ScreenshotFrame({
     return (
       <div role="img" aria-label={alt} className={`${frame} grid place-items-center bg-linear-to-b from-raised to-card p-3 text-center`}>
         <span className="flex min-w-0 flex-col items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={faviconOf(domain)} alt="" width={32} height={32} loading="lazy" className="h-8 w-8 rounded-lg" />
+          {iconFailed ? (
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-card text-mute ring-1 ring-edge">
+              <Globe className="h-4 w-4" aria-hidden />
+            </span>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              ref={checkIcon}
+              src={faviconOf(domain)}
+              alt=""
+              width={32}
+              height={32}
+              loading="lazy"
+              onError={() => setIconFailed(true)}
+              className="h-8 w-8 rounded-lg"
+            />
+          )}
           <span className="max-w-full break-all text-xs font-medium text-mute">{domain}</span>
         </span>
       </div>
