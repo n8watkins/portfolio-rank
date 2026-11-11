@@ -68,14 +68,30 @@ const parse = (v) => {
 /** A small builder for one sheet, which checks the naming rule as it goes. */
 function sheet(kind, { now, headline, angle, dataLink, query }) {
   const at = new Date(now).toISOString();
-  const s = { kind, ready: true, headline, angle, dataAsOf: at, dataLink, facts: [], charts: [], names: [], screenshots: [] };
+  const s = { kind, ready: true, headline, angle, dataAsOf: at, dataLink, facts: [], charts: [], names: [], screenshots: [], notable: [], superlatives: [], examples: [] };
   let n = 0;
   return {
     s,
-    fact(label, value, display, { tone = "neutral", about = null, q = query } = {}) {
+    fact(label, value, display, { tone = "neutral", about = null, q = query, scope = null } = {}) {
       const id = `f${++n}`;
-      s.facts.push({ id, label, value, display: String(display), tone, about, query: q, at });
+      s.facts.push({ id, label, value, display: String(display), tone, about, query: q, at, ...(scope ? { scope } : {}) });
       return id;
+    },
+    /** A surprising fact the writer should lead with: its fact ids and a one-line hook made of placeholders. */
+    notable(factIds, why) {
+      s.notable.push({ factIds, why });
+    },
+    /**
+     * A claim of "most", "least" or "only" the sheet can support. `tied` is
+     * true when more than one item shares the extreme; the checker then
+     * rejects a superlative about these facts unless it names the tie.
+     */
+    superlative(term, factIds, tied, tieFactId) {
+      s.superlatives.push({ term, factIds, tied, tieFactId });
+    },
+    /** A named site that is strong on one axis, for a "Try this" step to point to. */
+    example(axis, factId, row) {
+      s.examples.push({ axis, factId, name: row.name, url: row.url });
     },
     name(row, reason) {
       if (!s.names.some((x) => x.url === row.url)) {
@@ -142,6 +158,14 @@ const median = (xs) => {
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
+/** The items sharing the extreme value of `key`, comparing what a reader sees (rounded to `d` decimals). */
+export function extremes(items, key, dir = "max", d = 1) {
+  if (!items.length) return [];
+  const r = (x) => Number(key(x).toFixed(d));
+  const best = (dir === "max" ? Math.max : Math.min)(...items.map(r));
+  return items.filter((x) => r(x) === best);
+}
+const joinWords = (xs) => (xs.length <= 2 ? xs.join(" and ") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 const axisScore = (r, k) => (typeof r.rubric?.[k]?.score === "number" ? r.rubric[k].score : null);
 const axisSum = (r) => AXES.reduce((a, k) => a + (axisScore(r, k) ?? 0), 0);
 
@@ -162,26 +186,45 @@ export async function topGrades(db, { now }) {
     query: "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
   });
   b.fact("Portfolios graded by the AI judge", rows.length, fmt.int(rows.length));
-  b.fact("Share graded S or A", best.length / rows.length, fmt.pct(best.length / rows.length));
+  b.fact("Share of all graded portfolios that are graded S or A", best.length / rows.length, fmt.pct(best.length / rows.length), {
+    scope: { need: "graded|all portfolios|every portfolio|everyone", avoid: "of (?:the )?(?:top|best|leading) (?:portfolios|sites)" },
+  });
   const sCount = rows.filter((r) => r.rubric.tier === "S").length;
   b.fact("Portfolios graded S, the top tier", sCount, fmt.int(sCount));
-  const gaps = [];
+  const per = [];
   const bestIds = [];
   const restIds = [];
   for (const k of AXES) {
     const mb = mean(best.map((r) => axisScore(r, k)).filter((x) => x != null));
     const mr = mean(rest.map((r) => axisScore(r, k)).filter((x) => x != null));
     if (mb == null || mr == null) continue;
-    bestIds.push([AXIS_LABELS[k], b.fact(`Average ${AXIS_LABELS[k]} score (1 to 5) of S and A portfolios`, mb, fmt.dec(mb))]);
-    restIds.push([AXIS_LABELS[k], b.fact(`Average ${AXIS_LABELS[k]} score (1 to 5) of all other graded portfolios`, mr, fmt.dec(mr))]);
-    gaps.push({ k, gap: mb - mr });
+    const ib = b.fact(`Average ${AXIS_LABELS[k]} score (1 to 5) of S and A portfolios`, mb, fmt.dec(mb));
+    const ir = b.fact(`Average ${AXIS_LABELS[k]} score (1 to 5) of all other graded portfolios`, mr, fmt.dec(mr));
+    bestIds.push([AXIS_LABELS[k], ib]);
+    restIds.push([AXIS_LABELS[k], ir]);
+    per.push({ k, label: AXIS_LABELS[k], mb, mr, gap: mb - mr, ib, ir });
   }
-  gaps.sort((x, y) => y.gap - x.gap);
-  if (gaps.length) {
-    b.fact("The axis where S and A portfolios lead the rest by the most", AXIS_LABELS[gaps[0].k], AXIS_LABELS[gaps[0].k]);
-    b.fact("That axis's lead, in points on a 1 to 5 scale", gaps[0].gap, `${fmt.dec(gaps[0].gap)} points`);
-    const last = gaps.at(-1);
-    b.fact("The axis where the gap is smallest", AXIS_LABELS[last.k], AXIS_LABELS[last.k]);
+  if (per.length) {
+    const lead = extremes(per, (x) => x.gap, "max");
+    const small = extremes(per, (x) => x.gap, "min");
+    const leadId = b.fact(lead.length > 1 ? "The axes where S and A portfolios lead the rest by the most (tied)" : "The axis where S and A portfolios lead the rest by the most", lead.map((x) => x.label).join(" and "), joinWords(lead.map((x) => x.label)));
+    const gapId = b.fact("The biggest lead, in points on a 1 to 5 scale", lead[0].gap, `${fmt.dec(lead[0].gap)} points`);
+    const nLead = b.fact("Number of axes sharing the biggest lead", lead.length, fmt.int(lead.length));
+    b.superlative("biggest lead", [leadId, gapId], lead.length > 1, nLead);
+    const smallId = b.fact(small.length > 1 ? "The axes where the gap between S and A portfolios and the rest is smallest (tied)" : "The axis where the gap is smallest", small.map((x) => x.label).join(" and "), joinWords(small.map((x) => x.label)));
+    b.superlative("smallest gap", [smallId], small.length > 1, nLead);
+    // Notable: an axis that is lowest for both groups (a weak spot everywhere), else the smallest gap; then the biggest lead.
+    const lowBest = extremes(per, (x) => x.mb, "min");
+    const lowRest = extremes(per, (x) => x.mr, "min");
+    const lowAll = lowBest.filter((x) => lowRest.includes(x));
+    if (lowAll.length === 1) {
+      const x = lowAll[0];
+      b.superlative("lowest score", [x.ib, x.ir], false, null);
+      b.notable([x.ib, x.ir], `${x.label} is the lowest-scoring axis for every group: {{${x.ib}}} on average for S and A portfolios against {{${x.ir}}} for the rest`);
+    } else {
+      b.notable([smallId], `S and A portfolios lead the rest by the least on ${small.map((x) => x.label).join(" and ")}`);
+    }
+    b.notable([leadId, gapId], `the biggest lead of S and A portfolios is {{${gapId}}} on {{${leadId}}}${lead.length > 1 ? " (a tie)" : ""}`);
   }
   b.chart({
     title: "Average score by axis: S and A portfolios against the rest",
@@ -202,6 +245,11 @@ export async function topGrades(db, { now }) {
   for (const r of named) {
     b.name(r, "graded S by the AI judge");
     b.fact(`${r.name} (${domainOf(r.url)}) is graded`, "S", "S", { tone: "positive", about: r.url });
+  }
+  // For each axis, the named S site that scores highest on it: a positive example a "Try this" step can link.
+  for (const p of per) {
+    const strong = named.filter((r) => axisScore(r, p.k) != null).sort((x, y) => axisScore(y, p.k) - axisScore(x, p.k) || x.url.localeCompare(y.url))[0];
+    if (strong) b.example(p.label, b.fact(`${strong.name} (${domainOf(strong.url)}) scores ${axisScore(strong, p.k)} out of 5 on ${p.label}`, axisScore(strong, p.k), String(axisScore(strong, p.k)), { tone: "positive", about: strong.url }), strong);
   }
   return b.done();
 }

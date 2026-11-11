@@ -297,9 +297,10 @@ How it runs, in short:
 - One round is the write request, the claim listing, the claim judgement (only when Tavily found results) and the final review; a failed round is revised, at most twice, then the draft is stored as `dropped` with its failures.
 - Outside claims are cut by code (exact sentences), not by a rewrite; a rewrite happens only when a code check or the review fails.
 - The writer gets each fact's placeholder, label and display, never its raw value or query; code assembles the TL;DR block, the image markers and the call to action, and puts each sentence on its own line.
-- The number check allows years, list numbers, the Gemini model names, the rubric's "1 to 5", the post's allowed names and addresses, and the sentences of supported outside claims; the template's 400 to 600 words get 10% slack.
+- The number check allows years, list numbers, the Gemini model names, the rubric's "1 to 5", the post's allowed names and addresses, and the sentences of supported outside claims; the template's 250 to 400 words get 10% slack.
 - Generated images and charts are stored in the `SHOTS` bucket under `content/<SITE_ENV>/<post id>/`, which `/shots` does not serve; the blog lane serves them.
   Stock photos are hotlinked, as Unsplash requires, with the Unsplash download endpoint called when one is used.
 - Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `UNSPLASH_ACCESS_KEY` and `PEXELS_API_KEY` a stock slot falls back to a spare chart or is dropped; without the `AI` binding the same for illustrations.
 - The weekly summary is an owner alert of kind "info" (`content-weekly`) on Sunday nights while the engine is on.
+- The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs); `WRITER_MODE` ("single" or "staged", [pipeline/content/staged.mjs](../pipeline/content/staged.mjs)) picks how the first draft is written.
 - Tests: [tests/content.test.mjs](../tests/content.test.mjs) and [tests/admin-content.test.mjs](../tests/admin-content.test.mjs).

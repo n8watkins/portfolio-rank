@@ -331,6 +331,24 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Only Google's own sources; "what's trending" outside them is not read.
   Why: when Google retires 3.5 Flash-Lite, every grade and comparison method needs warning and a re-run plan.
 
+- **Post length is 250 to 400 words, with real paragraphs** (owner, 2026-11-10: option A). Status: built.
+  The template, the length check (10% slack either side) and the revision prompt say 250 to 400 words, down from 400 to 600.
+  Paragraphs are 2 to 4 sentences with an opening hook and a closing takeaway; a draft where most paragraphs are one sentence fails.
+  The TL;DR is exactly three bullets, each with a fact placeholder.
+  Why: the owner liked the draft's content but not its length or one-sentence paragraphs.
+- **Superlatives, hooks, callouts and actions are checked against the fact sheet** (owner request, 2026-11-10). Status: built.
+  The fact builder computes ties (compared as a reader sees them, to one decimal) and exposes them as facts; "largest", "smallest", "most" or "only" about a tied fact fails unless the sentence says it is a tie.
+  It also flags one or two notable facts (a score that is low across every tier, or the biggest outlier); the opener and first TL;DR bullet must lead with one.
+  The callout must restate exactly one numeric fact with the scope its label gives, so "23% of top portfolios" for 23% of all graded portfolios fails.
+  A "Try this" step links to a named positive example (an S site strong on that axis) where the naming rule allows.
+  Why: each of these was a way the first draft read well and was subtly wrong.
+
+- **Staged writer behind `WRITER_MODE`, `single` stays the default** (owner request, 2026-11-10). Status: built; the default is a recommendation.
+  `staged` writes a post as an outline (hook, title, TL;DR, three sections with their facts; structure-checked and retried once before any section is written), two section requests and a finish request, then runs the same code checks: 4 write requests (5 after an outline retry) against 1 for `single`.
+  Same top-grades data, no revision rounds (10 Gemini requests in all): `single` wrote 211 words (too short) and `staged` 448 (too long), both with every other code check green except the length and a 429 from an example site's host (now treated as reachable).
+  The staged text read fuller and kept the hook and ties better, but it costs 3 to 4 more requests and the sample did not show a pass-rate gain, so `single` stays until a run with revisions on shows `staged` passing more often.
+  Why: simplicity and cost win until the quality gain is measured.
+
 ## Games, badges and claims
 
 The back end for all of these is built behind the `GAMES_V2` flag, off until the redesign ships ([AUTOMATION.md](../AUTOMATION.md#games-badges-claims-live-stats-and-reports-built-off)).

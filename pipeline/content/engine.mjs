@@ -33,6 +33,7 @@ import { checkLinksLoad, codeChecks, urlsIn } from "./checks.mjs";
 import { TAVILY_PER_POST, TAVILY_PER_WEEK, checkClaims } from "./claims.mjs";
 import { buildPickRequest, buildReviewRequest, choosePicks, reviewCheck } from "./topic.mjs";
 import { fillImages } from "./images.mjs";
+import { OutlineError, STAGED_REQUESTS, stagedWrite } from "./staged.mjs";
 
 export const MAX_REVISIONS = 2;
 /** Requests one round of a draft needs: write, list claims, judge them, final review. */
@@ -151,8 +152,10 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
   const mode = ctx.flags.contentMode;
   const db = ctx.db;
   const log = (line) => ctx.log(`Content: ${kind}: ${line}`);
-  if (budget < MIN_DRAFT_REQUESTS) {
-    await recordRun(db, { night, now, step: "draft", mode, status: "deferred", kind, detail: { reason: `only ${budget} request(s) left in this batch; ${MIN_DRAFT_REQUESTS} needed` } });
+  const staged = ctx.flags.writerMode === "staged";
+  const minRequests = staged ? STAGED_REQUESTS + 2 : MIN_DRAFT_REQUESTS;
+  if (budget < minRequests) {
+    await recordRun(db, { night, now, step: "draft", mode, status: "deferred", kind, detail: { reason: `only ${budget} request(s) left in this batch; ${minRequests} needed` } });
     return { status: "deferred", requests: 0 };
   }
   const sheet = await BUILDERS[kind](db, { now });
@@ -178,7 +181,8 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
         failures.push(`no budget for revision ${round} (${g.left()} request(s) left)`);
         break;
       }
-      draft = normalizeDraft(await g.generate(round === 0 ? buildWriteRequest(sheet) : buildReviseRequest(sheet, draft, failures)));
+      if (round === 0 && staged) draft = normalizeDraft((await stagedWrite(sheet, g.generate, { onOutlineFail: (p) => log(`outline retry: ${p.slice(0, 2).join("; ")}`) })).draft);
+      else draft = normalizeDraft(await g.generate(round === 0 ? buildWriteRequest(sheet) : buildReviseRequest(sheet, draft, failures)));
       // Gate 2: outside claims, on the unfilled draft.
       const text = draftTexts(draft)
         .filter(([k]) => !k.startsWith("images."))
@@ -220,7 +224,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
       break;
     }
   } catch (e) {
-    if (!(e instanceof ContentBudgetError)) {
+    if (!(e instanceof ContentBudgetError) && !(e instanceof OutlineError)) {
       await recordRun(db, { night, now, step: "draft", mode, status: "failed", kind, gemini: g.used.n, tavily: searches, detail: { error: msg(e), history } });
       throw e;
     }

@@ -7,11 +7,16 @@ The goal: a reader decides in 5 seconds from the title and TL;DR, and gets the w
 
 ### Rules
 
-- **Length:** 400-600 words of body text (image specs and metadata don't count).
+- **Length:** 250-400 words of body text (image specs and metadata do not count; owner decision, 2026-11-10).
 - **Voice:** follow `VOICE.md`. Lead with the point, short sentences, real numbers, first person. No em dashes, no hype.
 - **Facts:** every number traces to a source. Anything unconfirmed gets [check] and stays until confirmed.
 - **Skimmability:** subheads say what the section proves, not "Background" or "Results". A reader who reads only the TL;DR, subheads and callout should get the story.
 - **Sentences:** one full sentence per line in the Markdown source.
+- **Paragraphs:** real paragraphs of 2-4 sentences, never one sentence each, with an opening hook (a notable fact from the sheet) and a closing takeaway of 2-3 sentences.
+- **TL;DR:** exactly three bullets, each with at least one fact placeholder.
+- **Superlatives:** "largest", "smallest", "most" or "only" must be true against the fact sheet, ties included; a tie is said as a tie.
+- **Callout:** restates exactly one numeric fact with the scope its label gives (a share of all graded portfolios is not a share of top portfolios).
+- **Try this:** where a named positive example fits, a step links to it.
 
 ### Skeleton
 
@@ -30,8 +35,6 @@ The goal: a reader decides in 5 seconds from the title and TL;DR, and gets the w
 > - <what happened, with the key number>
 > - <why it happened, in one plain sentence>
 > - <the fix or the finding>
-> - <the takeaway the reader can use>
-> - <optional: the bonus lesson>
 
 [IMAGE 1: hero]
 

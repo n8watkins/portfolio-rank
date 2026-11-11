@@ -34,6 +34,7 @@ import { emailSender, nightConditions, reconcileAlerts, tractionConditions, trac
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
+import { writerMode } from "../pipeline/content/staged.mjs";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
@@ -99,6 +100,7 @@ function engine(env: NightEnv, runId: string) {
     },
     flags: {
       contentMode: contentMode(env.CONTENT_MODE),
+      writerMode: writerMode(env.WRITER_MODE),
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
       ranking: rankingConfig({
