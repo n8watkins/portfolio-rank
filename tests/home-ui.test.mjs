@@ -221,6 +221,19 @@ test("a grade from home: /me follows it, then shows the report", { skip: !gradin
   // Re-grades wait a week: the button says so and stays off.
   assert.ok(await page.getByRole("button", { name: "Request a re-grade" }).isDisabled());
   await page.getByText(/Next re-grade available in 7 days/).waitFor();
+
+  // On a phone the badges show what's earned and the next three; the rest wait behind a button.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const badges = page.getByRole("region", { name: /Badges/ });
+  const show = badges.getByRole("button", { name: /Show all \d+ badges/ });
+  await show.waitFor();
+  // Plain li, not the listitem role: hidden items have no role, and these count them.
+  const visible = () => badges.locator("li").evaluateAll((els) => els.filter((el) => el.offsetParent !== null).length);
+  const total = await badges.locator("li").count();
+  assert.ok((await visible()) < total, "some badges wait behind the button");
+  await show.click();
+  assert.equal(await visible(), total);
+  assert.equal(await show.count(), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });

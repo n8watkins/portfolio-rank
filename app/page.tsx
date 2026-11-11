@@ -104,7 +104,7 @@ export default async function Home() {
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <TopTen top={data.top} className="rise" />
             <div className="flex flex-col gap-5">
-              <RecentlyGraded items={data.recent} className="reveal flex flex-1 flex-col" />
+              <RecentlyGraded items={data.recent} now={data.at} className="reveal flex flex-1 flex-col" />
               <LiveCard stats={data.stats} className="reveal" />
             </div>
           </div>

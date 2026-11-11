@@ -110,18 +110,18 @@ export type BoardItem = {
 
 export type TopTen =
   | { kind: "views"; views: { key: View; label: string; rows: BoardItem[] }[] }
-  | { kind: "people"; rows: BoardItem[] };
+  | { kind: "ai"; rows: BoardItem[] };
 
 const VIEW_LABEL: Record<View, string> = { merged: "Merged", ai: "AI", people: "People" };
 
 /**
  * The top 10. With RANKING_V2 on and the boards computed: Merged, AI and
- * People (lib/ranking/board.ts). Otherwise the people's ELO board the
- * leaderboard shows today (app/top/page.tsx), from the same query.
+ * People (lib/ranking/board.ts). Until then the order of the AI grade (the
+ * people's ELO board is too thin to rank on yet: most sites share one
+ * vote), with the tier in the score column.
  */
-async function topTen(): Promise<TopTen> {
+async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
   await ensureSchema();
-  const hidden = await hiddenUrls();
   const item = (url: string, rank: number, score: string, tied = false): BoardItem => {
     const p = byUrl.get(url);
     return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, score, href: reportPath(url) };
@@ -140,15 +140,10 @@ async function topTen(): Promise<TopTen> {
       return { kind: "views", views: (["merged", "ai", "people"] as View[]).map((k) => views.find((v) => v.key === k)!) };
     }
   }
-  const res = await db().execute({ sql: "SELECT url, elo FROM ratings WHERE votes >= 1 ORDER BY elo DESC LIMIT 40", args: [] });
-  const rows = res.rows
-    .map((r) => ({ url: String(r.url), elo: Number(r.elo) }))
-    .filter((r) => byUrl.has(r.url) && !hidden.has(r.url))
-    .slice(0, 10)
-    .map((r, i) => item(r.url, i + 1, String(r.elo)));
+  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, p.tier));
   const shots = await shotBases(rows.map((r) => r.url));
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-  return { kind: "people", rows };
+  return { kind: "ai", rows };
 }
 
 export type GradedItem = { url: string; name: string; domain: string; tier: string; at: string; hero: string | null; href: string };
@@ -185,26 +180,37 @@ export type LiveStat = { key: string; label: string; value: string; tone: 1 | 2 
 type SiteStats = Awaited<ReturnType<typeof siteStats>>;
 
 /** The Live card's numbers: the same as /api/stats/live, read here so the page renders them. */
-async function liveStats(listed: number): Promise<LiveStat[]> {
+async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> {
   const now = new Date();
-  const [site, counts] = await Promise.all([
+  const [site, counts, week] = await Promise.all([
     cached<SiteStats>("stats", "site", { ttlMs: HOUR }, () => siteStats(db(), { feed: FEED, now })),
     liveCounts(db(), { now }),
+    // Votes in the last 7 days: a count over the log's recent rows, so an hour in the cache.
+    cached<{ n: number }>("home", "votes-week", { ttlMs: HOUR }, async () => {
+      const since = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 19).replace("T", " ");
+      const r = await db().execute({ sql: "SELECT COUNT(*) AS n FROM votes WHERE created_at >= ?", args: [since] });
+      return { n: Number(r.rows[0]?.n ?? 0) };
+    }),
   ]);
+  const sGrades = pool.filter((p) => p.tier === "S").length;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
     { key: "portfolios", label: "Portfolios listed", value: n(listed), tone: 1 },
-    { key: "graded", label: "Graded by AI", value: n(site.graded), tone: 2 },
+    // The same count as the AI ranks on this page (listed, graded, not hidden).
+    { key: "graded", label: "Graded by AI", value: n(pool.length), tone: 2 },
     site.ownDomainPct == null ? null : { key: "own", label: "On their own domain", value: `${site.ownDomainPct}%`, tone: 4 },
     site.commonRole ? { key: "role", label: "Most common role", value: site.commonRole.label, tone: 3 } : null,
-    { key: "votesToday", label: "Votes today", value: n(counts.votesToday), tone: 3 },
-    { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 },
+    // A quiet week would read as a dead site: then a number that is never 0.
+    week.n > 0
+      ? { key: "votesWeek", label: "Votes this week", value: n(week.n), tone: 3 }
+      : { key: "sGrades", label: "Portfolios graded S", value: n(sGrades), tone: 3 },
+    counts.votes > 0 ? { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 } : null,
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
     site.averageTier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
-    { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 },
-    { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 },
-    gamesEnabled() ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
+    site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
+    site.changedThisMonth > 0 ? { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 } : null,
+    gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
   ];
   return out.filter((s): s is LiveStat => s !== null);
 }
@@ -280,7 +286,7 @@ export async function homeData() {
   const pool = await rankedPool();
   const hidden = await hiddenUrls();
   const total = FEED.filter((p) => !hidden.has(p.url)).length;
-  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(), recentlyGraded(), liveStats(total), polls()]);
+  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total, pool), polls()]);
   const potd = await portfolioOfTheDay(pool, new Set(show.map((s) => s.url)));
   return {
     /** Listed portfolios anyone can see (the browse grid's count). */
@@ -291,5 +297,7 @@ export async function homeData() {
     stats,
     potd,
     polls: poll,
+    /** When this render read the data: what "3 days ago" counts from. */
+    at: Date.now(),
   };
 }

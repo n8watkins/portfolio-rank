@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BookOpen, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, Users, X } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, Bot, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
 import { RankBadge, TierBadge } from "@/components/ui/badges";
 import { sectionTitle } from "@/components/ui/styles";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
@@ -11,9 +11,19 @@ import type { BoardItem, GradedItem, LiveStat, PortfolioOfTheDay as Potd, ShowIt
 import { topPct } from "@/lib/home";
 import type { PublicPoll } from "@/lib/polls/server";
 
+const RELATIVE = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
+/** "today", "3 days ago", "5 months ago": as of when the page was rendered. */
+function ago(iso: string, now: number) {
+  const days = Math.round((now - Date.parse(iso)) / 86_400_000);
+  if (days < 1) return "today";
+  if (days < 30) return RELATIVE.format(-days, "day");
+  if (days < 365) return RELATIVE.format(-Math.round(days / 30.4), "month");
+  return RELATIVE.format(-Math.round(days / 365), "year");
+}
+
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-function BoardRow({ r }: { r: BoardItem }) {
+function BoardRow({ r, tier }: { r: BoardItem; tier: boolean }) {
   return (
     <li>
       <a href={r.href} className="group flex items-center gap-3.5 rounded-xl px-2 py-3 transition hover:bg-raised">
@@ -25,7 +35,7 @@ function BoardRow({ r }: { r: BoardItem }) {
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.line}</span>
         </span>
-        <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums">{r.score}</span>
+        <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? <TierBadge tier={r.score} /> : r.score}</span>
       </a>
     </li>
   );
@@ -42,7 +52,7 @@ function Board({ rows, scoreLabel }: { rows: BoardItem[]; scoreLabel: string }) 
       </div>
       <ol className="flex flex-1 flex-col justify-between">
         {rows.map((r) => (
-          <BoardRow key={r.url} r={r} />
+          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} />
         ))}
       </ol>
     </div>
@@ -51,16 +61,16 @@ function Board({ rows, scoreLabel }: { rows: BoardItem[]; scoreLabel: string }) 
 
 /** Top 10: Merged, AI and People with ranking v2; the people's board until then. */
 export function TopTen({ top, className = "" }: { top: TopTenData; className?: string }) {
-  const empty = top.kind === "people" ? top.rows.length === 0 : false;
+  const empty = top.kind === "ai" && top.rows.length === 0;
   return (
     <section aria-labelledby="top10" className={`card flex flex-col p-4 sm:p-6 ${className}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 id="top10" className={sectionTitle}>
           Top 10
         </h3>
-        {top.kind === "people" && (
+        {top.kind === "ai" && (
           <p className="flex items-center gap-1.5 text-xs text-mute">
-            <Users className="h-3.5 w-3.5" aria-hidden /> By people&apos;s votes in face-offs
+            <Bot className="h-3.5 w-3.5" aria-hidden /> By AI grade
           </p>
         )}
       </div>
@@ -78,8 +88,8 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           <span className="icon-tile h-11 w-11">
             <Swords className="h-5 w-5" aria-hidden />
           </span>
-          <p className="font-semibold">The board fills as people vote</p>
-          <p className="max-w-sm text-sm text-mute">Every face-off vote moves two portfolios. Cast the first ones.</p>
+          <p className="font-semibold">The board fills as portfolios are graded</p>
+          <p className="max-w-sm text-sm text-mute">Gemini grades new portfolios every night. Meanwhile, every face-off vote moves two of them.</p>
           {ROUTES.faceoff && (
             <a href={ROUTES.faceoff} className="group mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent">
               Vote in a face-off <ArrowRight className="nudge h-4 w-4" aria-hidden />
@@ -87,20 +97,20 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           )}
         </div>
       ) : (
-        <Board rows={top.rows} scoreLabel="ELO" />
+        <Board rows={top.rows} scoreLabel="Tier" />
       )}
     </section>
   );
 }
 
 /** The portfolios Gemini graded last, with their tier. */
-export function RecentlyGraded({ items, className = "" }: { items: GradedItem[]; className?: string }) {
+export function RecentlyGraded({ items, now, className = "" }: { items: GradedItem[]; now: number; className?: string }) {
   if (items.length === 0) return null;
   return (
     <section aria-labelledby="recent" className={`card p-4 sm:p-5 ${className}`}>
       <div className="mb-2 flex items-center justify-between px-1">
         <h3 id="recent" className={`${sectionTitle} flex items-center gap-2`}>
-          <Sparkles className="h-4 w-4 text-mute" aria-hidden /> Just graded
+          <Sparkles className="h-4 w-4 text-mute" aria-hidden /> Recently graded
         </h3>
         <span className="rounded-full border border-edge-strong px-2 py-0.5 text-[11px] font-semibold text-mute">Gemini</span>
       </div>
@@ -111,8 +121,11 @@ export function RecentlyGraded({ items, className = "" }: { items: GradedItem[];
               <Thumb src={r.hero} domain={r.domain} className="aspect-square w-10 rounded-lg" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{r.name}</span>
-                <span className="block truncate text-xs text-mute">
-                  {r.domain} · {shortDate(r.at)}
+                <span className="flex min-w-0 gap-1 text-xs text-mute">
+                  <span className="truncate">{r.domain}</span>
+                  <span className="shrink-0">
+                    · <time dateTime={r.at}>{ago(r.at, now)}</time>
+                  </span>
                 </span>
               </span>
               <TierBadge tier={r.tier} />
@@ -307,14 +320,26 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
 export function AboutCard({ total }: { total: number }) {
   if (!ROUTES.about) return null;
   return (
-    <a href={ROUTES.about} className="card card-hover group flex h-full flex-col p-5 sm:p-6">
+    <a href={ROUTES.about} className="card card-hover group flex h-full flex-col justify-center p-5 sm:p-6">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/n8-icon.png" alt="" width={44} height={44} className="h-11 w-11 rounded-xl" />
       <h2 className="mt-4 text-lg font-bold tracking-tight">About PortfolioRank</h2>
-      <p className="mt-1 text-sm text-mute">
-        A project by n8builds. Where the {total.toLocaleString("en-US")} portfolios come from, what code checks, what Gemini judges, and how votes become a rank.
-      </p>
-      <span className="mt-auto inline-flex items-center gap-1 pt-4 text-sm font-semibold text-accent">
+      <p className="mt-1 text-sm text-mute">A project by n8builds: how {total.toLocaleString("en-US")} portfolios get a grade and a rank.</p>
+      <ul className="mt-4 grid gap-2.5 text-sm">
+        {[
+          { Icon: Users, text: "Where the list comes from" },
+          { Icon: Code, text: "What the code checks" },
+          { Icon: Sparkles, text: "What Gemini judges" },
+        ].map(({ Icon, text }) => (
+          <li key={text} className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-raised text-mute ring-1 ring-edge">
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            {text}
+          </li>
+        ))}
+      </ul>
+      <span className="inline-flex items-center gap-1 pt-5 text-sm font-semibold text-accent">
         Read about it <ArrowRight className="nudge h-4 w-4" aria-hidden />
       </span>
     </a>

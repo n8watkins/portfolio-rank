@@ -29,8 +29,11 @@ export function Badges({ defs }: { defs: BadgeDef[] }) {
       alive = false;
     };
   }, []);
+  const [all, setAll] = useState(false);
   const earned = list.filter((b) => b.earned);
-  const locked = list.filter((b) => !b.earned);
+  // Locked ones closest to done first: on a phone only the next three show until asked.
+  const locked = list.filter((b) => !b.earned).sort((a, b) => b.progress / b.target - a.progress / a.target);
+  const NEXT = 3;
 
   return (
     <section aria-labelledby="badges" className="card reveal mt-5 p-5 sm:p-6">
@@ -44,8 +47,13 @@ export function Badges({ defs }: { defs: BadgeDef[] }) {
         {signedIn === false && <span className="text-xs text-mute">Saved in this browser. Sign in to keep your badges.</span>}
       </div>
       <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {[...earned, ...locked].map((b) => (
-          <li key={b.id} className={`flex items-center gap-3 rounded-xl border p-3 ${b.earned ? "border-edge bg-bg/40" : "border-dashed border-edge"}`}>
+        {[...earned, ...locked].map((b, k) => (
+          <li
+            key={b.id}
+            className={`flex items-center gap-3 rounded-xl border p-3 ${b.earned ? "border-edge bg-bg/40" : "border-dashed border-edge"} ${
+              !all && k >= earned.length + NEXT ? "max-sm:hidden" : ""
+            }`}
+          >
             <BadgeArt id={b.id} hue={b.hue} locked={!b.earned} size={44} />
             <span className="min-w-0">
               <span className={`flex items-center gap-1.5 text-sm font-semibold ${b.earned ? "" : "text-mute"}`}>
@@ -63,6 +71,11 @@ export function Badges({ defs }: { defs: BadgeDef[] }) {
           </li>
         ))}
       </ul>
+      {!all && locked.length > NEXT && (
+        <button type="button" onClick={() => setAll(true)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-edge text-sm font-semibold sm:hidden">
+          Show all {list.length} badges
+        </button>
+      )}
     </section>
   );
 }
