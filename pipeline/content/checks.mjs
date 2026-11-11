@@ -4,11 +4,12 @@
 // draft passes only when every one is ok. They run on the draft before its
 // placeholders are filled (numbers) and after (names and links), so a
 // figure in a post can only have come from the fact sheet.
-import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, fill } from "./writer.mjs";
+import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, fill, oneSentencePerLine } from "./writer.mjs";
+import { checkActions, checkCallout, checkHook, checkParagraphs, checkSuperlatives } from "./quality.mjs";
 import { SITE_URL, domainOf } from "./facts.mjs";
 
-/** The template's word range (POST_TEMPLATE.md), with 10% slack either side. */
-export const WORDS = { min: 400, max: 600, slack: 0.1 };
+/** The template's word range (POST_TEMPLATE.md; owner decision 2026-11-10: 250 to 400 words), with 10% slack either side. */
+export const WORDS = { min: 250, max: 400, slack: 0.1 };
 
 // Digits a post may hold outside placeholders: years, the numbers of a
 // numbered list, the Gemini model names and the rubric's 1 to 5 scale.
@@ -138,7 +139,10 @@ export function checkTemplate(draft, sheet) {
   if (!String(draft.share_line ?? "").trim() || fill(draft.share_line, sheet.facts).length >= 260) p.push("share line must be under 260 characters");
   if (!String(draft.newsletter_blurb ?? "").trim()) p.push("newsletter blurb is empty");
   const tldr = draft.tldr ?? [];
-  if (tldr.length < 3 || tldr.length > 5) p.push(`TL;DR has ${tldr.length} bullets, 3 to 5 needed`);
+  if (tldr.length !== 3) p.push(`TL;DR has ${tldr.length} bullets, exactly 3 needed`);
+  tldr.forEach((b, i) => {
+    if (!new RegExp(PLACEHOLDER.source).test(String(b))) p.push(`TL;DR bullet ${i + 1} has no fact placeholder`);
+  });
   const heads = [...body.matchAll(/^###\s+(.+)$/gm)].map((m) => m[1].trim());
   if (heads.filter((h) => !/^try this$/i.test(h)).length < 2) p.push("at least two ### subheads are needed besides Try this");
   if (/^#{1,2}\s|^#{4,}\s/m.test(body)) p.push("only ### subheads are allowed");
@@ -173,8 +177,8 @@ export function checkTemplate(draft, sheet) {
   const words = wordCount(fill(assembleBody(draft), sheet.facts));
   const lo = Math.floor(WORDS.min * (1 - WORDS.slack));
   const hi = Math.ceil(WORDS.max * (1 + WORDS.slack));
-  if (words < lo) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: add about ${500 - words} words, for example one more ### section of several paragraphs`);
-  if (words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: cut about ${words - 500} words`);
+  if (words < lo) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: add about ${325 - words} words, for example a longer paragraph`);
+  if (words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: cut about ${words - 325} words`);
   return result("template", p);
 }
 
@@ -186,6 +190,11 @@ export function codeChecks(draft, sheet, { roster, allowedSentences = [], claimU
     checkNames(filled, sheet, roster, { extraDomains: claimUrls.map(domainOf) }),
     checkLinks(filled, [SITE_URL, ...sheet.names.map((n) => n.url), ...claimUrls]),
     checkTemplate(draft, sheet),
+    checkParagraphs({ ...draft, body: oneSentencePerLine(String(draft.body ?? "")) }),
+    checkSuperlatives(draft, sheet),
+    checkCallout(draft, sheet),
+    checkHook(draft, sheet),
+    checkActions(draft, sheet),
   ];
   return { ok: checks.every((c) => c.ok), checks, failures: checks.flatMap((c) => c.problems.map((x) => `${c.name}: ${x}`)) };
 }
