@@ -563,7 +563,7 @@ test("images: seeded bad stock photos are rejected; people never in the hero", (
 
 // A real 1024x1024 JPEG, the shape flux-1-schnell returns.
 const SQUARE = Buffer.from(jpeg.encode({ data: Buffer.alloc(1024 * 1024 * 4, 180), width: 1024, height: 1024 }, 80).data).toString("base64");
-const LIMITS = { maxImages: 40, ceiling: 2500 };
+const LIMITS = { maxImages: 40, perHour: 2, ceiling: 2500 };
 const CHECK_OK = { fits: true, on_style: true, text_artifacts: false, people: false, brand_logo: false, fake_screenshot: false, three_d: false, note: "ok" };
 const PICTURES = [
   { slot: "hero", purpose: "a calm desk", kind: "picture", keywords: ["design", "layout", "grid", "polish", "ui"], alt: "a" },
@@ -669,9 +669,9 @@ test("images: Schnell erroring goes to Lucid once; a passing check is captioned 
 test("images: no neuron room means no Workers AI call at all; at most 3 image checks a post", async () => {
   const { db, sheet } = await sheetAndRoster();
   let calls = 0;
-  const r = await fill4(sheet, { postId: "p5", db, ai: { run: async () => (calls++, { image: SQUARE }) }, limits: { maxImages: 40, ceiling: 50 }, generate: async () => CHECK_OK });
+  const r = await fill4(sheet, { postId: "p5", db, ai: { run: async () => (calls++, { image: SQUARE }) }, limits: { ...LIMITS, ceiling: 50 }, generate: async () => CHECK_OK });
   assert.equal(calls, 0);
-  assert.ok(r.notes.some((n) => /no room today/.test(n)));
+  assert.ok(r.notes.some((n) => /no room now/.test(n)));
 
   // Pexels on every slot would be 4 checks; the post stops at 3 (2 Pexels and 1 fresh).
   const fetchImpl = async (url) =>

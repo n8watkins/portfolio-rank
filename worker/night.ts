@@ -37,7 +37,6 @@ import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
 import { writerMode } from "../pipeline/content/staged.mjs";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
-import { libraryConfig } from "../pipeline/content/library-stage.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
@@ -136,9 +135,6 @@ function engine(env: NightEnv, runId: string) {
       ai: withGateway(env.AI),
       store,
     },
-    // The image library's night stage (pipeline/content/library-stage.mjs):
-    // LIBRARY_PER_NIGHT images with LIBRARY_MODEL, within AI_NEURON_CEILING.
-    library: { ...libraryConfig(env), ai: withGateway(env.AI), store },
     runId,
   };
 }

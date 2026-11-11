@@ -331,7 +331,8 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Why: charts and screenshots are free and exact; the review catches wrong charts and odd generated images without a human.
 - **Never pay for images: at most 40 AI images a day** (owner, 2026-11-10, tightened twice the same day). Status: built (#94).
   Every image comes from free daily allowances only.
-  The limit is in images, so it is obvious: at most 40 AI images a UTC day (`MAX_AI_IMAGES_PER_DAY`), counted per image, for the library and the posts together.
+  The limit is in images, so it is obvious: at most 40 AI images a UTC day (`MAX_AI_IMAGES_PER_DAY`) and at most 2 in any rolling hour, counted per image, for the library and the posts together.
+  Every Workers AI call goes through the `portfoliorank-ai` AI Gateway (#95: 2 requests an hour, sliding, and a $1 a month Workers AI spend limit); its 429 means stop, no retry, try next hour.
   Behind it, a neuron guard: at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`; 40 Schnell images are about 2,320).
   Both settings can be lowered, never raised: a value above 40 or 2,500 (or not a whole number) is rejected and fails closed, so no Workers AI call is made until it is fixed.
   Before every call, one image and its estimated neurons are reserved in one statement; a failed reservation means no call, nothing is retried, and a reservation is never given back.
@@ -349,7 +350,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Why: Schnell is about 58 neurons an image against 2,400 for Flux 2 Dev, so 40 images fit a day and the library fills in about 4 nights; the house style and the check keep it clean.
 - **The image library** (owner, 2026-11-10). Status: built (#94).
   26 tech-first themes (the 13 of the style sample plus AI and agents, open source, remote work, interviews, side projects, accessibility, mobile, security, deployment and cloud, learning and growth, the job market, frontend frameworks, backend and data, freelancing) x 5 subjects = 130 images in the house style.
-  The end-of-day run makes up to 40 a night (within the 40 AI images a day; about 2,300 neurons), one Gemini check each on the 16:9 crop; a pass is pending for the owner, a fail is rejected-auto and kept for the owner to see.
+  The Worker's hourly tick makes up to 2 an hour (the AI Gateway's sliding limit), never from 20:00 to midnight Pacific so the night's post gets the hour, within the 40 AI images a day, one Gemini check each on the 16:9 crop; a pass is pending for the owner, a fail is rejected-auto and kept for the owner to see.
   The owner keeps or drops each on `/admin/images` (server-checked admin, CSRF-protected POSTs), which also lists the library with usage counts and a retire button; only approved images are used.
   Images live in the `SHOTS` bucket under `private/library/<SITE_ENV>/` and in `image_library` (schema version 9).
   The round-1 and round-2 samples were not imported (agent): the night makes the same subjects in the final style.

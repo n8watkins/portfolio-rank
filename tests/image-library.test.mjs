@@ -12,13 +12,12 @@ import path from "node:path";
 import jpeg from "jpeg-js";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
-import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
-import { MAX_AI_IMAGES_PER_DAY, MAX_NEURON_CEILING, PORTFOLIORANK_SLICE, aiLimits, aiUsage, guardedRun, NeuronBudgetError, neuronDay, neuronsFor, reserveImage } from "../lib/content/neurons.mjs";
+import { MAX_AI_IMAGES_PER_DAY, MAX_AI_IMAGES_PER_HOUR, MAX_NEURON_CEILING, PORTFOLIORANK_SLICE, aiLimits, aiUsage, guardedRun, NeuronBudgetError, neuronDay, neuronsFor, reserveImage } from "../lib/content/neurons.mjs";
 import { decide, getImage, insertImage, listImages, matchLibrary, matchScore, queuedSubjects, recordUse } from "../lib/content/library.mjs";
 import { pexelsCap, reserveSearch, searchUsage } from "../lib/content/pexels-searches.mjs";
 import { LIBRARY_SUBJECTS, THEMES } from "../pipeline/content/house-style.mjs";
 import { cropTo16x9, generateIllustration, libraryModel } from "../pipeline/content/workers-ai.mjs";
-import { DEFAULT_PER_NIGHT, libraryConfig, libraryStage, makeLibraryImage, manualBatch, perNight } from "../pipeline/content/library-stage.mjs";
+import { libraryConfig, libraryStage, makeLibraryImage, perHour, runLibraryBatch } from "../pipeline/content/library-stage.mjs";
 import { STAGES, budgetPlan } from "../pipeline/budget.mjs";
 import { GeminiUnavailableError, PRIMARY_MODEL, createGemini } from "../pipeline/gemini.mjs";
 
@@ -32,32 +31,33 @@ async function freshDb() {
 
 const jpegOf = (w, h, v = 128) => new Uint8Array(jpeg.encode({ data: Buffer.alloc(w * h * 4, v), width: w, height: h }, 80).data);
 const SQUARE_B64 = Buffer.from(jpegOf(1024, 1024)).toString("base64");
-const LIMITS = { maxImages: 40, ceiling: 2500 };
+const LIMITS = { maxImages: 40, perHour: 2, ceiling: 2500 };
 const CHECK_OK = { fits: true, on_style: true, text_artifacts: false, people: false, brand_logo: false, fake_screenshot: false, three_d: false, note: "ok" };
 
 // ---------------------------------------------------------------------------
-// The never-pay guard: 40 AI images a UTC day first, 2,500 neurons behind it
+// The never-pay guard: 40 AI images a UTC day, 2 a rolling hour, 2,500 neurons
 // ---------------------------------------------------------------------------
+const at = (iso, minutes = 0) => new Date(Date.parse(iso) + minutes * 60000);
+
 test("estimates: Schnell 58, Lucid 1,512 (768x432, 20 steps), Flux 2 Dev 2,400 (1024x576, 16 steps); 40 Schnell images fit 2,500", () => {
   assert.equal(neuronsFor("schnell"), 58);
   assert.equal(neuronsFor("lucid"), 1512);
   assert.equal(neuronsFor("flux2dev"), 2400);
   for (const k of ["schnell", "lucid", "flux2dev"]) assert.ok(neuronsFor(k) <= MAX_NEURON_CEILING);
   assert.equal(MAX_AI_IMAGES_PER_DAY, 40);
+  assert.equal(MAX_AI_IMAGES_PER_HOUR, 2);
   assert.equal(MAX_NEURON_CEILING, 2500);
   assert.ok(MAX_AI_IMAGES_PER_DAY * neuronsFor("schnell") <= MAX_NEURON_CEILING);
   assert.ok(MAX_NEURON_CEILING <= PORTFOLIORANK_SLICE);
-  assert.equal(DEFAULT_PER_NIGHT, MAX_AI_IMAGES_PER_DAY);
 });
 
-test("limits: 40 images and 2,500 neurons by default; a value above either, or not a whole number, is rejected and fails closed", () => {
-  assert.deepEqual(aiLimits({}), { maxImages: 40, ceiling: 2500, problem: null });
-  assert.deepEqual(aiLimits({ MAX_AI_IMAGES_PER_DAY: "10", AI_NEURON_CEILING: "1000" }), { maxImages: 10, ceiling: 1000, problem: null });
-  assert.deepEqual(aiLimits({ MAX_AI_IMAGES_PER_DAY: "0", AI_NEURON_CEILING: "0" }), { maxImages: 0, ceiling: 0, problem: null });
+test("limits: 40 a day, 2 an hour, 2,500 neurons by default; a value above a maximum, or not a whole number, is rejected and fails closed", () => {
+  assert.deepEqual(aiLimits({}), { maxImages: 40, perHour: 2, ceiling: 2500, problem: null });
+  assert.deepEqual(aiLimits({ MAX_AI_IMAGES_PER_DAY: "10", AI_NEURON_CEILING: "1000" }), { maxImages: 10, perHour: 2, ceiling: 1000, problem: null });
+  assert.deepEqual(aiLimits({ MAX_AI_IMAGES_PER_DAY: "0", AI_NEURON_CEILING: "0" }), { maxImages: 0, perHour: 2, ceiling: 0, problem: null });
   for (const bad of ["41", "100", "-1", "abc", "39.5"]) {
     const l = aiLimits({ MAX_AI_IMAGES_PER_DAY: bad });
-    assert.equal(l.maxImages, 0, `${bad} must fail closed`);
-    assert.equal(l.ceiling, 0);
+    assert.deepEqual([l.maxImages, l.perHour, l.ceiling], [0, 0, 0], `${bad} must fail closed`);
     assert.match(l.problem, /MAX_AI_IMAGES_PER_DAY .* not a whole number from 0 to 40/);
   }
   for (const bad of ["2501", "5000", "7000", "x"]) {
@@ -67,71 +67,79 @@ test("limits: 40 images and 2,500 neurons by default; a value above either, or n
   }
 });
 
-test("guard: at most 40 images a day, counted per image, whatever the neurons", async () => {
+test("guard: at most 2 images in any rolling hour, then more once the hour has passed", async () => {
   const { db } = await freshDb();
-  const now = new Date("2026-11-11T05:00:00Z");
+  const t0 = "2026-11-11T05:00:00Z";
+  assert.equal((await reserveImage(db, { neurons: 58, limits: LIMITS, now: at(t0) })).ok, true);
+  assert.equal((await reserveImage(db, { neurons: 58, limits: LIMITS, now: at(t0, 10) })).ok, true);
+  assert.equal((await reserveImage(db, { neurons: 58, limits: LIMITS, now: at(t0, 50) })).ok, false, "a third within the hour");
+  assert.equal((await reserveImage(db, { neurons: 58, limits: LIMITS, now: at(t0, 61) })).ok, true, "the first left the window");
+  const u = await aiUsage(db, { limits: LIMITS, now: at(t0, 61) });
+  assert.deepEqual([u.images, u.lastHour, u.perHour], [3, 2, 2]);
+});
+
+test("guard: at most 40 images a UTC day, counted per image, even with hourly room", async () => {
+  const { db } = await freshDb();
   let ok = 0;
-  for (let i = 0; i < 60; i++) if ((await reserveImage(db, { neurons: 58, limits: LIMITS, now })).ok) ok++;
+  // Two an hour from 00:00 UTC: 48 tries in 24 hours.
+  for (let i = 0; i < 48; i++) if ((await reserveImage(db, { neurons: 58, limits: LIMITS, now: at("2026-11-11T00:00:00Z", i * 30) })).ok) ok++;
   assert.equal(ok, 40);
-  const u = await aiUsage(db, { limits: LIMITS, now });
+  const u = await aiUsage(db, { limits: LIMITS, now: at("2026-11-11T23:59:00Z") });
   assert.deepEqual([u.images, u.maxImages, u.neurons, u.ceiling], [40, 40, 2320, 2500]);
-  // The 41st is refused even though 180 neurons are left.
-  assert.equal((await reserveImage(db, { neurons: 58, limits: LIMITS, now })).ok, false);
 });
 
 test("guard: the neuron ceiling stops bigger calls before the image count does; 0 means nothing", async () => {
   const { db } = await freshDb();
-  const now = new Date("2026-11-11T05:00:00Z");
-  assert.equal((await reserveImage(db, { neurons: 1512, limits: LIMITS, now })).ok, true);
-  assert.equal((await reserveImage(db, { neurons: 1512, limits: LIMITS, now })).ok, false, "3,024 would pass 2,500");
-  assert.equal((await reserveImage(db, { neurons: 58, limits: LIMITS, now })).ok, true);
-  const u = await aiUsage(db, { limits: LIMITS, now });
-  assert.deepEqual([u.images, u.neurons], [2, 1570]);
-  const later = new Date("2026-11-12T05:00:00Z");
-  assert.equal((await reserveImage(db, { neurons: 58, limits: { maxImages: 0, ceiling: 2500 }, now: later })).ok, false);
-  assert.equal((await reserveImage(db, { neurons: 58, limits: { maxImages: 40, ceiling: 0 }, now: later })).ok, false);
+  const wide = { maxImages: 40, perHour: 40, ceiling: 2500 };
+  const now = at("2026-11-11T05:00:00Z");
+  assert.equal((await reserveImage(db, { neurons: 1512, limits: wide, now })).ok, true);
+  assert.equal((await reserveImage(db, { neurons: 1512, limits: wide, now })).ok, false, "3,024 would pass 2,500");
+  assert.equal((await reserveImage(db, { neurons: 58, limits: wide, now })).ok, true);
+  assert.deepEqual(Object.values(await aiUsage(db, { limits: wide, now })).slice(1, 6), [2, 40, 2, 40, 1570]);
+  const later = at("2026-11-12T05:00:00Z");
+  assert.equal((await reserveImage(db, { neurons: 58, limits: { ...LIMITS, maxImages: 0 }, now: later })).ok, false);
+  assert.equal((await reserveImage(db, { neurons: 58, limits: { ...LIMITS, perHour: 0 }, now: later })).ok, false);
+  assert.equal((await reserveImage(db, { neurons: 58, limits: { ...LIMITS, ceiling: 0 }, now: later })).ok, false);
   assert.equal((await reserveImage(db, { neurons: 58, limits: aiLimits({ MAX_AI_IMAGES_PER_DAY: "99" }), now: later })).ok, false);
   assert.equal((await aiUsage(db, { limits: LIMITS, now: later })).images, 0);
 });
 
 test("guard: the day rolls over at 00:00 UTC, Cloudflare's reset", async () => {
   const { db } = await freshDb();
-  const before = new Date("2026-11-11T23:59:59Z");
-  const after = new Date("2026-11-12T00:00:00Z");
-  assert.equal(neuronDay(before), "2026-11-11");
-  assert.equal(neuronDay(after), "2026-11-12");
-  // 20:30 Pacific (the night run) is 04:30 UTC.
-  assert.equal(neuronDay(new Date("2026-11-11T04:30:00Z")), "2026-11-11");
-  const two = { maxImages: 2, ceiling: 2500 };
-  assert.equal((await reserveImage(db, { neurons: 58, limits: two, now: before })).ok, true);
-  assert.equal((await reserveImage(db, { neurons: 58, limits: two, now: before })).ok, true);
-  assert.equal((await reserveImage(db, { neurons: 58, limits: two, now: before })).ok, false);
-  assert.equal((await reserveImage(db, { neurons: 58, limits: two, now: after })).ok, true);
-  assert.equal((await aiUsage(db, { limits: two, now: before })).images, 2);
-  assert.equal((await aiUsage(db, { limits: two, now: after })).images, 1);
+  assert.equal(neuronDay(at("2026-11-11T23:59:59Z")), "2026-11-11");
+  assert.equal(neuronDay(at("2026-11-12T00:00:00Z")), "2026-11-12");
+  const one = { maxImages: 1, perHour: 2, ceiling: 2500 };
+  assert.equal((await reserveImage(db, { neurons: 58, limits: one, now: at("2026-11-11T23:30:00Z") })).ok, true);
+  assert.equal((await reserveImage(db, { neurons: 58, limits: one, now: at("2026-11-11T23:59:59Z") })).ok, false);
+  assert.equal((await reserveImage(db, { neurons: 58, limits: one, now: at("2026-11-12T00:00:00Z") })).ok, true);
+  assert.equal((await aiUsage(db, { limits: one, now: at("2026-11-11T12:00:00Z") })).images, 1);
+  assert.equal((await aiUsage(db, { limits: one, now: at("2026-11-12T12:00:00Z") })).images, 1);
 });
 
-test("guard: concurrent reservations from separate connections never pass either limit", async () => {
-  const { db, url } = await freshDb();
-  const clients = Array.from({ length: 4 }, () => createClient({ url, timeout: 10000 }));
-  const now = new Date("2026-11-11T05:00:00Z");
-  const results = await Promise.all(Array.from({ length: 100 }, (_, i) => reserveImage(clients[i % 4], { neurons: 58, limits: LIMITS, now }).catch((e) => ({ ok: false, error: e }))));
-  const ok = results.filter((r) => r.ok).length;
-  const u = await aiUsage(db, { limits: LIMITS, now });
-  assert.equal(ok, 40);
-  assert.deepEqual([u.images, u.neurons], [40, 40 * 58]);
-  const { db: db2, url: url2 } = await freshDb();
-  const c2 = Array.from({ length: 4 }, () => createClient({ url: url2, timeout: 10000 }));
-  const big = await Promise.all(Array.from({ length: 20 }, (_, i) => reserveImage(c2[i % 4], { neurons: 1512, limits: LIMITS, now }).catch(() => ({ ok: false }))));
-  assert.equal(big.filter((r) => r.ok).length, 1);
-  assert.ok((await aiUsage(db2, { limits: LIMITS, now })).neurons <= 2500);
+test("guard: concurrent reservations from separate connections never pass any limit", async () => {
+  const now = at("2026-11-11T05:00:00Z");
+  const run = async (limits, neurons, n) => {
+    const { db, url } = await freshDb();
+    const clients = Array.from({ length: 4 }, () => createClient({ url, timeout: 10000 }));
+    const results = await Promise.all(Array.from({ length: n }, (_, i) => reserveImage(clients[i % 4], { neurons, limits, now }).catch(() => ({ ok: false }))));
+    return { ok: results.filter((r) => r.ok).length, u: await aiUsage(db, { limits, now }) };
+  };
+  const hour = await run(LIMITS, 58, 30);
+  assert.equal(hour.ok, 2);
+  assert.equal(hour.u.lastHour, 2);
+  const day = await run({ maxImages: 40, perHour: 1000, ceiling: 2500 }, 58, 100);
+  assert.equal(day.ok, 40);
+  assert.equal(day.u.images, 40);
+  const neurons = await run({ maxImages: 40, perHour: 1000, ceiling: 2500 }, 1512, 20);
+  assert.equal(neurons.ok, 1);
+  assert.ok(neurons.u.neurons <= 2500);
 });
 
 test("guardedRun: no room means the call is never made", async () => {
   const { db } = await freshDb();
   let called = 0;
-  await assert.rejects(guardedRun(db, { key: "lucid", limits: { maxImages: 40, ceiling: 1000 }, call: async () => called++ }), NeuronBudgetError);
-  await assert.rejects(guardedRun(db, { key: "schnell", limits: { maxImages: 0, ceiling: 2500 }, call: async () => called++ }), /0 of 0 images/);
+  await assert.rejects(guardedRun(db, { key: "lucid", limits: { ...LIMITS, ceiling: 1000 }, call: async () => called++ }), NeuronBudgetError);
+  await assert.rejects(guardedRun(db, { key: "schnell", limits: { ...LIMITS, maxImages: 0 }, call: async () => called++ }), /0 of 0 images today/);
   assert.equal(called, 0);
   assert.equal(await guardedRun(db, { key: "schnell", limits: LIMITS, call: async (cfg) => (called++, cfg.id) }), "@cf/black-forest-labs/flux-1-schnell");
   assert.equal(called, 1);
@@ -164,7 +172,7 @@ test("generateIllustration: Schnell once; Lucid once only when Schnell errors; b
   assert.deepEqual(inputs[1][1], { prompt: "p", width: 768, height: 432, num_steps: 20 });
   // Lucid's 1,512 doesn't fit what a small ceiling leaves, so a Schnell error there makes nothing.
   const { db: db2 } = await freshDb();
-  const tight = await generateIllustration({ ai: failing, db: db2, limits: { maxImages: 40, ceiling: 1000 }, prompt: "p" });
+  const tight = await generateIllustration({ ai: failing, db: db2, limits: { ...LIMITS, ceiling: 1000 }, prompt: "p" });
   assert.equal(tight.ok, false);
   assert.equal(tight.budget, true);
 });
@@ -246,17 +254,21 @@ test("decisions: keep and drop for pending and rejected-auto, retire for approve
 });
 
 // ---------------------------------------------------------------------------
-// The night stage
+// The library's work: one image per queue item, the hourly batch
 // ---------------------------------------------------------------------------
-function stageCtx(db, { ai, perNightN = 3, limits = LIMITS, stored = new Map() } = {}) {
+function stageCtx(db, { ai, limits = LIMITS, stored = new Map() } = {}) {
   return {
     db,
     now: () => Date.parse("2026-11-11T05:00:00Z"),
     log: () => {},
-    library: { ai, perNight: perNightN, model: "schnell", limits, env: "test", store: async (k, b) => (stored.set(k, b), k) },
+    library: { ai, perHour: 2, model: "schnell", limits, env: "test", store: async (k, b) => (stored.set(k, b), k) },
   };
 }
 const schnellAi = (calls = []) => ({ run: async (model) => (calls.push(model), { image: SQUARE_B64 }) });
+const geminiFetch = async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(CHECK_OK) }] }, finishReason: "STOP" }], usageMetadata: {} }), { status: 200 });
+// 10:15 Pacific on 2026-11-11 (outside the quiet hours).
+const MORNING = Date.parse("2026-11-11T18:15:00Z");
+const batch = (db, over = {}) => runLibraryBatch({ db, env: { SITE_ENV: "production", GEMINI_RPM: "6000" }, ai: schnellAi(), store: async (k) => k, apiKey: "k", runId: "test", fetchImpl: geminiFetch, now: () => MORNING, log: () => {}, ...over });
 
 test("house style: 26 themes of 5 subjects, each with alt text and tags; the queue goes round the themes", () => {
   assert.equal(THEMES.length, 26);
@@ -268,7 +280,7 @@ test("house style: 26 themes of 5 subjects, each with alt text and tags; the que
   assert.equal(new Set(THEMES.map((t) => t.id)).size, 26);
 });
 
-test("library stage: one image per queue item, checked on the 16:9 crop; a failed check is rejected-auto; settings", async () => {
+test("library image: one per queue item, checked on the 16:9 crop; a failed check is rejected-auto; settings", async () => {
   const { db } = await freshDb();
   const calls = [];
   const stored = new Map();
@@ -292,24 +304,24 @@ test("library stage: one image per queue item, checked on the 16:9 crop; a faile
   assert.equal(img.key, `private/library/test/${a.id}.jpg`);
   assert.ok(stored.has(img.key));
   assert.deepEqual(img.tags.slice(0, 2), THEMES.find((t) => t.id === first.theme).tags.slice(0, 2));
-  // Made items leave the queue for good.
   const left = await queuedSubjects(db);
   assert.equal(left.length, 128);
   assert.ok(!left.some((s) => s.theme === first.theme && s.index === first.index));
-  // A second run for the same item stores nothing new (the unique index).
-  assert.equal((await makeLibraryImage(ctx, gen(CHECK_OK), first)).status, "skipped");
+  // The same item again, an hour later, stores nothing new (the unique index).
+  const later = { ...ctx, now: () => Date.parse("2026-11-11T06:30:00Z") };
+  assert.equal((await makeLibraryImage(later, gen(CHECK_OK), first)).status, "skipped");
   assert.equal((await listImages(db)).length, 2);
 
-  assert.equal(perNight(undefined), 40);
-  assert.equal(perNight("0"), 0);
-  assert.equal(perNight("500"), 100);
-  assert.deepEqual(libraryConfig({ LIBRARY_PER_NIGHT: "0", MAX_AI_IMAGES_PER_DAY: "0", AI_NEURON_CEILING: "0", SITE_ENV: "staging" }), { perNight: 0, model: "schnell", limits: { maxImages: 0, ceiling: 0, problem: null }, env: "staging" });
+  assert.equal(perHour(undefined), 2);
+  assert.equal(perHour("0"), 0);
+  assert.equal(perHour("1"), 1);
+  assert.equal(perHour("40"), 2, "never more than the gateway's 2 an hour");
+  assert.deepEqual(libraryConfig({ LIBRARY_PER_HOUR: "0", MAX_AI_IMAGES_PER_DAY: "0", AI_NEURON_CEILING: "0", SITE_ENV: "staging" }), { perHour: 0, model: "schnell", limits: { maxImages: 0, perHour: 2, ceiling: 0, problem: null }, env: "staging" });
   assert.match(libraryConfig({ MAX_AI_IMAGES_PER_DAY: "50" }).limits.problem, /0 to 40/);
-  assert.match(libraryStage.off({ library: { ai: {}, ...libraryConfig({ MAX_AI_IMAGES_PER_DAY: "50" }) } }), /off: MAX_AI_IMAGES_PER_DAY "50"/);
-  assert.match(libraryStage.off({ library: { ai: {}, ...libraryConfig({ AI_NEURON_CEILING: "5000" }) } }), /off: AI_NEURON_CEILING "5000"/);
+  assert.match(libraryStage.off(), /hourly tick/);
 });
 
-test("library stage: a check that cannot run keeps the image pending, without a retry", async () => {
+test("library image: a check that cannot run keeps the image pending, without a retry", async () => {
   const { db } = await freshDb();
   const ctx = stageCtx(db, { ai: schnellAi() });
   const [item] = await queuedSubjects(db, { limit: 1 });
@@ -320,51 +332,49 @@ test("library stage: a check that cannot run keeps the image pending, without a 
   assert.match((await getImage(db, r.id)).check.error, /busy/);
 });
 
-test("library stage: per-night cap, the budget stop, and its place after Content", async () => {
+test("hourly batch: 2 an hour, logged as job library, within its Gemini cap; the next tick in the same hour makes none", async () => {
   const { db } = await freshDb();
   assert.deepEqual(STAGES.map((s) => s.key), ["grade_new", "grade_changed", "compare", "content", "library", "regrade", "experiment"]);
   assert.deepEqual(budgetPlan().stages.library, { cap: 40, minutes: 25 });
-  assert.match(libraryStage.off({ library: { ai: null, perNight: 40 } }), /no Workers AI/);
-  assert.match(libraryStage.off({ library: { ai: {}, perNight: 0 } }), /LIBRARY_PER_NIGHT/);
-
   const calls = [];
-  const ctx = stageCtx(db, { ai: schnellAi(calls), perNightN: 3 });
-  assert.equal(await libraryStage.count(ctx), 3);
-  const stage = { tried: [] };
-  const gemini = { generate: async () => ({ result: CHECK_OK, model: PRIMARY_MODEL }) };
-  let items = await libraryStage.next(ctx, stage, 20);
-  assert.equal(items.length, 3);
-  for (const item of items) assert.equal(await libraryStage.run(ctx, gemini, item, stage), "ok");
-  assert.deepEqual(await libraryStage.next(ctx, stage, 20), [], "the night's 3 are made");
-
-  // Room for 2 images today: the third is never called and the stage stops.
-  const { db: db2 } = await freshDb();
-  const calls2 = [];
-  const ctx2 = stageCtx(db2, { ai: schnellAi(calls2), perNightN: 10, limits: { maxImages: 2, ceiling: 2500 } });
-  const stage2 = { tried: [] };
-  items = await libraryStage.next(ctx2, stage2, 20);
-  const results = [];
-  for (const item of items.slice(0, 3)) results.push(await libraryStage.run(ctx2, gemini, item, stage2));
-  assert.deepEqual(results, ["ok", "ok", "skipped"]);
-  assert.equal(calls2.length, 2);
-  assert.equal(stage2.budgetOut, true);
-  assert.deepEqual(await libraryStage.next(ctx2, stage2, 20), []);
-  assert.equal((await aiUsage(db2, { limits: { maxImages: 2, ceiling: 2500 } })).images, 2);
+  const r = await batch(db, { ai: schnellAi(calls) });
+  assert.deepEqual(r.made.map((m) => m.status), ["pending", "pending"]);
+  assert.equal(calls.length, 2);
+  const logged = (await db.execute("SELECT job, COUNT(*) AS n FROM gemini_requests GROUP BY job")).rows.map((x) => `${x.job}:${x.n}`);
+  assert.deepEqual(logged, ["library:2"]);
+  // Ten minutes later, the rolling hour is full: no Workers AI call at all.
+  const again = await batch(db, { ai: schnellAi(calls), now: () => MORNING + 600000 });
+  assert.deepEqual(again.made, []);
+  assert.match(again.stopped, /2 of 2 in the last hour/);
+  assert.equal(calls.length, 2);
+  // An hour on, two more.
+  assert.equal((await batch(db, { ai: schnellAi(calls), now: () => MORNING + 3600000 + 1000 })).made.length, 2);
+  // The library job's Gemini cap spent: no batch.
+  const capped = await batch(db, { now: () => MORNING + 7200000 + 1000, env: { SITE_ENV: "production", GEMINI_BUDGET: JSON.stringify({ stages: { library: { cap: 4 } } }) } });
+  assert.equal(capped.error, "no_gemini_budget");
 });
 
-test("manual batch: at most 5, within the library stage's Gemini cap, logged as job library", async () => {
+test("hourly batch: quiet from 20:00 to midnight Pacific, off without the binding, the key or the limits; the gateway's 429 stops it", async () => {
   const { db } = await freshDb();
-  await ensureGeminiLog(db);
-  const geminiFetch = async () =>
-    new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(CHECK_OK) }] }, finishReason: "STOP" }], usageMetadata: {} }), { status: 200 });
-  const r = await manualBatch({ db, env: { SITE_ENV: "production" }, ai: schnellAi(), store: async (k) => k, apiKey: "k", login: "owner", count: 9, fetchImpl: geminiFetch });
-  assert.equal(r.made.length, 5);
-  assert.ok(r.made.every((m) => m.status === "pending"));
-  const logged = (await db.execute("SELECT job, COUNT(*) AS n FROM gemini_requests GROUP BY job")).rows.map((x) => `${x.job}:${x.n}`);
-  assert.deepEqual(logged, ["library:5"]);
-  // The stage's cap is spent: no more checks today.
-  const capped = await manualBatch({ db, env: { SITE_ENV: "production", GEMINI_BUDGET: JSON.stringify({ stages: { library: { cap: 5 } } }) }, ai: schnellAi(), store: async (k) => k, apiKey: "k", login: "owner", fetchImpl: geminiFetch });
-  assert.equal(capped.error, "no_gemini_budget");
+  const calls = [];
+  const evening = await batch(db, { ai: schnellAi(calls), now: () => Date.parse("2026-11-12T04:15:00Z") }); // 20:15 Pacific
+  assert.equal(evening.error, "off");
+  assert.match(evening.stopped, /quiet hours/);
+  assert.equal((await batch(db, { now: () => Date.parse("2026-11-12T08:15:00Z") })).made.length, 2, "00:15 Pacific is fine");
+  assert.match((await batch(db, { ai: null })).stopped, /no Workers AI binding/);
+  assert.match((await batch(db, { apiKey: "" })).stopped, /GEMINI_API_KEY/);
+  assert.match((await batch(db, { env: { LIBRARY_PER_HOUR: "0" } })).stopped, /LIBRARY_PER_HOUR is 0/);
+  assert.match((await batch(db, { env: { AI_NEURON_CEILING: "9000" } })).stopped, /AI_NEURON_CEILING "9000"/);
+  assert.equal(calls.length, 0);
+  // The gateway answers 429: one call, no Lucid, nothing stored, the batch stops.
+  const { db: db2 } = await freshDb();
+  const gwCalls = [];
+  const gateway = { run: async (model) => (gwCalls.push(model), Promise.reject(Object.assign(new Error("429"), { name: "AiBudgetExhausted" }))) };
+  const r = await batch(db2, { ai: gateway });
+  assert.deepEqual(r.made, []);
+  assert.match(r.stopped, /no room for AI images now/);
+  assert.deepEqual(gwCalls, ["@cf/black-forest-labs/flux-1-schnell"]);
+  assert.equal((await listImages(db2)).length, 0);
 });
 
 // ---------------------------------------------------------------------------

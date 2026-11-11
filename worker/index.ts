@@ -15,6 +15,7 @@ import { markStaging, stagingRobots } from "./staging";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
+import { libraryTick } from "./library";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -41,11 +42,16 @@ const worker = {
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
-  // finishes people's grade requests that waited for Gemini 3.5; the weekly
+  // finishes people's grade requests that waited for Gemini 3.5 and makes the
+  // image library's hourly batch (./library.ts); the weekly
   // one is model watch (./model-watch.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
-    if (controller.cron === PEOPLE_QUEUE_CRON) await drainPeople(env as NightEnv);
+    if (controller.cron === PEOPLE_QUEUE_CRON) {
+      await drainPeople(env as NightEnv);
+      // The image library's hourly batch (./library.ts): up to 2 images, never in the evening.
+      await libraryTick(env as NightEnv, controller.scheduledTime);
+    }
     else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     else if (controller.cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
     else await startTonight(controller.scheduledTime, env as NightEnv);

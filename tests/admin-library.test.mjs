@@ -90,7 +90,7 @@ test("library API: keep, drop and retire, each only from the statuses it applies
 test("manual batch: admin and CSRF checked; refused outside production", async () => {
   assert.equal((await post("/api/admin/library/generate", { count: 1 }, { cookie: admin, origin: "https://evil.example" })).status, 403);
   assert.equal((await post("/api/admin/library/generate", { count: 1 }, { cookie: other })).status, 403);
-  assert.equal((await post("/api/admin/library/generate", { count: 9 }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library/generate", { count: 3 }, { cookie: admin })).status, 400);
   const r = await post("/api/admin/library/generate", { count: 1 }, { cookie: admin });
   assert.equal(r.status, 409);
   assert.deepEqual(await r.json(), { error: "production_only" });
@@ -103,7 +103,7 @@ test("review page: only the admin sees it; images are served to the admin only",
   assert.equal(page.status, 200);
   const html = await page.text();
   assert.match(html, /Image library/);
-  assert.match(html, /Make 5 now/);
+  assert.match(html, /Make 2 now/);
   assert.match(html, /AI images today: (<!-- -->)?0(<!-- -->)? of (<!-- -->)?40/);
   assert.equal((await fetch(`${BASE}/api/admin/library/${ids[0]}/image`)).status, 401);
   // The admin may ask; the test server has no bucket, so the bytes are not there.

@@ -50,10 +50,10 @@ export function LibraryReview({ images }: { images: LibraryImage[] }) {
 
   const generate = async () => {
     setBusy("generate");
-    setMessage("Making up to 5 images; this takes about a minute...");
-    const r = await post("/api/admin/library/generate", { count: 5 });
+    setMessage("Making up to 2 images; this takes about half a minute...");
+    const r = await post("/api/admin/library/generate", { count: 2 });
     const made = (r.data?.made ?? []) as { status: string }[];
-    setMessage(r.ok ? `Made ${made.length}: ${made.map((m) => m.status).join(", ") || "none"}${r.data?.stopped ? `. Stopped: ${r.data.stopped}` : ""}` : `Not started: ${r.data?.error ?? "error"}`);
+    setMessage(r.ok ? `Made ${made.length}: ${made.map((m) => m.status).join(", ") || "none"}${r.data?.stopped ? `. Stopped: ${r.data.stopped}` : ""}` : `Not started: ${r.data?.stopped ?? r.data?.error ?? "error"}`);
     setBusy(null);
     router.refresh();
   };
@@ -67,10 +67,10 @@ export function LibraryReview({ images }: { images: LibraryImage[] }) {
           disabled={busy !== null}
           className="rounded-lg border border-edge-strong bg-raised px-3 py-1.5 text-sm font-semibold hover:border-accent disabled:opacity-50"
         >
-          Make 5 now
+          Make 2 now
         </button>
         <span className="text-sm text-mute" role="status" aria-live="polite">
-          {message || "The nightly run makes up to 40 a night, within the free Workers AI allowance."}
+          {message || "Up to 2 new images an hour (none from 20:00 to midnight Pacific), at most 40 a day, within the free Workers AI allowance."}
         </span>
       </div>
       {SECTIONS.map((section) => {

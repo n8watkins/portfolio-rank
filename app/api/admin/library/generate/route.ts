@@ -2,15 +2,18 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdminPost } from "@/lib/admin";
 import { workerEnv } from "@/lib/grader/server";
-import { MAX_MANUAL, manualBatch } from "@/pipeline/content/library-stage.mjs";
+import { MAX_MANUAL, runLibraryBatch } from "@/pipeline/content/library-stage.mjs";
+import { withGateway } from "@/lib/ai-gateway.mjs";
 
 // One manual batch of library images, for when the owner doesn't want to
-// wait for the night (docs/CONTENT-ENGINE.md, "The image library"): the same
-// work as the night's "Image library" stage for at most 5 queue items, with
-// the same limits (pipeline/content/library-stage.mjs manualBatch).
-//   POST /api/admin/library/generate { count?: 1..5 }
+// wait for the next hourly tick (docs/CONTENT-ENGINE.md, "The image
+// library"): the same work for at most 2 queue items, through the AI Gateway,
+// with the same limits (pipeline/content/library-stage.mjs runLibraryBatch:
+// 40 a UTC day, 2 a rolling hour, quiet from 20:00 to midnight Pacific).
+//   POST /api/admin/library/generate { count?: 1..2 }
 //     -> { made: [{ id, status }], stopped? }; 400, 401, 403,
-//        409 production_only, 429 no_gemini_budget, 503 no_ai | no_gemini_key
+//        409 production_only | off (with why), 429 no_gemini_budget,
+//        503 no_ai | no_gemini_key
 // Production only: the neuron counter lives in each environment's database,
 // and only production's guards the account (staging's ceiling is 0).
 export const dynamic = "force-dynamic";
@@ -41,7 +44,8 @@ export async function POST(req: Request) {
     await bucket.put(key, bytes, { httpMetadata: { contentType } });
     return key;
   };
-  const out = await manualBatch({ db: db(), env, ai: env.AI, store, apiKey, login: who.login, count });
+  const out = await runLibraryBatch({ db: db(), env, ai: withGateway(env.AI), store, apiKey, runId: `manual:${who.login}`, count });
+  if (out.error === "off") return NextResponse.json(out, { status: 409, headers: PRIVATE });
   if (out.error) return fail(out.error, 429);
   return NextResponse.json(out, { headers: PRIVATE });
 }

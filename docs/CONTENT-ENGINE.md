@@ -192,22 +192,23 @@ Owner decisions of 2026-11-10 ([DECISIONS.md](DECISIONS.md#content-engine)).
 A library of house-style illustrations ([pipeline/content/house-style.mjs](../pipeline/content/house-style.mjs)): strictly flat 2D vector, warm greys with one amber accent, no text, no people, no logos.
 
 - **The queue:** 26 tech-first themes x 5 subjects = 130 images, made in rounds (the first subject of every theme, then the second, and so on), each with alt text and tags for matching.
-- **Every night:** the end-of-day run's "Image library" stage ([pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs)), after Content, makes up to `LIBRARY_PER_NIGHT` (40) images: one Flux Schnell call each (Lucid Origin only if Schnell errors), a center crop to 16:9 (1024 x 576), one Gemini check of the cropped image with no retry (it rejects any text-like marks, people, logos, 3D and off-style images), then R2 under the private prefix `private/library/<SITE_ENV>/` and a row in `image_library`.
-  The queue is done in about 4 nights.
+- **Every hour:** the Worker's hourly tick ([worker/library.ts](../worker/library.ts), the existing `15 * * * *` cron, [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs)) makes up to `LIBRARY_PER_HOUR` (2, the AI Gateway's hourly limit) images, except from 20:00 to midnight Pacific, when the night's post gets the gateway's allowance: one Flux Schnell call each through the `portfoliorank-ai` gateway (Lucid Origin only if Schnell errors), a center crop to 16:9 (1024 x 576), one Gemini check of the cropped image with no retry (it rejects any text-like marks, people, logos, 3D and off-style images), then R2 under the private prefix `private/library/<SITE_ENV>/` and a row in `image_library`.
+  At up to 40 a day, the queue is done in about 4 days.
+  The night's "Image library" stage is only the Gemini cap for job `library` (40 a day); it does no work in the night.
 - **Statuses:** `pending` (passed the check, waiting for the owner), `approved`, `rejected` (dropped by the owner), `rejected-auto` (failed the check, kept for the owner to see), `retired`.
   Only approved images are ever used.
   A queue item gets one image, ever; one whose model calls both errored has no row and comes up on a later night.
 - **Review:** `/admin/images` (only for `ADMIN_GITHUB_LOGIN`; a 404 for anyone else) lists the pending images with keep and drop, the failed ones (keep one anyway if the check was wrong), and the library with usage counts and a retire button.
   Decisions are POSTs to `/api/admin/library` that must come from the site with a JSON body (CSRF), checked on the server.
-- **One batch by hand:** the page's "Make 5 now" button (`POST /api/admin/library/generate`, production only) runs the night stage's work for up to 5 queue items, with the same 40-images-a-day limit, the "library" stage's Gemini cap and no retries.
-  Setting `LIBRARY_PER_NIGHT` to "0" stops the nightly work; `LIBRARY_MODEL` "flux2dev" switches the library to Flux 2 Dev (multipart input, 1024 x 576 and 16 steps so it fits the 2,500-neuron guard, 2,400 neurons an image, so one a day).
-- **The never-pay guard** ([lib/content/neurons.mjs](../lib/content/neurons.mjs)): **at most 40 AI images a UTC day** (`MAX_AI_IMAGES_PER_DAY`), counted per image, for the library and the posts together.
+- **One batch by hand:** the page's "Make 2 now" button (`POST /api/admin/library/generate`, production only) runs the hourly tick's work at once for up to 2 queue items, with the same limits (40 a day, 2 an hour, quiet in the evening), the "library" job's Gemini cap and no retries.
+  Setting `LIBRARY_PER_HOUR` to "0" stops the hourly work; `LIBRARY_MODEL` "flux2dev" switches the library to Flux 2 Dev (multipart input, 1024 x 576 and 16 steps so it fits the 2,500-neuron guard, 2,400 neurons an image, so one a day).
+- **The never-pay guard** ([lib/content/neurons.mjs](../lib/content/neurons.mjs)): **at most 40 AI images a UTC day** (`MAX_AI_IMAGES_PER_DAY`) and **at most 2 in any rolling hour** (the AI Gateway's limit), counted per image, for the library and the posts together; every call goes through the `portfoliorank-ai` AI Gateway ([lib/ai-gateway.mjs](../lib/ai-gateway.mjs), [AI-GATEWAY.md](AI-GATEWAY.md)), whose 429 means stop, with no retry.
   Behind it, at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`; 40 Schnell images are about 2,320), half of PortfolioRank's 5,000 slice of the account's free 10,000 ([COSTS.md](COSTS.md#workers-ai)); Cloudflare resets the allowance at 00:00 UTC.
-  Before every call, one image and the call's estimated neurons are reserved for the day (`ai_image_days`) in one statement that only succeeds while both stay within their limits; a failed reservation skips the call, with no retry, and a reservation is never given back.
+  Before every call, one image and the call's estimated neurons are reserved (`ai_image_calls`, one row per call) in one statement that only succeeds while the day's images, the hour's images and the day's neurons all stay within their limits; a failed reservation skips the call, with no retry, and a reservation is never given back.
   Either setting above its maximum (or not a whole number) is rejected and turns Workers AI off; staging's limits are 0.
   Estimates round partial tiles up: Schnell 58, Lucid Origin 1,512 (768 x 432, 20 steps), Flux 2 Dev 2,400 (1024 x 576, 16 steps).
   "AI images today: N of 40" shows on `/admin/images` and in `GET /api/admin/quota`.
-- **Seed:** the round-1 and round-2 sample images were not imported; the nightly run makes the same subjects in the final house style.
+- **Seed:** the round-1 and round-2 sample images were not imported; the hourly tick makes the same subjects in the final house style.
 
 **Owner decision (2026-11-10): stock photos with people in them.**
 Allowed, but never as the hero and never next to a named developer, so a stranger's face can't be read as that developer.

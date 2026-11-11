@@ -89,10 +89,11 @@
     // call; a value above 40 or 2,500 is rejected and turns Workers AI off.
     "MAX_AI_IMAGES_PER_DAY": "40",
     "AI_NEURON_CEILING": "2500",
-    // The image library (pipeline/content/library-stage.mjs): images a night
-    // ("0" stops it) and the model: "schnell", or "flux2dev" (2,400
+    // The image library (pipeline/content/library-stage.mjs, worker/library.ts):
+    // images an hour on the hourly tick (at most 2, the AI Gateway's limit;
+    // "0" stops it) and the model: "schnell", or "flux2dev" (2,400
     // neurons an image at 1024x576 and 16 steps, so one a day).
-    "LIBRARY_PER_NIGHT": "40",
+    "LIBRARY_PER_HOUR": "2",
     "LIBRARY_MODEL": "schnell"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
@@ -180,7 +181,7 @@
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
         "AI_NEURON_CEILING": "0",
-        "LIBRARY_PER_NIGHT": "0",
+        "LIBRARY_PER_HOUR": "0",
         "LIBRARY_MODEL": "schnell"
       },
       // No crons at all: the end-of-day run, the people queue and model watch
