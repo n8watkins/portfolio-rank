@@ -176,7 +176,7 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 - **Results feed:** `pollResults(db, { since })` in [lib/polls/store.mjs](lib/polls/store.mjs) returns closed polls with totals, the winning option and the margin in points, for the content engine and the AI vs people comparisons; the public `past` list carries the same totals.
 - **Turso reads:** a public read is a handful of indexed rows, at most once a minute per data center; a vote is one insert (plus the trigger's update) and two rate-limit upserts.
 
-### Games, badges, claims, live stats and reports (built, off)
+## Games, badges, claims, live stats and reports (built, off)
 
 Owner decisions of 2026-11-10 ([docs/DECISIONS.md](docs/DECISIONS.md#games-badges-and-claims)).
 The back end is built in [lib/games](lib/games); the screens come with the redesign (branch `preview/redesign`).
@@ -214,11 +214,13 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
 - **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, sites changed this month from `rating_resets`, the newest entry) come from one pass over the listed portfolios, cached an hour.
   Stars and the community list's contributors come from the GitHub API, cached a day.
   Votes today (Pacific, through the `votes_created_idx` index), all votes and quizzes finished are read on each edge-cache miss.
-- **Report download** ([lib/games/report.mjs](lib/games/report.mjs)): a print-optimised HTML page with a "Save as PDF" button, not a PDF made on the Worker (a Worker PDF library ships Latin-1 fonts only, or a megabyte-scale font).
-  Signed-in visitors open any listed report; others get a one-time link by email, valid 24 hours and stored only as its SHA-256, which lets that browser open that one report for an hour.
-- **Email** ([lib/email.ts](lib/email.ts)): the one gate, through Cloudflare Email Service's `send_email` binding named `EMAIL` from `EMAIL_FROM`, with a hard daily cap (`EMAIL_DAILY_CAP`, default 50).
-  Until the owner adds the binding and `EMAIL_FROM` ([DEPLOY.md](DEPLOY.md)), `/api/report/email` answers 503 `email_unavailable` and sends nothing.
-- **Abuse guards:** every write checks the `Origin` header; rate limits per browser and per hashed IP live in `rate_limits` (new quizzes 30 an hour per browser, guesses 300, badge events 120, claims 10 an account, owner actions 20, report emails 5 an hour and 3 a day per address); Turnstile guards report emails when `TURNSTILE_SECRET_KEY` is set (action `report-email`).
+- **Report download** (`printView` and `renderReportHtml` in [lib/grader/report.mjs](lib/grader/report.mjs)): a print-optimised HTML page with a "Save as PDF" button, not a PDF made on the Worker (a Worker PDF library ships Latin-1 fonts only, or a megabyte-scale font).
+  It shows a listed portfolio's grade with the same facts and judgments as a "grade my portfolio" report.
+  Signed-in visitors open any listed report; others get a one-time link by email, which lets that browser open that one report for an hour.
+- **Report links by email:** the same machinery as grade reports ("Grade my portfolio", Email below).
+  The link is a `report-link` one-time link ([lib/grader/links.mjs](lib/grader/links.mjs)): signed, valid 24 hours, works once, only a hash of its nonce stored, and it never opens a grade report (nor a grade link a print report).
+  The email goes through the shared gate ([lib/email/gate.mjs](lib/email/gate.mjs), kind `report-link`); a refused send answers 503 `email_unavailable` with the reason (`unavailable`, `capped` or `failed`), and the unused link simply expires.
+- **Abuse guards:** every write checks the `Origin` header; rate limits per browser and per hashed IP live in `rate_limits` (new quizzes 30 an hour per browser, guesses 300, badge events 120, claims 10 an account, owner actions 20, report emails 5 an hour); the email gate adds its daily caps, including 3 emails a day to one address; Turnstile guards report emails when `TURNSTILE_SECRET_KEY` is set (action `report-email`, [lib/turnstile.ts](lib/turnstile.ts)).
 - **Turso reads:** a quiz or guess reads a few rows by primary key; a badge check reads at most about 3,000 rows and is reused for 15 seconds; live stats cost about 2,100 rows an hour plus a few indexed rows a minute per data center.
 
 The API:
@@ -237,10 +239,13 @@ The API:
 | `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt }, regrade? }`; 400 `confirm_required`, 401, 403 `not_owner`, 429 |
 | `GET /api/admin/claims`, `POST /api/admin/claims` `{ id, decision, note? }` | the review queue, and a decision; admin login only |
 | `GET /api/stats/live` | the live numbers; public, 60 s, edge cache |
-| `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` |
-| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden), 404, 410 (link used or expired) |
+| `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` with `reason` |
+| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden), 404, 410 (link used, expired or forged) |
 
 A quiz is `{ id, kind, day, challenge, hit, rounds: [{ index, url, name, tagline, domain, path, shot, hero }], progress: { results, finished, score, hits } }`.
+
+The tables are in [lib/games/schema.mjs](lib/games/schema.mjs) (schema version 5).
+`tests/games.test.mjs` covers the rules without a server and `tests/games-api.test.mjs` every route on the production build, with `GAMES_V2=true` and a local stand-in for the GitHub API on its own port (`GAMES_TEST_GITHUB_API`, which `lib/grader/server.ts` ignores on the deployed Workers).
 
 ## Grade my portfolio
 
@@ -329,7 +334,8 @@ Reports and their screenshots are deleted after 180 days.
 
 - **"Get it by email", no account needed:** the address waits in `grade_emails` until the report is ready (also after waiting in a queue or for a later day), then the grader's tick sends a one-time link and erases the address, keeping only a keyed hash so the same address isn't added twice; at most 2 addresses a report.
 - **The link** ([lib/grader/links.mjs](lib/grader/links.mjs)): signed with `AUTH_SECRET`, expires in 7 days, works once (only a hash of its nonce is stored); opening it makes that browser the report's owner, and a used or expired link still leads to the report without granting anything.
-- **One gate** ([lib/email/gate.mjs](lib/email/gate.mjs)): every email (grade reports, owner alerts, the newsletter later) is counted in `email_sends` and stops at hard daily caps: 100 in all, 80 grade reports, 20 owner alerts and 3 to any one address (`EMAIL_CAPS` overrides them), under Cloudflare Email Service's beta daily limit.
+  The same module makes the games' print report links (scope `report-link`, a day); each scope is signed apart, so a link of one never opens the other, and both live in `grade_links` with its `scope` column.
+- **One gate** ([lib/email/gate.mjs](lib/email/gate.mjs)): every email (grade reports, the games' report links, owner alerts, the newsletter later) is counted in `email_sends` and stops at hard daily caps: 100 in all, 80 grade reports, 40 report links, 20 owner alerts and 3 to any one address (`EMAIL_CAPS` overrides them), under Cloudflare Email Service's beta daily limit.
   A refused or failed send counts too, so a broken provider can't become a retry storm; the log keeps a keyed hash, never the address.
   A report email the gate keeps refusing is given up after 3 days and its address erased.
 - **The sender:** Cloudflare Email Service through the Worker's `send_email` binding `SEND_EMAIL`, from `EMAIL_FROM` (`portfoliorank@n8builds.dev`; n8builds.dev is onboarded for sending, as for Wren).
@@ -342,7 +348,7 @@ While `GRADER_ENABLED` is not `"true"` it returns before reading anything.
 
 ### Tables
 
-`grade_jobs`, `grade_caps` (a day of counters, left out of the backup), `grade_emails`, `grade_links`, `email_sends` and `email_outbox` (test runs only, left out of the backup), in [lib/grader/schema.mjs](lib/grader/schema.mjs).
+`grade_jobs`, `grade_caps` (a day of counters, left out of the backup), `grade_emails`, `grade_links` (every one-time link, the games' too; expired ones are also deleted by the nightly retention), `email_sends` and `email_outbox` (test runs only, left out of the backup), in [lib/grader/schema.mjs](lib/grader/schema.mjs).
 
 ### Testing
 

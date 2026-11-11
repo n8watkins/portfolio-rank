@@ -348,18 +348,21 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   A Worker PDF library either ships standard fonts only (Latin-1, so many names break) or a megabyte-scale font, and lays out the screenshot and notes worse than the browser's own "Save as PDF".
   The page is for signed-in visitors, or opened once through a link sent by email (valid 24 hours, stored only as a hash).
   Why: correct for every name and language, with no new dependency.
+- **The games reuse the grader's email, Turnstile, one-time links and report lines** (agent, 2026-11-10, merging #80 with #81). Status: building.
+  Report links are `report-link` one-time links in `lib/grader/links.mjs`, sent through the shared email gate (kind `report-link`), checked by `lib/turnstile.ts`, and the print page shows the grade with the grade report's own fact and judgment lines.
+  Why: one mechanism for each, so caps, signing and retention can't drift between two copies.
 
 ## Newsletter and email
 
 - **A weekly newsletter** (owner, 2026-11-10). Status: planned.
   Sign-up on every post and on the site, confirm by email (double opt-in), one-click unsubscribe, a weekly digest of new posts, the top 5 and the biggest climber.
   Why: a way to bring readers back that doesn't depend on search or social.
-- **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (#81, `lib/email/gate.mjs`).
-  Newsletter, queued grade reports and owner updates all pass one module that counts every send and stops at a daily cap.
-  The caps (agent): 100 emails a day in all, 80 grade reports, 20 owner alerts and 3 to any one address; a refused or failed send counts too, and the log keeps a keyed hash, never the address (`EMAIL_CAPS` changes them).
+- **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (#81, `lib/email/gate.mjs`; the games' report links use it too).
+  Newsletter, queued grade reports, the games' report links and owner updates all pass one module that counts every send and stops at a daily cap.
+  The caps (agent): 100 emails a day in all, 80 grade reports, 40 report links, 20 owner alerts and 3 to any one address; a refused or failed send counts too, and the log keeps a keyed hash, never the address (`EMAIL_CAPS` changes them).
   Why: the same hard-cap pattern as Wren's demo budget; no bug or abuse can send unbounded email.
 - **All email goes through Cloudflare Email Service** (owner, 2026-11-10). Status: building (#81): the Worker's `send_email` binding, from `portfoliorank@n8builds.dev`; owner alerts go to `OWNER_EMAIL` once the owner sets it.
-  Newsletter, queued grade reports and owner alerts all send through Cloudflare Email Service, still behind the one gate with hard caps.
+  Newsletter, queued grade reports, report links and owner alerts all send through Cloudflare Email Service, still behind the one gate with hard caps.
   Workers Paid includes 3,000 emails a month per account, shared with Wren, then $0.35 per 1,000.
   Sends to the owner's verified address are free and don't count, so owner alerts go there.
   Sending is in beta and new accounts start with a conservative daily limit, which the gate's caps must stay under.
