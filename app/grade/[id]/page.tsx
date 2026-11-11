@@ -42,7 +42,7 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
         {/* The result first */}
         <section aria-labelledby="overall" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div className="card card-featured rise overflow-hidden">
-            <Shot base={site.shot} alt={`Screenshot of ${site.domain}`} domain={site.domain} eager className="aspect-[16/10] w-full" />
+            <Shot base={site.shot} alt={`Screenshot of ${site.domain}`} domain={site.domain} eager className="aspect-[16/10] w-full lg:aspect-auto lg:h-full" />
           </div>
           <div className="card rise flex flex-col p-6 sm:p-8" style={d(80)}>
             <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent">
@@ -80,7 +80,8 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
         </section>
 
         {/* What a hiring manager sees, and how it looks and reads */}
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        {/* Each card is as tall as its content, so neither shows an empty band. */}
+        <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <section aria-labelledby="hiring" className="card reveal p-5 sm:p-6">
             <h2 id="hiring" className="flex items-center gap-2 text-lg font-bold tracking-tight">
               <Briefcase className="h-4 w-4 text-mute" aria-hidden /> What a hiring manager sees
@@ -174,14 +175,44 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
               <TrendingUp className="h-5 w-5 text-accent" aria-hidden /> Portfolios doing it better
             </h2>
             <p className="mt-1 text-sm text-mute">Ranked above this one, each with the thing it does better. Sample comparison.</p>
-            <div className={`mt-5 grid grid-cols-1 gap-5 ${better.length >= 3 ? "md:grid-cols-3" : better.length === 2 ? "md:grid-cols-2" : ""}`}>
+            {better.length === 1 ? (
+              // One site: a smaller shot beside a centred text block with its own actions.
+              <div className="card mt-5 grid grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                <a href={`/grade/${better[0].r.slug}`} className="group block overflow-hidden border-edge max-md:border-b md:border-r">
+                  <Shot base={better[0].r.shot} alt={`Screenshot of ${better[0].r.domain}`} domain={better[0].r.domain} className="aspect-[16/10] h-full w-full transition duration-500 group-hover:scale-[1.02]" />
+                </a>
+                <div className="flex flex-col justify-center p-5 sm:p-7">
+                  <p className="flex items-center gap-2.5">
+                    <RankBadge rank={better[0].r.rank} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-lg font-semibold">{better[0].r.name}</span>
+                      <span className="block text-xs text-mute tabular-nums">
+                        #{better[0].r.rank} merged · Top {topPct(better[0].r.rank, board.length)}%
+                      </span>
+                    </span>
+                  </p>
+                  <p className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden /> Better {better[0].label.toLowerCase()}: {better[0].theirs} vs {better[0].yours}
+                  </p>
+                  <p className="mt-2 text-[15px] text-mute">{better[0].note}</p>
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <a href={`/grade/${better[0].r.slug}`} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-edge bg-card px-3.5 text-sm font-semibold shadow-[var(--card-hi)] hover:border-edge-strong">
+                      See its report
+                    </a>
+                    <a href={better[0].r.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-edge bg-card px-3.5 text-sm font-semibold shadow-[var(--card-hi)] hover:border-edge-strong">
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Visit
+                    </a>
+                    <a href={`/play?with=${encodeURIComponent(better[0].r.slug)}`} className="group btn-sheen inline-flex h-10 items-center gap-1.5 rounded-lg px-3.5 text-sm font-semibold">
+                      Compare in a face-off <ArrowRight className="nudge h-3.5 w-3.5" aria-hidden />
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ) : (
+            <div className={`mt-5 grid grid-cols-1 gap-5 ${better.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
               {better.map((b) => (
-                <a
-                  key={b.r.url}
-                  href={`/grade/${b.r.slug}`}
-                  className={`card card-hover group grid overflow-hidden ${better.length === 1 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}
-                >
-                  <Shot base={b.r.shot} alt="" domain={b.r.domain} className={`aspect-[16/10] w-full border-edge ${better.length === 1 ? "max-md:border-b md:border-r" : "border-b"}`} />
+                <a key={b.r.url} href={`/grade/${b.r.slug}`} className="card card-hover group flex flex-col overflow-hidden">
+                  <Shot base={b.r.shot} alt="" domain={b.r.domain} className="aspect-[16/10] w-full border-b border-edge" />
                   <span className="flex flex-1 flex-col p-4">
                     <span className="flex items-center gap-2">
                       <RankBadge rank={b.r.rank} />
@@ -195,6 +226,7 @@ export default async function GradeReport({ params, searchParams }: { params: Pr
                 </a>
               ))}
             </div>
+            )}
           </section>
         )}
 
