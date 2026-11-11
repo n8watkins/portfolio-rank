@@ -39,7 +39,9 @@ export type Pool = {
 // rebuilt at most every few hours (one read of the board, about 6,300 rows)
 // and each isolate keeps it for a few minutes (docs/COSTS.md section C).
 const POOL_TTL_MS = 3 * 60 * 60 * 1000;
-const POOL_MEMO_MS = 5 * 60 * 1000;
+// Kept in memory a few minutes; never in the end-to-end runs (SITE_ENV "test"),
+// where one test's pool must not linger into the next test's seeded boards.
+const POOL_MEMO_MS = process.env.SITE_ENV === "test" ? 0 : 5 * 60 * 1000;
 let poolMemo: { at: number; pool: Promise<Pool> } | null = null;
 
 export async function getPool(): Promise<Pool> {
