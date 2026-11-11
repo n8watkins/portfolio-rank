@@ -25,7 +25,7 @@ import { renderChart } from "../pipeline/content/charts.mjs";
 import { CTA, assembleBody, buildWriteRequest, fill } from "../pipeline/content/writer.mjs";
 import { DEFAULT_WRITER_MODE, STAGED_REQUESTS, checkOutline, writerMode } from "../pipeline/content/staged.mjs";
 import { renderPreview } from "../pipeline/content/preview.mjs";
-import { checkNames, checkNumbers, codeChecks, wordCount } from "../pipeline/content/checks.mjs";
+import { checkLinksLoad, checkNames, checkNumbers, codeChecks, wordCount } from "../pipeline/content/checks.mjs";
 import { checkClaims, TAVILY_PER_WEEK } from "../pipeline/content/claims.mjs";
 import { choosePicks, denied } from "../pipeline/content/topic.mjs";
 import { AI_IMAGES_PER_POST, chooseCandidate, fillImages } from "../pipeline/content/images.mjs";
@@ -923,7 +923,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
   return {
     calls,
     requests: { [PRIMARY_MODEL]: 0 },
-    async generate(parts, schema, options) {
+    async generate(parts, schema) {
       const p = schema?.properties ?? {};
       const kind = p.hook_fact_ids ? "outline" : p.sections ? "sections" : p.title ? "write" : p.claims ? "claims" : p.on_topic ? "review" : "unknown";
       calls.push({ kind, text: parts[0].text });
@@ -990,8 +990,14 @@ test("staged writer: a failing finish is dropped without budget for a revision, 
   assert.equal(r.status, "dropped", "not enough budget for a revision after 6 requests");
   assert.match(r.failures.join(";"), /38%/);
   const g2 = stagedGemini(sheet);
-  const r2 = await runDraft(ctx, g2, { kind: "top-grades", night: "2026-11-16", budget: STAGED_REQUESTS + 3 });
+  const r2 = await runDraft(ctx, g2, { kind: "top-grades", night: "2026-11-16", budget: STAGED_REQUESTS + 2 });
   assert.equal(r2.status, "ok");
   const g3 = stagedGemini(sheet);
   assert.equal((await runDraft(ctx, g3, { kind: "top-grades", night: "2026-11-16", budget: 3 })).status, "deferred");
+});
+
+test("links: a site that answers 429 (rate-limiting the checker) loads; a 404 does not", async () => {
+  const fetchImpl = async (u) => new Response("x", { status: String(u).includes("busy") ? 429 : 404 });
+  assert.equal((await checkLinksLoad(["https://busy.example"], fetchImpl)).ok, true);
+  assert.equal((await checkLinksLoad(["https://gone.example"], fetchImpl)).ok, false);
 });

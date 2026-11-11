@@ -153,7 +153,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
   const db = ctx.db;
   const log = (line) => ctx.log(`Content: ${kind}: ${line}`);
   const staged = ctx.flags.writerMode === "staged";
-  const minRequests = staged ? STAGED_REQUESTS + 3 : MIN_DRAFT_REQUESTS;
+  const minRequests = staged ? STAGED_REQUESTS + 2 : MIN_DRAFT_REQUESTS;
   if (budget < minRequests) {
     await recordRun(db, { night, now, step: "draft", mode, status: "deferred", kind, detail: { reason: `only ${budget} request(s) left in this batch; ${minRequests} needed` } });
     return { status: "deferred", requests: 0 };

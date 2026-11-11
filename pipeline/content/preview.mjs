@@ -68,7 +68,10 @@ export function bodyHtml(body, images = new Map()) {
       quote.push(/^- /.test(t) ? `<li>${inline(t.slice(2))}</li>` : `<p>${inline(t)}</p>`);
     } else if (/^\d+\.\s/.test(l)) {
       if (para.length || quote.length) flush();
-      if (list !== "ol") (list = "ol"), out.push("<ol>");
+      if (list !== "ol") {
+        list = "ol";
+        out.push("<ol>");
+      }
       out.push(`<li>${inline(l.replace(/^\d+\.\s/, ""))}</li>`);
     } else if (!l.trim()) flush();
     else {

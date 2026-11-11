@@ -107,7 +107,8 @@ export async function checkLinksLoad(urls, fetchImpl, { timeoutMs = 10000 } = {}
     if (domainOf(u) === domainOf(SITE_URL)) continue;
     try {
       const res = await fetchImpl(u, { method: "GET", redirect: "follow", signal: AbortSignal.timeout(timeoutMs), headers: { "user-agent": "PortfolioRank link check" } });
-      if (!res.ok) problems.push(`link ${u} answered ${res.status}`);
+      // 429: the site is there and rate-limiting the checker, not broken.
+      if (!res.ok && res.status !== 429) problems.push(`link ${u} answered ${res.status}`);
       await res.body?.cancel?.();
     } catch (e) {
       problems.push(`link ${u} did not load (${String(e?.message ?? e).slice(0, 80)})`);
