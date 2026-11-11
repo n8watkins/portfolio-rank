@@ -12,73 +12,11 @@ import fs from "fs";
 import path from "path";
 import { pipelineDb } from "../pipeline/roster.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
-import { versionOf } from "../pipeline/rubric.mjs";
+import { AXES, buildPairs, compareGrades } from "../pipeline/grade-pairs.mjs";
 
-export const AXES = ["visual_design", "five_second_test", "storytelling", "writing", "memorability", "motion"];
-const TIER = { S: 5, A: 4, B: 3, C: 2, D: 1 };
-
-const parse = (json) => {
-  try {
-    const r = JSON.parse(String(json));
-    return r && r.tier ? r : null;
-  } catch {
-    return null;
-  }
-};
-
-/**
- * Pairs (old grade by `from`, the grade by `to` that replaced it) from
- * rubric_history rows (ordered by url, id) and the current grades.
- */
-export function buildPairs(history, current, { from = BACKUP_MODEL, to = PRIMARY_MODEL } = {}) {
-  const pairs = [];
-  for (let i = 0; i < history.length; i++) {
-    const h = history[i];
-    if (h.model !== from || h.replaced_by_model !== to) continue;
-    const next = history[i + 1]?.url === h.url ? history[i + 1].rubric : current.get(h.url);
-    const a = parse(h.rubric);
-    const b = parse(next);
-    // Only same-rubric pairs measure the model: a v1 grade against a v2 grade
-    // differs by rubric too (pipeline/rubric.mjs RUBRIC_VERSION).
-    if (a && b && b.model === to && versionOf(a) === versionOf(b)) pairs.push({ url: h.url, a, b });
-  }
-  return pairs;
-}
+export { AXES, buildPairs, compareGrades };
 
 const pct = (n, d) => (d ? `${((100 * n) / d).toFixed(1)}%` : "-");
-
-/** The comparison numbers for a list of pairs. */
-export function compareGrades(pairs) {
-  const n = pairs.length;
-  let exact = 0;
-  let withinOne = 0;
-  let portfolioDisagree = 0;
-  const axis = Object.fromEntries(AXES.map((k) => [k, { sum: 0, n: 0 }]));
-  for (const { a, b } of pairs) {
-    const ta = TIER[a.tier];
-    const tb = TIER[b.tier];
-    if (ta && tb) {
-      if (ta === tb) exact++;
-      if (Math.abs(ta - tb) <= 1) withinOne++;
-    }
-    if (Boolean(a.is_portfolio) !== Boolean(b.is_portfolio)) portfolioDisagree++;
-    for (const k of AXES) {
-      const sa = a[k]?.score;
-      const sb = b[k]?.score;
-      if (typeof sa === "number" && typeof sb === "number") {
-        axis[k].sum += Math.abs(sa - sb);
-        axis[k].n++;
-      }
-    }
-  }
-  return {
-    pairs: n,
-    exact,
-    withinOne,
-    portfolioDisagree,
-    mae: Object.fromEntries(AXES.map((k) => [k, axis[k].n ? axis[k].sum / axis[k].n : null])),
-  };
-}
 
 export function compareMarkdown(r, { from = BACKUP_MODEL, to = PRIMARY_MODEL } = {}) {
   const lines = [

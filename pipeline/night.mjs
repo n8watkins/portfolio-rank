@@ -10,7 +10,9 @@
 //
 //   ctx = { db, apiKey, plan, quota, rpm, now() -> ms, sleep(ms), log(line),
 //           fetchImpl, image(shotKey) -> inline image part | "missing" | null,
-//           flags: { rankingV2, rubricRegrade, ranking (lib/ranking/config) },
+//           flags: { rankingV2, rubricRegrade, ranking (lib/ranking/config),
+//                    contentMode },
+//           content: { env, keys, ai, store } (pipeline/content/engine.mjs),
 //           runId }
 //
 // and a state that is plain JSON (a Workflow step's result), so a run can be
@@ -35,8 +37,10 @@
 //   3. AI ranking comparisons (ranking v2, only when RANKING_V2 is on), then
 //      the boards are rebuilt. Human face-off votes use no Gemini and are
 //      never scheduled.
-//   4. Content: for now the weekly polls (pipeline/polls.mjs), at most one
-//      request a night and two a week; the content engine's posts join later
+//   4. Content: the weekly polls (pipeline/polls.mjs), at most one request a
+//      night and two a week, then the content engine (pipeline/content/
+//      engine.mjs, docs/CONTENT-ENGINE.md) while CONTENT_MODE is not "off":
+//      the week's pick on Sunday, one post a night on the drafting nights
 //   5. Re-grades: 3.1 grades on 3.5, then (RUBRIC_REGRADE) older rubrics
 //   6. Experiments (none scheduled)
 //
@@ -66,7 +70,8 @@ import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE }
 import { planBatches, planPairs, pairKey } from "../lib/ranking/matchmaking.mjs";
 import { comparisonsToday, ensureRankingSchema, inputDigest, insertComparison, loadInput, syncVotes, writeResults } from "../lib/ranking/store.mjs";
 import { recompute } from "../lib/ranking/views.mjs";
-import { ensurePollsSchema, pollsContent, schedulePolls } from "./polls.mjs";
+import { ensurePollsSchema, schedulePolls } from "./polls.mjs";
+import { contentStage } from "./content/engine.mjs";
 
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
@@ -278,8 +283,8 @@ const handlers = {
     close: rebuildBoards,
     parkable: false,
   },
-  // The weekly polls; the content engine's posts will join this stage.
-  content: pollsContent,
+  // The weekly polls, then the content engine's posts (pipeline/content/engine.mjs).
+  content: contentStage,
   regrade: { ...queues.regrade, parkable: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   experiment: { off: () => "nothing scheduled" },
 };
@@ -587,7 +592,8 @@ export async function runBatch(ctx, state) {
         break;
       }
       try {
-        const out = await h.run(ctx, gemini, item, stage);
+        // left: what this batch may still spend, for an item that makes several requests (a post).
+        const out = await h.run(ctx, gemini, item, stage, { left: budget - spent() });
         if (out === "skipped") {
           stage.skipped++;
           stage.tried.push(item.id);

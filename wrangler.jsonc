@@ -37,6 +37,8 @@
   // from EMAIL_FROM, an address on n8builds.dev, which is onboarded for
   // sending; every send passes the shared gate's caps (lib/email/gate.mjs).
   "send_email": [{ "name": "SEND_EMAIL" }],
+  // Workers AI: the content engine's illustrations (flux-1-schnell, free allowance).
+  "ai": { "binding": "AI" },
   "vars": {
     // "production", or "staging" in env.staging below (worker/staging.ts).
     "SITE_ENV": "production",
@@ -69,7 +71,10 @@
     // happens with the redesign.
     "GAMES_V2": "false",
     // The sender of every email (lib/email/gate.mjs).
-    "EMAIL_FROM": "portfoliorank@n8builds.dev"
+    "EMAIL_FROM": "portfoliorank@n8builds.dev",
+    // The content engine's kill switch (docs/CONTENT-ENGINE.md): "off",
+    // "dry-run" (private drafts only) or "publish"; only the owner sets publish.
+    "CONTENT_MODE": "off"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
     // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
@@ -129,6 +134,7 @@
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
       "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" }],
       "send_email": [{ "name": "SEND_EMAIL" }],
+      "ai": { "binding": "AI" },
       "vars": {
         // "staging": robots.txt disallows everything and every response says
         // noindex (worker/staging.ts); Sentry tags events "staging".
@@ -145,7 +151,8 @@
         "ADMIN_GITHUB_LOGIN": "n8watkins",
         "GRADER_ENABLED": "false",
         "GAMES_V2": "false",
-        "EMAIL_FROM": "portfoliorank@n8builds.dev"
+        "EMAIL_FROM": "portfoliorank@n8builds.dev",
+        "CONTENT_MODE": "off"
       },
       // No crons at all: the end-of-day run, the people queue and model watch
       // all call Gemini.

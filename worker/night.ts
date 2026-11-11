@@ -33,6 +33,8 @@ import { rankingConfig } from "../lib/ranking/config.mjs";
 import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
+import { contentMode } from "../lib/content/store.mjs";
+import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
@@ -51,6 +53,11 @@ export type NightEnv = CloudflareEnv & {
   // Hashes addresses for the email gate's per-recipient cap.
   AUTH_SECRET?: string;
   EMAIL_CAPS?: string;
+  // The content engine's optional keys (docs/CONTENT-ENGINE.md): without
+  // Tavily, outside claims are cut; without Unsplash or Pexels, no stock photos.
+  TAVILY_API_KEY?: string;
+  UNSPLASH_ACCESS_KEY?: string;
+  PEXELS_API_KEY?: string;
 };
 
 type NightParams = { trigger: "cron" | "manual"; scheduledTime?: number };
@@ -91,6 +98,7 @@ function engine(env: NightEnv, runId: string) {
       }
     },
     flags: {
+      contentMode: contentMode(env.CONTENT_MODE),
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
       ranking: rankingConfig({
@@ -103,6 +111,17 @@ function engine(env: NightEnv, runId: string) {
     // Owner alerts through the shared email gate (pipeline/alerts.mjs
     // emailSender); null until the send_email binding and OWNER_EMAIL exist.
     email: emailSender(env, { db }),
+    // The content engine (pipeline/content/engine.mjs): its images go to the
+    // SHOTS bucket under content/<SITE_ENV>/, which /shots does not serve.
+    content: {
+      env: String(env.SITE_ENV ?? "production"),
+      keys: { tavily: env.TAVILY_API_KEY, unsplash: env.UNSPLASH_ACCESS_KEY, pexels: env.PEXELS_API_KEY },
+      ai: env.AI ?? null,
+      store: async (key: string, bytes: Uint8Array, contentType: string) => {
+        await env.SHOTS.put(key, bytes, { httpMetadata: { contentType } });
+        return key;
+      },
+    },
     runId,
   };
 }
@@ -195,7 +214,12 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
     await step.do("owner alerts", ONCE_MORE, async () => {
       const ctx = engine(this.env, runId);
       const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
-      const conditions = [...nightConditions(night, ctx.plan), ...(await tractionConditions(ctx.db, { now: new Date(Date.parse(String(state.startedAt))), levels: tractionLevels(this.env.ALERT_TRACTION) }))];
+      const startedAt = Date.parse(String(state.startedAt));
+      const conditions = [
+        ...nightConditions(night, ctx.plan),
+        ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
+        ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
+      ];
       // The weekly model watch owns its own alerts (./model-watch.ts); the night never clears them.
       const r = await reconcileAlerts(ctx.db, { conditions, scope: (key: string) => !isModelWatchAlert(key), email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
       log("night.alerts", r);
