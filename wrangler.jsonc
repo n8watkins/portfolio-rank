@@ -60,7 +60,7 @@
     // Ranking v2's AI comparisons run only when this is "true" (RANKING.md).
     "RANKING_V2": "false",
     // "true" re-grades 3.5 grades from an older rubric, lowest priority.
-    "RUBRIC_REGRADE": "false",
+    "RUBRIC_REGRADE": "true",
     // Gemini requests a minute, for the whole run.
     "GEMINI_RPM": "8",
     // Sites the nightly checks re-capture (oldest first) to find redesigns.
