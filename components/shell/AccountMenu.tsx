@@ -116,9 +116,14 @@ function ThemeItems() {
   const sub = useRef<HTMLDivElement>(null);
   const leave = useRef<ReturnType<typeof setTimeout>>(undefined);
   const radios = () => Array.from(sub.current?.querySelectorAll<HTMLElement>("[role=menuitemradio]") ?? []);
+  // A request to focus the current choice, honoured once the submenu is on the page.
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    if (focusTick) (radios().find((r) => r.getAttribute("aria-checked") === "true") ?? radios()[0])?.focus();
+  }, [focusTick]);
   const show = (focus: boolean) => {
     setOpen(true);
-    if (focus) requestAnimationFrame(() => (radios().find((r) => r.getAttribute("aria-checked") === "true") ?? radios()[0])?.focus());
+    if (focus) setFocusTick((n) => n + 1);
   };
   const back = () => {
     setOpen(false);

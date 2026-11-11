@@ -86,7 +86,7 @@ test("the header's settings menu sets System, Light or Dark, applies at once and
   await page.keyboard.press("ArrowRight");
   const sub = page.getByRole("menu", { name: "Theme" });
   await sub.waitFor();
-  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "System");
+  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "System");
   assert.equal(await sub.getByRole("menuitemradio", { name: "System" }).getAttribute("aria-checked"), "true");
   // On a wide screen it opens beside the menu, not inside it.
   const [m, s] = [await menu.boundingBox(), await sub.boundingBox()];
