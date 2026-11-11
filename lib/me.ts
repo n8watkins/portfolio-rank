@@ -20,7 +20,7 @@ const FEED = feed as FeedRow[];
 
 let listedByKey: Map<string, FeedRow> | null = null;
 /** The listed portfolio a grade is about, if it is on the list. */
-function listedSite(siteKey: string): FeedRow | null {
+export function listedSite(siteKey: string): FeedRow | null {
   if (!listedByKey) {
     listedByKey = new Map();
     for (const p of FEED) {

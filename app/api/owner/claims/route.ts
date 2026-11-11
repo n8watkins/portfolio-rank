@@ -6,9 +6,9 @@ import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
 import { MAX_VERIFIED, META_NAME, NOTE_MAX, autoProof, listClaims, metaProof, openClaim, ownerState, setClaimStatus, verifiedCount } from "@/lib/games/claims.mjs";
 import { fetchPage, githubProfile, templateOf } from "@/lib/games/owner";
-import { PRIVATE, fail, gamesEnabled, off, overLimit, rateLimited } from "@/lib/games/server";
+import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
 
-// Claim your portfolio (GAMES_V2). Signed in with GitHub only.
+// Claim your portfolio: always on, so removal is self-serve. Signed in with GitHub only.
 // GET  /api/owner/claims -> { claims: [{ url, status, method, meta, state, ... }] }
 // POST /api/owner/claims { url, method?: "auto" | "meta" | "manual", note? }
 //   auto    (default) checks that the home page links to github.com/<you>,
@@ -44,7 +44,7 @@ async function signedIn() {
 }
 
 export async function GET() {
-  if (!gamesEnabled()) return off();
+  // Always on: owners can prove a site is theirs whatever the feature switches say.
   const me = await signedIn();
   if (!me) return fail("signin_required", 401);
   await ensureSchema();
@@ -53,7 +53,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!gamesEnabled()) return off();
+  // Always on: owners can prove a site is theirs whatever the feature switches say.
   if (!sameOrigin(req)) return fail("bad_origin", 403);
   const me = await signedIn();
   if (!me) return fail("signin_required", 401);

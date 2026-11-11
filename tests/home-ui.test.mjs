@@ -175,7 +175,7 @@ test("the home grade form: the free-tier note where a grade starts, and a plain 
   await context.close();
 });
 
-test("a grade from home: /me follows it, then shows the report", { skip: !grading }, async () => {
+test("a grade from home: its progress page, and /me follows it to the report", { skip: !grading }, async () => {
   const { page, context, errors } = await freshPage(1440);
   // A first visit to /me offers the grade form.
   await page.goto(BASE + "/me");
@@ -185,7 +185,12 @@ test("a grade from home: /me follows it, then shows the report", { skip: !gradin
   const form = page.locator("#grade form");
   await form.getByLabel("Your portfolio address").fill("home-e2e.dev");
   await form.getByRole("button", { name: "Grade it" }).click();
-  await page.waitForURL(/\/me$/, { timeout: 20000 });
+  // The form leads to the grade's own page, which follows it.
+  await page.waitForURL(/\/grade\/[A-Za-z0-9_-]{16,}$/, { timeout: 20000 });
+  await page.getByRole("heading", { level: 1, name: "home-e2e.dev" }).waitFor();
+  await page.getByRole("progressbar", { name: "Grade progress" }).waitFor();
+  // /me shows the same grade.
+  await page.goto(BASE + "/me");
   await page.getByRole("heading", { level: 1, name: "Your report on home-e2e.dev is being prepared" }).waitFor();
   const bar = page.getByRole("progressbar", { name: "Report progress" });
   assert.equal(await bar.getAttribute("aria-valuenow"), "1");

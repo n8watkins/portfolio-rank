@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Award } from "lucide-react";
 import { BadgeArt } from "@/components/ui/BadgeArt";
 
-export type BadgeDef = { id: string; name: string; how: string; hue: number; target: number };
+export type BadgeDef = { id: string; name: string; how: string; hue: number; target: number; counter?: string };
 type Status = BadgeDef & { progress: number; earned: boolean; new: boolean };
 
 /**
@@ -46,7 +46,7 @@ export function Badges({ defs }: { defs: BadgeDef[] }) {
         </h2>
         {signedIn === false && <span className="text-xs text-mute">Saved in this browser. Sign in to keep your badges.</span>}
       </div>
-      <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <ul className="mt-5 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         {[...earned, ...locked].map((b, k) => (
           <li
             key={b.id}
@@ -61,7 +61,8 @@ export function Badges({ defs }: { defs: BadgeDef[] }) {
                 {b.new && <span className="pop-in shrink-0 rounded-full bg-fill px-1.5 text-[10px] font-bold uppercase text-on-fill">New</span>}
               </span>
               <span className="block text-xs text-mute">{b.how}</span>
-              {!b.earned && b.target > 1 && (
+              {/* A grade level is reached at once, never counted up to. */}
+              {!b.earned && b.target > 1 && b.counter !== "gradeLevel" && (
                 <span className="mt-1 block text-[11px] tabular-nums text-mute">
                   {b.progress.toLocaleString("en-US")} / {b.target.toLocaleString("en-US")}
                 </span>

@@ -257,6 +257,12 @@ How it works is in [AUTOMATION.md](../AUTOMATION.md#grade-my-portfolio); the red
   Its requests are not in `gemini_requests`: they spend the visitor's quota, so the budget accountant must not count them.
   The key never goes to GitHub.
   Why: the key is the visitor's money; holding it even briefly would be a liability, and an own-key grade must be comparable with every other.
+- **The grade pages say only what the back end does** (agent, 2026-11-10). Status: building (Wave B, `feat/redesign-grade`).
+  The approved report's "Email me updates" became "Email me the report", the existing one-time link, because nothing sends rank or re-grade updates yet; "Add me to the leaderboard" opens the community list's submission form until question 8 in ROADMAP.md is decided; "Expected" on a fix is the places gained among graded portfolios with that score one point higher (the tier kept), or the checks score with that check passing, and nothing when neither moves.
+  Why: a report about someone's work must not promise what never arrives.
+- **"Grade yours" follows GRADER_ENABLED at build time** (agent, 2026-11-10). Status: building (Wave B).
+  next.config.ts reads the variable (or wrangler.jsonc's value for the Worker being built) into `ROUTES.grade`, so prerendered pages and the browser agree; turning grading on in wrangler.jsonc ships with a deploy, which rebuilds.
+  Why: the shell is on prerendered pages, and a link that differs between server and browser breaks hydration.
 - **The report is built by code from the grade** (agent, 2026-11-10). Status: building (#81).
   Strengths, the three fixes to make first, the estimated rank among the listed graded portfolios (on the level the leaderboard seeds from the grade), similar portfolios and portfolios doing the weakest axes better are all computed from stored grades when the grade is written, with no extra Gemini request; the comparison pool is cached for an hour.
   Why: "facts from code, words from Gemini", and no report view scans the portfolios table.

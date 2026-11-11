@@ -6,7 +6,7 @@ import { isKnownPortfolio } from "@/lib/roster";
 import { ownerAction } from "@/lib/games/claims.mjs";
 import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } from "@/lib/games/server";
 
-// What a verified owner can do with their portfolio (GAMES_V2).
+// What a verified owner can do with their portfolio (remove and hide always; regrade with GAMES_V2).
 // POST /api/owner/actions { url, action, confirm? }
 //   remove      (needs confirm: true) hidden from the site at once, then
 //               moved to data/excluded.json as an owner request by the weekly
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
 
 export async function POST(req: Request) {
-  if (!gamesEnabled()) return off();
+  // Remove and hide are always on, so removal is self-serve; a re-grade waits for the games (GAMES_V2).
   if (!sameOrigin(req)) return fail("bad_origin", 403);
   const s = await auth();
   if (!s?.raterId?.startsWith("gh:")) return fail("signin_required", 401);
@@ -36,6 +36,7 @@ export async function POST(req: Request) {
   const action = typeof body?.action === "string" ? body.action : "";
   if (!url || !action) return fail("bad_request", 400);
   if (!isKnownPortfolio(url)) return fail("not_owner", 403);
+  if (action === "regrade" && !gamesEnabled()) return off();
   if (action === "remove" && body.confirm !== true) return fail("confirm_required", 400);
   await ensureSchema();
   const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);

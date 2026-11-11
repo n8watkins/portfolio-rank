@@ -1,26 +1,28 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { KeyRound, Link2, Loader2, Sparkles } from "lucide-react";
 import { FreeTierNote } from "@/components/grade/FreeTierNote";
-import { goToMine, useGradeRequest } from "@/components/grade/useGradeRequest";
+import { reportHref, useGradeRequest } from "@/components/grade/useGradeRequest";
 
 const LOOKS_LIKE_URL = /^(https?:\/\/)?[^\s./]+\.[^\s]{2,}$/;
 
 /**
  * Paste a link, grade it (GRADER_ENABLED; pages render it only when it's on).
- * On success the visitor lands on their portfolio page, which follows the
- * grade. Optionally with the visitor's own Gemini key, used once and kept in
+ * On success the visitor lands on the report's page (/grade/<id>), which
+ * follows the grade. Optionally with the visitor's own Gemini key, used once and kept in
  * this tab only.
  */
-export function GradeForm({ compact = false, center = false }: { compact?: boolean; center?: boolean }) {
+export function GradeForm({ compact = false, center = false, initialUrl = "" }: { compact?: boolean; center?: boolean; initialUrl?: string }) {
   const id = useId();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [key, setKey] = useState("");
   const [ownKey, setOwnKey] = useState(false);
   const [error, setError] = useState("");
   const keyInput = useRef<HTMLInputElement>(null);
   const { arm, submit, busy, turnstile } = useGradeRequest();
+  const router = useRouter();
 
   return (
     <form
@@ -36,7 +38,8 @@ export function GradeForm({ compact = false, center = false }: { compact?: boole
         }
         setError("");
         const r = await submit(v, ownKey ? key.trim() : null);
-        if (r.ok || r.report) return goToMine();
+        if (r.ok) return router.push(reportHref(r.id));
+        if (r.report) return router.push(reportHref(r.report));
         setError(r.message);
       }}
       className="w-full"

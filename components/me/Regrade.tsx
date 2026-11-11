@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, RefreshCw, ScanSearch } from "lucide-react";
 import { FreeTierNote } from "@/components/grade/FreeTierNote";
-import { useGradeRequest } from "@/components/grade/useGradeRequest";
+import { reportHref, useGradeRequest } from "@/components/grade/useGradeRequest";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
 
 /**
  * Re-grade (POST /api/grade again): open once a week, or sooner when the
@@ -20,6 +20,7 @@ export function Regrade({
   regradeAfter,
   cooldownDays,
   now,
+  follow = false,
 }: {
   url: string;
   gradedAt: string;
@@ -27,6 +28,8 @@ export function Regrade({
   /** pipeline/budget.mjs REGRADE_COOLDOWN_DAYS */
   cooldownDays: number;
   now: number;
+  /** Go to the new grade's page once it starts (the report page); else refresh in place (/me). */
+  follow?: boolean;
 }) {
   const router = useRouter();
   const { arm, submit, busy, turnstile } = useGradeRequest();
@@ -38,6 +41,8 @@ export function Regrade({
   const go = async () => {
     setNote(null);
     const r = await submit(url);
+    if (follow && r.ok) return router.push(reportHref(r.id));
+    if (follow && !r.ok && r.report) return router.push(reportHref(r.report));
     if (r.ok || r.error === "in_progress") return router.refresh();
     if (r.error === "cooldown")
       return setNote({ ok: false, text: `No changes found since the last grade. ${r.nextAt ? `The next re-grade opens ${day(r.nextAt)}.` : ""}`.trim() });
