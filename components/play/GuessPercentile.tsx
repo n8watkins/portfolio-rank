@@ -304,7 +304,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                   return (
                     <li
                       key={rd.index}
-                      className={`pop-in rounded-xl border p-2 text-center ${ok ? "border-up/40 bg-up/10" : near ? "border-accent/40 bg-accent-soft" : "border-edge bg-raised"}`}
+                      className={`pop-in rounded-xl border px-1 py-2 text-center sm:p-2 ${ok ? "border-up/40 bg-up/10" : near ? "border-accent/40 bg-accent-soft" : "border-edge bg-raised"}`}
                       style={{ animationDelay: `${k * 90}ms` }}
                     >
                       <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full ${ok ? "bg-up text-white" : near ? "bg-fill text-on-fill" : "bg-edge-strong text-card"}`}>
@@ -313,7 +313,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                       <span className="sr-only">
                         {rd.name}: {what}, you said top {r?.guess}%{r?.merged != null ? `, it's top ${r.merged}%` : ""}.
                       </span>
-                      <span className="mt-1.5 block text-[11px] text-mute tabular-nums" aria-hidden>
+                      <span className="mt-1.5 block text-[11px] whitespace-nowrap text-mute tabular-nums" aria-hidden>
                         {r?.guess ?? "-"} / {r?.merged ?? "-"}
                       </span>
                     </li>
@@ -496,7 +496,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                       <span className="flex items-center gap-1.5 text-xs text-mute">
                         <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
                       </span>
-                      <span className="mt-0.5 block text-lg font-bold tabular-nums">{v != null ? `Top ${v}%` : <span className="text-mute">-</span>}</span>
+                      <span className="mt-0.5 block text-base font-bold whitespace-nowrap tabular-nums sm:text-lg">{v != null ? `Top ${v}%` : <span className="text-mute">-</span>}</span>
                     </li>
                   ))}
                 </ul>
@@ -548,8 +548,9 @@ function Meter({ guess, actual }: { guess: number; actual: number }) {
         <span className="pop-in absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card bg-fill shadow" style={{ left: `${actual}%` }} />
       </div>
       <div className="relative h-5 text-[11px] text-mute tabular-nums">
-        <span className="absolute left-0">1%</span>
-        <span className="absolute right-0">100%</span>
+        {/* The scale's ends give way to "you" when it sits next to them. */}
+        {guess > 22 && <span className="absolute left-0">1%</span>}
+        {guess < 78 && <span className="absolute right-0">100%</span>}
         <span className="absolute -translate-x-1/2 font-semibold whitespace-nowrap text-ink" style={{ left: `${clamp(guess)}%` }}>
           you {guess}%
         </span>

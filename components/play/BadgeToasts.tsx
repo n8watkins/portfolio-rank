@@ -52,7 +52,11 @@ export function useBadgeToasts(enabled: boolean, guest: boolean) {
   return { check, toast };
 }
 
-/** "Badge earned", top right under the header (clear of the game's own buttons), for 8 seconds. */
+/**
+ * "Badge earned" for 8 seconds, top right under the header: at the bottom
+ * (the preview's place) it covered Next pair on phones and the end card's
+ * buttons on short screens.
+ */
 function BadgeToast({ badge, guest, onDone }: { badge: Badge; guest: boolean; onDone: () => void }) {
   const done = useRef(onDone);
   useEffect(() => {

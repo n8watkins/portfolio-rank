@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { auth } from "@/auth";
+import { INTRO_COOKIE } from "@/components/play/intro";
 import { Swords, Target } from "lucide-react";
 import { PlayGames } from "@/components/play/PlayGames";
 import { db, ensureSchema } from "@/lib/db";
@@ -39,6 +42,8 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
   const mode = games && sp.mode === "guess" ? "guess" : "faceoff";
   const quizId = typeof sp.quiz === "string" && QUIZ_ID.test(sp.quiz) ? sp.quiz : null;
   const shots = games ? await cardShots() : [];
+  // The practice intro is drawn with the page, so it never pushes the cards down later.
+  const intro = !(await auth())?.user && (await cookies()).get(INTRO_COOKIE)?.value !== "1";
 
   return (
     <div className="wrap py-4 sm:py-8">
@@ -74,7 +79,7 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
         </nav>
       )}
       <div className="rise" style={{ "--d": "80ms" } as React.CSSProperties}>
-        <PlayGames mode={mode} games={games} quizId={mode === "guess" ? quizId : null} />
+        <PlayGames mode={mode} games={games} quizId={mode === "guess" ? quizId : null} intro={intro} />
       </div>
     </div>
   );

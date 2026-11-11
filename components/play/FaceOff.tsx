@@ -7,6 +7,7 @@ import { useSignIn } from "@/components/SignInModal";
 import { SiteActions } from "@/components/play/SiteActions";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
+import { INTRO_COOKIE } from "@/components/play/intro";
 import { useStoredFlag } from "@/lib/client-state";
 import { isTextField } from "@/lib/dom";
 import { frameOf } from "@/lib/shot-url";
@@ -22,7 +23,6 @@ type Rater = { signedIn: boolean; login: string | null; anonVotesUsed: number | 
 type Side = "a" | "b";
 
 const ROUND = 10;
-const INTRO_KEY = "pr-faceoff-intro";
 const SCORES_KEY = "pr-show-scores";
 
 const domainOf = (url: string) => {
@@ -88,7 +88,7 @@ function Share({ pct, mine, k }: { pct: number; mine: boolean; k: string }) {
   );
 }
 
-export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck: (now?: boolean) => void }) {
+export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: boolean; intro: boolean; onBadgeCheck: (now?: boolean) => void }) {
   const [pair, setPair] = useState<Pair | null>(null);
   const [rater, setRater] = useState<Rater | null>(null);
   const [pick, setPick] = useState<Side | null>(null);
@@ -100,7 +100,8 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
   const [agreed, setAgreed] = useState(0);
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
-  const [intro, setIntro] = useState(false);
+  // A guest's practice intro, until they vote or dismiss it (drawn by the server: no shift).
+  const [intro, setIntro] = useState(introAtFirst);
   // Off by default so votes stay honest; remembered in this browser.
   const [showScores, setShowScores] = useStoredFlag(SCORES_KEY);
   const openSignIn = useSignIn();
@@ -156,16 +157,7 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
     setLoadError(false);
     setPair({ a: data.a, b: data.b, token: data.token });
     const r = data.rater;
-    if (r) {
-      setRater(r);
-      if (!r.signedIn) {
-        try {
-          setIntro(localStorage.getItem(INTRO_KEY) !== "1");
-        } catch {
-          setIntro(true);
-        }
-      }
-    }
+    if (r) setRater(r);
     setPick(null);
     setBusy(false);
   }, []);
@@ -178,9 +170,7 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
 
   const dismissIntro = () => {
     setIntro(false);
-    try {
-      localStorage.setItem(INTRO_KEY, "1");
-    } catch {}
+    document.cookie = `${INTRO_COOKIE}=1; path=/; max-age=31536000; samesite=lax`;
   };
 
   const vote = useCallback(
@@ -315,7 +305,7 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
     <div>
       {/* Progress through the round */}
       <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex min-w-[8rem] flex-1 items-center gap-3">
           <span className="shrink-0 text-sm font-semibold tabular-nums">
             {Math.min(done, ROUND)} / {ROUND}
           </span>
@@ -338,10 +328,10 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
         </span>
       </div>
 
-      {intro && rater && !rater.signedIn && !gated && (
+      {intro && !rater?.signedIn && !gated && (
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-accent/40 bg-accent-soft p-3.5 text-sm">
           <p className="min-w-0 flex-1">
-            <strong>Pick the portfolio you&apos;d rather hire from.</strong> Your first {rater.anonVoteLimit} votes are practice: you see how others lean, and they count once you{" "}
+            <strong>Pick the portfolio you&apos;d rather hire from.</strong> Your first {rater?.anonVoteLimit ?? 10} votes are practice: you see how others lean, and they count once you{" "}
             <button type="button" onClick={() => signIn(false)} className="font-semibold text-accent underline underline-offset-2">
               sign in
             </button>
