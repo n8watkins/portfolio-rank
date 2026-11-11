@@ -28,7 +28,7 @@ import { PRIMARY_MODEL } from "../gemini.mjs";
 import { pacificParts } from "../quota-day.mjs";
 import { AI_LINE, aiNote, contentWeek, nextMorning, recordRun, runsOfWeek, slugify, storePost, tavilyThisWeek } from "../../lib/content/store.mjs";
 import { BUILDERS, findIdeas } from "./facts.mjs";
-import { assembleBody, buildReviseRequest, buildWriteRequest, cutSentences, draftTexts, fill } from "./writer.mjs";
+import { assembleBody, buildReviseRequest, buildWriteRequest, cutSentences, draftTexts, fill, normalizeDraft } from "./writer.mjs";
 import { checkLinksLoad, codeChecks, urlsIn } from "./checks.mjs";
 import { TAVILY_PER_POST, TAVILY_PER_WEEK, checkClaims } from "./claims.mjs";
 import { buildPickRequest, buildReviewRequest, choosePicks, reviewCheck } from "./topic.mjs";
@@ -178,7 +178,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
         failures.push(`no budget for revision ${round} (${g.left()} request(s) left)`);
         break;
       }
-      draft = await g.generate(round === 0 ? buildWriteRequest(sheet) : buildReviseRequest(sheet, draft, failures));
+      draft = normalizeDraft(await g.generate(round === 0 ? buildWriteRequest(sheet) : buildReviseRequest(sheet, draft, failures)));
       // Gate 2: outside claims, on the unfilled draft.
       const text = draftTexts(draft)
         .filter(([k]) => !k.startsWith("images."))
@@ -228,6 +228,8 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
   }
 
   const checks = { passed, rounds: history.length, history, failures: passed ? [] : failures };
+  // A dropped draft keeps the image slots it proposed, for the owner's review.
+  if (!passed && draft) checks.proposedImages = draft.images ?? [];
   if (!passed) {
     if (draft) await storePost(db, postOf({ id: postId, kind, sheet, draft, images: [], supported, checks, night, ctx, requests: g.used.n, status: "dropped" }), { mode, publishAt: null, now });
     await recordRun(db, { night, now, step: "draft", mode, status: "dropped", kind, postId: draft ? postId : null, gemini: g.used.n, tavily: searches, detail: { failures: failures.slice(0, 20) } });
