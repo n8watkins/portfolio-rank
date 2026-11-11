@@ -29,6 +29,7 @@ import { dailyQuota } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_RPM } from "../pipeline/gemini.mjs";
 import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
+import { withGateway } from "../lib/ai-gateway.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
@@ -121,7 +122,7 @@ function engine(env: NightEnv, runId: string) {
       env: String(env.SITE_ENV ?? "production"),
       tavilyMonthlyCredits: env.TAVILY_MONTHLY_CREDITS,
       keys: { tavily: env.TAVILY_API_KEY, unsplash: env.UNSPLASH_ACCESS_KEY, pexels: env.PEXELS_API_KEY },
-      ai: env.AI ?? null,
+      ai: withGateway(env.AI),
       store: async (key: string, bytes: Uint8Array, contentType: string) => {
         await env.SHOTS.put(key, bytes, { httpMetadata: { contentType } });
         return key;
