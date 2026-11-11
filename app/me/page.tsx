@@ -391,7 +391,7 @@ function Report({ mine }: { mine: Mine }) {
         </section>
       </div>
 
-      {gamesEnabled() && <Badges defs={(BADGES as { id: string; name: string; how: string; hue: number; target: number }[]).map(({ id, name, how, hue, target }) => ({ id, name, how, hue, target }))} />}
+      {gamesEnabled() && <Badges defs={(BADGES as { id: string; name: string; how: string; hue: number; target: number; counter: string }[]).map(({ id, name, how, hue, target, counter }) => ({ id, name, how, hue, target, counter }))} />}
     </div>
   );
 }

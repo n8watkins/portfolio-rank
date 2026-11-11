@@ -1,7 +1,21 @@
 // lib/grader/present.mjs: how the grade report page words a grade (no server).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FACT_COPY, FACT_GROUPS, fixEffects, hiringGroups, placeIn, verdictOf } from "../lib/grader/present.mjs";
+import { CELEBRATIONS, FACT_COPY, FACT_GROUPS, celebrationLevel, fixEffects, hiringGroups, placeIn, verdictOf } from "../lib/grader/present.mjs";
+import { BADGES } from "../lib/games/badges.mjs";
+
+test("celebrations: an S is level 5 whatever its place; otherwise the top 50, 25, 10 and 5% bands; each badge exists", () => {
+  assert.equal(celebrationLevel(null), 0);
+  assert.equal(celebrationLevel({ tier: "S", percentile: null }), 5);
+  assert.equal(celebrationLevel({ tier: "s", percentile: { topPct: 30 } }), 5);
+  const at = (topPct) => celebrationLevel({ tier: "A", percentile: { topPct } });
+  assert.deepEqual([1, 5, 6, 10, 11, 25, 26, 50, 51, 100].map(at), [4, 4, 3, 3, 2, 2, 1, 1, 0, 0]);
+  assert.equal(celebrationLevel({ tier: "B", percentile: null }), 0);
+  for (const c of CELEBRATIONS.filter(Boolean)) {
+    assert.equal(CELEBRATIONS[c.level], c);
+    if (c.badge) assert.equal(BADGES.find((b) => b.id === c.badge)?.target, c.level, c.badge);
+  }
+});
 import { factLines, strengthsAndFixes } from "../lib/grader/report.mjs";
 import { CODE_CRITERIA } from "../pipeline/rubric.mjs";
 import { seedFromGrade } from "../lib/ranking/engine.mjs";

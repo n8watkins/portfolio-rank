@@ -1,4 +1,5 @@
 import {
+  Award,
   Bookmark,
   Compass,
   CalendarCheck,
@@ -10,13 +11,16 @@ import {
   Library,
   ListPlus,
   Lock,
+  Medal,
   Megaphone,
   Moon,
   Rocket,
   Share2,
   Sparkles,
+  Star,
   Swords,
   Target,
+  Trophy,
   Users,
   Vote,
   Zap,
@@ -43,6 +47,10 @@ const ICONS: Record<string, typeof Vote> = {
   gem: Gem,
   owl: Moon,
   visit50: Compass,
+  top25: Award,
+  top10: Medal,
+  top5: Trophy,
+  stier: Star,
 };
 
 /**

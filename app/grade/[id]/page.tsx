@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArrowRight, Bot, Briefcase, CircleAlert, ExternalLink, Link2Off, PartyPopper, Rocket, Sparkles, TrendingUp, Wrench } from "lucide-react";
+import { Celebration } from "@/components/grade/Celebration";
 import { GradeForm } from "@/components/grade/GradeForm";
 import { GradeProgress } from "@/components/grade/GradeProgress";
 import { HiringView } from "@/components/grade/HiringView";
@@ -10,6 +11,7 @@ import { RankBadge, TierBadge } from "@/components/ui/badges";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ACTIVE_STATES, JOB_ID } from "@/lib/grader/jobs.mjs";
+import { CELEBRATIONS, celebrationLevel } from "@/lib/grader/present.mjs";
 import { graderEnabled } from "@/lib/grader/server";
 import { faceOffPair, gradePage, type GradePage } from "@/lib/grade-page";
 import { ROUTES } from "@/lib/nav";
@@ -104,10 +106,13 @@ export default async function GradeReportPage({ params, searchParams }: Params &
   const joinHref = `${SITE.submit}&url=${encodeURIComponent(job.url)}`;
   const claimHref = page.games && page.listed ? `/claim?url=${encodeURIComponent(page.listed.url)}` : null;
   const better = view.better;
+  // The owner's result is celebrated (once per browser); a shared link isn't.
+  const celebration = job.mine ? (CELEBRATIONS[celebrationLevel(rep)] ?? null) : null;
 
   return (
     <div className="wrap report py-8 sm:py-10">
       <LinkNote link={link} />
+      <Celebration id={job.id} level={celebration} anchor="report-tier" games={page.games} />
 
       {/* The result first */}
       <section aria-labelledby="overall" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -125,7 +130,9 @@ export default async function GradeReportPage({ params, searchParams }: Params &
           </a>
 
           <div className="mt-6 flex items-center gap-5">
-            <TierBadge tier={rep.tier} size="lg" />
+            <span id="report-tier" className="shrink-0">
+              <TierBadge tier={rep.tier} size="lg" />
+            </span>
             <div className="min-w-0">
               {pct ? (
                 <>

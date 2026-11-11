@@ -300,6 +300,21 @@ test("badge events: visits are distinct and stop at the Explorer target; unknown
   await assert.rejects(recordEvent(db, "anon:v", "vote"));
 });
 
+test("badge events: a grade level keeps the best one and earns every badge up to it", async () => {
+  const db = await freshDb();
+  const pool = { totals: { merged: 0, ai: 0, people: 0 }, sites: [] };
+  assert.equal(await recordEvent(db, "anon:l", "level", { level: 0 }), false);
+  assert.equal(await recordEvent(db, "anon:l", "level", { level: 9 }), false);
+  assert.equal(await recordEvent(db, "anon:l", "level", { level: 3 }), true);
+  assert.equal(await recordEvent(db, "anon:l", "level", { level: 2 }), false, "a lower level never replaces a higher one");
+  const out = await checkBadges(db, "anon:l", { pool, now: T0, force: true, signedIn: false });
+  assert.equal(out.counters.gradeLevel, 3);
+  assert.deepEqual(out.awarded.filter((id) => ["top25", "top10", "top5", "stier"].includes(id)).sort(), ["top10", "top25"]);
+  assert.equal(await recordEvent(db, "anon:l", "level", { level: 5 }), true);
+  const s = await checkBadges(db, "anon:l", { pool, now: T0, force: true, signedIn: false });
+  assert.deepEqual(s.awarded.sort(), ["stier", "top5"]);
+});
+
 test("a guest's quizzes, badges and counters move to the account at sign-in; the account's own play wins", async () => {
   const db = await freshDb();
   await seedRatings(db);
