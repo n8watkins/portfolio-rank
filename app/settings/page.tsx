@@ -261,6 +261,15 @@ export default function SettingsPage() {
           Your data
         </h2>
         <div className={box}>
+          <Row
+            id="remove"
+            title="Remove my portfolio"
+            desc="First prove the site is yours: a link to your GitHub profile on it, or a short code you add to the page. Then hide its grade or remove it."
+          >
+            <a href="/claim" className={smallBtn}>
+              Start
+            </a>
+          </Row>
           {session && session !== "loading" ? (
             <>
               <Row id="download" title="Download my data" desc="A JSON file of everything stored about your account: votes, likes, lists, badges, quiz plays and claims.">

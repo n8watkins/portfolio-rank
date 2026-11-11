@@ -37,15 +37,10 @@ const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
     a: (
       <>
         No problem -{" "}
-        <a
-          href={SITE.remove}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-accent hover:underline"
-        >
-          request removal
+        <a href="/claim" className="text-accent hover:underline">
+          prove it&apos;s yours and remove it
         </a>{" "}
-        and it&apos;s dropped from the grid, voting, and leaderboard for good.
+        yourself, and it&apos;s dropped from the grid, voting, and leaderboard for good.
       </>
     ),
   },

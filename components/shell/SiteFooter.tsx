@@ -32,7 +32,8 @@ const COLS: { title: string; links: Link[] }[] = [
     links: [
       { href: SITE.github, label: "GitHub", ext: true },
       { href: SITE.submit, label: "Submit a portfolio", ext: true },
-      { href: SITE.remove, label: "Remove my portfolio", ext: true },
+      // Self-serve: prove the site is yours, then hide or remove it (app/claim).
+      { href: "/claim", label: "Remove my portfolio" },
     ],
   },
 ];
