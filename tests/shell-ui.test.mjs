@@ -7,6 +7,8 @@ import { chromium } from "playwright";
 import { encode } from "@auth/core/jwt";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
+// "Grade yours" is in the shell only while grading is on (lib/nav.ts ROUTES.grade).
+const grading = process.env.GRADER_ENABLED === "true";
 let browser;
 
 before(async () => {
@@ -148,8 +150,9 @@ test("phones: a bottom tab bar with More, which holds settings and sign-in; the 
   await tabs.waitFor();
   assert.deepEqual(
     (await tabs.locator("a, button").allTextContents()).map((t) => t.trim()),
-    ["Top", "Play", "Browse", "More"]
+    grading ? ["Top", "Play", "Grade", "Browse", "More"] : ["Top", "Play", "Browse", "More"]
   );
+  if (grading) assert.equal(await tabs.getByRole("link", { name: "Grade" }).getAttribute("href"), "/grade");
   assert.equal(await tabs.getByRole("link", { name: "Top" }).getAttribute("aria-current"), "page");
   // Every tab is a 44px-plus target, and the bar sits at the bottom edge.
   const boxes = await tabs.locator("a, button").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
@@ -210,16 +213,17 @@ test("signed in: the avatar opens an account menu that works from the keyboard",
   const menu = page.getByRole("menu", { name: "Account" });
   await menu.waitFor();
   const items = menu.getByRole("menuitem");
-  assert.deepEqual((await items.allTextContents()).map((t) => t.trim()), ["Profile, likes and lists", "My votes", "ThemeSystem", "All settings", "Sign out"]);
+  const first = grading ? "Grade your portfolio" : "Profile, likes and lists";
+  assert.deepEqual((await items.allTextContents()).map((t) => t.trim()), [...(grading ? [first] : []), "Profile, likes and lists", "My votes", "ThemeSystem", "All settings", "Sign out"]);
   // The theme is one row, its choices in a submenu.
   assert.equal(await menu.getByRole("menuitemradio").count(), 0);
   // Focus starts on the first item; arrows wrap, Home and End jump.
   const focused = () => page.evaluate(() => document.activeElement?.textContent?.trim());
-  assert.equal(await focused(), "Profile, likes and lists");
+  assert.equal(await focused(), first);
   await page.keyboard.press("ArrowUp");
   assert.equal(await focused(), "Sign out");
   await page.keyboard.press("Home");
-  assert.equal(await focused(), "Profile, likes and lists");
+  assert.equal(await focused(), first);
   await page.keyboard.press("End");
   assert.equal(await focused(), "Sign out");
   // Escape closes it and gives focus back to the avatar.

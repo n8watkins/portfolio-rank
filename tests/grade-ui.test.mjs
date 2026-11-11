@@ -59,7 +59,7 @@ after(async () => {
 
 async function freshPage(width, height = 900, options = {}) {
   // Each visitor its own network, so the per-network daily cap never mixes tests.
-  const context = await browser.newContext({ viewport: { width, height }, extraHTTPHeaders: { "cf-connecting-ip": `198.51.100.${ipSeq++}` }, ...options });
+  const context = await browser.newContext({ viewport: { width, height }, extraHTTPHeaders: { "cf-connecting-ip": `192.0.2.${ipSeq++}` }, ...options });
   const p = await context.newPage();
   const errors = [];
   p.on("pageerror", (e) => errors.push(String(e)));
@@ -234,7 +234,7 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   const id = await startGrade(p, LISTED);
   await finish(id);
   await p.reload();
-  await p.getByText("On the leaderboard").waitFor();
+  await p.getByText("On the leaderboard", { exact: true }).waitFor();
   const claim = p.getByRole("link", { name: /Claim your portfolio/ });
   assert.equal(await claim.getAttribute("href"), `/claim?url=${encodeURIComponent(LISTED)}`);
   await context.close();
