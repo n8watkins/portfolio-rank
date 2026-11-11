@@ -267,6 +267,8 @@ test("daily caps: 3 a visitor, 6 a network, reserved atomically", { skip: !enabl
   const ip = "198.51.100.7";
   const a = visitor({ ip });
   for (let i = 1; i <= 3; i++) assert.equal((await grade(a, `cap${i}-e2e.dev`)).status, 202);
+  // With the games on, each accepted request counts toward the grade badges.
+  if (process.env.GAMES_V2 === "true") assert.equal((await call(a, "GET", "/api/badges")).body.counters.grades, 3);
   const over = await grade(a, "cap4-e2e.dev");
   assert.equal(over.status, 429);
   assert.deepEqual([over.body.error, over.body.scope], ["daily_limit", "visitor"]);

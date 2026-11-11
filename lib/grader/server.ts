@@ -54,13 +54,14 @@ export const keyed = (scope: string, value: string) => createHmac("sha256", secr
 
 /**
  * Who is asking: the visitor (signed-in account, else the signed browser
- * cookie, issued when missing) and the network, both as keyed hashes.
+ * cookie, issued when missing) and the network, both as keyed hashes, plus
+ * the raw player id the games count badges for (never stored by the grader).
  */
-export async function requester(req: Request): Promise<{ visitor: string; network: string; ip: string }> {
+export async function requester(req: Request): Promise<{ visitor: string; network: string; ip: string; player: string }> {
   const voter = (await currentVoter({ create: true }))!;
   const ip = clientIp(req);
   const net = networkOf(ip);
-  return { visitor: keyed("visitor", voter.voter), network: net ? keyed("network", net) : "", ip };
+  return { visitor: keyed("visitor", voter.voter), network: net ? keyed("network", net) : "", ip, player: voter.voter };
 }
 
 /** The report ids this browser owns (the signed pr_grades cookie). */

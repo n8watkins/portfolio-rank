@@ -195,7 +195,7 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   A guess is checked on the server: a hit is within 15 points, points are 100 minus 2.5 per point off (never below 20), each round counts once, and the fifth answer finishes the play.
   No response carries a percentile before its guess.
 - **Badges** ([lib/games/badges.mjs](lib/games/badges.mjs)): 20, each a target on one counter.
-  Counters come from votes, quiz plays and guesses, poll votes (last 5 weeks), lists and likes (signed in only), plus `player_counters` (shares, and grades the grade service reports through `recordEvent(db, player, "grade")`) and `player_visits` (up to 50).
+  Counters come from votes, quiz plays and guesses, poll votes (last 5 weeks), lists and likes (signed in only), plus `player_counters` (shares, and grade requests `POST /api/grade` accepted, counted through `recordEvent(db, player, "grade")`) and `player_visits` (up to 50).
   Night owl is a vote between midnight and 5 a.m. Pacific.
   Hidden gem compares a saved site's percentile when a check first saw it saved with its percentile now.
   Early supporter goes to anyone active on or before `EARLY_SUPPORTER_UNTIL` (a Worker variable, `YYYY-MM-DD`; unset gives none).
