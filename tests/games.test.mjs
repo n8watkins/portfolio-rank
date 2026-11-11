@@ -72,15 +72,16 @@ async function seedRatings(db, n = 20) {
 const grade = (tier, quality, extra = {}) =>
   JSON.stringify({ tier, quality_score: quality, rubric_version: 2, model: "gemini-3.5-flash-lite", is_portfolio: true, judged_at: T0.toISOString(), ...extra });
 
-test("percentiles: top X% from a rank, points 100 minus 4 a point, never below 0", () => {
+test("percentiles: top X% from a rank, points 100 minus 2.5 a point, never below 20", () => {
   assert.equal(topPct(1, 2000), 1);
   assert.equal(topPct(20, 2000), 1);
   assert.equal(topPct(21, 2000), 2);
   assert.equal(topPct(2000, 2000), 100);
   assert.equal(topPct(0, 10), null);
   assert.equal(points(30, 30), 100);
-  assert.equal(points(40, 30), 60);
-  assert.equal(points(1, 100), 0);
+  assert.equal(points(40, 30), 75);
+  assert.equal(points(46, 30), 60);
+  assert.equal(points(1, 100), 20);
 });
 
 test("pool: ranks from the boards, graded sites only, owner-hidden sites left out", async () => {
@@ -163,14 +164,14 @@ test("guesses: scored on the server, one answer a round, the fifth finishes the 
   assert.equal(again.result.guess, actual[0]);
   assert.equal((await recordGuess(db, { quiz, player: "anon:p", index: 5, guess: 1, pool, now: T0 })).error, "bad_index");
 
-  // 11 points off: not a hit, 56 points.
-  const off = Math.min(100, actual[1] + 11) === actual[1] + 11 ? actual[1] + 11 : actual[1] - 11;
+  // 16 points off: not a hit, 60 points.
+  const off = Math.min(100, actual[1] + 16) === actual[1] + 16 ? actual[1] + 16 : actual[1] - 16;
   const miss = await recordGuess(db, { quiz, player: "anon:p", index: 1, guess: off, pool, now: T0 });
   assert.equal(miss.result.hit, false);
-  assert.equal(miss.result.points, 56);
+  assert.equal(miss.result.points, 60);
   for (const i of [2, 3]) await recordGuess(db, { quiz, player: "anon:p", index: i, guess: actual[i], pool, now: T0 });
   const last = await recordGuess(db, { quiz, player: "anon:p", index: 4, guess: actual[4], pool, now: T0 });
-  assert.deepEqual(last.finished, { score: 456, hits: 4, perfect: false });
+  assert.deepEqual(last.finished, { score: 460, hits: 4, perfect: false });
   const mine = await progress(db, quiz.id, "anon:p");
   assert.equal(mine.finished, true);
   assert.equal(mine.results.length, 5);

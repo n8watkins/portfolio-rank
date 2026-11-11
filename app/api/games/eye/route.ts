@@ -5,7 +5,7 @@ import { PRIVATE, currentPlayer, earlyUntil, gamesEnabled, getPool, off } from "
 
 // GET /api/games/eye -> { eye } for the visitor ("your eye"):
 //   crowd   { agree, of, pct }: face-off votes that match the People board
-//           (the winner ranks higher there) plus quiz guesses within 10
+//           (the winner ranks higher there) plus quiz guesses within 15
 //           points of the People percentile
 //   ai      the same against the AI board
 //   votes, guesses   the two parts separately

@@ -13,7 +13,8 @@ import { PRIVATE, currentPlayer, earlyUntil, fail, gamesEnabled, getPool, off, o
 //        badges    badge ids this answer earned (the "badge earned" toast)
 //   409 { error: "already_guessed", result }: each round counts once
 //   400 bad_request | bad_index, 403 bad_origin, 404 not_found, 429 rate_limited
-// Scoring: a hit is within 10 points; points are 100 minus 4 per point off.
+// Scoring: a hit is within 15 points; points are 100 minus 2.5 per point
+// off, never below 20.
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
 

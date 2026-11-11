@@ -313,7 +313,7 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 
 - **Guess the percentile, checked on the server** (owner, 2026-11-10). Status: building (back end).
   Quizzes of 5 portfolios: a Daily 5 that is the same for everyone each Pacific day, drawn from graded listed sites spread across the board; random quizzes; challenge links that replay the same 5.
-  A hit is within 10 points; points are 100 minus 4 per point off.
+  A hit is within 15 points; points are 100 minus 2.5 per point off, never below 20 (owner, 2026-11-10, replacing within 10 and 4 per point).
   The real percentile is never sent before the guess; results are stored per visitor or account.
   Why: a fair, shareable game that teaches people what good looks like.
 - **Percentiles from the ranking views, with a grade fallback** (owner, 2026-11-10). Status: building.

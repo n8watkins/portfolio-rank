@@ -192,7 +192,7 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
 - **Quizzes** ([lib/games/quiz.mjs](lib/games/quiz.mjs)): five portfolios, one drawn from each fifth of the board, in shuffled order.
   The Daily 5 (`daily-YYYY-MM-DD`, Pacific day) is drawn from the date alone and stored at its first request, so it is the same for everyone all day.
   A random quiz (`r-` and 10 random characters) is stored too, so its challenge link replays the same five.
-  A guess is checked on the server: a hit is within 10 points, points are 100 minus 4 per point off (never below 0), each round counts once, and the fifth answer finishes the play.
+  A guess is checked on the server: a hit is within 15 points, points are 100 minus 2.5 per point off (never below 20), each round counts once, and the fifth answer finishes the play.
   No response carries a percentile before its guess.
 - **Badges** ([lib/games/badges.mjs](lib/games/badges.mjs)): 20, each a target on one counter.
   Counters come from votes, quiz plays and guesses, poll votes (last 5 weeks), lists and likes (signed in only), plus `player_counters` (shares, and grades the grade service reports through `recordEvent(db, player, "grade")`) and `player_visits` (up to 50).
@@ -201,7 +201,7 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   Early supporter goes to anyone active on or before `EARLY_SUPPORTER_UNTIL` (a Worker variable, `YYYY-MM-DD`; unset gives none).
   Awards are idempotent (the `badges` primary key) and stay when a counter drops.
   A check is reused for 15 seconds (`badge_checks`), and each read is capped (1,000 votes, plays and guesses).
-- **Your eye:** the share of a player's face-off votes whose winner ranks higher on the People board (or the AI board), plus quiz guesses within 10 points of that view's percentile.
+- **Your eye:** the share of a player's face-off votes whose winner ranks higher on the People board (or the AI board), plus quiz guesses within 15 points of that view's percentile.
 - **Save to list:** the games use the existing lists API (`/api/lists`, `/api/lists/<id>/items`); nothing new.
 - **Claims** ([lib/games/claims.mjs](lib/games/claims.mjs)): signed in with GitHub, a claim is verified automatically when the portfolio's home page links to `github.com/<login>` (not for a site built from a known template, and only if the page didn't redirect elsewhere) or the GitHub profile's Website field is the portfolio's domain (GitHub API by numeric id, cached a day; `GITHUB_API_TOKEN` optional).
   Otherwise the owner adds `<meta name="portfoliorank-verify" content="<token>">` and asks again with `method: "meta"`, or asks for manual review, which the admin decides through `/api/admin/claims`.
