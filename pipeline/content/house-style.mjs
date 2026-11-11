@@ -4,11 +4,11 @@
 // the neutral surfaces in app/globals.css.
 
 export const HOUSE_STYLE = [
-  "Strictly flat 2D vector editorial illustration, simple geometric shapes, solid fills, no 3D, no perspective rendering, no shading gradients, no glossy or realistic textures",
+  "Strictly flat 2D vector illustration for a developer-focused tech publication, simple geometric shapes and UI wireframe elements, solid fills only, no 3D, no isometric or perspective rendering, no gradients, no shadows, no glow, no glossy or realistic textures",
   "neutral palette of warm greys and off-white with a single amber accent (#fbbf24) used sparingly on the focal element",
   "clean composition with generous empty space on one side for a title overlay",
   "wide 16:9 hero crop, calm and confident mood",
-  "no letters or numbers anywhere, no text, no words, no engraved or printed markings on any object, no logos, no brand marks, no watermarks",
+  "no letters or numbers anywhere, no text, no words, no code characters, no engraved or printed markings on any object, no logos, no brand marks, no watermarks",
   "no people, no faces, no hands, no recognisable real persons",
 ].join(". ") + ".";
 
@@ -25,79 +25,86 @@ export const HERO_SIZE = { width: 1280, height: 720 };
 /** The full image prompt for a subject. */
 export const imagePrompt = (subject) => `${subject}. ${HOUSE_STYLE}`;
 
-// One subject prompt per theme. Subjects are objects and abstract scenes,
-// never people, so the style rules above are easy to keep.
+// One subject prompt per theme. Tech-first: browser windows, editors, charts
+// and dashboards drawn as flat wireframes, never people, so the style rules
+// above are easy to keep. Design is one theme among twelve.
 export const THEMES = [
   {
     id: "design-polish",
     theme: "Design and visual polish",
-    subject: "A tidy arrangement of overlapping rounded rectangles and a ruler-straight alignment grid, one card slightly highlighted in amber, suggesting careful spacing and refinement",
-    alt: "Abstract illustration of aligned cards on a grid, one highlighted in amber, for design and visual polish",
+    subject: "A flat browser window with a clean UI layout, a faint grid overlay on top, and several rounded components snapping into place along the grid lines, one component highlighted in amber",
+    alt: "Flat browser window with a grid overlay and components snapping into place, one in amber, for design and visual polish",
   },
   {
     id: "project-storytelling",
     theme: "Project storytelling",
-    subject: "A winding path of stepping stones across a neutral landscape leading to a glowing amber flag on a small hill, each stone a different simple shape, a journey told in stages",
-    alt: "Illustration of a path of stepping stones leading to an amber flag, for project storytelling",
+    subject: "A repository card with a branch icon unfolding like a paper fold into a wider case-study page made of image blocks and abstract grey bars, an amber arrow between the card and the page",
+    alt: "Repository card unfolding into a case-study page with an amber arrow, for project storytelling",
   },
   {
     id: "writing-copy",
     theme: "Writing and copy",
-    subject: "A large pencil resting across a blank sheet of paper with a few abstract grey lines and one amber underline, a fountain pen nib beside it, the page otherwise empty",
-    alt: "Illustration of a pencil and a sheet with grey lines and an amber underline, for writing and copy",
+    subject: "A flat editor window showing tidy paragraph blocks drawn as plain grey bars with no letters, one paragraph block highlighted in amber, a thin cursor line beside it",
+    alt: "Editor window with tidy grey paragraph bars and one amber highlight, for writing and copy",
   },
   {
     id: "first-impressions",
     theme: "First impressions (the five-second test)",
-    subject: "A large stopwatch dial frozen at a few seconds beside a simple browser window shape, with a single amber spotlight beam falling on the window's main block",
-    alt: "Illustration of a stopwatch beside a browser window lit by an amber spotlight, for first impressions",
+    subject: "A flat browser tab and window with a stopwatch icon beside it, the hero section of the page lit up in amber while the rest of the page stays grey",
+    alt: "Browser window with a stopwatch and an amber-lit hero section, for first impressions",
   },
   {
     id: "motion-interaction",
     theme: "Motion and interaction",
-    subject: "A circle moving along a curved dotted trajectory with faded ghost copies trailing behind it, the leading circle amber, and a simple cursor arrow near a button shape",
-    alt: "Illustration of an amber circle with a motion trail and a cursor arrow, for motion and interaction",
+    subject: "Three flat UI cards mid-animation sliding across a browser window, each with fading motion trails behind it, the leading card amber, a cursor arrow nearby",
+    alt: "UI cards mid-animation with motion trails, the leading card amber, for motion and interaction",
   },
   {
     id: "dark-mode-theming",
     theme: "Dark mode and theming",
-    subject: "A circle split diagonally into a light half and a dark half, with a small amber crescent moon and sun symbol at the seam, two plain interface cards below in matching light and dark",
-    alt: "Illustration of a circle split into light and dark halves with an amber accent, for dark mode and theming",
+    subject: "One flat interface window split down the middle into a light half and a dark half, with the same layout blocks on both sides, a small amber toggle switch at the seam",
+    alt: "One interface split into light and dark halves with an amber toggle, for dark mode and theming",
   },
   {
     id: "performance-page-weight",
     theme: "Performance and page weight",
-    subject: "A balance scale weighing a heavy stack of grey boxes against one small amber feather-light block, the scale tipping gently, suggesting a lightweight page",
-    alt: "Illustration of a balance scale with grey boxes and a light amber block, for performance and page weight",
+    subject: "A flat page-load waterfall chart of horizontal bars in staggered rows, one short amber bar, beside a small light bundle box with a feather-light feel, no numbers or labels",
+    alt: "Page-load waterfall chart beside a small light bundle box with an amber bar, for performance and page weight",
   },
   {
     id: "careers-hiring",
     theme: "Careers and hiring",
-    subject: "An open door with warm amber light spilling out onto a grey floor, a simple staircase of three steps leading up to it, a briefcase silhouette resting on the bottom step",
-    alt: "Illustration of an open door with amber light and a short staircase, for careers and hiring",
-  },
-  {
-    id: "standing-out",
-    theme: "Standing out",
-    subject: "A tidy row of identical grey rounded squares with exactly one amber square lifted slightly above the row and casting a soft shadow",
-    alt: "Illustration of a row of grey squares with one amber square raised above, for standing out",
+    subject: "A flat recruiter's screen showing a row of portfolio browser tabs and a grid of candidate cards, one candidate card highlighted in amber with a checkmark shape, no faces",
+    alt: "Recruiter screen with portfolio tabs and one amber highlighted candidate card, for careers and hiring",
   },
   {
     id: "data-rankings",
     theme: "Data and rankings",
-    subject: "A podium of three stepped blocks of different heights in greys, the tallest in amber, with a simple bar chart silhouette behind it and no numbers or labels",
-    alt: "Illustration of a three-step podium with the top block in amber and a bar chart behind, for data and rankings",
+    subject: "A flat leaderboard dashboard window with a ranked list of rows on one side and a bar chart on the other, the tallest bar and the top row in amber, no numbers or labels",
+    alt: "Leaderboard dashboard with bar charts and an amber top rank, for data and rankings",
   },
   {
     id: "tools-stacks",
     theme: "Tools and stacks",
-    subject: "A neat vertical stack of layered slabs like a technology stack, each a different simple geometric tile in grey, with a small amber gear at the top layer and a wrench leaning on the side",
-    alt: "Illustration of stacked layered slabs with an amber gear on top, for tools and stacks",
+    subject: "A flat code editor window and a terminal window side by side, with abstract layered stack shapes of simple geometric tiles floating between them, one tile amber, no logos and no code characters",
+    alt: "Code editor and terminal windows with abstract stack shapes and one amber tile, for tools and stacks",
+  },
+  {
+    id: "ai-assistance",
+    theme: "AI and developer tooling",
+    subject: "A flat browser window of a page layout with an AI assistant reviewing the code, drawn as a network of connected nodes and lines over the window, one central node in amber",
+    alt: "AI assistant drawn as a node network over a browser window, one amber node, for AI and developer tooling",
   },
   {
     id: "community-feedback",
     theme: "Community and feedback",
-    subject: "Several overlapping rounded speech bubbles of different sizes in greys, one amber bubble in the middle containing a simple checkmark shape, no text inside any bubble",
-    alt: "Illustration of overlapping speech bubbles with one amber bubble holding a checkmark, for community and feedback",
+    subject: "Flat comment threads with nested reply bars and a pull-request review panel with a diff made of grey lines and an amber approve checkmark badge, no text",
+    alt: "Comment threads and a pull-request review with an amber approval badge, for community and feedback",
+  },
+  {
+    id: "standing-out",
+    theme: "Standing out",
+    subject: "A tidy row of identical flat browser-window thumbnails with exactly one amber window lifted slightly above the row",
+    alt: "Row of grey browser thumbnails with one amber window raised above, for standing out",
   },
 ];
