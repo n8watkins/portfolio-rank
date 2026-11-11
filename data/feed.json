@@ -1342,6 +1342,11 @@
     "url": "https://anuragaffection.vercel.app"
   },
   {
+    "name": "Anurag Shre",
+    "url": "https://anuragshre.vercel.app/",
+    "tagline": "Software Engineer | Full Stack & AI"
+  },
+  {
     "name": "Anurag Zete",
     "url": "https://portfolio-anuragzete.web.app",
     "tagline": "Software Engineer"
@@ -3565,7 +3570,7 @@
   },
   {
     "name": "Guillermo Navarro",
-    "url": "https://guille0197.github.io/portafolio",
+    "url": "https://gnavarro.dev/",
     "tagline": "Software Engineer | Full Stack Developer | AWS & SaaS"
   },
   {
@@ -6050,6 +6055,11 @@
     "url": "https://nathansimpson.design"
   },
   {
+    "name": "Nathan Watkins",
+    "url": "https://portfolio.n8builds.dev",
+    "tagline": "Full-Stack Engineer"
+  },
+  {
     "name": "Navdeep Singh",
     "url": "https://navdeep.site",
     "tagline": "Full Stack Dev | Student at NITJ"
@@ -7425,6 +7435,11 @@
     "name": "Sachin Goyal",
     "url": "https://www.sachingoyal.me",
     "tagline": "Full Stack AI Engineer"
+  },
+  {
+    "name": "Sachin Kumar",
+    "url": "https://sachingg.me",
+    "tagline": "Cybersecurity Enthusiast"
   },
   {
     "name": "Sachin Srinivasan",
