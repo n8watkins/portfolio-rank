@@ -2,7 +2,8 @@ import { createHash, randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { emailAvailable, sendEmail } from "@/lib/email";
-import { clientIp, ipKey, sameOrigin, verifyTurnstile } from "@/lib/polls/server";
+import { clientIp, ipKey, sameOrigin } from "@/lib/polls/server";
+import { verifyTurnstile } from "@/lib/turnstile";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 import { SITE_URL } from "@/lib/site";
 import { createReportLink, dropReportLink } from "@/lib/games/report.mjs";
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
     ...(ip ? [{ key: `report-email:ip:${ipKey(ip)}`, limit: 5, windowMs: HOUR }] : []),
   ]);
   if (over) return rateLimited(over);
-  if ((await verifyTurnstile(body.turnstileToken, ip, "report-email")) === "failed") return fail("turnstile_failed", 403);
+  if ((await verifyTurnstile(body.turnstileToken, ip, { action: "report-email" })) === "failed") return fail("turnstile_failed", 403);
 
   const token = randomBytes(32).toString("base64url");
   await createReportLink(db(), { url, token, now: new Date() });

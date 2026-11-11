@@ -24,3 +24,4 @@ retry-github.log
 .wrangler
 .dev.vars*
 data/e2e.db*
+data/e2e-shots/

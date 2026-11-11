@@ -10,16 +10,16 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **Deploy from GitHub:** `.github/workflows/deploy.yml` ships every push to main, staging first ("How a change ships" below), once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
 - **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
 - **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`, plus two for the end-of-day run ([AUTOMATION.md](AUTOMATION.md#end-of-day-run)):
-  `GEMINI_API_KEY` (send it with `pass-env pipe portfolio-rank/GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY`) and `GITHUB_DISPATCH_TOKEN` (a fine-grained token for `n8watkins/portfolio-rank` only with "Actions: Read and write"; `pass-env pipe portfolio-rank/GITHUB_DISPATCH_TOKEN -- npx wrangler secret put GITHUB_DISPATCH_TOKEN`).
-  Optional: `TURNSTILE_SECRET_KEY` turns on Cloudflare Turnstile for poll votes (AUTOMATION.md "Polls") and report emails; without it the check is skipped.
+  `GEMINI_API_KEY` (send it with `pass-env pipe portfolio-rank/GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY`) and `GITHUB_DISPATCH_TOKEN` (a fine-grained token for `n8watkins/portfolio-rank` only with "Actions: Read and write"; `pass-env pipe portfolio-rank/GITHUB_DISPATCH_TOKEN -- npx wrangler secret put GITHUB_DISPATCH_TOKEN`), which also starts "grade my portfolio" captures.
+  Optional: `TURNSTILE_SECRET_KEY` turns on Cloudflare Turnstile for poll votes, grade requests and report emails (AUTOMATION.md "Polls", "Grade my portfolio" and "Games, badges, claims, live stats and reports"); without it the check is skipped.
+  Email (grade reports, report links, owner alerts) goes through the `send_email` binding `SEND_EMAIL` from the `EMAIL_FROM` variable; owner alerts need the `OWNER_EMAIL` variable ("Grade my portfolio: owner steps" below).
   Optional: `GITHUB_API_TOKEN` (a fine-grained token with no permissions, public data only) raises the GitHub API rate limit for claims and the live stats.
-- **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
-  Before switching it on, for report links by email: add `"send_email": [{ "name": "EMAIL" }]` to `wrangler.jsonc`, onboard the sender's domain to Cloudflare Email Service, set the variable `EMAIL_FROM` (for example `PortfolioRank <reports@n8builds.dev>`) and, if wanted, `EMAIL_DAILY_CAP` (default 50); then run `npm run cf-typegen`.
-  Without them `/api/report/email` answers 503 and sends nothing.
-  Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
   Without `GITHUB_DISPATCH_TOKEN` the nightly checks are not started from Cloudflare (one log line says so) and their GitHub schedule runs as the fallback.
   `SHOTS_BASE_URL` and `AUTH_URL` (the site's address) are plain variables in `wrangler.jsonc`; `lib/site.ts` holds the same address for canonical URLs, share links and the sitemap.
-  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`) and `ADMIN_GITHUB_LOGIN`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_LOGIN`, `GRADER_ENABLED`, `GAMES_V2` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+- **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
+  Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
+  Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
 - **Cron Triggers and the Workflow:** `triggers.crons` and `workflows` in `wrangler.jsonc`; `npx wrangler triggers deploy` is not needed, a deploy registers them (they can take up to 15 minutes to reach every location).
   Check them in the dashboard (Workers & Pages, portfolio-rank, Settings, Triggers) or with `npx wrangler workflows instances list portfolio-rank-night`.
 - **Screenshots and favicons:** the Worker answers `/shots/<shot_key>/<file>` and `/favicon/<domain>` itself, before the app (`worker/assets.ts`), from the edge cache when it can.
@@ -38,6 +38,35 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`; staging has its own OAuth app ("Staging" below).
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
   `prewarm.yml` calls the site's API at the `PROD_BASE_URL` repository variable (`https://portfoliorank.n8builds.dev`).
+
+## Grade my portfolio: owner steps
+
+The back end ships switched off (`GRADER_ENABLED` is `"false"` in `wrangler.jsonc`, AUTOMATION.md "Grade my portfolio").
+These steps can be done any time before it is switched on; each one is safe on its own.
+
+1. **Turnstile widget** (an agent couldn't create it: the Cloudflare connection lacks write access to Turnstile).
+   In the Cloudflare dashboard, open Turnstile, Add widget: name `PortfolioRank`, hostnames `portfoliorank.n8builds.dev`, `staging.portfoliorank.n8builds.dev` and `localhost`, widget mode **Managed**, no pre-clearance.
+   The pages render it with `appearance: "interaction-only"` and execution on page load, so most visitors never see it; the actions are `grade`, `grade-email` and `poll-vote`.
+   Keep the secret in pass and send it to both Workers without it ever being shown:
+   ```bash
+   ! pass-env set portfolio-rank/TURNSTILE_SECRET_KEY        # paste the widget's secret key
+   pass-env pipe portfolio-rank/TURNSTILE_SECRET_KEY -- npx wrangler secret put TURNSTILE_SECRET_KEY
+   pass-env pipe portfolio-rank/TURNSTILE_SECRET_KEY -- npx wrangler secret put TURNSTILE_SECRET_KEY --env staging
+   ```
+   From then on every grade request, report-email request and poll vote needs a Turnstile token, so the redesign's forms must render the widget before this goes on in production.
+   Put the public site key in `wrangler.jsonc` as the variable `TURNSTILE_SITE_KEY` (production and staging) in the redesign's pull request, where the pages read it.
+2. **Email sender:** nothing to set up for the sender itself: `n8builds.dev` is onboarded for Cloudflare Email Sending (Wren sends from it), and the Worker sends from `portfoliorank@n8builds.dev` through its `send_email` binding `SEND_EMAIL`.
+   Check after the first deploy that the domain still shows as onboarded under Email, Email Sending in the dashboard; sending is in beta with a daily limit for new accounts, which the gate's caps (100 a day) stay under.
+3. **Owner alerts by email:** set your verified address as the Worker variable `OWNER_EMAIL` (sends to it are free).
+   Add it to `wrangler.jsonc` `vars` in a pull request, since a deploy resets variables to what the file says.
+4. **Dispatch token:** `GITHUB_DISPATCH_TOKEN` on the production Worker (step "Secrets" above) also starts the grader's captures.
+   Without it every grade stops after the free checks with the state `unavailable`.
+   Never add it to staging.
+5. **Gemini key:** `GEMINI_API_KEY` on the production Worker (already set) finishes queued grades in the hourly people-queue cron; the `GEMINI_API_KEY` repository secret (already set) grades on the runner.
+   `grade.yml` uses the existing `TURSO_*` and `R2_*` repository secrets; nothing new.
+6. **Switch it on** once the redesign's `/grade` and `/grade/[id]` pages are merged: set `GRADER_ENABLED` to `"true"` in `wrangler.jsonc` (production, and staging to try it there first without the dispatch token).
+
+Turning it off again is the same variable: the API answers 404 and the five-minute cron does nothing; jobs, reports and emails waiting stay in the database until it is back on.
 
 ## How a change ships
 

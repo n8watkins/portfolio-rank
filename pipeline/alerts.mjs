@@ -15,12 +15,15 @@
 //                            ("PortfolioRank is doing well")
 // Levels: ALERT_TRACTION (JSON, {"peopleGrades": 50, "humanVotes": 300}).
 //
-// Email: one interface, { send({ to, subject, text }) }. The email provider
-// isn't chosen yet (docs/DECISIONS.md: SES or Cloudflare Email Service) and
-// the Worker has no email binding, so the sender is null and alerts are
-// recorded and logged but not delivered; a day's alert is only marked sent
-// once a sender delivers it. Wire a sender in emailSender() to turn it on.
+// Email: one interface, { send({ to, subject, text }) }, which throws when
+// the email was not sent. It is Cloudflare Email Service behind the shared
+// email gate with its hard caps (lib/email/gate.mjs, kind "owner-alert"),
+// to OWNER_EMAIL, the owner's verified address (sends there are free). With
+// no send_email binding, EMAIL_FROM or OWNER_EMAIL the sender is null:
+// alerts are recorded and logged but not delivered, and a day's alert is
+// only marked sent once the email went out.
 import { quotaDay } from "./quota-day.mjs";
+import { createEmailGate, emailCaps, emailTransport } from "../lib/email/gate.mjs";
 
 export const DEFAULT_TRACTION = { peopleGrades: 50, humanVotes: 300 };
 
@@ -33,15 +36,25 @@ export function tractionLevels(raw = globalThis.process?.env?.ALERT_TRACTION) {
 }
 
 /**
- * The email sender, or null while no provider is set up (today). Wire the
- * chosen provider here, from the Worker's env (a SEND_EMAIL binding or a
- * provider key).
- * @param {unknown} env
+ * The owner-alert sender: the shared email gate over the Worker's send_email
+ * binding, or null while the binding, EMAIL_FROM or OWNER_EMAIL is missing.
+ * `send` throws when the gate refused or the provider failed, so the alert
+ * stays unsent for the day.
+ * @param {any} env
+ * @param {{ db?: { execute: Function, transaction: Function } }} [options]
  * @returns {null | { send(m: { to: string, subject: string, text: string }): Promise<void> }}
  */
-export function emailSender(env) {
-  void env;
-  return null;
+export function emailSender(env, { db } = {}) {
+  if (!db || !env?.OWNER_EMAIL) return null;
+  const transport = emailTransport(env, { db });
+  if (!transport) return null;
+  const gate = createEmailGate({ db, transport, caps: emailCaps(env.EMAIL_CAPS), secret: env.AUTH_SECRET ?? globalThis.process?.env?.AUTH_SECRET });
+  return {
+    async send({ to, subject, text }) {
+      const r = await gate.send({ kind: "owner-alert", to, subject, text });
+      if (!r.sent) throw new Error(`owner alert email not sent (${r.reason})`);
+    },
+  };
 }
 
 export async function ensureAlertSchema(db) {
@@ -141,11 +154,18 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
       continue;
     }
     const since = quotaDay(new Date(String(row?.first_seen ?? at))).day;
-    await email.send({
-      to,
-      subject: `${c.kind === "good" ? "" : "[PortfolioRank] "}${c.title}`,
-      text: `${c.detail ?? ""}\n\nOngoing since ${since}. This email repeats once a day until it clears.`,
-    });
+    try {
+      await email.send({
+        to,
+        subject: `${c.kind === "good" ? "" : "[PortfolioRank] "}${c.title}`,
+        text: `${c.detail ?? ""}\n\nOngoing since ${since}. This email repeats once a day until it clears.`,
+      });
+    } catch (e) {
+      // Refused by the email gate's caps or failed at the provider: tried again on the next run.
+      out.unsent.push(c.key);
+      log(`owner alert not emailed: ${c.title} (${String(e?.message ?? e).slice(0, 120)})`);
+      continue;
+    }
     await db.execute({ sql: "UPDATE owner_alerts SET last_sent_day = ?, sends = sends + 1 WHERE key = ?", args: [day, c.key] });
     out.sent.push(c.key);
   }

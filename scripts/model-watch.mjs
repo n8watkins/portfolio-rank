@@ -7,7 +7,7 @@
 //   pass-env run -- node scripts/model-watch.mjs            store the run and record the alerts
 //   pass-env run -- node scripts/model-watch.mjs --dry-run  print only; writes nothing
 // The database is pipelineDb's: Turso with TURSO_*, else LOCAL_DB_FILE or
-// data/portfoliorank.db. Email stays off (pipeline/alerts.mjs emailSender, not wired yet).
+// data/portfoliorank.db. Email stays off here: only the Worker has the send_email binding (pipeline/alerts.mjs emailSender).
 import path from "path";
 import { fileURLToPath } from "url";
 import { pipelineDb } from "../pipeline/roster.mjs";

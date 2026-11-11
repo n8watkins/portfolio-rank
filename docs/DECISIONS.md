@@ -43,7 +43,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Free quota first; billing with a Google budget alert and an in-app daily cap only when grades outgrow it.
   Revisit at the public launch of the grader or when traffic grows (see "Free tier everywhere").
   Why: a grade costs about $0.001 on rubric v2 at paid rates, so paid is cheap, but free covers today's volume.
-- **Free tier everywhere: no region blocking, a clear notice and your own key** (owner, 2026-11-10). Status: decided; the notice and the own-key option come with "grade my portfolio".
+- **Free tier everywhere: no region blocking, a clear notice and your own key** (owner, 2026-11-10). Status: the own-key option's back end is building (#81, "Grade my portfolio" below); the notice comes with the redesign's grade pages.
   PortfolioRank stays on Gemini's free tier and blocks no region.
   Google's terms allow only Paid Services when an API client is offered to people in the EEA, Switzerland or the UK, and ask free-tier users not to send personal information ([ASSUMPTIONS.md](ASSUMPTIONS.md) summary item 1, A9); the owner accepts that risk for now.
   In its place: wherever a visitor starts AI work (the future grader and re-grade requests), a clear notice that the AI runs on Google Gemini's free tier and that people shouldn't submit private details, and a bring-your-own-key option so a visitor can grade on their own Gemini key.
@@ -104,7 +104,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Page text is untrusted data** (agent, 2026-11-10). Status: built (#57).
   It travels in a `<site_data>` block the instructions mark as data, never instructions.
   Why: once grades are public, sites will try to talk to the judge.
-- **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: planned (the grader lane implements it).
+- **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: building (#81).
+  Every grade (the nightly ones and "grade my portfolio") also returns up to three roles the page claims, cleaned by code; they are labels, never scored, so the rubric version stays 2.
   Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
@@ -156,9 +157,9 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: an unattended job must have bounded cost and bounded damage.
 - **Quota exhausted is "deferred, not failed" everywhere** (owner, 2026-11-10). Status: building (#69).
   `compare.mjs` now exits 0 when 3.5's quota is spent, like `judge.mjs` since #63.
-- **Re-grades on request, with a cooldown** (owner, 2026-11-10). Status: the rule is building (#69, `regradeAllowed`); the request flow comes with "grade my portfolio".
+- **Re-grades on request, with a cooldown** (owner, 2026-11-10). Status: the rule is building (#69, `regradeAllowed`); the request flow is building (#81, "Grade my portfolio" below).
   Once every 7 days, sooner when the page fingerprint changed after the last grade.
-- **People's requests wait for 3.5, never 3.1** (owner, 2026-11-10). Status: building (#69, `pipeline/people.mjs`); used once "grade my portfolio" ships.
+- **People's requests wait for 3.5, never 3.1** (owner, 2026-11-10). Status: building (#69, `pipeline/people.mjs`); "grade my portfolio" uses it (#81).
   A busy 3.5 is retried as usual, then the request is queued and finished by an hourly cron when 3.5 is available, and the person is emailed when it is done.
 - **The ELO-era AI votes stop running on a schedule** (agent, 2026-11-10, following "comparisons when `RANKING_V2` is on"). Status: building (#69).
   `judge-vote.yml` is manual only; until `RANKING_V2` is on, no AI votes are added to the ELO board.
@@ -172,7 +173,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   The redesign's admin page will read it.
 - **A paid key comes later, with a hard cap** (owner, 2026-11-10). Status: planned.
   See Gemini above.
-- **Real-browser work stays on GitHub Actions** (owner, 2026-11-10). Status: built for the nightly checks (#69); planned for "grade my portfolio".
+- **Real-browser work stays on GitHub Actions** (owner, 2026-11-10). Status: built for the nightly checks (#69); building for "grade my portfolio" (#81, `grade.yml`).
   Screenshots, rendered text and health checks run on Actions (free for a public repository), started on time by the Cloudflare cron or on demand by the Worker with a `workflow_dispatch`.
   Live "grade my portfolio" shows the free fact checks at once (a plain fetch from the Worker) and starts an Actions job for the screenshot and the AI grade, then notifies.
   Cloudflare Browser Rendering is parked as a later upgrade.
@@ -211,6 +212,45 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: a script could redraw pairs until a chosen site appeared and claim those votes at sign-in.
 - **Lint on every PR** (agent, from the site audit, 2026-11-10). Status: building (#59).
   Why: the repo had no lint setup at all.
+
+## Grade my portfolio
+
+How it works is in [AUTOMATION.md](../AUTOMATION.md#grade-my-portfolio); the redesign preview (`preview/redesign`) shows the screens.
+
+- **Built behind a switch, off until the redesign's UI ships** (owner, 2026-11-10). Status: building (#81).
+  The back end (the API under `/api/grade`, the capture workflow, the emails and the five-minute cron) is merged with the Worker variable `GRADER_ENABLED` set to `"false"`: every route answers 404 and the cron reads nothing.
+  Why: the API and its guardrails can be reviewed, tested and deployed before anyone can reach them.
+- **No account needed; a link plus an email gets a one-time link** (owner, 2026-11-10). Status: building (#81).
+  The browser that asks for a grade owns its report (a signed cookie); an emailed link is signed, expires in 7 days and works once, and opening it makes that browser the owner too.
+  The owner may delete the report; anyone with the link may read it.
+  Why: no sign-up between a visitor and their grade, and an inbox is proof enough to own a report.
+- **Reports are unlisted and shareable by link** (owner, 2026-11-10; the details are the agent's). Status: building (#81).
+  The id is 128 random bits and the only way in; every answer says noindex and is never stored in a shared cache; the page text, the visitor and the network are never returned; a re-grade request learns an earlier report's id only in the browser that owns it; reports and their screenshots are deleted after 180 days.
+  Why: a grade is about someone's work, so it reaches only the people they share it with.
+- **The free checks at once from the Worker, the screenshot and grade on GitHub Actions, dispatched on demand** (owner, 2026-11-10, accepting the Actions terms grey area in [ASSUMPTIONS.md](ASSUMPTIONS.md) section F). Status: building (#81).
+  A plain fetch measures the facts code can check while the visitor waits; `grade.yml` then captures the page and grades it.
+  The dispatch has no inputs and the run's log only counts, because the repository is public and a job id is a report's key (agent).
+  Why: free, and the capture code already runs there; Browser Rendering stays the switch if GitHub objects or volume grows.
+- **The visitor's browser can't be turned against our network** (agent, 2026-11-10). Status: building (#81).
+  Addresses are http or https on ports 80 and 443 with a public host name; on the runner every Chromium request goes through a local proxy that resolves each host itself, refuses private, loopback, link-local and metadata addresses and connects to the address it checked; our own fetches follow redirects by hand and check every hop.
+  Why: a visitor picks the address and the page picks everything it loads; a runner has a metadata service and local ports like any cloud machine.
+- **Daily caps per visitor, per network and site-wide, reserved together** (owner asked for the three caps, 2026-11-10; the numbers are the agent's). Status: building (#81).
+  3 grades a day per visitor (account or signed browser cookie), 6 per network (an IPv4 address or an IPv6 /64), 100 site-wide, per Pacific day, taken in one database transaction or not at all; attempts are rate limited before any work (20 an hour per visitor, 60 per network), and Turnstile checks every request once its secret is set.
+  Past the site-wide share a request waits for a later day and is emailed, as decided in "Queue and email past the daily cap"; at most 200 wait at once.
+  `GRADER_CAPS` changes the numbers.
+  Why: the free quota is about 500 requests a day and people come first, so 100 grades leave room for re-tries and the background while no one person or network can take the day.
+- **Re-grade cooldown per address; grading a listed site reuses nothing** (owner, 2026-11-10). Status: building (#81).
+  An address is graded once every 7 days, sooner when the free checks find the page's structure changed, and never twice at once; a listed site is always captured and graded fresh, never copied from the leaderboard's grade.
+  Why: the leaderboard's grade may be old, and a visitor asking for a grade wants today's page judged.
+- **Own key: in the request body once, never stored or logged** (owner decided the option, 2026-11-10; the handling is the agent's). Status: building (#81).
+  The key stays in the visitor's browser and reaches the Worker only in the JSON body of the request that uses it, never a URL or a request header, because Workers Logs records request headers.
+  The Worker checks it with a free metadata call at the start, then grades on it once the capture has landed, with `gemini-3.5-flash-lite` and the same rubric, marking the grade as own-key.
+  Its requests are not in `gemini_requests`: they spend the visitor's quota, so the budget accountant must not count them.
+  The key never goes to GitHub.
+  Why: the key is the visitor's money; holding it even briefly would be a liability, and an own-key grade must be comparable with every other.
+- **The report is built by code from the grade** (agent, 2026-11-10). Status: building (#81).
+  Strengths, the three fixes to make first, the estimated rank among the listed graded portfolios (on the level the leaderboard seeds from the grade), similar portfolios and portfolios doing the weakest axes better are all computed from stored grades when the grade is written, with no extra Gemini request; the comparison pool is cached for an hour.
+  Why: "facts from code, words from Gemini", and no report view scans the portfolios table.
 
 ## Polls
 
@@ -314,10 +354,11 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 - **A weekly newsletter** (owner, 2026-11-10). Status: planned.
   Sign-up on every post and on the site, confirm by email (double opt-in), one-click unsubscribe, a weekly digest of new posts, the top 5 and the biggest climber.
   Why: a way to bring readers back that doesn't depend on search or social.
-- **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (`lib/email.ts`, a daily cap; off until the sender is wired).
+- **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (#81, `lib/email/gate.mjs`).
   Newsletter, queued grade reports and owner updates all pass one module that counts every send and stops at a daily cap.
+  The caps (agent): 100 emails a day in all, 80 grade reports, 20 owner alerts and 3 to any one address; a refused or failed send counts too, and the log keeps a keyed hash, never the address (`EMAIL_CAPS` changes them).
   Why: the same hard-cap pattern as Wren's demo budget; no bug or abuse can send unbounded email.
-- **All email goes through Cloudflare Email Service** (owner, 2026-11-10). Status: decided; the sender is not wired yet.
+- **All email goes through Cloudflare Email Service** (owner, 2026-11-10). Status: building (#81): the Worker's `send_email` binding, from `portfoliorank@n8builds.dev`; owner alerts go to `OWNER_EMAIL` once the owner sets it.
   Newsletter, queued grade reports and owner alerts all send through Cloudflare Email Service, still behind the one gate with hard caps.
   Workers Paid includes 3,000 emails a month per account, shared with Wren, then $0.35 per 1,000.
   Sends to the owner's verified address are free and don't count, so owner alerts go there.
@@ -327,7 +368,7 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 - **No postal address in emails for now** (owner, 2026-11-10). Status: decided.
   The newsletter is editorial and PortfolioRank sells nothing, so it isn't commercial email under CAN-SPAM; if ads, sponsors or paid features ever arrive, a PO box or virtual mailbox goes in the footer.
   Why: no address needed today, and none to get spammed at.
-- **Queue and email past the daily cap** (owner, 2026-11-10). Status: planned.
+- **Queue and email past the daily cap** (owner, 2026-11-10). Status: building (#81): a request past the day's share waits for a later day, and one Gemini 3.5 can't answer waits in the people queue; both are emailed when ready.
   Every "grade my portfolio" request goes through a queue; with quota left it runs at once and the person watches, past the cap it waits and the report is emailed when ready (on the Batch API at half price once billing is on).
   Why: an email costs about 1/50 of a grade, so the queue lets free quota and Batch carry the load instead of refusing people.
 

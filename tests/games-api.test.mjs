@@ -16,7 +16,7 @@ import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
-const GH_PORT = Number(process.env.E2E_GH_PORT ?? 7693);
+const GH_PORT = Number(process.env.E2E_GAMES_GH_PORT ?? 7694);
 const db = createClient({ url: DB_URL, timeout: 10000 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -25,7 +25,7 @@ const SITES = feed.slice(100, 120).map((p) => p.url);
 const REPORT = SITES[0];
 const OWNED = feed[150].url;
 
-// A stand-in for the GitHub API (GITHUB_API_BASE in scripts/test-e2e.sh).
+// A stand-in for the GitHub API (GAMES_TEST_GITHUB_API in scripts/test-e2e.sh).
 const gh = createServer((req, res) => {
   if (req.url.includes("/contributors")) {
     res.writeHead(200, { "content-type": "application/json", link: '<http://x/?per_page=1&page=2>; rel="next", <http://x/?per_page=1&page=321>; rel="last"' });

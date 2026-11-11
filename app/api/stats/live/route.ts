@@ -6,6 +6,7 @@ import { cachedResponse } from "@/lib/edge-cache";
 import { SITE, SITE_URL } from "@/lib/site";
 import { githubStats, liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled, off } from "@/lib/games/server";
+import { testSeam } from "@/lib/grader/server";
 
 // GET /api/stats/live (GAMES_V2) -> the live numbers in one answer:
 //   portfolios, graded, gradedThisWeek, votesToday, votes, quizzesPlayed,
@@ -35,7 +36,7 @@ export async function GET() {
         "stats",
         "github",
         { ttlMs: 24 * HOUR, isFailure: (g) => g.stars == null || g.contributors == null, failureTtlMs: HOUR },
-        () => githubStats({ repo: SITE.githubRepo, token: process.env.GITHUB_API_TOKEN ?? null, base: process.env.GITHUB_API_BASE || undefined })
+        () => githubStats({ repo: SITE.githubRepo, token: process.env.GITHUB_API_TOKEN ?? null, base: testSeam("GAMES_TEST_GITHUB_API") })
       ),
       liveCounts(db(), { now }),
     ]);

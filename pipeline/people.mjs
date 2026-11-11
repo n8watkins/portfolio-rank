@@ -22,10 +22,17 @@
 //
 // ctx is pipeline/night.mjs's context plus `email` (pipeline/alerts.mjs
 // sender, or null while no email provider is set up).
+//
+// "Grade my portfolio" (lib/grader) queues its free-tier grades here with
+// meta.grade_job set: after every try the job moves along with the request
+// (lib/grader/finish.mjs syncFromPeople), and the report email goes out
+// from the grader's own queue (worker/grader.ts), so such requests carry no
+// email address here.
 import { peopleAllowance, usageToday } from "./budget.mjs";
 import { createGemini, createLimiter, GeminiAuthError, GeminiUnavailableError, PRIMARY_MODEL } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { gradeFromEvidence } from "./night.mjs";
+import { syncFromPeople } from "../lib/grader/finish.mjs";
 
 export const MAX_ATTEMPTS = 3;
 
@@ -55,8 +62,11 @@ export async function ensurePeopleSchema(db) {
 const iso = (ms) => new Date(ms).toISOString();
 const msg = (e) => String(e?.message ?? e).slice(0, 200);
 
-/** Queues a request and tries it at once. Returns the request row as stored. */
-export async function requestGrade(ctx, { kind = "grade", url, name = "", email = null, shot_key, page_text, facts, meta = null }) {
+/**
+ * Queues a request and tries it at once (unless `tryNow` is false: then the
+ * hourly drain does). Returns the request row as stored.
+ */
+export async function requestGrade(ctx, { kind = "grade", url, name = "", email = null, shot_key, page_text, facts, meta = null }, { tryNow = true } = {}) {
   await ensurePeopleSchema(ctx.db);
   await ensureGeminiLog(ctx.db);
   const at = iso(ctx.now());
@@ -66,7 +76,7 @@ export async function requestGrade(ctx, { kind = "grade", url, name = "", email 
     args: [kind, url, name, email, shot_key, page_text, typeof facts === "string" ? facts : JSON.stringify(facts ?? null), meta == null ? null : typeof meta === "string" ? meta : JSON.stringify(meta), at, at],
   });
   const id = Number(res.rows[0].id);
-  await processRequest(ctx, id);
+  if (tryNow) await processRequest(ctx, id);
   return readRequest(ctx.db, id);
 }
 
@@ -86,9 +96,30 @@ async function setStatus(db, id, fields, now) {
 /**
  * Tries one queued request. Returns its new status: "done", "queued" (3.5
  * busy, out of quota or the people's share used: it waits) or "failed"
- * (the request itself failed MAX_ATTEMPTS times).
+ * (the request itself failed MAX_ATTEMPTS times). A request for a grade job
+ * moves its job along too.
  */
 export async function processRequest(ctx, id) {
+  const status = await processOne(ctx, id);
+  if (status) {
+    const req = await readRequest(ctx.db, id);
+    const jobId = gradeJobOf(req);
+    if (jobId) await syncFromPeople(ctx.db, { jobId, request: req, now: ctx.now() });
+  }
+  return status;
+}
+
+/** The grade job a request belongs to (meta.grade_job), or null. */
+export function gradeJobOf(req) {
+  try {
+    const meta = typeof req?.meta === "string" ? JSON.parse(req.meta) : req?.meta;
+    return typeof meta?.grade_job === "string" ? meta.grade_job : null;
+  } catch {
+    return null;
+  }
+}
+
+async function processOne(ctx, id) {
   const { db } = ctx;
   const req = (await db.execute({ sql: "SELECT * FROM people_requests WHERE id = ? AND status = 'queued'", args: [id] })).rows[0];
   if (!req) return null;
