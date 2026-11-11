@@ -348,11 +348,11 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   A "Try this" step links to a named positive example (an S site strong on that axis) where the naming rule allows.
   Why: each of these was a way the first draft read well and was subtly wrong.
 
-- **Staged writer behind `WRITER_MODE`, `single` stays the default** (owner request, 2026-11-10). Status: built; the default is a recommendation.
+- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90).
   `staged` writes a post as an outline (hook, title, TL;DR, three sections with their facts; structure-checked and retried once before any section is written), two section requests and a finish request, then runs the same code checks: 4 write requests (5 after an outline retry) against 1 for `single`.
-  Same top-grades data, no revision rounds (10 Gemini requests in all): `single` wrote 211 words (too short) and `staged` 448 (too long), both with every other code check green except the length and a 429 from an example site's host (now treated as reachable).
-  The staged text read fuller and kept the hook and ties better, but it costs 3 to 4 more requests and the sample did not show a pass-rate gain, so `single` stays until a run with revisions on shows `staged` passing more often.
-  Why: simplicity and cost win until the quality gain is measured.
+  Why: better reading quality for about 1 to 4 more Gemini requests per post.
+  `single` stays available by setting `WRITER_MODE` to "single"; unset or unknown values now mean "staged".
+  Earlier sample, same top-grades data: `single` wrote 211 words (too short) and `staged` 448 (too long); the staged text kept the hook and ties better.
 
 ## Games, badges and claims
 
