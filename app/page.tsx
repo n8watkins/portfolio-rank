@@ -40,7 +40,7 @@ export default async function Home() {
         <div className="wrap">
           <section aria-labelledby="hero" className="grid grid-cols-1 items-center gap-10 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14 lg:py-24">
             <div className="text-center lg:text-left">
-              <p className="rise mb-5 inline-flex items-center gap-2 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-mute shadow-[var(--card-hi)]">
+              <p className="rise mb-5 inline-flex items-center gap-2 rounded-full border border-edge bg-card px-3 py-1 text-xs font-medium text-balance text-mute shadow-[var(--card-hi)]">
                 <span className="attn-dot" aria-hidden /> {total} portfolios ranked by people and AI
               </p>
               {grading ? (
