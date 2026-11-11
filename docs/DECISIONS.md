@@ -401,6 +401,12 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   https://staging.portfoliorank.n8builds.dev is the same Worker code in the wrangler environment `staging`, with its own Turso database (a copy of a production backup), its own ISR cache bucket, no Cron Triggers and no Gemini key, robots noindex and a "Staging" ribbon ([DEPLOY.md](../DEPLOY.md), "Staging").
   A merge to main deploys staging, runs a read-only smoke check there, and only then deploys production, which gets the same check; pull requests don't deploy, and a branch goes to staging by running the Deploy workflow on it.
   Why: one staging site can't serve parallel PRs without them overwriting each other, while gating production on a live staging check catches what CI on a local database can't (bindings, secrets, the real data).
+- **Keep staging through the redesign launch** (owner, 2026-11-10). Status: decided.
+  Staging catches failures that only show up on Cloudflare while Wave B lands in several PRs.
+  After launch, review whether it should still block production deploys, or delete it (Worker `portfolio-rank-staging`, Turso database `portfolio-rank-staging`, repository secrets `STAGING_TURSO_*`).
+  Scheduled jobs are deliberately not duplicated on staging: they would spend the shared Gemini quota, double the Actions minutes and risk writes to shared buckets, and stale data there would raise false alarms.
+  Scheduled code is covered by tests instead.
+  Why: the extra safety is worth keeping while the change rate is high, and it costs nothing ([COSTS.md](COSTS.md), "Staging").
 - **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
   Why: what merges is what the next deploy ships.
 

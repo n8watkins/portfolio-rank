@@ -27,7 +27,7 @@ Shared assumptions:
 
 | Line | Today | Modest | Popular | Price basis |
 | --- | --- | --- | --- | --- |
-| Workers Paid base | $5.00 | $5.00 | $5.00 | $5 a month |
+| Workers Paid base (the account's plan: the $5 a month add-on, not Pro or a zone plan) | $5.00 | $5.00 | $5.00 | $5 a month |
 | Workers requests (10M included) | $0 (about 14k) | $0 (about 450k) | $0 (about 4.5M) | then $0.30 per million |
 | Workers CPU (30M ms included) | $0 | $0 | $0 to $0.05 (about 28M ms, measure) | then $0.02 per million ms |
 | Workers Logs (20M events included) | $0 | $0 | $0 | then $0.60 per million |
@@ -189,3 +189,17 @@ One line grows instead: the nightly backup now reads every table, so in the popu
 - Terms risk: GitHub's Actions terms bar use "as part of a serverless application" where the burden outweighs the benefit and, on hosted runners, activity unrelated to the software project (ASSUMPTIONS.md section F); batching on-demand captures and keeping Browser Rendering ready limits that risk.
 
 Sources for this section are in ASSUMPTIONS.md section F.
+
+## Staging
+
+Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("A staging site checks every change before production").
+
+- Cloudflare: the account is on Workers Paid, the $5 a month add-on (not Pro or any zone plan), which includes 10M Worker requests a month.
+  Staging's Worker served 677 requests that day against 4,754 for production, so its usage sits well inside that allowance.
+- Idle cost: staging has no Cron Triggers, no Gemini key and no dispatch token, so it spends nothing while nobody uses it.
+- R2: the ISR cache bucket is a few MB, inside the free 10 GB.
+- Email: sends only go through the capped gate, to verified addresses.
+- Turso: the account is on the Starter plan with overages disabled, so it cannot bill.
+  Staging's database is 2.4 MB; the whole account uses 11 MB of 5 GB and 1.7M of 500M rows read.
+- GitHub Actions: staging adds about a minute per push to main.
+- Total extra cost: $0.
