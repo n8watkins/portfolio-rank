@@ -1,0 +1,51 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { db, ensureSchema } from "@/lib/db";
+import { sameOrigin } from "@/lib/polls/server";
+import { isKnownPortfolio } from "@/lib/roster";
+import { ownerAction } from "@/lib/games/claims.mjs";
+import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } from "@/lib/games/server";
+
+// What a verified owner can do with their portfolio (GAMES_V2).
+// POST /api/owner/actions { url, action, confirm? }
+//   remove      (needs confirm: true) hidden from the site at once, then
+//               moved to data/excluded.json as an owner request by the weekly
+//               exclusions pull request; /removed counts it without details
+//   hide_grade  the AI grade is no longer shown; show_grade shows it again
+//   regrade     asks the grade service for a new grade (its cooldown applies;
+//               one open request per site)
+//   200 { state: { hideGrade, removedAt }, regrade? }
+//   400 bad_request | bad_action | confirm_required, 401 signin_required,
+//   403 bad_origin | not_owner, 429 rate_limited
+// Every action is written to the claims audit log.
+export const dynamic = "force-dynamic";
+const HOUR = 60 * 60 * 1000;
+
+export async function POST(req: Request) {
+  if (!gamesEnabled()) return off();
+  if (!sameOrigin(req)) return fail("bad_origin", 403);
+  const s = await auth();
+  if (!s?.raterId?.startsWith("gh:")) return fail("signin_required", 401);
+  let body: { url?: unknown; action?: unknown; confirm?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return fail("bad_request", 400);
+  }
+  const url = typeof body?.url === "string" ? body.url : "";
+  const action = typeof body?.action === "string" ? body.action : "";
+  if (!url || !action) return fail("bad_request", 400);
+  if (!isKnownPortfolio(url)) return fail("not_owner", 403);
+  if (action === "remove" && body.confirm !== true) return fail("confirm_required", 400);
+  await ensureSchema();
+  const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);
+  if (over) return rateLimited(over);
+  const out = await ownerAction(db(), { url, owner: s.raterId, action, now: new Date() });
+  if (!out.ok) return fail(out.error ?? "bad_request", out.error === "not_owner" ? 403 : 400);
+  if (action !== "regrade") {
+    // The quiz pool leaves out removed sites and hidden grades.
+    await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
+    forgetPool();
+  }
+  return NextResponse.json({ state: out.state, ...(out.regrade ? { regrade: out.regrade } : {}) }, { headers: PRIVATE });
+}

@@ -11,11 +11,15 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
 - **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`, plus two for the end-of-day run ([AUTOMATION.md](AUTOMATION.md#end-of-day-run)):
   `GEMINI_API_KEY` (send it with `pass-env pipe portfolio-rank/GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY`) and `GITHUB_DISPATCH_TOKEN` (a fine-grained token for `n8watkins/portfolio-rank` only with "Actions: Read and write"; `pass-env pipe portfolio-rank/GITHUB_DISPATCH_TOKEN -- npx wrangler secret put GITHUB_DISPATCH_TOKEN`), which also starts "grade my portfolio" captures.
-  Optional: `TURNSTILE_SECRET_KEY` turns on Cloudflare Turnstile for poll votes and grade requests (AUTOMATION.md "Polls" and "Grade my portfolio"); without it the check is skipped.
-  Email (grade reports, owner alerts) goes through the `send_email` binding `SEND_EMAIL` from the `EMAIL_FROM` variable; owner alerts need the `OWNER_EMAIL` variable ("Grade my portfolio: owner steps" below).
+  Optional: `TURNSTILE_SECRET_KEY` turns on Cloudflare Turnstile for poll votes, grade requests and report emails (AUTOMATION.md "Polls", "Grade my portfolio" and "Games, badges, claims, live stats and reports"); without it the check is skipped.
+  Email (grade reports, report links, owner alerts) goes through the `send_email` binding `SEND_EMAIL` from the `EMAIL_FROM` variable; owner alerts need the `OWNER_EMAIL` variable ("Grade my portfolio: owner steps" below).
+  Optional: `GITHUB_API_TOKEN` (a fine-grained token with no permissions, public data only) raises the GitHub API rate limit for claims and the live stats.
   Without `GITHUB_DISPATCH_TOKEN` the nightly checks are not started from Cloudflare (one log line says so) and their GitHub schedule runs as the fallback.
   `SHOTS_BASE_URL` and `AUTH_URL` (the site's address) are plain variables in `wrangler.jsonc`; `lib/site.ts` holds the same address for canonical URLs, share links and the sitemap.
-  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_LOGIN`, `GRADER_ENABLED` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_LOGIN`, `GRADER_ENABLED`, `GAMES_V2` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+- **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
+  Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
+  Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
 - **Cron Triggers and the Workflow:** `triggers.crons` and `workflows` in `wrangler.jsonc`; `npx wrangler triggers deploy` is not needed, a deploy registers them (they can take up to 15 minutes to reach every location).
   Check them in the dashboard (Workers & Pages, portfolio-rank, Settings, Triggers) or with `npx wrangler workflows instances list portfolio-rank-night`.
 - **Screenshots and favicons:** the Worker answers `/shots/<shot_key>/<file>` and `/favicon/<domain>` itself, before the app (`worker/assets.ts`), from the edge cache when it can.

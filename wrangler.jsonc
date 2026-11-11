@@ -64,6 +64,10 @@
     // "Grade my portfolio" (lib/grader, AUTOMATION.md): its API and crons do
     // nothing until this is "true", which waits for the redesign's UI.
     "GRADER_ENABLED": "false",
+    // Games, badges, claims, live stats and report downloads (lib/games):
+    // every one of their routes answers 404 until this is "true", which
+    // happens with the redesign.
+    "GAMES_V2": "false",
     // The sender of every email (lib/email/gate.mjs).
     "EMAIL_FROM": "portfoliorank@n8builds.dev"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
@@ -140,6 +144,7 @@
         "NIGHTLY_REFRESH": "150",
         "ADMIN_GITHUB_LOGIN": "n8watkins",
         "GRADER_ENABLED": "false",
+        "GAMES_V2": "false",
         "EMAIL_FROM": "portfoliorank@n8builds.dev"
       },
       // No crons at all: the end-of-day run, the people queue and model watch

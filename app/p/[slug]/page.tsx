@@ -12,6 +12,7 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
+import { ownerState } from "@/lib/games/claims.mjs";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -156,7 +157,11 @@ export default async function PortfolioPage({
       args: [url],
     })
   ).rows[0];
-  const grade = publicGrade(rubricRow?.ai_rubric);
+  // A verified owner may remove their portfolio or hide its grade
+  // (lib/games/claims.mjs); a removed one is gone at once.
+  const owner = await ownerState(db(), url);
+  if (owner.removedAt) notFound();
+  const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
 
   const shot = await shotFor(url);
 

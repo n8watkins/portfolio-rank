@@ -64,6 +64,23 @@ To be removed, or to stay listed but never be named in posts, see [removal.md](r
 - No API ever shows who voted for what; results are totals.
 - Individual poll votes are deleted 30 days after the poll closes; the totals stay.
 
+## If you play the games (when they launch)
+
+- Your quiz answers are stored with your account id, or the random id from your practice-vote cookie, with the time and the percentiles they were scored against.
+- Badges you earn are stored the same way, with what they need: how many times you shared a result, and which portfolios you opened (at most 50).
+- "Your eye" (how often you agree with the crowd and the AI) is worked out from your own votes and answers; nobody else sees it.
+- If you sign in afterwards, your quizzes and badges move to your account.
+- Challenge links share the five portfolios of a quiz, never your answers.
+
+## If you claim your portfolio (when claims launch)
+
+- Claiming needs a GitHub sign-in.
+  I store your GitHub id number and username with the portfolio's address, how the claim was verified, and a note if you write one.
+- To verify, the site fetches your portfolio's public home page and your public GitHub profile (to compare its Website field).
+- Every claim, review and owner action (removing the site, hiding its grade, asking for a re-grade) goes into an audit log with your GitHub id number and the time, so a removal can always be traced to whoever asked for it.
+- If you remove your portfolio, it disappears from the site at once and its address goes on the public removals list in the site's repository, marked "owner request", without your name; the removed-portfolios page only counts these.
+- If you ask for a report link by email, your address is used to send that one email and is not stored; only a one-way hash of it counts how many emails it got that day (at most 3).
+
 ## If you grade your portfolio (when "grade my portfolio" launches)
 
 - I store the address you submit, its screenshots, page text, measured facts and the report.
@@ -120,6 +137,9 @@ None of them get your data to sell, and neither do I.
 | Votes and ratings, including practice votes | As long as the site runs (the leaderboard is computed from them) |
 | Individual poll votes | 30 days after the poll closes; the totals stay |
 | Likes and lists | Until you delete them, or ask me to delete your account's data |
+| Quiz answers and badges | Until you ask me to delete your account's data [owner: confirm, or set a limit] |
+| Claims and the claims audit log | As long as the site runs [owner: confirm] |
+| One-time report links (a hash, never the email address) | Until they expire (a day), deleted that night |
 | Listed site data | While listed, then deleted 30 days after it leaves the list |
 | Hashed network addresses (rate limits) | At most 30 days |
 | Gemini request log (which job asked, when, tokens used; no visitor data) | 90 days, then only daily totals |

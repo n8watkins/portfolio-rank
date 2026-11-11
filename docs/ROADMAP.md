@@ -54,6 +54,9 @@ Stops the current 30 AI votes a day in the shared ELO pool once it lands.
 | Shared shell, light theme, icons, phone tab bar, `/browse` with the grid moved off home | to do |
 | Face-off that fits on a phone, leaderboard tabs, portfolio page with the shared grade card | to do |
 | Privacy page and the other legal pages, from the drafts in [legal/](legal/) | needs owner (placeholders), then to do |
+| Back end for the redesign's games: Guess the percentile (Daily 5, random quizzes, challenge links, server-side scoring, "your eye"), 20 badges with the guest merge at sign-in, claim your portfolio with owner removal, hidden grades and re-grade requests, one live stats endpoint, the report download (AUTOMATION.md "Games, badges, claims, live stats and reports") | building, behind `GAMES_V2` (off) |
+| Screens for the games, badges, claims, live stats and report download, then `GAMES_V2=true` | to do, with the redesign |
+| Early supporter badge: the last day it is given (`EARLY_SUPPORTER_UNTIL`) | needs owner |
 
 Depends on: can start alongside phase 2; the leaderboard tabs fill in when ranking lands.
 

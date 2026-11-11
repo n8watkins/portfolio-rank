@@ -81,7 +81,7 @@ test("night runs older than 180 days go; comparisons keep everything the recompu
   await c("2026-10-30T00:00:00.000Z", 2); // recent
   const before = inputDigest(await loadInput(d));
   const out = await pruneLogs(d, { now: NOW });
-  assert.deepEqual(out, { nightRuns: 1, reasons: 1, alerts: 0 });
+  assert.deepEqual(out, { nightRuns: 1, reasons: 1, alerts: 0, links: 0, badgeChecks: 0 });
   assert.deepEqual((await d.execute("SELECT night FROM night_runs")).rows.map((x) => x.night), ["2026-11-09"]);
   const rows = (await d.execute("SELECT source, shown, ranking, reason FROM comparisons ORDER BY source")).rows.map((x) => [x.source, x.shown, x.ranking, x.reason]);
   assert.deepEqual(rows, [

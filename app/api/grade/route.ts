@@ -10,6 +10,8 @@ import { startCapture } from "@/lib/grader/dispatch.mjs";
 import { checkOwnKey, validOwnKey } from "@/lib/grader/own-key.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
 import { quotaDay } from "@/pipeline/quota-day.mjs";
+import { recordEvent } from "@/lib/games/badges.mjs";
+import { gamesEnabled } from "@/lib/games/server";
 import {
   PRIVATE,
   addOwnedJob,
@@ -132,6 +134,8 @@ export async function POST(req: Request) {
     });
   }
   await addOwnedJob(id);
+  // An accepted request counts toward the games' grade badges (First grade, 10 grades).
+  if (gamesEnabled()) await recordEvent(client, who.player, "grade");
   const job = await readJob(client, id);
   return NextResponse.json(publicJob(job, { mine: true }), { status: 202, headers: PRIVATE });
 }

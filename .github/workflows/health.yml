@@ -103,6 +103,11 @@ jobs:
       - name: Check every listed site and exclude confirmed-down ones
         run: node pipeline/health-check.mjs --concurrency 8 --exclusions
 
+      # Portfolios their verified owners removed (lib/games/claims.mjs) join
+      # the same pull request, as "owner request" (pipeline/owner-removals.mjs).
+      - name: Add owner removals
+        run: node pipeline/owner-removals.mjs
+
       - name: Detect exclusions
         id: excl
         run: |
@@ -133,7 +138,7 @@ jobs:
             const before = JSON.parse(require("child_process").execSync("git show HEAD:data/excluded.json"));
             const after = require("./data/excluded.json");
             console.log(after.length - before.length);')
-          title="chore(data): exclude ${added} confirmed-down portfolio(s) $(date -u +%Y-%m-%d)"
+          title="chore(data): exclude ${added} portfolio(s) $(date -u +%Y-%m-%d)"
           bot_id=$(gh api "/users/${BOT_SLUG}%5Bbot%5D" --jq .id)
           git config user.name "${BOT_SLUG}[bot]"
           git config user.email "${bot_id}+${BOT_SLUG}[bot]@users.noreply.github.com"
@@ -142,7 +147,7 @@ jobs:
           git commit -m "$title" -m "Release-note: skip"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin "HEAD:refs/heads/$BRANCH"
-          body="Sites the weekly health check confirmed down (3 failed checks in a row over 13+ days) move to data/excluded.json with the reason and the evidence, and out of data/feed.json. They show on /removed once this merges.
+          body="Sites the weekly health check confirmed down (3 failed checks in a row over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json. They show on /removed once this merges; owner requests are counted there, never named.
 
           Opened by the [Weekly health check run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
           open=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
