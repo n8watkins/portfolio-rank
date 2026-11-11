@@ -3,7 +3,6 @@ import { SITE } from "@/lib/site";
 import type { PrimaryAction } from "@/lib/nav";
 import { AccountMenu } from "@/components/shell/AccountMenu";
 import { HeaderNav } from "@/components/shell/HeaderNav";
-import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { Wordmark } from "@/components/shell/Wordmark";
 
 /**
@@ -41,8 +40,6 @@ export function SiteHeader({ action }: { action: PrimaryAction | null }) {
         </div>
         <HeaderNav />
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {/* Below 360 px the toggle gives way; the theme stays in the More sheet. */}
-          <ThemeToggle className="max-[359px]:hidden" />
           {action && (
             <a
               href={action.href}
