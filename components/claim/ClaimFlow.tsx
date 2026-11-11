@@ -44,7 +44,7 @@ const errorText = (b: Record<string, unknown>) => ERRORS[String(b.error)] ?? "Th
  * is the site's domain, else with a meta tag (or a review by hand); then the
  * owner can ask for a re-grade, hide the grade, or remove the portfolio.
  */
-export function ClaimFlow({ url, name, domain, hero }: { url: string; name: string; domain: string; hero: string | null }) {
+export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: string; name: string; domain: string; hero: string | null; /** Re-grades are offered only while the games are on (GAMES_V2). */ regrade?: boolean }) {
   const session = useClientSession();
   const [current, setStep] = useState<Step>("loading");
   const [claim, setClaim] = useState<Claim | null>(null);
@@ -151,8 +151,8 @@ export function ClaimFlow({ url, name, domain, hero }: { url: string; name: stri
               Claim {domain}
             </h1>
             <p className="mt-2 text-mute">
-              Claiming lets you remove your portfolio from PortfolioRank, hide its grade, or ask for a re-grade. We tie it to your GitHub account, the same way removal requests
-              already work.
+              Claiming lets you remove your portfolio from PortfolioRank{regrade ? ", hide its grade, or ask for a re-grade" : " or hide its grade"}. We tie it to your GitHub
+              account, the same way removal requests already work.
             </p>
             <button
               type="button"
@@ -279,16 +279,18 @@ export function ClaimFlow({ url, name, domain, hero }: { url: string; name: stri
               Manage {domain}
             </h1>
             <ul className="mt-6 grid gap-3">
-              <li className="flex flex-wrap items-center gap-4 rounded-xl border border-edge p-4">
-                <RefreshCw className="h-5 w-5 shrink-0 text-mute" aria-hidden />
-                <span className="min-w-0 flex-1 text-sm">
-                  <span className="block font-semibold">Request a re-grade</span>
-                  <span className="block text-mute">After a change to your site. Once a week at most.</span>
-                </span>
-                <button type="button" disabled={busy} onClick={() => act("regrade")} className={btnSecondary}>
-                  Re-grade
-                </button>
-              </li>
+              {regrade && (
+                <li className="flex flex-wrap items-center gap-4 rounded-xl border border-edge p-4">
+                  <RefreshCw className="h-5 w-5 shrink-0 text-mute" aria-hidden />
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="block font-semibold">Request a re-grade</span>
+                    <span className="block text-mute">After a change to your site. Once a week at most.</span>
+                  </span>
+                  <button type="button" disabled={busy} onClick={() => act("regrade")} className={btnSecondary}>
+                    Re-grade
+                  </button>
+                </li>
+              )}
               <li className="flex flex-wrap items-center gap-4 rounded-xl border border-edge p-4">
                 <EyeOff className="h-5 w-5 shrink-0 text-mute" aria-hidden />
                 <span className="min-w-0 flex-1 text-sm">

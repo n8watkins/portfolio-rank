@@ -308,3 +308,17 @@ test("how grading works: the five tiers, the bands, what's checked, how votes co
   assert.match(sitemap, /\/grading<\/loc>/);
   assert.doesNotMatch(sitemap, /\/grade\/[A-Za-z0-9_-]{22}/);
 });
+
+test("claim: always reachable, finds a listed site by its address", async () => {
+  const { page: p, context, errors } = await freshPage(390, 844);
+  await p.goto(`${BASE}/claim`);
+  await p.getByRole("heading", { level: 1, name: "Remove or manage your portfolio" }).waitFor();
+  const host = new URL(LISTED).hostname.replace(/^www\./, "");
+  await p.getByLabel("Your portfolio address").fill(host);
+  await p.getByRole("button", { name: "Find it" }).click();
+  await p.getByRole("heading", { level: 1, name: new RegExp(`Claim ${host.replace(/\./g, "\\.")}`) }).waitFor();
+  await p.goto(`${BASE}/claim?url=no-such-portfolio.example`);
+  await p.getByText("That address isn't on the list.").waitFor();
+  assert.deepEqual(errors, []);
+  await context.close();
+});
