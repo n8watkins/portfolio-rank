@@ -186,7 +186,7 @@ test("GEMINI_BUDGET overrides merge over the defaults; a broken value keeps the 
   assert.deepEqual(p.stages.compare, { cap: 50, minutes: 45 });
   assert.deepEqual(p.stages.grade_new, DEFAULT_PLAN.stages.grade_new);
   assert.deepEqual(budgetPlan("{not json"), DEFAULT_PLAN);
-  assert.deepEqual(STAGES.map((s) => s.label), ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Re-grades (3.1 and older rubric)", "Experiments"]);
+  assert.deepEqual(STAGES.map((s) => s.label), ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Image library", "Re-grades (3.1 and older rubric)", "Experiments"]);
 });
 
 test("usage history: 30 Pacific days, per job and model, newest first, for the admin view", async () => {

@@ -72,7 +72,7 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
   assert.ok(yesterday.requests >= 1 && yesterday.ok === 0);
   assert.deepEqual(
     body.now.background.map((s) => s.label),
-    ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Re-grades (3.1 and older rubric)", "Experiments"]
+    ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Image library", "Re-grades (3.1 and older rubric)", "Experiments"]
   );
   assert.equal(typeof body.now.people, "number");
   assert.ok(Array.isArray(body.nights) && Array.isArray(body.parked) && Array.isArray(body.alerts));
@@ -81,6 +81,14 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
   assert.match(body.tavily.month, /^\d{4}-\d{2}$/);
   assert.equal(typeof body.tavily.used, "number");
   assert.equal(body.tavily.cap, 200);
+  // Pexels searches this month (500 by default) and today's AI images, "N of 40", with their neurons.
+  assert.match(body.pexels.month, /^\d{4}-\d{2}$/);
+  assert.equal(typeof body.pexels.used, "number");
+  assert.equal(body.pexels.cap, 500);
+  assert.match(body.aiImages.day, /^\d{4}-\d{2}-\d{2}$/);
+  assert.deepEqual([body.aiImages.images, body.aiImages.maxImages, body.aiImages.ceiling, body.aiImages.slice, body.aiImages.free], [0, 40, 2500, 5000, 10000]);
+  assert.equal(body.aiImages.problem, null);
+  assert.equal(body.library.subjects, 130);
 });
 
 test("admin quota API: the latest model watch report, recorded even while email is off", async () => {

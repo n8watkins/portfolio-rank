@@ -56,12 +56,13 @@ export type NightEnv = CloudflareEnv & {
   AUTH_SECRET?: string;
   EMAIL_CAPS?: string;
   // The content engine's optional keys (docs/CONTENT-ENGINE.md): without
-  // Tavily, outside claims are cut; without Unsplash or Pexels, no stock photos.
+  // Tavily, outside claims are cut; without Pexels, no stock photos.
   TAVILY_API_KEY?: string;
   // Tavily credits PortfolioRank may use a month (lib/content/tavily-credits.mjs); 200 when missing.
   TAVILY_MONTHLY_CREDITS?: string;
-  UNSPLASH_ACCESS_KEY?: string;
   PEXELS_API_KEY?: string;
+  // Pexels searches a month (lib/content/pexels-searches.mjs); 500 when missing.
+  PEXELS_MONTHLY_SEARCHES?: string;
 };
 
 type NightParams = { trigger: "cron" | "manual"; scheduledTime?: number };
@@ -79,6 +80,12 @@ function engine(env: NightEnv, runId: string) {
   // The app's database module (Turso over the network), never a client of its own.
   const db = database();
   const plan = budgetPlan(env.GEMINI_BUDGET);
+  // Content and library images go to the SHOTS bucket under prefixes that
+  // /shots does not serve (content/<SITE_ENV>/, private/library/<SITE_ENV>/).
+  const store = async (key: string, bytes: Uint8Array, contentType: string) => {
+    await env.SHOTS.put(key, bytes, { httpMetadata: { contentType } });
+    return key;
+  };
   return {
     db,
     apiKey: env.GEMINI_API_KEY,
@@ -116,17 +123,17 @@ function engine(env: NightEnv, runId: string) {
     // Owner alerts through the shared email gate (pipeline/alerts.mjs
     // emailSender); null until the send_email binding and OWNER_EMAIL exist.
     email: emailSender(env, { db }),
-    // The content engine (pipeline/content/engine.mjs): its images go to the
-    // SHOTS bucket under content/<SITE_ENV>/, which /shots does not serve.
+    // The content engine (pipeline/content/engine.mjs).
     content: {
       env: String(env.SITE_ENV ?? "production"),
       tavilyMonthlyCredits: env.TAVILY_MONTHLY_CREDITS,
-      keys: { tavily: env.TAVILY_API_KEY, unsplash: env.UNSPLASH_ACCESS_KEY, pexels: env.PEXELS_API_KEY },
+      keys: { tavily: env.TAVILY_API_KEY, pexels: env.PEXELS_API_KEY },
+      pexelsMonthlySearches: env.PEXELS_MONTHLY_SEARCHES,
+      // The day's AI image limits (lib/content/neurons.mjs aiLimits).
+      aiEnv: { MAX_AI_IMAGES_PER_DAY: env.MAX_AI_IMAGES_PER_DAY, AI_NEURON_CEILING: env.AI_NEURON_CEILING },
+      // Every Workers AI call goes through the portfoliorank-ai gateway (lib/ai-gateway.mjs).
       ai: withGateway(env.AI),
-      store: async (key: string, bytes: Uint8Array, contentType: string) => {
-        await env.SHOTS.put(key, bytes, { httpMetadata: { contentType } });
-        return key;
-      },
+      store,
     },
     runId,
   };

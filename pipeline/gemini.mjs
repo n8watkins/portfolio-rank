@@ -319,7 +319,10 @@ export function createGemini({
     let slowdowns = 0;
     let idx = active;
     let oneOff = false; // this call alone moved to the backup after retries
+    // options.noRetry: exactly one HTTP request (the image checks; owner rule
+    // "no retries anywhere"): any failure ends the call at once.
     const spendRetry = (model, reason) => {
+      if (options.noRetry) throw new GeminiUnavailableError(`gemini ${model} ${reason}; no retry for this call`);
       if (counts.retries >= retryBudget) {
         throw new GeminiRetryBudgetError(`gemini ${model} ${reason}: this run's retry budget (${retryBudget}) is used up`);
       }
@@ -359,7 +362,7 @@ export function createGemini({
         continue;
       }
       if (out.kind === "slow") {
-        if (++slowdowns > maxSlowdowns) {
+        if (options.noRetry || ++slowdowns > maxSlowdowns) {
           throw new GeminiUnavailableError(`gemini ${model}: still rate limited after ${maxSlowdowns} slowdowns`);
         }
         const wait = retryDelayFrom(out.body) ?? slowdownMs;
@@ -377,6 +380,7 @@ export function createGemini({
         await sleep(wait);
         continue;
       }
+      if (options.noRetry) throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason}; no retry for this call`);
       if (!oneOff && idx + 1 < models.length) {
         log(`  gemini ${model} ${out.reason} after ${retryDelaysMs.length} retries; this call goes to ${models[idx + 1]}`);
         counts.fallbacks++;

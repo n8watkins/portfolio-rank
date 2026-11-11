@@ -1,24 +1,39 @@
-// Images (docs/CONTENT-ENGINE.md, "Images", gate 5): each slot the writer
-// proposed is filled from one source with a known licence, in this order of
-// preference: a chart drawn by code from the fact sheet, our own R2
-// screenshot of a named, positive site, a free-licence stock photo
-// (Unsplash, then Pexels), or a Workers AI illustration (flux-1-schnell).
-// Stock photos and illustrations are reviewed by Gemini (one request per
-// slot, with up to 3 candidates; one retry). A slot with no good image
-// becomes an unused chart or is dropped: a post can go out with fewer
-// images, never with a bad one. Every image records its source, licence,
-// credit and review. Each source is optional and skipped cleanly when its
-// key or binding is missing.
+// Images (docs/CONTENT-ENGINE.md, "Images", gate 5). The writer proposes a
+// hero and 2 or 3 inline slots, each with a brief (what it shows, the mood,
+// 5 keywords, alt text) at no extra request. Each slot is filled once, from
+// the first of these that works:
+//
+//   1. chart or screenshot slots: a chart drawn by code from the fact sheet,
+//      or our own R2 screenshot of a named, positive site (no request);
+//   2. the image library: the approved image whose tags best match the
+//      brief's keywords, not used in the last 10 posts (no request);
+//   3. Pexels (PEXELS_API_KEY): one search, the top 3, one Gemini check to
+//      choose; at most 1 search a slot and 2 a post;
+//   4. one fresh illustration (Flux Schnell; Lucid Origin only when Schnell
+//      errors), within the day's AI image limits, one Gemini check on the
+//      16:9 crop; at most 1 a post; it also joins the library as pending;
+//   5. the fallback: the best library match even if used recently, then an
+//      unused chart, else the slot is dropped.
+//
+// Hard limits: 1 hero and up to 3 inline images (the template check), at
+// most 3 Gemini image checks a post, and no retries anywhere: every failure
+// moves on to the next step. Every image records its source, licence, credit
+// and approval; generated ones are captioned "AI-generated illustration".
 //
 // Owner decision 3 (2026-11-10): stock photos with people are allowed, but
 // never as the hero and never next to a named developer.
+import crypto from "node:crypto";
 import { renderChart } from "./charts.mjs";
+import { AI_CAPTION, imagePrompt } from "./house-style.mjs";
+import { GENERATED, buildCheckRequest, checkPasses, generateIllustration } from "./workers-ai.mjs";
+import { insertImage, libraryKey, matchLibrary, recordUse } from "../../lib/content/library.mjs";
+import { PEXELS_PER_POST, reserveSearch } from "../../lib/content/pexels-searches.mjs";
 
-export const FLUX_MODEL = "@cf/black-forest-labs/flux-1-schnell";
-/** Workers AI candidates a post may generate (3 slots x 3). */
-export const AI_IMAGES_PER_POST = 9;
+/** Gemini image checks a post may make (Pexels choices and fresh illustrations). */
+export const MAX_IMAGE_CHECKS = 3;
+/** Fresh illustrations a post may generate. */
+export const FRESH_PER_POST = 1;
 export const CANDIDATES = 3;
-const UTM = "utm_source=portfoliorank&utm_medium=referral";
 
 export const REVIEW_SCHEMA = {
   type: "OBJECT",
@@ -45,10 +60,11 @@ export const REVIEW_SCHEMA = {
   required: ["candidates", "choice"],
 };
 
+/** The one Gemini look at a slot's stock candidates. */
 export function buildReviewRequest(slot, paragraph, candidates, source) {
   const text = [
     `Review ${candidates.length} candidate image(s) for one slot of a PortfolioRank blog post (${source}).`,
-    `Slot: ${slot.slot}. Purpose: ${slot.purpose}. Alt text: ${slot.alt}.`,
+    `Slot: ${slot.slot}. Purpose: ${slot.purpose}. Mood: ${slot.mood ?? "calm, confident"}. Alt text: ${slot.alt}.`,
     `The paragraph it sits next to: ${String(paragraph).slice(0, 800)}`,
     "For each candidate (index 0 first, in the order shown) answer: fits (it shows what the purpose asks, clearly, at blog quality), people (any person or face is visible), garbled_text (any letters, words or numbers, especially malformed ones), odd_hands_or_faces, resembles_real_person (looks like a specific real or famous person), brand_logo (a recognisable logo or product), fake_screenshot (looks like a screenshot of a real website or app).",
     "choice: the index of the best candidate that fits and has none of those problems, or -1 when none does.",
@@ -57,14 +73,14 @@ export function buildReviewRequest(slot, paragraph, candidates, source) {
   return {
     parts: [{ text }, ...candidates.map((c) => ({ inline_data: { mime_type: c.mime, data: c.base64 } }))],
     schema: REVIEW_SCHEMA,
-    options: { systemInstruction: "You are a careful photo editor.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0 },
+    options: { systemInstruction: "You are a careful photo editor.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0, noRetry: true },
   };
 }
 
 /**
  * Code's side of the review: the chosen candidate if it passes every rule,
  * else the first that does, else null. `peopleAllowed` is false for the hero
- * and next to a named developer; illustrations never show a person.
+ * and next to a named developer.
  */
 export function chooseCandidate(answer, count, { peopleAllowed }) {
   const byIndex = new Map((answer?.candidates ?? []).map((c) => [Number(c.index), c]));
@@ -88,27 +104,9 @@ async function fetchBytes(url, fetchImpl) {
   return { base64: b64(buf), mime: res.headers.get("content-type")?.split(";")[0] || "image/jpeg" };
 }
 
-/** Unsplash search: candidates with their credit; hotlinked as Unsplash asks. */
-async function unsplash(query, { key, fetchImpl, page = 1 }) {
-  const u = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${CANDIDATES}&page=${page}&orientation=landscape&content_filter=high`;
-  const res = await fetchImpl(u, { headers: { authorization: `Client-ID ${key}`, "accept-version": "v1" }, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`unsplash answered ${res.status}`);
-  const data = await res.json();
-  return (data.results ?? []).slice(0, CANDIDATES).map((p) => ({
-    source: "unsplash",
-    thumb: p.urls?.small,
-    url: p.urls?.regular,
-    licence: "Unsplash License",
-    credit: `Photo by ${p.user?.name ?? "an Unsplash photographer"} on Unsplash`,
-    creditUrl: `${p.user?.links?.html ?? "https://unsplash.com"}?${UTM}`,
-    sourceUrl: `https://unsplash.com/?${UTM}`,
-    download: p.links?.download_location,
-  }));
-}
-
-/** Pexels search: candidates with their credit. */
-async function pexels(query, { key, fetchImpl, page = 1 }) {
-  const u = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${CANDIDATES}&page=${page}&orientation=landscape`;
+/** One Pexels search: up to 3 candidates with their credit. */
+export async function pexelsSearch(query, { key, fetchImpl }) {
+  const u = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${CANDIDATES}&orientation=landscape`;
   const res = await fetchImpl(u, { headers: { authorization: key }, signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`pexels answered ${res.status}`);
   const data = await res.json();
@@ -123,16 +121,6 @@ async function pexels(query, { key, fetchImpl, page = 1 }) {
   }));
 }
 
-/** Workers AI candidates, as JPEG bytes in base64. */
-async function illustrations(prompt, { ai, n }) {
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const r = await ai.run(FLUX_MODEL, { prompt: `${prompt}. Flat vector illustration, dark background, amber and grey accents, no text, no letters, no logos, no real people.`, steps: 4 });
-    if (r?.image) out.push({ source: "workers-ai", base64: r.image, mime: "image/jpeg" });
-  }
-  return out;
-}
-
 /** The paragraph before an image marker (what the image sits next to). */
 export function paragraphBefore(body, slot) {
   const at = body.indexOf(`[[image:${slot}]]`);
@@ -141,24 +129,52 @@ export function paragraphBefore(body, slot) {
   return paras.at(-1) ?? "";
 }
 
+/** A brief's keywords: the writer's, else words from the purpose, query or prompt. */
+export function briefKeywords(slot) {
+  const given = (slot.keywords ?? []).map((k) => String(k).trim()).filter(Boolean);
+  if (given.length) return given.slice(0, 8);
+  return String([slot.query, slot.purpose, slot.prompt].filter(Boolean).join(" "))
+    .split(/[^A-Za-z0-9+#-]+/)
+    .filter((w) => w.length > 2)
+    .slice(0, 8);
+}
+
+/** Chart and screenshot slots are filled by code; every other kind is a picture. */
+const isPicture = (slot) => slot.kind !== "chart" && slot.kind !== "screenshot";
+
 /**
- * Fills every slot. ctx: { postId, env, fetchImpl, keys: { unsplash,
- * pexels }, ai, store(key, bytes, contentType) -> stored key, generate(request) }.
- * budget: { gemini } requests this step may still spend. Returns
- * { images, dropped, requests, aiImages, notes }.
+ * Fills every slot. ctx: { postId, env, db, now, fetchImpl, keys: { pexels },
+ * pexelsCap, ai, limits (aiLimits), store(key, bytes, contentType) -> key,
+ * generate(request) -> answer }. budget: { gemini } requests this step may
+ * still spend. Returns { images, dropped, requests, aiImages, pexels, notes, body }.
  */
 export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }) {
-  const out = { images: [], dropped: [], requests: 0, aiImages: 0, notes: [] };
+  const out = { images: [], dropped: [], requests: 0, aiImages: 0, pexels: 0, notes: [] };
+  const now = () => new Date(ctx.now ? ctx.now() : Date.now());
   const usedCharts = new Set(slots.filter((s) => s.kind === "chart").map((s) => s.chart_id));
+  const usedLibrary = new Set();
   const keyFor = (slot, ext) => `content/${ctx.env}/${ctx.postId}/${slot}.${ext}`;
   const names = sheet.names.map((n) => n.name).filter(Boolean);
+  const checksLeft = () => Math.min(MAX_IMAGE_CHECKS - out.requests, budget.gemini - out.requests);
 
   const chartImage = async (slot, chart, alt) => {
     const svg = renderChart(chart, sheet.facts);
     const key = await ctx.store(keyFor(slot.slot, "svg"), new TextEncoder().encode(svg), "image/svg+xml");
-    return { slot: slot.slot, kind: "chart", source: "code", chartId: chart.id, key, alt, licence: "ours", credit: "Chart: PortfolioRank data", review: "none needed: drawn from the checked facts" };
+    return { slot: slot.slot, kind: "chart", source: "code", chartId: chart.id, key, alt, licence: "ours", credit: "Chart: PortfolioRank data", approval: "not needed: drawn by code from the checked facts" };
+  };
+  const libraryImage = async (slot, img, step) => {
+    usedLibrary.add(img.id);
+    if (ctx.db) await recordUse(ctx.db, { imageId: img.id, postId: ctx.postId, slot: slot.slot, now: now() });
+    return { slot: slot.slot, kind: "library", source: img.source, libraryId: img.id, key: img.key, alt: slot.alt || img.alt, caption: img.caption, licence: img.licence, credit: img.credit, approval: `approved by the owner (library, ${step})` };
   };
   const fallback = async (slot, why) => {
+    if (ctx.db && isPicture(slot)) {
+      const again = await matchLibrary(ctx.db, { keywords: briefKeywords(slot), exclude: usedLibrary, allowRecent: true });
+      if (again) {
+        out.notes.push(`${slot.slot}: ${why}; used library image ${again.id} (used recently)`);
+        return libraryImage(slot, again, "fallback");
+      }
+    }
     const spare = sheet.charts.find((c) => !usedCharts.has(c.id));
     if (spare) {
       usedCharts.add(spare.id);
@@ -168,6 +184,72 @@ export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }
     out.notes.push(`${slot.slot}: ${why}; dropped`);
     out.dropped.push(slot.slot);
     return null;
+  };
+
+  // 3. Pexels: one search and one check; null when it yields nothing usable.
+  const fromPexels = async (slot, keywords, para) => {
+    if (!ctx.keys?.pexels) return { why: "no PEXELS_API_KEY" };
+    if (out.pexels >= PEXELS_PER_POST) return { why: `the post's ${PEXELS_PER_POST} Pexels searches are used` };
+    if (checksLeft() < 1) return { why: "no image check left for this post" };
+    if (ctx.db && !(await reserveSearch(ctx.db, { cap: ctx.pexelsCap, now: now() }))) return { why: "the month's Pexels searches are used" };
+    out.pexels++;
+    let cands = await pexelsSearch(keywords.join(" ").slice(0, 100), { key: ctx.keys.pexels, fetchImpl: ctx.fetchImpl }).catch((e) => (out.notes.push(`${slot.slot}: ${e.message}`), []));
+    for (const c of cands) Object.assign(c, await fetchBytes(c.thumb, ctx.fetchImpl).catch(() => ({ base64: null })));
+    cands = cands.filter((c) => c.base64);
+    if (!cands.length) return { why: "Pexels found nothing" };
+    out.requests++;
+    const answer = await ctx.generate(buildReviewRequest(slot, para, cands, "stock photos"));
+    const peopleAllowed = slot.slot !== "hero" && !names.some((n) => para.includes(n));
+    const pick = chooseCandidate(answer, cands.length, { peopleAllowed });
+    if (pick == null) return { why: "no Pexels photo passed the check" };
+    const c = cands[pick];
+    const review = answer.candidates?.find((x) => Number(x.index) === pick) ?? null;
+    return { image: { slot: slot.slot, kind: "stock", source: "pexels", url: c.url, alt: slot.alt, licence: c.licence, credit: c.credit, creditUrl: c.creditUrl, sourceUrl: c.sourceUrl, approval: "Gemini check passed (automatic)", review } };
+  };
+
+  // 4. One fresh illustration and one check; it joins the library as pending (or rejected-auto).
+  const fresh = async (slot, keywords) => {
+    if (!ctx.ai) return { why: "no Workers AI binding" };
+    if (!ctx.db) return { why: "no database for the neuron guard" };
+    if (out.aiImages >= FRESH_PER_POST) return { why: `the post's ${FRESH_PER_POST} fresh illustration is used` };
+    if (checksLeft() < 1) return { why: "no image check left for this post" };
+    const subject = String(slot.prompt || slot.purpose);
+    out.aiImages++;
+    const gen = await generateIllustration({ ai: ctx.ai, db: ctx.db, limits: ctx.limits, prompt: imagePrompt(subject), primary: "schnell", now });
+    if (!gen.ok) return { why: `no illustration (${gen.notes.join("; ")})` };
+    const id = crypto.randomBytes(8).toString("hex");
+    const key = await ctx.store(libraryKey(ctx.env, id), gen.bytes, "image/jpeg");
+    out.requests++;
+    let answer = null;
+    let error = null;
+    try {
+      answer = await ctx.generate(buildCheckRequest({ subject, bytes: gen.bytes }));
+    } catch (e) {
+      error = String(e?.message ?? e).slice(0, 200);
+    }
+    const pass = !error && checkPasses(answer);
+    await insertImage(ctx.db, {
+      id,
+      theme: "post",
+      subject,
+      prompt: subject,
+      model: gen.model,
+      key,
+      width: gen.width,
+      height: gen.height,
+      tags: keywords,
+      alt: slot.alt,
+      ...GENERATED,
+      status: error ? "pending" : pass ? "pending" : "rejected-auto",
+      check: answer ?? { error },
+      neurons: gen.neurons,
+      postId: ctx.postId,
+      now: now(),
+    });
+    if (error) throw new Error(`illustration check: ${error}`);
+    if (!pass) return { why: `the illustration failed its check (${answer?.note ?? "no note"})` };
+    await recordUse(ctx.db, { imageId: id, postId: ctx.postId, slot: slot.slot, now: now() });
+    return { image: { slot: slot.slot, kind: "illustration", source: "workers-ai", model: gen.model, libraryId: id, key, alt: slot.alt, prompt: subject, caption: AI_CAPTION, licence: GENERATED.licence, credit: GENERATED.credit, approval: "Gemini check passed (automatic); in the library as pending", review: answer } };
   };
 
   for (const slot of slots) {
@@ -189,54 +271,26 @@ export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }
               licence: "ours: our capture of a listed portfolio, named for a positive reason",
               credit: `Screenshot of ${shot.name}'s portfolio`,
               creditUrl: shot.url,
-              review: "naming rule checked by code",
+              approval: "not needed: naming rule checked by code",
             }
           : await fallback(slot, `no allowed screenshot of ${slot.site_url}`);
       } else {
+        const keywords = briefKeywords(slot);
         const para = paragraphBefore(filledBody, slot.slot);
-        const peopleAllowed = slot.kind === "stock" && slot.slot !== "hero" && !names.some((n) => para.includes(n));
-        for (let round = 1; round <= 2 && !image; round++) {
-          let cands = [];
-          if (slot.kind === "stock") {
-            const query = String(slot.query || slot.purpose).slice(0, 100);
-            if (ctx.keys.unsplash) cands = await unsplash(query, { key: ctx.keys.unsplash, fetchImpl: ctx.fetchImpl, page: round }).catch((e) => (out.notes.push(`${slot.slot}: ${e.message}`), []));
-            if (!cands.length && ctx.keys.pexels) cands = await pexels(query, { key: ctx.keys.pexels, fetchImpl: ctx.fetchImpl, page: round }).catch((e) => (out.notes.push(`${slot.slot}: ${e.message}`), []));
-            if (!ctx.keys.unsplash && !ctx.keys.pexels) break;
-            for (const c of cands) Object.assign(c, await fetchBytes(c.thumb, ctx.fetchImpl).catch(() => ({ base64: null })));
-            cands = cands.filter((c) => c.base64);
-          } else if (slot.kind === "illustration") {
-            if (!ctx.ai) break;
-            const n = Math.min(CANDIDATES, AI_IMAGES_PER_POST - out.aiImages);
-            if (n <= 0) break;
-            out.aiImages += n;
-            cands = await illustrations(String(slot.prompt || slot.purpose), { ai: ctx.ai, n }).catch((e) => (out.notes.push(`${slot.slot}: workers ai: ${e.message}`), []));
-          }
-          if (!cands.length) break;
-          if (budget.gemini - out.requests < 1) {
-            out.notes.push(`${slot.slot}: no Gemini budget left to review candidates`);
-            break;
-          }
-          const answer = await ctx.generate(buildReviewRequest(slot, para, cands, slot.kind === "stock" ? "stock photos" : "AI-generated illustrations"));
-          out.requests++;
-          const pick = chooseCandidate(answer, cands.length, { peopleAllowed: slot.kind === "stock" && peopleAllowed });
-          if (pick == null) {
-            out.notes.push(`${slot.slot}: review rejected round ${round}`);
-            continue;
-          }
-          const c = cands[pick];
-          const review = answer.candidates?.find((x) => Number(x.index) === pick) ?? null;
-          if (c.source === "workers-ai") {
-            const key = await ctx.store(keyFor(slot.slot, "jpg"), Buffer.from(c.base64, "base64"), "image/jpeg");
-            image = { slot: slot.slot, kind: "illustration", source: "workers-ai", model: FLUX_MODEL, key, alt: slot.alt, prompt: slot.prompt, licence: "generated", credit: "AI-generated illustration", review };
-          } else {
-            if (c.download) await ctx.fetchImpl(c.download, { headers: { authorization: `Client-ID ${ctx.keys.unsplash}` } }).catch(() => {});
-            image = { slot: slot.slot, kind: "stock", source: c.source, url: c.url, alt: slot.alt, licence: c.licence, credit: c.credit, creditUrl: c.creditUrl, sourceUrl: c.sourceUrl, review };
-          }
+        const match = ctx.db ? await matchLibrary(ctx.db, { keywords, exclude: usedLibrary }) : null;
+        if (match) image = await libraryImage(slot, match, "matched by tags");
+        const whys = [];
+        if (!image) {
+          const p = await fromPexels(slot, keywords, para);
+          if (p.image) image = p.image;
+          else whys.push(p.why);
         }
         if (!image) {
-          const why = slot.kind === "stock" && !ctx.keys.unsplash && !ctx.keys.pexels ? "no stock key (UNSPLASH_ACCESS_KEY or PEXELS_API_KEY)" : slot.kind === "illustration" && !ctx.ai ? "no Workers AI binding" : "no candidate passed the review";
-          image = await fallback(slot, why);
+          const f = await fresh(slot, keywords);
+          if (f.image) image = f.image;
+          else whys.push(f.why);
         }
+        if (!image) image = await fallback(slot, whys.join("; "));
       }
     } catch (e) {
       image = await fallback(slot, `failed: ${String(e?.message ?? e).slice(0, 100)}`);

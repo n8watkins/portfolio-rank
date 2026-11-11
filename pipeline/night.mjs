@@ -41,8 +41,11 @@
 //      night and two a week, then the content engine (pipeline/content/
 //      engine.mjs, docs/CONTENT-ENGINE.md) while CONTENT_MODE is not "off":
 //      the week's pick on Sunday, one post a night on the drafting nights
-//   5. Re-grades: 3.1 grades on 3.5, then (RUBRIC_REGRADE) older rubrics
-//   6. Experiments (none scheduled)
+//   5. Image library: no work in the night, only the cap for the library's
+//      Gemini checks, which run on the Worker's hourly tick
+//      (worker/library.ts, pipeline/content/library-stage.mjs)
+//   6. Re-grades: 3.1 grades on 3.5, then (RUBRIC_REGRADE) older rubrics
+//   7. Experiments (none scheduled)
 //
 // No endless retries: each request has the client's own retries (10, 30,
 // 60 s for a busy 3.5), the night has a retry budget (plan.retryBudget), a
@@ -72,6 +75,7 @@ import { comparisonsToday, ensureRankingSchema, inputDigest, insertComparison, l
 import { recompute } from "../lib/ranking/views.mjs";
 import { ensurePollsSchema, schedulePolls } from "./polls.mjs";
 import { contentStage } from "./content/engine.mjs";
+import { libraryStage } from "./content/library-stage.mjs";
 
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
@@ -285,6 +289,8 @@ const handlers = {
   },
   // The weekly polls, then the content engine's posts (pipeline/content/engine.mjs).
   content: contentStage,
+  // The blog's image library, a few house-style illustrations a night (pipeline/content/library-stage.mjs).
+  library: libraryStage,
   regrade: { ...queues.regrade, parkable: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   experiment: { off: () => "nothing scheduled" },
 };

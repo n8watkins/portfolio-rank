@@ -325,10 +325,44 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Why: fewer posts with unique data rank better and look less like spam than many thin ones.
 - **Every post is labelled** "written with AI from PortfolioRank data", with the data linked (owner, 2026-11-10). Status: planned; the disclosure is drafted in [legal/ai-content.md](legal/ai-content.md).
   Why: honesty with readers and with search engines about how the posts are made.
-- **Images pipeline** (owner, 2026-11-10). Status: planned.
+- **Images pipeline** (owner, 2026-11-10). Status: superseded the same day by the image library decisions below (no Unsplash, no candidate rounds, no retry).
   Sources in order of preference: charts made by code, our own screenshots (naming rule applies), Unsplash and Pexels stock with automatic credit, and Cloudflare Workers AI illustrations on the free allowance; Gemini's paid image model is not used.
   Gemini proposes each image slot with alt text, code makes or fetches 2-3 candidates, Gemini picks the best for fit and accuracy, one retry, else a chart or no image.
   Why: charts and screenshots are free and exact; the review catches wrong charts and odd generated images without a human.
+- **Never pay for images: at most 40 AI images a day** (owner, 2026-11-10, tightened twice the same day). Status: built (#94).
+  Every image comes from free daily allowances only.
+  The limit is in images, so it is obvious: at most 40 AI images a UTC day (`MAX_AI_IMAGES_PER_DAY`) and at most 2 in any rolling hour, counted per image, for the library and the posts together.
+  Every Workers AI call goes through the `portfoliorank-ai` AI Gateway (#95: 2 requests an hour, sliding, and a $1 a month Workers AI spend limit); its 429 means stop, no retry, try next hour.
+  Behind it, a neuron guard: at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`; 40 Schnell images are about 2,320).
+  Both settings can be lowered, never raised: a value above 40 or 2,500 (or not a whole number) is rejected and fails closed, so no Workers AI call is made until it is fixed.
+  Before every call, one image and its estimated neurons are reserved in one statement; a failed reservation means no call, nothing is retried, and a reservation is never given back.
+  Estimates from the pricing page, partial tiles rounded up: Flux Schnell 58 an image, Lucid Origin 1,512 (768 x 432, 20 steps), Flux 2 Dev 2,400 (1024 x 576, 16 steps; its native 1280 x 720 would be 4,500, past the ceiling).
+  "AI images today: N of 40" shows on `/admin/images` and in `GET /api/admin/quota`.
+  Why: the account is on Workers Paid, which bills neurons past the free allowance automatically; a count of images is easy to read and to check.
+- **Account-wide Workers AI slices with a strict buffer** (owner, 2026-11-10). Status: built (#94) for PortfolioRank's slice.
+  The account must never pass the free 10,000 neurons a UTC day: PortfolioRank images 5,000, demo-kit 2,000, everything else 1,000, and a 2,000 buffer never used ([COSTS.md](COSTS.md#workers-ai)).
+  PortfolioRank uses at most 2,500 of its 5,000 (the 40-image limit above).
+  Why: each app guards only its own counter, so the slices plus an unused buffer keep the account's total under the free allowance even when one app misjudges its use.
+- **Schnell for everything; Flux 2 Dev later, optional** (owner, 2026-11-10). Status: built (#94).
+  Flux Schnell makes the library and the per-post images; it is square, so code center-crops to 16:9 and the Gemini check sees the cropped image and rejects any text-like marks (Schnell tends to draw fake text).
+  Flux 2 Dev (native 1280 x 720, multipart input) stays configured and off: `LIBRARY_MODEL` "flux2dev" turns it on for the library.
+  Lucid Origin is the backup only when Schnell errors (never after a failed check), still within the guard.
+  Why: Schnell is about 58 neurons an image against 2,400 for Flux 2 Dev, so 40 images fit a day and the library fills in about 4 nights; the house style and the check keep it clean.
+- **The image library** (owner, 2026-11-10). Status: built (#94).
+  26 tech-first themes (the 13 of the style sample plus AI and agents, open source, remote work, interviews, side projects, accessibility, mobile, security, deployment and cloud, learning and growth, the job market, frontend frameworks, backend and data, freelancing) x 5 subjects = 130 images in the house style.
+  The Worker's hourly tick makes up to 2 an hour (the AI Gateway's sliding limit), never from 20:00 to midnight Pacific so the night's post gets the hour, within the 40 AI images a day, one Gemini check each on the 16:9 crop; a pass is pending for the owner, a fail is rejected-auto and kept for the owner to see.
+  The owner keeps or drops each on `/admin/images` (server-checked admin, CSRF-protected POSTs), which also lists the library with usage counts and a retire button; only approved images are used.
+  Images live in the `SHOTS` bucket under `private/library/<SITE_ENV>/` and in `image_library` (schema version 9).
+  The round-1 and round-2 samples were not imported (agent): the night makes the same subjects in the final style.
+  Why: an approved library makes most images free and instant, and a human sees every image once before it can appear.
+- **Per post: brief, then charts, library, Pexels, one fresh image, fallback** (owner, 2026-11-10). Status: built (#94).
+  The writer gives each slot a brief (what it shows, mood, 5 keywords, alt text) at no extra request.
+  A slot is filled by a chart or our screenshot, else the approved library image that best matches the keywords and wasn't used in the last 10 posts, else Pexels (1 search a slot, 2 a post, one Gemini check to choose), else one fresh Schnell illustration a post (one attempt, one check; on a failed check the slot falls back), else the best library match regardless of recent use or a spare chart.
+  Hard limits: 1 hero and up to 3 inline images, at most 3 Gemini image checks a post, no retries anywhere.
+  Every image stores its source, licence, credit and approval; generated images are captioned "AI-generated illustration".
+  Pexels searches are counted per month (`pexels_searches`) and shown in `GET /api/admin/quota` next to Tavily and Gemini, with today's neurons.
+  Unsplash is dropped (agent): the plan has one stock source, and Pexels is configured.
+  Why: a fixed, small cost per post, a consistent look, and a bad image is never worth a retry loop.
 - **Model watch is news only, weekly** (owner, 2026-11-10; weekly by the owner the same day). Status: built (#74).
   Every Monday a Worker cron reads Google's model list (`models.list`, no generate quota), the deprecations page and the release notes, compares them with last week's snapshot and reports new models, retirements with dates, Flash-Lite changes and the status of the models in use through the owner alerts and the admin quota API ([AUTOMATION.md](../AUTOMATION.md#model-watch)).
   It never changes a setting: a new model runs as an experiment first, and switching the judge is a config change by the owner.

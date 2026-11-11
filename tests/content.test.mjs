@@ -28,7 +28,12 @@ import { renderPreview } from "../pipeline/content/preview.mjs";
 import { checkLinksLoad, checkNames, checkNumbers, codeChecks, wordCount } from "../pipeline/content/checks.mjs";
 import { checkClaims, TAVILY_PER_WEEK } from "../pipeline/content/claims.mjs";
 import { choosePicks, denied } from "../pipeline/content/topic.mjs";
-import { AI_IMAGES_PER_POST, chooseCandidate, fillImages } from "../pipeline/content/images.mjs";
+import { chooseCandidate, fillImages } from "../pipeline/content/images.mjs";
+import { insertImage } from "../lib/content/library.mjs";
+import { aiUsage } from "../lib/content/neurons.mjs";
+import { searchUsage } from "../lib/content/pexels-searches.mjs";
+import jpeg from "jpeg-js";
+import crypto from "node:crypto";
 import { contentJob, contentStage, contentSummaryConditions, draftsDue, runDraft, runPick } from "../pipeline/content/engine.mjs";
 import { PUBLISH_CAP, contentMode, contentWeek, listPosts, nextMorning, recordRun, storePost } from "../lib/content/store.mjs";
 
@@ -548,64 +553,135 @@ test("topic filter: the deny list drops politics, crime, disasters, lawsuits and
 // ---------------------------------------------------------------------------
 // Images
 // ---------------------------------------------------------------------------
-test("images: seeded bad images are rejected; people never in the hero; no keys means a chart or nothing", async () => {
-  const { sheet } = await sheetAndRoster();
+test("images: seeded bad stock photos are rejected; people never in the hero", () => {
   const flags = { fits: true, people: false, garbled_text: false, odd_hands_or_faces: false, resembles_real_person: false, brand_logo: false, fake_screenshot: false };
   assert.equal(chooseCandidate({ choice: 0, candidates: [{ index: 0, ...flags, garbled_text: true }, { index: 1, ...flags }] }, 2, { peopleAllowed: true }), 1);
   assert.equal(chooseCandidate({ choice: 0, candidates: [{ index: 0, ...flags, people: true }] }, 1, { peopleAllowed: false }), null);
   assert.equal(chooseCandidate({ choice: 0, candidates: [{ index: 0, ...flags, people: true }] }, 1, { peopleAllowed: true }), 0);
   assert.equal(chooseCandidate({ choice: -1, candidates: [{ index: 0, ...flags, fake_screenshot: true }] }, 1, { peopleAllowed: true }), null);
-
-  // Illustrations: a fake Workers AI; the review rejects every candidate (garbled text), so the slot falls back.
-  let generated = 0;
-  const ai = { run: async (_model, input) => (assert.deepEqual(Object.keys(input).sort(), ["prompt", "steps"], "flux-1-schnell rejects other fields such as seed (error 5006)"), generated++, { image: Buffer.from("jpeg").toString("base64") }) };
-  const slots = [
-    { slot: "hero", purpose: "p", kind: "illustration", prompt: "a desk", alt: "a" },
-    { slot: "inline-1", purpose: "p", kind: "illustration", prompt: "a desk", alt: "a" },
-    { slot: "inline-2", purpose: "p", kind: "illustration", prompt: "a desk", alt: "a" },
-    { slot: "inline-3", purpose: "p", kind: "stock", query: "laptop", alt: "a" },
-  ];
-  const body = "Intro.\n\n[[image:inline-1]]\n\nMore.\n\n[[image:inline-2]]\n\n[[image:inline-3]]";
-  const r = await fillImages(slots, {
-    sheet,
-    body,
-    filledBody: body,
-    budget: { gemini: 20 },
-    ctx: { postId: "p1", env: "test", fetchImpl: async () => new Response("", { status: 500 }), keys: {}, ai, store: async (k) => k, generate: async () => ({ choice: 0, candidates: [0, 1, 2].map((index) => ({ index, ...flags, garbled_text: true })) }) },
-  });
-  assert.ok(generated <= AI_IMAGES_PER_POST, `${generated} generated`);
-  assert.equal(r.aiImages, AI_IMAGES_PER_POST);
-  // The one spare chart replaces the hero; the rest are dropped and their markers removed.
-  assert.deepEqual(r.images.map((i) => `${i.slot}:${i.kind}`), ["hero:chart"]);
-  assert.deepEqual(r.dropped, ["inline-1", "inline-2", "inline-3"]);
-  assert.ok(!r.body.includes("[[image:"));
-  assert.ok(r.notes.some((n) => /no stock key/.test(n)));
 });
 
-test("images: a stock photo is reviewed, credited, and its Unsplash download is reported", async () => {
-  const { sheet } = await sheetAndRoster();
-  const seen = [];
+// A real 1024x1024 JPEG, the shape flux-1-schnell returns.
+const SQUARE = Buffer.from(jpeg.encode({ data: Buffer.alloc(1024 * 1024 * 4, 180), width: 1024, height: 1024 }, 80).data).toString("base64");
+const LIMITS = { maxImages: 40, perHour: 2, ceiling: 2500 };
+const CHECK_OK = { fits: true, on_style: true, text_artifacts: false, people: false, brand_logo: false, fake_screenshot: false, three_d: false, note: "ok" };
+const PICTURES = [
+  { slot: "hero", purpose: "a calm desk", kind: "picture", keywords: ["design", "layout", "grid", "polish", "ui"], alt: "a" },
+  { slot: "inline-1", purpose: "a stack of tools", kind: "picture", keywords: ["tools", "stack", "editor", "terminal", "workflow"], alt: "b" },
+  { slot: "inline-2", purpose: "a fast page", kind: "picture", keywords: ["performance", "speed", "bundle", "weight", "load"], alt: "c" },
+  { slot: "inline-3", purpose: "a ranking", kind: "picture", keywords: ["rankings", "data", "leaderboard", "chart", "scores"], alt: "d" },
+];
+const PICTURE_BODY = "Intro.\n\n[[image:inline-1]]\n\nMore.\n\n[[image:inline-2]]\n\nEnd.\n\n[[image:inline-3]]";
+const noFetch = async () => new Response("", { status: 500 });
+const fill4 = (sheet, ctx, slots = PICTURES) => fillImages(slots, { sheet, body: PICTURE_BODY, filledBody: PICTURE_BODY, budget: { gemini: 20 }, ctx: { env: "test", now: () => MONDAY, fetchImpl: noFetch, keys: {}, ai: null, store: async (k) => k, ...ctx } });
+
+async function approvedImage(db, theme, tags) {
+  const id = crypto.randomBytes(8).toString("hex");
+  await insertImage(db, { id, theme, key: `private/library/test/${id}.jpg`, tags, alt: "alt", caption: "AI-generated illustration", source: "workers-ai", licence: "generated", credit: "AI-generated illustration", status: "approved" });
+  return id;
+}
+
+test("images: approved library images fill matching slots first, with no request; pending ones never", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const design = await approvedImage(db, "design-polish", ["design", "layout", "grid"]);
+  await insertImage(db, { id: "0".repeat(16), theme: "tools-stacks", key: "k", tags: ["tools", "stack"], alt: "a", caption: "c", source: "workers-ai", licence: "l", credit: "c", status: "pending" });
+  let requests = 0;
+  const r = await fill4(sheet, { postId: "p1", db, generate: async () => (requests++, {}) }, PICTURES.slice(0, 2));
+  assert.equal(requests, 0);
+  assert.equal(r.images[0].kind, "library");
+  assert.equal(r.images[0].libraryId, design);
+  assert.match(r.images[0].approval, /approved by the owner/);
+  // The pending tools image is never used: inline-1 falls back to a spare chart.
+  assert.equal(r.images[1].kind, "chart");
+  const uses = (await db.execute("SELECT image_id, post_id, slot FROM image_library_uses")).rows.map((x) => `${x.image_id}:${x.post_id}:${x.slot}`);
+  assert.deepEqual(uses, [`${design}:p1:hero`]);
+});
+
+test("images: Pexels gets 1 search a slot and 2 a post, each counted for the month; people never in the hero", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const searches = [];
   const fetchImpl = async (url) => {
-    seen.push(String(url));
-    if (String(url).startsWith("https://api.unsplash.com/search")) {
-      return new Response(JSON.stringify({ results: [{ urls: { small: "https://images.example/s.jpg", regular: "https://images.example/r.jpg" }, links: { download_location: "https://api.unsplash.com/photos/x/download" }, user: { name: "Ada", links: { html: "https://unsplash.com/@ada" } } }] }), { status: 200 });
+    if (String(url).startsWith("https://api.pexels.com/v1/search")) {
+      searches.push(String(url));
+      return new Response(JSON.stringify({ photos: [{ src: { medium: "https://images.example/m.jpg", large2x: "https://images.example/l.jpg" }, photographer: "Ada", photographer_url: "https://www.pexels.com/@ada", url: "https://www.pexels.com/photo/1" }] }), { status: 200 });
     }
-    if (String(url) === "https://images.example/s.jpg") return new Response(Buffer.from("jpeg"), { status: 200, headers: { "content-type": "image/jpeg" } });
-    return new Response("{}", { status: 200 });
+    if (String(url) === "https://images.example/m.jpg") return new Response(Buffer.from("jpeg"), { status: 200, headers: { "content-type": "image/jpeg" } });
+    return new Response("{}", { status: 404 });
   };
   const flags = { fits: true, people: true, garbled_text: false, odd_hands_or_faces: false, resembles_real_person: false, brand_logo: false, fake_screenshot: false };
-  const body = "Intro.\n\nA paragraph about teams.\n\n[[image:inline-1]]";
-  const r = await fillImages([{ slot: "inline-1", purpose: "a team at work", kind: "stock", query: "team", alt: "A team." }], {
-    sheet,
-    body,
-    filledBody: body,
-    budget: { gemini: 5 },
-    ctx: { postId: "p1", env: "test", fetchImpl, keys: { unsplash: "u-key" }, ai: null, store: async (k) => k, generate: async () => ({ choice: 0, candidates: [{ index: 0, ...flags }] }) },
-  });
-  assert.equal(r.images[0].kind, "stock");
-  assert.equal(r.images[0].credit, "Photo by Ada on Unsplash");
-  assert.equal(r.images[0].licence, "Unsplash License");
-  assert.ok(seen.includes("https://api.unsplash.com/photos/x/download"));
+  const r = await fill4(sheet, { postId: "p2", db, fetchImpl, keys: { pexels: "px-key" }, pexelsCap: 500, generate: async () => ({ choice: 0, candidates: [{ index: 0, ...flags }] }) });
+  assert.equal(searches.length, 2, "at most 2 searches a post");
+  assert.equal(r.pexels, 2);
+  // The hero's only photo shows people: refused there; inline-1 takes it, with its credit.
+  assert.notEqual(r.images.find((i) => i.slot === "hero")?.kind, "stock");
+  const stock = r.images.find((i) => i.slot === "inline-1");
+  assert.equal(stock.kind, "stock");
+  assert.equal(stock.credit, "Photo by Ada on Pexels");
+  assert.equal(stock.licence, "Pexels License");
+  assert.equal((await searchUsage(db, { cap: 500, now: new Date(MONDAY) })).used, 2);
+});
+
+test("images: one fresh Schnell illustration a post, one check on the 16:9 crop, no retry; a failed check falls back, never to Lucid", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const calls = [];
+  const ai = { run: async (model, input) => (calls.push(model), assert.deepEqual(Object.keys(input).sort(), ["prompt", "steps"], "flux-1-schnell rejects other fields such as seed (error 5006)"), { image: SQUARE }) };
+  const checked = [];
+  const generate = async (req) => {
+    const img = jpeg.decode(Buffer.from(req.parts[1].inline_data.data, "base64"));
+    checked.push(`${img.width}x${img.height}`);
+    assert.equal(req.options.noRetry, true);
+    return { ...CHECK_OK, text_artifacts: true, note: "letters on the screen" };
+  };
+  const r = await fill4(sheet, { postId: "p3", db, ai, limits: LIMITS, generate });
+  assert.deepEqual(calls, ["@cf/black-forest-labs/flux-1-schnell"], "one attempt; a failed check never calls Lucid");
+  assert.deepEqual(checked, ["1024x576"], "one check, on the cropped image");
+  assert.equal(r.aiImages, 1);
+  // The rejected illustration is kept for the owner as rejected-auto, and used nowhere.
+  const row = (await db.execute("SELECT status, post_id FROM image_library WHERE theme = 'post'")).rows[0];
+  assert.equal(row.status, "rejected-auto");
+  assert.equal(row.post_id, "p3");
+  assert.ok(r.images.every((i) => i.kind === "chart"));
+  assert.equal((await aiUsage(db, { limits: LIMITS, now: new Date(MONDAY) })).neurons, 58);
+});
+
+test("images: Schnell erroring goes to Lucid once; a passing check is captioned and joins the library as pending", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const calls = [];
+  const lucid = Buffer.from(jpeg.encode({ data: Buffer.alloc(1024 * 576 * 4, 90), width: 1024, height: 576 }, 80).data).toString("base64");
+  const ai = {
+    run: async (model) => {
+      calls.push(model);
+      if (model.includes("schnell")) throw new Error("3040: Capacity temporarily exceeded");
+      return { image: lucid };
+    },
+  };
+  const r = await fill4(sheet, { postId: "p4", db, ai, limits: LIMITS, generate: async () => CHECK_OK }, [PICTURES[0]]);
+  assert.deepEqual(calls, ["@cf/black-forest-labs/flux-1-schnell", "@cf/leonardo/lucid-origin"]);
+  const hero = r.images[0];
+  assert.equal(hero.kind, "illustration");
+  assert.equal(hero.model, "lucid");
+  assert.equal(hero.caption, "AI-generated illustration");
+  assert.match(hero.key, /^private\/library\/test\/[0-9a-f]{16}\.jpg$/);
+  assert.equal((await db.execute({ sql: "SELECT status FROM image_library WHERE id = ?", args: [hero.libraryId] })).rows[0].status, "pending");
+  assert.equal((await aiUsage(db, { limits: LIMITS, now: new Date(MONDAY) })).neurons, 58 + 1512);
+});
+
+test("images: no neuron room means no Workers AI call at all; at most 3 image checks a post", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  let calls = 0;
+  const r = await fill4(sheet, { postId: "p5", db, ai: { run: async () => (calls++, { image: SQUARE }) }, limits: { ...LIMITS, ceiling: 50 }, generate: async () => CHECK_OK });
+  assert.equal(calls, 0);
+  assert.ok(r.notes.some((n) => /no room now/.test(n)));
+
+  // Pexels on every slot would be 4 checks; the post stops at 3 (2 Pexels and 1 fresh).
+  const fetchImpl = async (url) =>
+    String(url).startsWith("https://api.pexels.com")
+      ? new Response(JSON.stringify({ photos: [{ src: { medium: "https://i.example/m.jpg" }, photographer: "Bo" }] }), { status: 200 })
+      : new Response(Buffer.from("x"), { status: 200, headers: { "content-type": "image/jpeg" } });
+  let checks = 0;
+  const r2 = await fill4(sheet, { postId: "p6", db, fetchImpl, keys: { pexels: "k" }, pexelsCap: 500, ai: { run: async () => ({ image: SQUARE }) }, limits: LIMITS, generate: async () => (checks++, { choice: -1, candidates: [] }) });
+  assert.equal(checks, 3);
+  assert.equal(r2.requests, 3);
 });
 
 // ---------------------------------------------------------------------------
