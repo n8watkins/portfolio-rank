@@ -130,6 +130,15 @@
   "placement": { "mode": "targeted", "region": "aws:us-east-2" },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "upload_source_maps": true,
+  // Workers Cache (worker/edge-cache.ts): Cloudflare's cache sits in front of the
+  // CachedPages entrypoint, so the public pages, sitemap, robots.txt and share image
+  // cost no CPU time once cached, for visitors without PortfolioRank's own cookies.
+  // The default entrypoint runs on every request and sends only those to CachedPages.
+  "cache": { "enabled": false },
+  "exports": {
+    "default": { "type": "worker", "cache": { "enabled": false } },
+    "CachedPages": { "type": "worker", "cache": { "enabled": true } }
+  },
   // The staging site (DEPLOY.md "Staging"): the same code as the Worker
   // "portfolio-rank-staging" (`--env staging`) at its own address, with its
   // own Turso database (its TURSO_* secrets) and its own ISR cache bucket.
@@ -187,6 +196,12 @@
       // No crons at all: the end-of-day run, the people queue and model watch
       // all call Gemini.
       "triggers": { "crons": [] },
+      // The same edge cache as production (worker/edge-cache.ts).
+      "cache": { "enabled": false },
+      "exports": {
+        "default": { "type": "worker", "cache": { "enabled": false } },
+        "CachedPages": { "type": "worker", "cache": { "enabled": true } }
+      },
       // Bound so the code and its types match production; nothing starts it.
       "workflows": [{ "name": "portfolio-rank-night-staging", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }]
     }
