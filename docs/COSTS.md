@@ -203,3 +203,16 @@ Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("
   Staging's database is 2.4 MB; the whole account uses 11 MB of 5 GB and 1.7M of 500M rows read.
 - GitHub Actions: staging adds about a minute per push to main.
 - Total extra cost: $0.
+
+## Tavily credits
+
+PortfolioRank and Wren share one free Tavily account: 1,000 credits a month and 100 requests a minute across both keys.
+PortfolioRank may use 200 credits a month (`TAVILY_MONTHLY_CREDITS`, in both environments of `wrangler.jsonc`), Wren 750, which leaves 50 spare (owner, 2026-11-10).
+Credits are counted by Tavily's pricing ([Tavily credits](https://docs.tavily.com/documentation/api-credits)): a basic search is 1 credit and an advanced one 2.
+The content engine only calls the basic search without page text, so each claim check is 1 credit, and it calls no extract, map or crawl endpoint.
+Tavily's own page says only "1,000 free API credits every month"; other sources say the reset is the 1st of the calendar month, so the counter uses the UTC calendar month and the 50 spare credits cover any difference.
+The count is the `tavily_credits` table (one row per month), and each search reserves its credit before the call, in a single statement that only succeeds while the month stays within the cap.
+At the cap outside claims are cut, exactly as when `TAVILY_API_KEY` is missing.
+The credit is given back when Tavily answers with an error.
+The month's use and the cap show in `GET /api/admin/quota` as `tavily`.
+The weekly cap (40 searches) and the per-post cap (10) still apply on top of the monthly one.

@@ -77,6 +77,10 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
   assert.equal(typeof body.now.people, "number");
   assert.ok(Array.isArray(body.nights) && Array.isArray(body.parked) && Array.isArray(body.alerts));
   assert.equal(typeof body.peopleQueue, "object");
+  // Tavily credits this month against the cap (200 by default; the e2e run sets none).
+  assert.match(body.tavily.month, /^\d{4}-\d{2}$/);
+  assert.equal(typeof body.tavily.used, "number");
+  assert.equal(body.tavily.cap, 200);
 });
 
 test("admin quota API: the latest model watch report, recorded even while email is off", async () => {

@@ -30,6 +30,7 @@ import { AI_LINE, aiNote, contentWeek, nextMorning, recordRun, runsOfWeek, slugi
 import { BUILDERS, findIdeas } from "./facts.mjs";
 import { assembleBody, buildReviseRequest, buildWriteRequest, cutSentences, draftTexts, fill, normalizeDraft } from "./writer.mjs";
 import { checkLinksLoad, codeChecks, urlsIn } from "./checks.mjs";
+import { creditsFor, monthlyCap } from "../../lib/content/tavily-credits.mjs";
 import { TAVILY_PER_POST, TAVILY_PER_WEEK, checkClaims } from "./claims.mjs";
 import { buildPickRequest, buildReviewRequest, choosePicks, reviewCheck } from "./topic.mjs";
 import { fillImages } from "./images.mjs";
@@ -188,7 +189,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
         .filter(([k]) => !k.startsWith("images."))
         .map(([, v]) => v)
         .join("\n");
-      const claims = await checkClaims(text, { tavilyKey: ctx.content?.keys?.tavily, fetchImpl: ctx.fetchImpl, budget: { gemini: g.left() - 1, tavily: tavilyLeft - searches }, generate: g.generate });
+      const claims = await checkClaims(text, { tavilyKey: ctx.content?.keys?.tavily, fetchImpl: ctx.fetchImpl, budget: { gemini: g.left() - 1, tavily: tavilyLeft - searches }, generate: g.generate, credits: creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), now: () => new Date(now) }) });
       searches += claims.searches;
       supported = [...supported.filter((c) => text.includes(c.sentence) && !claims.cut.some((x) => x.sentence === c.sentence)), ...claims.supported].filter(
         (c, i, all) => all.findIndex((x) => x.sentence === c.sentence) === i
