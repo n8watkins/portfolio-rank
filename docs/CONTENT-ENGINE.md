@@ -1,7 +1,9 @@
 # Content engine design
 
-The design of PortfolioRank's automatic blog, for the owner to read before any of it is built.
-Nothing here is code yet.
+The design of PortfolioRank's automatic blog.
+The owner answered every decision on 2026-11-10 with the recommended option; they are marked **Owner decision** below and collected at the end.
+The back end (plan steps 2 and 4 to 8) is built and switched off (`CONTENT_MODE` "off"); see "What is built" at the end.
+The blog pages (step 3) come with the redesign.
 It turns the content engine plan, the security review, the Gemini budget page and the decisions in [DECISIONS.md](DECISIONS.md) into one buildable design, trimmed to what the owner asked for: "don't overbuild".
 
 Sources, all read on 2026-11-10:
@@ -11,7 +13,7 @@ Sources, all read on 2026-11-10:
 - [Gemini budget](https://claude.ai/artifact/44NyzmGV1NsuenjNPtZNAH), "People first, AI with the leftovers"
 - [POST_TEMPLATE.md](content/POST_TEMPLATE.md), [DECISIONS.md](DECISIONS.md), [MODEL-LIMITS.md](MODEL-LIMITS.md), [COSTS.md](COSTS.md), [legal/ai-content.md](legal/ai-content.md)
 
-Places where the owner has to choose are marked **Owner decision needed**, with a recommendation.
+The owner's choices are marked **Owner decision** where they apply.
 They are collected at the end.
 
 ## In one paragraph
@@ -67,8 +69,8 @@ An outside claim is anything about the world that our data doesn't show ("hiring
 
 Tavily's free plan gives 1,000 credits a month ([Tavily credits](https://docs.tavily.com/documentation/api-credits)); at 2 posts a week, 6 claims each and a few news searches, the engine uses about 100 a month.
 
-**Owner decision needed: which Tavily key.**
-Recommended: a separate PortfolioRank key (`portfolio-rank/TAVILY_API_KEY` in `pass-env`, a Worker secret), so Wren's allowance and PortfolioRank's can't starve each other.
+**Owner decision (2026-11-10): which Tavily key.**
+A separate PortfolioRank key (`portfolio-rank/TAVILY_API_KEY` in `pass-env`, a Worker secret), so Wren's allowance and PortfolioRank's can't starve each other.
 
 ### 3. Topic filter
 
@@ -141,8 +143,8 @@ A typical week:
 
 A busy day for people, when the quota runs out before the night, simply moves a post to the next night.
 
-**Owner decision needed: the publishing days and time.**
-Recommended: Tuesday and Thursday at 08:00 Pacific, with the weekly summary to the owner on Sunday.
+**Owner decision (2026-11-10): the publishing days and time.**
+Tuesday and Thursday at 08:00 Pacific, with the weekly summary to the owner on Sunday.
 
 ## What it reads
 
@@ -182,8 +184,8 @@ Rules for all images:
 - A slot that gets no good image after one retry becomes a chart, or is dropped; a post can publish with fewer images, never with a bad one.
 - Gemini's paid image model is not used.
 
-**Owner decision needed: stock photos with people in them.**
-Recommended: allowed, but never as the hero and never next to a named developer, so a stranger's face can't be read as that developer.
+**Owner decision (2026-11-10): stock photos with people in them.**
+Allowed, but never as the hero and never next to a named developer, so a stranger's face can't be read as that developer.
 
 ## Where posts live
 
@@ -198,15 +200,15 @@ Two options:
 | Safety | the post body is Markdown rendered with no raw HTML and no scripts | MDX can run code, which is wrong for text an AI wrote |
 | Fits the pipeline | the end-of-day run already writes to the database from Cloudflare | needs a GitHub write token on the Worker |
 
-**Owner decision needed: database or MDX.**
-Recommended: the database, with Markdown bodies (not MDX) rendered by a strict renderer that allows no raw HTML.
+**Owner decision (2026-11-10): database or MDX.**
+The database, with Markdown bodies (not MDX) rendered by a strict renderer that allows no raw HTML.
 
 The blog itself is part of the redesign ("Blog `/blog`" in DECISIONS.md "Structure of the redesign"): `/blog`, `/blog/[slug]`, tags, an RSS feed and share images.
 Each post shows the AI note with a link to `/about-posts` (the page drafted in [legal/ai-content.md](legal/ai-content.md)) and to its data.
 
-**Owner decision needed: where the AI note sits.**
+**Owner decision (2026-11-10): where the AI note sits.**
 The security review says a footer; the drafted disclosure page says a line at the top.
-Recommended: a short line under the title ("Written with AI from PortfolioRank data") and the fuller note with the data link at the end of the post.
+A short line under the title ("Written with AI from PortfolioRank data") and the fuller note with the data link at the end of the post.
 
 ## The newsletter hook
 
@@ -217,8 +219,8 @@ The content engine never sends email itself.
 - Email goes through Cloudflare Email Service (owner, 2026-11-10, after the content plan was written); the gate is the only code that knows that, so a later change of provider doesn't touch the content engine.
 - Until the newsletter exists, `newsletter_pending` just stays set, and the first issue can pick up the latest posts.
 
-**Owner decision needed: the newsletter in a week with no post.**
-Recommended: send it anyway with the top 5 and the biggest climber, since those change every week.
+**Owner decision (2026-11-10): the newsletter in a week with no post.**
+Send it anyway with the top 5 and the biggest climber, since those change every week.
 
 ## What the owner sees
 
@@ -232,13 +234,13 @@ Recommended: send it anyway with the top 5 and the biggest climber, since those 
 - What it must show before publishing: at least 2 drafts that passed every check, no naming-rule or topic failure that slipped past the checks (the owner can read the drafts), and request counts close to the estimates above.
 - The seeded test drafts (wrong numbers, an invented statistic, a low scorer named, instructions hidden in a news result, a generated image with garbled text) run in the test suite before the dry run starts, not in it.
 
-**Owner decision needed: who ends the dry run.**
-Recommended: the owner switches `CONTENT_MODE` to `publish` by hand after the week; it never switches itself.
+**Owner decision (2026-11-10): who ends the dry run.**
+The owner switches `CONTENT_MODE` to `publish` by hand after the week; it never switches itself.
 
 ## Model choice
 
-**Owner decision needed: 3.5 for everything, or 3.1 for bulk analysis.**
-Recommended: every content request on 3.5 (one consistent writer and reviewer, inside the content stage), and no bulk reading of portfolio text by Gemini in the first version: trend stories count things with code.
+**Owner decision (2026-11-10): 3.5 for everything, or 3.1 for bulk analysis.**
+Every content request on 3.5 (one consistent writer and reviewer, inside the content stage), and no bulk reading of portfolio text by Gemini in the first version: trend stories count things with code.
 The budget page's idea of reading every portfolio's text on 3.1 for trends ("non-ranking analysis", which DECISIONS.md allows on 3.1) can come later as a labelled experiment if code counts turn out too shallow.
 
 ## Implementation plan
@@ -258,13 +260,46 @@ Each step is one pull request with its risks turned into tests (the security rev
 
 Steps 2, 3 and 4 can start in parallel; 5 needs 2 and 4; 8 needs 5 to 7.
 
-## Owner decisions needed
+## Owner decisions (answered 2026-11-10)
 
-1. **Tavily key:** a separate PortfolioRank key (recommended) or Wren's.
-2. **Publishing days and time:** Tuesday and Thursday 08:00 Pacific, summary on Sunday (recommended).
-3. **Stock photos with people:** allowed, never as the hero or next to a named developer (recommended).
-4. **Where posts live:** the database with Markdown bodies (recommended) or MDX files in the repository.
-5. **Where the AI note sits:** a short line under the title and the full note with the data link at the end (recommended).
-6. **Newsletter in a week with no post:** send the top 5 and the climber anyway (recommended).
-7. **Ending the dry run:** the owner switches to `publish` by hand (recommended).
-8. **Models:** 3.5 for all content requests, trends counted by code, 3.1 analysis later as an experiment (recommended).
+The owner chose every recommended option:
+
+1. **Tavily key:** a separate PortfolioRank key, `portfolio-rank/TAVILY_API_KEY`.
+2. **Publishing days and time:** Tuesday and Thursday 08:00 Pacific, the summary on Sunday.
+3. **Stock photos with people:** allowed, never as the hero or next to a named developer.
+4. **Where posts live:** the database, with Markdown bodies.
+5. **Where the AI note sits:** a short line under the title and the full note with the data link at the end.
+6. **Newsletter in a week with no post:** it still sends, with the top 5 and the climber.
+7. **Ending the dry run:** the owner switches `CONTENT_MODE` to `publish` by hand.
+8. **Models:** `gemini-3.5-flash-lite` for all content requests, trends counted by code, 3.1 analysis later as an experiment.
+
+## What is built
+
+The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Worker environments).
+
+| Part | Where |
+| --- | --- |
+| Tables `posts` and `content_runs` (schema version 6), the switch, the publish cap in the same write, the admin read | [lib/content/schema.mjs](../lib/content/schema.mjs), [lib/content/store.mjs](../lib/content/store.mjs) |
+| Fact builders: "3.1 vs 3.5" and "Leaderboard movement" as planned, plus "What the best-graded portfolios share" and "Dark mode, motion and page weight", which read today's grades and capture measurements, so there is something to write while the first two wait for re-grades and ranking v2 | [pipeline/content/facts.mjs](../pipeline/content/facts.mjs) |
+| Charts drawn from the facts (SVG) | [pipeline/content/charts.mjs](../pipeline/content/charts.mjs) |
+| The writer, placeholders and filling, the revision request | [pipeline/content/writer.mjs](../pipeline/content/writer.mjs) |
+| Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |
+| Outside claims through Tavily, the verbatim quote rule | [pipeline/content/claims.mjs](../pipeline/content/claims.mjs) |
+| The topic filter: deny list, pick, final review | [pipeline/content/topic.mjs](../pipeline/content/topic.mjs) |
+| Images: charts, R2 screenshots, Unsplash and Pexels, Workers AI with Gemini's review | [pipeline/content/images.mjs](../pipeline/content/images.mjs) |
+| The night stage, the schedule, the caps, the weekly owner summary | [pipeline/content/engine.mjs](../pipeline/content/engine.mjs), wired in [pipeline/night.mjs](../pipeline/night.mjs) and [worker/night.ts](../worker/night.ts) |
+| Admin review of drafts (JSON) | `GET /api/admin/content` ([app/api/admin/content/route.ts](../app/api/admin/content/route.ts)) |
+
+How it runs, in short:
+
+- The Content stage runs the weekly polls first, then one content job a night while `CONTENT_MODE` is not "off": the pick on Sunday night (or the first night of a week without one), a draft on Monday and Wednesday nights, and a later night when an earlier draft of the week was dropped or deferred.
+- A draft runs in one batch and never spends more than that batch has left (at most 20 requests); it needs at least 4 to start, else it waits for the next night.
+- One round is the write request, the claim listing, the claim judgement (only when Tavily found results) and the final review; a failed round is revised, at most twice, then the draft is stored as `dropped` with its failures.
+- Outside claims are cut by code (exact sentences), not by a rewrite; a rewrite happens only when a code check or the review fails.
+- The writer gets each fact's placeholder, label and display, never its raw value or query; code assembles the TL;DR block, the image markers and the call to action, and puts each sentence on its own line.
+- The number check allows years, list numbers, the Gemini model names, the rubric's "1 to 5", the post's allowed names and addresses, and the sentences of supported outside claims; the template's 400 to 600 words get 10% slack.
+- Generated images and charts are stored in the `SHOTS` bucket under `content/<SITE_ENV>/<post id>/`, which `/shots` does not serve; the blog lane serves them.
+  Stock photos are hotlinked, as Unsplash requires, with the Unsplash download endpoint called when one is used.
+- Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `UNSPLASH_ACCESS_KEY` and `PEXELS_API_KEY` a stock slot falls back to a spare chart or is dropped; without the `AI` binding the same for illustrations.
+- The weekly summary is an owner alert of kind "info" (`content-weekly`) on Sunday nights while the engine is on.
+- Tests: [tests/content.test.mjs](../tests/content.test.mjs) and [tests/admin-content.test.mjs](../tests/admin-content.test.mjs).

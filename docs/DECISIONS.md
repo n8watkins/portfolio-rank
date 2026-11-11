@@ -268,7 +268,23 @@ How it works is in [AUTOMATION.md](../AUTOMATION.md#grade-my-portfolio); the red
 
 ## Content engine
 
-The design, with the decisions still open, is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
+The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
+
+- **The eight content engine decisions** (owner, 2026-11-10: all the recommended options). Status: built in the back end, off (this PR's lane; the blog pages come with the redesign).
+  1. A separate PortfolioRank Tavily key, `portfolio-rank/TAVILY_API_KEY`, so Wren's allowance and PortfolioRank's can't starve each other.
+  2. Posts publish Tuesday and Thursday at 08:00 Pacific (drafted Monday and Wednesday nights); the owner's summary comes on Sunday.
+  3. Stock photos with people are allowed, but never as the hero and never next to a named developer.
+  4. Posts live in the database as Markdown, rendered with no raw HTML; no MDX.
+  5. A short AI line under the title ("Written with AI from PortfolioRank data.") and the full note with the data link at the end.
+  6. The weekly newsletter still sends in a week with no post, with the top 5 and the biggest climber.
+  7. The owner switches `CONTENT_MODE` from `dry-run` to `publish` by hand; it never switches itself.
+  8. `gemini-3.5-flash-lite` for every content request; trends are counted by code; reading portfolio text with 3.1 can come later as a labelled experiment.
+  Why: the recommendations kept the engine small, positive and fail-closed, which is what the owner asked for.
+- **Content engine back end** (agent, 2026-11-10, under the decisions above). Status: built, `CONTENT_MODE` "off".
+  Tables `posts` and `content_runs`, fact builders with code-drawn charts, the writer with placeholders, the code checks, outside claims through Tavily, the topic filter, images (charts, our screenshots, Unsplash and Pexels, Workers AI with Gemini's review), the caps, the kill switch, the weekly summary and `GET /api/admin/content` for reviewing drafts before the blog exists ([CONTENT-ENGINE.md](CONTENT-ENGINE.md#what-is-built)).
+  Two extra fact builders read today's grades and capture measurements ("what the best-graded portfolios share", "dark mode, motion and page weight"), because "3.1 vs 3.5" needs re-grade pairs and "Leaderboard movement" needs ranking v2, and production has neither yet.
+  Tavily, Unsplash and Pexels keys are optional: without Tavily every outside claim is cut, without a stock key stock slots fall back to a chart or are dropped.
+  Why: a dry run needs something to write about today, and every source the owner hasn't set up yet fails closed.
 
 - **Fully automatic and fail-closed** (owner, 2026-11-10). Status: planned.
   Posts publish on their own with no review step; a draft that fails a check is revised automatically, and if it still fails after two rounds it is dropped, never published and never queued for the owner.

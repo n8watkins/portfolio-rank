@@ -92,7 +92,7 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 | 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts | 300 | 60 min |
 | 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`) | 100 | 30 min |
 | 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
-| 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; the content engine's posts join later | 100 | 30 min |
+| 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
 | 5 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics | 300 | 60 min |
 | 6 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
@@ -175,6 +175,18 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 - **Privacy:** no API returns who voted for what; results are totals and percentages.
 - **Results feed:** `pollResults(db, { since })` in [lib/polls/store.mjs](lib/polls/store.mjs) returns closed polls with totals, the winning option and the margin in points, for the content engine and the AI vs people comparisons; the public `past` list carries the same totals.
 - **Turso reads:** a public read is a handful of indexed rows, at most once a minute per data center; a vote is one insert (plus the trigger's update) and two rate-limit upserts.
+
+### Content engine
+
+The automatic blog's back end ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md), [pipeline/content/engine.mjs](pipeline/content/engine.mjs)), built and off.
+
+- **The switch:** the Worker variable `CONTENT_MODE`: "off" (the default in both environments; the stage does no post work), "dry-run" (drafts stay private, status `draft`) or "publish" (posts go live at the next 08:00 Pacific); only the owner sets "publish".
+- **Schedule:** Sunday night picks the week's 2 ideas and a reserve (one request, or none when there is only one idea); Monday and Wednesday nights each draft one post for Tuesday and Thursday; a dropped or deferred draft is made up on a later night of the week.
+- **A draft:** facts from code, then the write request, the claim listing, the claim judgement (only with Tavily results) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
+- **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 40 a week, 9 Workers AI candidates a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes.
+- **Optional keys** (Worker secrets): `TAVILY_API_KEY` (without it outside claims are cut), `UNSPLASH_ACCESS_KEY` and `PEXELS_API_KEY` (without them no stock photos); the `AI` binding (Workers AI) makes illustrations.
+- **Tables:** `posts` (body, fact sheet, checks, images with source, licence and credit, claims with sources, `publish_at`, `newsletter_pending`) and `content_runs` (each night's picks and drafts, and the Gemini, Tavily and Workers AI calls they used).
+- **The owner:** `GET /api/admin/content[?status=draft|published|dropped|unpublished|all]` (admin only) lists posts with their fact sheet, checks and images, the latest runs and the mode; on Sunday nights while the engine is on, an owner alert `content-weekly` summarises the week.
 
 ## Games, badges, claims, live stats and reports (built, off)
 
