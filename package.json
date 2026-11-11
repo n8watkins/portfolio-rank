@@ -24,6 +24,7 @@
     "@sentry/browser": "11.11.0",
     "@sentry/cloudflare": "11.11.0",
     "@sentry/core": "11.11.0",
+    "lucide-react": "^1.70.0",
     "next": "^16.4.5",
     "next-auth": "^5.0.0-beta.32",
     "openskill": "5.0.1",

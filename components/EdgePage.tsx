@@ -1,8 +1,8 @@
-import Link from "next/link";
+import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import type { ReactNode } from "react";
 
-/** The frame for the not-found and error pages: logo, a label, a heading, one
- *  sentence and the ways out. */
+/** The body of the not-found and error pages, inside the shell: a label, a
+ *  heading, one sentence and the ways out. */
 export function EdgePage({
   label,
   title,
@@ -15,23 +15,15 @@ export function EdgePage({
   actions: ReactNode;
 }) {
   return (
-    <main id="main" tabIndex={-1} className="mx-auto flex min-h-[80vh] max-w-md flex-col items-center justify-center px-4 py-16 text-center">
-      <Link href="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/pr-logo.svg" alt="" className="h-8 w-8" />
-        <span>
-          Portfolio<span className="text-accent">Rank</span>
-        </span>
-      </Link>
-      <p className="mt-10 text-xs font-semibold uppercase tracking-widest text-accent">{label}</p>
+    <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 py-16 text-center">
+      <p className="text-xs font-semibold uppercase tracking-widest text-accent">{label}</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-balance">{title}</h1>
       <p className="mt-3 text-sm leading-relaxed text-mute text-pretty">{children}</p>
       <div className="mt-8 flex flex-wrap items-center justify-center gap-3">{actions}</div>
-    </main>
+    </div>
   );
 }
 
-export const primaryButton =
-  "rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-bg transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-export const secondaryButton =
-  "rounded-lg border border-edge px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-mute focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+// The shared button styles (components/ui/styles.ts).
+export const primaryButton = btnPrimary;
+export const secondaryButton = btnSecondary;

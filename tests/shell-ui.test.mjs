@@ -1,0 +1,254 @@
+// Browser tests for the shared shell (components/shell/): the header's
+// navigation, the theme toggle, the phone tab bar and its More sheet, and the
+// skip link, against the production build scripts/test-e2e.sh starts.
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { chromium } from "playwright";
+import { encode } from "@auth/core/jwt";
+
+const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
+let browser;
+
+before(async () => {
+  for (let i = 0; i < 60; i++) {
+    try {
+      if ((await fetch(BASE + "/api/rank")).ok) break;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  browser = await chromium.launch();
+});
+after(async () => {
+  await browser?.close();
+});
+
+async function freshPage(width, height = 900, options = {}) {
+  const context = await browser.newContext({ viewport: { width, height }, ...options });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
+  return { page, context, errors };
+}
+
+const theme = (page) => page.evaluate(() => document.documentElement.dataset.theme ?? "system");
+const bg = (page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+test("desktop header: one Main nav, the current page marked, the maker link named", async () => {
+  const { page, context, errors } = await freshPage(1440);
+  await page.goto(BASE + "/top");
+  const banner = page.getByRole("banner");
+  const nav = banner.getByRole("navigation", { name: "Main" });
+  await nav.waitFor();
+  assert.deepEqual(await nav.getByRole("link").allTextContents(), ["Leaderboard", "Play", "Browse"]);
+  assert.equal(await nav.getByRole("link", { name: "Leaderboard" }).getAttribute("aria-current"), "page");
+  assert.equal(await nav.getByRole("link", { name: "Play" }).getAttribute("aria-current"), null);
+  // Every link in the shell goes somewhere that exists.
+  for (const href of await page.locator("header a[href^='/'], footer a[href^='/'], nav a[href^='/']").evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute("href")))])) {
+    const res = await fetch(BASE + href.split("#")[0], { redirect: "manual" });
+    assert.ok(res.status < 400, `${href} answered ${res.status}`);
+  }
+  const maker = banner.getByRole("link", { name: "n8builds.dev, the maker of PortfolioRank" });
+  assert.equal(await maker.getAttribute("href"), "https://n8builds.dev");
+  assert.ok(await maker.getByText("n8builds.dev").isVisible(), "the maker's name shows on desktop");
+  // The phone tab bar is not shown on desktop.
+  assert.equal(await page.locator("nav[aria-label=Main]").filter({ hasText: "More" }).isVisible(), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("theme toggle cycles System, Light, Dark, applies at once and survives a reload without a flash", async () => {
+  const { page, context, errors } = await freshPage(1440, 900, { colorScheme: "dark" });
+  await page.goto(BASE + "/how");
+  const toggle = page.getByRole("button", { name: /^Theme: / });
+  await toggle.waitFor();
+  assert.equal(await theme(page), "system");
+  const darkBg = await bg(page);
+
+  await toggle.click();
+  assert.equal(await theme(page), "light");
+  assert.match(await toggle.getAttribute("aria-label"), /^Theme: Light\. Switch to Dark/);
+  const lightBg = await bg(page);
+  assert.notEqual(lightBg, darkBg);
+
+  // The saved choice is on <html> before any script of ours runs.
+  await page.reload({ waitUntil: "commit" });
+  await page.waitForSelector("body");
+  assert.equal(await theme(page), "light");
+  assert.equal(await bg(page), lightBg);
+
+  await page.getByRole("button", { name: /^Theme: / }).click();
+  assert.equal(await theme(page), "dark");
+  await page.getByRole("button", { name: /^Theme: / }).click();
+  assert.equal(await theme(page), "system");
+  assert.equal(await page.evaluate(() => localStorage.getItem("pr-theme")), null);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("phones: a bottom tab bar with More, which holds the theme and sign-in", async () => {
+  const { page, context, errors } = await freshPage(390, 844);
+  await page.goto(BASE + "/top");
+  const tabs = page.locator("nav[aria-label=Main]").filter({ hasText: "More" });
+  await tabs.waitFor();
+  assert.deepEqual(
+    (await tabs.locator("a, button").allTextContents()).map((t) => t.trim()),
+    ["Top", "Play", "Browse", "More"]
+  );
+  assert.equal(await tabs.getByRole("link", { name: "Top" }).getAttribute("aria-current"), "page");
+  // Every tab is a 44px-plus target, and the bar sits at the bottom edge.
+  const boxes = await tabs.locator("a, button").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+  assert.ok(boxes.every((h) => h >= 44), JSON.stringify(boxes));
+  const bar = await tabs.boundingBox();
+  assert.equal(Math.round(bar.y + bar.height), 844);
+  // The desktop links are hidden; the maker shows as its icon only.
+  assert.equal(await page.getByRole("banner").getByRole("navigation").isVisible(), false);
+
+  await tabs.getByRole("button", { name: "More" }).click();
+  const sheet = page.getByRole("dialog", { name: "More" });
+  await sheet.waitFor();
+  assert.ok(await sheet.getByRole("link", { name: "Settings" }).isVisible());
+  await sheet.getByRole("radio", { name: "Dark" }).click();
+  assert.equal(await theme(page), "dark");
+  assert.equal(await sheet.getByRole("radio", { name: "Dark" }).getAttribute("aria-checked"), "true");
+  // Arrow keys move the choice, as a radio group should.
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(await theme(page), "light");
+  await page.keyboard.press("Escape");
+  await sheet.waitFor({ state: "hidden" });
+
+  // Sign in from the sheet opens the site's sign-in dialog.
+  await tabs.getByRole("button", { name: "More" }).click();
+  await sheet.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("dialog", { name: "Sign in to PortfolioRank" }).waitFor();
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("signed in: the avatar opens an account menu that works from the keyboard", async () => {
+  const id = "800900001";
+  const token = await encode({
+    token: { raterId: `gh:${id}`, login: "e2e-shell", sub: id },
+    secret: process.env.AUTH_SECRET,
+    salt: "authjs.session-token",
+    maxAge: 3600,
+  });
+  const { page, context, errors } = await freshPage(1440);
+  await context.addCookies([{ name: "authjs.session-token", value: token, url: BASE }]);
+  await page.goto(BASE + "/settings");
+  const avatar = page.getByRole("banner").getByRole("button", { name: "Account: e2e-shell" });
+  await avatar.waitFor();
+  assert.equal(await page.getByRole("banner").getByRole("button", { name: "Sign in" }).count(), 0);
+
+  await avatar.click();
+  const menu = page.getByRole("menu", { name: "Account" });
+  await menu.waitFor();
+  const items = menu.getByRole("menuitem");
+  assert.deepEqual((await items.allTextContents()).map((t) => t.trim()), ["Profile, likes and lists", "My votes", "Settings", "Sign out"]);
+  // Focus starts on the first item; arrows wrap, Home and End jump.
+  const focused = () => page.evaluate(() => document.activeElement?.textContent?.trim());
+  assert.equal(await focused(), "Profile, likes and lists");
+  await page.keyboard.press("ArrowUp");
+  assert.equal(await focused(), "Sign out");
+  await page.keyboard.press("Home");
+  assert.equal(await focused(), "Profile, likes and lists");
+  await page.keyboard.press("End");
+  assert.equal(await focused(), "Sign out");
+  // Escape closes it and gives focus back to the avatar.
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "detached" });
+  assert.ok(await avatar.evaluate((el) => el === document.activeElement));
+  // A click outside closes it too.
+  await avatar.click();
+  await menu.waitFor();
+  await page.locator("h1").click();
+  await menu.waitFor({ state: "detached" });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("the skip link is the first Tab stop and moves focus to main", async () => {
+  const { page, context } = await freshPage(1440);
+  await page.goto(BASE + "/removed");
+  await page.locator("h1").waitFor();
+  await page.keyboard.press("Tab");
+  const skip = page.getByRole("link", { name: "Skip to content" });
+  assert.ok(await skip.evaluate((el) => el === document.activeElement));
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.activeElement?.id === "main");
+  // One main landmark, with the page's one h1 inside it.
+  assert.equal(await page.locator("main").count(), 1);
+  assert.equal(await page.locator("main h1").count(), 1);
+  await context.close();
+});
+
+test("email sign-up: input and button are separate, side by side when wide, stacked when narrow, with error and success", async () => {
+  for (const width of [320, 390, 768, 1440]) {
+    const { page, context, errors } = await freshPage(width, 900);
+    await page.goto(BASE + "/ui-kit");
+    for (const form of await page.locator("form").filter({ has: page.getByLabel("Your email") }).all()) {
+      const input = form.getByLabel("Your email");
+      const button = form.getByRole("button", { name: "Subscribe" });
+      // Never nested: the button is not inside the input's box or a bordered wrapper of the input.
+      const nested = await button.evaluate((b) => {
+        for (let el = b.parentElement; el && el.tagName !== "FORM"; el = el.parentElement)
+          if (parseFloat(getComputedStyle(el).borderTopWidth) > 0) return true;
+        return false;
+      });
+      assert.equal(nested, false, `button sits in a bordered wrapper at ${width}px`);
+      const i = await input.boundingBox();
+      const b = await button.boundingBox();
+      assert.ok(i.height >= 44 && b.height >= 44, `44px targets at ${width}px`);
+      const formWidth = (await form.boundingBox()).width;
+      if (formWidth >= 384) {
+        // Within a pixel: layout lands on half pixels.
+        assert.ok(Math.abs(i.y - b.y) < 1, `side by side at ${width}px`);
+        assert.ok(Math.abs(i.height - b.height) < 1, "the same height");
+        assert.ok(Math.abs(b.x - (i.x + i.width) - 8) < 1, "an 8px gap");
+      } else {
+        assert.ok(b.y >= i.y + i.height + 7, `stacked at ${width}px`);
+        assert.ok(Math.abs(b.width - i.width) < 1, "full width when stacked");
+      }
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+
+  const { page, context } = await freshPage(1440, 900);
+  await page.goto(BASE + "/ui-kit");
+  const form = page.locator("form").filter({ has: page.getByLabel("Your email") }).first();
+  const input = form.getByLabel("Your email");
+  await input.fill("not-an-address");
+  await form.getByRole("button", { name: "Subscribe" }).click();
+  await form.getByRole("alert").filter({ hasText: "Enter an email address" }).waitFor();
+  assert.equal(await input.getAttribute("aria-invalid"), "true");
+  await input.fill("bounce-fail@example.com");
+  await form.getByRole("button", { name: "Subscribe" }).click();
+  assert.ok(await form.getByRole("button", { name: "Subscribing..." }).isDisabled());
+  await form.getByRole("alert").filter({ hasText: "bounced" }).waitFor();
+  assert.equal(await input.inputValue(), "bounce-fail@example.com", "the address is kept after an error");
+  await input.fill("you@example.com");
+  await form.getByRole("button", { name: "Subscribe" }).click();
+  await page.getByRole("status").filter({ hasText: "Check your inbox" }).first().waitFor();
+  await context.close();
+});
+
+test("the UI kit page answers in the test build and is never indexed", async () => {
+  // The test build runs with SITE_ENV=test, so here it answers 200; production builds answer 404 (app/ui-kit/page.tsx).
+  const res = await fetch(BASE + "/ui-kit");
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("x-robots-tag") ?? (await res.text()), /noindex/);
+});
+
+test("no page in the shell scrolls sideways from 320 to 1440px", async () => {
+  for (const width of [320, 768, 1024, 1440]) {
+    const { page, context } = await freshPage(width, 800);
+    for (const path of ["/top", "/how", "/removed", "/settings", "/rank", "/zz-no-such-page"]) {
+      await page.goto(BASE + path);
+      await page.locator("h1").first().waitFor();
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      assert.equal(over, 0, `${path} at ${width}px overflows by ${over}px`);
+    }
+    await context.close();
+  }
+});

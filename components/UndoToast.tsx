@@ -119,13 +119,13 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
           {toasts.map((t) => (
             <div
               key={t.id}
-              className="toast-in pointer-events-auto flex min-h-[52px] items-center gap-1 rounded-xl border border-edge bg-[#1c1c21] py-1.5 pl-4 pr-1.5 text-sm text-ink shadow-2xl shadow-black/60"
+              className="toast-in pointer-events-auto flex min-h-[52px] items-center gap-1 rounded-xl border border-edge bg-card py-1.5 pl-4 pr-1.5 text-sm text-ink shadow-2xl shadow-black/30"
             >
               <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{t.message}</span>
               <button
                 type="button"
                 onClick={() => void queue.undo(t.id)}
-                className="min-h-11 min-w-11 rounded-lg px-3.5 font-semibold text-accent transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-accent"
+                className="min-h-11 min-w-11 rounded-lg px-3.5 font-semibold text-accent transition hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent"
               >
                 Undo
               </button>
@@ -133,14 +133,14 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
                 type="button"
                 aria-label="Dismiss"
                 onClick={() => queue.dismiss(t.id)}
-                className="grid min-h-11 min-w-11 place-items-center rounded-lg text-mute transition hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+                className="grid min-h-11 min-w-11 place-items-center rounded-lg text-mute transition hover:bg-raised hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
               >
                 ✕
               </button>
             </div>
           ))}
           {notice && (
-            <div className="toast-in pointer-events-auto rounded-xl border border-edge bg-[#1c1c21] px-4 py-3.5 text-sm text-ink shadow-2xl shadow-black/60">
+            <div className="toast-in pointer-events-auto rounded-xl border border-edge bg-card px-4 py-3.5 text-sm text-ink shadow-2xl shadow-black/30">
               {notice}
             </div>
           )}

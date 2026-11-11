@@ -47,11 +47,13 @@ test("home and the leaderboard don't scroll sideways on a 320px phone", async ()
     await page.locator("h1").first().waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320, path);
   }
-  // The home header's buttons stay on one line.
-  const heights = await page.goto(BASE + "/").then(() =>
-    page.getByRole("banner").locator("nav > *").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))
-  );
-  const shown = heights.filter((h) => h > 0);
-  assert.ok(shown.length >= 3 && shown.every((h) => h < 40), JSON.stringify(heights));
+  // The header stays one 64px row: logo, maker mark and Sign in, nothing wraps.
+  await page.goto(BASE + "/");
+  const banner = page.getByRole("banner");
+  const signIn = banner.getByRole("button", { name: "Sign in" });
+  await signIn.waitFor();
+  assert.equal(Math.round((await banner.boundingBox()).height), 65); // 64px row + 1px border
+  const box = await signIn.boundingBox();
+  assert.ok(box.height < 40 && box.x + box.width <= 320, JSON.stringify(box));
   await page.close();
 });

@@ -148,7 +148,7 @@ export function ProfileLists() {
         <button
           onClick={create}
           disabled={!newName.trim() || creating}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85 disabled:opacity-50"
+          className="rounded-lg bg-fill px-4 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85 disabled:opacity-50"
         >
           {creating ? "Creating…" : "+ New list"}
         </button>

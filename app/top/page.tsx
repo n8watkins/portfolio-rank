@@ -1,4 +1,3 @@
-import Link from "next/link";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
@@ -85,19 +84,7 @@ export default async function TopPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a
-          href="/rank"
-          className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent"
-        >
-          ⚔️ Cast votes
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+      <div>
         <div className="py-6 text-center">
           <h1 className="text-3xl font-bold tracking-tight">🏆 Leaderboard</h1>
           <p className="mt-2 text-sm text-mute">
@@ -144,7 +131,7 @@ export default async function TopPage() {
                   fetchPriority="high"
                   className="aspect-[16/9] w-full bg-edge object-cover object-top"
                 />
-                <span className="absolute left-3 top-3 rounded-full bg-accent px-3 py-1 text-sm font-bold text-bg shadow">
+                <span className="absolute left-3 top-3 rounded-full bg-fill px-3 py-1 text-sm font-bold text-on-fill shadow">
                   👑 #1
                 </span>
               </div>
@@ -220,7 +207,7 @@ export default async function TopPage() {
             )}
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }

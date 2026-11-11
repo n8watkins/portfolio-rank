@@ -191,7 +191,7 @@ export function AddToListButton({
                   <span
                     aria-hidden
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs ${
-                      l.contains ? "border-accent bg-accent text-bg" : "border-mute"
+                      l.contains ? "border-accent bg-fill text-on-fill" : "border-mute"
                     }`}
                   >
                     {l.contains ? "✓" : ""}
@@ -229,7 +229,7 @@ export function AddToListButton({
             <button
               type="submit"
               disabled={!newName.trim() || creating}
-              className="min-h-11 shrink-0 rounded-lg bg-accent px-3 text-sm font-semibold text-bg transition hover:opacity-85 disabled:opacity-50"
+              className="min-h-11 shrink-0 rounded-lg bg-fill px-3 text-sm font-semibold text-on-fill transition hover:opacity-85 disabled:opacity-50"
             >
               {creating ? "Creating…" : "Create & add"}
             </button>

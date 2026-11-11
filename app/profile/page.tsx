@@ -1,4 +1,3 @@
-import Link from "next/link";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { auth } from "@/auth";
@@ -47,17 +46,17 @@ export default async function ProfilePage() {
 
   if (!session?.raterId) {
     return (
-      <main id="main" tabIndex={-1} className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
         <h1 className="text-2xl font-bold tracking-tight">My profile</h1>
         <p className="mt-3 text-sm text-mute">
           Sign in to see your stats, likes, and lists.
         </p>
         <SignInButton
-          className="mt-6 inline-block min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+          className="mt-6 inline-block min-h-11 rounded-lg bg-fill px-5 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
           title="Sign in to PortfolioRank"
           body="See your stats, votes, likes and lists. One account, one vote per matchup."
         />
-      </main>
+      </div>
     );
   }
 
@@ -80,17 +79,8 @@ export default async function ProfilePage() {
     }));
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a href="/rank" className="text-xs font-semibold text-accent">
-          ⚔️ Keep ranking
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+    <div className="mx-auto max-w-5xl px-4 pb-16 pt-4 sm:px-6">
+      <div>
         <div className="py-4">
           <h1 className="text-3xl font-bold tracking-tight">My profile</h1>
           <p className="mt-1 text-sm text-mute">
@@ -147,7 +137,7 @@ export default async function ProfilePage() {
           </div>
           <ProfileLikes items={likes} />
         </section>
-      </main>
+      </div>
     </div>
   );
 }

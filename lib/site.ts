@@ -15,6 +15,12 @@ export const SITE = {
 // robots.txt are built from it.
 export const SITE_URL = "https://portfoliorank.n8builds.dev";
 
+// Cloudflare Turnstile's public site key (widget "PortfolioRank", managed
+// mode; its secret is TURNSTILE_SECRET_KEY on the Workers, lib/turnstile.ts).
+// Public by design. NEXT_PUBLIC_TURNSTILE_SITE_KEY can swap in one of
+// Cloudflare's test keys for local runs.
+export const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAAF8GDSY7kmBfRpoD";
+
 // True in the staging build (the deploy workflow sets NEXT_PUBLIC_SITE_ENV to
 // "staging" for it; DEPLOY.md "Staging"): pages show a "Staging" ribbon and
 // say noindex. Inlined at build time, so the prerendered home page has it too.

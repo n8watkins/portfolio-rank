@@ -50,8 +50,9 @@ Stops the current 30 AI votes a day in the shared ELO pool once it lands.
 
 | Step | Status |
 | --- | --- |
-| Local preview of the new shell, adaptive home, leaderboard tabs and grade report; desktop, then phone, with screenshots | needs owner (approval) |
-| Shared shell, light theme, icons, phone tab bar, `/browse` with the grid moved off home | to do |
+| Local preview of the new shell, adaptive home, leaderboard tabs and grade report; desktop, then phone, with screenshots | done (approved 2026-11-10, `preview/redesign`) |
+| Shared shell, light theme, icons, phone tab bar and the shared building blocks (Wave B step 1) | building |
+| `/browse` with the grid moved off home | to do |
 | Face-off that fits on a phone, leaderboard tabs, portfolio page with the shared grade card | to do |
 | Privacy page and the other legal pages, from the drafts in [legal/](legal/) | needs owner (placeholders), then to do |
 | Back end for the redesign's games: Guess the percentile (Daily 5, random quizzes, challenge links, server-side scoring, "your eye"), 20 badges with the guest merge at sign-in, claim your portfolio with owner removal, hidden grades and re-grade requests, one live stats endpoint, the report download (AUTOMATION.md "Games, badges, claims, live stats and reports") | building, behind `GAMES_V2` (off) |

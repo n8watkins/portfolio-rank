@@ -6,8 +6,6 @@ import { useSignIn } from "@/components/SignInModal";
 import { isModalOpen } from "@/components/Modal";
 import { isTextField } from "@/lib/dom";
 import { useStoredFlag } from "@/lib/client-state";
-import Link from "next/link";
-import { AuthButton } from "@/components/AuthButton";
 import { LikeButton } from "@/components/LikeButton";
 import { frameOf } from "@/lib/shot-url";
 
@@ -329,21 +327,9 @@ export default function RankPage() {
   }, [vote, skip]);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6">
-      <header className="flex items-center justify-between gap-3 py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <p className="hidden text-xs text-mute sm:block">
-            {count} vote{count === 1 ? "" : "s"} this session
-          </p>
-          <AuthButton />
-        </div>
-      </header>
-
-      <main id="main" tabIndex={-1}>
-        <div className="py-4 text-center">
+    <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      <div>
+        <div className="pb-4 text-center">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Which portfolio is better?
           </h1>
@@ -355,6 +341,11 @@ export default function RankPage() {
               Tap a screenshot to pick it - or Skip below if you can&apos;t tell.
             </span>
           </p>
+          {count > 0 && (
+            <p className="mt-1 text-xs tabular-nums text-mute">
+              {count} vote{count === 1 ? "" : "s"} this session
+            </p>
+          )}
           {/* Vote results and errors are announced without moving focus. */}
           <p role="status" aria-live="polite" className={last ? "mt-2 text-sm font-medium text-accent" : "sr-only"}>
             {last}
@@ -395,7 +386,7 @@ export default function RankPage() {
             </p>
             <button
               onClick={() => promptSignIn(true)}
-              className="mt-4 inline-block rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+              className="mt-4 inline-block rounded-lg bg-fill px-5 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
             >
               Sign in
             </button>
@@ -412,7 +403,7 @@ export default function RankPage() {
                 setBusy(true);
                 loadPair();
               }}
-              className="mt-4 min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+              className="mt-4 min-h-11 rounded-lg bg-fill px-5 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
             >
               Retry
             </button>
@@ -450,7 +441,7 @@ export default function RankPage() {
                         </span>
                       )}
                       {isWinner && (
-                        <span className="absolute right-2 top-2 rounded-full bg-accent px-2.5 py-1 text-xs font-bold text-bg shadow">
+                        <span className="absolute right-2 top-2 rounded-full bg-fill px-2.5 py-1 text-xs font-bold text-on-fill shadow">
                           ✓ Your pick
                         </span>
                       )}
@@ -460,7 +451,7 @@ export default function RankPage() {
                         onClick={() => vote(side, true)}
                         disabled={busy || picked !== null}
                         title="Super-vote: spend a ⭐ for double ELO weight + a Most-Loved star"
-                        className="absolute left-2 top-2 z-10 rounded-full bg-bg/80 px-2.5 py-1 text-xs font-bold text-accent backdrop-blur transition hover:bg-accent hover:text-bg"
+                        className="absolute left-2 top-2 z-10 rounded-full bg-bg/80 px-2.5 py-1 text-xs font-bold text-accent backdrop-blur transition hover:bg-fill hover:text-on-fill"
                       >
                         ⭐ Super
                       </button>
@@ -594,7 +585,7 @@ export default function RankPage() {
             Auto-open: {autoOpen ? "on" : "off"}
           </button>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

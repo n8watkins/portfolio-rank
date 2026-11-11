@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
@@ -166,20 +165,8 @@ export default async function PortfolioPage({
   const shot = await shotFor(url);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a
-          href="/top"
-          className="text-xs font-semibold text-mute transition hover:text-ink"
-        >
-          🏆 Leaderboard
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+    <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      <div>
         <div className="mb-4 rounded-xl border border-edge bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
@@ -218,7 +205,7 @@ export default async function PortfolioPage({
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+                className="rounded-lg bg-fill px-4 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
               >
                 Visit site ↗
               </a>
@@ -240,7 +227,7 @@ export default async function PortfolioPage({
             <div className="flex items-center gap-3">
               <span
                 className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
-                  grade.showTier ? "bg-accent text-bg" : "bg-edge text-ink"
+                  grade.showTier ? "bg-fill text-on-fill" : "bg-edge text-ink"
                 }`}
               >
                 {grade.showTier ? grade.tier : "AI"}
@@ -303,7 +290,7 @@ export default async function PortfolioPage({
           </a>
           .
         </p>
-      </main>
+      </div>
     </div>
   );
 }

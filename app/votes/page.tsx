@@ -1,4 +1,3 @@
-import Link from "next/link";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { auth } from "@/auth";
@@ -41,17 +40,17 @@ export default async function VotesPage() {
 
   if (!session?.raterId) {
     return (
-      <main id="main" tabIndex={-1} className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
         <h1 className="text-2xl font-bold tracking-tight">My votes</h1>
         <p className="mt-3 text-sm text-mute">
           Sign in to see your voting history.
         </p>
         <SignInButton
-          className="mt-6 inline-block min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:opacity-85"
+          className="mt-6 inline-block min-h-11 rounded-lg bg-fill px-5 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
           title="Sign in to PortfolioRank"
           body="See your stats, votes, likes and lists. One account, one vote per matchup."
         />
-      </main>
+      </div>
     );
   }
 
@@ -63,17 +62,8 @@ export default async function VotesPage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6">
-      <header className="flex items-center justify-between py-4">
-        <Link href="/" className="text-sm font-bold tracking-tight">
-          ← Portfolio<span className="text-accent">Rank</span>
-        </Link>
-        <a href="/rank" className="text-xs font-semibold text-accent">
-          ⚔️ Keep ranking
-        </a>
-      </header>
-
-      <main id="main" tabIndex={-1}>
+    <div className="mx-auto max-w-2xl px-4 pt-4 sm:px-6">
+      <div>
         <h1 className="pt-4 text-2xl font-bold tracking-tight">My votes</h1>
         <p className="mt-1 pb-6 text-sm text-mute">
           {res.rows.length} vote{res.rows.length === 1 ? "" : "s"} as{" "}
@@ -106,7 +96,7 @@ export default async function VotesPage() {
             ))}
           </ul>
         )}
-      </main>
+      </div>
     </div>
   );
 }

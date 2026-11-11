@@ -1,0 +1,14 @@
+import Link from "next/link";
+
+/** The logo and name; goes home. */
+export function Wordmark() {
+  return (
+    <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-lg text-[17px] font-bold tracking-tight">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/pr-logo.svg" alt="" width={32} height={32} className="h-8 w-8" />
+      <span>
+        Portfolio<span className="text-accent">Rank</span>
+      </span>
+    </Link>
+  );
+}
