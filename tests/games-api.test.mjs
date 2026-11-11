@@ -11,7 +11,6 @@ import { createServer } from "node:http";
 import { createClient } from "@libsql/client";
 import { encode } from "@auth/core/jwt";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
-import { createReportLink } from "../lib/games/report.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
@@ -294,7 +293,7 @@ test("live stats: many numbers in one cached answer, GitHub numbers included", a
   assert.ok("commonRole" in s && "averageTier" in s && "newest" in s && "ownDomainPct" in s && "resumePct" in s);
 });
 
-test("report download: signed in, or a one-time email link; email needs a sender", async () => {
+test("report download: signed in, or a one-time link sent through the email gate", async () => {
   const path = `/report/print?url=${encodeURIComponent(REPORT)}`;
   const anon = await call(jar(), "GET", path);
   assert.equal(anon.status, 401);
@@ -305,24 +304,36 @@ test("report download: signed in, or a one-time email link; email needs a sender
   assert.ok(page.text.includes("Clean type and spacing") && page.text.includes("@media print"));
   assert.equal((await call(me, "GET", `/report/print?url=${encodeURIComponent("https://not-listed.example")}`)).status, 404);
 
-  // A one-time link opens that one report in that browser, once.
-  const token = "e2e".padEnd(43, "x");
-  await createReportLink(db, { url: REPORT, token });
+  const j = jar();
+  const to = `report-${Date.now()}@example.dev`;
+  assert.equal((await call(j, "POST", "/api/report/email", { url: REPORT, email: "not-an-email" })).body.error, "bad_email");
+  assert.equal((await call(j, "POST", "/api/report/email", "{nope")).body.error, "bad_request");
+  assert.equal((await call(j, "POST", "/api/report/email", { url: "https://not-listed.example", email: to })).body.error, "unknown_portfolio");
+  assert.equal((await call(j, "POST", "/api/report/email", { url: REPORT, email: to }, { origin: "https://evil.example" })).status, 403);
+  const mail = await call(j, "POST", "/api/report/email", { url: REPORT, email: to });
+  assert.equal(mail.status, 202, mail.text);
+  assert.deepEqual(mail.body, { sent: true });
+
+  // The email went through the shared gate (kind "report-link"), which logs no address.
+  const sent = (await db.execute({ sql: "SELECT text FROM email_outbox WHERE kind = 'report-link' AND to_addr = ? ORDER BY id DESC LIMIT 1", args: [to] })).rows[0];
+  assert.ok(sent, "the email is in the test outbox");
+  const gateLog = (await db.execute("SELECT kind, status, to_hash FROM email_sends WHERE kind = 'report-link' ORDER BY id DESC LIMIT 1")).rows[0];
+  assert.equal(gateLog.status, "sent");
+  assert.ok(!String(gateLog.to_hash).includes("@"));
+  const link = String(sent.text).match(/(\/report\/print\?t=[^\s]+)/)?.[1];
+  assert.ok(link, sent.text);
+
+  // The link opens that one report in that browser, once.
   const visitor = jar();
-  const open = await call(visitor, "GET", `/report/print?t=${token}`, undefined, { redirect: "manual" });
+  const open = await call(visitor, "GET", link, undefined, { redirect: "manual" });
   assert.equal(open.status, 303);
   assert.equal(open.headers.get("location"), path);
   assert.equal((await call(visitor, "GET", path)).status, 200);
   assert.equal((await call(visitor, "GET", `/report/print?url=${encodeURIComponent(SITES[1])}`)).status, 401, "only that report");
-  assert.equal((await call(jar(), "GET", `/report/print?t=${token}`, undefined, { redirect: "manual" })).status, 410);
-  // A forged pass is ignored.
+  assert.equal((await call(jar(), "GET", link, undefined, { redirect: "manual" })).status, 410, "used");
+  // A report link is not a grade report's link, and a forged pass is ignored.
+  const asGrade = await call(jar(), "GET", `/api/grade/link?t=${link.split("?t=")[1]}`, undefined, { redirect: "manual" });
+  assert.match(asGrade.headers.get("location") ?? "", /\/grade\?link=bad$/);
+  assert.equal((await call(jar(), "GET", `/report/print?t=${"e2e".padEnd(43, "x")}`, undefined, { redirect: "manual" })).status, 410, "forged");
   assert.equal((await call(jar(`pr_report=${Date.now() + 9e6}|${REPORT}.${"a".repeat(43)}`), "GET", path)).status, 401);
-
-  const j = jar();
-  assert.equal((await call(j, "POST", "/api/report/email", { url: REPORT, email: "not-an-email" })).body.error, "bad_email");
-  assert.equal((await call(j, "POST", "/api/report/email", { url: "https://not-listed.example", email: "a@b.dev" })).body.error, "unknown_portfolio");
-  assert.equal((await call(j, "POST", "/api/report/email", { url: REPORT, email: "a@b.dev" }, { origin: "https://evil.example" })).status, 403);
-  const mail = await call(j, "POST", "/api/report/email", { url: REPORT, email: "a@b.dev" });
-  assert.equal(mail.status, 503);
-  assert.equal(mail.body.error, "email_unavailable");
 });

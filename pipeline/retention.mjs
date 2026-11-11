@@ -18,12 +18,13 @@
 //                    one-sentence explanation, which no recompute reads) is
 //                    cleared after COMPARISON_REASON_DAYS (90) days.
 //   owner_alerts     cleared alerts are deleted after 180 days.
-//   report_links     one-time report links (lib/games/report.mjs) are
-//                    deleted 7 days after they expire.
+//   grade_links      one-time links (lib/grader/links.mjs) are deleted once
+//                    they expire, whichever feature is on (the grader's
+//                    tick does the same hourly while it runs).
 //   badge_checks     a player's last badge check (a 15-second reuse) is
 //                    deleted after a day; the next check rebuilds it.
 import { quotaDay } from "./quota-day.mjs";
-import { pruneReportLinks } from "../lib/games/report.mjs";
+import { pruneLinks } from "../lib/grader/links.mjs";
 
 export const GEMINI_RAW_DAYS = 90;
 export const NIGHT_RUN_DAYS = 180;
@@ -125,7 +126,7 @@ export async function rollUpGeminiRequests(db, { now = new Date(), keepDays = GE
 /** Deletes and clears what the retention rules above say. Returns the counts. */
 export async function pruneLogs(db, { now = new Date() } = {}) {
   const before = (days) => new Date(now.getTime() - days * DAY_MS).toISOString();
-  const out = { nightRuns: 0, reasons: 0, alerts: 0, reportLinks: 0, badgeChecks: 0 };
+  const out = { nightRuns: 0, reasons: 0, alerts: 0, links: 0, badgeChecks: 0 };
   if (await tableExists(db, "night_runs")) {
     // night is a Pacific date ("YYYY-MM-DD"): compare dates.
     out.nightRuns = (await db.execute({ sql: "DELETE FROM night_runs WHERE night < ?", args: [before(NIGHT_RUN_DAYS).slice(0, 10)] })).rowsAffected;
@@ -144,8 +145,8 @@ export async function pruneLogs(db, { now = new Date() } = {}) {
   if (await tableExists(db, "owner_alerts")) {
     out.alerts = (await db.execute({ sql: "DELETE FROM owner_alerts WHERE cleared_at IS NOT NULL AND cleared_at < ?", args: [before(CLEARED_ALERT_DAYS)] })).rowsAffected;
   }
-  if (await tableExists(db, "report_links")) {
-    out.reportLinks = await pruneReportLinks(db, { now });
+  if (await tableExists(db, "grade_links")) {
+    out.links = await pruneLinks(db, { now: now.getTime() });
   }
   if (await tableExists(db, "badge_checks")) {
     out.badgeChecks = (await db.execute({ sql: "DELETE FROM badge_checks WHERE at < ?", args: [now.getTime() - DAY_MS] })).rowsAffected;

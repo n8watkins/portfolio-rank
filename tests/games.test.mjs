@@ -34,7 +34,8 @@ import {
 } from "../lib/games/claims.mjs";
 import { planOwnerRemovals } from "../pipeline/owner-removals.mjs";
 import { githubStats, liveCounts, pacificMonthStart, siteStats, sqliteTime } from "../lib/games/stats.mjs";
-import { consumeReportLink, createReportLink, hashToken, pruneReportLinks, renderReportHtml, reportGrade } from "../lib/games/report.mjs";
+import { createOneTimeLink, openLinkToken, openOneTimeLink, pruneLinks } from "../lib/grader/links.mjs";
+import { printView, renderReportHtml } from "../lib/grader/report.mjs";
 import { createRng } from "../lib/ranking/prng.mjs";
 import { pollWeek } from "../lib/polls/week.mjs";
 import { insertPoll } from "../pipeline/polls.mjs";
@@ -439,26 +440,31 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   assert.deepEqual(await githubStats({ repo: "x/y", fetchImpl: async () => new Response("", { status: 403 }) }), { stars: null, contributors: null });
 });
 
-test("report links: stored as a hash, open once, expire after a day", async () => {
+test("report links: the shared one-time links, scope report-link: a nonce hash, open once, a day, never a grade link", async () => {
   const db = await freshDb();
-  const token = "A".repeat(43);
-  await createReportLink(db, { url: site(1), token, now: T0 });
-  assert.equal((await db.execute("SELECT token_hash FROM report_links")).rows[0].token_hash, hashToken(token));
-  assert.equal(await consumeReportLink(db, { token, now: T0 }), site(1));
-  assert.equal(await consumeReportLink(db, { token, now: T0 }), null, "used");
-  const t2 = "B".repeat(43);
-  await createReportLink(db, { url: site(1), token: t2, now: T0 });
-  assert.equal(await consumeReportLink(db, { token: t2, now: new Date(T0.getTime() + 25 * 3600000) }), null, "expired");
-  assert.equal(await consumeReportLink(db, { token: "short", now: T0 }), null);
-  assert.equal(await pruneReportLinks(db, { now: new Date(T0.getTime() + 9 * 86400000) }), 2);
+  const secret = "test-secret";
+  const now = T0.getTime();
+  const { token } = await createOneTimeLink(db, { scope: "report-link", subject: site(1), secret, now });
+  const row = (await db.execute("SELECT job_id, scope FROM grade_links")).rows[0];
+  assert.deepEqual([row.job_id, row.scope], [site(1), "report-link"]);
+  // A report link is not a grade link, and the other way round.
+  assert.equal((await openLinkToken(db, token, { secret, now })).error, "bad");
+  assert.deepEqual(await openOneTimeLink(db, token, { scope: "report-link", secret, now }), { ok: true, subject: site(1) });
+  assert.deepEqual(await openOneTimeLink(db, token, { scope: "report-link", secret, now }), { ok: false, error: "used", subject: site(1) });
+  const late = await createOneTimeLink(db, { scope: "report-link", subject: site(1), secret, now });
+  assert.equal((await openOneTimeLink(db, late.token, { scope: "report-link", secret, now: now + 25 * 3600000 })).error, "expired");
+  assert.equal((await openOneTimeLink(db, "short", { scope: "report-link", secret, now })).error, "bad");
+  await assert.rejects(createOneTimeLink(db, { scope: "report-link", subject: "javascript:alert(1)", secret, now }));
+  assert.equal(await pruneLinks(db, { now: now + 2 * 86400000 }), 2);
 });
 
 test("the print report escapes what it shows and keeps the tier letter for the top tiers", () => {
-  assert.equal(reportGrade("{nope"), null);
-  assert.equal(reportGrade(JSON.stringify({ tier: "Z" })), null);
-  const g = reportGrade(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "<b>busy</b>" }, checks: { resume: true, github: false } }));
+  assert.equal(printView("{nope"), null);
+  assert.equal(printView(JSON.stringify({ tier: "Z" })), null);
+  const g = printView(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "<b>busy</b>" }, writing: 3, checks: { resume: true, github: false } }));
   assert.equal(g.showTier, false);
-  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, grade: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.n8builds.dev", now: T0 });
+  assert.deepEqual(g.judgments.map((j) => [j.id, j.score]), [["visual_design", 2], ["writing", 3]], "older bare scores count too");
+  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.n8builds.dev", now: T0 });
   assert.ok(html.includes("Zoë &lt;script&gt;"));
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&lt;b&gt;busy&lt;/b&gt;"));
