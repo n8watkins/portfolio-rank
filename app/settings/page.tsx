@@ -33,8 +33,80 @@ const LOCAL = [
   { key: "pr_celebrated", what: "Celebrations seen", why: "So a report celebrates once." },
 ];
 
-/** Where data requests go (docs/legal/privacy.md, "Your choices"). */
-const CONTACT = "nate@n8builds.dev";
+/**
+ * Delete my account: type the GitHub username, then everything stored
+ * about the account is deleted at once (DELETE /api/account) and you are
+ * signed out.
+ */
+function DeleteAccount({ login }: { login: string }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+  const ok = typed.trim().replace(/^@/, "").toLowerCase() === login.toLowerCase();
+  const del = async () => {
+    setState("busy");
+    try {
+      const res = await fetch("/api/account", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm: typed }) });
+      if (!res.ok) throw new Error(String(res.status));
+      await signOut({ callbackUrl: "/?account=deleted" });
+    } catch {
+      setState("error");
+    }
+  };
+  return (
+    <div className="p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p id="delete-label" className="font-semibold">
+            Delete my account
+          </p>
+          <p className="mt-0.5 text-sm text-mute">Deletes your votes, likes, lists, badges, quiz plays and claims, then signs you out. It can&apos;t be undone.</p>
+        </div>
+        {!open && (
+          <button type="button" onClick={() => setOpen(true)} className={`${smallBtn} shrink-0 text-down`}>
+            Delete
+          </button>
+        )}
+      </div>
+      {open && (
+        <form
+          className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (ok) void del();
+          }}
+        >
+          <label className="min-w-0 flex-1 text-sm">
+            <span className="block text-mute">
+              Type <strong className="text-ink">{login}</strong> to confirm
+            </span>
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-1 h-10 w-full rounded-lg border border-edge bg-bg px-3 text-sm outline-none focus:border-accent"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" disabled={!ok || state === "busy"} className="inline-flex h-10 items-center rounded-lg bg-down px-3.5 text-sm font-semibold text-white disabled:opacity-50">
+              {state === "busy" ? "Deleting..." : "Delete my account"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className={smallBtn}>
+              Cancel
+            </button>
+          </div>
+          {state === "error" && (
+            <p role="alert" className="text-sm text-down sm:basis-full">
+              That didn&apos;t work. Nothing was deleted; try again.
+            </p>
+          )}
+        </form>
+      )}
+    </div>
+  );
+}
 
 const LOCAL_KEYS =[...LOCAL.map((l) => l.key), "pr-faceoff-intro"];
 
@@ -189,11 +261,22 @@ export default function SettingsPage() {
           Your data
         </h2>
         <div className={box}>
-          <Row id="copy" title="A copy, or deletion" desc="Ask for a copy of what's stored about you, or for it to be deleted. Answered within 30 days.">
-            <a href={`mailto:${CONTACT}?subject=${encodeURIComponent("My PortfolioRank data")}`} className={smallBtn}>
-              Email a request
-            </a>
-          </Row>
+          {session && session !== "loading" ? (
+            <>
+              <Row id="download" title="Download my data" desc="A JSON file of everything stored about your account: votes, likes, lists, badges, quiz plays and claims.">
+                <a href="/api/account" download className={smallBtn}>
+                  Download
+                </a>
+              </Row>
+              <DeleteAccount login={session.login} />
+            </>
+          ) : (
+            <Row id="data-signin" title="Your account's data" desc="Sign in to download everything stored about your account, or to delete it.">
+              <button type="button" onClick={() => openSignIn(SHELL_SIGN_IN)} className={smallBtn}>
+                Sign in
+              </button>
+            </Row>
+          )}
         </div>
       </section>
     </div>

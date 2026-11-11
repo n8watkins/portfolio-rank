@@ -8,7 +8,8 @@ PortfolioRank is a side project run by me, [owner: legal name, or business name 
 This page says what the site stores about you, why, who else sees it, and how long it's kept.
 Short version: I store as little as I can, I never sell anything, and you can ask me to delete what's yours.
 
-Questions or requests: nate@n8builds.dev.
+Downloading your data, deleting your account and removing your portfolio are self-serve on the Settings page (see "Your choices").
+Questions: nate@n8builds.dev.
 
 ## If you just browse
 
@@ -74,7 +75,8 @@ For each listed site I store:
 
 If your site leaves the list, its screenshots and stored page data are deleted 30 days later.
 Its past votes stay in the vote log but are no longer shown.
-To be removed, or to stay listed but never be named in posts, see [removal.md](removal.md).
+To remove it yourself, use "Remove my portfolio" on the Settings page (see "Your choices").
+To stay listed but never be named in posts, see [removal.md](removal.md).
 
 ## If you vote in a poll
 
@@ -169,9 +171,15 @@ None of them get your data to sell, and neither do I.
 
 ## Your choices
 
-- Ask for a copy of what's stored about you, or for it to be deleted: email nate@n8builds.dev from the address or GitHub account it's about.
-  I'll answer within 30 days.
-- Deleting your account's data removes your likes and lists; your votes are removed from the log and the leaderboard recomputed. [owner: confirm votes are deleted on request rather than anonymised]
+All of these are self-serve, on the site's Settings page, and take effect at once.
+
+- **Download my data**: signed in, one click gives you a JSON file of everything stored against your account: votes, likes, lists, badges, quiz plays, poll votes, claims and the portfolio actions you took.
+- **Delete my account**: signed in, type your GitHub username to confirm.
+  Your votes, likes, lists, badges, quiz plays, poll votes and claims are deleted together in one step, and you are signed out (your session lives only in your browser's cookie, so signing out ends it).
+  Your votes leave the vote log, and the leaderboard drops them at its next recompute.
+  Kept, because they name no one: anonymous counts (how many quizzes were played, how many votes each poll option got) and a portfolio's own state, so a removal or a hidden grade you made stays in force, with your account struck from the record of who made it.
+- **Remove my portfolio**: prove the site is yours (your GitHub profile's Website field, or a code you put on the page), then hide its grade or remove it from PortfolioRank.
+- **Forget my preferences**: clears what's saved in your browser.
 - Block cookies in your browser; you can still browse, but not vote or sign in.
 
 PortfolioRank is not meant for anyone under 16.
