@@ -54,6 +54,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
+  const [focusHead, setFocusHead] = useState(0);
 
   const start = useCallback((q: Quiz) => {
     const done = q.progress.results;
@@ -115,7 +116,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
         const q: Quiz = (await res.json()).quiz;
         window.history.pushState(null, "", q.challenge);
         start(q);
-        requestAnimationFrame(() => headRef.current?.focus());
+        setFocusHead((n) => n + 1);
       }
     } catch {
       setNote("Couldn't start a quiz. Try again.");
@@ -145,7 +146,6 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
         if (res.ok && data.finished) setFinal({ score: data.finished.score, hits: data.finished.hits });
         if (!reduced) navigator.vibrate?.(result.hit ? [10, 40, 10] : 12);
         if (data.badges?.length) onBadgeCheck(true);
-        requestAnimationFrame(() => nextRef.current?.focus());
       } else if (res.status === 429) setNote("That's a lot of guesses for one hour. Try again a little later.");
       else setNote("That guess didn't go through. Try again.");
     } catch {
@@ -158,8 +158,17 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
     setShown(false);
     setGuess(START);
     setI((n) => n + 1);
-    requestAnimationFrame(() => headRef.current?.focus());
+    setFocusHead((n) => n + 1);
   }, []);
+
+  // After a guess, focus moves to the next step once it is on the page.
+  useEffect(() => {
+    if (shown) nextRef.current?.focus();
+  }, [shown]);
+  // On to the next portfolio (or the end card, or a new quiz): focus its heading.
+  useEffect(() => {
+    if (focusHead) headRef.current?.focus();
+  }, [focusHead]);
 
   // The end card's "Your eye", once the quiz is done.
   useEffect(() => {
@@ -177,7 +186,8 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   // Enter locks the guess in, then goes on (but never steals a button's or a link's own Enter).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || e.defaultPrevented || isModalOpen() || isTextField(e.target) || finishedAll) return;
+      const slider = e.target instanceof HTMLInputElement && e.target.type === "range";
+      if (e.key !== "Enter" || e.defaultPrevented || isModalOpen() || (isTextField(e.target) && !slider) || finishedAll) return;
       if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement) return;
       e.preventDefault();
       if (shown) next();

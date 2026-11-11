@@ -106,6 +106,11 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
   const openSignIn = useSignIn();
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
+  // Bumped when a vote is counted: focus then moves to Next pair, once it is on the page.
+  const [counted, setCounted] = useState(0);
+  useEffect(() => {
+    if (counted) nextRef.current?.focus();
+  }, [counted]);
   const seq = useRef(0);
 
   const finished = done >= ROUND && pick === null;
@@ -235,8 +240,8 @@ export function FaceOff({ games, onBadgeCheck }: { games: boolean; onBadgeCheck:
         setBest((b) => Math.max(b, s));
       }
       setBusy(false);
+      setCounted((c) => c + 1);
       onBadgeCheck();
-      requestAnimationFrame(() => nextRef.current?.focus());
     },
     [pair, busy, pick, gated, finished, reduced, streak, signIn, load, onBadgeCheck]
   );

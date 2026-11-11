@@ -1,3 +1,4 @@
+import Link from "next/link";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
@@ -42,12 +43,12 @@ export async function TopMarquee() {
         <h2 className="text-sm font-semibold text-mute">
           🏆 Top ranked right now
         </h2>
-        <a
+        <Link
           href="/top"
           className="text-xs font-semibold text-accent transition hover:underline"
         >
           Full leaderboard →
-        </a>
+        </Link>
       </div>
       <div className="relative -mx-4 overflow-hidden sm:-mx-6">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-bg to-transparent" />
