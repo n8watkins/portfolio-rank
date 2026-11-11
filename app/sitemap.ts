@@ -4,6 +4,7 @@ import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { hiddenUrls } from "@/lib/roster";
 import { graderEnabled } from "@/lib/grader/server";
+import { rankingViewsEnabled } from "@/lib/leaderboard";
 
 const BASE = SITE_URL;
 
@@ -15,6 +16,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE, changeFrequency: "daily", priority: 1 },
     { url: `${BASE}/top`, changeFrequency: "daily", priority: 0.8 },
+    // The AI and People views exist only while the ranking views are on.
+    ...(rankingViewsEnabled()
+      ? (["ai", "people"] as const).map((v) => ({ url: `${BASE}/top/${v}`, changeFrequency: "daily" as const, priority: 0.6 }))
+      : []),
     { url: `${BASE}/browse`, changeFrequency: "daily", priority: 0.7 },
     { url: `${BASE}/play`, changeFrequency: "daily", priority: 0.6 },
     // Reports (/grade/<id>) and claims are unlisted and never indexed.

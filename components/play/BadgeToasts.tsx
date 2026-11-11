@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { BadgeArt } from "@/components/play/BadgeArt";
+import { createPortal } from "react-dom";
+import { BadgeArt } from "@/components/ui/BadgeArt";
 
 type Badge = { id: string; name: string; how: string; hue: number; new: boolean };
 
@@ -66,10 +67,11 @@ function BadgeToast({ badge, guest, onDone }: { badge: Badge; guest: boolean; on
     const t = setTimeout(() => done.current(), SHOW_MS);
     return () => clearTimeout(t);
   }, []);
-  return (
+  // On <body>: inside the page, an animated (transformed) ancestor would hold the fixed toast in its own box.
+  return createPortal(
     <div
       role="status"
-      className="pop-in fixed top-[4.75rem] right-4 z-30 flex w-[min(22rem,calc(100vw-2rem))] items-center gap-3 rounded-2xl border border-edge bg-card p-3 pr-2 shadow-2xl shadow-black/30 lg:bottom-6"
+      className="pop-in fixed top-[4.75rem] right-4 z-30 flex w-[min(22rem,calc(100vw-2rem))] items-center gap-3 rounded-2xl border border-edge bg-card p-3 pr-2 shadow-2xl shadow-black/30"
     >
       <BadgeArt id={badge.id} hue={badge.hue} size={48} />
       <span className="min-w-0 flex-1">
@@ -80,6 +82,7 @@ function BadgeToast({ badge, guest, onDone }: { badge: Badge; guest: boolean; on
       <button type="button" onClick={onDone} aria-label="Dismiss" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-mute hover:bg-raised hover:text-ink">
         <X className="h-4 w-4" aria-hidden />
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -294,7 +294,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
               <p className="mt-1 text-mute">
                 Score <strong className="text-ink tabular-nums">{score}</strong> of {n * 100}
               </p>
-              <ol className="mt-5 grid grid-cols-5 gap-2" aria-label="Each guess">
+              <ol className="mt-5 divide-y divide-edge rounded-xl border border-edge bg-bg/40" aria-label="Each guess">
                 {quiz.rounds.map((rd, k) => {
                   const r = results.find((x) => x.index === rd.index);
                   const d = r ? off(r) : null;
@@ -302,26 +302,29 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                   const near = !ok && d != null && d <= NEAR;
                   const what = ok ? "Hit" : near ? "So close" : "Missed";
                   return (
-                    <li
-                      key={rd.index}
-                      className={`pop-in rounded-xl border px-1 py-2 text-center sm:p-2 ${ok ? "border-up/40 bg-up/10" : near ? "border-accent/40 bg-accent-soft" : "border-edge bg-raised"}`}
-                      style={{ animationDelay: `${k * 90}ms` }}
-                    >
-                      <span className={`mx-auto grid h-7 w-7 place-items-center rounded-full ${ok ? "bg-up text-white" : near ? "bg-fill text-on-fill" : "bg-edge-strong text-card"}`}>
-                        {ok ? <Check className="h-4 w-4" aria-hidden /> : near ? <Target className="h-4 w-4" aria-hidden /> : <X className="h-4 w-4" aria-hidden />}
+                    <li key={rd.index} className="pop-in flex items-center gap-3 px-3 py-2.5 sm:px-4" style={{ animationDelay: `${k * 90}ms` }}>
+                      <span
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${ok ? "bg-up text-card" : near ? "bg-fill text-on-fill" : "bg-raised text-mute ring-1 ring-inset ring-edge-strong"}`}
+                        aria-hidden
+                      >
+                        {ok ? <Check className="h-4 w-4" strokeWidth={2.75} /> : near ? <Target className="h-4 w-4" /> : <X className="h-4 w-4" />}
                       </span>
-                      <span className="sr-only">
-                        {rd.name}: {what}, you said top {r?.guess}%{r?.merged != null ? `, it's top ${r.merged}%` : ""}.
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{rd.name}</span>
+                        <span className="block text-xs text-mute tabular-nums">
+                          You said top {r?.guess ?? "-"}%{r?.merged != null ? ` · it's top ${r.merged}%` : ""}
+                        </span>
                       </span>
-                      <span className="mt-1.5 block text-[11px] whitespace-nowrap text-mute tabular-nums" aria-hidden>
-                        {r?.guess ?? "-"} / {r?.merged ?? "-"}
+                      <span className="shrink-0 text-right">
+                        <span className={`block text-xs font-semibold ${ok ? "text-up" : near ? "text-accent" : "text-mute"}`}>{what}</span>
+                        <span className="block text-xs text-mute tabular-nums">{r ? `+${r.points}` : "-"}</span>
                       </span>
                     </li>
                   );
                 })}
               </ol>
               <p className="mt-2 text-xs text-mute">
-                Each box: your guess / the real top %. Green within {quiz.hit}, amber within {NEAR}.
+                A hit is within {quiz.hit} points of the real top %; so close, within {NEAR}.
               </p>
               <div className="mt-6 flex flex-wrap gap-2">
                 <CopyButton text={text} label="Share result" icon={Share2} buttonClass={btnPrimary} onCopied={shared} />
