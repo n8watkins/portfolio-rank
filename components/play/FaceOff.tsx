@@ -159,24 +159,39 @@ function Frame({ e }: { e: Entry }) {
   );
 }
 
-/** The crowd's share on a card after the vote: counts up, the bar fills. */
-function Share({ pct, mine, k }: { pct: number; mine: boolean; k: string }) {
+/** Under this many face-offs on either side, the crowd's lean is too thin to quote as a share. */
+const FEW_VOTES = 5;
+const fewVotes = (p: Pair) => Math.min(p.a.votes, p.b.votes) < FEW_VOTES;
+
+/**
+ * The spotlight's result, in a band under the screenshot (never over the
+ * site's own headline): the crowd's share counting up with its bar, or
+ * "First votes on this pair" while either side has had few face-offs.
+ */
+function ResultBand({ pct, mine, early, k }: { pct: number; mine: boolean; early: boolean; k: string }) {
   const n = useCountUp(pct, k);
   return (
-    <span className="absolute inset-x-0 bottom-0 block bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-12 text-white sm:p-4">
+    <div className="flex items-center gap-3 border-t border-edge bg-raised px-3 py-2.5 sm:px-4">
       {mine && (
         <Burst on>
-          <span className="pop-in mb-2 inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-xs font-bold text-on-fill">
+          <span className="pop-in inline-flex shrink-0 items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-xs font-bold text-on-fill">
             <Check className="h-3 w-3" aria-hidden /> Your pick
           </span>
         </Burst>
       )}
-      <span className="block text-3xl font-bold tabular-nums sm:text-4xl">{n}%</span>
-      <span className="block text-xs text-white/80">of people would pick this</span>
-      <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-white/20" aria-hidden>
-        <span className={`bar-fill block h-full rounded-full ${mine ? "bg-fill" : "bg-white/70"}`} style={{ width: `${pct}%` }} />
-      </span>
-    </span>
+      {early ? (
+        <p className="text-sm text-mute">First votes on this pair: the crowd&apos;s lean shows once both have a few more face-offs.</p>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <p className="shrink-0 text-sm text-mute">
+            <strong className="text-2xl font-bold text-ink tabular-nums">{n}%</strong> of people would pick this one
+          </p>
+          <span className="block h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-edge" aria-hidden>
+            <span className={`bar-fill block h-full rounded-full ${mine ? "bg-fill" : "bg-mute"}`} style={{ width: `${pct}%` }} />
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -355,7 +370,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
           : r,
       );
       setIntro(false);
-      const lean = leanOf(shareOf(pair[side].elo, pair[other].elo));
+      // A pair with few face-offs has no real crowd lean yet: it neither builds nor breaks a streak.
+      const lean = fewVotes(pair) ? "even" : leanOf(shareOf(pair[side].elo, pair[other].elo));
       // A dead heat is neither with nor against the crowd: the streak holds.
       saveRound((r) => {
         const s = lean === "even" ? r.streak : lean === "with" ? r.streak + 1 : 0;
@@ -401,7 +417,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     if (!pick || busy || !pair) return;
     setBusy(true);
     const side = pick;
-    const withCrowd = leanOf(shareOf(pair[side].elo, pair[side === "a" ? "b" : "a"].elo)) === "with";
+    const withCrowd = !fewVotes(pair) && leanOf(shareOf(pair[side].elo, pair[side === "a" ? "b" : "a"].elo)) === "with";
     try {
       const res = await fetch("/api/rank/undo", { method: "POST" });
       const data = await res.json();
@@ -459,6 +475,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   }, [pick, vote, next, finished, pair]);
 
   const shares = pair ? { a: shareOf(pair.a.elo, pair.b.elo), b: shareOf(pair.b.elo, pair.a.elo) } : null;
+  const early = pair ? fewVotes(pair) : false;
+  const leanText = pick && shares ? (early ? "First votes on this pair." : LEAN[leanOf(shares[pick])]) : "";
   const kbd = "inline-grid h-6 min-w-6 place-items-center rounded-md border border-edge px-1 text-[11px] font-semibold text-mute";
 
   return (
@@ -572,12 +590,11 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 style={{ viewTransitionName: `faceoff-card-${focus}` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                <div className="relative">
-                  <div className="h-[clamp(160px,30vh,340px)] w-full overflow-hidden">
-                    <Frame e={e} />
-                  </div>
-                  <Share pct={shares[focus]} mine={mine} k={`${pair.token}-${focus}`} />
+                <div className="h-[clamp(160px,30vh,340px)] w-full overflow-hidden">
+                  <Frame e={e} />
                 </div>
+                {/* The result in its own band, never over the site's own headline. */}
+                <ResultBand pct={shares[focus]} mine={mine} early={early} k={`${pair.token}-${focus}`} />
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-edge px-3 py-2.5 sm:px-4">
                   <EloLine url={e.url} />
                   <span className="ml-auto flex flex-wrap items-center gap-2">
@@ -587,7 +604,6 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                     <a href={`/p/${encodeURIComponent(e.url)}`} target="_blank" rel="noopener" className={`${btnSecondary} h-10 px-3`}>
                       <ArrowUpRight className="h-4 w-4" aria-hidden /> Full profile
                     </a>
-                    <ViewControls prefs={prefs} choose={choose} toggle={toggle} />
                   </span>
                 </div>
                 {simple ? <PlaySummary url={e.url} /> : <DetailsPanel id={`details-${focus}`} url={e.url} record profile={false} metrics={prefs.metrics} sections={prefs.sections} />}
@@ -603,7 +619,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 {/* Next is always one look away; on a phone the bar at the bottom carries it. */}
                 <div className="card grid gap-2 p-3 text-center max-md:hidden">
                   <p className="text-sm" aria-hidden>
-                    <span className="font-semibold">{LEAN[leanOf(shares[pick])]}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
+                    <span className="font-semibold">{leanText}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
                   </p>
                   <button ref={nextRef} type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N Escape" className={`${btnPrimary} w-full`}>
                     {done >= ROUND ? "See results" : "Next pair"} <ArrowRight className="nudge h-4 w-4" aria-hidden />
@@ -625,17 +641,22 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                   className="card group relative flex min-w-0 flex-col overflow-hidden text-left transition hover:shadow-[0_0_0_2px_var(--color-edge-strong)]"
                   style={{ viewTransitionName: `faceoff-card-${side}` } as React.CSSProperties}
                 >
-                  <span className="relative block aspect-[16/10] w-full overflow-hidden">
+                  <span className="block aspect-[16/10] w-full overflow-hidden">
                     <Frame e={e} />
-                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 pt-8 text-white">
-                      {pick === side && (
-                        <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-[11px] font-bold text-on-fill">
-                          <Check className="h-3 w-3" aria-hidden /> Your pick
-                        </span>
-                      )}
-                      <span className="block text-xl font-bold tabular-nums">{shares[side]}%</span>
-                      <span className="block text-[11px] text-white/80">would pick this one</span>
-                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 border-y border-edge bg-raised px-2.5 py-2">
+                    {pick === side && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-[11px] font-bold text-on-fill">
+                        <Check className="h-3 w-3" aria-hidden /> Your pick
+                      </span>
+                    )}
+                    {early ? (
+                      <span className="text-xs text-mute">First votes on this pair</span>
+                    ) : (
+                      <span className="text-xs text-mute">
+                        <strong className="text-base text-ink tabular-nums">{shares[side]}%</strong> would pick this one
+                      </span>
+                    )}
                   </span>
                   <span className="flex items-center justify-between gap-2 p-2.5">
                     <span className="min-w-0">
@@ -724,7 +745,13 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
 
       {/* Results, errors and loading, announced without moving focus. */}
       <p role="status" aria-live="polite" className="sr-only">
-        {busy && !pair ? "Loading a pair" : pick && pair && shares ? `You picked ${pair[pick].name}. ${shares[pick]}% of people would pick it. ${LEAN[leanOf(shares[pick])]}` : (note ?? "")}
+        {busy && !pair
+          ? "Loading a pair"
+          : pick && pair && shares
+            ? early
+              ? `You picked ${pair[pick].name}. First votes on this pair.`
+              : `You picked ${pair[pick].name}. ${shares[pick]}% of people would pick it. ${leanText}`
+            : (note ?? "")}
       </p>
 
       {/* Right under the cards, centered where the eye already is; on a phone it stays above the tab bar. */}
@@ -759,7 +786,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
           ) : (
             <>
               <p className="pop-in text-sm" aria-hidden>
-                <span className="font-semibold">{shares && LEAN[leanOf(shares[pick])]}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
+                <span className="font-semibold">{leanText}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
               </p>
               <div className="flex items-center gap-3">
                 <button type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N ArrowRight" className={`${btnPrimary} min-w-44 whitespace-nowrap`}>
