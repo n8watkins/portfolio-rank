@@ -112,14 +112,14 @@ export default async function AdminUsagePage() {
   return (
     <div className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
       <div className="py-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <AdminNav current="/admin/usage" />
+        <div className="mt-3">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Usage</h1>
             <p className="mt-1 text-sm text-mute">
               Today is {u.now.day || "today"} in Pacific time; Gemini&apos;s allowance resets at midnight Pacific. Every metered call is capped and stops at its limit, so nothing here can bill.
             </p>
           </div>
-          <AdminNav current="/admin/usage" />
         </div>
         {alerts.length > 0 && (
           <ul className="mt-4 grid gap-2" aria-label="Owner alerts">

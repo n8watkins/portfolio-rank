@@ -11,7 +11,7 @@ export const ADMIN_PAGES = [
 /** The admin pages' links; `current` is the page it sits on (marked aria-current). */
 export function AdminNav({ current }: { current: (typeof ADMIN_PAGES)[number]["href"] }) {
   return (
-    <nav aria-label="Admin" className="flex flex-wrap gap-1">
+    <nav aria-label="Admin" className="-ml-3 flex flex-wrap gap-1">
       {ADMIN_PAGES.map((p) => (
         <Link
           key={p.href}
