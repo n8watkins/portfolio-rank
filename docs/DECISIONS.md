@@ -294,6 +294,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   6. The weekly newsletter still sends in a week with no post, with the top 5 and the biggest climber.
   7. The owner switches `CONTENT_MODE` from `dry-run` to `publish` by hand; it never switches itself.
   8. `gemini-3.5-flash-lite` for every content request; trends are counted by code; reading portfolio text with 3.1 can come later as a labelled experiment.
+     Changed by the owner on 2026-11-12: a content request falls back to the free `gemini-3.1-flash-lite` when 3.5 is busy, and a draft Google can't answer waits 15 to 30 minutes and tries again instead of failing ([CONTENT-ENGINE.md](CONTENT-ENGINE.md#write-a-draft-now)); grades and votes stay on 3.5 alone.
 - **Tavily is capped at 200 credits a month** (owner, 2026-11-10). Status: built.
   PortfolioRank and Wren share one free Tavily account (1,000 credits a month, 100 requests a minute across both keys); PortfolioRank gets 200 (`TAVILY_MONTHLY_CREDITS`), Wren 750, and 50 stay spare.
   A counter in the database (`tavily_credits`, schema version 8) is reserved before each search and released if Tavily errors; at the cap outside claims are cut, as when the key is missing, and `GET /api/admin/quota` shows the month's use.

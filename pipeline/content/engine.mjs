@@ -30,7 +30,7 @@
 // needs a clean quality scorecard, else the post is kept for review.
 import crypto from "node:crypto";
 import { pollsContent } from "../polls.mjs";
-import { PRIMARY_MODEL } from "../gemini.mjs";
+import { CONTENT_MODELS, isBusy } from "./busy.mjs";
 import { pacificParts } from "../quota-day.mjs";
 import { AI_LINE, aiNote, contentWeek, nextMorning, recordRun, runsOfWeek, slugify, storePost, tavilyThisWeek } from "../../lib/content/store.mjs";
 import { BUILDERS, findIdeas } from "./facts.mjs";
@@ -45,6 +45,7 @@ import { pexelsCap } from "../../lib/content/pexels-searches.mjs";
 import { OutlineError, STAGED_REQUESTS, stagedWrite } from "./staged.mjs";
 import { draftsDueBy, nextTopic, readAutomation, markTopicUsed } from "../../lib/content/automation.mjs";
 import { scorecard } from "./scorecard.mjs";
+import { linkPortfoliosToPages } from "../../lib/content/portfolio-links.mjs";
 
 export const MAX_REVISIONS = 2;
 /** Requests one round of a draft needs: write, list claims, judge them, final review. */
@@ -145,7 +146,7 @@ function budgeted(gemini, limit) {
     if (used.n >= limit) throw new ContentBudgetError(`content budget of ${limit} request(s) for this step is used up`);
     used.n++;
     const out = await gemini.generate(req.parts, req.schema, req.options);
-    if (out.model !== PRIMARY_MODEL) throw new Error(`answered by ${out.model}, not ${PRIMARY_MODEL}`);
+    if (!CONTENT_MODELS.includes(out.model)) throw new Error(`answered by ${out.model}, not ${CONTENT_MODELS.join(" or ")}`);
     return out.result;
   };
   return { generate, used, left: () => limit - used.n };
@@ -291,7 +292,11 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
     }
   } catch (e) {
     if (!(e instanceof ContentBudgetError) && !(e instanceof OutlineError)) {
-      await recordRun(db, { night, now, step, mode, status: "failed", kind, gemini: g.used.n, tavily: searches, detail: { error: msg(e), history } });
+      // Google busy: "deferred", so the same night (or "Write a draft now") may try the draft again later (pipeline/content/busy.mjs).
+      const busy = isBusy(e);
+      await recordRun(db, { night, now, step, mode, status: busy ? "deferred" : "failed", kind, gemini: g.used.n, tavily: searches, detail: { ...(busy ? { reason: "Google's AI was busy" } : {}), error: msg(e), history } });
+      // What the draft spent before it stopped, for the job's totals (pipeline/content/manual.mjs).
+      e.spent = { gemini: g.used.n, tavily: searches, imagesAi: 0 };
       throw e;
     }
     failures.push(msg(e));
@@ -332,6 +337,8 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
     },
   }).catch(async (e) => {
     if (e instanceof ContentBudgetError) return { images: [], dropped: (draft.images ?? []).map((i) => i.slot), requests: 0, aiImages: 0, pexels: 0, notes: [msg(e)], body };
+    if (isBusy(e)) await recordRun(db, { night, now, step, mode, status: "deferred", kind, gemini: g.used.n, tavily: searches, detail: { reason: "Google's AI was busy", error: msg(e), history } });
+    e.spent = { gemini: g.used.n, tavily: searches, imagesAi: 0 };
     throw e;
   });
   checks.images = img.notes;
@@ -367,7 +374,8 @@ function postOf({ id, kind, sheet, draft, body, images, supported, checks, night
     newsletterBlurb: f(draft.newsletter_blurb),
     aiLine: AI_LINE,
     aiNote: aiNote({ dataAsOf: sheet.dataAsOf, dataLink: sheet.dataLink }),
-    body: linkSources(f(body ?? assembleBody(draft)), supported),
+    // Portfolios link to their PortfolioRank page (lib/content/portfolio-links.mjs), after the checks loaded the sites themselves.
+    body: linkPortfoliosToPages(linkSources(f(body ?? assembleBody(draft)), supported), (sheet.names ?? []).map((n) => n.url).filter(Boolean)),
     facts: sheet,
     checks,
     images: images.map((i) => ({ ...i, alt: f(i.alt) })),
@@ -392,6 +400,8 @@ async function waiting(ctx) {
  */
 export const contentStage = {
   parkable: false,
+  // Google busy on a draft: the night pauses and tries it again (pipeline/night.mjs, pipeline/content/busy.mjs).
+  busyRetry: true,
   count: async (ctx) => (await pollsContent.count(ctx)) + (await waiting(ctx)),
   next: async (ctx, stage, n) => {
     if (!stage.pollsDone) {

@@ -18,13 +18,14 @@
 // it never publishes on its own. It is recorded in content_runs as step
 // "manual", which the night's schedule does not count.
 import crypto from "node:crypto";
-import { DEFAULT_RPM, PRIMARY_MODEL, createGemini, createLimiter } from "../gemini.mjs";
+import { DEFAULT_RPM, createGemini, createLimiter } from "../gemini.mjs";
+import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, CONTENT_RETRY_BUDGET, isBusy, retryClock } from "./busy.mjs";
 import { createRequestLog, dailyQuota, ensureGeminiLog } from "../gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "../budget.mjs";
 import { BUILDERS, KIND_LABELS } from "./facts.mjs";
 import { PHASES, runDraft } from "./engine.mjs";
 import { STAGED_REQUESTS } from "./staged.mjs";
-import { finishJob, getJob, setPhase, startJob } from "../../lib/content/jobs.mjs";
+import { addSpent, finishJob, getJob, resumeJob, setPhase, startJob } from "../../lib/content/jobs.mjs";
 import { writerGuidelines } from "../../lib/content/guidelines.mjs";
 
 /** Gemini requests one manual draft may spend at most (a draft that passes first time uses about 9). */
@@ -75,18 +76,26 @@ export async function manualBudget(db, { env = {}, now = new Date() } = {}) {
   return { allowed: Math.min(MANUAL_REQUESTS, a.allowed), remaining: a.remaining, reserve: a.reserve, used: a.used, cap: a.cap, limitedBy: a.limitedBy };
 }
 
+/** Tries of one draft in all: the first, then one after each of BUSY_WAIT_MINUTES. */
+export const DRAFT_TRIES = BUSY_WAIT_MINUTES.length + 1;
+
 /**
- * Runs one queued job to the end. `ctx` is the night's engine context
+ * Runs one try of a job. `ctx` is the night's engine context
  * (worker/night.ts engine): { db, apiKey, rpm, now, log, fetchImpl, flags,
- * content, env }. Never throws: every outcome ends in the job's row.
- * Returns the finished job.
+ * content, env }. `attempt` is 1 for a queued job, then 2, 3... for the
+ * tries after Google's AI was busy. Never throws: every outcome ends in the
+ * job's row. Returns the job; when Google was busy and a try is left, the
+ * job is still running in phase "busy" and `retryInMs` says how long the
+ * caller waits before the next try (worker/draft.ts sleeps that long).
+ * @returns {Promise<(Awaited<ReturnType<typeof getJob>> & { retryInMs?: number }) | null>}
  */
-export async function runManualJob(ctx, jobId) {
+export async function runManualJob(ctx, jobId, { attempt = 1, tries = DRAFT_TRIES } = {}) {
   const db = ctx.db;
   const now = () => (ctx.now ? ctx.now() : Date.now());
   const job = await getJob(db, jobId);
   if (!job) return null;
-  if (!(await startJob(db, jobId, { now: new Date(now()) }))) return job;
+  const took = attempt <= 1 ? await startJob(db, jobId, { now: new Date(now()) }) : await resumeJob(db, jobId);
+  if (!took) return job;
   const done = async (status, message, extra = {}) => {
     await finishJob(db, jobId, { status, message, now: new Date(now()), ...extra });
     return getJob(db, jobId);
@@ -103,7 +112,10 @@ export async function runManualJob(ctx, jobId) {
     const picked = await chooseKind(db, { kind: source ? String(source.kind) : job.kind, now: now() });
     if (picked.error) return done("skipped", picked.error);
     const budget = await manualBudget(db, { env: ctx.env ?? {}, now: new Date(now()) });
+    // A later try (after Google was busy) gets only what the earlier tries left of the draft's MANUAL_REQUESTS.
+    if (job.gemini > 0) budget.allowed = Math.min(budget.allowed, Math.max(0, MANUAL_REQUESTS - job.gemini));
     if (budget.allowed < MANUAL_MIN) {
+      if (job.gemini > 0 && budget.limitedBy == null) return done("failed", `Google's AI was busy, and the earlier tries used ${job.gemini} of this draft's ${MANUAL_REQUESTS} Gemini requests, so there is not enough left to finish it. Try again later.`, { kind: picked.kind });
       const why = budget.limitedBy === "cap" ? `the content job's ${budget.cap} requests today are used` : `${Math.max(0, budget.remaining)} Gemini requests are left today and ${budget.reserve} are kept for people's grades`;
       return done("skipped", `Not enough Gemini left for a draft now: ${why}. Try again tomorrow.`, { kind: picked.kind });
     }
@@ -111,14 +123,16 @@ export async function runManualJob(ctx, jobId) {
     const requestLog = createRequestLog({ db, job: "content", runId: `manual:${jobId}` });
     const gemini = createGemini({
       apiKey: ctx.apiKey,
-      models: [PRIMARY_MODEL],
+      // 3.5 Flash-Lite, then 3.1 Flash-Lite when 3.5 is busy, with longer jittered waits (pipeline/content/busy.mjs).
+      ...CONTENT_GEMINI,
       limiter: createLimiter({ rpm: ctx.rpm || DEFAULT_RPM, now }),
       onRequest: (r) => requestLog.record(r),
       onDailyQuota: "stop",
-      // A few retries for a busy API, counted inside the same daily quota; no more.
-      retryBudget: 3,
+      // Retries for a busy API, inside the draft's request budget and the daily quota; no more.
+      retryBudget: CONTENT_RETRY_BUDGET,
       fetchImpl: ctx.fetchImpl,
       now,
+      ...(ctx.sleep ? { sleep: ctx.sleep } : {}),
     });
     const guidelines = await writerGuidelines(db);
     const focus = job.topic ?? (source?.focus ? String(source.focus) : null);
@@ -138,6 +152,17 @@ export async function runManualJob(ctx, jobId) {
     if (r.status === "deferred") return done("skipped", "Not enough Gemini budget left to start the draft.", spent);
     return done("skipped", "The story had no data to write from.", spent);
   } catch (e) {
-    return done("failed", `Stopped: ${msg(e)}`);
+    const spent = e?.spent ?? { gemini: 0, tavily: 0, imagesAi: 0 };
+    if (isBusy(e)) {
+      if (attempt < tries) {
+        const waitMs = BUSY_WAIT_MINUTES[Math.min(attempt, BUSY_WAIT_MINUTES.length) - 1] * 60000;
+        await addSpent(db, jobId, spent);
+        await setPhase(db, jobId, { phase: "busy", message: `Google's AI is busy. Retrying at ${retryClock(now() + waitMs)} (try ${attempt + 1} of ${tries}).` });
+        ctx.log?.(`Content: manual ${jobId}: Google's AI is busy (${msg(e)}); try ${attempt + 1} of ${tries} in ${waitMs / 60000} min`);
+        return { ...(await getJob(db, jobId)), retryInMs: waitMs };
+      }
+      return done("failed", `Google's AI stayed busy through ${tries} tries over about ${BUSY_WAIT_MINUTES.reduce((a, b) => a + b, 0)} minutes, so nothing was written. Try again later. (Last error: ${msg(e)})`, spent);
+    }
+    return done("failed", `Stopped: ${msg(e)}`, spent);
   }
 }

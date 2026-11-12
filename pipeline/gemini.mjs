@@ -32,6 +32,9 @@
 // call that still fails after the retries goes once to the next model, and
 // a spent daily quota moves the rest of the run to it (onDailyQuota
 // "fallback") or stops it ("stop").
+// The content engine (posts, not grades) also passes the chain, with
+// fallbackAfter 1, when 3.5 is busy (owner, 2026-11-12;
+// pipeline/content/busy.mjs).
 // Every HTTP request waits its turn on one shared limiter (createLimiter), so
 // retries count against the rate too, and is reported to onRequest for the
 // request log (pipeline/gemini-log.mjs), thinking tokens included.
@@ -183,6 +186,12 @@ export function createGemini({
   retryDelaysMs = [10000, 30000, 60000],
   // Per-minute 429s: how many times to slow down before giving up on a call.
   maxSlowdowns = 5,
+  // With a chain only: after this many busy answers (5xx, timeout, network)
+  // in a row from a model, the call moves to the next model and spends the
+  // rest of retryDelaysMs there. The default (all of them) keeps the old
+  // rule: the backup gets one try after the last retry. The content engine
+  // moves after 1, since a different model is rarely busy at the same time.
+  fallbackAfter = retryDelaysMs.length,
   // With a chain only: "fallback" moves the run to the next model when a
   // daily quota is spent, "stop" ends it instead (GeminiQuotaError). With
   // one model a spent quota always ends the run.
@@ -372,6 +381,13 @@ export function createGemini({
         continue;
       }
       // transient: 5xx, timeout, network
+      if (!options.noRetry && !oneOff && idx + 1 < models.length && transient >= fallbackAfter) {
+        log(`  gemini ${model} ${out.reason} after ${transient} retr${transient === 1 ? "y" : "ies"}; this call goes to ${models[idx + 1]}`);
+        counts.fallbacks++;
+        oneOff = true;
+        idx++;
+        continue;
+      }
       if (transient < retryDelaysMs.length) {
         const wait = Math.round(retryDelaysMs[transient] * jitter());
         spendRetry(model, out.reason);
@@ -381,14 +397,6 @@ export function createGemini({
         continue;
       }
       if (options.noRetry) throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason}; no retry for this call`);
-      if (!oneOff && idx + 1 < models.length) {
-        log(`  gemini ${model} ${out.reason} after ${retryDelaysMs.length} retries; this call goes to ${models[idx + 1]}`);
-        counts.fallbacks++;
-        oneOff = true;
-        idx++;
-        transient = retryDelaysMs.length; // one attempt on the backup, no further retries
-        continue;
-      }
       throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason} after ${retryDelaysMs.length} retries`);
     }
   }
