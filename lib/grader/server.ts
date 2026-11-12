@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 import { SITE_URL } from "@/lib/site";
 import { clientIp, currentVoter, sameOrigin } from "@/lib/polls/server";
 import { OWNER_COOKIE, ownerCookieValue, readOwnerCookie } from "./links.mjs";
-import { networkOf } from "./caps.mjs";
+import { network48Of, networkOf, trustedAccount } from "./caps.mjs";
+import { auth } from "@/auth";
 import { createEmailGate, emailCaps, emailTransport } from "@/lib/email/gate.mjs";
 import type { Fetcher } from "./quick";
 import { publicFetcher } from "./quick";
@@ -54,14 +55,25 @@ export const keyed = (scope: string, value: string) => createHmac("sha256", secr
 
 /**
  * Who is asking: the visitor (signed-in account, else the signed browser
- * cookie, issued when missing) and the network, both as keyed hashes, plus
- * the raw player id the games count badges for (never stored by the grader).
+ * cookie, issued when missing), the network and its IPv6 /48, all as keyed
+ * hashes, plus the raw player id the games count badges for (never stored
+ * by the grader) and whether it's a trusted account (caps.mjs
+ * trustedAccount: signed in with a GitHub account at least 30 days old).
  */
-export async function requester(req: Request): Promise<{ visitor: string; network: string; ip: string; player: string }> {
+export async function requester(req: Request): Promise<{ visitor: string; network: string; network48: string; ip: string; player: string; trusted: boolean }> {
   const voter = (await currentVoter({ create: true }))!;
   const ip = clientIp(req);
   const net = networkOf(ip);
-  return { visitor: keyed("visitor", voter.voter), network: net ? keyed("network", net) : "", ip, player: voter.voter };
+  const net48 = network48Of(ip);
+  const session = voter.signedIn ? await auth() : null;
+  return {
+    visitor: keyed("visitor", voter.voter),
+    network: net ? keyed("network", net) : "",
+    network48: net48 ? keyed("network48", net48) : "",
+    ip,
+    player: voter.voter,
+    trusted: trustedAccount({ raterId: session?.raterId, accountCreatedAt: session?.accountCreatedAt }),
+  };
 }
 
 /** The report ids this browser owns (the signed pr_grades cookie). */

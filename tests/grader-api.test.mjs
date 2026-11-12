@@ -286,6 +286,25 @@ test("daily caps: 3 a visitor, 6 a network, reserved atomically", { skip: !enabl
   await runCaptureJob({ grade: false });
 });
 
+test("daily caps: one IPv6 /48 gets 12 a day however many /64s it rotates through", { skip: !enabled }, async () => {
+  const results = [];
+  for (let i = 1; i <= 13; i++) results.push(await grade(visitor({ ip: `2001:db8:4800:${i.toString(16)}::1` }), `v6-${i}-e2e.dev`));
+  assert.deepEqual(results.slice(0, 12).map((r) => r.status), Array(12).fill(202));
+  assert.deepEqual([results[12].status, results[12].body.scope], [429, "network48"]);
+  assert.equal((await grade(visitor({ ip: "2001:db8:4801:1::1" }), "v6-other-e2e.dev")).status, 202, "the next /48 is its own");
+  await runCaptureJob({ grade: false });
+});
+
+test("own key: never checked with Google before the free checks and the caps pass", { skip: !enabled }, async () => {
+  const v = visitor();
+  for (let i = 1; i <= 3; i++) assert.equal((await grade(v, `keycap${i}-e2e.dev`)).status, 202);
+  const asked = seen.geminiKeys.length;
+  const r = await grade(v, "keycap4-e2e.dev", { geminiKey: BAD_KEY });
+  assert.deepEqual([r.status, r.body.error], [429, "daily_limit"], "over the cap, the key isn't tested");
+  assert.equal(seen.geminiKeys.length, asked, "Google was never asked");
+  await runCaptureJob({ grade: false });
+});
+
 test("own key: checked for free, never stored or logged, used once to finish the grade on the visitor's quota", { skip: !enabled }, async () => {
   const v = visitor();
   assert.equal((await grade(v, "own-e2e.dev", { geminiKey: BAD_KEY })).body.error, "own_key_rejected");

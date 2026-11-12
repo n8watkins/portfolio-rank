@@ -12,12 +12,12 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { normalizeGradeUrl, siteKeyOf } from "../lib/grader/url.mjs";
 import { isPublicIp } from "../lib/net-guard.mjs";
-import { DEFAULT_CAPS, graderCaps, networkOf, reserveCaps, reserveSite } from "../lib/grader/caps.mjs";
-import { JOB_ID, claimCaptures, createJob, newJobId, readJob, regradeCheck, setJob, shotKeyOf } from "../lib/grader/jobs.mjs";
+import { DEFAULT_CAPS, graderCaps, network48Of, networkOf, reserveCaps, reserveSite, trustedAccount } from "../lib/grader/caps.mjs";
+import { JOB_ID, claimCaptures, countWaiting, createJob, newJobId, readJob, regradeCheck, setJob, shotKeyOf } from "../lib/grader/jobs.mjs";
 import { MAX_DISPATCHES, NO_TOKEN_REASON, retryStalled, startCapture } from "../lib/grader/dispatch.mjs";
 import { createLinkToken, openLinkToken, ownerCookieValue, readOwnerCookie } from "../lib/grader/links.mjs";
 import { emailState, reportEmail, requestEmail, sendDueEmails } from "../lib/grader/notify.mjs";
-import { addressHash, createEmailGate, emailTransport, validEmail } from "../lib/email/gate.mjs";
+import { DEFAULT_EMAIL_CAPS, addressHash, capReason, createEmailGate, emailCapConditions, emailCaps, emailTransport, isEmailCapAlert, validEmail } from "../lib/email/gate.mjs";
 import { buildReport, compareWithPool, gradedPool, strengthsAndFixes } from "../lib/grader/report.mjs";
 import { completeJob, recordCapture } from "../lib/grader/finish.mjs";
 import { checkOwnKey, gradeOnOwnKey, validOwnKey } from "../lib/grader/own-key.mjs";
@@ -94,7 +94,7 @@ test("networks: an IPv4 address is its own network, IPv6 is grouped by /64; priv
 // ---------------------------------------------------------------------------
 test("caps: all three counters are taken together or not at all, per Pacific day", async () => {
   const db = await tempDb();
-  const caps = { ...DEFAULT_CAPS, visitor: 2, network: 3, site: 4 };
+  const caps = { ...DEFAULT_CAPS, visitor: 2, network: 3, site: 4, trusted: 0 };
   const now = new Date(T0);
   assert.equal((await reserveCaps(db, { visitor: "v1", network: "n1", now, caps })).ok, true);
   assert.equal((await reserveCaps(db, { visitor: "v1", network: "n1", now, caps })).ok, true);
@@ -120,7 +120,7 @@ test("caps: concurrent requests can't pass the site-wide cap together (cost abus
   // timeout (95 seconds in all). Failing at once leaves the waiting to
   // reserveCaps' own retries, which yield the thread.
   const db = await tempDb({ busyTimeoutMs: 0 });
-  const caps = { ...DEFAULT_CAPS, visitor: 100, network: 100, site: 5 };
+  const caps = { ...DEFAULT_CAPS, visitor: 100, network: 100, site: 5, trusted: 0 };
   const results = await Promise.all(Array.from({ length: 20 }, (_, i) => reserveCaps(db, { visitor: `v${i}`, network: `n${i}`, now: new Date(T0), caps }).catch(() => ({ ok: false, scope: "busy" }))));
   assert.equal(results.filter((r) => r.ok).length, 5);
   assert.equal(Number((await db.execute("SELECT n FROM grade_caps WHERE k = '2026-11-10|site|all'")).rows[0].n), 5);
@@ -128,6 +128,54 @@ test("caps: concurrent requests can't pass the site-wide cap together (cost abus
   assert.equal(await reserveSite(db, { day: "2026-11-11", caps }), true);
   assert.deepEqual(graderCaps('{"visitor":1,"site":"x","waiting":-4}'), { ...DEFAULT_CAPS, visitor: 1, waiting: 0 });
   assert.deepEqual(graderCaps("not json"), DEFAULT_CAPS);
+});
+
+test("caps: one IPv6 /48 can't take a day's grading through many /64s", async () => {
+  assert.equal(network48Of("2001:db8:abcd:12::1"), "2001:db8:abcd::/48");
+  assert.equal(network48Of("2001:db8:abcd:ff00::9"), "2001:db8:abcd::/48", "another /64 of the same /48");
+  assert.equal(network48Of("203.0.113.9"), "", "IPv4 is capped per address");
+  assert.equal(network48Of(""), "");
+  const db = await tempDb();
+  const caps = { ...DEFAULT_CAPS, visitor: 100, network: 6, network48: 12, site: 1000, trusted: 0 };
+  const now = new Date(T0);
+  // A script rotating /64s: each /64 is under its own cap, the /48 stops it at 12.
+  const results = [];
+  for (let i = 0; i < 20; i++) results.push(await reserveCaps(db, { visitor: `bot${i}`, network: `n64-${i}`, network48: "n48-a", now, caps }));
+  assert.equal(results.filter((r) => r.ok).length, 12);
+  assert.equal(results.at(-1).scope, "network48");
+  assert.equal((await reserveCaps(db, { visitor: "v", network: "n64-x", network48: "n48-b", now, caps })).ok, true, "another /48 is unaffected");
+});
+
+test("caps: part of each day's share is kept for GitHub accounts at least 30 days old", async () => {
+  const db = await tempDb();
+  const caps = { ...DEFAULT_CAPS, visitor: 100, network: 100, network48: 100, site: 10, trusted: 3 };
+  const now = new Date(T0);
+  let open = 0;
+  for (let i = 0; i < 12; i++) if ((await reserveCaps(db, { visitor: `anon${i}`, network: `n${i}`, now, caps })).ok) open++;
+  assert.equal(open, 7, "anyone else stops at site - trusted");
+  const trusted = [];
+  for (let i = 0; i < 4; i++) trusted.push((await reserveCaps(db, { visitor: `gh${i}`, network: `t${i}`, trusted: true, now, caps })).ok);
+  assert.deepEqual(trusted, [true, true, true, false], "the kept share, then the day is full");
+  // Requests that waited are started from the open share of a later day only.
+  for (let i = 0; i < 7; i++) assert.equal(await reserveSite(db, { day: "2026-11-11", caps }), true);
+  assert.equal(await reserveSite(db, { day: "2026-11-11", caps }), false);
+  assert.equal((await reserveCaps(db, { visitor: "gh9", network: "t9", trusted: true, now: new Date("2026-11-11T20:00:00Z"), caps })).ok, true);
+
+  const day = 86400000;
+  assert.equal(trustedAccount({ raterId: "gh:1", accountCreatedAt: new Date(T0 - 31 * day).toISOString(), now: T0 }), true);
+  assert.equal(trustedAccount({ raterId: "gh:1", accountCreatedAt: new Date(T0 - 29 * day).toISOString(), now: T0 }), false);
+  assert.equal(trustedAccount({ raterId: "gh:1", now: T0 }), false, "no account date");
+  assert.equal(trustedAccount({ raterId: "anon:x", accountCreatedAt: "2010-01-01T00:00:00Z", now: T0 }), false);
+  assert.deepEqual([DEFAULT_CAPS.waiting, DEFAULT_CAPS.waitingPerNetwork, DEFAULT_CAPS.network48, DEFAULT_CAPS.trusted], [50, 2, 12, 30]);
+});
+
+test("waiting line: counted in all and per network", async () => {
+  const db = await tempDb();
+  for (const [i, network] of ["a", "a", "b"].entries()) await createJob(db, { url: `https://w${i}.dev/`, siteKey: `w${i}.dev`, status: "waiting", network, now: T0 });
+  await createJob(db, { url: "https://c.dev/", siteKey: "c.dev", status: "capturing", network: "a", now: T0 });
+  assert.equal(await countWaiting(db), 3);
+  assert.equal(await countWaiting(db, { network: "a" }), 2);
+  assert.equal(await countWaiting(db, { network: "z" }), 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -290,6 +338,44 @@ test("email gate: hard daily, per-kind and per-recipient caps; refused and faile
   await broken.send({ kind: "grade-report", to: "b@example.com", subject: "s", text: "t" });
   assert.deepEqual(await broken.send({ kind: "grade-report", to: "c@example.com", subject: "s", text: "t" }), { sent: false, reason: "cap:day" });
   assert.deepEqual(await createEmailGate({ db: db2, transport: null }).send({ kind: "grade-report", to: "a@example.com", subject: "s", text: "t" }), { sent: false, reason: "no_transport" });
+});
+
+test("email gate: report links can't spend the part of the day held back for grade reports and owner alerts", async () => {
+  const db = await tempDb();
+  const box = outbox();
+  const caps = { day: 10, perRecipient: 3, kinds: { "grade-report": 10, "report-link": 10, "owner-alert": 5 }, reserve: { "grade-report": 4, "owner-alert": 1 } };
+  const gate = createEmailGate({ db, transport: box.transport, caps, secret: SECRET, now: () => new Date(T0) });
+  const send = (kind, i) => gate.send({ kind, to: `${kind}${i}@example.com`, subject: "s", text: "t" });
+  const links = [];
+  for (let i = 0; i < 8; i++) links.push((await send("report-link", i)).sent);
+  assert.deepEqual(links, [true, true, true, true, true, false, false, false], "10 - 4 - 1 held back");
+  // The held-back part still goes out.
+  for (let i = 0; i < 4; i++) assert.deepEqual(await send("grade-report", i), { sent: true });
+  assert.deepEqual(await send("owner-alert", 0), { sent: true });
+  assert.deepEqual(await send("grade-report", 9), { sent: false, reason: "cap:day" });
+  assert.equal(capReason(caps, "grade-report", { "report-link": 2 }), null);
+  assert.equal(capReason(caps, "report-link", { "report-link": 5 }), "cap:day");
+  assert.equal(capReason(caps, "report-link", { "report-link": 3, "grade-report": 6 }), "cap:day", "a reserve used up holds nothing back");
+  assert.deepEqual(emailCaps('{"reserve":{"grade-report":50}}').reserve, { "grade-report": 50, "owner-alert": 10 });
+  assert.deepEqual(DEFAULT_EMAIL_CAPS.reserve, { "grade-report": 30, "owner-alert": 10 });
+});
+
+test("email caps: the owner is alerted at 80% of a kind's cap or of the day's", async () => {
+  const db = await tempDb();
+  const box = outbox();
+  const caps = { day: 100, perRecipient: 3, kinds: { "grade-report": 80, "report-link": 10 }, reserve: {} };
+  const gate = createEmailGate({ db, transport: box.transport, caps, secret: SECRET, now: () => new Date(T0) });
+  for (let i = 0; i < 7; i++) await gate.send({ kind: "report-link", to: `l${i}@example.com`, subject: "s", text: "t" });
+  assert.deepEqual(await emailCapConditions(db, { now: new Date(T0), caps }), []);
+  await gate.send({ kind: "report-link", to: "l8@example.com", subject: "s", text: "t" });
+  const [c] = await emailCapConditions(db, { now: new Date(T0), caps });
+  assert.equal(c.key, "email-cap:report-link");
+  assert.ok(isEmailCapAlert(c.key));
+  assert.match(c.title, /8 of 10 "report-link" emails/);
+  // A new Pacific day starts at zero, so the alert clears.
+  assert.deepEqual(await emailCapConditions(db, { now: new Date("2026-11-11T20:00:00Z"), caps }), []);
+  const day = await emailCapConditions(db, { now: new Date(T0), caps: { ...caps, day: 10 } });
+  assert.deepEqual(day.map((x) => x.key), ["email-cap:day", "email-cap:report-link"]);
 });
 
 test("email transport: the send_email binding from EMAIL_FROM; the test outbox is refused on deployed Workers", async () => {

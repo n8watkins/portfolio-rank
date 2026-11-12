@@ -21,6 +21,7 @@ import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
+import { emailAlertsTick } from "./email-alerts";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -80,6 +81,8 @@ const worker = {
     if (controller.cron === PEOPLE_QUEUE_CRON) {
       // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
       await removalsTick(env as NightEnv, controller.scheduledTime);
+      // An alert at 80% of any email cap (./email-alerts.ts).
+      await emailAlertsTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
       // The image library's hourly batch (./library.ts): up to 2 images, never in the evening.
       await libraryTick(env as NightEnv, controller.scheduledTime);

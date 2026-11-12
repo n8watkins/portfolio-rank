@@ -396,3 +396,17 @@ test("report download: signed in, or a one-time link sent through the email gate
   assert.equal((await call(jar(), "GET", `/report/print?t=${"e2e".padEnd(43, "x")}`, undefined, { redirect: "manual" })).status, 410, "forged");
   assert.equal((await call(jar(`pr_report=${Date.now() + 9e6}|${REPORT}.${"a".repeat(43)}`), "GET", path)).status, 401);
 });
+
+test("report links by email: a few a day per network, however many browsers it uses", async () => {
+  const send = (ip, i) =>
+    fetch(`${BASE}/api/report/email`, {
+      method: "POST",
+      headers: { origin: BASE, "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({ url: REPORT, email: `net-${Date.now()}-${i}@example.dev` }),
+    });
+  const statuses = [];
+  // Fresh cookies every time, from one IPv6 /64.
+  for (let i = 0; i < 4; i++) statuses.push((await send(`2001:db8:77:1::${i + 1}`, i)).status);
+  assert.deepEqual(statuses, [202, 202, 202, 429]);
+  assert.equal((await send("2001:db8:77:2::1", 9)).status, 202, "another network has its own");
+});
