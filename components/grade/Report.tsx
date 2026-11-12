@@ -82,7 +82,7 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
           {pct ? (
             <>
               <p className="text-xl font-bold leading-none tabular-nums">Top {pct.topPct}%</p>
-              <p className="text-[11px] text-mute tabular-nums">Graded against {(pct.total - 1).toLocaleString("en-US")} portfolios</p>
+              <p className="max-w-[7.5rem] text-[11px] leading-snug text-mute tabular-nums sm:max-w-none">Graded against {(pct.total - 1).toLocaleString("en-US")} portfolios</p>
             </>
           ) : (
             <p className="text-xs text-mute">{rep.isPortfolio === false ? "Not ranked: not a portfolio" : "Rank once more are graded"}</p>

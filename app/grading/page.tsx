@@ -63,7 +63,7 @@ export default function GradingPage() {
         {/* The tiers */}
         <section aria-labelledby="tiers" className="mt-12">
           <SectionHeader id="tiers" eyebrow="The grade" title={`${TIERS.length} tiers, ${TIERS[0].tier} to ${TIERS[TIERS.length - 1].tier}`} className="mb-5" />
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:gap-3 lg:grid-cols-7">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:gap-3">
             {TIERS.map(({ tier, name, note }) => (
               <li key={tier} className="card flex items-center gap-3 px-4 py-3 sm:flex-col sm:items-start sm:p-4">
                 <TierBadge tier={tier} />
