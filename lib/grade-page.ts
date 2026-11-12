@@ -35,6 +35,8 @@ export type GradePage = {
   games: boolean;
   /** When this was read: what "re-grade available in N days" counts from. */
   at: number;
+  /** The free checks in the hiring manager's three groups, for a job with no report (yet). */
+  checks: ReturnType<typeof hiringGroups> | null;
   report: null | {
     verdict: string;
     groups: ReturnType<typeof hiringGroups>;
@@ -90,7 +92,8 @@ export async function gradePage(id: string): Promise<GradePage | null> {
     const shots = await shotBases([site.url]);
     hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
   }
-  const base = { job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now() };
+  const freeChecks = job.checks?.ok ? hiringGroups((job.checks as { facts?: Parameters<typeof hiringGroups>[0] }).facts ?? []) : null;
+  const base = { job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
   if (!job.report || !raw.result) return { ...base, report: null };
 
   const rep = job.report;
