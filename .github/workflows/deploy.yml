@@ -85,6 +85,9 @@ jobs:
 
       - name: Smoke check staging
         if: steps.setup.outputs.ready == 'true'
+        env:
+          # Sent as X-Staging-Gate; the Cloudflare rule that locks staging lets it through.
+          STAGING_GATE_KEY: ${{ secrets.STAGING_GATE_KEY }}
         run: node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging
 
   deploy:
