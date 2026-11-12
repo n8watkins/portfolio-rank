@@ -678,14 +678,17 @@ function PsiRow({ label, state, metrics, short = false }: { label: string; state
 function ScoreRing({ label, state }: { label: string; state: PsiState }) {
   const { phase, data } = state;
   const score = data?.ok ? (data.scores?.performance ?? null) : null;
+  // A run still going elsewhere reads as measuring, not as a missing score.
+  const running = phase === "measuring" || (data?.ok === false && (data.error === "in_progress" || data.error === "still_measuring"));
+  const why = data && !data.ok && !running ? psiProblem(data.error).text : null;
   const r = 15;
   const c = 2 * Math.PI * r;
   return (
-    <div className="flex items-center gap-2" title={`${label} performance${score != null ? `: ${score}` : ""}`}>
+    <div className="flex items-center gap-2" title={why ?? `${label} performance${score != null ? `: ${score}` : ""}`}>
       <span className={`relative grid h-10 w-10 shrink-0 place-items-center ${scoreColor(score)}`}>
         {phase === "loading" ? (
           <span className="h-10 w-10 rounded-full bg-raised motion-safe:animate-pulse" aria-hidden />
-        ) : phase === "measuring" ? (
+        ) : running ? (
           <Loader2 className="h-5 w-5 text-accent motion-safe:animate-spin" aria-label="Measuring" />
         ) : (
           <>
@@ -721,30 +724,32 @@ export function PlaySummary({ url }: { url: string }) {
   const lines = inspect?.ok ? polishLines(inspect as Inspection & { ok: true }) : null;
   const passed = lines?.filter((l) => l.pass).length ?? 0;
   const misses = lines?.filter((l) => !l.pass).map((l) => l.label.replace(/ \(.*\)$/, "")) ?? [];
+  const showBuilt = !inspect || Boolean(s?.framework || s?.host);
 
   return (
     <div className="@container border-t border-edge bg-bg/40 px-3 py-3 sm:px-4">
-      <div className="grid gap-3 @lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.2fr)] @lg:items-center @lg:gap-5">
+      <div className={`grid gap-3 @lg:items-center @lg:gap-5 ${showBuilt ? "@lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.2fr)]" : "@lg:grid-cols-[auto_minmax(0,1fr)]"}`}>
         <div className="flex items-center gap-4" role="group" aria-label="Lighthouse performance">
           <ScoreRing label="Mobile" state={mobile} />
           <ScoreRing label="Desktop" state={desktop} />
         </div>
-        <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
-          <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Built with</p>
-          {!inspect ? (
-            <Placeholder className="mt-1 h-5 w-32" />
-          ) : s?.framework || s?.host ? (
-            <p className="details-in mt-1 flex flex-wrap gap-1.5">
-              {[s?.framework, s?.host].filter(Boolean).map((v) => (
-                <span key={v} className="rounded-md border border-edge bg-card px-2 py-0.5 text-xs font-medium">
-                  {v}
-                </span>
-              ))}
-            </p>
-          ) : (
-            <p className="details-in mt-1 text-xs text-mute">Not detected</p>
-          )}
-        </div>
+        {/* Built with: only when the polish fetch found a framework or host (unknowns stay hidden). */}
+        {showBuilt && (
+          <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
+            <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Built with</p>
+            {!inspect ? (
+              <Placeholder className="mt-1 h-5 w-32" />
+            ) : (
+              <p className="details-in mt-1 flex flex-wrap gap-1.5">
+                {[s?.framework, s?.host].filter(Boolean).map((v) => (
+                  <span key={v} className="rounded-md border border-edge bg-card px-2 py-0.5 text-xs font-medium">
+                    {v}
+                  </span>
+                ))}
+              </p>
+            )}
+          </div>
+        )}
         <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
           <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Polish</p>
           {!inspect ? (

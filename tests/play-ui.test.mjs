@@ -90,10 +90,11 @@ test("face-off: pick with a key, the crowd's lean is announced, Undo takes it ba
   const left = (await picks.first().getAttribute("aria-label")).replace(/^Pick /, "");
   await page.keyboard.press("ArrowLeft");
   await page.getByRole("status").filter({ hasText: `You picked ${left}.` }).waitFor();
-  assert.match(await page.getByRole("status").filter({ hasText: "You picked" }).textContent(), /\d+% of people would pick it\. (With the crowd|The underdog|A dead heat for the crowd)\./);
+  assert.match(await page.getByRole("status").filter({ hasText: "You picked" }).textContent(), /(\d+% of people would pick it\. (With the crowd|You picked the underdog|A dead heat for the crowd)\.|First votes on this pair\.)/);
   // The spotlight: the picked one in front with its share and ELO, the other at the side with its own.
-  await page.getByText("of people would pick this").waitFor();
-  assert.equal(await page.getByText("would pick this one").count(), 1);
+  // The result sits in a band under the screenshot: a share, or "First votes" while the pair has few face-offs.
+  await page.getByText(/of people would pick this one|First votes on this pair/).first().waitFor();
+  assert.ok((await page.getByText(/would pick this one|First votes on this pair/).count()) >= 2, "a result on both cards");
   await page.getByText(/^(ELO [0-9,]+|No ELO yet)/).first().waitFor();
   await page.waitForFunction(() => /^Next pair/.test(document.activeElement?.textContent?.trim() ?? ""));
   // Clicking the other brings it to the front; Next is still the next step.
