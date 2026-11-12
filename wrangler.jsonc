@@ -83,8 +83,10 @@
     // The sender of every email (lib/email/gate.mjs).
     "EMAIL_FROM": "portfoliorank@n8builds.dev",
     // The content engine's kill switch (docs/CONTENT-ENGINE.md): "off",
-    // "dry-run" (private drafts only) or "publish"; only the owner sets publish.
-    "CONTENT_MODE": "off",
+    // "dry-run" (draft mode: drafts wait on /admin/blog for the owner to
+    // publish or reject) or "publish"; only the owner sets publish. Draft
+    // mode in production since 2026-11-11 (owner); staging stays "off".
+    "CONTENT_MODE": "dry-run",
     // How the content engine writes a post: "staged" (outline, sections, finish;
     // pipeline/content/staged.mjs) or "single" (one request).
     "WRITER_MODE": "staged",
