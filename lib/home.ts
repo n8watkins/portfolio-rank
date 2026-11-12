@@ -9,7 +9,7 @@ import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { readBoard, VIEWS, type View } from "@/lib/ranking/board";
 import { readPolls } from "@/lib/polls/store.mjs";
-import { publicPolls, type PublicPoll, type StoredPoll } from "@/lib/polls/server";
+import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
 
 // The home page's data, all real, read once per render of the cached page
 // (app/page.tsx is rendered at most every few minutes, never per visit).
@@ -275,11 +275,12 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
   return null;
 }
 
-/** This week's poll and the last results, or nothing when there are none. */
-async function polls(): Promise<{ active: PublicPoll | null; past: PublicPoll[] }> {
-  const read = (await readPolls(db(), { now: new Date(), past: 3 })) as { active: StoredPoll | null; past: StoredPoll[] };
+/** This week's poll, the next ones scheduled and the last results. */
+async function polls(): Promise<{ active: PublicPoll | null; upcoming: UpcomingPoll[]; past: PublicPoll[] }> {
+  const read = (await readPolls(db(), { now: new Date(), past: 3, upcoming: 3 })) as { active: StoredPoll | null; upcoming: UpcomingPoll[]; past: StoredPoll[] };
   const all = await publicPolls(read.active ? [read.active, ...read.past] : read.past);
-  return read.active ? { active: all[0], past: all.slice(1) } : { active: null, past: all };
+  const upcoming = read.upcoming;
+  return read.active ? { active: all[0], upcoming, past: all.slice(1) } : { active: null, upcoming, past: all };
 }
 
 export type HomeData = Awaited<ReturnType<typeof homeData>>;

@@ -4,11 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Vote } from "lucide-react";
 import { PollBar } from "@/components/home/PollBar";
 import { Turnstile, type TurnstileHandle } from "@/components/ui/Turnstile";
+import { closesOn, voteCount } from "@/lib/polls/format";
 import type { PublicPoll } from "@/lib/polls/server";
-
-const closesOn = (iso: string) =>
-  // closesAt is the first moment it's closed: the day before is its last.
-  new Date(Date.parse(iso) - 1).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
 
 /**
  * This week's poll (app/api/polls). One vote per visitor, no sign-in: the
@@ -96,7 +93,7 @@ export function PollCard({ poll: initial }: { poll: PublicPoll }) {
               disabled={voted || busy}
               onClick={() => vote(o.index)}
               aria-pressed={mine === o.index}
-              aria-label={voted ? `${o.label}: ${o.percent}%, ${o.votes} votes` : `Vote for ${o.label}${o.site ? `, ${o.site.domain}` : ""}`}
+              aria-label={voted ? `${o.label}: ${o.percent}%, ${voteCount(o.votes)}` : `Vote for ${o.label}${o.site ? `, ${o.site.domain}` : ""}`}
               className={`group relative flex flex-col overflow-hidden rounded-xl border bg-raised text-left transition disabled:cursor-default ${
                 mine === o.index ? "border-accent ring-2 ring-accent" : voted ? "border-edge" : "card-hover border-edge hover:border-edge-strong"
               }`}
@@ -114,7 +111,7 @@ export function PollCard({ poll: initial }: { poll: PublicPoll }) {
                       </span>
                     )}
                     <span className="block text-2xl font-bold tabular-nums">{o.percent}%</span>
-                    <span className="block text-xs text-white/80">{o.votes.toLocaleString("en-US")} votes</span>
+                    <span className="block text-xs text-white/80">{voteCount(o.votes)}</span>
                   </span>
                 )}
               </span>
@@ -156,7 +153,7 @@ export function PollCard({ poll: initial }: { poll: PublicPoll }) {
         </p>
       )}
       <p role="status" className="mt-4 text-xs text-mute">
-        {voted ? `Thanks. ${poll.total.toLocaleString("en-US")} votes so far.` : "One vote per visitor, no sign-in."} Closes {closesOn(poll.closesAt)}.
+        {voted ? `Thanks. ${voteCount(poll.total)} so far.` : "One vote per visitor, no sign-in."} Closes {closesOn(poll.closesAt)}.
       </p>
     </section>
   );

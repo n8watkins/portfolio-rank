@@ -29,7 +29,7 @@ export const ROUTES: Record<
   guess: null,
   browse: "/browse",
   blog: null, // "/blog"
-  polls: null, // "/polls"
+  polls: "/polls",
   // "/about" when the about page ships.
   about: "/how",
   grading: "/grading",
