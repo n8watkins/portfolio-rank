@@ -79,7 +79,7 @@ export async function generateIllustration({ ai, db, limits, prompt, primary = "
       notes.push(`${key}: ${String(e?.message ?? e).slice(0, 160)}`);
       // No room in the budget (ours, or the AI Gateway's rate limit, which
       // lib/ai-gateway.mjs reports as AiBudgetExhausted): never try another model.
-      if (e instanceof NeuronBudgetError || e?.name === "AiBudgetExhausted") return { ok: false, budget: true, notes };
+      if (e instanceof NeuronBudgetError || e?.name === "AiBudgetExhausted") return { ok: false, budget: true, gateway: e?.name === "AiBudgetExhausted", notes };
     }
   }
   return { ok: false, notes };

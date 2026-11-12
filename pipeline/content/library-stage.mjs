@@ -1,13 +1,14 @@
 // The image library's work (docs/CONTENT-ENGINE.md, "The image library"):
 // the Worker's hourly tick (worker/library.ts, the existing "15 * * * *"
-// cron) makes up to LIBRARY_PER_HOUR (2) illustrations from the queue of
-// themes x subjects (pipeline/content/house-style.mjs), never between 20:00
-// and midnight Pacific, so the night's post gets the hour's AI Gateway
-// allowance. Each image:
+// cron) makes up to LIBRARY_PER_HOUR (40; the day's 40 is the only real
+// limit, and the owner's "Make now" may use what is left of it)
+// illustrations from the queue of themes x subjects
+// (pipeline/content/house-style.mjs), never between 20:00 and midnight
+// Pacific, so the night's post gets its image. Each image:
 //
 //   1. one Workers AI call through the portfoliorank-ai gateway (Flux
 //      Schnell; Lucid Origin only if Schnell errors), its image and neurons
-//      reserved first against 40 a UTC day, 2 a rolling hour and 2,500
+//      reserved first against 40 a UTC day and 2,500
 //      neurons a day (lib/content/neurons.mjs); no room, or the gateway's
 //      429, means stop until the next tick;
 //   2. a center crop to 16:9 and the image stored in R2 under a private
@@ -22,17 +23,23 @@ import crypto from "node:crypto";
 import { DEFAULT_RPM, PRIMARY_MODEL, GeminiAuthError, GeminiQuotaError, GeminiRetryBudgetError, createGemini, createLimiter } from "../gemini.mjs";
 import { createRequestLog, dailyQuota, ensureGeminiLog } from "../gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "../budget.mjs";
-import { insertImage, libraryKey, queuedSubjects } from "../../lib/content/library.mjs";
-import { MAX_AI_IMAGES_PER_HOUR, aiLimits, pruneCalls } from "../../lib/content/neurons.mjs";
+import { cleanSubject, customItem, insertImage, libraryKey, queuedSubjects } from "../../lib/content/library.mjs";
+import { MAX_AI_IMAGES_PER_HOUR, aiHeadroom, aiLimits, aiUsage, neuronsFor, pruneCalls } from "../../lib/content/neurons.mjs";
 import { pacificParts } from "../quota-day.mjs";
 import { GENERATED, buildCheckRequest, checkPasses, generateIllustration, libraryModel } from "./workers-ai.mjs";
 
-/** LIBRARY_PER_HOUR: a whole number from 0 (off) to 2 (the gateway's hourly limit), else 2. */
+/**
+ * LIBRARY_PER_HOUR: how many images the hourly tick makes, a whole number from
+ * 0 (off) to 40 (the day's cap), else 40.
+ */
 export function perHour(value) {
   const raw = String(value ?? "").trim();
   const n = Number(raw);
   return raw !== "" && Number.isInteger(n) && n >= 0 ? Math.min(n, MAX_AI_IMAGES_PER_HOUR) : MAX_AI_IMAGES_PER_HOUR;
 }
+
+/** Images one call of "Make now" may ask for: the day's 40 (the page asks for one a request, so it shows progress). */
+export const MAX_MANUAL = MAX_AI_IMAGES_PER_HOUR;
 
 /** Pacific hours with no library work: the end-of-day run (20:30) and its post get the gateway's hourly allowance. */
 export const QUIET_HOURS = [20, 21, 22, 23];
@@ -62,7 +69,7 @@ export async function makeLibraryImage(ctx, generate, item) {
   const lib = ctx.library;
   const gen = await generateIllustration({ ai: lib.ai, db: ctx.db, limits: lib.limits, prompt: item.prompt, primary: lib.model, now: () => new Date(ctx.now()) });
   if (!gen.ok) {
-    if (gen.budget) return { status: "budget", notes: gen.notes };
+    if (gen.budget) return { status: "budget", gateway: Boolean(gen.gateway), notes: gen.notes };
     throw new Error(`no image: ${gen.notes.join("; ")}`);
   }
   const id = crypto.randomBytes(8).toString("hex");
@@ -109,41 +116,71 @@ export async function makeLibraryImage(ctx, generate, item) {
 // job "library" (pipeline/budget.mjs); the work runs on the hourly tick.
 export const libraryStage = { parkable: false, off: () => "runs on the hourly tick (worker/library.ts), not in the night" };
 
-/** Why the library does nothing now, or null. */
-export function libraryOff(lib, now) {
-  if (!lib?.ai) return "no Workers AI binding";
-  if (lib.limits?.problem) return lib.limits.problem;
-  if (!lib.perHour) return "LIBRARY_PER_HOUR is 0";
-  if (!lib.limits?.maxImages || !lib.limits?.ceiling) return "MAX_AI_IMAGES_PER_DAY or AI_NEURON_CEILING is 0";
-  if (now != null && QUIET_HOURS.includes(pacificParts(now).hour)) return "quiet hours (20:00 to midnight Pacific): the night's post gets the AI Gateway's hourly allowance";
+/** Why the library does nothing now: { code, text } ("quiet" for the nightly pause, else "off"), or null. */
+export function libraryOffReason(lib, now) {
+  if (!lib?.ai) return { code: "off", text: "no Workers AI binding" };
+  if (lib.limits?.problem) return { code: "off", text: lib.limits.problem };
+  if (!lib.perHour) return { code: "off", text: "LIBRARY_PER_HOUR is 0" };
+  if (!lib.limits?.maxImages || !lib.limits?.ceiling || !lib.limits?.perHour) return { code: "off", text: "MAX_AI_IMAGES_PER_DAY or AI_NEURON_CEILING is 0" };
+  if (now != null && QUIET_HOURS.includes(pacificParts(now).hour)) return { code: "quiet", text: "quiet hours (20:00 to midnight Pacific): the night's post gets the AI Gateway's hourly allowance" };
   return null;
 }
 
-/** Images one manual batch may make (the gateway's hourly limit). */
-export const MAX_MANUAL = MAX_AI_IMAGES_PER_HOUR;
+/** Why the library does nothing now, or null. */
+export function libraryOff(lib, now) {
+  return libraryOffReason(lib, now)?.text ?? null;
+}
+
 
 /**
  * One batch of library images: the hourly tick (up to LIBRARY_PER_HOUR) or
- * the owner's "Make 2 now" (POST /api/admin/library/generate). Same limits
- * either way: the AI image limits (40 a day, 2 an hour, 2,500 neurons), one
- * Gemini check each within the "library" job's daily cap and what people
- * leave (the budget accountant), no retries. Stops at the first failure or
- * when there is no room; the next tick tries again. `ai` is already wrapped
- * by lib/ai-gateway.mjs. Returns { made: [{ id, status }], stopped?, error? }
- * where error is "off" (with stopped saying why) or "no_gemini_budget".
- * @param {{ db: any, env: any, ai: any, store: any, apiKey?: string, runId: string, count?: number, fetchImpl?: typeof fetch, now?: () => number, quiet?: boolean, log?: (line: string) => void }} args
+ * the owner's "Make now" (POST /api/admin/library/generate), up to what is
+ * left of the day's 40, or one image from the owner's own subject (`custom`:
+ * { subject, theme? }, cleaned here). Same limits every way: the AI image
+ * limits (40 a day, 2,500 neurons), one Gemini check each within
+ * the "library" job's daily cap and what people leave (the budget
+ * accountant), no retries. Stops at the first failure or when there is no
+ * room; the next tick tries again. `ai` is already wrapped by
+ * lib/ai-gateway.mjs. Returns { made: [{ id, status }], stopped?, error?,
+ * reason?, nextAt?, usage } where error is "off", "bad_subject", "no_room" or
+ * "no_gemini_budget", and reason says why nothing more was made: "quiet",
+ * "hour" and "day" (with nextAt), "neurons", "gateway" (the AI Gateway's own 429),
+ * "no_gemini_budget", "queue_empty", "bad_subject", "off" or "error". usage
+ * is the AI image counters after the batch (lib/content/neurons.mjs aiUsage).
+ * @param {{ db: any, env: any, ai: any, store: any, apiKey?: string, runId: string, count?: number, custom?: { subject: unknown, theme?: string } | null, fetchImpl?: typeof fetch, now?: () => number, quiet?: boolean, log?: (line: string) => void }} args
  */
-export async function runLibraryBatch({ db, env, ai, store, apiKey, runId, count, fetchImpl = globalThis.fetch, now = () => Date.now(), quiet = true, log = (line) => console.log(JSON.stringify({ event: "library", line })) }) {
-  const lib = { ...libraryConfig(env), ai, store };
-  const off = libraryOff(lib, quiet ? now() : null);
-  if (off) return { made: [], error: "off", stopped: off };
-  if (!apiKey) return { made: [], error: "off", stopped: "no GEMINI_API_KEY for the checks" };
+export async function runLibraryBatch(args) {
+  const lib = { ...libraryConfig(args.env), ai: args.ai, store: args.store };
+  const now = args.now ?? (() => Date.now());
+  const result = await batchWork({ ...args, now }, lib);
+  // Always say where the counters stand now, so the page can show them next to the outcome.
+  try {
+    result.usage = await aiUsage(args.db, { limits: lib.limits, now: new Date(now()) });
+  } catch {}
+  return result;
+}
+
+/** @param {any} args @param {any} lib */
+async function batchWork({ db, env, apiKey, runId, count, custom = null, fetchImpl = globalThis.fetch, now, quiet = true, log = (line) => console.log(JSON.stringify({ event: "library", line })) }, lib) {
+  const manual = count != null || custom != null;
+  const off = libraryOffReason(lib, quiet ? now() : null);
+  if (off) return { made: [], error: "off", reason: off.code, stopped: off.text };
+  if (!apiKey) return { made: [], error: "off", reason: "off", stopped: "no GEMINI_API_KEY for the checks" };
+  let cleaned = null;
+  if (custom) {
+    cleaned = cleanSubject(custom.subject);
+    if (!cleaned.ok) return { made: [], error: "bad_subject", reason: "bad_subject", stopped: cleaned.error };
+  }
   await ensureGeminiLog(db);
   await pruneCalls(db, { now: new Date(now()) });
+  const room = await aiHeadroom(db, { limits: lib.limits, neurons: neuronsFor(lib.model), now: new Date(now()) });
+  if (room.remaining < 1) return { made: [], error: "no_room", reason: room.blocker, nextAt: room.nextAt, stopped: `no room for AI images now (${room.blocker})` };
   const plan = budgetPlan(env.GEMINI_BUDGET);
   const usage = await usageToday(db, { now: new Date(now()), plan });
-  const n = Math.min(count ?? lib.perHour, lib.perHour, backgroundAllowance("library", usage, { plan, quota: dailyQuota(env.GEMINI_DAILY_QUOTA) }).allowed);
-  if (n < 1) return { made: [], error: "no_gemini_budget" };
+  const allowed = backgroundAllowance("library", usage, { plan, quota: dailyQuota(env.GEMINI_DAILY_QUOTA) }).allowed;
+  // The tick makes LIBRARY_PER_HOUR; the owner's "Make now" what it asks for, within what is left of the day.
+  const n = Math.min(custom ? 1 : (count ?? lib.perHour), manual ? MAX_MANUAL : lib.perHour, allowed, room.remaining);
+  if (n < 1) return { made: [], error: "no_gemini_budget", reason: "no_gemini_budget" };
   const requestLog = createRequestLog({ db, job: "library", runId });
   const gemini = createGemini({
     apiKey,
@@ -157,13 +194,22 @@ export async function runLibraryBatch({ db, env, ai, store, apiKey, runId, count
   });
   const ctx = { db, now, log, library: lib };
   const made = [];
-  for (const item of await queuedSubjects(db, { limit: n })) {
+  const items = custom ? [customItem({ subject: cleaned.subject, theme: custom.theme })] : await queuedSubjects(db, { limit: n });
+  if (!items.length) return { made, reason: "queue_empty", stopped: "every subject has an image or is skipped" };
+  for (const item of items) {
     try {
       const r = await makeLibraryImage(ctx, (q) => gemini.generate(q.parts, q.schema, q.options), item);
-      if (r.status === "budget") return { made, stopped: `no room for AI images now: ${r.notes.join("; ")}` };
+      if (r.status === "budget") {
+        // The gateway's own limit (a 429), else our counters moved under us.
+        const after = await aiHeadroom(db, { limits: lib.limits, neurons: neuronsFor(lib.model), now: new Date(now()) });
+        const stop = { made, stopped: `no room for AI images now: ${r.notes.join("; ")}` };
+        // The refused call is counted too, so the gateway let through one fewer in the last hour.
+        if (r.gateway) return { ...stop, reason: "gateway", gatewayLimit: Math.max(0, after.lastHour - 1) };
+        return { ...stop, reason: after.blocker ?? "hour", nextAt: after.nextAt };
+      }
       made.push({ id: r.id, status: r.status });
     } catch (e) {
-      return { made, stopped: msg(e) };
+      return { made, reason: "error", stopped: msg(e) };
     }
   }
   return { made };

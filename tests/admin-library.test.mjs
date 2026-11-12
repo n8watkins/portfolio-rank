@@ -79,10 +79,50 @@ test("library API: keep, drop and retire, each only from the statuses it applies
   assert.equal((await post("/api/admin/library", { id: "../x", action: "keep" }, { cookie: admin })).status, 400);
 });
 
-test("manual batch: admin and CSRF checked; refused outside production", async () => {
+test("library API: drop's Undo restores to where it was; alt text and tags are edited and cleaned; nothing is deleted", async () => {
+  const id = "e2e0000000000003";
+  await insertImage(db, { id, theme: "design-polish", subjectIndex: null, key: `private/library/test/${id}.jpg`, tags: ["design"], alt: "A test image", caption: "AI-generated illustration", source: "workers-ai", licence: "generated", credit: "AI-generated illustration", status: "pending", check: null });
+  assert.equal((await post("/api/admin/library", { id, action: "drop" }, { cookie: admin })).status, 200);
+  assert.equal((await post("/api/admin/library", { id, action: "restore", to: "approved" }, { cookie: admin })).status, 400);
+  const back = await post("/api/admin/library", { id, action: "restore", to: "pending" }, { cookie: admin });
+  assert.equal(back.status, 200);
+  assert.equal((await back.json()).image.status, "pending");
+  const edit = await post("/api/admin/library", { id, action: "edit", alt: "Grid of cards, one amber", tags: ["Design", "cards"] }, { cookie: admin });
+  assert.equal(edit.status, 200);
+  const img = (await edit.json()).image;
+  assert.deepEqual([img.alt, img.tags], ["Grid of cards, one amber", ["design", "cards"]]);
+  const short = await post("/api/admin/library", { id, action: "edit", alt: "no" }, { cookie: admin });
+  assert.equal(short.status, 400);
+  assert.match((await short.json()).error, /at least 8/);
+  assert.equal((await post("/api/admin/library", { id, action: "edit", tags: "x" }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library", { id, action: "edit", alt: "x".repeat(5000) }, { cookie: admin })).status, 400);
+  assert.equal((await db.execute({ sql: "SELECT COUNT(*) AS n FROM image_library WHERE id = ?", args: [id] })).rows[0].n, 1);
+});
+
+test("queue API: admin only; edit, skip and reset a queued subject; bad input refused", async () => {
+  assert.equal((await fetch(`${BASE}/api/admin/library/queue`)).status, 401);
+  const list = await fetch(`${BASE}/api/admin/library/queue`, { headers: { cookie: admin } });
+  const items = (await list.json()).items;
+  assert.equal(items.length, 130);
+  const q = items[5];
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: q.index, op: "skip" }, { cookie: other })).status, 403);
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: q.index, op: "skip" }, { cookie: admin, origin: "https://evil.example" })).status, 403);
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: "5", op: "skip" }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: q.index, op: "edit", subject: "x" }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: q.index, op: "edit", subject: "A flat lighthouse beside a browser window" }, { cookie: admin })).status, 200);
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: q.index, op: "skip" }, { cookie: admin })).status, 200);
+  const after = (await (await fetch(`${BASE}/api/admin/library/queue`, { headers: { cookie: admin } })).json()).items.find((x) => x.theme === q.theme && x.index === q.index);
+  assert.deepEqual([after.subject, after.skipped, after.edited], ["A flat lighthouse beside a browser window", true, true]);
+  assert.equal((await post("/api/admin/library/queue", { theme: q.theme, index: q.index, op: "reset" }, { cookie: admin })).status, 200);
+});
+
+test("manual batch: admin and CSRF checked; bounded input; refused outside production", async () => {
   assert.equal((await post("/api/admin/library/generate", { count: 1 }, { cookie: admin, origin: "https://evil.example" })).status, 403);
   assert.equal((await post("/api/admin/library/generate", { count: 1 }, { cookie: other })).status, 403);
-  assert.equal((await post("/api/admin/library/generate", { count: 3 }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library/generate", { count: 41 }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library/generate", { count: 2, custom: { subject: "A flat lighthouse beside a window" } }, { cookie: admin })).status, 400, "one custom image at a time");
+  assert.equal((await post("/api/admin/library/generate", { custom: { subject: "x".repeat(3000) } }, { cookie: admin })).status, 400);
+  assert.equal((await post("/api/admin/library/generate", { custom: { subject: 7 } }, { cookie: admin })).status, 400);
   const r = await post("/api/admin/library/generate", { count: 1 }, { cookie: admin });
   assert.equal(r.status, 409);
   assert.deepEqual(await r.json(), { error: "production_only" });
@@ -94,9 +134,17 @@ test("review page: only the admin sees it; images are served to the admin only",
   const page = await fetch(`${BASE}/admin/images`, { headers: { cookie: admin } });
   assert.equal(page.status, 200);
   const html = await page.text();
-  assert.match(html, /Image library/);
-  assert.match(html, /Make 2 now/);
-  assert.match(html, /AI images today: (<!-- -->)?0(<!-- -->)? of (<!-- -->)?40/);
+  const text = html.replace(/<!-- -->/g, "");
+  assert.match(text, /Image library/);
+  assert.match(text, /Make 2 now/);
+  assert.match(text, /Make up to 40/);
+  assert.match(text, /How images are made/);
+  assert.match(text, /Made today<\/dt><dd[^>]*>0 of 40/);
+  assert.match(text, /no hourly cap/);
+  assert.match(text, /Flux 2 Dev is off/);
+  assert.match(text, /Today 0 of 40 · 40 left/);
+  assert.match(text, /To review <span[^>]*>\(\d+\)/);
+  assert.match(text, /Up next <span[^>]*>\(130 of 130 left\)/);
   assert.equal((await fetch(`${BASE}/api/admin/library/${ids[0]}/image`)).status, 401);
   // The admin may ask; the test server has no bucket, so the bytes are not there.
   assert.equal((await fetch(`${BASE}/api/admin/library/${ids[0]}/image`, { headers: { cookie: admin } })).status, 404);

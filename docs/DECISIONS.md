@@ -351,6 +351,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
 - **Never pay for images: at most 40 AI images a day** (owner, 2026-11-10, tightened twice the same day). Status: built (#94).
   Every image comes from free daily allowances only.
   The limit is in images, so it is obvious: at most 40 AI images a UTC day (`MAX_AI_IMAGES_PER_DAY`) and at most 2 in any rolling hour, counted per image, for the library and the posts together.
+  Owner, 2026-11-11: "40 a day only": the app's hourly cap is gone (the rolling hour counts against the same 40, so it never stops a call first) so "Make now" can make a batch at once; the AI Gateway's 40 per 3,600 seconds is the backstop, and the 40 a day and 2,500 neurons stay.
   Every Workers AI call goes through the `portfoliorank-ai` AI Gateway (#95: 2 requests an hour, sliding, and a $1 a month Workers AI spend limit); its 429 means stop, no retry, try next hour.
   Behind it, a neuron guard: at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`; 40 Schnell images are about 2,320).
   Both settings can be lowered, never raised: a value above 40 or 2,500 (or not a whole number) is rejected and fails closed, so no Workers AI call is made until it is fixed.
