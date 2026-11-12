@@ -5,6 +5,7 @@ import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
 import { displayName } from "@/lib/grader/present.mjs";
 import { graderEnabled, readGradeShot } from "@/lib/grader/server";
 import { listedSite } from "@/lib/me";
+import { isPublicTier } from "@/lib/tiers.mjs";
 
 // A grade report's share card: the shared portfolio card (lib/og-portfolio.tsx)
 // with the person's name, address, screenshot, tier and "Top N%". Like the
@@ -32,13 +33,17 @@ async function report(id: string) {
   if (!graderEnabled() || !JOB_ID.test(id)) return null;
   await ensureSchema();
   const job = await readJob(db(), id);
-  if (!job || job.status !== "done" || !job.result?.tier) return null;
+  if (!job || job.status !== "done" || !job.result) return null;
   const url = String(job.url);
   const quick = job.quick as { title?: string } | null;
   const name = displayName({ listedName: listedSite(String(job.site_key))?.name, title: quick?.title, domain: domainOf(url) });
   const shot = job.shot_key ? await readGradeShot(String(job.shot_key), "hero.jpg").catch(() => null) : null;
+  // The tier by rank (lib/tiers.mjs) and "Top N%" show on the card only for the public tiers (SSS to B):
+  // the card travels with the link, so no one's shared card says C or D.
+  const tier = job.report?.rank?.tier;
   const pct = (job.report?.percentile ?? null) as { topPct: number; total: number } | null;
-  return { name, url: shownUrl(url), shot, tier: String(job.result.tier), result: pct ? { topPct: pct.topPct, total: pct.total } : null };
+  if (!isPublicTier(tier)) return { name, url: shownUrl(url), shot, tier: null, result: null };
+  return { name, url: shownUrl(url), shot, tier: String(tier), result: pct ? { topPct: pct.topPct, total: pct.total - 1 } : null };
 }
 
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {

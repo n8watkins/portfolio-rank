@@ -35,7 +35,7 @@ export function listedSite(siteKey: string): FeedRow | null {
 type Step = { key: string; label: string; state: "done" | "running" | "waiting" | "pending" | "needs_key" | "failed" | "off" };
 type Line = { id: string; label: string; pass?: boolean | null; detail?: string; score?: number | null; note?: string };
 type Fix = { criterion: string; title: string; why: string; by: "ai" | "code" };
-type SiteLink = { url: string; name: string; domain: string; tier: string; path: string };
+type SiteLink = { url: string; name: string; domain: string; tier: string | null; path: string };
 
 /** GET /api/grade/<id>'s answer (lib/grader/view.mjs publicJob). */
 export type Job = {
@@ -51,7 +51,8 @@ export type Job = {
   email: { requested: boolean; sent: boolean };
   checks: { ok: boolean; message?: string } | null;
   report: null | {
-    tier: string;
+    /** The tier by rank in the library (lib/tiers.mjs); null when not ranked ("not a portfolio"). */
+    tier: string | null;
     isPortfolio: boolean | number | null;
     roles: string[];
     facts: Line[];
@@ -180,6 +181,13 @@ export async function myPortfolio(): Promise<Mine | null> {
     if (!hero && site) {
       const shots = await shotBases([site.url]);
       hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
+    }
+    if (job.report) {
+      // Today's tiers of the portfolios it points to (older reports stored Gemini's letters).
+      const tierNow = new Map(((await gradedPool(client)) as { url: string; tier: string | null }[]).map((p) => [p.url, p.tier]));
+      const now = <T extends { url: string }>(x: T) => ({ ...x, tier: tierNow.get(x.url) ?? null });
+      job.report.similar = job.report.similar.map(now);
+      job.report.better = job.report.better.map((b) => ({ ...b, sites: b.sites.map(now) }));
     }
     const linked = job.report ? [...job.report.similar, ...job.report.better.flatMap((b) => b.sites)].map((x) => x.url) : [];
     const [standings, listed, linkedShots] = await Promise.all([

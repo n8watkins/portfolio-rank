@@ -76,6 +76,7 @@ import { recompute } from "../lib/ranking/views.mjs";
 import { ensurePollsSchema, schedulePolls } from "./polls.mjs";
 import { contentStage } from "./content/engine.mjs";
 import { libraryStage } from "./content/library-stage.mjs";
+import { rankForWrite } from "../lib/tiers-store.mjs";
 
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
@@ -246,7 +247,8 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   }
   if (!image) return "skipped";
   const now = new Date(ctx.now());
-  const rubric = await gradeFromEvidence(gemini, { row, image, now });
+  // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
+  const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { now: ctx.now() });
   await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
   return "ok";
 }

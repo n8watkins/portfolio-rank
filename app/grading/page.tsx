@@ -6,6 +6,7 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
+import { SCORE_WEIGHTS, TIER_LADDER } from "@/lib/tiers.mjs";
 
 // How grading works, kept short: the tiers, what "top X%" means, what is
 // checked and how votes combine. The criteria come from the rubric
@@ -13,18 +14,13 @@ import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 
 export const metadata: Metadata = {
   title: "How grading works - PortfolioRank",
-  description: "What S, A, B, C and D mean, what a top 10% place says, what is checked and how people's votes move the ranking.",
+  description: "What the tiers from SSS to D mean, what a top 10% place says, what is checked and how people's votes move the ranking.",
 };
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
-const TIERS = [
-  { tier: "S", name: "Exceptional", note: "About 1 in 20." },
-  { tier: "A", name: "Strong", note: "Stands out." },
-  { tier: "B", name: "Solid", note: "The most common grade." },
-  { tier: "C", name: "Weak", note: "Works, says little." },
-  { tier: "D", name: "Needs work", note: "Hard to tell who you are." },
-];
+// The ladder, from lib/tiers.mjs (the owner's settings).
+const TIERS = TIER_LADDER;
 
 /** The bands a report names, best first: `of` is the band's share in twentieths, drawn as a little bar. */
 const BANDS = [
@@ -66,8 +62,8 @@ export default function GradingPage() {
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
         {/* The tiers */}
         <section aria-labelledby="tiers" className="mt-12">
-          <SectionHeader id="tiers" eyebrow="The grade" title="Five tiers, S to D" className="mb-5" />
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-5 sm:gap-3">
+          <SectionHeader id="tiers" eyebrow="The grade" title={`${TIERS.length} tiers, ${TIERS[0].tier} to ${TIERS[TIERS.length - 1].tier}`} className="mb-5" />
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:gap-3 lg:grid-cols-7">
             {TIERS.map(({ tier, name, note }) => (
               <li key={tier} className="card flex items-center gap-3 px-4 py-3 sm:flex-col sm:items-start sm:p-4">
                 <TierBadge tier={tier} />
@@ -78,14 +74,17 @@ export default function GradingPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-mute">The AI makes the call, with the facts in front of it. No S+: S is the top.</p>
+          <p className="mt-3 text-sm text-mute text-pretty">
+            Your tier is your place among every graded portfolio. The AI&apos;s five scores make up {pct(SCORE_WEIGHTS.quality)} of
+            the score and the code checks {pct(SCORE_WEIGHTS.checks)}. Only tiers B and up are shown in public.
+          </p>
         </section>
 
         {/* Top X% */}
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
           <p className="text-[15px] text-mute">
-            Only 1 in 10 graded portfolios placed higher. Tier first, then the AI&apos;s scores break ties.
+            Only 1 in 10 graded portfolios placed higher. The score decides the place, and the place decides the tier.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {BANDS.map((b) => (

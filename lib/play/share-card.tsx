@@ -6,6 +6,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { isHidden } from "@/lib/roster";
 import { playCards } from "@/lib/play/card";
 import { readGradeShot } from "@/lib/grader/server";
+import { tierChipStyle } from "@/lib/og-tier";
 
 // A listed portfolio's share card: its name, its public grade and "top N%"
 // (top tiers only, as on the page) beside its own screenshot. It is the
@@ -16,8 +17,6 @@ import { readGradeShot } from "@/lib/grader/server";
 export const SHARE_SIZE = OG_SIZE;
 
 const amber = "#fbbf24";
-const TIER_BG: Record<string, string> = { S: amber, A: "#3a2a0a", B: "#1c1c21" };
-const TIER_INK: Record<string, string> = { S: "#0a0a0b", A: amber, B: "#ededf0" };
 
 const domainOf = (url: string) => {
   try {
@@ -100,25 +99,7 @@ export async function listedShareCard(url: string): Promise<Response> {
           <div style={{ display: "flex", width: 640, height: 400, borderRadius: 18, border: "1.5px solid #26262b", background: "#121215" }} />
         )}
         {tier && (
-          <div
-            style={{
-              display: "flex",
-              position: "absolute",
-              left: -36,
-              bottom: 0,
-              width: 132,
-              height: 132,
-              borderRadius: 30,
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 76,
-              fontWeight: 800,
-              background: TIER_BG[tier],
-              color: TIER_INK[tier],
-              border: `3px solid ${tier === "S" ? "#0a0a0b" : amber}`,
-              boxShadow: "0 18px 40px rgba(0,0,0,0.5)",
-            }}
-          >
+          <div style={{ ...tierChipStyle(tier), position: "absolute", left: -36, bottom: 0 }}>
             {tier}
           </div>
         )}

@@ -48,7 +48,10 @@ export type Entry = {
   likely: string | null;
   /** "Top X%" among the sites shown in this view (AI view). */
   topPct: number | null;
+  /** The tier by rank in the library (lib/tiers.mjs); shown only when public. */
   tier: string | null;
+  /** People's ELO from face-off votes (lib/elo), shown beside the tier on every board; null without votes. */
+  elo: number | null;
   /** AI and people strongly disagree (Merged): their places in each view. */
   disagree: { ai: number; people: number } | null;
   votes: number | null;
@@ -77,6 +80,15 @@ export const domainOf = (url: string) => {
 
 const noTable = (e: unknown) => /no such (table|column)/i.test(String((e as Error)?.message ?? e));
 const marks = (n: number) => Array.from({ length: n }, () => "?").join(",");
+
+/** People's ELO for each url that has a rating row (one indexed read by primary key). */
+export async function eloOf(urls: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!urls.length) return out;
+  const res = await db().execute({ sql: `SELECT url, elo FROM ratings WHERE url IN (${marks(urls.length)})`, args: urls });
+  for (const r of res.rows) out.set(String(r.url), Math.round(Number(r.elo)));
+  return out;
+}
 
 // The basics a row shows as chips (lib/grader/report.mjs factLines ids).
 const CHIP: Record<string, string> = {
@@ -125,7 +137,7 @@ async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   return out;
 }
 
-/** The tier of each url's stored grade (ELO board), skipping hidden grades. */
+/** The tier by rank of each url's stored grade (ELO board), skipping hidden grades. */
 function tierOf(why: Map<string, Why>, tiers: Map<string, string>, url: string) {
   return why.has(url) ? (tiers.get(url) ?? null) : null;
 }
@@ -229,11 +241,12 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
 
   const board = await readBoard(kind, { limit });
   const urls = board.rows.map((r) => r.url);
-  const [bases, why, moves, split] = await Promise.all([
+  const [bases, why, moves, split, elos] = await Promise.all([
     shotBases(urls),
     whyFor(urls),
     kind === "ai" ? Promise.resolve(new Map<string, number>()) : movement(kind, urls),
     kind === "merged" ? disagreements(urls) : Promise.resolve(new Map<string, { ai: number; people: number }>()),
+    eloOf(urls),
   ]);
   const likely = kind === "ai" ? null : likelyRanks(board.rows, board.total);
 
@@ -253,6 +266,7 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
       likely: likely?.[i] ?? null,
       topPct: kind === "ai" ? topPct(r.rank, board.total) : null,
       tier: why.has(r.url) ? r.tier : null,
+      elo: elos.get(r.url) ?? null,
       disagree: split.get(r.url) ?? null,
       votes: null,
       why: why.get(r.url) ?? null,
@@ -284,7 +298,8 @@ async function loadElo(limit: number): Promise<Leaderboard> {
   const tiers = new Map<string, string>();
   if (urls.length) {
     const t = await db().execute({
-      sql: `SELECT url, json_extract(ai_rubric, '$.tier') AS tier FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)`,
+      // The tier by rank in the library (lib/tiers.mjs), never Gemini's own letter.
+      sql: `SELECT url, json_extract(ai_rubric, '$.rank.tier') AS tier FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)`,
       args: urls,
     });
     for (const r of t.rows) if (r.tier != null) tiers.set(String(r.url), String(r.tier));
@@ -305,6 +320,7 @@ async function loadElo(limit: number): Promise<Leaderboard> {
       likely: null,
       topPct: null,
       tier: tierOf(why, tiers, r.url),
+      elo: Math.round(r.elo),
       disagree: null,
       votes: r.votes,
       why: why.get(r.url) ?? null,

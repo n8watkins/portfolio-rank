@@ -70,6 +70,11 @@ jobs:
         if: steps.setup.outputs.ready == 'true'
         run: node scripts/migrate.mjs
 
+      # Tiers by rank (lib/tiers.mjs): staging has no crons, so its tiers are placed at each deploy.
+      - name: Place the staging tiers
+        if: steps.setup.outputs.ready == 'true'
+        run: node scripts/refresh-tiers.mjs
+
       - name: Build
         if: steps.setup.outputs.ready == 'true'
         run: npm run build:worker
@@ -133,6 +138,11 @@ jobs:
       - name: Migrate the database
         if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
         run: node scripts/migrate.mjs
+
+      # Tiers by rank (lib/tiers.mjs) placed before the new code serves; the hourly cron keeps them current.
+      - name: Place the tiers
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
+        run: node scripts/refresh-tiers.mjs
 
       - name: Build
         run: |

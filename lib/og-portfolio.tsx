@@ -3,6 +3,7 @@ import { OG_SIZE, dataUrl } from "@/lib/og-card";
 import { readPublicFile } from "@/lib/publicFile";
 import { SITE_URL } from "@/lib/site";
 import { fitName, fitSize, friendlyCount } from "@/lib/og-fit.mjs";
+import { tierChipStyle } from "@/lib/og-tier";
 
 /**
  * The share card of one portfolio (1200x630), shared by a grade report
@@ -27,6 +28,7 @@ export type PortfolioCardInput = {
   url: string;
   /** The hero screenshot (JPEG), or null. */
   shot: Uint8Array | null;
+  /** A public tier by rank (lib/tiers.mjs, SSS to B), or null to show none. */
   tier: string | null;
   /** "Top N%" and the number of portfolios it is among, or null to show no result. */
   result: { topPct: number; total: number } | null;
@@ -38,8 +40,6 @@ const BG = "#0a0a0b";
 const INK = "#ededf0";
 const MUTED = "#8b8b93";
 const AMBER = "#fbbf24";
-const TIER_BG: Record<string, string> = { S: AMBER, A: "#3a2a0a", B: "#1c1c21", C: "#1c1c21", D: "#1c1c21" };
-const TIER_INK: Record<string, string> = { S: "#0a0a0b", A: AMBER, B: "#ededf0", C: "#ededf0", D: "#a1a1aa" };
 
 const LEFT = 72;
 const COL_W = 500;
@@ -116,25 +116,7 @@ export async function portfolioCard(c: PortfolioCardInput, extraHeaders: Record<
             </div>
           )}
           {c.tier && (
-            <div
-              style={{
-                display: "flex",
-                position: "absolute",
-                left: -36,
-                bottom: 0,
-                width: 132,
-                height: 132,
-                borderRadius: 30,
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 76,
-                fontWeight: 800,
-                background: TIER_BG[c.tier] ?? TIER_BG.C,
-                color: TIER_INK[c.tier] ?? TIER_INK.C,
-                border: `3px solid ${c.tier === "S" ? BG : AMBER}`,
-                boxShadow: "0 18px 40px rgba(0,0,0,0.5)",
-              }}
-            >
+            <div style={{ ...tierChipStyle(c.tier), position: "absolute", left: -36, bottom: 0 }}>
               {c.tier}
             </div>
           )}

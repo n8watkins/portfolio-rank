@@ -12,6 +12,8 @@ import { db, ensureSchema } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
+import { BELOW_TOP_TIERS, isPublicTier, tierOf } from "@/lib/tiers.mjs";
+import { TierBadge } from "@/components/ui/badges";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -71,11 +73,12 @@ export async function generateMetadata({
   };
 }
 
-// The AI review shows for any graded site, but only the top tiers (S/A/B) get the
-// prominent letter badge - lower tiers show the axis scores under a neutral "AI"
-// mark, so we never slap a public "D" on someone's work.
+// The AI review shows for any graded site, but only the top tiers (SSS to B, by
+// rank in the library: lib/tiers.mjs) get the prominent letter badge - lower
+// tiers show the axis scores under a neutral "AI" mark and say "Graded, below
+// the top tiers", so we never slap a public "D" on someone's work.
 function publicGrade(raw: unknown): null | {
-  tier: string;
+  tier: string | null;
   showTier: boolean;
   model?: string;
   /** Rubric v2: weighted AI quality (1-5) and the share of code checks passed (0-100). */
@@ -90,8 +93,9 @@ function publicGrade(raw: unknown): null | {
   } catch {
     return null;
   }
-  const tier = r.tier as string | undefined;
-  if (!tier || !["S", "A", "B", "C", "D"].includes(tier)) return null;
+  // A real grade: Gemini answered (its own letter is there). The tier shown is the one by rank.
+  if (typeof r.tier !== "string" || !r.tier || "error" in r) return null;
+  const tier = tierOf(r);
   const axes = Object.entries(AXIS_LABELS)
     .map(([key, label]) => {
       const ax = r[key];
@@ -101,7 +105,7 @@ function publicGrade(raw: unknown): null | {
     .filter((a): a is NonNullable<typeof a> => a !== null);
   return {
     tier,
-    showTier: ["S", "A", "B"].includes(tier),
+    showTier: isPublicTier(tier),
     model: typeof r.model === "string" ? r.model : undefined,
     quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
     checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
@@ -225,15 +229,16 @@ export default async function PortfolioPage({
         {grade && (
           <div className="mt-4 rounded-xl border border-edge bg-card p-5">
             <div className="flex items-center gap-3">
-              <span
-                className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
-                  grade.showTier ? "bg-fill text-on-fill" : "bg-edge text-ink"
-                }`}
-              >
-                {grade.showTier ? grade.tier : "AI"}
-              </span>
+              {grade.showTier && grade.tier ? (
+                <TierBadge tier={grade.tier} />
+              ) : (
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-edge text-sm font-bold text-ink">AI</span>
+              )}
               <div>
-                <p className="font-semibold">AI design review</p>
+                <p className="font-semibold">
+                  AI design review
+                  {!grade.showTier && grade.tier && <span className="ml-2 text-xs font-normal text-mute">{BELOW_TOP_TIERS}</span>}
+                </p>
                 <p className="text-xs text-mute">
                   by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
                   a verdict
