@@ -27,6 +27,9 @@ test("private, loopback, metadata and reserved addresses are refused", () => {
     "http://192.0.0.8/",
     "http://192.168.1.1/",
     "http://198.18.0.1/",
+    "http://168.63.129.16/?comp=versions", // Azure WireServer (GitHub's hosted runners)
+    "http://2822734096/", // the same, in decimal
+    "http://[::ffff:a83f:8110]/", // and IPv4-mapped
     "http://224.0.0.1/",
     "http://255.255.255.255/",
     "http://[::1]/",
