@@ -5,6 +5,7 @@ import { clientIp, ipKey, sameOrigin } from "@/lib/polls/server";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { createOneTimeLink } from "@/lib/grader/links.mjs";
+import { networkOf } from "@/lib/grader/caps.mjs";
 import { authSecret, emailGate, readJsonBody, siteBase } from "@/lib/grader/server";
 import { PRIVATE, currentPlayer, fail, gamesEnabled, off, overLimit, portfolioName, rateLimited } from "@/lib/games/server";
 
@@ -17,12 +18,15 @@ import { PRIVATE, currentPlayer, fail, gamesEnabled, off, overLimit, portfolioNa
 //   turnstile_failed, 429 rate_limited, 503 email_unavailable with reason
 //   "unavailable" (no transport), "capped" (a cap of the email gate) or
 //   "failed" (the provider refused it)
-// Caps: 5 an hour per browser and per network here, then the shared email
-// gate's (lib/email/gate.mjs, kind "report-link"): the site-wide and
-// per-kind daily caps and at most 3 emails a day to one address. The
-// address is used to send and is not stored; the gate keeps a keyed hash.
+// Caps: 5 an hour per browser and 3 a day per network (IPv4 address or
+// IPv6 /64) here, then the shared email gate's (lib/email/gate.mjs, kind
+// "report-link"): the site-wide and per-kind daily caps, the part of the day
+// held back for grade reports, and at most 3 emails a day to one address.
+// The address is used to send and is not stored; the gate keeps a keyed hash.
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const REPORT_EMAILS_PER_NETWORK_DAY = 3;
 
 export async function POST(req: Request) {
   if (!gamesEnabled()) return off();
@@ -42,9 +46,12 @@ export async function POST(req: Request) {
   if (!gate.enabled) return fail("email_unavailable", 503, { reason: "unavailable" });
   const player = (await currentPlayer({ create: true }))!;
   const ip = clientIp(req);
+  // The day's report-link emails are a pool everyone shares (the email
+  // gate's caps), so one network may use only a few of them a day.
+  const net = networkOf(ip);
   const over = await overLimit([
     { key: `report-email:b:${player.browser || player.id}`, limit: 5, windowMs: HOUR },
-    ...(ip ? [{ key: `report-email:ip:${ipKey(ip)}`, limit: 5, windowMs: HOUR }] : []),
+    ...(net ? [{ key: `report-email:net-day:${ipKey(net)}`, limit: REPORT_EMAILS_PER_NETWORK_DAY, windowMs: DAY }] : []),
   ]);
   if (over) return rateLimited(over);
   if ((await verifyTurnstile(body.turnstileToken, ip, { action: "report-email" })) === "failed") return fail("turnstile_failed", 403);

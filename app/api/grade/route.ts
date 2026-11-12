@@ -75,12 +75,6 @@ export async function POST(req: Request) {
 
   if ((await verifyTurnstile(body.turnstileToken, who.ip, { action: "grade" })) === "failed") return fail("turnstile_failed", 403);
 
-  if (geminiKey) {
-    const apiBase = testSeam("GRADER_TEST_GEMINI_API");
-    const check = await checkOwnKey(geminiKey, apiBase ? { apiBase } : {});
-    if (check === "rejected") return fail("own_key_rejected", 400, { message: "Google didn't accept that key for gemini-3.5-flash-lite." });
-  }
-
   // The free checks, at once (cached per address for a day).
   const quick = await quickFacts(client, { url: target.url, siteKey: target.siteKey, fetcher: graderFetcher(), now });
   if (!quick.ok) {
@@ -96,17 +90,31 @@ export async function POST(req: Request) {
   }
 
   const caps = graderCaps(process.env.GRADER_CAPS);
-  let reserved = await reserveCaps(client, { visitor: who.visitor, network: who.network, now: new Date(now), caps });
+  // Signed-in GitHub accounts at least 30 days old may use the whole day's share; anyone else the open part (lib/grader/caps.mjs).
+  const mine = { visitor: who.visitor, network: who.network, network48: who.network48, trusted: who.trusted, now: new Date(now), caps };
+  let reserved = await reserveCaps(client, mine);
   let waiting = false;
   if (!reserved.ok && reserved.scope === "site") {
     // Past today's share: the request waits for a later day (it still counts for the visitor and the network).
-    if ((await countWaiting(client)) >= caps.waiting) return fail("busy", 503, { message: "Grading is full for now. Please try again tomorrow." }, { "retry-after": "3600" });
-    reserved = await reserveCaps(client, { visitor: who.visitor, network: who.network, site: false, now: new Date(now), caps });
+    // The line is short, and one network holds only a couple of places in it.
+    const busy = () => fail("busy", 503, { message: "Grading is full for now. Please try again tomorrow." }, { "retry-after": "3600" });
+    if ((await countWaiting(client)) >= caps.waiting) return busy();
+    if (who.network && (await countWaiting(client, { network: who.network })) >= caps.waitingPerNetwork) return busy();
+    reserved = await reserveCaps(client, { ...mine, site: false });
     waiting = reserved.ok;
   }
   if (!reserved.ok) {
     const resetAt = quotaDay(new Date(now)).end.toISOString();
     return fail("daily_limit", 429, { scope: reserved.scope, resetAt, message: "That's today's limit of grades. It resets at midnight Pacific time." });
+  }
+
+  // The visitor's own Gemini key is checked with Google only now, after the
+  // free checks and the caps: a key check costs a grade from the day's
+  // allowance, so this can't be used to test keys in bulk.
+  if (geminiKey) {
+    const apiBase = testSeam("GRADER_TEST_GEMINI_API");
+    const check = await checkOwnKey(geminiKey, apiBase ? { apiBase } : {});
+    if (check === "rejected") return fail("own_key_rejected", 400, { message: "Google didn't accept that key for gemini-3.5-flash-lite." });
   }
 
   const { cached, ...stored } = quick;
