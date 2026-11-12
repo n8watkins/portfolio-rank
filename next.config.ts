@@ -3,22 +3,28 @@ import { readFileSync } from "node:fs";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import { parseJsonc } from "./scripts/check-worker-exports.mjs";
 
-// "Grade my portfolio" is switched by the Worker variable GRADER_ENABLED. The
-// shell's links to the grade pages (lib/nav.ts ROUTES.grade) are part of
-// pages prerendered at build time, so the build reads the same switch: the
-// variable when the build environment sets it (the test runs), else
-// wrangler.jsonc's value for the Worker being built (staging or production).
-// Flipping it in wrangler.jsonc ships with a deploy, which rebuilds.
-function graderSwitch(): string {
-  if (process.env.GRADER_ENABLED !== undefined) return /^true$/i.test(process.env.GRADER_ENABLED) ? "true" : "false";
+// The launch switches are Worker variables, but pages prerendered at build
+// time (the home page, /top and its views, the sitemap: ISR) read them too,
+// so the build must see the values the Worker will run with: the variable
+// when the build environment sets it (the test runs), else wrangler.jsonc's
+// value for the Worker being built (staging or production). Flipping one in
+// wrangler.jsonc ships with a deploy, which rebuilds.
+function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2"): "true" | "false" {
+  if (process.env[name] !== undefined) return /^true$/i.test(String(process.env[name])) ? "true" : "false";
   try {
     const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
     const vars = process.env.NEXT_PUBLIC_SITE_ENV === "staging" ? config.env?.staging?.vars : config.vars;
-    return /^true$/i.test(String(vars?.GRADER_ENABLED ?? "")) ? "true" : "false";
+    return /^true$/i.test(String(vars?.[name] ?? "")) ? "true" : "false";
   } catch {
     return "false";
   }
 }
+// GAMES_V2 and RANKING_V2 are read on the server only (lib/games/server.ts,
+// lib/leaderboard.ts, lib/home.ts), from process.env: setting them here
+// reaches the build's prerender, and the Worker sets the same values at run
+// time. "Grade my portfolio" is also read in the browser (lib/nav.ts
+// ROUTES.grade), so it is inlined as NEXT_PUBLIC_GRADER_ENABLED below.
+for (const name of ["GAMES_V2", "RANKING_V2"] as const) process.env[name] = launchSwitch(name);
 
 // Defense-in-depth response headers applied to every route: HSTS (the site is
 // HTTPS-only), clickjacking, MIME sniffing, referrer leakage, and a
@@ -64,7 +70,7 @@ const nextConfig: NextConfig = {
   // Browser source maps only for the deploy that uploads them to Sentry; the
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
-  env: { NEXT_PUBLIC_GRADER_ENABLED: graderSwitch() },
+  env: { NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED") },
   async headers() {
     // Grade reports are unlisted (shareable by link only) and claims are
     // personal: never indexed, whatever a page's own metadata says.
