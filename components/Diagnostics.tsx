@@ -347,3 +347,117 @@ export function DetailDiagnostics({ url }: { url: string }) {
     </div>
   );
 }
+
+/** The polish checklist's lines (shared by the portfolio page and the games). */
+function polishLines(inspect: Inspection & { ok: true }): { label: string; pass: boolean | undefined }[] {
+  const year = new Date().getFullYear();
+  return [
+    { label: "HTTPS", pass: inspect.https },
+    { label: "Custom domain", pass: inspect.customDomain },
+    { label: "Share image", pass: inspect.ogImageLoads },
+    { label: "Favicon", pass: inspect.favicon },
+    { label: "Meta description", pass: !!inspect.description },
+    { label: "Links to GitHub", pass: !!inspect.githubUrl || inspect.hasGithubLink },
+    { label: "Resume / CV", pass: inspect.hasResume },
+    { label: "Contact path", pass: inspect.hasContact },
+    { label: inspect.copyrightYear ? `Fresh (© ${inspect.copyrightYear})` : "Fresh", pass: inspect.copyrightYear == null || inspect.copyrightYear >= year - 1 },
+  ];
+}
+
+const PLAY_PSI: [string, string][] = [
+  ["performance", "Perf."],
+  ["accessibility", "Access."],
+  ["best-practices", "Best pr."],
+  ["seo", "SEO"],
+];
+
+function PlayLabel({ children }: { children: React.ReactNode }) {
+  return <h5 className="text-xs font-semibold tracking-wider text-mute uppercase">{children}</h5>;
+}
+
+/**
+ * The games' compact view of what the tools measured (Play's "About this
+ * portfolio"): the site's own link preview (its og:image, title and
+ * description), the Lighthouse scores and the polish checklist. Lighthouse
+ * comes only from the cache the portfolio page fills (/api/psi?cached=1), so a
+ * face-off never starts a PageSpeed run; the polish checks are the portfolio
+ * page's own, cached a week (/api/inspect).
+ */
+export function PlayDiagnostics({ url }: { url: string }) {
+  const { data: inspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
+  const { data: psi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}&cached=1`);
+
+  return (
+    <div className="grid gap-4">
+      <section className="grid gap-2">
+        <PlayLabel>Link preview</PlayLabel>
+        {!inspect ? (
+          <div className="h-16 animate-pulse rounded-lg bg-raised" />
+        ) : !inspect.ok ? (
+          <p className="text-sm text-mute">Couldn&apos;t reach the site to read its preview.</p>
+        ) : inspect.ogImage && inspect.ogImageLoads ? (
+          <div className="flex max-w-md overflow-hidden rounded-lg border border-edge bg-card">
+            <div className="w-28 shrink-0 border-r border-edge sm:w-32">
+              <ShareImage key={inspect.ogImage} src={new URL(inspect.ogImage, inspect.finalUrl).href} />
+            </div>
+            <div className="min-w-0 p-2">
+              <p className="truncate text-xs font-semibold">{inspect.ogTitle ?? inspect.title}</p>
+              <p className="line-clamp-2 text-[11px] text-mute">{inspect.ogDescription ?? inspect.description ?? ""}</p>
+              <p className="mt-0.5 truncate text-[11px] text-mute uppercase">{domainOf(url)}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="flex items-start gap-2 text-sm">
+            <span className="font-bold text-red-500" aria-hidden>
+              ✗
+            </span>
+            <span>
+              <strong>No share image:</strong> <span className="text-mute">links to this site show up bare.</span>
+            </span>
+          </p>
+        )}
+      </section>
+
+      <section className="grid gap-2">
+        <PlayLabel>Lighthouse (mobile)</PlayLabel>
+        {!psi ? (
+          <div className="h-12 animate-pulse rounded-lg bg-raised" />
+        ) : !psi.ok ? (
+          <p className="text-sm text-mute">{psi.error === "not_measured" ? "Not measured yet." : psiProblem(psi.error).text}</p>
+        ) : (
+          <div className="grid grid-cols-4 gap-1.5">
+            {PLAY_PSI.map(([id, label]) => (
+              <div key={id} className="rounded-lg border border-edge px-1 py-1.5 text-center" title={PSI_LABELS[id]}>
+                <p className={`text-lg font-bold tabular-nums ${scoreColor(psi.scores?.[id])}`}>{psi.scores?.[id] ?? "-"}</p>
+                <p className="text-[11px] text-mute">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-2">
+        <PlayLabel>Polish checklist</PlayLabel>
+        {!inspect ? (
+          <div className="h-16 animate-pulse rounded-lg bg-raised" />
+        ) : !inspect.ok ? (
+          <p className="text-sm text-mute">Couldn&apos;t reach the site.</p>
+        ) : (
+          <ul className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {polishLines(inspect as Inspection & { ok: true }).map((l) => (
+              <li key={l.label} className="flex items-center gap-1.5 text-xs">
+                <span className={`font-bold ${l.pass ? "text-up" : "text-red-500"}`} aria-hidden>
+                  {l.pass ? "✓" : "✗"}
+                </span>
+                <span className={l.pass ? "" : "text-mute"}>
+                  {l.label}
+                  <span className="sr-only">{l.pass ? ": yes" : ": no"}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

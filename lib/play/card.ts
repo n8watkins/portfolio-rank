@@ -1,15 +1,15 @@
 import { db, ensureSchema } from "@/lib/db";
-import { factLines, gradedPool, judgmentLines } from "@/lib/grader/report.mjs";
+import { factLines, gradedPool } from "@/lib/grader/report.mjs";
 import { hiringGroups, placeIn } from "@/lib/grader/present.mjs";
 
-// What the games show about a portfolio beside its screenshot: the public
-// grade (only the top tiers get a letter and a "top N%", as on the portfolio
-// page, so no one gets a public "D"), the roles the page claims, the hiring
-// manager's three questions as a one-word answer each, and its face-off
-// record. Public data only: nothing here depends on who is looking.
+// A listed portfolio's public summary: the public grade (only the top tiers
+// get a letter and a "top N%", as on the portfolio page, so no one gets a
+// public "D"), the roles the page claims, the hiring manager's three
+// questions as a one-word answer each, and its face-off record. Public data
+// only: nothing here depends on who is looking.
 //
-// Two shapes: `PlayCard` is the summary (the share card uses it),
-// `PlayDetails` adds what "About this portfolio" shows (/api/play/card).
+// The share card (lib/play/share-card.tsx) and the games' face-off record
+// (/api/play/card) read it.
 
 const PUBLIC_TIERS = new Set(["S", "A", "B"]);
 
@@ -27,14 +27,7 @@ export type PlayCard = {
   votes: number;
   wins: number;
 };
-export type PlayDetails = PlayCard & {
-  groups: ReturnType<typeof hiringGroups>;
-  judgments: { id: string; label: string; score: number | null; note: string }[];
-  model: string | null;
-  /** The listed portfolio's share card (app/p/[slug]/opengraph-image). */
-  shareImage: string;
-  profile: string;
-};
+export type PlayDetails = PlayCard;
 
 const parse = (v: unknown): Record<string, unknown> | null => {
   if (typeof v !== "string" || !v) return null;
@@ -100,18 +93,8 @@ export async function playCards(urls: string[]): Promise<Map<string, PlayCard>> 
   return new Map(urls.map((u) => [u, cardOf(rs.get(u)!, pool)]));
 }
 
-/** Everything the inline Details panel shows for one listed portfolio. */
+/** One listed portfolio's card, for the games' details (its face-off record) and its share card. */
 export async function playDetails(url: string): Promise<PlayDetails> {
   const [rs, pool] = await Promise.all([rows([url]), gradedPool(db()).catch(() => [])]);
-  const row = rs.get(url)!;
-  const g = row.hidden ? null : row.grade;
-  const slug = encodeURIComponent(url);
-  return {
-    ...cardOf(row, pool),
-    groups: g ? hiringGroups(factLines(g)) : [],
-    judgments: g ? judgmentLines(g) : [],
-    model: typeof g?.model === "string" ? g.model : null,
-    shareImage: `/p/${slug}/share-card`,
-    profile: `/p/${slug}`,
-  };
+  return cardOf(rs.get(url)!, pool);
 }

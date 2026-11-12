@@ -21,7 +21,7 @@ import { frameOf } from "@/lib/shot-url";
 // of a round, and the round is kept in sessionStorage so a sign-in returns to
 // it. Clicking a screenshot or the centered Pick picks it; ← and → pick, S or
 // ↓ skips ("Can't decide, skip"), Enter, N or → goes on. "About this
-// portfolio" (share card, hiring basics, AI grade) is shown while deciding;
+// portfolio" (its link preview, Lighthouse scores and polish checklist) is shown while deciding;
 // only the record (win rate) waits for the vote. No portfolio is shown twice
 // in a session (?seen=, kept in sessionStorage).
 
@@ -530,9 +530,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                {/* From 1440 px up: the screenshot with the share card under it on
-                    the left, the facts on the right. Below that, everything stacks
-                    under the screenshot. */}
+                {/* From 1440 px up the details sit beside the screenshot; below that, under it. */}
                 <div className="flex-1 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
                   <div className="min-w-0">
                     <button
@@ -547,9 +545,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                       {pick === null && <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />}
                       {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
                     </button>
-                    {wide && <DetailsPanel id={`share-${side}`} url={e.url} name={e.name} grade record={false} part="share" />}
                   </div>
-                  <DetailsPanel id={`details-${side}`} url={e.url} name={e.name} grade record={pick !== null} part={wide ? "facts" : "all"} side={wide} />
+                  <DetailsPanel id={`details-${side}`} url={e.url} record={pick !== null} profile side={wide} />
                 </div>
                 {/* The pick, centered under its card. */}
                 <div className="flex min-h-16 items-center justify-center border-t border-edge p-2.5 sm:p-3">
