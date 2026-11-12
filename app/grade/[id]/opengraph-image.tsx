@@ -5,7 +5,6 @@ import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
 import { displayName } from "@/lib/grader/present.mjs";
 import { graderEnabled, readGradeShot } from "@/lib/grader/server";
 import { listedSite } from "@/lib/me";
-import { SITE_URL } from "@/lib/site";
 
 // A grade report's share card: the shared portfolio card (lib/og-portfolio.tsx)
 // with the person's name, address, screenshot, tier and "Top N%". Like the
@@ -45,8 +44,7 @@ async function report(id: string) {
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const r = await report(id);
-  const host = (process.env.AUTH_URL || SITE_URL).replace(/^https?:\/\//, "").replace(/\/$/, "");
-  return portfolioCard(r ? { ...r, host } : { name: "Grade report", url: "How good is your portfolio?", shot: null, tier: null, result: null, host }, {
+  return portfolioCard(r ?? { name: "Grade report", url: "How good is your portfolio?", shot: null, tier: null, result: null }, {
     "cache-control": "private, max-age=300",
     "x-robots-tag": "noindex",
   });

@@ -1,6 +1,8 @@
 import { ImageResponse } from "next/og";
 import { OG_SIZE, dataUrl } from "@/lib/og-card";
 import { readPublicFile } from "@/lib/publicFile";
+import { SITE_URL } from "@/lib/site";
+import { fitName, fitSize, friendlyCount } from "@/lib/og-fit.mjs";
 
 /**
  * The share card of one portfolio (1200x630), shared by a grade report
@@ -12,7 +14,8 @@ import { readPublicFile } from "@/lib/publicFile";
  * and PortfolioRank small, bottom right.
  *
  * When the name is the address itself, the address line is left out.
- * Long names wrap to two lines and shrink, then end in an ellipsis; a long
+ * A long name wraps to two lines, then shrinks, then loses middle or
+ * trailing words (lib/og-fit.mjs fitName), never cut mid-word; a long
  * address shrinks, then ends in one; without a screenshot the frame shows the
  * address instead; without a result the left side keeps only the name.
  * Keep box-shadow blur at 70px or less: larger blurs on big boxes crash resvg.
@@ -27,8 +30,8 @@ export type PortfolioCardInput = {
   tier: string | null;
   /** "Top N%" and the number of portfolios it is among, or null to show no result. */
   result: { topPct: number; total: number } | null;
-  /** The site the card links back to, shown small (the Worker's own address). */
-  host: string;
+  /** The address shown small, bottom right: always the public site's (owner, 2026-11-12), also on staging and locally. */
+  host?: string;
 };
 
 const BG = "#0a0a0b";
@@ -42,26 +45,10 @@ const LEFT = 72;
 const COL_W = 500;
 const SHOT = { left: 628, top: 104, width: 640, height: 400 };
 
-/** A friendly lower bound for a count: 1,370 gives "1,300+", 2,046 gives "2,000+", 87 gives "80+". */
-export function friendlyCount(n: number): string {
-  const step = n >= 1000 ? 100 : n >= 100 ? 10 : 1;
-  const down = Math.floor(n / step) * step;
-  return `${down.toLocaleString("en-US")}${down < n ? "+" : ""}`;
-}
-
-/** The biggest font size (min..max) at which `text` fits `lines` lines of `width`, from Inter's average glyph width `em`. */
-export function fitSize(text: string, width: number, { max, min, em, lines = 1 }: { max: number; min: number; em: number; lines?: number }): number {
-  const fit = Math.floor((lines * width) / Math.max(1, text.length * em));
-  return Math.max(min, Math.min(max, fit));
-}
-
 export async function portfolioCard(c: PortfolioCardInput, extraHeaders: Record<string, string> = {}): Promise<Response> {
   const [medium, extraBold, mark] = await Promise.all([readPublicFile("/og/Inter-Medium.ttf"), readPublicFile("/og/Inter-ExtraBold.ttf"), readPublicFile("/og/pr-logo.svg")]);
 
-  // One line when it fits at 56px or more, else up to two lines.
-  const oneLine = fitSize(c.name, COL_W, { max: 72, min: 30, em: 0.6 });
-  const nameLines = oneLine >= 56 ? 1 : 2;
-  const nameSize = nameLines === 1 ? oneLine : fitSize(c.name, COL_W, { max: 56, min: 36, em: 0.6, lines: 2 });
+  const name = fitName(c.name, COL_W);
   const urlSize = fitSize(c.url, COL_W, { max: 30, min: 20, em: 0.55 });
   const shot = c.shot ? dataUrl(c.shot.buffer.slice(c.shot.byteOffset, c.shot.byteOffset + c.shot.byteLength) as ArrayBuffer, "image/jpeg") : null;
 
@@ -75,11 +62,28 @@ export async function portfolioCard(c: PortfolioCardInput, extraHeaders: Record<
           height: "100%",
           overflow: "hidden",
           background: BG,
-          backgroundImage: "radial-gradient(circle at 80% 40%, rgba(251,191,36,0.14), rgba(10,10,11,0) 55%)",
+          // Depth: a warm amber glow behind the screenshot, a fainter one low
+          // on the left under the result, and a slight lift from the top.
+          backgroundImage:
+            "radial-gradient(ellipse 760px 560px at 76% 50%, rgba(251,191,36,0.30), rgba(251,191,36,0.10) 40%, rgba(10,10,11,0) 72%), radial-gradient(ellipse 560px 380px at 6% 104%, rgba(245,158,11,0.18), rgba(10,10,11,0) 70%), linear-gradient(180deg, #121215 0%, #0a0a0b 65%)",
           fontFamily: "Inter",
           color: INK,
         }}
       >
+        {/* A faint amber grid behind the screenshot, fading out at its edges */}
+        <div
+          style={{
+            display: "flex",
+            position: "absolute",
+            left: SHOT.left - 90,
+            top: SHOT.top - 80,
+            width: SHOT.width + 180,
+            height: SHOT.height + 170,
+            backgroundImage:
+              "repeating-linear-gradient(0deg, rgba(251,191,36,0.10) 0px, rgba(251,191,36,0.10) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 32px), repeating-linear-gradient(90deg, rgba(251,191,36,0.10) 0px, rgba(251,191,36,0.10) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 32px)",
+            maskImage: "radial-gradient(ellipse at center, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 72%)",
+          }}
+        />
         {/* The screenshot, with the tier on its corner */}
         <div style={{ display: "flex", position: "absolute", left: SHOT.left, top: SHOT.top, width: SHOT.width, height: SHOT.height + 30 }}>
           {shot ? (
@@ -138,20 +142,12 @@ export async function portfolioCard(c: PortfolioCardInput, extraHeaders: Record<
 
         {/* Who: name and address */}
         <div style={{ display: "flex", flexDirection: "column", position: "absolute", left: LEFT, top: 76, width: COL_W }}>
-          <div
-            style={{
-              display: "block",
-              fontSize: nameSize,
-              fontWeight: 800,
-              lineHeight: 1.06,
-              letterSpacing: -0.025 * nameSize,
-              maxHeight: nameSize * 1.06 * nameLines + 4,
-              overflow: "hidden",
-              lineClamp: nameLines,
-              ...(nameLines === 1 ? { whiteSpace: "nowrap", textOverflow: "ellipsis" } : {}),
-            }}
-          >
-            {c.name}
+          <div style={{ display: "flex", flexDirection: "column", fontSize: name.size, fontWeight: 800, lineHeight: 1.06, letterSpacing: -0.025 * name.size }}>
+            {name.lines.map((line, i) => (
+              <div key={i} style={{ display: "flex", whiteSpace: "nowrap" }}>
+                {line}
+              </div>
+            ))}
           </div>
           {c.url !== c.name && <div style={{ display: "block", marginTop: 14, fontSize: urlSize, fontWeight: 500, color: AMBER, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.url}</div>}
         </div>
@@ -168,7 +164,7 @@ export async function portfolioCard(c: PortfolioCardInput, extraHeaders: Record<
         <div style={{ display: "flex", alignItems: "center", gap: 12, position: "absolute", right: 64, bottom: 40 }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- rendered by Satori, not the browser */}
           <img src={dataUrl(mark, "image/svg+xml")} width={36} height={36} alt="" style={{ borderRadius: 9 }} />
-          <div style={{ display: "flex", fontSize: 22, fontWeight: 500, color: "#a1a1aa" }}>{c.host}</div>
+          <div style={{ display: "flex", fontSize: 22, fontWeight: 500, color: "#a1a1aa" }}>{c.host ?? new URL(SITE_URL).host}</div>
         </div>
       </div>
     ),
