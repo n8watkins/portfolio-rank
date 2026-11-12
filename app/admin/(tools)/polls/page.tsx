@@ -1,4 +1,4 @@
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminHeader } from "@/components/admin/AdminHeader";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
@@ -25,17 +25,13 @@ export default async function AdminPollsPage() {
   const shown = await publicPolls(schedule);
 
   return (
-    <div className="wrap pb-20">
-      <div className="py-6">
-        <AdminNav current="/admin/polls" />
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Polls</h1>
-        <p className="mt-2 text-sm text-mute">
-          {schedule.length} poll{schedule.length === 1 ? "" : "s"} from this week on. Visitors see the questions and weeks of upcoming polls on /polls, never their options.
-        </p>
-      </div>
+    <>
+      <AdminHeader title="Polls">
+        {schedule.length} poll{schedule.length === 1 ? "" : "s"} from this week on. Visitors see the questions and weeks of upcoming polls on /polls, never their options.
+      </AdminHeader>
 
       {schedule.length === 0 && <p className="card p-5 text-sm text-mute">Nothing scheduled. The next nightly run makes this week&apos;s poll.</p>}
-      <ol className="grid gap-4">
+      <ol className="grid gap-4 xl:grid-cols-2">
         {schedule.map((p, i) => (
           <li key={p.id} className="card p-5" data-poll={p.id}>
             <p className="flex flex-wrap gap-x-2 text-xs text-mute">
@@ -103,6 +99,6 @@ export default async function AdminPollsPage() {
       ) : (
         <p className="mt-3 text-sm text-mute">No generation runs yet.</p>
       )}
-    </div>
+    </>
   );
 }

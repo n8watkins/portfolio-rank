@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Bot, Clock, Gauge, ImageIcon, Search, TriangleAlert } from "lucide-react";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminHeader } from "@/components/admin/AdminHeader";
 import { requireAdmin } from "@/lib/admin";
 import { adminUsage, type UsageDay } from "@/lib/admin/usage";
 import { PEOPLE_JOBS } from "@/pipeline/budget.mjs";
@@ -110,27 +110,19 @@ export default async function AdminUsagePage() {
   const alerts = u.alerts as { key: string; message?: string; title?: string }[];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-      <div className="py-6">
-        <AdminNav current="/admin/usage" />
-        <div className="mt-3">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Usage</h1>
-            <p className="mt-1 text-sm text-mute">
-              Today is {u.now.day || "today"} in Pacific time; Gemini&apos;s allowance resets at midnight Pacific. Every metered call is capped and stops at its limit, so nothing here can bill.
-            </p>
-          </div>
-        </div>
-        {alerts.length > 0 && (
-          <ul className="mt-4 grid gap-2" aria-label="Owner alerts">
-            {alerts.map((a) => (
-              <li key={a.key} className="flex items-start gap-2 rounded-xl border border-down/40 bg-down/5 p-3 text-sm">
-                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-down" aria-hidden /> {a.title ?? a.message ?? a.key}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+    <>
+      <AdminHeader title="Usage">
+        {u.now.day ? `Today is ${u.now.day} in Pacific time; ` : "Days are counted in Pacific time; "}Gemini&apos;s allowance resets at midnight Pacific. Every metered call is capped and stops at its limit, so nothing here can bill.
+      </AdminHeader>
+      {alerts.length > 0 && (
+        <ul className="-mt-2 mb-6 grid gap-2" aria-label="Owner alerts">
+          {alerts.map((a) => (
+            <li key={a.key} className="flex items-start gap-2 rounded-xl border border-down/40 bg-down/5 p-3 text-sm">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-down" aria-hidden /> {a.title ?? a.message ?? a.key}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card id="gemini" icon={<Bot className="h-4 w-4" aria-hidden />} title="Gemini today" note="Requests since midnight Pacific, retries included.">
@@ -225,6 +217,6 @@ export default async function AdminUsagePage() {
           </Card>
         </div>
       </div>
-    </div>
+    </>
   );
 }
