@@ -45,6 +45,9 @@ Shared assumptions:
 | Google Play (one time, if pursued) | $25 | | | |
 | Option: captures on Browser Rendering instead of Actions | $0 | $0 (8 of 10 included hours) | about $6.60 (83 hours) | $0.09 per hour over 10 |
 
+The weekly change fingerprint of every listed site ([AUTOMATION.md](../AUTOMATION.md#when-checks-re-run)) adds about 300 page fetches a day on the hourly cron: about 0.1 to 0.3 million ms of Workers CPU a month of the 30 million included, and about 3 million Turso rows read a month.
+In return Lighthouse, polish, captures and link checks re-run only for sites that changed or got old, instead of on fixed timers.
+
 Gemini background work at paid rates (3.5 Flash-Lite, $0.30 input and $2.50 output per 1M tokens):
 
 | Job | Requests a month | Cost per request | Month |

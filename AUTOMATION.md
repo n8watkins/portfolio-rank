@@ -7,7 +7,7 @@ truth for the data flow and the GitHub Actions.
 
 ```
 emmabostian/developer-portfolios (upstream, community-curated)
-        │  (only MERGED entries — upstream review is the trust gate)
+        │  (only MERGED entries - upstream review is the trust gate)
         ▼
   sync-upstream Action  ──rebuild──►  data/feed.json
         │                               = upstream − excluded.json + additions.json
@@ -36,7 +36,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
 |---|---|---|
 | **Upstream merge** | High (Emma reviewed it) | Auto-pulled by `sync-upstream` |
 | **Direct submission** | Unvetted | Issue form → `data/additions.json` |
-| **Takedown / opt-out** | — | "Remove my portfolio" issue → `data/excluded.json` (dropped forever) |
+| **Takedown / opt-out** | - | "Remove my portfolio" issue → `data/excluded.json` (dropped forever) |
 | **Our own cleanup** | Health check, confirmed over 2+ weeks | `health.yml` → `data/excluded.json` (reason, dates, evidence) |
 
 ### Our list wins (owner decision 2026-11-10)
@@ -64,6 +64,49 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
   Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
 
+## When checks re-run
+
+Owner decision of 2026-11-11 ([docs/DECISIONS.md](docs/DECISIONS.md#infrastructure)): if a site hasn't changed, don't measure it again; if it has, measure it again.
+It isn't about saving free API requests: re-runs take time, and a changed site should not show old results.
+The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mjs).
+
+**The rule, for every check on a portfolio:** reuse the stored result while the site is unchanged.
+Run it again when:
+
+- the site's change fingerprint changed after the result was measured;
+- the admin pressed "Re-measure" on the portfolio's page, or its verified owner asked for a re-grade;
+- the result is older than its maximum age (below), because some things break without the page changing;
+- the result is a failure and its short retry window has passed.
+
+| Check | Where it is stored | Maximum age | A failure is retried after | When a due result runs again |
+| --- | --- | --- | --- | --- |
+| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` for S, A and B sites |
+| Polish checklist and share card | `cache` `inspect:<url>` | 30 days (the share image and favicon can break on their own) | 1 hour | On the next view, and `prewarm.yml` |
+| Project link checks | `portfolios.facts` (`facts_at`) | 30 days (links rot without the page changing) | the next night | Tonight's free checks (`evidence.mjs --links`, up to 120 a night) |
+| Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | the next night | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, changed and asked-for sites first) |
+| "Grade my portfolio" free checks | `cache` `grader:quick:<site>` | links 30 days | 10 minutes (the visitor may have just fixed the site) | A request is a grade: the page is always fetched again, and only its link checks are reused while the page is unchanged |
+
+**The change fingerprint** ([lib/freshness.mjs](lib/freshness.mjs) `pageFingerprint`), from one ordinary page fetch, the same one the polish check and the grader's free checks make (`safeFetch`, the body capped at 800 KB):
+
+- a hash of the HTML with per-request noise removed: inline scripts, comments, CSP nonces, CSRF and trace tokens (and Sentry's trace tags), timestamps and epoch numbers, UUIDs and long hex or base64 ids, numbers in counter ids (`bits-5`, React's ids), Cloudflare's per-response links and email obfuscation, `@font-face` rules (font CDNs reorder their subsets), whitespace between tags, and the order of the `<head>` (streaming renderers emit it in a different order);
+- plus the sorted script and stylesheet URLs (without per-request query parameters such as `?t=<epoch>`), whose build hashes change on every deploy;
+- ETag and Last-Modified count only when the body is byte-for-byte the same as last time (a redeploy of identical HTML); a Last-Modified equal to the response's own time is a dynamic page and never counts.
+
+The first fingerprint of a site is its baseline, never a change.
+About 1.5% of sites really differ on every request (a live clock, a random quote, a "now playing" track): they look changed at each weekly check and get re-measured weekly.
+A client-rendered page whose HTML shell and asset names stay the same across deploys looks unchanged; the maximum ages catch it.
+
+**The weekly check** ([worker/freshness.ts](worker/freshness.ts)): the hourly Cron Trigger (`15 * * * *`) fingerprints the listed, live sites attempted longest ago, about a 168th of the list each hour (14 of 2,106), so each site is checked once a week, and a site attempted in the last day is never fetched again.
+The polish check and the grader's free checks record the fingerprint of the page they already fetched, so a change found there counts at once.
+A fetch that fails keeps the stored fingerprint and only notes the attempt.
+The state is `site_freshness`: per address the fingerprint, `checked_at`, `attempted_at`, `changed_at` (and why), and `forced_at`.
+
+**What it costs** (2,106 listed sites, measured on 400 of them): about 300 page fetches a day, about 400 subrequests with redirects plus 3 Turso requests a tick (about 17 to 20 subrequests per hourly run, far under a run's limit); the fingerprint takes about 1 ms of CPU at the median and 8 ms at the 90th percentile, so with the fetch's own work about 1.5 to 3 seconds of Workers CPU a day, roughly 0.1 to 0.3 million ms a month of the 30 million included.
+Turso: the due query reads about 4,200 rows a tick (about 3 million a month of 500 million) and writes about 300 rows a day.
+
+**What people see:** under Lighthouse and the polish checklist, "Measured Nov 11 · site unchanged since" when a later check found the page the same, or "Re-measuring, the site changed · last measured Nov 3" while a due result runs again (the page asks again until the new result is in).
+**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`), and the counts in `GET /api/admin/quota` `freshness` and on `/admin/usage`: sites unchanged, changed this week, never checked, checked today, and re-measured today (Lighthouse, polish, captures, link checks).
+
 ## End-of-day run
 
 Owner decisions of 2026-11-10 ("people first, AI with the leftovers"); the reasons are in [docs/DECISIONS.md](docs/DECISIONS.md#gemini-budget-one-key).
@@ -73,10 +116,10 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | When (Pacific) | Where | What |
 | --- | --- | --- |
 | All day, as they arrive | Worker and `grade.yml` | People's grade requests ("Grade my portfolio" below, [pipeline/people.mjs](pipeline/people.mjs)): the whole day's quota minus the evening reserve, 3.5 only; a request 3.5 can't answer waits in a queue |
-| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)) |
+| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), checks the change fingerprint of a 168th of the list ("When checks re-run" above), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)) |
 | Every 5 minutes | Worker cron | The grader's tick ([worker/grader.ts](worker/grader.ts)): report emails, captures that didn't start, requests waiting for a later day, cleanup; nothing while `GRADER_ENABLED` is off |
 | 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
-| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of the 150 sites captured longest ago, page evidence, fingerprint changes); on Sundays also `health.yml` (not waited for) |
+| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due, fingerprint changes); on Sundays also `health.yml` (not waited for) |
 | Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
 | 23:30 | Workflow | Hard stop, 30 minutes before the reset; the summary and owner alerts |
 | Then | Workflow | Roll-ups and retention of the log tables ([pipeline/retention.mjs](pipeline/retention.mjs)): `gemini_requests` older than 90 Pacific days becomes `gemini_daily`, `night_runs` older than 180 days and the free-text reason of comparisons older than 90 days go |
@@ -273,7 +316,7 @@ The back end is built and off: every route answers 404 and the five-minute cron 
 
 ```
 visitor ── POST /api/grade ──► Worker: address checks, rate limit, Turnstile, own key checked (free)
-                               free checks at once (plain fetch, cached a day per address)
+                               free checks at once (plain fetch; link checks reused while unchanged)
                                re-grade cooldown, daily caps (one transaction), job row
                                workflow_dispatch grade.yml (no inputs)
                                       │
@@ -297,7 +340,7 @@ report ◄── GET /api/grade/<id> (progress, then the report) ── email: o
 4. Cloudflare Turnstile (action `grade`), refused on the deployed Workers when the `TURNSTILE_SECRET_KEY` secret is missing; the token's hostname must be the Worker's own (`AUTH_URL`); only local runs skip it ([lib/turnstile.ts](lib/turnstile.ts)).
 5. An own key, if sent, is checked with a free metadata call (`models.get` for `gemini-3.5-flash-lite`, no generate quota).
 6. The free checks ([lib/grader/quick.ts](lib/grader/quick.ts)): one plain fetch from the Worker through `safeFetch` (every redirect hop re-checked, 10-second timeout, 1.5 MB cap, and `global_fetch_strictly_public` refuses names that resolve to private addresses), then the facts code can check (`pipeline/facts.mjs`, project links checked through the same fetch) and a fingerprint of the HTML's structure.
-   Cached per address for a day (failures for 10 minutes) in the `cache` table.
+   The page is fetched again for every request (its fingerprint is what the cooldown compares); the project link checks are reused while the fingerprint is unchanged, for at most 30 days, and a failure for 10 minutes, in the `cache` table ("When checks re-run" above).
    A page that is unreachable, answers an error, is parked or isn't HTML gets a 422 with the reason and counts against nothing.
 7. The re-grade cooldown ([lib/grader/jobs.mjs](lib/grader/jobs.mjs) `regradeCheck`, the budget's `regradeAllowed`): one grade per address every 7 days, sooner when the free checks' fingerprint changed since, and never two at once.
    Only the browser that owns the earlier report is told its id.
@@ -424,7 +467,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`judge-vote.yml`** | manual only | Fallback: the ELO-era AI votes, or (repository variable `RANKING_V2`) the ranking v2 comparisons and recompute, within the accountant's share | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
-| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API | TURSO |
+| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites whose result is due by "When checks re-run" (never measured first, then changed or re-measured, then oldest), by hitting the prod API | TURSO |
 | **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
@@ -440,7 +483,7 @@ Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without clai
 - **R2 (10 GB free):** ~570 MB of serve-frames (hero/mobile/full) + ~0.2 MB/day
   backups → far under the cap, $0.
 - **GitHub Actions:** unlimited (public repo).
-- **PSI/Lighthouse:** 25k runs/day — ample.
+- **PSI/Lighthouse:** 25k runs/day - ample.
 - **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.
 
 ## AI judge (Gemini)
@@ -516,7 +559,7 @@ serve images.
 
 ## Local pipeline scripts
 
-- `pipeline/capture.mjs [--upload-only] [--only s] [--force]` — Playwright capture + R2 upload
+- `pipeline/capture.mjs [--upload-only] [--only s] [--force]` - Playwright capture + R2 upload
 - `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
 - `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
 - `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
@@ -528,9 +571,9 @@ serve images.
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
 - `node scripts/model-watch.mjs [--dry-run]` - the weekly model watch by hand (needs `GEMINI_API_KEY` for the model list; no generate calls)
-- `node pipeline/capture.mjs --refresh N` - also re-capture the N sites captured longest ago (finds redesigns)
-- `node pipeline/evidence.mjs [--limit N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them
+- `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: changed or asked for, then 90 days old (finds redesigns)
+- `node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them; `--links N` also measures again up to N sites whose project link checks are due
 - `node scripts/detect-changes.mjs` - record page fingerprint changes (`rating_resets`)
 - `node scripts/simulate-ranking.mjs [--grades csv] [--votes-log log] [--out dir]` - offline evaluation of ranking v2
 - `scripts/backup-db.mjs` - DB → R2 snapshot · `scripts/restore-db.mjs` - snapshot → a new, empty database · `scripts/export-grades.mjs` - grades → CSV
-- `scripts/r2-check.mjs` — R2 connectivity · `scripts/r2-upload-one.mjs <key>` — single-site upload
+- `scripts/r2-check.mjs` - R2 connectivity · `scripts/r2-upload-one.mjs <key>` - single-site upload

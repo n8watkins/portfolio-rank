@@ -514,6 +514,15 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Scheduled jobs are deliberately not duplicated on staging: they would spend the shared Gemini quota, double the Actions minutes and risk writes to shared buckets, and stale data there would raise false alarms.
   Scheduled code is covered by tests instead.
   Why: the extra safety is worth keeping while the change rate is high, and it costs nothing ([COSTS.md](COSTS.md), "Staging").
+- **Checks re-run only when the site changed, or when they are old** (owner, 2026-11-11: "If there have been no changes, don't regenerate; if there have been changes, regenerate. It's not about avoiding a free API request; it just takes time."; the fingerprint and the numbers are the agent's). Status: building (`feat/check-freshness`).
+  One rule for every check on a portfolio ([lib/freshness.mjs](../lib/freshness.mjs), [AUTOMATION.md](../AUTOMATION.md#when-checks-re-run)): reuse the stored result while the site's change fingerprint is unchanged; re-run it when the fingerprint changed after it was measured, on a re-grade, on the admin's "Re-measure", or past a maximum age.
+  Maximum ages: Lighthouse and screenshots 90 days; polish, link checks and the grader's link checks 30 days, since links and share images rot without the page changing.
+  Failures keep their short retry window: an hour, and 10 minutes for "grade my portfolio", whose visitor may have just fixed the site.
+  The fingerprint is one ordinary page fetch, the one the polish check and the grader's free checks already make: a hash of the HTML with per-request noise removed (inline scripts, nonces, CSRF and trace tokens, timestamps, random ids, counter ids, Cloudflare's per-response links, the head's order) plus the script and stylesheet URLs, whose build hashes change on every deploy.
+  ETag and Last-Modified count only when the body is byte-for-byte the same, because servers that hash each response into its ETag would otherwise change on every check.
+  Every listed site is checked once a week on the hourly cron, never twice in a day.
+  Measured on 2026-11-11 by fetching 400 listed sites twice: before the noise rules 9% looked changed between two fetches seconds apart, after them about 1.5%, all of them pages that really differ per request (a live clock, a random quote, a "now playing" track); those get re-measured weekly.
+  Why: the old fixed timers re-ran Lighthouse every 30 days, re-captured 150 sites a night whether or not they changed and re-ran the polish check weekly, so unchanged sites waited on slow re-runs, and a changed site could show stale results for weeks.
 - **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
   Why: what merges is what the next deploy ships.
 
