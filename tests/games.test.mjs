@@ -31,6 +31,7 @@ import {
   ownerState,
   reviewQueue,
   setClaimStatus,
+  verifiedCount,
 } from "../lib/games/claims.mjs";
 import { planOwnerRemovals } from "../pipeline/owner-removals.mjs";
 import { githubStats, liveCounts, pacificMonthStart, siteStats, sqliteTime } from "../lib/games/stats.mjs";
@@ -341,7 +342,7 @@ test("a guest's quizzes, badges and counters move to the account at sign-in; the
   assert.deepEqual(await mergeGuest(db, { guest: "gh:2", account: "gh:1" }), { moved: false }, "only a guest id merges");
 });
 
-test("claims: the GitHub link, the profile's Website and the meta tag", () => {
+test("claims: the GitHub link and the meta tag", () => {
   const html = `<a href="https://github.com/Octo-Cat">GitHub</a><meta content="tok123" name="portfoliorank-verify">`;
   assert.equal(linksToGithub(html, "octo-cat"), true);
   assert.equal(linksToGithub(`<a href="https://github.com/octo-cat/repo">`, "octo-cat"), true);
@@ -353,15 +354,16 @@ test("claims: the GitHub link, the profile's Website and the meta tag", () => {
 
   const url = "https://jane.dev";
   const page = { html, finalUrl: "https://www.jane.dev/" };
-  assert.equal(autoProof({ url, page, profile: null, ownerId: "gh:1", login: "octo-cat" }), "github_link");
+  assert.equal(autoProof({ url, page, login: "octo-cat" }), "github_link");
   // A template clone's footer links the template's author: not proof.
-  assert.equal(autoProof({ url, page, profile: null, ownerId: "gh:1", login: "octo-cat", template: "Brittany Chiang v4 clone" }), null);
+  assert.equal(autoProof({ url, page, login: "octo-cat", template: "Brittany Chiang v4 clone" }), null);
   // A page that redirected elsewhere proves nothing.
-  assert.equal(autoProof({ url, page: { html, finalUrl: "https://github.com/octo-cat" }, profile: null, ownerId: "gh:1", login: "octo-cat" }), null);
-  const profile = { id: 1, login: "octo-cat", blog: "jane.dev" };
-  assert.equal(autoProof({ url, page: null, profile, ownerId: "gh:1", login: "octo-cat" }), "github_blog");
-  assert.equal(autoProof({ url, page: null, profile, ownerId: "gh:2", login: "octo-cat" }), null, "someone else's profile");
-  assert.equal(autoProof({ url, page: null, profile: { ...profile, blog: "https://other.dev" }, ownerId: "gh:1", login: "octo-cat" }), null);
+  assert.equal(autoProof({ url, page: { html, finalUrl: "https://github.com/octo-cat" }, login: "octo-cat" }), null);
+  // The GitHub profile's Website field is free text anyone can set to any
+  // domain: it never proves who controls the site.
+  const profile = { id: 1, login: "mallory", blog: "jane.dev" };
+  assert.equal(autoProof({ url, page: null, profile, ownerId: "gh:1", login: "mallory" }), null);
+  assert.equal(autoProof({ url, page: { html: "<p>Jane</p>", finalUrl: url }, profile, ownerId: "gh:1", login: "mallory" }), null);
   assert.equal(metaProof({ url, page, token: "tok123" }), true);
   assert.equal(metaProof({ url, page, token: "nope" }), false);
 });
@@ -392,6 +394,24 @@ test("claims: owner actions need a verified claim, and every step is in the audi
   const log = (await db.execute({ sql: "SELECT action FROM claim_log WHERE url = ? ORDER BY id", args: [url] })).rows.map((r) => String(r.action));
   assert.deepEqual(log, ["claim_started", "claim_review", "claim_verified", "hide_grade", "regrade_requested", "regrade_already_pending", "remove", "remove"]);
   assert.equal(MAX_VERIFIED, 3);
+});
+
+test("claims: a claim verified by the retired profile-Website proof gives no owner rights", async () => {
+  const db = await freshDb();
+  const url = site(3);
+  // Verified before the proof was retired: Mallory set her GitHub Website to someone else's domain.
+  const claim = await openClaim(db, { url, owner: "gh:66", login: "mallory", token: "tok", now: T0 });
+  await setClaimStatus(db, { claim, status: "verified", method: "github_blog", actor: "gh:66", now: T0 });
+  assert.equal(await isVerifiedOwner(db, { url, owner: "gh:66" }), false);
+  assert.equal(await verifiedCount(db, "gh:66"), 0);
+  assert.deepEqual(await ownerAction(db, { url, owner: "gh:66", action: "remove", now: T0 }), { ok: false, error: "not_owner" });
+  assert.deepEqual(await ownerAction(db, { url, owner: "gh:66", action: "hide_grade", now: T0 }), { ok: false, error: "not_owner" });
+  assert.deepEqual(await ownerState(db, url), { hideGrade: false, removedAt: null });
+  // The claim reads as pending, so its owner can prove it again with a link or the meta tag.
+  assert.equal((await claimById(db, claim.id)).status, "pending");
+  assert.equal((await openClaim(db, { url, owner: "gh:66", login: "mallory", token: "x", now: T0 })).status, "pending");
+  await setClaimStatus(db, { claim: await claimById(db, claim.id), status: "verified", method: "meta", actor: "gh:66", now: T0 });
+  assert.equal(await isVerifiedOwner(db, { url, owner: "gh:66" }), true, "a real proof verifies it again");
 });
 
 test("owner removals join data/excluded.json as owner requests, without names, and leave the feed", () => {

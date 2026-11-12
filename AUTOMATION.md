@@ -217,7 +217,8 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   A check is reused for 15 seconds (`badge_checks`), and each read is capped (1,000 votes, plays and guesses).
 - **Your eye:** the share of a player's face-off votes whose winner ranks higher on the People board (or the AI board), plus quiz guesses within 15 points of that view's percentile.
 - **Save to list:** the games use the existing lists API (`/api/lists`, `/api/lists/<id>/items`); nothing new.
-- **Claims** ([lib/games/claims.mjs](lib/games/claims.mjs)): signed in with GitHub, a claim is verified automatically when the portfolio's home page links to `github.com/<login>` (not for a site built from a known template, and only if the page didn't redirect elsewhere) or the GitHub profile's Website field is the portfolio's domain (GitHub API by numeric id, cached a day; `GITHUB_API_TOKEN` optional).
+- **Claims** ([lib/games/claims.mjs](lib/games/claims.mjs)): signed in with GitHub, a claim is verified automatically when the portfolio's home page links to `github.com/<login>` (not for a site built from a known template, and only if the page didn't redirect elsewhere; the current login comes from the GitHub API by numeric id, cached a day, `GITHUB_API_TOKEN` optional).
+  The GitHub profile's Website field is never proof: anyone can set it to any domain, and claims once verified that way count as pending and give no owner rights (`RETIRED_PROOFS`).
   Otherwise the owner adds `<meta name="portfoliorank-verify" content="<token>">` and asks again with `method: "meta"`, or asks for manual review, which the admin decides through `/api/admin/claims`.
   An account verifies at most 3 portfolios by itself; more go to review.
 - **Owner actions:** remove, hide or show the grade, and re-grade.

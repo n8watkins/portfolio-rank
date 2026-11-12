@@ -96,7 +96,7 @@ To stay listed but never be named in posts, see [removal.md](removal.md).
 
 - Claiming needs a GitHub sign-in.
   I store your GitHub id number and username with the portfolio's address, how the claim was verified, and a note if you write one.
-- To verify, the site fetches your portfolio's public home page and your public GitHub profile (to compare its Website field).
+- To verify, the site fetches your portfolio's public home page (to find a link to your GitHub profile or the verification code) and your public GitHub profile (for your current username).
 - Every claim, review and owner action (removing the site, hiding its grade, asking for a re-grade) goes into an audit log with your GitHub id number and the time, so a removal can always be traced to whoever asked for it.
 - If you remove your portfolio, it disappears from the site at once and its address goes on the public removals list in the site's repository, marked "owner request", without your name; the removed-portfolios page only counts these.
 - If you ask for a report link by email, your address is used to send that one email and is not stored; only a one-way hash of it counts how many emails it got that day (at most 3).
@@ -178,7 +178,7 @@ All of these are self-serve, on the site's Settings page, and take effect at onc
   Your votes, likes, lists, badges, quiz plays, poll votes and claims are deleted together in one step, and you are signed out (your session lives only in your browser's cookie, so signing out ends it).
   Your votes leave the vote log, and the leaderboard drops them at its next recompute.
   Kept, because they name no one: anonymous counts (how many quizzes were played, how many votes each poll option got) and a portfolio's own state, so a removal or a hidden grade you made stays in force, with your account struck from the record of who made it.
-- **Remove my portfolio**: prove the site is yours (your GitHub profile's Website field, or a code you put on the page), then hide its grade or remove it from PortfolioRank.
+- **Remove my portfolio**: prove the site is yours (a link from the site to your GitHub profile, or a code you put on the page), then hide its grade or remove it from PortfolioRank.
 - **Forget my preferences**: clears what's saved in your browser.
 - Block cookies in your browser; you can still browse, but not vote or sign in.
 

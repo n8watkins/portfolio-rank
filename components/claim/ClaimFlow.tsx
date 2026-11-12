@@ -40,8 +40,8 @@ const errorText = (b: Record<string, unknown>) => ERRORS[String(b.error)] ?? "Th
 /**
  * Claim a listed portfolio (GAMES_V2, /api/owner/claims and
  * /api/owner/actions): sign in with GitHub; the claim is verified at once
- * when the site links to github.com/<login> or the GitHub profile's Website
- * is the site's domain, else with a meta tag (or a review by hand); then the
+ * when the site links to github.com/<login>, else with a meta tag (or a
+ * review by hand); then the
  * owner can ask for a re-grade, hide the grade, or remove the portfolio.
  */
 export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: string; name: string; domain: string; hero: string | null; /** Re-grades are offered only while the games are on (GAMES_V2). */ regrade?: boolean }) {
@@ -168,10 +168,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
             <h2 className="mt-8 text-sm font-semibold">How we check it&apos;s yours</h2>
             <ul className="mt-2 grid gap-2 text-sm text-mute">
               <li className="flex gap-2">
-                <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden /> Your site links to your GitHub profile, or
-              </li>
-              <li className="flex gap-2">
-                <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden /> your GitHub profile&apos;s Website field points to {domain}.
+                <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink" aria-hidden /> Your site links to your GitHub profile.
               </li>
               <li className="flex gap-2">
                 <Code2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> Neither? Add a one-line meta tag to your site.
@@ -186,7 +183,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
             <h1 id="claim-t" className="mt-1 flex items-center gap-3 text-2xl font-bold tracking-tight sm:text-3xl">
               <LoaderCircle className="h-6 w-6 animate-spin text-mute" aria-hidden /> Checking {domain}
             </h1>
-            <p className="mt-2 text-mute">Looking for a link to github.com/{login} on the page and at your GitHub profile&apos;s Website field.</p>
+            <p className="mt-2 text-mute">Looking for a link to github.com/{login} on the page.</p>
           </>
         )}
 
@@ -202,11 +199,6 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
                   ok: claim?.method === "github_link",
                   t: `${domain} links to github.com/${login}`,
                   d: claim?.method === "github_link" ? "Found in the page's links." : step === "verified" ? "Not needed: one check is enough." : `No link to github.com/${login} on the page.`,
-                },
-                {
-                  ok: claim?.method === "github_blog",
-                  t: `GitHub profile Website points to ${domain}`,
-                  d: claim?.method === "github_blog" ? "Your profile's Website field matches." : step === "verified" ? "Not needed: one check is enough." : `Your profile's Website field isn't ${domain}.`,
                 },
                 ...(claim?.method === "meta" ? [{ ok: true, t: "The meta tag is on the home page", d: "You can remove it now." }] : []),
               ].map((c) => (
