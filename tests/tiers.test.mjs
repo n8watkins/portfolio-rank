@@ -14,17 +14,18 @@ import {
   TIER_LADDER,
   distribution,
   isPublicTier,
-  placeKey,
+  orderLibrary,
+  placeNew,
   rankKey,
+  rankLibrary,
   rankScore,
-  sortedKeys,
   tierAt,
   tierOf,
   tierOfValue,
   tierValue,
   topPctAt,
 } from "../lib/tiers.mjs";
-import { LIBRARY_KEY, cachedLibraryKeys, placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
+import { LIBRARY_KEY, cachedLibrary, placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { compareWithPool, printView } from "../lib/grader/report.mjs";
 import { celebrationLevel } from "../lib/grader/present.mjs";
 
@@ -48,8 +49,8 @@ const grade = (axis, checks = 80, letter = "B", extra = {}) => ({
 test("the ladder: owner's cut-offs in order, B public, C and D private", () => {
   assert.deepEqual(TIERS, ["SSS", "SS", "S", "A", "B", "C", "D"]);
   assert.deepEqual(
-    TIER_LADDER.map((t) => t.top),
-    [2, 5, 10, 20, 80, 95, 100]
+    TIER_LADDER.map((t) => t.count ?? `${t.top}%`),
+    [3, 10, "1%", "15%", "70%", "85%", "100%"]
   );
   assert.deepEqual(PUBLIC_TIERS, ["SSS", "SS", "S", "A", "B"]);
   assert.equal(isPublicTier("B"), true);
@@ -75,51 +76,65 @@ test("the score: 80% the AI's weighted scores, 20% the code checks; unknown chec
   assert.ok(rankKey(grade(4, 81, "D")) > rankKey(grade(4, 80, "S")));
 });
 
-test("a library of 1,000 distinct scores gets the owner's shares exactly", () => {
-  const keys = sortedKeys(Array.from({ length: 1000 }, (_, i) => i * 10));
-  assert.deepEqual(distribution(keys), { SSS: 20, SS: 30, S: 50, A: 100, B: 600, C: 150, D: 50 });
-  assert.equal(tierAt(1, 1000), "SSS");
-  assert.equal(tierAt(1000, 1000), "D");
+/** A library of distinct keys, best first: n entries, urls s0 (best) to s<n-1>. */
+const lib = (n, key = (i) => (n - i) * 10, elo = () => null) => orderLibrary(Array.from({ length: n }, (_, i) => ({ url: `https://s${String(i).padStart(5, "0")}.dev`, key: key(i), elo: elo(i) })));
+
+test("a library of 2,000 distinct scores: exactly 3 SSS and 7 SS, then the owner's shares", () => {
+  const order = lib(2000);
+  // S: places 11 to the 1% line (20); A to 15% (300); B to 70% (1,400); C to 85% (1,700); D the rest.
+  assert.deepEqual(distribution(order), { SSS: 3, SS: 7, S: 10, A: 280, B: 1100, C: 300, D: 300 });
+  const ranks = rankLibrary(order);
+  assert.equal(ranks.get(order[2].url).tier, "SSS");
+  assert.equal(ranks.get(order[3].url).tier, "SS");
+  assert.equal(ranks.get(order[9].url).tier, "SS");
+  assert.equal(ranks.get(order[10].url).tier, "S");
+  assert.equal(ranks.get(order[0].url).top, 1);
   assert.equal(topPctAt(1, 1000), 1);
-  assert.equal(topPctAt(20, 1000), 2);
-  assert.equal(topPctAt(21, 1000), 3);
+  assert.equal(topPctAt(11, 1000), 2);
+  assert.equal(tierAt(2000, 2000), "D");
 });
 
-test("ties share a place and a tier: the middle of the group decides", () => {
-  // 100 sites: 10 tied at the top, then distinct scores.
-  const keys = sortedKeys([...Array(10).fill(9999), ...Array.from({ length: 90 }, (_, i) => i)]);
-  const top = placeKey(keys, 9999, { member: true });
-  assert.equal(top.position, 5.5);
-  // Middle of the group at 5%: the whole group is SS, none SSS, none S.
-  assert.equal(top.tier, "SS");
-  const dist = distribution(keys);
-  assert.equal(dist.SSS, 0);
-  assert.equal(dist.SS, 10);
+test("count tiers break every tie: score, Gemini's letter, then ELO, then the address", () => {
+  // 20 sites tied on score and letter at the top, then 980 distinct below.
+  const order = lib(1000, (i) => (i < 20 ? 99990 : 50000 - i), (i) => (i < 20 ? 1200 + (i % 4) * 10 : null));
+  const ranks = rankLibrary(order);
+  const tier = (t) => order.filter((e) => ranks.get(e.url).tier === t);
+  assert.equal(tier("SSS").length, 3);
+  assert.equal(tier("SS").length, 7);
+  // Highest ELO first (1230 on i = 3, 7, 11 ...), then the address.
+  assert.deepEqual(tier("SSS").map((e) => e.url), ["https://s00003.dev", "https://s00007.dev", "https://s00011.dev"]);
+  // The tied group's rest share a tier by the middle of their group (share tiers): all S or all A, never split.
+  const rest = order.slice(10, 20).map((e) => ranks.get(e.url).tier);
+  assert.equal(new Set(rest).size, 1);
+  // A newcomer that ties exactly loses the tie to the library's members.
+  const tied = placeNew(order, { url: "", key: 99990, elo: 1230 });
+  assert.equal(tied.place, 6);
+  assert.equal(tied.tier, "SS");
+  assert.equal(placeNew(order, { url: "https://new.dev", key: 999999 }).tier, "SSS");
+});
+
+test("share tiers: equal scores share a place and a tier", () => {
+  const order = lib(1000, (i) => (i < 100 ? 10000 - i : i < 200 ? 5000 : 4000 - i));
+  const ranks = rankLibrary(order);
+  // Places 101-200 tie: middle 150.5 of 1,000 is 15%: all A, none split.
+  assert.deepEqual([...new Set(order.slice(100, 200).map((e) => ranks.get(e.url).tier))], ["A"]);
 });
 
 test("a small library hands out no tier it has no room for", () => {
   assert.equal(tierAt(1, 1), "B");
-  assert.deepEqual(distribution(sortedKeys([3, 2, 1])), { SSS: 0, SS: 0, S: 0, A: 0, B: 3, C: 0, D: 0 });
-  // 10: the best is S (top 10% holds one site), never SS or SSS; the worst is C, D needs 20.
-  const ten = sortedKeys(Array.from({ length: 10 }, (_, i) => i));
-  assert.equal(placeKey(ten, 9, { member: true }).tier, "S");
-  assert.equal(placeKey(ten, 0, { member: true }).tier, "C");
-  // 50: SSS needs exactly this many.
-  const fifty = sortedKeys(Array.from({ length: 50 }, (_, i) => i));
-  assert.equal(placeKey(fifty, 49, { member: true }).tier, "SSS");
-  assert.equal(placeKey(sortedKeys(fifty.slice(1)), 48, { member: true }).tier, "SS");
-  // Empty: nothing to rank against.
-  assert.equal(placeKey([], 5).tier, "B");
+  assert.deepEqual(distribution(lib(3)), { SSS: 0, SS: 0, S: 0, A: 0, B: 3, C: 0, D: 0 });
+  // 50: no count tiers (they need 100) and no S (the top 1% holds no one): the best are A.
+  const fifty = rankLibrary(lib(50));
+  assert.equal(fifty.get("https://s00000.dev").tier, "A");
+  assert.equal(fifty.get("https://s00049.dev").tier, "D");
+  // 100: the count tiers start.
+  assert.equal(rankLibrary(lib(100)).get("https://s00000.dev").tier, "SSS");
+  assert.equal(placeNew([], { url: "x", key: 5 }).tier, "B");
 });
 
-test("a newcomer is placed as if added; tierOf reads only the rank, never Gemini's letter", () => {
-  const keys = sortedKeys(Array.from({ length: 99 }, (_, i) => i * 10));
-  const p = placeKey(keys, 10000);
-  assert.equal(p.total, 100);
-  assert.equal(p.rank, 1);
-  assert.equal(p.tier, "SSS");
+test("tierOf reads only the rank, never Gemini's letter", () => {
   assert.equal(tierOf(grade(5, 100, "S")), null);
-  assert.equal(tierOf(grade(5, 100, "S", { rank: { tier: "SS", score: 99, top: 3 } })), "SS");
+  assert.equal(tierOf(grade(5, 100, "S", { rank: { tier: "SS", score: 99, top: 1 } })), "SS");
   assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "SS" } })), null);
 });
 
@@ -133,7 +148,7 @@ test("a visitor's grade is ranked against the pool, with 'graded against N' and 
   const low = compareWithPool(grade(1, 0, "D"), pool);
   assert.equal(low.rank.tier, "D");
   // Not a portfolio: no rank.
-  assert.equal(placeGrade(grade(5, 100, "S", { is_portfolio: false }), sortedKeys(pool.map((p) => p.key))), null);
+  assert.equal(placeGrade(grade(5, 100, "S", { is_portfolio: false }), orderLibrary(pool)), null);
 });
 
 test("the printable report shows public tiers only, and the note below them", () => {
@@ -157,7 +172,7 @@ async function db() {
 test("refreshTiers writes each grade's rank, only when it changed, and ranks old reports", async () => {
   const client = await db();
   const rows = [];
-  for (let i = 0; i < 60; i++) rows.push([`https://site${i}.example/`, JSON.stringify(grade(1 + (i % 5), (i * 7) % 101, ["S", "A", "B", "C", "D"][i % 5]))]);
+  for (let i = 0; i < 120; i++) rows.push([`https://site${i}.example/`, JSON.stringify(grade(1 + (i % 5), (i * 7) % 101, ["S", "A", "B", "C", "D"][i % 5]))]);
   rows.push(["https://notone.example/", JSON.stringify(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "SSS", score: 100, top: 1 } }))]);
   rows.push(["https://gone.example/", JSON.stringify(grade(5, 100, "S"))]);
   rows.push(["https://broken.example/", JSON.stringify({ error: "no_usable_captures" })]);
@@ -167,15 +182,22 @@ test("refreshTiers writes each grade's rank, only when it changed, and ranks old
     sql: "INSERT INTO grade_jobs (id, url, site_key, status, result, report, created_at, updated_at) VALUES ('job1', 'https://x.example/', 'x.example', 'done', ?, ?, '2026-11-01', '2026-11-01')",
     args: [JSON.stringify(grade(5, 100, "S")), JSON.stringify({ percentile: { rank: 9, total: 10, topPct: 90, ahead: 10, level: 30 } })],
   });
+  // Ranked on an older ladder: placed again.
+  await client.execute({
+    sql: "INSERT INTO grade_jobs (id, url, site_key, status, result, report, created_at, updated_at) VALUES ('job2', 'https://y.example/', 'y.example', 'done', ?, ?, '2026-11-01', '2026-11-01')",
+    args: [JSON.stringify(grade(1, 0, "D")), JSON.stringify({ rank: { tier: "B", score: 0, top: 50, v: 1 } })],
+  });
 
   const first = await refreshTiers(client, { now: Date.parse("2026-11-12T00:00:00Z") });
-  assert.equal(first.library, 60);
+  assert.equal(first.library, 120);
   assert.equal(first.cleared, 1);
-  assert.equal(first.jobs, 1);
+  assert.equal(first.jobs, 2);
   const sum = Object.values(first.distribution).reduce((a, b) => a + b, 0);
-  assert.equal(sum, 60);
+  assert.equal(sum, 120);
+  assert.equal(first.distribution.SSS, 3);
+  assert.equal(first.distribution.SS, 7);
   const read = async (url) => JSON.parse(String((await client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0].ai_rubric));
-  const best = await read("https://site59.example/");
+  const best = await read("https://site119.example/");
   assert.ok(TIERS.includes(best.rank.tier));
   // Gemini's own letter stays as it was.
   assert.equal(best.tier, "D");
@@ -186,8 +208,10 @@ test("refreshTiers writes each grade's rank, only when it changed, and ranks old
   assert.equal((await read("https://broken.example/")).rank, undefined);
   const job = JSON.parse(String((await client.execute("SELECT report FROM grade_jobs WHERE id = 'job1'")).rows[0].report));
   assert.equal(job.rank.tier, "SSS");
-  assert.equal(job.percentile.total, 61);
+  assert.equal(job.percentile.total, 121);
   assert.equal(job.percentile.level, 30);
+  const job2 = JSON.parse(String((await client.execute("SELECT report FROM grade_jobs WHERE id = 'job2'")).rows[0].report));
+  assert.equal(job2.rank.tier, "D");
 
   // Nothing changed: nothing written.
   const second = await refreshTiers(client, { now: Date.parse("2026-11-12T01:00:00Z") });
@@ -196,7 +220,7 @@ test("refreshTiers writes each grade's rank, only when it changed, and ranks old
   assert.equal(second.jobs, 0);
 
   // The cached library places a new grade at once.
-  assert.equal((await cachedLibraryKeys(client, { now: Date.parse("2026-11-12T01:30:00Z") })).length, 60);
+  assert.equal((await cachedLibrary(client, { now: Date.parse("2026-11-12T01:30:00Z") })).length, 120);
   const fresh = await rankForWrite(client, grade(5, 100, "S"), { now: Date.parse("2026-11-12T01:30:00Z") });
   assert.equal(fresh.rank.tier, "SSS");
   const not = await rankForWrite(client, grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S" } }));

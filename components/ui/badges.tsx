@@ -6,7 +6,7 @@ import { BELOW_TOP_TIERS, isPublicTier } from "@/lib/tiers.mjs";
 // Small marks shared by the leaderboard, reports, cards and Play.
 
 export const TIER_STYLE: Record<string, string> = {
-  // The top 2% and 5% (lib/tiers.mjs): gold, framed by a thin ring (TIER_FRAME), so they read above a plain S.
+  // The top 3 and the top 10 (lib/tiers.mjs): gold, framed by a thin ring (TIER_FRAME), so they read above a plain S.
   SSS: "text-[#2a1d06]",
   SS: "bg-fill text-on-fill",
   S: "bg-fill text-on-fill",

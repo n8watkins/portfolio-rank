@@ -163,7 +163,7 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
     await ensureSchema();
     const pool = (await gradedPool(db())) as PoolSite[];
     const hidden = await gradeHiddenUrls();
-    // The top 20% (SSS to A, lib/tiers.mjs).
+    // The top 15% (SSS to A, lib/tiers.mjs).
     const pick = pool.filter((p) => !hidden.has(p.url) && p.tier && tierIndex(p.tier) >= 0 && tierIndex(p.tier) <= tierIndex("A"));
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));

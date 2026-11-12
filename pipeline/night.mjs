@@ -249,7 +249,7 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   if (!image) return "skipped";
   const now = new Date(ctx.now());
   // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
-  const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { now: ctx.now() });
+  const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { url, now: ctx.now() });
   await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
   return "ok";
 }

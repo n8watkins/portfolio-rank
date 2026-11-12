@@ -23,7 +23,7 @@ import { ACTIVE, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { AXES, TIER } from "../grade-pairs.mjs";
-import { placeKey, rankKey, sortedKeys, tierIndex, tierOf, tierValue } from "../../lib/tiers.mjs";
+import { orderLibrary, placeNew, rankKey, rankLibrary, tierIndex, tierOf, tierValue } from "../../lib/tiers.mjs";
 
 export const SITE_URL = "https://portfoliorank.n8builds.dev";
 /** The smallest group a share or average is computed over. */
@@ -148,7 +148,7 @@ async function gradedRows(db) {
     .filter((r) => !removed.has(String(r.url)))
     .map((r) => ({ url: String(r.url), name: r.name == null ? null : String(r.name), shotKey: r.shot_key == null ? null : String(r.shot_key), rubric: parse(r.ai_rubric), meta: parse(r.meta) }))
     .filter((r) => r.rubric && TIER[r.rubric.tier] && r.rubric.is_portfolio !== false)
-    .map((r, _i, all) => ({ ...r, tier: tierOf(r.rubric) ?? placedTier(all, r.rubric, true) }));
+    .map((r, _i, all) => ({ ...r, tier: tierOf(r.rubric) ?? placedTier(all, r.rubric, true, r.url) }));
 }
 
 /**
@@ -156,12 +156,16 @@ async function gradedRows(db) {
  * shows (stored as grade.rank) when there is one, else placed here. `member`
  * says the grade is one of the rows.
  */
-function placedTier(rows, grade, member) {
-  rows.keys ??= sortedKeys(rows.map((r) => rankKey(r.rubric)));
-  return placeKey(rows.keys, rankKey(grade), { member })?.tier ?? null;
+function placedTier(rows, grade, member, url = "") {
+  rows.order ??= orderLibrary(rows.map((r) => ({ url: r.url, key: rankKey(r.rubric) })));
+  if (member) {
+    rows.ranks ??= rankLibrary(rows.order);
+    return rows.ranks.get(url)?.tier ?? null;
+  }
+  return placeNew(rows.order, { url, key: rankKey(grade) })?.tier ?? null;
 }
 
-/** Graded A or higher: the top 20% by rank (lib/tiers.mjs). */
+/** Graded A or higher: the top 15% by rank (lib/tiers.mjs). */
 const top = (r) => r.tier != null && tierIndex(r.tier) <= tierIndex("A");
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const median = (xs) => {
@@ -193,7 +197,7 @@ export async function topGrades(db, { now }) {
   const b = sheet(kind, {
     now,
     headline: "What the AI grader rewards, and what it marks down",
-    angle: "Compare the AI judge's scores on each axis for portfolios graded A or higher (the top 20%) with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
+    angle: "Compare the AI judge's scores on each axis for portfolios graded A or higher (the top 15%) with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
     dataLink: `${SITE_URL}/top`,
     query: "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
   });
@@ -202,7 +206,7 @@ export async function topGrades(db, { now }) {
     scope: { need: "graded|all portfolios|every portfolio|everyone", avoid: "of (?:the )?(?:top|best|leading) (?:portfolios|sites)" },
   });
   const sCount = rows.filter((r) => r.tier === "SSS").length;
-  b.fact("Portfolios graded SSS, the top tier (the top 2%)", sCount, fmt.int(sCount));
+  b.fact("Portfolios graded SSS, the top tier (the top 3)", sCount, fmt.int(sCount));
   const per = [];
   const bestIds = [];
   const restIds = [];
@@ -255,7 +259,7 @@ export async function topGrades(db, { now }) {
     .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
     .slice(0, 5);
   for (const r of named) {
-    b.name(r, "graded SSS, the top 2%");
+    b.name(r, "graded SSS, one of the top 3");
     b.fact(`${r.name} (${domainOf(r.url)}) is graded`, "SSS", "SSS", { tone: "positive", about: r.url });
   }
   // For each axis, the named SSS site that scores highest on it: a positive example a "Try this" step can link.
@@ -432,7 +436,7 @@ export async function regradeChanges(db, { now }) {
     if (String(h.model ?? "") !== String(now2.rubric.model ?? "") || (before.rubric_version ?? null) !== (now2.rubric.rubric_version ?? null)) continue;
     seen.add(url);
     // Both tiers by rank in today's library (lib/tiers.mjs): the earlier grade placed as if it were graded now.
-    const was = placedTier(rows, before, false);
+    const was = placedTier(rows, before, false, url);
     if (!was || !now2.tier) continue;
     pairs.push({ row: now2, before: { ...before, tier: was }, after: { ...now2.rubric, tier: now2.tier } });
   }

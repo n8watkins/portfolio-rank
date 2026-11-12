@@ -9,7 +9,7 @@
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { TIERS, distribution } from "../lib/tiers.mjs";
-import { libraryKeys, loadGrades, refreshTiers } from "../lib/tiers-store.mjs";
+import { libraryOrder, loadGrades, refreshTiers } from "../lib/tiers-store.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const db = url
@@ -19,8 +19,8 @@ const db = url
 const share = (dist, n) => TIERS.map((t) => `${t} ${dist[t]} (${n ? ((100 * dist[t]) / n).toFixed(1) : 0}%)`).join(", ");
 
 if (process.argv.includes("--read-only")) {
-  const keys = libraryKeys(await loadGrades(db));
-  console.log(`tiers (read-only): library ${keys.length}; ${share(distribution(keys), keys.length)}`);
+  const order = libraryOrder(await loadGrades(db));
+  console.log(`tiers (read-only): library ${order.length}; ${share(distribution(order), order.length)}`);
 } else {
   const r = await refreshTiers(db);
   console.log(`tiers: library ${r.library}, ${r.updated} rank(s) written, ${r.cleared} cleared, ${r.jobs} report(s) ranked; ${share(r.distribution, r.library)}`);

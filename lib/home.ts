@@ -249,7 +249,7 @@ export type PortfolioOfTheDay = {
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
 async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  // The top 20% (SSS to A, lib/tiers.mjs).
+  // The top 15% (SSS to A, lib/tiers.mjs).
   const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && p.tier && tierIndex(p.tier) >= 0 && tierIndex(p.tier) <= tierIndex("A")).slice(0, 100);
   if (candidates.length === 0) return null;
   const day = Math.floor(now.getTime() / 86_400_000);

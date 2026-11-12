@@ -3,8 +3,8 @@ import type { CSSProperties } from "react";
 // The tier chip on the share cards (lib/og-portfolio.tsx, lib/play/share-card.tsx),
 // drawn by Satori: one look everywhere a card shows a tier. S is the flat
 // amber tile; SS adds a gold ring around it; SSS is metallic gold (the
-// leaderboard's gold medal) with the ring and a warm glow, so the top 2% and
-// 5% read above a plain S without turning into a sticker.
+// leaderboard's gold medal) with the ring and a warm glow, so the top 3 and the
+// top 10 read above a plain S without turning into a sticker.
 
 const BG = "#0a0a0b";
 const AMBER = "#fbbf24";
