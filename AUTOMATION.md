@@ -93,7 +93,7 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 | 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`) | 100 | 30 min |
 | 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
 | 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
-| 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run on the hourly tick (up to `LIBRARY_PER_HOUR`, 40, never 20:00 to midnight Pacific, at most 40 AI images a UTC day; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
+| 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
 | 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics | 300 | 60 min |
 | 7 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
