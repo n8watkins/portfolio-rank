@@ -9,11 +9,9 @@ import { readGradeShot } from "@/lib/grader/server";
 
 // A listed portfolio's share card: its name, its public grade and "top N%"
 // (top tiers only, as on the page) beside its own screenshot. It is the
-// portfolio page's Open Graph image (app/p/[slug]/opengraph-image.tsx) and
-// the card the games show (lib/play/card.ts shareImage); `masked` leaves out
-// the tier and the result, for Guess the percentile before a guess
-// (app/p/[slug]/share-card). The shared card design (the report lane's
-// lib/og-portfolio.tsx) replaces the drawing below when it lands.
+// portfolio page's Open Graph image (app/p/[slug]/opengraph-image.tsx). The
+// shared card design (the report lane's lib/og-portfolio.tsx) replaces the
+// drawing below when it lands.
 
 export const SHARE_SIZE = OG_SIZE;
 
@@ -49,7 +47,7 @@ async function portfolio(url: string) {
   return { name: p.name, tagline: p.tagline ?? null, domain: domainOf(url), card, shot };
 }
 
-export async function listedShareCard(url: string, { masked = false }: { masked?: boolean } = {}): Promise<Response> {
+export async function listedShareCard(url: string): Promise<Response> {
   const [medium, extraBold, mark, n8, p] = await Promise.all([
     readPublicFile("/og/Inter-Medium.ttf"),
     readPublicFile("/og/Inter-ExtraBold.ttf"),
@@ -59,7 +57,7 @@ export async function listedShareCard(url: string, { masked = false }: { masked?
   ]);
 
   const name = p ? p.name : "PortfolioRank";
-  const tier = masked ? null : (p?.card.tier ?? null);
+  const tier = p?.card.tier ?? null;
   const tagline = !p
     ? "The best developer portfolios, ranked."
     : tier && p.card.topPct

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cached, type CacheMeta } from "@/lib/cache";
+import { cached, peekCached, type CacheMeta } from "@/lib/cache";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
@@ -76,6 +76,8 @@ async function runPsi(target: string): Promise<PsiResult> {
   return { ok: true, scores, metrics };
 }
 
+const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
+
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url");
   // Only audit sites on the roster - keeps strangers from burning the PSI
@@ -88,6 +90,12 @@ export async function GET(req: Request) {
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
+  // ?cached=1 (the games): only a result already stored, never a PageSpeed
+  // run, so a face-off view can't spend the quota; "not_measured" otherwise.
+  if (new URL(req.url).searchParams.get("cached") === "1") {
+    const hit = await peekCached<PsiResult>("psi", url, PSI_TTL_MS);
+    return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
+  }
   // A result stays fresh for 30 days; a failure (quota, timeout, a site that
   // won't load) for an hour, so a broken site can't burn the quota by being
   // asked again and again, and a good result is never replaced by a failure.
@@ -98,7 +106,7 @@ export async function GET(req: Request) {
     "psi",
     url,
     {
-      ttlMs: 30 * 24 * 3600 * 1000,
+      ttlMs: PSI_TTL_MS,
       isFailure: (d) => !d.ok,
       failureTtlMs: 3600 * 1000,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
