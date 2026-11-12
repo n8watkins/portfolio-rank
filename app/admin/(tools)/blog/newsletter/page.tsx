@@ -34,7 +34,7 @@ const ISSUE_TONE: Record<string, string> = {
 const ISSUE_LABEL: Record<string, string> = { sending: "Sending", sent: "Sent", stopped: "Stopped", skipped: "Not sent" };
 
 function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
-  return <span className={`inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold capitalize ring-1 ring-inset ${tone}`}>{children}</span>;
+  return <span className={`inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold ring-1 ring-inset ${tone}`}>{children}</span>;
 }
 
 function Stat({ label, value, hint }: { label: string; value: number; hint: string }) {
@@ -107,9 +107,12 @@ export default async function AdminNewsletterPage() {
               </EmptyState>
             ) : (
               <ul className="mt-4 grid gap-2">
-                {issues.map((i) => (
+                {issues.map((i) => {
+                  // A post that went out while nobody was confirmed reached no one; say so instead of "Sent".
+                  const nobody = i.status === "sent" && i.sent + i.failed === 0;
+                  return (
                   <li key={i.id} className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-3 sm:p-4">
-                    <Pill tone={ISSUE_TONE[i.status] ?? ISSUE_TONE.skipped}>{ISSUE_LABEL[i.status] ?? i.status}</Pill>
+                    <Pill tone={nobody ? ISSUE_TONE.skipped : (ISSUE_TONE[i.status] ?? ISSUE_TONE.skipped)}>{nobody ? "No subscribers yet" : (ISSUE_LABEL[i.status] ?? i.status)}</Pill>
                     <span className="min-w-0 flex-1 basis-56">
                       {i.slug ? (
                         <a href={`/blog/${i.slug}`} className="block font-semibold leading-snug hover:underline">
@@ -130,7 +133,8 @@ export default async function AdminNewsletterPage() {
                       {i.status === "sending" && <>, {i.waiting} to go</>}
                     </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -159,11 +163,11 @@ export default async function AdminNewsletterPage() {
                           {s.email}
                         </span>
                         <span className="md:hidden">
-                          <Pill tone={SUB_TONE[s.status] ?? SUB_TONE.unsubscribed}>{s.status}</Pill>
+                          <Pill tone={SUB_TONE[s.status] ?? SUB_TONE.unsubscribed}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill>
                         </span>
                       </span>
                       <span className="hidden md:block">
-                        <Pill tone={SUB_TONE[s.status] ?? SUB_TONE.unsubscribed}>{s.status}</Pill>
+                        <Pill tone={SUB_TONE[s.status] ?? SUB_TONE.unsubscribed}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill>
                       </span>
                       <span className="tabular-nums text-mute">
                         <span className="md:hidden">Signed up </span>
