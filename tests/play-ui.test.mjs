@@ -121,7 +121,8 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
   // Ticking a part adds it, and the view becomes the viewer's own.
   await page.getByText("Show", { exact: true }).click();
-  await page.getByRole("checkbox", { name: "Polish checklist" }).check();
+  // A click, not check(): the box flips when the view transition lands, a frame later.
+  await page.getByRole("checkbox", { name: "Polish checklist" }).click();
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   assert.equal(await page.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed"), "false");
   await context.close();
