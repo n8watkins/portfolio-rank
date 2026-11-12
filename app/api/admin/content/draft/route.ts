@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdmin, requireAdminPost } from "@/lib/admin";
 import { workerEnv } from "@/lib/grader/server";
-import { cleanNotes, cleanTopic, createJob, finishJob, getJob, recentJobs } from "@/lib/content/jobs.mjs";
+import { cleanNotes, cleanTopic, createJob, finishJob, getJob, jobCalls, recentJobs } from "@/lib/content/jobs.mjs";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { BUILDERS } from "@/pipeline/content/facts.mjs";
 import { newJobId } from "@/pipeline/content/manual.mjs";
@@ -14,7 +14,8 @@ import { newJobId } from "@/pipeline/content/manual.mjs";
 //     -> 202 { job }; 400 (bad_request, or the cleaning message),
 //        401, 403, 404 not_found (the draft to rewrite), 409
 //        production_only, 429 daily_cap (5 a Pacific day), 503 no_workflow
-//   GET  /api/admin/content/draft?id=<job>  -> { job }          the live status
+//   GET  /api/admin/content/draft?id=<job>  -> { job }          the live status, with job.calls
+//                                                              (Gemini attempts, answered, busy, backup)
 //   GET  /api/admin/content/draft           -> { jobs, costs }  today's jobs and the cost panel
 // The draft runs in the DraftWorkflow (worker/draft.ts); production only,
 // where the Gemini key and the counters live. POSTs must come from this
@@ -33,8 +34,10 @@ export async function GET(req: Request) {
   const id = new URL(req.url).searchParams.get("id");
   if (id != null) {
     if (!/^[0-9a-f]{16}$/.test(id)) return fail("not_found", 404);
-    const job = await getJob(db(), id);
-    return job ? NextResponse.json({ job }, { headers: PRIVATE }) : fail("not_found", 404);
+    const client = db();
+    const job = await getJob(client, id);
+    // calls: Gemini attempts and answers apart (lib/content/jobs.mjs jobCalls).
+    return job ? NextResponse.json({ job: { ...job, calls: (await jobCalls(client, [id]))[id] } }, { headers: PRIVATE }) : fail("not_found", 404);
   }
   const client = db();
   const [jobs, costs] = await Promise.all([recentJobs(client, { limit: 10 }), contentCosts(client, { env: process.env, now: new Date() })]);

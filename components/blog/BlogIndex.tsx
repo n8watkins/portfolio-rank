@@ -57,7 +57,9 @@ function Featured({ post }: { post: BlogListItem }) {
   );
 }
 
-function Card({ post }: { post: BlogListItem }) {
+/** One post as a card: the grid on /blog, and "More articles" under a post (h3 there). */
+export function Card({ post, level = 2 }: { post: BlogListItem; level?: 2 | 3 }) {
+  const H = level === 3 ? "h3" : "h2";
   return (
     <a href={`/blog/${post.slug}`} className="card card-hover group flex h-full flex-col overflow-hidden">
       <div className="overflow-hidden border-b border-edge">
@@ -65,7 +67,7 @@ function Card({ post }: { post: BlogListItem }) {
       </div>
       <div className="flex flex-1 flex-col p-5">
         {post.tags[0] && <span className={`${tagClass} self-start`}>{post.tags[0]}</span>}
-        <h2 className="mt-3 text-lg font-bold leading-snug tracking-tight text-balance">{post.title}</h2>
+        <H className="mt-3 text-lg font-bold leading-snug tracking-tight text-balance">{post.title}</H>
         {post.subtitle && <p className="mt-2 line-clamp-3 text-[15px] leading-relaxed text-mute">{post.subtitle}</p>}
         <div className="mt-auto pt-4">
           <Meta post={post} />

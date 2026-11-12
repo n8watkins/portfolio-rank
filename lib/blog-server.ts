@@ -1,6 +1,6 @@
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
-import { getPublished, listPublished } from "@/lib/content/blog.mjs";
+import { getPublished, listPublished, morePosts } from "@/lib/content/blog.mjs";
 import { type BlogListItem, type BlogPost, imageSrc } from "@/lib/blog";
 import type { Related } from "@/components/blog/Article";
 
@@ -17,6 +17,12 @@ export async function publishedPosts(opts: { tag?: string | null; limit?: number
 export async function publishedPost(slug: string): Promise<BlogPost | null> {
   await ensureSchema();
   return (await getPublished(db(), slug, { now: new Date() })) as BlogPost | null;
+}
+
+/** "More articles" under a post: related by tag first, then the newest (lib/content/blog.mjs morePosts). */
+export async function moreArticles(post: { id: string; tags: string[] }, limit = 3): Promise<BlogListItem[]> {
+  const posts = await publishedPosts({ limit: 50 });
+  return morePosts(post, posts, { limit }) as BlogListItem[];
 }
 
 const domainOf = (url: string) => {

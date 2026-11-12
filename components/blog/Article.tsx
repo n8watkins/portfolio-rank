@@ -5,8 +5,10 @@ import { ShareLinks } from "@/components/blog/ShareLinks";
 import { tag as tagClass } from "@/components/ui/Chip";
 import { btnSecondary, eyebrow } from "@/components/ui/styles";
 import { tagSlug } from "@/lib/content/blog.mjs";
-import { type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
+import { Card } from "@/components/blog/BlogIndex";
+import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
+import { postLinkFor } from "@/lib/portfolio-links";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
@@ -18,7 +20,7 @@ export type Related = { name: string; url: string; domain: string; reason?: stri
 function Figure({ postId, image, cover = false }: { postId: string; image: PostImage; cover?: boolean }) {
   const credit = creditOf(image);
   const chart = image.kind === "chart";
-  const href = image.kind === "screenshot" && credit.href ? `/p/${encodeURIComponent(credit.href)}` : credit.href;
+  const href = image.kind === "screenshot" && credit.href ? postLinkFor(credit.href) : credit.href;
   return (
     <figure className={cover ? "" : "my-9"}>
       <div className={`overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
@@ -65,7 +67,7 @@ const domainOf = (url: string) => {
   }
 };
 
-export function Article({ post, related, banner }: { post: BlogPost; related: Related[]; banner?: ReactNode }) {
+export function Article({ post, related, banner, more = [] }: { post: BlogPost; related: Related[]; banner?: ReactNode; more?: BlogListItem[] }) {
   const cover = coverOf(post.images);
   const bySlot = new Map(post.images.map((im) => [im.slot, im]));
   const sources = post.claims.map((c) => c.url);
@@ -113,6 +115,7 @@ export function Article({ post, related, banner }: { post: BlogPost; related: Re
         <Markdown
           body={post.body}
           sources={sources}
+          linkFor={postLinkFor}
           figure={(slot) => {
             const im = bySlot.get(slot);
             return im && im !== cover ? <Figure postId={post.id} image={im} /> : null;
@@ -124,7 +127,7 @@ export function Article({ post, related, banner }: { post: BlogPost; related: Re
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {related.map((r) => (
                 <li key={r.url}>
-                  <a href={`/p/${encodeURIComponent(r.url)}`} className="card card-hover flex items-center gap-3 p-3">
+                  <a href={postLinkFor(r.url)} className="card card-hover flex items-center gap-3 p-3">
                     <span className="h-12 w-20 shrink-0 overflow-hidden rounded-md border border-edge bg-raised">
                       {r.shot && (
                         // eslint-disable-next-line @next/next/no-img-element -- a small screenshot thumbnail
@@ -207,6 +210,26 @@ export function Article({ post, related, banner }: { post: BlogPost; related: Re
           <ShareLinks url={postUrl(post.slug)} text={post.shareLine || post.title} />
         </div>
       </div>
+
+      {more.length > 0 && (
+        <section aria-labelledby="more-articles" className="mx-auto mt-16 max-w-6xl border-t border-edge px-4 pt-10 sm:px-6">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="more-articles" className="text-2xl font-bold tracking-tight">
+              More articles
+            </h2>
+            <a href={blog} className="group inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-mute transition hover:text-ink">
+              All posts <ArrowRight className="nudge h-4 w-4" aria-hidden />
+            </a>
+          </div>
+          <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {more.map((p) => (
+              <li key={p.id}>
+                <Card post={p} level={3} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </article>
   );
 }

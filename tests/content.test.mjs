@@ -38,7 +38,9 @@ import crypto from "node:crypto";
 import { contentJob, contentStage, contentSummaryConditions, draftsDue, runDraft, runPick } from "../pipeline/content/engine.mjs";
 import { addTopic, automationBounds, listTopics, nextRun, readAutomation, removeTopic, saveAutomation, validateAutomation } from "../lib/content/automation.mjs";
 import { PUBLISH_CAP, contentMode, contentWeek, listPosts, nextMorning, recordRun, storePost } from "../lib/content/store.mjs";
-import { MANUAL_PER_DAY, cleanNotes, cleanTopic, createJob, getJob, jobsToday } from "../lib/content/jobs.mjs";
+import { MANUAL_PER_DAY, cleanNotes, cleanTopic, createJob, getJob, jobCalls, jobsToday } from "../lib/content/jobs.mjs";
+import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
+import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
 import { runManualJob } from "../pipeline/content/manual.mjs";
@@ -793,16 +795,16 @@ test("automation: the owner's settings live in the database, inside the config's
   assert.match(validateAutomation({ enabled: true, mode: "review", days: [1], perWeek: 2 }, env).error, /at least 2 days/);
   assert.match(validateAutomation({ enabled: true, mode: "review", days: [1], perWeek: 1 }, { CONTENT_MODE: "off" }).error, /off/);
   assert.match(validateAutomation({ enabled: true, mode: "review", days: [], perWeek: 1 }, env).error, /at least one day/);
-  assert.deepEqual(validateAutomation({ enabled: true, mode: "review", days: [5, 2, 2, 0, 9], perWeek: 1 }, env).settings, { enabled: true, mode: "review", days: [2, 5], perWeek: 1 }, "Sunday and unknown days are dropped");
+  assert.deepEqual(validateAutomation({ enabled: true, mode: "review", days: [5, 2, 2, 0, 9], perWeek: 1 }, env).settings, { enabled: true, mode: "review", days: [2, 5], perWeek: 1, keepReady: 0 }, "Sunday and unknown days are dropped");
 
   const db = await fixture();
   const read = await readAutomation(db, env);
-  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, engineMode: "dry-run" }, "the config's schedule until the owner saves");
+  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, keepReady: 0, engineMode: "dry-run" }, "the config's schedule until the owner saves");
   assert.equal(read.saved, null);
   assert.ok((await saveAutomation(db, { enabled: true, mode: "publish", days: [2, 4], perWeek: 2 }, { env: { CONTENT_MODE: "publish" }, by: "owner" })).settings);
   // A later config lowers what was saved; it never raises it.
   const lowered = await readAutomation(db, { CONTENT_MODE: "dry-run", CONTENT_DRAFTS_PER_WEEK: "1" });
-  assert.deepEqual(lowered.settings, { enabled: true, mode: "review", days: [2, 4], perWeek: 1, engineMode: "dry-run" });
+  assert.deepEqual(lowered.settings, { enabled: true, mode: "review", days: [2, 4], perWeek: 1, keepReady: 0, engineMode: "dry-run" });
   assert.equal((await readAutomation(db, { CONTENT_MODE: "off" })).settings.engineMode, "off");
 });
 
@@ -834,6 +836,28 @@ test("automation: the chosen days drive the schedule, off writes nothing, and un
   await db.execute("ALTER TABLE content_settings RENAME TO content_settings_moved");
   assert.equal((await contentJob(tuesday)).job, null, "a missing table fails closed too");
   assert.ok(await removeTopic(db, added.topic.id));
+});
+
+test("automation: drafts to keep ready top up the review queue one a night, beyond the drafts a week", async () => {
+  const env = { CONTENT_MODE: "dry-run" };
+  assert.match(validateAutomation({ enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 6 }, env).error, /0 to 5/);
+  assert.equal(validateAutomation({ enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 3 }, env).settings.keepReady, 3);
+  const db = await fixture();
+  const g = fakeGemini({ pick: (n, parts) => ({ ideas: JSON.parse(parts[0].text.split("<ideas>\n")[1].split("\n</ideas>")[0]).map((i, k) => ({ kind: i.kind, interest: 9 - k, topic: "what the AI grader rewards and penalizes", tone: "positive" })) }) });
+  await runPick(contentCtx(db, { now: SUNDAY }).ctx, g, { night: "2026-11-15", budget: 20 });
+  // Tuesdays only, one a week, and 2 kept ready: Monday isn't a drafting night, but it tops up.
+  await saveAutomation(db, { enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 2 }, { env });
+  const monday = contentCtx(db, { now: MONDAY }).ctx;
+  assert.equal((await contentJob(monday)).job?.step, "draft");
+  // With 2 drafts waiting, no top-up.
+  for (const id of ["ee00000000000001", "ee00000000000002"]) await db.execute({ sql: "INSERT INTO posts (id, slug, kind, status, mode, title, ai_line, ai_note, body, facts, checks, images, claims, data_as_of, created_at, updated_at) VALUES (?, ?, 'top-grades', 'draft', 'dry-run', 't', 'a', 'n', 'b', '{}', '{}', '[]', '[]', ?, ?, ?)", args: [id, id, new Date(MONDAY).toISOString(), new Date(MONDAY).toISOString(), new Date(MONDAY).toISOString()] });
+  const r = await contentJob(monday);
+  assert.equal(r.job, null);
+  assert.match(r.reason, /2 or more drafts are waiting/);
+  // Off (0): only the drafting nights.
+  await db.execute("DELETE FROM posts");
+  await saveAutomation(db, { enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 0 }, { env });
+  assert.equal((await contentJob(monday)).job, null);
 });
 
 test("automation: the next run, in words", () => {
@@ -1429,4 +1453,95 @@ test("links: a site that answers 429 (rate-limiting the checker) loads; a 404 do
   const fetchImpl = async (u) => new Response("x", { status: String(u).includes("busy") ? 429 : 404 });
   assert.equal((await checkLinksLoad(["https://busy.example"], fetchImpl)).ok, true);
   assert.equal((await checkLinksLoad(["https://gone.example"], fetchImpl)).ok, false);
+});
+
+// ---------------------------------------------------------------------------
+// When Google's AI is busy (pipeline/content/busy.mjs)
+// ---------------------------------------------------------------------------
+const OVERLOADED = () => new Response(JSON.stringify({ error: { code: 503, message: "The model is overloaded. Please try again later.", status: "UNAVAILABLE" } }), { status: 503 });
+
+/** manualFetch, with Gemini answering 503 for the models `busy(model)` names. */
+function busyFetch(answers, busy) {
+  const ok = manualFetch(answers);
+  return async (url, init) => {
+    const m = String(url).match(/models\/([^:]+):generateContent/);
+    if (m && busy(m[1])) return OVERLOADED();
+    return ok(url, init);
+  };
+}
+
+test("busy Google: 3.5 overloaded moves each request to 3.1 Flash-Lite, and the job counts attempts and answers apart", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const ctx = { ...manualCtx(db, { answers: {} }), sleep: async () => {} };
+  ctx.fetchImpl = busyFetch({ write: () => goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK }, (model) => model === PRIMARY_MODEL);
+  await createJob(db, { id: hex(600), kind: "top-grades", by: "admin:o", now: MONDAY });
+  const job = await runManualJob(ctx, hex(600));
+  assert.equal(job.status, "done", job.message);
+  assert.equal(job.gemini, 3, "the draft's own requests: write, list claims, review");
+  // Each request: 3.5 busy, a jittered wait, 3.5 busy again, then 3.1 answers.
+  assert.deepEqual((await jobCalls(db, [hex(600)]))[hex(600)], { attempts: 9, answered: 3, busy: 6, backup: 3 });
+  const models = (await db.execute("SELECT DISTINCT model FROM gemini_requests WHERE status = 200")).rows.map((r) => r.model);
+  assert.deepEqual(models, [BACKUP_MODEL]);
+});
+
+test("busy Google: a draft with no answer waits 15, 20, then 30 minutes between tries, saying when it retries, then fails plainly", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const ctx = { ...manualCtx(db, { answers: {} }), sleep: async () => {} };
+  ctx.fetchImpl = busyFetch({ write: () => goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK }, () => true);
+  await createJob(db, { id: hex(601), kind: "top-grades", by: "admin:o", now: MONDAY });
+  const tries = BUSY_WAIT_MINUTES.length + 1;
+  for (let attempt = 1; attempt < tries; attempt++) {
+    const job = await runManualJob(ctx, hex(601), { attempt, tries });
+    assert.equal(job.status, "running", job.message);
+    assert.equal(job.phase, "busy");
+    assert.equal(job.retryInMs, BUSY_WAIT_MINUTES[attempt - 1] * 60000);
+    assert.match(job.message, new RegExp(`^Google's AI is busy\\. Retrying at \\d{1,2}:\\d{2}\\s[AP]M PT \\(try ${attempt + 1} of ${tries}\\)\\.$`));
+    // Recorded as deferred, not failed, so the night may try the same draft again.
+    assert.equal((await db.execute("SELECT status FROM content_runs ORDER BY id DESC LIMIT 1")).rows[0].status, "deferred");
+  }
+  // A first try can't take a job that is already running.
+  assert.equal((await runManualJob(ctx, hex(601), { attempt: 1, tries })).phase, "busy");
+  const last = await runManualJob(ctx, hex(601), { attempt: tries, tries });
+  assert.equal(last.status, "failed");
+  assert.match(last.message, /stayed busy through 4 tries/);
+  assert.equal(last.retryInMs, undefined);
+  const calls = (await jobCalls(db, [hex(601)]))[hex(601)];
+  assert.equal(calls.answered, 0);
+  assert.equal(calls.attempts, 5 * tries, "every attempt is counted: 2 on 3.5 and 3 on 3.1 a try");
+  assert.equal(calls.busy, calls.attempts);
+  assert.equal((await getJob(db, hex(601))).gemini, tries, "one request of the draft's budget a try");
+});
+
+test("busy Google at night: the Content stage pauses and drafts again later the same night, without a failure", async () => {
+  const db = await fixture({ motion: [2, 1] });
+  const sheet = await topGrades(db, { now: MONDAY });
+  const web = geminiFetch(goodDraft(sheet));
+  // The first write request gets no answer from either model (5 attempts), then Google is back.
+  let busyWrites = 5;
+  const fetchImpl = async (url, init) => {
+    if (String(url).includes("generativelanguage") && busyWrites > 0 && JSON.parse(String(init.body)).generationConfig?.responseSchema?.properties?.title) {
+      busyWrites--;
+      return OVERLOADED();
+    }
+    return web.fetchImpl(url, init);
+  };
+  const r = await nightRun(db, { mode: "dry-run", now: MONDAY, fetchImpl });
+  assert.ok(r.lines.some((l) => /Content: Google's AI is busy .*retrying at \d{1,2}:\d{2}\s[AP]M PT \(wait 1 of 3\)/.test(l)), r.lines.join("\n"));
+  const posts = await listPosts(db, { status: "all" });
+  assert.equal(posts.length, 1, "the draft was written on the second try");
+  assert.equal(posts[0].status, "draft");
+  const runs = (await db.execute("SELECT step, status FROM content_runs WHERE step = 'draft' ORDER BY id")).rows.map((x) => x.status);
+  assert.deepEqual(runs, ["deferred", "ok"]);
+  const content = r.summary.stages.find((s) => s.key === "content");
+  assert.equal(content.failed, 0);
+});
+
+test("portfolio links: the writer points a named portfolio at its PortfolioRank page; sources and other links stay", () => {
+  const body = "See [Top Person 1](https://top-1.dev) and [their site](https://www.top-1.dev/).\nA claim ([source](https://top-1.dev)).\nOur [leaderboard](https://portfoliorank.n8builds.dev/top) and [elsewhere](https://example.com).";
+  const out = linkPortfoliosToPages(body, ["https://top-1.dev"]);
+  assert.ok(out.includes("[Top Person 1](https://portfoliorank.n8builds.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
+  assert.ok(out.includes("[their site](https://portfoliorank.n8builds.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
+  assert.ok(out.includes("([source](https://top-1.dev))"), out);
+  assert.ok(out.includes("[leaderboard](https://portfoliorank.n8builds.dev/top)"), out);
+  assert.ok(out.includes("[elsewhere](https://example.com)"), out);
 });

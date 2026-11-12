@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Article } from "@/components/blog/Article";
-import { publishedPost, relatedPortfolios } from "@/lib/blog-server";
+import { moreArticles, publishedPost, relatedPortfolios } from "@/lib/blog-server";
 import { coverOf, imageSrc, postUrl } from "@/lib/blog";
 import { SITE_URL } from "@/lib/site";
 
@@ -34,7 +34,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const post = await publishedPost(slug);
   if (!post) notFound();
-  const related = await relatedPortfolios(post);
+  const [related, more] = await Promise.all([relatedPortfolios(post), moreArticles(post)]);
   const cover = coverOf(post.images);
   const jsonLd = {
     "@context": "https://schema.org",
@@ -55,7 +55,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-      <Article post={post} related={related} />
+      <Article post={post} related={related} more={more} />
     </>
   );
 }

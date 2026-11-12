@@ -78,8 +78,11 @@ export function linkHref(url: string): string {
 
 const external = (href: string) => /^https?:/.test(href);
 
+/** Where a link should go, before linkHref: a portfolio's site becomes its PortfolioRank page (lib/portfolio-links.ts). */
+export type LinkFor = (url: string) => string;
+
 /** Inline marks: **bold**, `code`, [text](https://...) and bare https addresses. */
-export function Inline({ text, sources = [] }: { text: string; sources?: string[] }) {
+export function Inline({ text, sources = [], linkFor }: { text: string; sources?: string[]; linkFor?: LinkFor }) {
   const parts: ReactNode[] = [];
   const re = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
   let last = 0;
@@ -101,7 +104,7 @@ export function Inline({ text, sources = [] }: { text: string; sources?: string[
           </a>
         );
       } else {
-        const href = linkHref(url);
+        const href = linkHref(linkFor ? linkFor(url) : url);
         parts.push(
           <a
             key={k++}
@@ -121,7 +124,7 @@ export function Inline({ text, sources = [] }: { text: string; sources?: string[
 }
 
 /** A post body. `figure(slot)` renders an image slot (or null when the slot has no image). */
-export function Markdown({ body, figure, sources = [] }: { body: string; figure: (slot: string) => ReactNode; sources?: string[] }) {
+export function Markdown({ body, figure, sources = [], linkFor }: { body: string; figure: (slot: string) => ReactNode; sources?: string[]; linkFor?: LinkFor }) {
   const blocks = parseBlocks(body);
   return (
     <div className="article-body">
@@ -136,7 +139,7 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
           case "para":
             return (
               <p key={i} className="mt-5 text-pretty">
-                <Inline text={b.text} sources={sources} />
+                <Inline text={b.text} sources={sources} linkFor={linkFor} />
               </p>
             );
           case "cta":
@@ -156,7 +159,7 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
                     <li key={j} className="flex gap-3">
                       <span aria-hidden className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-fill" />
                       <span>
-                        <Inline text={item} sources={sources} />
+                        <Inline text={item} sources={sources} linkFor={linkFor} />
                       </span>
                     </li>
                   ))}
@@ -169,7 +172,7 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
                 <p className={`font-bold tracking-tight text-ink ${b.lead.length <= 12 ? "text-4xl tabular-nums sm:text-5xl" : "text-xl sm:text-2xl"}`}>{b.lead}</p>
                 {b.rest.map((r, j) => (
                   <p key={j} className="mt-2 text-[15px] text-mute">
-                    <Inline text={r} sources={sources} />
+                    <Inline text={r} sources={sources} linkFor={linkFor} />
                   </p>
                 ))}
               </aside>
@@ -180,7 +183,7 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
               <L key={i} className={`mt-5 grid gap-2.5 pl-6 ${b.ordered ? "list-decimal marker:font-semibold marker:text-accent" : "list-disc marker:text-accent"}`}>
                 {b.items.map((item, j) => (
                   <li key={j} className="pl-1.5">
-                    <Inline text={item} sources={sources} />
+                    <Inline text={item} sources={sources} linkFor={linkFor} />
                   </li>
                 ))}
               </L>

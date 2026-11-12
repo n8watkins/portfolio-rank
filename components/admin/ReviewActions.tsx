@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, EyeOff, RotateCcw, Send, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, RotateCcw, Send, X } from "lucide-react";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 
 // The owner's decision on one post (POST /api/admin/content/<id>): Publish
-// or Reject a draft, Unpublish a published post. Reject and Unpublish take
+// now, Schedule (for the draft's 08:00 Pacific slot while it is ahead) or
+// Reject a draft; Publish now or Unpublish a post scheduled for later;
+// Unpublish a live post. Reject and Unpublish take
 // an optional note, kept on the post. "Rewrite with these notes" rejects the
 // draft with the notes and starts a new draft from them
 // (POST /api/admin/content/draft { rewriteOf, notes }; same caps as "Write a
@@ -24,7 +26,12 @@ const ERRORS: Record<string, string> = {
   workflow_failed: "The rewrite didn't start. Try again in a minute.",
 };
 
-export function ReviewActions({ id, status, publishLabel }: { id: string; status: string; publishLabel: string }) {
+/**
+ * `scheduledFor`: the post's slot ("Fri 8:00 AM PT") while it is
+ * still ahead, else null. A draft then offers Schedule beside Publish now; a
+ * published post that isn't live yet offers Publish now.
+ */
+export function ReviewActions({ id, status, scheduledFor }: { id: string; status: string; scheduledFor: string | null }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +67,7 @@ export function ReviewActions({ id, status, publishLabel }: { id: string; status
     }
   };
 
-  const act = async (action: "publish" | "reject" | "unpublish") => {
+  const act = async (action: "publish" | "publish_now" | "reject" | "unpublish") => {
     setBusy(action);
     setError(null);
     try {
@@ -122,11 +129,18 @@ export function ReviewActions({ id, status, publishLabel }: { id: string; status
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap gap-2">
+        {(status === "draft" || (status === "published" && scheduledFor)) && (
+          <button type="button" className={btnPrimary} disabled={busy !== null} onClick={() => act("publish_now")} data-publish-now>
+            {busy === "publish_now" ? <Check className="h-4 w-4" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} {busy === "publish_now" ? "Publishing" : "Publish now"}
+          </button>
+        )}
         {status === "draft" && (
           <>
-            <button type="button" className={btnPrimary} disabled={busy !== null} onClick={() => act("publish")}>
-              {busy === "publish" ? <Check className="h-4 w-4" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} {busy === "publish" ? "Publishing" : publishLabel}
-            </button>
+            {scheduledFor && (
+              <button type="button" className={btnSecondary} disabled={busy !== null} onClick={() => act("publish")} data-schedule>
+                <CalendarClock className="h-4 w-4" aria-hidden /> {busy === "publish" ? "Scheduling" : `Schedule for ${scheduledFor}`}
+              </button>
+            )}
             <button type="button" className={btnSecondary} disabled={busy !== null} onClick={() => setAsking("reject")}>
               <X className="h-4 w-4 text-down" aria-hidden /> Reject
             </button>

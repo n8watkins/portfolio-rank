@@ -218,7 +218,10 @@
         "GRADER_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
-        "CONTENT_MODE": "off",
+        // "publish" so the owner can walk through automatic publishing on
+        // staging (owner, 2026-11-12). Staging has no crons and no Gemini key,
+        // so this writes nothing by itself; it only lets /admin/blog choose it.
+        "CONTENT_MODE": "publish",
         "CONTENT_DRAFTS_PER_WEEK": "2",
         // How the content engine writes a post: "staged" (outline, sections, finish;
         // pipeline/content/staged.mjs) or "single" (one request).
