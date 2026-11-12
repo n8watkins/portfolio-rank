@@ -137,3 +137,13 @@ export async function peekCached<T extends object>(namespace: string, key: strin
   const data = JSON.parse(String(row.v)) as T;
   return { ...data, measuredAt: new Date(at).toISOString(), ...(Date.now() - at >= ttlMs ? { stale: true } : {}) };
 }
+
+/**
+ * Cache-Control for a stored result sent to the browser: a good, fresh one is
+ * kept 5 minutes, so a repeat view is instant; a failure, a miss or a stale
+ * result is never kept, so the next look asks again. HTTP caching only: when
+ * results re-run is decided by the cache rules above.
+ */
+export function browserCache(d: { ok?: boolean; stale?: boolean }): string {
+  return d.ok && !d.stale ? "public, max-age=300" : "no-store";
+}

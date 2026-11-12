@@ -111,7 +111,8 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   await page.getByRole("button", { name: "Simple" }).click();
   assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
-  await page.getByRole("heading", { name: "Lighthouse performance" }).first().waitFor();
+  // Simple: the strip under the screenshot (performance rings, built with, polish count).
+  await page.getByLabel("Lighthouse performance").first().waitFor();
   // Remembered in this browser.
   await page.reload();
   await page.getByRole("button", { name: /^Pick / }).first().waitFor();

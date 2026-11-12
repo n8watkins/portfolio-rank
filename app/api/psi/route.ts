@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cached, peekCached, type CacheMeta } from "@/lib/cache";
+import { browserCache, cached, peekCached, type CacheMeta } from "@/lib/cache";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
@@ -111,7 +111,8 @@ export async function GET(req: Request) {
   // ("not_measured" otherwise); Play reads it first and measures on a miss.
   if (params.get("cached") === "1") {
     const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS);
-    return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
+    const body = hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult);
+    return NextResponse.json(body, { headers: { "cache-control": browserCache(body) } });
   }
   // A result stays fresh for 30 days; a failure (quota, timeout, a site that
   // won't load) for an hour, so a broken site can't burn the quota by being
@@ -130,5 +131,5 @@ export async function GET(req: Request) {
     },
     () => runPsi(url, strategy)
   );
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { "cache-control": browserCache(data) } });
 }
