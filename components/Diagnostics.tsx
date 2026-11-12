@@ -8,6 +8,22 @@ import type { PsiResult } from "@/app/api/psi/route";
 import type { CacheMeta } from "@/lib/cache";
 import { useClientSession } from "@/lib/session-client";
 
+/**
+ * A page's title and description as the page shows them: the polish fetch
+ * stores them as written in the HTML, so entities (&amp;, &#x27;, &#39;, &quot;) are
+ * decoded here, for new and already cached results alike.
+ */
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+function decodeEntities(s: string | null | undefined): string {
+  return (s ?? "").replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+      return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    }
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
+
 function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -419,10 +435,10 @@ export function DetailDiagnostics({ url }: { url: string }) {
               <ShareImage key={inspect.ogImage} src={new URL(inspect.ogImage, inspect.finalUrl).href} />
               <div className="border-t border-edge p-3">
                 <p className="truncate text-sm font-semibold">
-                  {inspect.ogTitle ?? inspect.title}
+                  {decodeEntities(inspect.ogTitle ?? inspect.title)}
                 </p>
                 <p className="line-clamp-2 text-xs text-mute">
-                  {inspect.ogDescription ?? inspect.description ?? ""}
+                  {decodeEntities(inspect.ogDescription ?? inspect.description ?? "")}
                 </p>
                 <p className="mt-1 text-xs text-mute uppercase">
                   {domainOf(url)}
@@ -691,8 +707,8 @@ export function PlayDiagnostics({
                 <ShareImage key={inspect.ogImage} compact src={new URL(inspect.ogImage, inspect.finalUrl).href} />
               </div>
               <div className="min-w-0 p-2">
-                <p className="truncate text-xs font-semibold">{inspect.ogTitle ?? inspect.title}</p>
-                <p className="line-clamp-2 text-[11px] text-mute">{inspect.ogDescription ?? inspect.description ?? ""}</p>
+                <p className="truncate text-xs font-semibold">{decodeEntities(inspect.ogTitle ?? inspect.title)}</p>
+                <p className="line-clamp-2 text-[11px] text-mute">{decodeEntities(inspect.ogDescription ?? inspect.description ?? "")}</p>
                 <p className="mt-0.5 truncate text-[11px] text-mute uppercase">{domainOf(url)}</p>
               </div>
             </div>
