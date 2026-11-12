@@ -513,6 +513,10 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Why: the extra safety is worth keeping while the change rate is high, and it costs nothing ([COSTS.md](COSTS.md), "Staging").
 - **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
   Why: what merges is what the next deploy ships.
+- **Email sign-in beside GitHub; email accounts' votes count fully** (owner, 2026-11-12). Status: building (branch `feat/email-signin`).
+  A one-time link by email, sent through the shared mailroom inside PortfolioRank's share, with Turnstile and per-address and per-network caps; fake accounts are dealt with only if they actually show up.
+  Claims, owner actions and the admin stay on GitHub, since their proof is tied to a GitHub account (AUTOMATION.md "Email sign-in").
+  Why: some people who want to vote or keep lists don't use GitHub, and a link is the simplest way in without a password.
 
 ## Superseded
 
