@@ -27,14 +27,14 @@ type PsiResponse = {
   };
 };
 
-async function runPsi(target: string): Promise<PsiResult> {
+async function runPsi(target: string, strategy: Strategy): Promise<PsiResult> {
   // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
   const psiUrl = new URL(
     process.env.PSI_API_BASE ??
       "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
   );
   psiUrl.searchParams.set("url", target);
-  psiUrl.searchParams.set("strategy", "mobile");
+  psiUrl.searchParams.set("strategy", strategy);
   if (process.env.PSI_API_KEY) {
     psiUrl.searchParams.set("key", process.env.PSI_API_KEY);
   }
@@ -85,8 +85,18 @@ async function runPsi(target: string): Promise<PsiResult> {
 
 const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
 
+/**
+ * PageSpeed strategies: mobile (the default, cached as psi:<url>, as before)
+ * and desktop (the games show both; cached as psi-desktop:<url>, with the
+ * same TTLs and lease).
+ */
+type Strategy = "mobile" | "desktop";
+const NAMESPACE: Record<Strategy, string> = { mobile: "psi", desktop: "psi-desktop" };
+
 export async function GET(req: Request) {
-  const url = new URL(req.url).searchParams.get("url");
+  const params = new URL(req.url).searchParams;
+  const url = params.get("url");
+  const strategy: Strategy = params.get("strategy") === "desktop" ? "desktop" : "mobile";
   // Only audit sites on the roster - keeps strangers from burning the PSI
   // quota or pointing our server at arbitrary URLs.
   if (!url || !isKnownPortfolio(url)) {
@@ -97,10 +107,10 @@ export async function GET(req: Request) {
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
-  // ?cached=1 (the games): only a result already stored, never a PageSpeed
-  // run, so a face-off view can't spend the quota; "not_measured" otherwise.
-  if (new URL(req.url).searchParams.get("cached") === "1") {
-    const hit = await peekCached<PsiResult>("psi", url, PSI_TTL_MS);
+  // ?cached=1: only a result already stored, never a PageSpeed run
+  // ("not_measured" otherwise); Play reads it first and measures on a miss.
+  if (params.get("cached") === "1") {
+    const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS);
     return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
   }
   // A result stays fresh for 30 days; a failure (quota, timeout, a site that
@@ -110,7 +120,7 @@ export async function GET(req: Request) {
   // other callers hear "in_progress" and retry. A stale result is served at
   // once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
-    "psi",
+    NAMESPACE[strategy],
     url,
     {
       ttlMs: PSI_TTL_MS,
@@ -118,7 +128,7 @@ export async function GET(req: Request) {
       failureTtlMs: 3600 * 1000,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
     },
-    () => runPsi(url)
+    () => runPsi(url, strategy)
   );
   return NextResponse.json(data);
 }

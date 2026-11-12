@@ -458,6 +458,104 @@ function SpecList({ inspect, psi, projects }: { inspect: Inspection | null; psi:
   );
 }
 
+type Strategy = "mobile" | "desktop";
+type PsiState = { phase: "loading" | "measuring" | "done"; data: PsiResult | null; retry: () => void };
+
+// One measurement per site and strategy on the page, however many cards ask.
+const measuring = new Map<string, Promise<PsiResult>>();
+const POLL_MS = 5_000;
+const POLL_FOR_MS = 150_000;
+
+const psiEndpoint = (url: string, strategy: Strategy, cachedOnly: boolean) =>
+  `/api/psi?url=${encodeURIComponent(url)}${strategy === "desktop" ? "&strategy=desktop" : ""}${cachedOnly ? "&cached=1" : ""}`;
+
+/**
+ * Measures when missing (owner, 2026-11-12): a site with no stored
+ * Lighthouse result (and no stored failure) is measured as soon as Play shows
+ * it, through the normal /api/psi, whose per-site lease lets every viewer
+ * share one PageSpeed run. While another viewer's run is going ("in_progress"),
+ * this polls the stored result until it lands.
+ */
+function usePsi(url: string, strategy: Strategy): PsiState {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<{ key: string; phase: PsiState["phase"]; data: PsiResult | null } | null>(null);
+  const key = `${strategy}:${url}:${attempt}`;
+  useEffect(() => {
+    let live = true;
+    const set = (phase: PsiState["phase"], data: PsiResult | null) => live && setState({ key, phase, data });
+    const peek = () => fetch(psiEndpoint(url, strategy, true)).then((r) => r.json() as Promise<PsiResult>);
+    const measure = () => {
+      const k = `${strategy}:${url}`;
+      let p = attempt === 0 ? measuring.get(k) : undefined;
+      if (!p) {
+        p = fetch(psiEndpoint(url, strategy, false)).then((r) => r.json() as Promise<PsiResult>);
+        measuring.set(k, p);
+        p.finally(() => measuring.get(k) === p && measuring.delete(k));
+      }
+      return p;
+    };
+    const run = async () => {
+      try {
+        const stored = attempt === 0 ? await peek() : null;
+        if (stored && !(stored.ok === false && stored.error === "not_measured")) return set("done", stored);
+        set("measuring", null);
+        let result = await measure();
+        const until = Date.now() + POLL_FOR_MS;
+        while (live && !result.ok && result.error === "in_progress" && Date.now() < until) {
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          const p = await peek();
+          if (!(p.ok === false && p.error === "not_measured")) result = p;
+        }
+        set("done", !result.ok && result.error === "in_progress" ? { ok: false, error: "still_measuring" } : result);
+      } catch {
+        set("done", { ok: false, error: "fetch_error" });
+      }
+    };
+    run();
+    return () => {
+      live = false;
+    };
+  }, [url, strategy, attempt, key]);
+  const current = state?.key === key ? state : null;
+  return { phase: current?.phase ?? "loading", data: current?.data ?? null, retry: () => setAttempt((a) => a + 1) };
+}
+
+/** One strategy's Lighthouse scores: a placeholder, "Measuring…", the four scores, or the reason with Retry. */
+function PsiRow({ label, state }: { label: string; state: PsiState }) {
+  const { phase, data } = state;
+  return (
+    <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-2">
+      <span className="text-xs text-mute">{label}</span>
+      {phase === "loading" ? (
+        <Placeholder className="h-11" />
+      ) : phase === "measuring" ? (
+        <div role="status" className="relative h-11 overflow-hidden rounded-lg border border-edge bg-raised">
+          <span className="absolute inset-y-0 left-0 w-1/3 rounded-lg bg-accent/15 motion-safe:animate-[measuring_1.6s_ease-in-out_infinite]" aria-hidden />
+          <span className="relative flex h-full items-center px-3 text-xs text-mute">Measuring with Google Lighthouse… (about 30 s)</span>
+        </div>
+      ) : data?.ok ? (
+        <div className="details-in grid grid-cols-4 gap-1.5">
+          {PLAY_PSI.map(([id, short]) => (
+            <div key={id} className="rounded-lg border border-edge px-1 py-1 text-center" title={PSI_LABELS[id]}>
+              <p className={`text-base leading-tight font-bold tabular-nums ${scoreColor(data.scores?.[id])}`}>{data.scores?.[id] ?? "-"}</p>
+              <p className="text-[10px] text-mute">{short}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="details-in flex flex-wrap items-center gap-x-2 text-xs text-mute">
+          <span>{data?.error === "still_measuring" ? "Still measuring. Try again in a minute." : psiProblem(data?.error).text}</span>
+          {(data?.error === "still_measuring" || psiProblem(data?.error).retry) && (
+            <button type="button" onClick={state.retry} className="min-h-9 font-semibold text-accent underline-offset-4 hover:underline">
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * The games' view of what the tools measured on a site (Play's "About this
  * portfolio"), in two parts so the widest layout can balance them:
@@ -465,14 +563,15 @@ function SpecList({ inspect, psi, projects }: { inspect: Inspection | null; psi:
  * - "checks": its own link preview (og:image, title, description), the
  *   Lighthouse scores and the polish checklist;
  * - "all": both, one after the other.
- * Lighthouse is read only from the cache the portfolio page fills
- * (/api/psi?cached=1), so a face-off never starts a PageSpeed run; the polish
- * fetch is the portfolio page's own (/api/inspect). Each part fades in when
+ * Lighthouse (mobile and desktop) is measured when missing (usePsi); the
+ * polish fetch is the portfolio page's own (/api/inspect). Each part fades in when
  * its data arrives, over a placeholder of its shape.
  */
 export function PlayDiagnostics({ url, part = "all", projects }: { url: string; part?: "all" | "spec" | "checks"; projects?: number | null }) {
   const { data: inspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
-  const { data: psi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}&cached=1`);
+  const mobile = usePsi(url, "mobile");
+  const desktop = usePsi(url, "desktop");
+  const psi = mobile.data;
   const spec = part !== "checks";
   const checks = part !== "spec";
 
@@ -511,21 +610,9 @@ export function PlayDiagnostics({ url, part = "all", projects }: { url: string; 
 
       {checks && (
         <section className="grid gap-2">
-          <PlayLabel>Lighthouse (mobile)</PlayLabel>
-          {!psi ? (
-            <Placeholder className="h-12" />
-          ) : !psi.ok ? (
-            <p className="details-in text-sm text-mute">{psi.error === "not_measured" ? "Not measured yet." : psiProblem(psi.error).text}</p>
-          ) : (
-            <div className="details-in grid grid-cols-4 gap-1.5">
-              {PLAY_PSI.map(([id, label]) => (
-                <div key={id} className="rounded-lg border border-edge px-1 py-1.5 text-center" title={PSI_LABELS[id]}>
-                  <p className={`text-lg font-bold tabular-nums ${scoreColor(psi.scores?.[id])}`}>{psi.scores?.[id] ?? "-"}</p>
-                  <p className="text-[11px] text-mute">{label}</p>
-                </div>
-              ))}
-            </div>
-          )}
+          <PlayLabel>Lighthouse</PlayLabel>
+          <PsiRow label="Mobile" state={mobile} />
+          <PsiRow label="Desktop" state={desktop} />
         </section>
       )}
 
