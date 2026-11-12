@@ -86,7 +86,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
   // Signed in: an earlier claim picks up where it was; otherwise check at once.
   useEffect(() => {
     if (session === "loading") return;
-    if (session === null) return;
+    if (session === null || session.provider === "email") return;
     let live = true;
     (async () => {
       try {
@@ -143,8 +143,11 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
   };
 
   const login = session && session !== "loading" ? session.login : "";
-  // Signed out, the first step is all there is.
-  const step = session === null ? "signin" : current;
+  // Signed out, the first step is all there is. Claims are tied to a GitHub
+  // account (the site links to it, or the meta tag names it), so an email
+  // account starts at the same step, with a note.
+  const emailAccount = session !== null && session !== "loading" && session.provider === "email";
+  const step = session === null || emailAccount ? "signin" : current;
   const at = stepIndex(step);
 
   return (
@@ -179,6 +182,11 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
               Claiming lets you remove your portfolio from PortfolioRank{regrade ? ", hide its grade, or ask for a re-grade" : " or hide its grade"}. We tie it to your GitHub
               account, the same way removal requests already work.
             </p>
+            {emailAccount && (
+              <p role="note" className="mt-3 rounded-lg bg-raised p-3 text-sm">
+                You&apos;re signed in with email ({login}). Claiming needs GitHub: continuing signs you in with GitHub instead, and your email account keeps its votes, likes and lists.
+              </p>
+            )}
             <button
               type="button"
               disabled={step === "loading"}

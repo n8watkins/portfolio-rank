@@ -8,7 +8,10 @@ import { useSyncExternalStore } from "react";
 // server would make every page dynamic.
 
 export type ClientSession = {
+  /** The GitHub login, or the address for an email account. */
   login: string;
+  /** How the account signs in (auth.ts). */
+  provider: "github" | "email";
   name: string | null;
   email: string | null;
   image: string | null;
@@ -26,9 +29,15 @@ function load() {
   started = true;
   fetch("/api/auth/session")
     .then((r) => (r.ok ? r.json() : null))
-    .then((s: { login?: string; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
+    .then((s: { login?: string; provider?: string; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
       state = s?.login
-        ? { login: s.login, name: s.user?.name ?? null, email: s.user?.email ?? null, image: s.user?.image ?? null }
+        ? {
+            login: s.login,
+            provider: s.provider === "email" ? "email" : "github",
+            name: s.user?.name ?? null,
+            email: s.user?.email ?? null,
+            image: s.user?.image ?? null,
+          }
         : null;
     })
     .catch(() => {

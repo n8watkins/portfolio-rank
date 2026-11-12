@@ -381,6 +381,22 @@ While `GRADER_ENABLED` is not `"true"` it returns before reading anything.
 
 `tests/grader.test.mjs` (caps, cooldown, claims, dispatch, links, the email gate, report emails, the report, own keys and the people queue, with a mocked GitHub and Gemini), `tests/grader-capture.test.mjs` (the proxy and guarded fetch against private addresses, and a real Chromium capture through the proxy) and `tests/grader-api.test.mjs` (every route on the production build, with local stand-ins for the sites, GitHub and Gemini that `scripts/test-e2e.sh` turns on; `lib/grader/server.ts` ignores them on the deployed Workers).
 
+## Email sign-in
+
+Owner request of 2026-11-12: besides GitHub, anyone can sign in with an emailed one-time link; email accounts' votes count fully (owner decision: deal with fake accounts only if it actually happens).
+
+- **The request** (`POST /api/signin/email { email, turnstileToken?, callbackUrl? }`, [app/api/signin/email/route.ts](app/api/signin/email/route.ts)): this site's Origin, a plausible address, 10 attempts an hour and 30 a day per network (the IPv4 address or IPv6 /64), Turnstile (action `signin-email`, refused on the deployed Workers without the secret), then 3 links an hour and 6 a day per address; networks and addresses are kept only as keyed hashes in `rate_limits`.
+  The answer is the same `{ sent: true }` for any address that gets that far, new or known; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited` with `retry-after`, 503 `email_unavailable`.
+- **The link** ([lib/signin/store.mjs](lib/signin/store.mjs)): 256 random bits, only its SHA-256 stored, 15 minutes to live, used once in one `UPDATE ... RETURNING`; a same-site `callbackUrl` brings you back to the page you were on.
+- **The email** goes through the shared gate (kind `signin`: 40 a day, 10 of them kept for sign-in, 6 to one address a day, counted apart from reports) and then the mailroom service binding `MAILROOM` (app `portfoliorank`, kind `signin`, with the mailroom's priority share for sign-in); test runs keep it in `email_outbox`.
+- **The landing page** `/signin/email?t=<token>` only reads the link and shows the masked address; its button uses it (Auth.js Credentials provider `email-link` in [auth.ts](auth.ts)), so a mail scanner that opens links can't sign anyone in or use the link up.
+  A used, expired or unknown link says which, and offers a new one.
+- **The account** (`email_accounts`): created at the first sign-in, one per address (a keyed hash is unique); the rater id is `em:<random id>`, which says nothing about the address; the session's `login` is the address, shown only to its owner.
+- **What needs GitHub:** claiming a portfolio and the owner's actions (the proof is a link to the GitHub profile or a meta tag tied to it; an email account sees a note and continues with GitHub), and the admin pages (`ADMIN_GITHUB_ID`).
+  `MIN_GITHUB_ACCOUNT_AGE_DAYS` applies to GitHub accounts only, so email accounts' votes count from the first day; the grader's trusted share (`TRUSTED_ACCOUNT_DAYS`) stays GitHub-only.
+  Settings shows "Email" and the address; deleting the account asks for the address instead of a username, and deletes `email_accounts` and pending links with everything else.
+- **Retention:** links leave the database at the next request and in the nightly retention a day after they expire; they are left out of the backup, accounts are in it.
+
 ## Model watch
 
 Owner decision of 2026-11-10: model watch is news only; nothing switches on its own.
