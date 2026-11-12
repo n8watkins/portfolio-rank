@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cached, peekCached, type CacheMeta } from "@/lib/cache";
+import { browserCache, cached, peekCached, type CacheMeta } from "@/lib/cache";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 import { CHECK_KINDS } from "@/lib/freshness.mjs";
 
@@ -114,7 +114,8 @@ export async function GET(req: Request) {
   // It says whether the result is due by the same rule, without a refresh.
   if (params.get("cached") === "1") {
     const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS, { isFailure: (d) => !d.ok, freshness: { kind: "lighthouse", url } });
-    return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
+    const body = hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult);
+    return NextResponse.json(body, { headers: { "cache-control": browserCache(body) } });
   }
   // When Lighthouse runs again (lib/freshness.mjs, AUTOMATION.md "When checks
   // re-run"): a result is reused while the site is unchanged, and measured
@@ -137,5 +138,5 @@ export async function GET(req: Request) {
     },
     () => runPsi(url, strategy)
   );
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { "cache-control": browserCache(data) } });
 }

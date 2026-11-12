@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { PlayDiagnostics, SocialIcons } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
-import { GitHubMark } from "@/components/ui/GitHubMark";
 import type { PlayDetails } from "@/lib/play/card";
 
 // The pieces the games draw around a portfolio (face-off and Guess the
@@ -50,24 +49,16 @@ export function NameLine({ name, url, liked, onSaved, className = "" }: { name: 
   );
 }
 
-const onGitHubPages = (url: string) => /(^|\.)github\.io$/i.test(domainOf(url));
-
 /**
- * The site's address as the visit link (a new tab). A site hosted on GitHub
- * Pages (github.io) gets GitHub's mark on the right, "hosted on GitHub".
+ * The site's address as the visit link (a new tab). The person's GitHub and
+ * other profiles have one place, the icon row in the name line.
  */
 export function SiteLink({ url, className = "" }: { url: string; className?: string }) {
-  const gh = onGitHubPages(url);
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" className={`group inline-flex min-w-0 items-center gap-1 text-sm text-mute underline-offset-4 hover:text-ink hover:underline ${className}`}>
       <span className="truncate">{domainOf(url)}</span>
       <ArrowUpRight className="h-3.5 w-3.5 shrink-0 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
-      <span className="sr-only"> (opens in a new tab{gh ? ", hosted on GitHub" : ""})</span>
-      {gh && (
-        <span title="Hosted on GitHub" className="ml-1 inline-grid shrink-0 place-items-center">
-          <GitHubMark className="h-3.5 w-3.5" />
-        </span>
-      )}
+      <span className="sr-only"> (opens in a new tab)</span>
     </a>
   );
 }

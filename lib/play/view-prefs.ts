@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 // What Play shows about each portfolio, chosen by the viewer and remembered
 // in this browser (localStorage; every read and write survives storage being
@@ -49,6 +50,18 @@ function write(p: ViewPrefs) {
   }
 }
 
+/**
+ * Applies a view change through a View Transition where the browser has one
+ * and motion is welcome: the old and new layouts cross-fade and each card
+ * eases to its new height (app/globals.css). Otherwise the change is instant.
+ */
+function animated(update: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (!doc.startViewTransition || still) return update();
+  doc.startViewTransition(() => flushSync(update));
+}
+
 /** The viewer's Play view, the detailed one until they choose. */
 export function useViewPrefs() {
   const [prefs, setPrefs] = useState<ViewPrefs>(DETAILED);
@@ -58,16 +71,18 @@ export function useViewPrefs() {
     setPrefs(read());
   }, []);
   const choose = useCallback((p: ViewPrefs) => {
-    setPrefs(p);
+    animated(() => setPrefs(p));
     write(p);
   }, []);
   const toggle = useCallback((kind: "metrics" | "sections", id: string) => {
-    setPrefs((p) => {
-      const list = p[kind] as string[];
-      const next = { ...p, mode: "custom" as const, [kind]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id] } as ViewPrefs;
-      write(next);
-      return next;
-    });
+    animated(() =>
+      setPrefs((p) => {
+        const list = p[kind] as string[];
+        const next = { ...p, mode: "custom" as const, [kind]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id] } as ViewPrefs;
+        write(next);
+        return next;
+      }),
+    );
   }, []);
   return { prefs, choose, toggle };
 }

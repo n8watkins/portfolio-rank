@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cached, type CacheMeta } from "@/lib/cache";
+import { browserCache, cached, type CacheMeta } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
 import { siteSpec, type SiteSpec } from "@/lib/site-spec";
@@ -180,5 +180,5 @@ export async function GET(req: Request) {
     },
     () => inspect(url)
   );
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { "cache-control": browserCache(data) } });
 }

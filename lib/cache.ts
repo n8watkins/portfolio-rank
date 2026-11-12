@@ -194,3 +194,13 @@ export async function peekCached<T extends object>(
   const entry = await readEntry<T>(`${namespace}:${key}`, () => ttlMs, isFailure, freshness);
   return entry ? { ...entry.data, ...metaOf(entry) } : null;
 }
+
+/**
+ * Cache-Control for a stored result sent to the browser: a good, fresh one is
+ * kept 5 minutes, so a repeat view is instant; a failure, a miss or a stale
+ * result is never kept, so the next look asks again. HTTP caching only: when
+ * results re-run is decided by the cache rules above.
+ */
+export function browserCache(d: { ok?: boolean; stale?: boolean }): string {
+  return d.ok && !d.stale ? "public, max-age=300" : "no-store";
+}

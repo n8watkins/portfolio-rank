@@ -6,6 +6,7 @@ import { ArrowRight, Check, Flame, MousePointerClick, RotateCcw, Share2, Target,
 import { CopyButton } from "@/components/ui/CopyButton";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
+import { PlaySummary, prefetchPlayData } from "@/components/Diagnostics";
 import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
 import { ViewControls } from "@/components/play/ViewControls";
 import { useViewPrefs } from "@/lib/play/view-prefs";
@@ -101,17 +102,21 @@ function writeRound(r: RoundState) {
   }
 }
 
-/** True from 1440 px up, where details sit beside the screenshots. */
-function useWide() {
-  const [wide, setWide] = useState(false);
-  useEffect(() => {
-    const m = window.matchMedia("(min-width: 1440px)");
-    const on = () => setWide(m.matches);
-    on();
-    m.addEventListener("change", on);
-    return () => m.removeEventListener("change", on);
-  }, []);
-  return wide;
+/** Draws a pair from /api/rank, leaving out the sites this session has seen. */
+async function drawPair(): Promise<{ res: { ok: boolean; status: number }; data: (Pair & { rater?: Rater; error?: string }) | null }> {
+  const seen = readSeen();
+  const r = await fetch(seen.length ? `/api/rank?seen=${seen.join(",")}` : "/api/rank", { cache: "no-store" });
+  return { res: { ok: r.ok, status: r.status }, data: await r.json() };
+}
+
+/** Starts loading a portfolio's screenshot and stored details, so its card fills at once. */
+function warm(e: Entry) {
+  if (e.shot) {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = frameOf(e.shot, "hero.jpg");
+  }
+  prefetchPlayData(e.url);
 }
 
 const domainOf = (url: string) => {
@@ -201,13 +206,11 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   }, []);
   // A guest's practice intro, until they vote or dismiss it (drawn by the server: no shift).
   const [intro, setIntro] = useState(introAtFirst);
-  // The widest screens show "About this portfolio" beside each screenshot.
-  const wide = useWide();
   // What the viewer chose to see (Simple, Detailed or their own mix).
   const { prefs, choose, toggle } = useViewPrefs();
-  // Rich: anything beyond Lighthouse scores; then, from 1440 px up, the details split beside the screenshot.
+  // Simple has its own strip; Detailed and custom views show the chosen parts.
+  const simple = prefs.mode === "simple";
   const rich = prefs.sections.length > 0;
-  const split = wide && rich;
   const openSignIn = useSignIn();
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -232,15 +235,19 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     [openSignIn, rater?.anonVoteLimit],
   );
 
+  // A pair drawn ahead of time (after a vote), used by the next load().
+  const upcoming = useRef<ReturnType<typeof drawPair> | null>(null);
+
   const load = useCallback(async () => {
     const n = ++seq.current;
     setBusy(true);
-    let res: Response;
+    let res: { ok: boolean; status: number };
     let data: (Pair & { rater?: Rater; error?: string }) | null = null;
     try {
-      const seen = readSeen();
-      res = await fetch(seen.length ? `/api/rank?seen=${seen.join(",")}` : "/api/rank", { cache: "no-store" });
-      data = await res.json();
+      // The pair drawn ahead while the last one was on screen, else a new draw.
+      const ahead = upcoming.current;
+      upcoming.current = null;
+      ({ res, data } = await (ahead ?? drawPair()));
     } catch {
       if (n === seq.current) {
         setLoadError(true);
@@ -262,6 +269,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     setLoadError(false);
     setPair({ a: data.a, b: data.b, token: data.token });
     addSeen([data.a.id, data.b.id]);
+    warm(data.a);
+    warm(data.b);
     const r = data.rater;
     if (r) setRater(r);
     setPick(null);
@@ -353,6 +362,20 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       setBusy(false);
       setCounted((c) => c + 1);
       onBadgeCheck();
+      // The vote spent this pair: draw the next one now, while the result is
+      // on screen, and warm its screenshots and details, so Next is instant.
+      const ahead = drawPair();
+      upcoming.current = ahead;
+      ahead
+        .then(({ res: r, data: d }) => {
+          if (r.ok && d?.a && d?.b) {
+            warm(d.a);
+            warm(d.b);
+          }
+        })
+        .catch(() => {
+          if (upcoming.current === ahead) upcoming.current = null;
+        });
     },
     [pair, busy, pick, finished, reduced, saveRound, load, onBadgeCheck],
   );
@@ -539,13 +562,12 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                     ? "deal-in has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
                     : ""
                 } ${state} ${mine ? "shadow-[0_0_0_3px_var(--color-fill)]" : ""}`}
-                style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
+                // The card's view-transition name lets it ease to its new height when the view changes.
+                style={{ "--d": `${side === "a" ? 0 : 90}ms`, viewTransitionName: `faceoff-card-${side}` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                {/* Detailed, from 1440 px up: "Built with" fills the space under the
-                    screenshot and the checks sit beside it. Otherwise everything
-                    follows the screenshot. */}
-                <div className={`flex-1 ${split ? "grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]" : ""}`}>
+                {/* The screenshot across the card, then Simple's strip or the chosen details under it. */}
+                <div className="flex-1">
                   <div className="min-w-0">
                     <button
                       type="button"
@@ -569,26 +591,18 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                       )}
                       {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
                     </button>
-                    {split && <DetailsPanel id={`spec-${side}`} url={e.url} record={false} profile={false} part="spec" metrics={prefs.metrics} sections={prefs.sections} />}
                   </div>
-                  <DetailsPanel
-                    id={`details-${side}`}
-                    url={e.url}
-                    record={pick !== null}
-                    profile={rich}
-                    part={split ? "checks" : "all"}
-                    side={split}
-                    metrics={prefs.metrics}
-                    sections={prefs.sections}
-                  />
+                  {simple ? (
+                    <PlaySummary url={e.url} />
+                  ) : (
+                    <DetailsPanel id={`details-${side}`} url={e.url} record={pick !== null} profile={rich} metrics={prefs.metrics} sections={prefs.sections} />
+                  )}
                 </div>
                 {/* The pick, centered under its card. */}
                 <div className="flex min-h-16 items-center justify-center border-t border-edge p-2.5 sm:p-3">
                   {pick === null ? (
                     <button type="button" onClick={() => vote(side)} disabled={busy} aria-label={`Pick ${e.name}`} aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"} className={`${btnPrimary} pick min-w-48`}>
-                      {side === "a" && <kbd className="rounded border border-on-fill/30 px-1 text-[11px] max-md:hidden">←</kbd>}
                       <Check className="h-4 w-4" aria-hidden /> Pick {e.name.split(" ")[0]}
-                      {side === "b" && <kbd className="rounded border border-on-fill/30 px-1 text-[11px] max-md:hidden">→</kbd>}
                     </button>
                   ) : mine ? (
                     <p className="inline-flex items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-sm font-semibold text-on-fill">
@@ -607,12 +621,13 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         <div className="grid grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2" aria-busy="true">
           {[0, 1].map((k) => (
             <div key={k} aria-hidden className="card overflow-hidden">
-              <div className="flex h-[2.3rem] items-center border-b border-edge px-3 sm:px-4">
-                <div className="h-4 w-2/5 animate-pulse rounded bg-raised" />
+              <div className="flex h-[3.75rem] items-center border-b border-edge px-3 sm:px-4">
+                <div className="h-4 w-2/5 rounded bg-raised motion-safe:animate-pulse" />
               </div>
-              <div className="min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                <div className="aspect-[16/9] w-full animate-pulse bg-raised md:aspect-[16/10]" />
-                <div className="hidden min-[1440px]:block" />
+              <div className="aspect-[16/9] w-full bg-raised motion-safe:animate-pulse md:aspect-[16/10]" />
+              <div className="grid gap-2 border-t border-edge p-3 sm:p-4">
+                <div className="h-4 w-1/3 rounded bg-raised motion-safe:animate-pulse" />
+                <div className="h-10 rounded-lg bg-raised motion-safe:animate-pulse" />
               </div>
               <div className="h-[4.1rem] border-t border-edge sm:h-[4.35rem]" />
             </div>

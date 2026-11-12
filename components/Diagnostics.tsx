@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Cloud, FolderGit2, Gauge, Layers, Moon, Newspaper, Smartphone, Weight, type LucideIcon } from "lucide-react";
-import { GitHubMark } from "@/components/ui/GitHubMark";
+import { CalendarClock, Cloud, FolderGit2, Gauge, Layers, Loader2, Moon, Newspaper, Smartphone, Weight, type LucideIcon } from "lucide-react";
 import type { Inspection } from "@/app/api/inspect/route";
 import type { PsiResult } from "@/app/api/psi/route";
 import type { CacheMeta } from "@/lib/cache";
@@ -45,9 +44,9 @@ function Check({ pass, label }: { pass: boolean | undefined; label: string }) {
 
 function scoreColor(s: number | null | undefined) {
   if (s == null) return "text-mute";
-  if (s >= 90) return "text-green-400";
+  if (s >= 90) return "text-up";
   if (s >= 50) return "text-accent";
-  return "text-red-400";
+  return "text-down";
 }
 
 /** "Nov 3", with the year when it isn't this year's. */
@@ -110,6 +109,16 @@ function getJson(endpoint: string, attempt: number): Promise<unknown> {
     firstLoads.set(endpoint, p);
   }
   return p;
+}
+
+/**
+ * Starts the stored-details reads Play makes for a site (the polish check and
+ * both stored Lighthouse results, all in parallel), so a card that shows it
+ * next fills at once. Never starts a PageSpeed run.
+ */
+export function prefetchPlayData(url: string) {
+  const q = encodeURIComponent(url);
+  for (const e of [`/api/inspect?url=${q}`, `/api/psi?url=${q}&cached=1`, `/api/psi?url=${q}&strategy=desktop&cached=1`]) getJson(e, 0).catch(() => {});
 }
 
 const STALE_POLLS = 4;
@@ -303,6 +312,23 @@ function Unreachable({ onRetry }: { onRetry: () => void }) {
 /** The share card preview; falls back to a note when the image won't load here. */
 function ShareImage({ src, compact = false }: { src: string; compact?: boolean }) {
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  if (compact) {
+    // The games' small link preview: a shimmer until it loads, and no slot at
+    // all when it won't (the wrapper hides when empty), never a blank box.
+    if (broken) return null;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setBroken(true)}
+        className={`aspect-[1.91/1] w-full object-cover transition-opacity duration-200 ${loaded ? "opacity-100" : "bg-raised opacity-60 motion-safe:animate-pulse"}`}
+      />
+    );
+  }
   if (broken) {
     return (
       <div className={`flex aspect-[1.91/1] w-full items-center justify-center bg-edge text-center text-ink ${compact ? "px-1 text-[10px]" : "px-4 text-xs"}`}>
@@ -499,7 +525,7 @@ function Placeholder({ className }: { className: string }) {
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const metricOf = (psi: PsiResult | null, id: string) => (psi?.ok ? psi.metrics?.find((m) => m.id === id)?.value : undefined);
 
-type SpecRow = { icon: LucideIcon | "github"; label: string; value: React.ReactNode };
+type SpecRow = { icon: LucideIcon; label: string; value: React.ReactNode };
 
 /**
  * "Built with": a compact spec list of what the tools found, each line shown
@@ -524,16 +550,7 @@ function SpecList({ inspect, psi, projects }: { inspect: Inspection | null; psi:
   if (s?.darkMode) rows.push({ icon: Moon, label: "Dark mode", value: "Yes" });
   if (s?.blog) rows.push({ icon: Newspaper, label: "Blog", value: "Yes" });
   if (projects) rows.push({ icon: FolderGit2, label: "Projects linked", value: projects });
-  if (inspect.ok && inspect.githubUrl)
-    rows.push({
-      icon: "github",
-      label: "GitHub",
-      value: (
-        <a href={inspect.githubUrl} target="_blank" rel="noopener noreferrer" className="text-accent underline-offset-4 hover:underline">
-          {inspect.githubUrl.replace(/^https?:\/\/github\.com\//, "@")}
-        </a>
-      ),
-    });
+  // GitHub and the other profiles live in the card's name line (SocialIcons), once.
   // Last-Modified only when it is clearly older than the fetch (many hosts stamp every response with "now"); else the footer year.
   const lm = s?.lastModified ? Date.parse(s.lastModified) : NaN;
   const fetchedAt = inspect.measuredAt ? Date.parse(inspect.measuredAt) : NaN;
@@ -547,7 +564,7 @@ function SpecList({ inspect, psi, projects }: { inspect: Inspection | null; psi:
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1.5 @md:grid-cols-2">
         {rows.map(({ icon: Icon, label, value }) => (
           <div key={label} className="flex min-w-0 items-center gap-2 text-xs">
-            {Icon === "github" ? <GitHubMark className="h-3.5 w-3.5 shrink-0 text-mute" /> : <Icon className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />}
+            <Icon className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
             <dt className="shrink-0 text-mute">{label}</dt>
             <dd className="min-w-0 truncate font-medium">{value}</dd>
           </div>
@@ -582,7 +599,7 @@ function usePsi(url: string, strategy: Strategy): PsiState {
   useEffect(() => {
     let live = true;
     const set = (phase: PsiState["phase"], data: PsiResult | null) => live && setState({ key, phase, data });
-    const peek = () => fetch(psiEndpoint(url, strategy, true)).then((r) => r.json() as Promise<PsiResult>);
+    const peek = () => fetch(psiEndpoint(url, strategy, true), { cache: "no-store" }).then((r) => r.json() as Promise<PsiResult>);
     const measure = () => {
       const k = `${strategy}:${url}`;
       let p = attempt === 0 ? measuring.get(k) : undefined;
@@ -595,7 +612,8 @@ function usePsi(url: string, strategy: Strategy): PsiState {
     };
     const run = async () => {
       try {
-        const stored = attempt === 0 ? await peek() : null;
+        // The first read is shared with prefetchPlayData (the next pair warms it).
+        const stored = attempt === 0 ? ((await getJson(psiEndpoint(url, strategy, true), 0)) as PsiResult) : null;
         if (stored && !(stored.ok === false && stored.error === "not_measured")) return set("done", stored);
         set("measuring", null);
         let result = await measure();
@@ -629,9 +647,9 @@ function PsiRow({ label, state, metrics, short = false }: { label: string; state
       {phase === "loading" ? (
         <Placeholder className="h-11" />
       ) : phase === "measuring" ? (
-        <div role="status" className="relative h-11 overflow-hidden rounded-lg border border-edge bg-raised">
-          <span className="absolute inset-y-0 left-0 w-1/3 rounded-lg bg-accent/15 motion-safe:animate-[measuring_1.6s_ease-in-out_infinite]" aria-hidden />
-          <span className="relative flex h-full items-center px-3 text-xs text-mute">{short ? "Measuring…" : "Measuring with Google Lighthouse… (about 30 s)"}</span>
+        <div role="status" className="details-in flex h-11 items-center gap-2 rounded-lg border border-dashed border-edge-strong px-3 text-xs text-mute">
+          <Loader2 className="h-4 w-4 shrink-0 text-accent motion-safe:animate-spin" aria-hidden />
+          <span className="truncate">{short ? "Measuring…" : "Measuring with Google Lighthouse… (about 30 s)"}</span>
         </div>
       ) : data?.ok ? (
         <div className="details-in grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, cols.length)}, minmax(0, ${cols.length === 1 ? "6rem" : "1fr"}))` }}>
@@ -652,6 +670,98 @@ function PsiRow({ label, state, metrics, short = false }: { label: string; state
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A Lighthouse score as a small ring: the arc is the score, its colour the band. */
+function ScoreRing({ label, state }: { label: string; state: PsiState }) {
+  const { phase, data } = state;
+  const score = data?.ok ? (data.scores?.performance ?? null) : null;
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="flex items-center gap-2" title={`${label} performance${score != null ? `: ${score}` : ""}`}>
+      <span className={`relative grid h-10 w-10 shrink-0 place-items-center ${scoreColor(score)}`}>
+        {phase === "loading" ? (
+          <span className="h-10 w-10 rounded-full bg-raised motion-safe:animate-pulse" aria-hidden />
+        ) : phase === "measuring" ? (
+          <Loader2 className="h-5 w-5 text-accent motion-safe:animate-spin" aria-label="Measuring" />
+        ) : (
+          <>
+            <svg viewBox="0 0 36 36" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden>
+              <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-edge)" strokeWidth="3" />
+              {score != null && (
+                <circle cx="18" cy="18" r={r} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${(score / 100) * c} ${c}`} className="ring-in" />
+              )}
+            </svg>
+            <span className="details-in text-xs font-bold tabular-nums">{score ?? "-"}</span>
+          </>
+        )}
+      </span>
+      <span className="text-[11px] leading-tight text-mute">
+        {label}
+        <span className="block">perf.</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Simple's strip under the screenshot: Lighthouse performance as two rings
+ * (mobile, desktop), the framework and host, and the polish checks as a
+ * count with the misses named. The same stored data as Detailed (measured on
+ * a miss, like Detailed); each part fades in as it arrives.
+ */
+export function PlaySummary({ url }: { url: string }) {
+  const { data: inspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
+  const mobile = usePsi(url, "mobile");
+  const desktop = usePsi(url, "desktop");
+  const s = inspect?.ok ? inspect.spec : undefined;
+  const lines = inspect?.ok ? polishLines(inspect as Inspection & { ok: true }) : null;
+  const passed = lines?.filter((l) => l.pass).length ?? 0;
+  const misses = lines?.filter((l) => !l.pass).map((l) => l.label.replace(/ \(.*\)$/, "")) ?? [];
+
+  return (
+    <div className="@container border-t border-edge bg-bg/40 px-3 py-3 sm:px-4">
+      <div className="grid gap-3 @lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.2fr)] @lg:items-center @lg:gap-5">
+        <div className="flex items-center gap-4" role="group" aria-label="Lighthouse performance">
+          <ScoreRing label="Mobile" state={mobile} />
+          <ScoreRing label="Desktop" state={desktop} />
+        </div>
+        <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
+          <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Built with</p>
+          {!inspect ? (
+            <Placeholder className="mt-1 h-5 w-32" />
+          ) : s?.framework || s?.host ? (
+            <p className="details-in mt-1 flex flex-wrap gap-1.5">
+              {[s?.framework, s?.host].filter(Boolean).map((v) => (
+                <span key={v} className="rounded-md border border-edge bg-card px-2 py-0.5 text-xs font-medium">
+                  {v}
+                </span>
+              ))}
+            </p>
+          ) : (
+            <p className="details-in mt-1 text-xs text-mute">Not detected</p>
+          )}
+        </div>
+        <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
+          <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Polish</p>
+          {!inspect ? (
+            <Placeholder className="mt-1 h-5 w-40" />
+          ) : !lines ? (
+            <p className="details-in mt-1 text-xs text-mute">Couldn&apos;t reach the site</p>
+          ) : (
+            <p className="details-in mt-1 text-xs" title={misses.length ? `Missing: ${misses.join(", ")}` : "Every polish check passes"}>
+              <strong className={`tabular-nums ${misses.length === 0 ? "text-up" : ""}`}>
+                {passed}/{lines.length}
+              </strong>{" "}
+              checks
+              {misses.length > 0 && <span className="line-clamp-1 text-mute">Missing: {misses.join(", ").toLowerCase()}</span>}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -692,8 +802,11 @@ export function PlayDiagnostics({
   const polish = checks && sections.includes("polish");
   const lighthouse = checks && metrics.length > 0;
 
+  // Two columns when the card is wide enough (Detailed on desktop): the link
+  // preview and Lighthouse, then the polish checklist and "Built with".
   return (
-    <div className="@container grid gap-4">
+    <div className="@container">
+    <div className="grid gap-4 @xl:grid-cols-2 @xl:items-start @xl:gap-x-6">
       {preview && (
         <section className="grid gap-2">
           <PlayLabel>Link preview</PlayLabel>
@@ -714,7 +827,7 @@ export function PlayDiagnostics({
             </div>
           ) : (
             <p className="details-in flex items-start gap-2 text-sm">
-              <span className="font-bold text-red-500" aria-hidden>
+              <span className="font-bold text-down" aria-hidden>
                 ✗
               </span>
               <span>
@@ -747,7 +860,7 @@ export function PlayDiagnostics({
             <ul className="details-in grid grid-cols-2 gap-x-3 gap-y-1">
               {polishLines(inspect as Inspection & { ok: true }).map((l) => (
                 <li key={l.label} className="flex items-center gap-1.5 text-xs">
-                  <span className={`font-bold ${l.pass ? "text-up" : "text-red-500"}`} aria-hidden>
+                  <span className={`font-bold ${l.pass ? "text-up" : "text-down"}`} aria-hidden>
                     {l.pass ? "✓" : "✗"}
                   </span>
                   <span className={l.pass ? "" : "text-mute"}>
@@ -762,6 +875,7 @@ export function PlayDiagnostics({
       )}
 
       {spec && <SpecList inspect={inspect} psi={psi} projects={projects} />}
+    </div>
     </div>
   );
 }
