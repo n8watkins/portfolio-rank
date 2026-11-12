@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 /** The admin pages, in one place, so every admin page links to the others the same way. */
 export const ADMIN_PAGES = [
@@ -8,16 +11,23 @@ export const ADMIN_PAGES = [
   { href: "/admin/polls", label: "Polls" },
 ] as const;
 
-/** The admin pages' links; `current` is the page it sits on (marked aria-current). */
-export function AdminNav({ current }: { current: (typeof ADMIN_PAGES)[number]["href"] }) {
+/**
+ * The admin pages' links, drawn once by app/admin/layout.tsx above every
+ * admin page. The page you are on, or the section it belongs to (a draft,
+ * the guidelines and compare pages sit under Blog drafts), is marked
+ * aria-current.
+ */
+export function AdminNav() {
+  const path = usePathname() ?? "";
   return (
-    <nav aria-label="Admin" className="-ml-3 flex flex-wrap gap-1">
+    <nav aria-label="Admin" className="-mx-1 flex items-center gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] sm:gap-1">
+      <span className="mr-1 shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-accent">Admin</span>
       {ADMIN_PAGES.map((p) => (
         <Link
           key={p.href}
           href={p.href}
-          aria-current={p.href === current ? "page" : undefined}
-          className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-mute hover:bg-raised hover:text-ink aria-[current=page]:bg-raised aria-[current=page]:text-ink"
+          aria-current={path === p.href ? "page" : path.startsWith(`${p.href}/`) ? "true" : undefined}
+          className="inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-lg px-2.5 text-sm sm:px-3 font-semibold text-mute hover:bg-raised hover:text-ink [&[aria-current]]:bg-raised [&[aria-current]]:text-ink"
         >
           {p.label}
         </Link>

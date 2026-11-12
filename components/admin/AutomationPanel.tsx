@@ -108,7 +108,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
         : "Off";
 
   return (
-    <section aria-labelledby={`${id}-t`} className="card mt-4 p-5 sm:p-6" data-automation>
+    <section aria-labelledby={`${id}-t`} className="card @container p-5 sm:p-6" data-automation>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id={`${id}-t`} className="text-lg font-bold tracking-tight">
@@ -201,7 +201,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
           <p id={`${id}-mode`} className="text-sm font-semibold">
             Mode
           </p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div className="mt-2 grid gap-2 @lg:grid-cols-2">
             {(
               [
                 ["review", "Drafts for my review", "Each draft waits here until you publish, rewrite or reject it."],
@@ -262,7 +262,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
         {view.saved && !saved && <span className="text-xs text-mute">Last changed {new Date(view.saved.at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Los_Angeles" })} Pacific</span>}
       </div>
 
-      <dl className="mt-5 grid gap-3 border-t border-edge pt-4 text-sm sm:grid-cols-2">
+      <dl className="mt-5 grid gap-3 border-t border-edge pt-4 text-sm @lg:grid-cols-2">
         <div className="flex gap-2.5">
           <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
           <div>
@@ -295,7 +295,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
         </h3>
         <p className="text-xs text-mute">Optional. The next scheduled draft takes the first topic instead of choosing its own angle; the week&apos;s data still decides what it&apos;s written from.</p>
         <form
-          className="mt-2 flex flex-col gap-2 sm:flex-row"
+          className="mt-2 flex flex-col gap-2 @lg:flex-row"
           onSubmit={async (e) => {
             e.preventDefault();
             if (!topic.trim()) return;
@@ -317,7 +317,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
             maxLength={200}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="Why a resume link beats a contact form"
-            className="h-11 w-full min-w-0 rounded-lg border border-edge-strong bg-card px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 sm:flex-1"
+            className="h-11 w-full min-w-0 rounded-lg border border-edge-strong bg-card px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 @lg:flex-1"
           />
           <button type="submit" className={btnSecondary} disabled={!topic.trim()}>
             Add topic

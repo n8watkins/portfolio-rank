@@ -200,11 +200,14 @@ A library of house-style illustrations ([pipeline/content/house-style.mjs](../pi
 - **Statuses:** `pending` (passed the check, waiting for the owner), `approved`, `rejected` (dropped by the owner), `rejected-auto` (failed the check, kept for the owner to see), `retired`.
   Only approved images are ever used.
   A queue item gets one image, ever; one whose model calls both errored has no row and comes up on a later night.
-- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) opens on "To review" (pending images, with Keep and Drop), with tabs for Approved (with Retire), Dropped, Failed check (keep one anyway if the check was wrong) and All, each with its count.
+- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) is a thumbnail grid under tabs that stay in view: To review (pending images, with Approve and Drop on each thumbnail), Approved (with Retire), Dropped, Failed check (approve one anyway if the check was wrong) and All, each with its count.
+  It opens on To review, or on Approved when nothing waits for review.
+  A thumbnail opens the image large with its alt text and tags (editable), its decision (A approves, D drops, the arrows step through the tab) and the drafts tied to it; the tab and the open image are in the address (`?view=`, `?image=`), and Back closes the large view.
+  Make now, Make your own, Up next and "How images are made" are compact panels beside the grid (below it on phones).
   Drop takes the image out at once and shows an Undo toast; Undo puts it back where it was (`restore`).
   Decisions are POSTs to `/api/admin/library` that must come from the site with a JSON body (CSRF), checked on the server.
   Nothing on the page, and nothing in the engine, deletes an image: rejecting or unpublishing a post leaves its images, their uses and their associations as they are.
-- **Associations:** each card lists the drafts and posts the image is tied to, with their status: "used in" (`image_library_uses`), "considered for" (up to 3 close tag matches a slot looked at and did not pick, `image_library_considered`) and "made for" (a post's fresh illustration).
+- **Associations:** the large view lists the drafts and posts the image is tied to, with their status: "used in" (`image_library_uses`), "considered for" (up to 3 close tag matches a slot looked at and did not pick, `image_library_considered`) and "made for" (a post's fresh illustration).
 - **Make now** (`POST /api/admin/library/generate`, production only): the owner picks 1, 2, 5 or 10, or "Make up to N" (all that is left of the day), or a single subject of their own ("Make your own": a subject of 8 to 300 characters after cleaning and an optional theme, with a preview of the final prompt with the house style).
   The page asks for one image a request, so it shows "Making 1 of 2... about 5 seconds each" with the day's and the hour's counts next to the button.
   Every answer says what happened in plain words: "Made N", "Today's 40 are used", "Today's neuron allowance is used", "Paused 8 pm to midnight Pacific", or, for the AI Gateway's own 429, "The AI Gateway allows N an hour: raise it in AI Gateway settings".
@@ -383,7 +386,7 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Tables `posts` and `content_runs` (schema version 6), the switch, the publish cap in the same write, the admin read | [lib/content/schema.mjs](../lib/content/schema.mjs), [lib/content/store.mjs](../lib/content/store.mjs) |
 | Fact builders: what the AI grader rewards and penalizes, dark mode, motion and page weight, what people vote for and against, before and after a re-grade, and leaderboard movement (the "3.1 vs 3.5" builder was removed on 2026-11-11: dev meta) | [pipeline/content/facts.mjs](../pipeline/content/facts.mjs) |
 | Write a draft now, rewrites, the cost panel | [pipeline/content/manual.mjs](../pipeline/content/manual.mjs), [worker/draft.ts](../worker/draft.ts), [lib/content/jobs.mjs](../lib/content/jobs.mjs), [lib/content/costs.mjs](../lib/content/costs.mjs), [app/api/admin/content/draft/route.ts](../app/api/admin/content/draft/route.ts) |
-| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/blog/guidelines](../app/admin/blog/guidelines), [app/admin/blog/compare](../app/admin/blog/compare) |
+| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/(tools)/blog/guidelines](<../app/admin/(tools)/blog/guidelines>), [app/admin/(tools)/blog/compare](<../app/admin/(tools)/blog/compare>) |
 | Charts drawn from the facts (SVG) | [pipeline/content/charts.mjs](../pipeline/content/charts.mjs) |
 | The writer, placeholders and filling, the revision request | [pipeline/content/writer.mjs](../pipeline/content/writer.mjs) |
 | Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |
@@ -395,7 +398,7 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | The blog: `/blog`, `/blog/tag/[tag]`, `/blog/[slug]` with its share image, `/blog/rss.xml`, `/blog/media/<post id>/<slot>`, `/about-posts`, sitemap entries; the strict Markdown renderer | [app/blog](../app/blog), [components/blog](../components/blog), [lib/content/blog.mjs](../lib/content/blog.mjs), [app/about-posts/page.tsx](../app/about-posts/page.tsx) |
 | Review and publish: the queue, the review page, Publish, Reject and Unpublish | [app/admin/blog](../app/admin/blog), [app/api/admin/content/[id]/route.ts](../app/api/admin/content/[id]/route.ts) |
 | Fixture posts for local previews (two real dry-run drafts of 2026-11-10 with their images) | [scripts/seed-blog-fixtures.mjs](../scripts/seed-blog-fixtures.mjs), [tests/fixtures/blog](../tests/fixtures/blog) |
-| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/images/page.tsx](../app/admin/images/page.tsx), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
+| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/(tools)/images/page.tsx](<../app/admin/(tools)/images/page.tsx>), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
 
 How it runs, in short:
 
