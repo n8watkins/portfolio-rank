@@ -24,6 +24,8 @@ export type PlayCard = {
   roles: string[];
   /** The hiring manager's three questions (lib/grader/present.mjs FACT_GROUPS). */
   checks: { key: string; title: string; state: CheckState; toFix: string[] }[];
+  /** Project links the grade found on the page (its facts), or null. */
+  projects: number | null;
   votes: number;
   wins: number;
 };
@@ -64,6 +66,11 @@ async function rows(urls: string[]): Promise<Map<string, Row>> {
   );
 }
 
+const projectCount = (g: Record<string, unknown> | null): number | null => {
+  const n = (g?.facts as { project_links?: { checked?: unknown } } | undefined)?.project_links?.checked;
+  return typeof n === "number" && n > 0 ? n : null;
+};
+
 function cardOf(row: Row, pool: { url: string; mu: number }[]): PlayCard {
   const g = row.hidden ? null : row.grade;
   const tierRaw = typeof g?.tier === "string" ? g.tier.toUpperCase() : null;
@@ -82,6 +89,7 @@ function cardOf(row: Row, pool: { url: string; mu: number }[]): PlayCard {
       state: x.missing.length ? "fix" : x.ok.length ? "ok" : "unknown",
       toFix: x.missing.map((f) => f.short),
     })),
+    projects: projectCount(g),
     votes: Math.max(row.votes, row.wins),
     wins: row.wins,
   };

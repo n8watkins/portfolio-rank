@@ -9,6 +9,8 @@ export type PsiResult = CacheMeta & {
   error?: string;
   scores?: Record<string, number | null>; // 0-100
   metrics?: { id: string; label: string; value: string }[];
+  /** Page weight and request count from the same run (newer results only). */
+  weight?: { bytes: number | null; requests: number | null };
 };
 
 const METRIC_AUDITS = [
@@ -21,7 +23,7 @@ const METRIC_AUDITS = [
 type PsiResponse = {
   lighthouseResult?: {
     categories?: Record<string, { score?: number | null } | undefined>;
-    audits?: Record<string, { title?: string; displayValue?: string } | undefined>;
+    audits?: Record<string, { title?: string; displayValue?: string; numericValue?: number; details?: { items?: unknown[] } } | undefined>;
   };
 };
 
@@ -73,7 +75,12 @@ async function runPsi(target: string): Promise<PsiResult> {
       : [];
   });
 
-  return { ok: true, scores, metrics };
+  // From audits the same run already returns (no extra request).
+  const bytes = lhr.audits?.["total-byte-weight"]?.numericValue;
+  const requests = lhr.audits?.["network-requests"]?.details?.items?.length;
+  const weight = { bytes: typeof bytes === "number" ? Math.round(bytes) : null, requests: typeof requests === "number" ? requests : null };
+
+  return { ok: true, scores, metrics, weight };
 }
 
 const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
