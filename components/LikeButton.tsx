@@ -139,7 +139,8 @@ export function LikeButton({
         aria-pressed={liked}
         aria-label={name ? `${liked ? done : verb} ${name}` : undefined}
         title={liked ? `${done} to your profile. Click to remove.` : `${verb} to your profile (separate from your vote)`}
-        className={`${className} ${liked ? "!border-rose-400/50 !text-rose-500" : ""}`}
+        // The caller styles the saved state (aria-pressed); the heart fills.
+        className={className}
       >
         <Heart className={`h-4 w-4 shrink-0 ${liked ? "fill-current" : ""}`} aria-hidden />
         <span>{liked ? done : verb}</span>
