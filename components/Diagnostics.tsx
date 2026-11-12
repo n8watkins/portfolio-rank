@@ -186,6 +186,7 @@ function psiProblem(error: string | undefined): { text: string; retry: boolean }
   if (error === "in_progress") return { text: "Lighthouse is already running for this site. Try again in a minute.", retry: true };
   if (error === "timeout") return { text: "Google's Lighthouse timed out on this site.", retry: true };
   if (/429|quota|rate/i.test(error ?? "")) return { text: "Google's Lighthouse quota is used up for now. Try again later.", retry: true };
+  if (/capacity|unavailable|503/i.test(error ?? "")) return { text: "Google's Lighthouse is busy right now. Try again in a little while.", retry: true };
   return { text: "Lighthouse couldn't analyze this site right now.", retry: true };
 }
 
