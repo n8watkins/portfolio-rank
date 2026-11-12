@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AdminNav } from "@/components/admin/AdminNav";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
@@ -70,12 +70,8 @@ export default async function AdminImagesPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
       <div className="py-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Image library</h1>
-          <Link href="/admin/blog" className="inline-flex min-h-11 items-center text-sm font-semibold text-mute hover:text-ink">
-            Blog drafts
-          </Link>
-        </div>
+        <AdminNav current="/admin/images" />
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Image library</h1>
         {ai.problem && <p className="mt-2 text-sm text-down">{ai.problem}</p>}
 
         <details className="mt-4 rounded-xl border border-edge bg-card p-4 text-sm" data-how-made open>

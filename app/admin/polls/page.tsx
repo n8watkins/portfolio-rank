@@ -1,3 +1,4 @@
+import { AdminNav } from "@/components/admin/AdminNav";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
@@ -26,7 +27,8 @@ export default async function AdminPollsPage() {
   return (
     <div className="wrap pb-20">
       <div className="py-6">
-        <h1 className="text-3xl font-bold tracking-tight">Polls</h1>
+        <AdminNav current="/admin/polls" />
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Polls</h1>
         <p className="mt-2 text-sm text-mute">
           {schedule.length} poll{schedule.length === 1 ? "" : "s"} from this week on. Visitors see the questions and weeks of upcoming polls on /polls, never their options.
         </p>
