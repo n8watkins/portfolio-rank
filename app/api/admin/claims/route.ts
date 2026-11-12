@@ -6,7 +6,7 @@ import { RETIRED_PROOFS, claimById, reviewQueue, setClaimStatus } from "@/lib/ga
 import { PRIVATE, fail, gamesEnabled, off } from "@/lib/games/server";
 
 // The site owner's review of portfolio claims (GAMES_V2), only for
-// ADMIN_GITHUB_LOGIN.
+// the GitHub account in ADMIN_GITHUB_ID.
 // GET  /api/admin/claims -> { claims } waiting for review, oldest first
 // POST /api/admin/claims { id, decision: "verified" | "rejected", note? }
 //   -> { claim }; 400 bad_request, 401/403, 404 not_found, 409 not_in_review

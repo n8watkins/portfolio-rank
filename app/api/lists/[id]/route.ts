@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
+import { sameOrigin } from "@/lib/polls/server";
 import { purgeDeletedLists } from "@/lib/list-trash";
 
 const MAX_NAME_LEN = 60;
@@ -13,6 +14,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "bad_id" }, { status: 400 });
@@ -58,9 +60,10 @@ export async function PATCH(
  * Undo toast for a short window; see lib/list-trash.ts and ./trash/route.ts.
  */
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "bad_id" }, { status: 400 });

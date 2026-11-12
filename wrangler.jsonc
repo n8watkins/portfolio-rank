@@ -65,8 +65,14 @@
     "GEMINI_RPM": "8",
     // Sites the nightly checks re-capture (oldest first) to find redesigns.
     "NIGHTLY_REFRESH": "150",
-    // The GitHub login allowed to read /api/admin/* (the admin quota view).
-    "ADMIN_GITHUB_LOGIN": "n8watkins",
+    // The GitHub account allowed to use /api/admin/* and /admin/*, by its
+    // numeric id (`gh api user --jq .id`; n8watkins), never by login, which
+    // can be renamed and then taken by someone else (lib/admin.ts).
+    "ADMIN_GITHUB_ID": "8055935",
+    // GitHub accounts younger than this many days can sign in, like and keep
+    // lists, but their votes don't count, their claims wait for a review and
+    // they can't remove or hide a portfolio (lib/rater.ts accountTooNew).
+    "MIN_GITHUB_ACCOUNT_AGE_DAYS": "30",
     // "Grade my portfolio" (lib/grader, AUTOMATION.md): its API and crons do
     // nothing until this is "true", which waits for the redesign's UI.
     "GRADER_ENABLED": "false",
@@ -178,7 +184,8 @@
         "RUBRIC_REGRADE": "false",
         "GEMINI_RPM": "8",
         "NIGHTLY_REFRESH": "150",
-        "ADMIN_GITHUB_LOGIN": "n8watkins",
+        "ADMIN_GITHUB_ID": "8055935",
+        "MIN_GITHUB_ACCOUNT_AGE_DAYS": "30",
         "GRADER_ENABLED": "false",
         "GAMES_V2": "false",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",

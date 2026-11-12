@@ -15,14 +15,16 @@ export const ANON_MAX_DRAWS_PER_DAY = 60;
 export const UNDO_WINDOW_MINUTES = 10; // only a recent vote can be undone
 
 /**
- * Owner-tunable guards, off by default (0). Set as Worker vars in
+ * Owner-tunable guards, off when unset (0). Set as Worker vars in
  * wrangler.jsonc, read per request:
  * - HUMAN_MAX_DRAWS_PER_DAY: matchups a signed-in rater may draw per day,
  *   on top of the hourly MAX_DRAWS_PER_HOUR.
- * - MIN_GITHUB_ACCOUNT_AGE_DAYS: GitHub accounts younger than this can sign
- *   in, like and keep lists, but their votes (and claimed practice votes)
- *   don't count. Sessions from before this setting carry no account date and
- *   are treated as too new until they sign in again.
+ * - MIN_GITHUB_ACCOUNT_AGE_DAYS (30 in wrangler.jsonc): GitHub accounts
+ *   younger than this can sign in, like and keep lists, but their votes (and
+ *   claimed practice votes) don't count, a claim they prove waits for the
+ *   site owner's review, and they can't act as a portfolio's owner. Sessions
+ *   from before the account date was recorded are treated as too new until
+ *   they sign in again.
  */
 export function guardConfig() {
   const num = (name: string) => {
@@ -36,7 +38,7 @@ export function guardConfig() {
 }
 
 /** True when MIN_GITHUB_ACCOUNT_AGE_DAYS is set and this signed-in rater's account is younger. */
-export function accountTooNew(rater: Rater): boolean {
+export function accountTooNew(rater: Pick<Rater, "type" | "accountCreatedAt">): boolean {
   const { minAccountAgeDays } = guardConfig();
   if (rater.type !== "human" || !minAccountAgeDays) return false;
   const created = Date.parse(rater.accountCreatedAt ?? "");

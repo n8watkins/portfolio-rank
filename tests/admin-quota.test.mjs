@@ -1,12 +1,12 @@
 // The admin quota view's API (GET /api/admin/quota), end to end against the
 // running production build (scripts/test-e2e.sh, which sets
-// ADMIN_GITHUB_LOGIN=e2e-admin): only that GitHub login may read it, and it
+// ADMIN_GITHUB_ID): only that GitHub account may read it, and it
 // reports Gemini use by Pacific quota day, job and model, and the weekly
 // model watch's latest report.
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { createRequestLog, ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { quotaDay } from "../pipeline/budget.mjs";
@@ -16,15 +16,7 @@ const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
 const db = createClient({ url: DB_URL, timeout: 10000 });
 
-async function cookieFor(login, id) {
-  const token = await encode({
-    token: { raterId: `gh:${id}`, login, sub: String(id) },
-    secret: process.env.AUTH_SECRET,
-    salt: "authjs.session-token",
-    maxAge: 3600,
-  });
-  return `authjs.session-token=${token}`;
-}
+const cookieFor = (login, id) => sessionCookie({ id, login });
 
 before(async () => {
   // Wait for the server (the runner starts it just before the tests).
@@ -49,6 +41,15 @@ test("admin quota API: signed out is 401, any other login is 403, never cached",
   assert.deepEqual(await other.json(), { error: "forbidden" });
 });
 
+test("admin quota API: the admin is the account id, not the login", async () => {
+  // Someone who registered the admin's login after a rename: another account.
+  const squatter = await get(await cookieFor("e2e-admin", ADMIN_ID + 1));
+  assert.equal(squatter.status, 403);
+  // The admin after renaming their GitHub account: the same id.
+  const renamed = await get(await cookieFor("renamed-admin", ADMIN_ID));
+  assert.equal(renamed.status, 200);
+});
+
 test("admin quota API: today's and the last 30 days' use by job and model, the allowances and the runs", async () => {
   await ensureGeminiLog(db);
   const now = new Date();
@@ -58,7 +59,7 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
   for (let i = 0; i < 3; i++) await people.record({ at: new Date(today.start.getTime() + 60000).toISOString(), model: PRIMARY_MODEL, status: 200 });
   await night.record({ at: new Date(today.start.getTime() - 3600000).toISOString(), model: PRIMARY_MODEL, status: 503 }); // yesterday
 
-  const res = await get(await cookieFor("E2E-Admin", 990000002)); // logins match case-insensitively
+  const res = await get(await cookieFor("e2e-admin", ADMIN_ID));
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.timezone, "America/Los_Angeles");
@@ -99,7 +100,7 @@ test("admin quota API: the latest model watch report, recorded even while email 
     sql: "INSERT INTO model_watch_runs (ran_at, status, changes, snapshot, report) VALUES (?, 'partial', 0, '{}', ?)",
     args: [report.ranAt, JSON.stringify(report)],
   });
-  const body = await (await get(await cookieFor("e2e-admin", 990000002))).json();
+  const body = await (await get(await cookieFor("e2e-admin", ADMIN_ID))).json();
   assert.equal(body.modelWatch.runs[0].status, "partial");
   assert.equal(body.modelWatch.latest.ranAt, "2026-11-16T16:00:00.000Z");
   assert.match(body.modelWatch.latest.text, /Could not read the changelog source: HTTP 503/);

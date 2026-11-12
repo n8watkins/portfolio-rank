@@ -17,8 +17,8 @@ import { modelWatchSummary } from "@/pipeline/model-watch.mjs";
 // end-of-day runs, the parked items, the owner alerts that hold, people's
 // queued requests, the weekly model watch's latest report, and the monthly
 // Tavily credits and Pexels searches, today's AI images (and neurons) and the
-// image library's counts. Read-only, and only for the GitHub login in
-// ADMIN_GITHUB_LOGIN.
+// image library's counts. Read-only, and only for the GitHub account in
+// ADMIN_GITHUB_ID.
 //   GET /api/admin/quota[?days=30]
 export const dynamic = "force-dynamic";
 

@@ -126,7 +126,7 @@ It counts `gemini_requests` since midnight Pacific, retries included.
 ### The summary and the admin view
 
 Each run writes its summary to `night_runs` and to the Worker's logs: the estimate at the start (requests and minutes at the pace), the actual at the end, each stage's requests, results and minutes, why it stopped, and the parked items.
-`GET /api/admin/quota` (only for the GitHub login in `ADMIN_GITHUB_LOGIN`) returns Gemini use by quota day, job and model for the last 30 days, what each stage and people may spend now, the last 14 runs, parked items, owner alerts and people's queue; the redesign's admin page will show it.
+`GET /api/admin/quota` (only for the GitHub account whose numeric id is `ADMIN_GITHUB_ID`) returns Gemini use by quota day, job and model for the last 30 days, what each stage and people may spend now, the last 14 runs, parked items, owner alerts and people's queue; the redesign's admin page will show it.
 
 ### Owner alerts
 

@@ -33,6 +33,7 @@ async function post(path: string, body: unknown): Promise<{ ok: boolean; status:
 const ERRORS: Record<string, string> = {
   rate_limited: "That's a lot of checks in a short time. Try again in a little while.",
   not_owner: "This account isn't the verified owner of this portfolio.",
+  account_too_new: "Owner actions need a GitHub account at least 30 days old. Ask through GitHub if this can't wait.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };
 const errorText = (b: Record<string, unknown>) => ERRORS[String(b.error)] ?? "That didn't work. Try again in a moment.";

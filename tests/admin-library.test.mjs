@@ -1,28 +1,20 @@
 // The image library's review (/admin/images and /api/admin/library), end to
 // end against the running production build (scripts/test-e2e.sh, which sets
-// ADMIN_GITHUB_LOGIN=e2e-admin): only that login sees the page and may
+// ADMIN_GITHUB_ID): only that account sees the page and may
 // decide; every decision is a POST from this site with a JSON body (CSRF);
 // keep, drop and retire move only the statuses they apply to; the manual
 // batch runs only in production.
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { insertImage } from "../lib/content/library.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
 const db = createClient({ url: DB_URL, timeout: 10000 });
 
-async function cookieFor(login, id) {
-  const token = await encode({
-    token: { raterId: `gh:${id}`, login, sub: String(id) },
-    secret: process.env.AUTH_SECRET,
-    salt: "authjs.session-token",
-    maxAge: 3600,
-  });
-  return `authjs.session-token=${token}`;
-}
+const cookieFor = (login, id) => sessionCookie({ id, login });
 
 let admin;
 let other;
@@ -38,7 +30,7 @@ before(async () => {
     await new Promise((r) => setTimeout(r, 1000));
   }
   // The admin API creates the tables on first use.
-  admin = await cookieFor("e2e-admin", 990000101);
+  admin = await cookieFor("e2e-admin", ADMIN_ID);
   other = await cookieFor("someone-else", 990000102);
   const res = await fetch(`${BASE}/api/admin/library`, { headers: { cookie: admin } });
   assert.equal(res.status, 200);

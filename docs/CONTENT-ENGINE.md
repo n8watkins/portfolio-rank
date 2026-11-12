@@ -198,7 +198,7 @@ A library of house-style illustrations ([pipeline/content/house-style.mjs](../pi
 - **Statuses:** `pending` (passed the check, waiting for the owner), `approved`, `rejected` (dropped by the owner), `rejected-auto` (failed the check, kept for the owner to see), `retired`.
   Only approved images are ever used.
   A queue item gets one image, ever; one whose model calls both errored has no row and comes up on a later night.
-- **Review:** `/admin/images` (only for `ADMIN_GITHUB_LOGIN`; a 404 for anyone else) lists the pending images with keep and drop, the failed ones (keep one anyway if the check was wrong), and the library with usage counts and a retire button.
+- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) lists the pending images with keep and drop, the failed ones (keep one anyway if the check was wrong), and the library with usage counts and a retire button.
   Decisions are POSTs to `/api/admin/library` that must come from the site with a JSON body (CSRF), checked on the server.
 - **One batch by hand:** the page's "Make 2 now" button (`POST /api/admin/library/generate`, production only) runs the hourly tick's work at once for up to 2 queue items, with the same limits (40 a day, 2 an hour, quiet in the evening), the "library" job's Gemini cap and no retries.
   Setting `LIBRARY_PER_HOUR` to "0" stops the hourly work; `LIBRARY_MODEL` "flux2dev" switches the library to Flux 2 Dev (multipart input, 1024 x 576 and 16 steps so it fits the 2,500-neuron guard, 2,400 neurons an image, so one a day).

@@ -3,6 +3,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { restoredTimestamp } from "@/lib/list-trash";
 import { isKnownPortfolio } from "@/lib/roster";
 import { getRater } from "@/lib/rater";
+import { sameOrigin } from "@/lib/polls/server";
 
 /**
  * GET /api/likes            → { liked: string[] } - all urls the rater likes
@@ -45,6 +46,7 @@ export async function GET(req: Request) {
  * same gate voting uses). Only roster urls are accepted (403 unknown_url).
  */
 export async function POST(req: Request) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   const body = await req.json().catch(() => null);
   const url = body?.url;
   if (typeof url !== "string" || !url) {

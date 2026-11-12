@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
+import { sameOrigin } from "@/lib/polls/server";
 import { purgeDeletedLists, restoreDeletedList } from "@/lib/list-trash";
 
 /**
@@ -12,6 +13,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   const id = Number((await params).id);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "bad_id" }, { status: 400 });
