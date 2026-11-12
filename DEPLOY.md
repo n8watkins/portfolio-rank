@@ -102,7 +102,7 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
   The staging build adds a robots meta tag and a red "Staging" ribbon in the bottom-left corner (`components/StagingRibbon.tsx`).
 - **Locked:** the Worker locks staging itself, ahead of Next.js (`worker/staging-gate.ts`, only when `SITE_ENV` is `staging`; production never runs it).
-  It lets through `/healthz`, a request with the header `X-Staging-Gate` equal to the `STAGING_GATE_KEY` secret, and a request with the `__Host-staging_gate` cookie (an HMAC of an expiry, 30 days).
+  It lets through `/healthz`, the web app manifest and its icons (browsers fetch the manifest without cookies; they are the same public files production serves), a request with the header `X-Staging-Gate` equal to the `STAGING_GATE_KEY` secret, and a request with the `__Host-staging_gate` cookie (an HMAC of an expiry, 30 days).
   `GET /__gate?key=<secret>` sets that cookie and redirects to `/`; every other request gets a plain 404 `not found`.
   Wrong keys count against 10 a day per address in the `rate_limits` table; a missing secret or database failure keeps the site locked.
   The key is `portfolio-rank/STAGING_GATE_KEY` in pass, the `STAGING_GATE_KEY` Actions secret (`scripts/smoke.mjs` sends it as the header) and a secret on the staging Worker: `pass-env pipe portfolio-rank/STAGING_GATE_KEY -- npx wrangler secret put STAGING_GATE_KEY --env staging`.

@@ -2,7 +2,10 @@
 // it runs before Next.js and costs about a millisecond. Active only when
 // SITE_ENV is "staging"; production never reaches any of it.
 //
-// Let through: /healthz (answered ahead of this), a request carrying the
+// Let through: /healthz (answered ahead of this), the web app manifest and
+// its icons (browsers fetch the manifest without cookies, so the gate would
+// break it on every page; both are the same public files production serves),
+// a request carrying the
 // header `x-staging-gate` equal to the STAGING_GATE_KEY secret, or one with a
 // valid `__Host-staging_gate` cookie (an HMAC of an expiry, 30 days).
 // `GET /__gate?key=<secret>` sets that cookie and redirects to `/`; a wrong key
@@ -19,6 +22,8 @@ export const COOKIE_DAYS = 30;
 /** Wrong keys one address may try in a day. */
 export const FAILED_PER_DAY = 10;
 const DAY_MS = 86_400_000;
+/** Public files a browser fetches without cookies: the manifest and the icons it names (app/manifest.ts). */
+const OPEN_PATHS = /^\/(?:manifest\.webmanifest|icons\/[\w.-]+\.png)$/;
 
 export type GateEnv = {
   SITE_ENV?: string;
@@ -118,6 +123,7 @@ export async function stagingGate(request: Request, env: GateEnv, options: GateO
   if (!secret) return notFound();
   const now = options.now ?? Date.now();
   const url = new URL(request.url);
+  if ((request.method === "GET" || request.method === "HEAD") && OPEN_PATHS.test(url.pathname)) return null;
 
   if (url.pathname === GATE_PATH) {
     if (request.method !== "GET") return notFound();
