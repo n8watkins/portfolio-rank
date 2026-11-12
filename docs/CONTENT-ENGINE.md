@@ -100,10 +100,10 @@ In short: only our charts and screenshots, the owner-approved image library, Pex
   | Cap | Value |
   | --- | --- |
   | Posts published | 2 in any 7 days, counted in the same database write that publishes |
-  | Drafts started | 1 a night |
+  | Drafts started | 1 a night, plus at most 5 a Pacific day from "Write a draft now" |
   | Revision rounds | 2 a draft, then it is dropped |
   | Gemini | the "Content" stage: at most 100 requests and 30 minutes a night, through the budget accountant, after people and the stages before it |
-  | Tavily | 10 searches a post, 40 a week |
+  | Tavily | 10 searches a post, 50 a week (a quarter of the monthly 200) |
   | Workers AI images | 9 candidates a post (3 slots x 3) |
   | Newsletter | only through the shared email gate and its caps |
 
@@ -152,16 +152,15 @@ Only PortfolioRank's own tables, read-only, plus the two outside searches above.
 
 | Source | Tables | Story kinds | Ready? |
 | --- | --- | --- | --- |
-| Rankings | `site_ratings`, `rank_history`, `comparisons` (ranking v2) | top sites, biggest climbers, redesigns that paid off, AI vs people disagreements (aggregate) | after `RANKING_V2` is switched on ([RANKING.md](../RANKING.md)) |
-| Grades | `portfolios` (rubric, facts, page text), `rubric_history` | what high scorers share, trends in roles and stacks, 3.1 vs 3.5 | now |
-| Experiments | `comparisons` tagged by method, the Sunday grade comparison, the planned experiments table | "Can one AI request replace ten?", "3.5 vs 3.1: do they grade the same?" | 3.1 vs 3.5 now; the others as experiments finish |
+| Rankings | `rank_history` (ranking v2) | trends across the leaderboard: top sites and biggest climbers (`leaderboard-movement`) | after `RANKING_V2` is switched on ([RANKING.md](../RANKING.md)) |
+| Grades | `portfolios` (rubric, capture measurements) | what the AI grader rewards and penalizes (`top-grades`), dark mode, motion, phones and page weight (`page-craft`) | now |
+| Re-grades | `rubric_history` (same model and rubric version only) | how portfolios change: before and after a page change (`regrade-changes`) | as re-grades after page changes accumulate |
+| People's votes | `votes` with both sites' grades and measurements | what people vote for and against (`vote-patterns`) | once 40 votes between graded portfolios exist |
 | Polls | closed polls with totals, winner and margin (`pollResults` in [lib/polls/store.mjs](../lib/polls/store.mjs)) | "Developers voted: does a portfolio need a resume?" | back end built (#76); votes once the poll card ships |
-| Model watch | `model_watch_runs` (the weekly report) | "Google released a new Flash-Lite. We re-ran the judge." (only after an experiment has run) | built (#74) |
-| Our own running | `gemini_daily`, `night_runs` | build-in-public posts (what the free quota does in a month) | now |
 
+Owner direction of 2026-11-11 ("Owner direction" below): no story is about how PortfolioRank is built or run, so the model comparison (3.1 vs 3.5), model watch news and build-in-public posts from `gemini_daily` and `night_runs` are not story kinds.
 The fact builders are the only code that reads these tables for content.
 Each one is small, tested on a fixture database, and returns facts plus the names that may appear.
-The first two to build are "3.1 vs 3.5" (data exists today) and "Leaderboard movement" (once ranking v2 is on).
 
 Page text from portfolios is untrusted and never goes to the writer as instructions; for trend stories, code counts things in it (roles, stacks, words) and only the counts reach Gemini.
 
@@ -259,6 +258,44 @@ Owner decision of 2026-11-11: the engine writes drafts, the owner approves each 
 - **The pages** are ISR with a 5-minute revalidate, so a published post is on `/blog`, its tag pages and the feed within 5 minutes of its publish time, and anonymous visitors cost no database read in between; the sitemap lists posts once a day.
   Drafts and unpublished posts are a 404 on `/blog/[slug]`; their images (`/blog/media/<post id>/<slot>`) are served only to the admin, and a live post's images are public and cached for a day.
 
+## Owner direction (2026-11-11): about portfolios, short, with a payoff
+
+After reading the 2026-11-10 drafts the owner found them trite and too long for what they said, and the build-in-public postmortem ("my key wasn't working") was exactly what the blog must not be.
+
+- **About portfolios, never about building PortfolioRank.**
+  No bug postmortems, build-in-public, what the site costs to run, our stack, our pipeline or our model setup.
+  These are gone from the engine, not only from the prompt: the "3.1 vs 3.5" model comparison is no longer a story kind, the allowed topics (`TOPICS` in [pipeline/content/topic.mjs](../pipeline/content/topic.mjs)) no longer include "PortfolioRank data and method" or "Gemini model news", and the final review fails a post about how the site is built or run.
+- **The topics:** what people vote for and against (`vote-patterns`, from people's head-to-head votes), what the AI grader rewards and penalizes (`top-grades`, and `page-craft` for dark mode, motion, phones and page weight), how portfolios change over time (`regrade-changes`: same-judge re-grades before and after a page change), trends across the leaderboard (`leaderboard-movement`), new portfolios worth seeing, and portfolio or developer-hiring news with a real angle.
+  "New portfolios worth seeing" and hiring news are not built yet: the roster stores no date a portfolio was added, and news needs its own builder with Tavily searches.
+- **Shorter, with a payoff:** every post states one clear takeaway a reader can use on their own portfolio, early: the opener ends with it, addressed to the reader.
+  About 500 to 800 words unless the data earns more (the template check allows 475 to 840), with throat-clearing and anecdotes that don't pay off cut.
+- **Facts:** no claim about PortfolioRank's infrastructure (one draft said "Amazon SES"; email goes through the Cloudflare mailroom), and any fact the writer can't source from our data or a cited link is cut (gate 2 already cuts unsupported outside claims).
+- **Enforced by code before review:** the editorial check ([pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs) `editorialChecks`, run with the other code checks) fails a draft with dev meta or infrastructure words (our pipeline, stack or costs, a postmortem, "we built", vendors such as Amazon SES, Cloudflare, Turso or Tavily, model versions and quotas) or without a takeaway for the reader in its first 150 words.
+  A failing draft is revised with the problem listed, then dropped, so it never reaches the review queue; the scorecard shows the same two rules on every draft.
+
+## Write a draft now
+
+The owner's draft on demand, from `/admin/blog` (only the `ADMIN_GITHUB_ID` account).
+
+- **What it does:** an optional topic or angle (at most 200 characters) and an optional story kind (else the ready kind whose latest post is oldest), then the same writer, outside-claim research, images and code checks as the night ([pipeline/content/manual.mjs](../pipeline/content/manual.mjs) runs [pipeline/content/engine.mjs](../pipeline/content/engine.mjs) `runDraft`); the angle steers the writer over the same facts.
+- **Background job with live status:** `POST /api/admin/content/draft` queues a row in `content_jobs` ([lib/content/jobs.mjs](../lib/content/jobs.mjs)) and starts the `DraftWorkflow` ([worker/draft.ts](../worker/draft.ts), Workflow `portfolio-rank-draft`, binding `DRAFT`), so the draft can take its minutes after the request returns.
+  The page polls `GET /api/admin/content/draft?id=<job>` every 3 seconds: Reading the data, Writing, Researching, Checking, Picking images, Saving, then Done, with the time so far and "usually 1 to 3 minutes".
+  Production only (the Gemini key and the counters live there); one Workflow step, never retried, so a draft never spends its caps twice.
+- **Caps:** at most 20 Gemini requests a draft (about 9 when it passes first time), and never more than the "content" job may spend today after the reserve the budget accountant keeps for people's grades, so people's grading is never starved; Tavily 10 a post (the weekly cap is now 50, a quarter of the monthly 200, raised from 40 so drafts on demand fit beside the nights; the month's 200 stays the hard cap); Pexels 2 a post; 1 fresh AI image a post within the day's 40; at most 5 manual drafts (new ones and rewrites together) a Pacific day, counted in the statement that queues one.
+- **Never publishes by itself:** a manual draft is stored as a draft whatever `CONTENT_MODE` says, and recorded in `content_runs` as step `manual`, which the night's schedule does not count.
+- **The cost panel** ([lib/content/costs.mjs](../lib/content/costs.mjs)), from the existing counters with no metered call: Gemini today (used, left, the reserve kept for people, what a draft may take now), Tavily this month and this week, AI images today and Pexels this month, and drafts today of 5.
+- **From the command line:** `wrangler workflows trigger portfolio-rank-draft '{"topic":"..."}'` queues and writes one draft under the same daily cap; only someone with the account's Cloudflare API token can run it.
+- **Images:** a slot's library match now also counts the post's own tags, so the writer prefers approved library images that fit the whole post.
+
+## Quality tools
+
+- **Reject with notes, and "Rewrite with these notes":** on the review page, Reject keeps the owner's note on the draft; "Rewrite with these notes" rejects the draft with the notes and starts a new draft of the same kind and angle with the notes passed to the writer as `owner_notes` (same caps as Write a draft now; a rejected or dropped draft can be rewritten too).
+- **The editor's guidelines** (`/admin/blog/guidelines`, [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), table `content_guidelines`): a list of at most 20 rules of at most 200 characters (2,000 in all) that goes into every writer request as `editor_guidelines`, the night's and the manual ones.
+  The page offers the owner's notes from rejected and rewritten drafts to turn into rules.
+- **The scorecard** ([pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs)), on each review page, plain code: words against 500 to 800, a takeaway in the first 150 words, no dev meta, the reading level (Flesch-Kincaid grade, flagged above 11), real portfolio examples named, sources cited, claims cut, images with alt text and repeated four-word phrases.
+- **Compare** (`/admin/blog/compare?a=<id>&b=<id>`): two drafts side by side with their scorecards; the review page links every other draft on the same story.
+- **Style guide:** the shape and rules are [docs/content/POST_TEMPLATE.md](content/POST_TEMPLATE.md); the voice is the owner's `VOICE.md` (in the owner's writing skill, outside this repository), which the writer's system instruction ([pipeline/content/writer.mjs](../pipeline/content/writer.mjs)) restates; the editor's guidelines are the owner's own additions, and there is no other style guide.
+
 ## The newsletter hook
 
 The content engine never sends email itself.
@@ -329,7 +366,9 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Part | Where |
 | --- | --- |
 | Tables `posts` and `content_runs` (schema version 6), the switch, the publish cap in the same write, the admin read | [lib/content/schema.mjs](../lib/content/schema.mjs), [lib/content/store.mjs](../lib/content/store.mjs) |
-| Fact builders: "3.1 vs 3.5" and "Leaderboard movement" as planned, plus "What the best-graded portfolios share" and "Dark mode, motion and page weight", which read today's grades and capture measurements, so there is something to write while the first two wait for re-grades and ranking v2 | [pipeline/content/facts.mjs](../pipeline/content/facts.mjs) |
+| Fact builders: what the AI grader rewards and penalizes, dark mode, motion and page weight, what people vote for and against, before and after a re-grade, and leaderboard movement (the "3.1 vs 3.5" builder was removed on 2026-11-11: dev meta) | [pipeline/content/facts.mjs](../pipeline/content/facts.mjs) |
+| Write a draft now, rewrites, the cost panel | [pipeline/content/manual.mjs](../pipeline/content/manual.mjs), [worker/draft.ts](../worker/draft.ts), [lib/content/jobs.mjs](../lib/content/jobs.mjs), [lib/content/costs.mjs](../lib/content/costs.mjs), [app/api/admin/content/draft/route.ts](../app/api/admin/content/draft/route.ts) |
+| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/blog/guidelines](../app/admin/blog/guidelines), [app/admin/blog/compare](../app/admin/blog/compare) |
 | Charts drawn from the facts (SVG) | [pipeline/content/charts.mjs](../pipeline/content/charts.mjs) |
 | The writer, placeholders and filling, the revision request | [pipeline/content/writer.mjs](../pipeline/content/writer.mjs) |
 | Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |

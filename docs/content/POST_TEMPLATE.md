@@ -7,9 +7,14 @@ The goal: a reader decides in 5 seconds from the title and TL;DR, and gets the w
 
 ### Rules
 
-- **Length:** 250-400 words of body text (image specs and metadata do not count; owner decision, 2026-11-10).
+- **Topic:** portfolios, never PortfolioRank itself (owner, 2026-11-11): what people vote for and against, what the AI grader rewards and penalizes, how portfolios change over time, portfolios worth seeing, trends across the leaderboard, and portfolio or developer-hiring news with a real angle.
+  No bug postmortems, build-in-public, running costs, our stack or our pipeline.
+- **Payoff:** one clear takeaway a reader can use on their own portfolio, stated early: the opener ends with it, addressed to the reader.
+  Cut throat-clearing and anecdotes that don't pay off.
+- **Length:** about 500 to 800 words of body text, unless the data earns more (image specs and metadata do not count; owner, 2026-11-11, replacing 250 to 400 of 2026-11-10).
 - **Voice:** follow `VOICE.md`. Lead with the point, short sentences, real numbers, first person. No em dashes, no hype.
 - **Facts:** every number traces to a source. Anything unconfirmed gets [check] and stays until confirmed.
+  No claim about PortfolioRank's own infrastructure (one draft said Amazon SES; email goes through the Cloudflare mailroom), and any fact that is neither in our data nor followed by a cited link is cut.
 - **Skimmability:** subheads say what the section proves, not "Background" or "Results". A reader who reads only the TL;DR, subheads and callout should get the story.
 - **Sentences:** one full sentence per line in the Markdown source.
 - **Paragraphs:** real paragraphs of 2-4 sentences, never one sentence each, with an opening hook (a notable fact from the sheet) and a closing takeaway of 2-3 sentences.
@@ -38,7 +43,7 @@ The goal: a reader decides in 5 seconds from the title and TL;DR, and gets the w
 
 [IMAGE 1: hero]
 
-<2-3 line opener: the hook, then the stakes>
+<2-4 line opener: the hook, then the one takeaway for the reader's own portfolio>
 
 ### <Descriptive subhead: the problem>
 <short paragraphs, 2-4 lines each>

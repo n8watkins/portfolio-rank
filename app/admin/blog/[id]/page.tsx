@@ -9,6 +9,8 @@ import { ReviewActions } from "@/components/admin/ReviewActions";
 import { StatusPill, closedReason, pacificTime, publishLabel } from "@/components/admin/postStatus";
 import { relatedPortfolios } from "@/lib/blog-server";
 import type { BlogPost } from "@/lib/blog";
+import { scorecard } from "@/pipeline/content/scorecard.mjs";
+import { Scorecard } from "@/components/admin/Scorecard";
 
 // One post as readers would see it, with the owner's decision on top
 // (Publish or Reject a draft, Unpublish a published post) and, under it,
@@ -52,6 +54,8 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
   const cut = history.flatMap((h) => h.claims?.cut ?? []);
   const facts = post.facts?.facts ?? [];
   const reason = closedReason(post);
+  const card = scorecard(post);
+  const siblings = (await db().execute({ sql: "SELECT id, title FROM posts WHERE kind = ? AND id != ? ORDER BY created_at DESC LIMIT 5", args: [post.kind, post.id] })).rows.map((r) => ({ id: String(r.id), title: String(r.title) }));
 
   const banner = (
     <div className="border-b border-edge bg-card/80 backdrop-blur">
@@ -74,7 +78,7 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
             {reason && post.status !== "draft" && post.status !== "published" && <span>{reason}</span>}
           </p>
         </div>
-        {(post.status === "draft" || post.status === "published") && <ReviewActions id={post.id} status={post.status} publishLabel={publishLabel(post, now)} />}
+        {["draft", "published", "rejected", "dropped"].includes(post.status) && <ReviewActions id={post.id} status={post.status} publishLabel={publishLabel(post, now)} />}
       </div>
     </div>
   );
@@ -87,6 +91,20 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
         <p className="mt-1 text-sm text-mute">
           Kind {post.kind} · data as of {pacificTime(post.dataAsOf)} · {post.altTitles.length ? `other titles: ${post.altTitles.join(" | ")}` : ""}
         </p>
+        <Scorecard card={card} />
+        {siblings.length > 0 && (
+          <p className="mt-3 text-sm">
+            <span className="text-mute">Compare with another draft on this story: </span>
+            {siblings.map((s, i) => (
+              <span key={s.id}>
+                {i > 0 && " · "}
+                <Link href={`/admin/blog/compare?a=${post.id}&b=${s.id}`} className="font-semibold text-accent underline-offset-2 hover:underline">
+                  {s.title}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
         <Details title={`Checks${last ? `: ${last.checks.filter((c) => c.ok).length} of ${last.checks.length} passed` : ""}`} open={!post.checks?.passed}>
           {history.length === 0 && <p className="text-mute">No checks recorded.</p>}
           {history.map((h) => (

@@ -78,7 +78,8 @@ const CHECKS_POLL = "1 minute";
 
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 
-function engine(env: NightEnv, runId: string) {
+/** The engine's context for one run: the database, Gemini settings, flags and the content engine's keys and bindings (also used by ./draft.ts). */
+export function engine(env: NightEnv, runId: string) {
   // The app's database module (Turso over the network), never a client of its own.
   const db = database();
   const plan = budgetPlan(env.GEMINI_BUDGET);
@@ -133,6 +134,7 @@ function engine(env: NightEnv, runId: string) {
       pexelsMonthlySearches: env.PEXELS_MONTHLY_SEARCHES,
       // The day's AI image limits (lib/content/neurons.mjs aiLimits).
       aiEnv: { MAX_AI_IMAGES_PER_DAY: env.MAX_AI_IMAGES_PER_DAY, AI_NEURON_CEILING: env.AI_NEURON_CEILING },
+      // A post prefers approved library images whose tags match it (pipeline/content/images.mjs).
       // Every Workers AI call goes through the portfoliorank-ai gateway (lib/ai-gateway.mjs).
       ai: withGateway(env.AI),
       store,

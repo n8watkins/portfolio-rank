@@ -25,6 +25,8 @@ import { emailAlertsTick } from "./email-alerts";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
+// "Write a draft now" (wrangler.jsonc workflows, binding DRAFT).
+export { DraftWorkflow } from "./draft";
 
 // The ISR revalidation queue's Durable Object (wrangler.jsonc durable_objects).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

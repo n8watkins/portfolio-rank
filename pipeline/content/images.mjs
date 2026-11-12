@@ -145,7 +145,7 @@ const isPicture = (slot) => slot.kind !== "chart" && slot.kind !== "screenshot";
 /**
  * Fills every slot. ctx: { postId, env, db, now, fetchImpl, keys: { pexels },
  * pexelsCap, ai, limits (aiLimits), store(key, bytes, contentType) -> key,
- * generate(request) -> answer }. budget: { gemini } requests this step may
+ * generate(request) -> answer, postTags? }. budget: { gemini } requests this step may
  * still spend. Returns { images, dropped, requests, aiImages, pexels, notes, body }.
  */
 export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }) {
@@ -278,7 +278,8 @@ export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }
         const keywords = briefKeywords(slot);
         const para = paragraphBefore(filledBody, slot.slot);
         // The close matches are recorded as considered (shown on /admin/images), the best is used.
-        const ranked = ctx.db ? await rankLibrary(ctx.db, { keywords, exclude: usedLibrary }) : [];
+        // The brief's keywords and the post's own tags: the writer prefers approved images that fit the whole post.
+        const ranked = ctx.db ? await rankLibrary(ctx.db, { keywords: [...keywords, ...(ctx.postTags ?? [])], exclude: usedLibrary }) : [];
         const match = ranked[0]?.img ?? null;
         for (const { img } of ranked.slice(1)) await recordConsidered(ctx.db, { imageId: img.id, postId: ctx.postId, slot: slot.slot, now: now() });
         if (match) image = await libraryImage(slot, match, "matched by tags");

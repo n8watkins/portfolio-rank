@@ -133,8 +133,12 @@
   // captures that didn't start, requests waiting for a later day, cleanup;
   // it returns at once while GRADER_ENABLED is not "true".
   "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * 1", "*/5 * * * *"] },
-  // One instance a night ("night-<Pacific date>"), one step per batch.
-  "workflows": [{ "name": "portfolio-rank-night", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }],
+  // One instance a night ("night-<Pacific date>"), one step per batch; and
+  // the owner's "Write a draft now", one instance a draft (worker/draft.ts).
+  "workflows": [
+    { "name": "portfolio-rank-night", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" },
+    { "name": "portfolio-rank-draft", "binding": "DRAFT", "class_name": "DraftWorkflow" }
+  ],
   // Run next to the Turso database (aws-us-east-2): every request makes several
   // queries, so a Worker near the visitor would pay a cross-country round trip
   // for each. Static assets are still served from the edge.
@@ -221,7 +225,10 @@
         "CachedPages": { "type": "worker", "cache": { "enabled": true } }
       },
       // Bound so the code and its types match production; nothing starts it.
-      "workflows": [{ "name": "portfolio-rank-night-staging", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" }]
+      "workflows": [
+        { "name": "portfolio-rank-night-staging", "binding": "NIGHT", "class_name": "EndOfDayWorkflow" },
+        { "name": "portfolio-rank-draft-staging", "binding": "DRAFT", "class_name": "DraftWorkflow" }
+      ]
     }
   }
 }

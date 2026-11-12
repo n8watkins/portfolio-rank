@@ -22,8 +22,7 @@
 import { ACTIVE, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
-import { AXES, TIER, buildPairs, compareGrades } from "../grade-pairs.mjs";
-import { BACKUP_MODEL, PRIMARY_MODEL } from "../gemini.mjs";
+import { AXES, TIER } from "../grade-pairs.mjs";
 
 export const SITE_URL = "https://portfoliorank.n8builds.dev";
 /** The smallest group a share or average is computed over. */
@@ -180,8 +179,8 @@ export async function topGrades(db, { now }) {
   if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} S/A and ${rest.length} other grades; ${MIN_GROUP} of each needed`);
   const b = sheet(kind, {
     now,
-    headline: "What the best-graded developer portfolios have in common",
-    angle: "Compare the AI judge's scores on each axis for portfolios graded S or A with the rest, and say what a reader can copy.",
+    headline: "What the AI grader rewards, and what it marks down",
+    angle: "Compare the AI judge's scores on each axis for portfolios graded S or A with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
     dataLink: `${SITE_URL}/top`,
     query: "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
   });
@@ -324,79 +323,136 @@ export async function pageCraft(db, { now }) {
 }
 
 // ---------------------------------------------------------------------------
-// "3.1 vs 3.5: do they grade the same?" (re-grade pairs in rubric_history)
+// "What people vote for and against" (people's head-to-head votes)
 // ---------------------------------------------------------------------------
-export async function modelCompare(db, { now, from = BACKUP_MODEL, to = PRIMARY_MODEL }) {
-  const kind = "model-compare";
+/** The traits the capture measures, as [label, test]; undefined when not measured. */
+const TRAITS = [
+  ["dark mode by default", (r) => (typeof r.meta?.darkMode === "boolean" ? r.meta.darkMode : undefined)],
+  ["motion on the page", (r) => (typeof r.meta?.motion === "boolean" ? r.meta.motion : undefined)],
+  ["a layout that fits a phone screen", (r) => (typeof r.meta?.overflow390 === "boolean" ? !r.meta.overflow390 : undefined)],
+  ["no console errors", (r) => (typeof r.meta?.consoleErrors === "number" ? r.meta.consoleErrors === 0 : undefined)],
+];
+/** Votes a site needs before its win rate is named. */
+export const MIN_VOTES_NAMED = 5;
+
+export async function votePatterns(db, { now }) {
+  const kind = "vote-patterns";
+  const graded = new Map((await gradedRows(db)).map((r) => [r.url, r]));
+  // People's votes only (the AI judge's comparisons live elsewhere), between two graded, visible portfolios.
+  const votes = (await db.execute("SELECT winner, loser FROM votes")).rows
+    .map((v) => ({ w: graded.get(String(v.winner)), l: graded.get(String(v.loser)) }))
+    .filter((v) => v.w && v.l);
+  if (votes.length < MIN_GROUP * 2) return notReady(kind, `${votes.length} people's votes between graded portfolios; ${MIN_GROUP * 2} needed`);
+  const b = sheet(kind, {
+    now,
+    headline: "What people vote for when two portfolios go head to head",
+    angle: "In people's head-to-head votes, how often the portfolio with the better AI grade wins, and which things the winner has more often (dark mode, motion, a phone-friendly layout, no errors). A reader learns what real visitors reward.",
+    dataLink: `${SITE_URL}/top`,
+    query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+  });
+  b.fact("People's votes between two graded portfolios", votes.length, fmt.int(votes.length));
+  const decided = votes.filter((v) => TIER[v.w.rubric.tier] !== TIER[v.l.rubric.tier]);
+  if (decided.length >= MIN_GROUP) {
+    const agree = decided.filter((v) => TIER[v.w.rubric.tier] > TIER[v.l.rubric.tier]).length;
+    const id = b.fact("Share of votes, between portfolios of different AI grades, won by the better-graded one", agree / decided.length, fmt.pct(agree / decided.length), {
+      scope: { need: "different (?:AI )?grades?|better-graded|higher-graded", avoid: "of all votes" },
+    });
+    b.notable([id], `People pick the better-graded portfolio in {{${id}}} of votes where the grades differ.`);
+  }
+  const cats = [];
+  const ids = [];
+  for (const [label, f] of TRAITS) {
+    // Votes where exactly one side has the trait: who won?
+    const split = votes.filter((v) => typeof f(v.w) === "boolean" && typeof f(v.l) === "boolean" && f(v.w) !== f(v.l));
+    if (split.length < MIN_GROUP) continue;
+    const won = split.filter((v) => f(v.w)).length / split.length;
+    cats.push(label);
+    ids.push(b.fact(`Share of votes won by the portfolio with ${label}, when only one of the two has it`, won, fmt.pct(won), { scope: { need: "only one|one of the two|when one", avoid: "of all votes" } }));
+  }
+  if (ids.length) b.chart({ title: "When only one portfolio has it, how often it wins the vote", unit: "%", max: 1, categories: cats, series: [{ name: "Votes won", facts: ids }], alt: "Bar chart of how often the portfolio with each trait wins a vote against one without it." });
+  // The portfolios people pick most often (a positive reason), with enough votes to mean something.
+  const tally = new Map();
+  for (const v of votes) {
+    for (const [r, win] of [[v.w, 1], [v.l, 0]]) {
+      const t = tally.get(r.url) ?? { row: r, wins: 0, n: 0 };
+      t.wins += win;
+      t.n += 1;
+      tally.set(r.url, t);
+    }
+  }
+  const favourites = [...tally.values()]
+    .filter((t) => t.n >= MIN_VOTES_NAMED && t.row.name && t.wins / t.n >= 0.6)
+    .sort((x, y) => y.wins / y.n - x.wins / x.n || y.n - x.n || x.row.url.localeCompare(y.row.url))
+    .slice(0, 3);
+  for (const t of favourites) {
+    b.name(t.row, `won most of its head-to-head votes`);
+    const id = b.fact(`Share of its head-to-head votes ${t.row.name} (${domainOf(t.row.url)}) won`, t.wins / t.n, fmt.pct(t.wins / t.n), { tone: "positive", about: t.row.url });
+    b.example("what voters pick", id, t.row);
+  }
+  return b.done();
+}
+
+// ---------------------------------------------------------------------------
+// "How portfolios change: before and after a redesign" (same-rubric re-grades)
+// ---------------------------------------------------------------------------
+export async function regradeChanges(db, { now }) {
+  const kind = "regrade-changes";
   let history;
   try {
-    history = (await db.execute("SELECT url, model, rubric, replaced_by_model FROM rubric_history ORDER BY url, id")).rows.map((r) => ({
-      url: String(r.url),
-      model: r.model == null ? null : String(r.model),
-      rubric: String(r.rubric),
-      replaced_by_model: r.replaced_by_model == null ? null : String(r.replaced_by_model),
-    }));
+    history = (await db.execute("SELECT url, model, rubric, replaced_by_model, replaced_at FROM rubric_history ORDER BY url, id")).rows;
   } catch (e) {
     if (/no such table/i.test(String(e?.message))) return notReady(kind, "no re-grades yet (rubric_history does not exist)");
     throw e;
   }
   const rows = await gradedRows(db);
-  const visible = new Map(rows.map((r) => [r.url, r]));
-  const current = new Map(
-    (await db.execute(`SELECT url, ai_rubric FROM portfolios WHERE url IN (SELECT DISTINCT url FROM rubric_history)`)).rows.map((r) => [String(r.url), r.ai_rubric == null ? null : String(r.ai_rubric)])
-  );
-  const pairs = buildPairs(history, current, { from, to });
-  if (pairs.length < MIN_GROUP) return notReady(kind, `${pairs.length} sites graded by both models; ${MIN_GROUP} needed`);
-  const r = compareGrades(pairs);
+  const current = new Map(rows.map((r) => [r.url, r]));
+  // A site's latest earlier grade by the same model and rubric version as its grade now: the page changed, the judge didn't.
+  const pairs = [];
+  const seen = new Set();
+  for (const h of [...history].reverse()) {
+    const url = String(h.url);
+    const now2 = current.get(url);
+    if (!now2 || seen.has(url)) continue;
+    const before = parse(h.rubric);
+    if (!before?.tier || !TIER[before.tier] || before.is_portfolio === false) continue;
+    if (String(h.model ?? "") !== String(now2.rubric.model ?? "") || (before.rubric_version ?? null) !== (now2.rubric.rubric_version ?? null)) continue;
+    seen.add(url);
+    pairs.push({ row: now2, before, after: now2.rubric });
+  }
+  if (pairs.length < MIN_GROUP) return notReady(kind, `${pairs.length} portfolios re-graded after a change by the same judge; ${MIN_GROUP} needed`);
   const b = sheet(kind, {
     now,
-    headline: "We re-graded the same portfolios with a newer Gemini. Do the grades hold?",
-    angle: `The same sites graded by ${from} and then ${to} with the same rubric: how often the tier matched, which axes moved most, and what that means for anyone reading an AI grade.`,
+    headline: "Before and after: what changed when portfolios got a better grade",
+    angle: "Portfolios whose page changed and were graded again by the same judge with the same rubric: how many moved up a tier, which parts of the grade improved most, and what the improvers did. A reader learns which changes pay off.",
     dataLink: `${SITE_URL}/top`,
-    query: "rubric_history: each site's grade by the older model, paired with the newer model's grade of the same site and rubric version",
+    query: "rubric_history: each re-graded portfolio's previous grade by the same model and rubric version, against its grade now",
   });
-  b.fact("Sites graded by both models", r.pairs, fmt.int(r.pairs));
-  b.fact("Share given exactly the same tier", r.exact / r.pairs, fmt.pct(r.exact / r.pairs));
-  b.fact("Share within one tier", r.withinOne / r.pairs, fmt.pct(r.withinOne / r.pairs));
-  const higher = pairs.filter((p) => TIER[p.b.tier] > TIER[p.a.tier]).length;
-  const lower = pairs.filter((p) => TIER[p.b.tier] < TIER[p.a.tier]).length;
-  b.fact("Share the newer model graded higher", higher / r.pairs, fmt.pct(higher / r.pairs));
-  b.fact("Share the newer model graded lower", lower / r.pairs, fmt.pct(lower / r.pairs));
-  const maeIds = [];
+  b.fact("Portfolios re-graded after their page changed", pairs.length, fmt.int(pairs.length));
+  const up = pairs.filter((p) => TIER[p.after.tier] > TIER[p.before.tier]);
+  const down = pairs.filter((p) => TIER[p.after.tier] < TIER[p.before.tier]).length;
+  const upId = b.fact("Share that moved up at least one tier", up.length / pairs.length, fmt.pct(up.length / pairs.length));
+  b.fact("Share that moved down at least one tier", down / pairs.length, fmt.pct(down / pairs.length), { tone: "negative" });
+  b.notable([upId], `{{${upId}}} of re-graded portfolios moved up a tier after a change.`);
   const cats = [];
+  const ids = [];
+  const gains = [];
   for (const k of AXES) {
-    if (r.mae[k] == null) continue;
+    const d = pairs.map((p) => (typeof p.after?.[k]?.score === "number" && typeof p.before?.[k]?.score === "number" ? p.after[k].score - p.before[k].score : null)).filter((x) => x != null);
+    if (d.length < MIN_GROUP) continue;
+    const m = mean(d);
+    gains.push({ k, m });
     cats.push(AXIS_LABELS[k]);
-    maeIds.push(b.fact(`Average difference on ${AXIS_LABELS[k]}, in points on a 1 to 5 scale`, r.mae[k], fmt.dec(r.mae[k], 2)));
+    ids.push(b.fact(`Average change on ${AXIS_LABELS[k]} after a re-grade, in points on a 1 to 5 scale`, m, fmt.dec(m, 2)));
   }
-  const ranked = AXES.filter((k) => r.mae[k] != null).sort((x, y) => r.mae[y] - r.mae[x]);
-  if (ranked.length) {
-    b.fact("The axis the models disagree on most", AXIS_LABELS[ranked[0]], AXIS_LABELS[ranked[0]]);
-    b.fact("The axis the models agree on most", AXIS_LABELS[ranked.at(-1)], AXIS_LABELS[ranked.at(-1)]);
+  if (gains.length) {
+    const best = extremes(gains, (g) => g.m, "max", 2);
+    b.fact(best.length > 1 ? "The parts of the grade that improved most (tied)" : "The part of the grade that improved most", joinWords(best.map((g) => AXIS_LABELS[g.k])), joinWords(best.map((g) => AXIS_LABELS[g.k])));
+    b.chart({ title: "Average change per part of the grade after a re-grade (1 to 5 scale)", unit: "", max: 2, categories: cats, series: [{ name: "Average change", facts: ids }], alt: "Bar chart of how much each part of the AI grade changed, on average, when a portfolio was re-graded after a change." });
   }
-  if (cats.length) {
-    b.chart({ title: "Average difference per axis between the two models (1 to 5 scale)", unit: "", max: 2, categories: cats, series: [{ name: "Average difference", facts: maeIds }], alt: "Bar chart of how far apart the two models' scores are on each axis, on average." });
-  }
-  const tiers = ["S", "A", "B", "C", "D"];
-  const dist = (side) => tiers.map((t) => pairs.filter((p) => p[side].tier === t).length / r.pairs);
-  const da = dist("a");
-  const db2 = dist("b");
-  b.chart({
-    title: "Tier shares of the same sites under each model",
-    unit: "%",
-    max: 1,
-    categories: tiers,
-    series: [
-      { name: from, facts: tiers.map((t, i) => b.fact(`Share graded ${t} by ${from}`, da[i], fmt.pct(da[i]))) },
-      { name: to, facts: tiers.map((t, i) => b.fact(`Share graded ${t} by ${to}`, db2[i], fmt.pct(db2[i]))) },
-    ],
-    alt: "Grouped bar chart of the share of sites in each tier under the older and the newer model.",
-  });
-  const bothS = pairs.filter((p) => p.a.tier === "S" && p.b.tier === "S" && visible.get(p.url)?.name).slice(0, 5);
-  for (const p of bothS) {
-    const row = visible.get(p.url);
-    b.name(row, "graded S by both models");
-    b.fact(`${row.name} (${domainOf(row.url)}) was graded S by both models`, "S", "S", { tone: "positive", about: row.url });
+  for (const p of up.filter((x) => x.row.name).sort((x, y) => TIER[y.after.tier] - TIER[x.after.tier] || x.row.url.localeCompare(y.row.url)).slice(0, 3)) {
+    b.name(p.row, `moved up from ${p.before.tier} to ${p.after.tier} after a redesign`);
+    const id = b.fact(`${p.row.name} (${domainOf(p.row.url)}) moved up to tier`, p.after.tier, p.after.tier, { tone: "positive", about: p.row.url });
+    b.example("a redesign that paid off", id, p.row);
   }
   return b.done();
 }
@@ -468,11 +524,27 @@ export async function leaderboardMovement(db, { now, view = "merged" }) {
 }
 
 /** Every fact builder, by story kind. */
+// Owner direction (2026-11-11): every story is about portfolios, never about
+// building PortfolioRank. The model comparison (3.1 vs 3.5) and any
+// build-in-public, cost or pipeline story are not story kinds.
 export const BUILDERS = {
-  "model-compare": modelCompare,
-  "leaderboard-movement": leaderboardMovement,
   "top-grades": topGrades,
+  "vote-patterns": votePatterns,
+  "regrade-changes": regradeChanges,
+  "leaderboard-movement": leaderboardMovement,
   "page-craft": pageCraft,
+};
+
+/**
+ * What each story kind is about, in the owner's words (the "Write a draft now" picker).
+ * @type {Record<string, string>}
+ */
+export const KIND_LABELS = {
+  "top-grades": "What the AI grader rewards and penalizes",
+  "vote-patterns": "What people vote for and against",
+  "regrade-changes": "How portfolios change: before and after",
+  "leaderboard-movement": "Trends across the leaderboard",
+  "page-craft": "Dark mode, motion, phones and page weight",
 };
 
 /** Story ideas from the data (stage 1, Find): every builder that is ready. */
