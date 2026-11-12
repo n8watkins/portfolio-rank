@@ -1,0 +1,688 @@
+[
+  {
+    "id": "fa11ce00000000a1",
+    "slug": null,
+    "kind": "top-grades",
+    "title": "What the Best-Graded Developer Portfolios Have in Common",
+    "subtitle": "We analyze the AI judge scores to find out what sets top developer portfolios apart from the rest.",
+    "altTitles": [
+      "Decoding S and A Tier Developer Portfolios",
+      "What Makes a Top-Ranked Developer Portfolio"
+    ],
+    "tags": [
+      "Portfolios",
+      "Developer Careers",
+      "AI Judge",
+      "Web Development"
+    ],
+    "shareLine": "Discover what the best-graded developer portfolios do differently.",
+    "newsletterBlurb": "A deep dive into PortfolioRank scores showing how top developer portfolios excel in project storytelling and memorability.",
+    "body": "> **TL;DR**\n> - Top portfolios lead by 1.7 points on project storytelling and memorability, representing a tie across 2 axes.\n> - Only 16 portfolios achieve the top tier S grade out of 1,287 total graded sites.\n> - Motion scores remain low across all groups, averaging 2.4 for top tiers and 1.7 for others.\n\n[[image:hero]]\n\nTop portfolios lead by 1.7 points on project storytelling and memorability, representing a tie across 2 axes.\nWe analyze AI judge scores across thousands of sites to see what separates the highest tier developer portfolios from the rest of the group.\nUnderstanding these metrics helps you focus your design efforts where they matter most.\n\n[[image:inline-1]]\n\n### Visual Design and First Impressions\n\nWe measure visual design on a scale from one to five to see how well developer portfolios present themselves.\nThe average visual design score of S and A portfolios reaches 4.8.\nMeanwhile, the average visual design score of all other graded portfolios sits at 3.2.\n\nWe also test how quickly visitors grasp the main point within a short window.\nThe average the five-second test score of S and A portfolios is 4.9.\nFor all other graded portfolios, that average is 4.5, making it the five-second test where the gap is smallest.\n\n[[image:inline-2]]\n\n### Storytelling and Memorability\n\nThe average project storytelling score of S and A portfolios stands at 3.8.\nIn contrast, the average project storytelling score of all other graded portfolios drops to 2.1.\n\nThe average memorability score of S and A portfolios hits 4.1.\nFor all other graded portfolios, the average memorability score is 2.4.\n\n[[image:inline-3]]\n\n### Writing and Motion Scores\n\nWe track how clear text and subtle motion appear across developer sites.\nThe highest graded portfolios reach an average writing score of 4.7, while other graded portfolios average 3.4.\nClear communication sets top builders apart from the rest.\n\n> **23%**\n> Share of all graded portfolios that are graded S or A\n\n### Try this\n\n1. Improve your visual design by studying [Aayush Bharti](https://aaabaa-aayush.vercel.app) and aiming for clarity in your layout.\n2. Refine your project storytelling to make your case studies engaging and clear to visitors.\n3. Polish your written content to ensure your explanations are concise and professional.\n\nReview your own developer portfolio against these core benchmarks to find areas for immediate improvement.\nSmall adjustments to your project descriptions and layout can significantly elevate your overall presentation.\n\n**Grade your portfolio on PortfolioRank** -> https://portfoliorank.n8builds.dev",
+    "facts": {
+      "kind": "top-grades",
+      "ready": true,
+      "dataAsOf": "2026-11-11T02:31:18.894Z",
+      "dataLink": "https://portfoliorank.n8builds.dev/top",
+      "facts": [
+        {
+          "id": "f1",
+          "label": "Portfolios graded by the AI judge",
+          "display": "1,287",
+          "value": 1287,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f2",
+          "label": "Share of all graded portfolios that are graded S or A",
+          "display": "23%",
+          "value": 23,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f3",
+          "label": "Portfolios graded S, the top tier",
+          "display": "16",
+          "value": 16,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f4",
+          "label": "Average visual design score (1 to 5) of S and A portfolios",
+          "display": "4.8",
+          "value": 4.8,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f5",
+          "label": "Average visual design score (1 to 5) of all other graded portfolios",
+          "display": "3.2",
+          "value": 3.2,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f6",
+          "label": "Average the five-second test score (1 to 5) of S and A portfolios",
+          "display": "4.9",
+          "value": 4.9,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f7",
+          "label": "Average the five-second test score (1 to 5) of all other graded portfolios",
+          "display": "4.5",
+          "value": 4.5,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f8",
+          "label": "Average project storytelling score (1 to 5) of S and A portfolios",
+          "display": "3.8",
+          "value": 3.8,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f9",
+          "label": "Average project storytelling score (1 to 5) of all other graded portfolios",
+          "display": "2.1",
+          "value": 2.1,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f10",
+          "label": "Average writing score (1 to 5) of S and A portfolios",
+          "display": "4.7",
+          "value": 4.7,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f11",
+          "label": "Average writing score (1 to 5) of all other graded portfolios",
+          "display": "3.4",
+          "value": 3.4,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f12",
+          "label": "Average memorability score (1 to 5) of S and A portfolios",
+          "display": "4.1",
+          "value": 4.1,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f13",
+          "label": "Average memorability score (1 to 5) of all other graded portfolios",
+          "display": "2.4",
+          "value": 2.4,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f14",
+          "label": "Average motion score (1 to 5) of S and A portfolios",
+          "display": "2.4",
+          "value": 2.4,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f15",
+          "label": "Average motion score (1 to 5) of all other graded portfolios",
+          "display": "1.7",
+          "value": 1.7,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f16",
+          "label": "The axes where S and A portfolios lead the rest by the most (tied)",
+          "display": "project storytelling and memorability",
+          "value": "project storytelling and memorability",
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f17",
+          "label": "The biggest lead, in points on a 1 to 5 scale",
+          "display": "1.7 points",
+          "value": 1.7,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f18",
+          "label": "Number of axes sharing the biggest lead",
+          "display": "2",
+          "value": 2,
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f19",
+          "label": "The axis where the gap is smallest",
+          "display": "the five-second test",
+          "value": "the five-second test",
+          "tone": "neutral",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f20",
+          "label": "Luca Celebrano (lucacelebrano.me) is graded",
+          "display": "S",
+          "value": "S",
+          "tone": "positive",
+          "about": "https://lucacelebrano.me",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f21",
+          "label": "Othmaro Fallas (othmaro.dev) is graded",
+          "display": "S",
+          "value": "S",
+          "tone": "positive",
+          "about": "https://othmaro.dev",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f22",
+          "label": "Poorvaj Hinge (poorvajhinge.vercel.app) is graded",
+          "display": "S",
+          "value": "S",
+          "tone": "positive",
+          "about": "https://poorvajhinge.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f23",
+          "label": "Aayush Bharti (aaabaa-aayush.vercel.app) is graded",
+          "display": "S",
+          "value": "S",
+          "tone": "positive",
+          "about": "https://aaabaa-aayush.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f24",
+          "label": "Chanhdai (chanhdai.com) is graded",
+          "display": "S",
+          "value": "S",
+          "tone": "positive",
+          "about": "https://chanhdai.com",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f25",
+          "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on visual design",
+          "display": "5",
+          "value": 5,
+          "tone": "positive",
+          "about": "https://aaabaa-aayush.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f26",
+          "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on the five-second test",
+          "display": "5",
+          "value": 5,
+          "tone": "positive",
+          "about": "https://aaabaa-aayush.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f27",
+          "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on project storytelling",
+          "display": "5",
+          "value": 5,
+          "tone": "positive",
+          "about": "https://aaabaa-aayush.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f28",
+          "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on writing",
+          "display": "5",
+          "value": 5,
+          "tone": "positive",
+          "about": "https://aaabaa-aayush.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f29",
+          "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on memorability",
+          "display": "5",
+          "value": 5,
+          "tone": "positive",
+          "about": "https://aaabaa-aayush.vercel.app",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        },
+        {
+          "id": "f30",
+          "label": "Luca Celebrano (lucacelebrano.me) scores 5 out of 5 on motion",
+          "display": "5",
+          "value": 5,
+          "tone": "positive",
+          "about": "https://lucacelebrano.me",
+          "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios"
+        }
+      ],
+      "names": [
+        {
+          "name": "Luca Celebrano",
+          "url": "https://lucacelebrano.me",
+          "domain": "lucacelebrano.me",
+          "reason": "graded S by the AI judge"
+        },
+        {
+          "name": "Othmaro Fallas",
+          "url": "https://othmaro.dev",
+          "domain": "othmaro.dev",
+          "reason": "graded S by the AI judge"
+        },
+        {
+          "name": "Poorvaj Hinge",
+          "url": "https://poorvajhinge.vercel.app",
+          "domain": "poorvajhinge.vercel.app",
+          "reason": "graded S by the AI judge"
+        },
+        {
+          "name": "Aayush Bharti",
+          "url": "https://aaabaa-aayush.vercel.app",
+          "domain": "aaabaa-aayush.vercel.app",
+          "reason": "graded S by the AI judge"
+        },
+        {
+          "name": "Chanhdai",
+          "url": "https://chanhdai.com",
+          "domain": "chanhdai.com",
+          "reason": "graded S by the AI judge"
+        }
+      ],
+      "charts": [],
+      "screenshots": []
+    },
+    "checks": {
+      "passed": true,
+      "rounds": 1,
+      "history": [
+        {
+          "round": 0,
+          "checks": [
+            {
+              "name": "numbers",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "names",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "links",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "template",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "paragraphs",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "superlatives",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "callout",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "hook",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "actions",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "links-load",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "review",
+              "ok": true,
+              "problems": []
+            }
+          ],
+          "claims": {
+            "supported": [],
+            "cut": [
+              {
+                "sentence": "Project context helps recruiters understand your actual contributions rather than just seeing code.",
+                "reason": "not supported by the search results"
+              },
+              {
+                "sentence": "Standing out in a crowded market requires distinct creative choices.",
+                "reason": "not supported by the search results"
+              }
+            ],
+            "unchecked": false
+          }
+        }
+      ],
+      "failures": []
+    },
+    "images": [
+      {
+        "kind": "illustration",
+        "source": "workers-ai",
+        "model": "@cf/black-forest-labs/flux-1-schnell",
+        "caption": "AI-generated illustration",
+        "licence": "generated (Workers AI; ours to use)",
+        "credit": "AI-generated illustration",
+        "approval": "Gemini check passed (automatic)",
+        "slot": "hero",
+        "alt": "Abstract illustration of a podium with browser windows and rising bars.",
+        "key": "private/library/fixture/fa11ce00000000a1.jpg"
+      },
+      {
+        "kind": "chart",
+        "source": "code",
+        "licence": "ours",
+        "credit": "Chart: PortfolioRank data",
+        "approval": "not needed: drawn by code from the checked facts",
+        "slot": "inline-1",
+        "alt": "A chart comparing average scores by axis for top-tier portfolios against the rest.",
+        "key": "content/fixture/fa11ce00000000a1/inline-1.svg"
+      },
+      {
+        "kind": "screenshot",
+        "source": "r2",
+        "licence": "ours: our capture of a listed portfolio, named for a positive reason",
+        "credit": "Screenshot of Aayush Bharti's portfolio",
+        "creditUrl": "https://aaabaa-aayush.vercel.app",
+        "approval": "not needed: naming rule checked by code",
+        "slot": "inline-2",
+        "alt": "Screenshot of Aayush Bharti portfolio demonstrating strong visual design.",
+        "key": "1fef5ea23ebe8cb5/hero.jpg",
+        "url": "/shots/1fef5ea23ebe8cb5/hero.jpg"
+      },
+      {
+        "kind": "screenshot",
+        "source": "r2",
+        "licence": "ours: our capture of a listed portfolio, named for a positive reason",
+        "credit": "Screenshot of Luca Celebrano's portfolio",
+        "creditUrl": "https://lucacelebrano.me",
+        "approval": "not needed: naming rule checked by code",
+        "slot": "inline-3",
+        "alt": "Screenshot of Luca Celebrano portfolio showcasing motion and layout.",
+        "key": "68d6d29ec8ef73db/hero.jpg",
+        "url": "/shots/68d6d29ec8ef73db/hero.jpg"
+      }
+    ],
+    "claims": [],
+    "dataAsOf": "2026-11-11T02:31:18.894Z",
+    "requests": 8
+  },
+  {
+    "id": "fa11ce00000000b2",
+    "slug": null,
+    "kind": "page-craft",
+    "title": "Dark Mode, Motion, and Page Weight in Top Portfolios",
+    "subtitle": "An aggregate look at what the capture measured on each portfolio.",
+    "altTitles": [
+      "What Top Portfolios Actually Ship",
+      "Measuring Dark Mode, Motion, and Page Weight"
+    ],
+    "tags": [
+      "Portfolios",
+      "Performance",
+      "Design"
+    ],
+    "shareLine": "See what top portfolios actually ship in our latest data analysis.",
+    "newsletterBlurb": "Explore our latest findings on dark mode, motion, and page weight across developer portfolios.",
+    "body": "> **TL;DR**\n> - Only 28% of S and A portfolios feature dark mode by default.\n> - Top portfolios maintain a median page weight of 0.9 MB on first load.\n> - Responsive design is strong, with 95% fitting a phone screen without sideways scrolling.\n\n[[image:hero]]\n\nOnly 28% of S and A portfolios feature dark mode by default, which sets an interesting baseline for developer design choices.\nWe wanted to see what top sites actually ship compared to the rest of our dataset.\nOur analysis breaks down appearance, motion, and page weight across thousands of graded portfolios.\n\n[[image:inline-1]]\n\n### Default Appearance Choices\n\nWe track how developer sites set up their initial visual style.\nA share of 28% of S and A portfolios use dark mode by default.\nIn contrast, only a share of 19% of other portfolios make this choice.\n\n### Motion and Responsiveness\n\nWe also measure page motion and mobile layout compatibility across all graded sites.\nA share of 28% of S and A portfolios include motion on the page, while 18% of other portfolios do so.\nA share of 95% of S and A portfolios fit a phone screen without sideways scrolling, compared to 88% of other portfolios.\n\n### Performance and Errors\n\nWe checked console errors and found that 82% of top portfolios tie with 82% of other portfolios for clean code.\nFirst load median page weight sits at 0.9 MB for top sites compared to 1.1 MB for the rest.\nNetwork requests average 32 for top portfolios and 28 for other sites in our dataset.\n\n> **Share of S and A portfolios with dark mode by default is 28%**\n> This measurement reflects our aggregate findings on default visual themes across top developer portfolios.\n\n### Try this\n\n1. Review your portfolio for default dark mode styling.\n2. Check your mobile layout to ensure it fits a phone screen without sideways scrolling.\n3. Audit your first load page weight and network requests.\n\nThese measurements give us a clear look at current standards in developer portfolios.\nWe hope these insights help you refine your own site for better performance and usability.\n\n**Grade your portfolio on PortfolioRank** -> https://portfoliorank.n8builds.dev",
+    "facts": {
+      "kind": "page-craft",
+      "ready": true,
+      "dataAsOf": "2026-11-11T02:33:10.791Z",
+      "dataLink": "https://portfoliorank.n8builds.dev/top",
+      "facts": [
+        {
+          "id": "f1",
+          "label": "Portfolios measured and graded",
+          "display": "1,287",
+          "value": 1287,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f2",
+          "label": "Of them, graded S or A",
+          "display": "301",
+          "value": 301,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f3",
+          "label": "Share of S and A portfolios with dark mode by default",
+          "display": "28%",
+          "value": 28,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f4",
+          "label": "Share of other portfolios with dark mode by default",
+          "display": "19%",
+          "value": 19,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f5",
+          "label": "Share of S and A portfolios with motion on the page",
+          "display": "28%",
+          "value": 28,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f6",
+          "label": "Share of other portfolios with motion on the page",
+          "display": "18%",
+          "value": 18,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f7",
+          "label": "Share of S and A portfolios with fits a phone screen without sideways scrolling",
+          "display": "95%",
+          "value": 95,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f8",
+          "label": "Share of other portfolios with fits a phone screen without sideways scrolling",
+          "display": "88%",
+          "value": 88,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f9",
+          "label": "Share of S and A portfolios with no console errors",
+          "display": "82%",
+          "value": 82,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f10",
+          "label": "Share of other portfolios with no console errors",
+          "display": "82%",
+          "value": 82,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f11",
+          "label": "Median page weight of S and A portfolios, first load",
+          "display": "0.9 MB",
+          "value": 0.9,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f12",
+          "label": "Median page weight of other portfolios, first load",
+          "display": "1.1 MB",
+          "value": 1.1,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f13",
+          "label": "Median number of network requests of S and A portfolios",
+          "display": "32",
+          "value": 32,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        },
+        {
+          "id": "f14",
+          "label": "Median number of network requests of other portfolios",
+          "display": "28",
+          "value": 28,
+          "tone": "neutral",
+          "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+        }
+      ],
+      "names": [],
+      "charts": [],
+      "screenshots": []
+    },
+    "checks": {
+      "passed": true,
+      "rounds": 1,
+      "history": [
+        {
+          "round": 0,
+          "checks": [
+            {
+              "name": "numbers",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "names",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "links",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "template",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "paragraphs",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "superlatives",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "callout",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "hook",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "actions",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "links-load",
+              "ok": true,
+              "problems": []
+            },
+            {
+              "name": "review",
+              "ok": true,
+              "problems": []
+            }
+          ],
+          "claims": {
+            "supported": [],
+            "cut": [],
+            "unchecked": false
+          }
+        }
+      ],
+      "failures": []
+    },
+    "images": [
+      {
+        "kind": "illustration",
+        "source": "workers-ai",
+        "model": "@cf/black-forest-labs/flux-1-schnell",
+        "caption": "AI-generated illustration",
+        "licence": "generated (Workers AI; ours to use)",
+        "credit": "AI-generated illustration",
+        "approval": "Gemini check passed (automatic)",
+        "slot": "hero",
+        "alt": "Abstract illustration of a moon, a browser window, a motion trail and a scale.",
+        "key": "private/library/fixture/fa11ce00000000b2.jpg"
+      },
+      {
+        "kind": "chart",
+        "source": "code",
+        "licence": "ours",
+        "credit": "Chart: PortfolioRank data",
+        "approval": "not needed: drawn by code from the checked facts",
+        "slot": "inline-1",
+        "alt": "Chart comparing S and A portfolios against the rest across various measured metrics.",
+        "key": "content/fixture/fa11ce00000000b2/inline-1.svg"
+      }
+    ],
+    "claims": [],
+    "dataAsOf": "2026-11-11T02:33:10.791Z",
+    "requests": 6
+  }
+]

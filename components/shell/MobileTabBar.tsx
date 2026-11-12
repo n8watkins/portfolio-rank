@@ -7,6 +7,7 @@ import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { useSignIn } from "@/components/SignInModal";
 import { SHELL_SIGN_IN } from "@/components/shell/AccountMenu";
+import { useBlogLive } from "@/components/shell/useBlogLive";
 
 type Tab = { key: NavKey; href: string | null; label: string; Icon: typeof Trophy };
 
@@ -36,8 +37,9 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
   }, [more]);
 
   const signedIn = session !== "loading" && session !== null;
+  const blogLive = useBlogLive();
   const links: { href: string | null; label: string; Icon: typeof Trophy; signIn?: boolean }[] = [
-    { href: ROUTES.blog, label: "Blog", Icon: Newspaper },
+    { href: blogLive ? ROUTES.blog : null, label: "Blog", Icon: Newspaper },
     { href: ROUTES.polls, label: "Polls", Icon: Vote },
     { href: ROUTES.about, label: ROUTES.about === "/how" ? "How it works" : "About", Icon: BookOpen },
     signedIn ? { href: ROUTES.profile, label: "Account", Icon: User } : { href: "#signin", label: "Sign in", Icon: User, signIn: true },

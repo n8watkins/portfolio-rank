@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
@@ -36,7 +37,12 @@ export default async function AdminImagesPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
       <div className="py-6">
-        <h1 className="text-3xl font-bold tracking-tight">Image library</h1>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Image library</h1>
+          <Link href="/admin/blog" className="inline-flex min-h-11 items-center text-sm font-semibold text-mute hover:text-ink">
+            Blog review
+          </Link>
+        </div>
         <p className="mt-2 text-sm text-mute">
           {summary.counts.approved} approved, {summary.counts.pending} waiting for you, {summary.counts["rejected-auto"]} failed the check, {summary.queued} of {summary.subjects} subjects still queued.
         </p>

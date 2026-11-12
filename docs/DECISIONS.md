@@ -306,11 +306,23 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Tavily, Unsplash and Pexels keys are optional: without Tavily every outside claim is cut, without a stock key stock slots fall back to a chart or are dropped.
   Why: a dry run needs something to write about today, and every source the owner hasn't set up yet fails closed.
 
-- **Fully automatic and fail-closed** (owner, 2026-11-10). Status: planned.
-  Posts publish on their own with no review step; a draft that fails a check is revised automatically, and if it still fails after two rounds it is dropped, never published and never queued for the owner.
+- **The owner approves every post before it publishes** (owner, 2026-11-11). Status: building (the blog pages and the review flow, preview PR).
+  The engine writes drafts (`CONTENT_MODE` "dry-run" is the draft mode); the owner reads each one on `/admin/blog/[id]`, as readers would see it plus its checks, fact sheet, claims and image sources, and publishes or rejects it.
+  Publish goes live at the draft's scheduled 08:00 Pacific while that is still ahead, else at once, and keeps the cap of 2 posts in any 7 days in the same write; Reject and Unpublish take an optional note; every decision is stored on the post (`checks.owner`) with who and when.
+  A draft that fails its checks after two rounds is still dropped and never reaches the queue; the "publish" mode (automatic publishing) stays in the code, unused.
+  Why: the posts appear in the owner's name, and a person reading each one is the strongest check while the engine is new.
+- **Fully automatic and fail-closed** (owner, 2026-11-10). Status: the review part is superseded by the decision above (2026-11-11); failing closed still holds.
+  A draft that fails a check is revised automatically, and if it still fails after two rounds it is dropped, never published and never queued for the owner.
   Every number must match what code computed, links must load, quotes and sources can't be invented, and a second Gemini pass reviews tone and claims.
-  The owner is informed, not asked: a weekly "what went out" summary, plus an admin page and kill switches.
-  Why: the owner wants it to run without him; failing closed means the cost of a bad draft is a missing post, not a wrong one in his name.
+  The owner gets a weekly summary, an admin page and kill switches.
+  Why: failing closed means the cost of a bad draft is a missing post, not a wrong one in his name.
+- **The blog pages** (agent, 2026-11-11, under the decisions above). Status: building (preview PR).
+  `/blog` (newest post large, then a grid, tag chips), `/blog/tag/[tag]`, `/blog/[slug]` (cover, TL;DR, inline images with credits, numbered sources, the portfolios a post names linked to their pages, the AI note, share links, JSON-LD `BlogPosting`, a share image per post), `/blog/rss.xml`, sitemap entries and `/about-posts`.
+  Pages are ISR with a 5-minute revalidate, like `/top`: anonymous visitors are served from the cache, and a post shows up within 5 minutes of its publish time, whether the owner published it or its scheduled time came.
+  On-demand revalidation would need an OpenNext tag cache (none is configured, and a scheduled 08:00 publish has no request to trigger it), so time-based revalidation is the simpler, complete answer.
+  Images are served by `/blog/media/<post id>/<slot>` from the post's own row (never a key from the address): public and cached for a day once the post is live, admin-only before.
+  The header, footer and phone More sheet show their Blog link only once a post is published (owner, 2026-11-11), from `GET /api/blog/live` (edge-cached 5 minutes); `/blog` itself is always reachable and shows an empty state until then.
+  Why: the redesign's blog, in the same shell and tokens as home, `/top` and `/grading`.
 - **Positive by design** (owner, 2026-11-10, security review). Status: planned.
   Posts are about what the best developers are doing and how to fit the job market; topics and news are limited to careers, hiring and portfolios, and anything hostile or off-topic is skipped.
 - **Claims checked before publishing, not purged after** (owner, 2026-11-10, security review). Status: planned.
@@ -513,5 +525,6 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Replaced on 2026-11-10 by "Grades and ranking comparisons from 3.5 Flash-Lite only"; the fallback stays in the code behind `GEMINI_FALLBACK` for experiments.
 - **Catch-up mode** (owner, 2026-11-10; built in #54): grading spent 3.5's budget and then 3.1's, about 850 grades a day.
   Replaced on 2026-11-10 by "No catch-up mode; the backlog is graded on 3.5's daily budget".
-- **Blog drafts automatic, publishing one click by the owner** (ranking design suggestion, 2026-11-10): replaced the same day by fully automatic, fail-closed publishing.
+- **Blog drafts automatic, publishing one click by the owner** (ranking design suggestion, 2026-11-10): replaced the same day by fully automatic, fail-closed publishing, then brought back by the owner on 2026-11-11 ("The owner approves every post before it publishes").
+- **Posts publish on their own with no review step** (owner, 2026-11-10, part of "Fully automatic and fail-closed"): replaced on 2026-11-11 by "The owner approves every post before it publishes".
 - **Unpublish a post automatically when later data contradicts it, with a correction note** (owner, 2026-11-10, part of "Fully automatic and fail-closed"): replaced the same day by "Claims checked before publishing, not purged after"; the owner fixes or unpublishes a wrong post from the admin page.

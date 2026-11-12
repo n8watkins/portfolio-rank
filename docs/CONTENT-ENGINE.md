@@ -3,7 +3,7 @@
 The design of PortfolioRank's automatic blog.
 The owner answered every decision on 2026-11-10 with the recommended option; they are marked **Owner decision** below and collected at the end.
 The back end (plan steps 2 and 4 to 8) is built and switched off (`CONTENT_MODE` "off"); see "What is built" at the end.
-The blog pages (step 3) come with the redesign.
+The blog pages (step 3) and the owner's review are built ("Review and publish").
 It turns the content engine plan, the security review, the Gemini budget page and the decisions in [DECISIONS.md](DECISIONS.md) into one buildable design, trimmed to what the owner asked for: "don't overbuild".
 
 Sources, all read on 2026-11-10:
@@ -37,7 +37,7 @@ From DECISIONS.md and the security review, 2026-11-10:
 - **Pace: 1-2 posts a week**, the best-scoring draft each time.
 - **The naming rule:** developers are named only for positive reasons (top sites, climbers, redesigns that paid off); anything critical is in aggregate only.
 - **Facts from code, words from Gemini:** Gemini never invents a figure.
-- **Fully automatic and fail-closed:** no review step; the owner is informed, not asked.
+- **Fail-closed, and the owner approves every post** (2026-11-11, replacing "no review step"): a draft that fails its checks is dropped; one that passes waits on `/admin/blog` until the owner publishes or rejects it (see "Review and publish").
 - **People first:** content runs in the end-of-day run, after new grades and ranking comparisons, on what is left of the day's quota (stage "Content", at most 100 requests and 30 minutes a night; [AUTOMATION.md](../AUTOMATION.md#the-stages)).
 - **The gates shrink to the essentials:** facts from code, outside claims searched, topic filter, safe images, caps and a kill switch, and one week of private dry run.
 
@@ -236,6 +236,19 @@ Each post shows the AI note with a link to `/about-posts` (the page drafted in [
 The security review says a footer; the drafted disclosure page says a line at the top.
 A short line under the title ("Written with AI from PortfolioRank data") and the fuller note with the data link at the end of the post.
 
+## Review and publish
+
+Owner decision of 2026-11-11: the engine writes drafts, the owner approves each one before it publishes.
+
+- **Draft mode** is `CONTENT_MODE` "dry-run": every draft that passes its checks is stored as `draft` with its scheduled `publish_at` (the next 08:00 Pacific); nothing reaches `/blog`, RSS or the newsletter on its own.
+  "publish" (automatic publishing) stays in the code and is not used.
+- **The queue,** `/admin/blog` (only the `ADMIN_GITHUB_ID` account; a 404 for anyone else): drafts waiting for review, published and scheduled posts, and rejected, dropped or unpublished ones with why.
+- **The review page,** `/admin/blog/[id]`: the post exactly as readers will see it (the same article component as `/blog/[slug]`), with Publish and Reject on top and, under it, the checks of every round, the outside claims kept and cut, the fact sheet and each image's source, licence and approval.
+- **Publish** (`POST /api/admin/content/<id>`, `{ "action": "publish" }`, same-origin JSON like the image library's): the post goes live at its scheduled time while that is still ahead, else at once; the cap of 2 posts in any 7 days is counted in the same write, and a full week answers "weekly cap" and leaves the draft as it is; it sets `newsletter_pending`.
+- **Reject** a draft or **Unpublish** a published post, each with an optional note; every decision is kept on the post as `checks.owner` (action, who, when, note).
+- **The pages** are ISR with a 5-minute revalidate, so a published post is on `/blog`, its tag pages and the feed within 5 minutes of its publish time, and anonymous visitors cost no database read in between; the sitemap lists posts once a day.
+  Drafts and unpublished posts are a 404 on `/blog/[slug]`; their images (`/blog/media/<post id>/<slot>`) are served only to the admin, and a live post's images are public and cached for a day.
+
 ## The newsletter hook
 
 The content engine never sends email itself.
@@ -315,6 +328,9 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Images: charts, R2 screenshots, the image library, Pexels, one fresh illustration with one check | [pipeline/content/images.mjs](../pipeline/content/images.mjs) |
 | The night stage, the schedule, the caps, the weekly owner summary | [pipeline/content/engine.mjs](../pipeline/content/engine.mjs), wired in [pipeline/night.mjs](../pipeline/night.mjs) and [worker/night.ts](../worker/night.ts) |
 | Admin review of drafts (JSON) | `GET /api/admin/content` ([app/api/admin/content/route.ts](../app/api/admin/content/route.ts)) |
+| The blog: `/blog`, `/blog/tag/[tag]`, `/blog/[slug]` with its share image, `/blog/rss.xml`, `/blog/media/<post id>/<slot>`, `/about-posts`, sitemap entries; the strict Markdown renderer | [app/blog](../app/blog), [components/blog](../components/blog), [lib/content/blog.mjs](../lib/content/blog.mjs), [app/about-posts/page.tsx](../app/about-posts/page.tsx) |
+| Review and publish: the queue, the review page, Publish, Reject and Unpublish | [app/admin/blog](../app/admin/blog), [app/api/admin/content/[id]/route.ts](../app/api/admin/content/[id]/route.ts) |
+| Fixture posts for local previews (two real dry-run drafts of 2026-11-10 with their images) | [scripts/seed-blog-fixtures.mjs](../scripts/seed-blog-fixtures.mjs), [tests/fixtures/blog](../tests/fixtures/blog) |
 | The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/images/page.tsx](../app/admin/images/page.tsx), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
 
 How it runs, in short:
@@ -330,4 +346,4 @@ How it runs, in short:
 - Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `PEXELS_API_KEY` the Pexels step is skipped; without the `AI` binding (or with no neuron room) the fresh illustration is skipped.
 - The weekly summary is an owner alert of kind "info" (`content-weekly`) on Sunday nights while the engine is on.
 - The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs); `WRITER_MODE` ("staged" by default, or "single"; [pipeline/content/staged.mjs](../pipeline/content/staged.mjs)) picks how the first draft is written: staged is an outline, two section requests and a finish request (4 requests, 5 after an outline retry), single is one request.
-- Tests: [tests/content.test.mjs](../tests/content.test.mjs), [tests/admin-content.test.mjs](../tests/admin-content.test.mjs), [tests/image-library.test.mjs](../tests/image-library.test.mjs) and [tests/admin-library.test.mjs](../tests/admin-library.test.mjs).
+- Tests: [tests/blog.test.mjs](../tests/blog.test.mjs), [tests/blog-pages.test.mjs](../tests/blog-pages.test.mjs), [tests/content.test.mjs](../tests/content.test.mjs), [tests/admin-content.test.mjs](../tests/admin-content.test.mjs), [tests/image-library.test.mjs](../tests/image-library.test.mjs) and [tests/admin-library.test.mjs](../tests/admin-library.test.mjs).

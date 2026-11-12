@@ -106,7 +106,7 @@ export function siteBase(): string {
  * can never reroute production traffic.
  */
 export function testSeam(
-  name: "GRADER_TEST_SITE" | "GRADER_TEST_GITHUB_API" | "GRADER_TEST_GEMINI_API" | "GRADER_TEST_SHOTS_DIR" | "GAMES_TEST_GITHUB_API"
+  name: "GRADER_TEST_SITE" | "GRADER_TEST_GITHUB_API" | "GRADER_TEST_GEMINI_API" | "GRADER_TEST_SHOTS_DIR" | "GAMES_TEST_GITHUB_API" | "BLOG_TEST_MEDIA_DIR"
 ): string | undefined {
   const env = process.env.SITE_ENV;
   if (env === "production" || env === "staging") return undefined;
@@ -161,7 +161,7 @@ export async function readGradeShot(shotKey: string, file: "hero.jpg" | "mobile.
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
     try {
-      return new Uint8Array(await fs.readFile(path.join(dir, shotKey, file)));
+      return new Uint8Array(await fs.readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, shotKey, file)));
     } catch {
       return null;
     }
