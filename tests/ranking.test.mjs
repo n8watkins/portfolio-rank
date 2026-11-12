@@ -15,6 +15,7 @@ import { EXPERIMENT_VIEW, recompute, toIso, weekOf } from "../lib/ranking/views.
 import { drawWeight, pairKey, planBatches, planPairs, slotKind } from "../lib/ranking/matchmaking.mjs";
 import { cycleRate, positionBias, rankMovement, repeatDisagreement, wilson } from "../lib/ranking/analytics.mjs";
 import { createRng, weightedIndex } from "../lib/ranking/prng.mjs";
+import { medalFor, shownPlaces } from "../lib/ranking/places.mjs";
 import { buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "../pipeline/compare-prompts.mjs";
 
 const v2 = (tier, quality_score = null) => ({ tier, quality_score, rubric_version: 2, model: "gemini-3.5-flash-lite", is_portfolio: true });
@@ -326,4 +327,28 @@ test("config: off by default, budgets and flags from the environment", () => {
   assert.deepEqual(on.budget, { one_on_one: 100, batched: 40 });
   assert.equal(on.aiWeight, 0.3);
   assert.equal(rankingConfig({ RANKING_BUDGET: "not json", RANKING_AI_WEIGHT: "7" }).aiWeight, 0.5);
+});
+
+test("places: tied rows share the shown rank, but each view has exactly one gold, silver and bronze", () => {
+  // A run of ties at the very top and another across places 3 to 6, the way
+  // the AI and People boards look when many sites share a score.
+  const rows = [
+    { rank: 1, mu: 30, tiedWithNext: true },
+    { rank: 2, mu: 30, tiedWithNext: true },
+    { rank: 3, mu: 30, tiedWithNext: false },
+    { rank: 4, mu: 28, tiedWithNext: true },
+    { rank: 5, mu: 28, tiedWithNext: true },
+    { rank: 6, mu: 28, tiedWithNext: false },
+    { rank: 7, mu: 27, tiedWithNext: false },
+  ];
+  const shown = shownPlaces(rows);
+  assert.deepEqual(
+    shown.map((s) => [s.rank, s.tied]),
+    [[1, true], [1, true], [1, true], [4, true], [4, true], [4, true], [7, false]]
+  );
+  const medals = shown.map((s) => medalFor(s.place));
+  assert.deepEqual(medals, ["gold", "silver", "bronze", null, null, null, null]);
+  for (const m of ["gold", "silver", "bronze"]) assert.equal(medals.filter((x) => x === m).length, 1);
+  // Tied by the flag but not by the score as shown: not shared.
+  assert.deepEqual(shownPlaces([{ rank: 1, mu: 30.04, tiedWithNext: true }, { rank: 2, mu: 29.8, tiedWithNext: false }]).map((s) => s.rank), [1, 2]);
 });

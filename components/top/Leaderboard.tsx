@@ -143,10 +143,10 @@ function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boole
     <li className="border-b border-edge last:border-b-0">
       <a href={`/p/${encodeURIComponent(r.url)}`} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
         <span className="flex w-9 shrink-0 justify-end md:w-10">
-          <RankBadge rank={r.rank} tied={r.tied} size={r.rank <= 3 ? "lg" : "md"} />
+          <RankBadge rank={r.rank} place={r.place} tied={r.tied} size={r.place <= 3 ? "lg" : "md"} />
         </span>
         <span className="w-20 shrink-0 max-sm:hidden md:w-44 lg:w-52">
-          <ScreenshotFrame src={r.shot} alt="" domain={r.domain} eager={r.rank <= 3} className="rounded-lg border border-edge transition group-hover:border-edge-strong" />
+          <ScreenshotFrame src={r.shot} alt="" domain={r.domain} eager={r.place <= 3} className="rounded-lg border border-edge transition group-hover:border-edge-strong" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
