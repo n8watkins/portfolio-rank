@@ -535,6 +535,39 @@
   body {
     padding: 0 !important;
   }
+  html,
+  body {
+    background: #ffffff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  main {
+    padding: 0 !important;
+  }
+
+  /* The printed report (components/grade/PrintReport.tsx). */
+  .print-report {
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+  .print-report .pr-cover {
+    break-after: page;
+  }
+  .print-report .pr-block {
+    break-inside: avoid;
+  }
+  .print-report .pr-h2 {
+    font-size: 15pt;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    break-after: avoid;
+  }
+  .print-report .pr-bar-on {
+    background: #b7861c;
+  }
+  .print-report .pr-bar-off {
+    background: #e4e4e7;
+  }
 }
 
 /* Attention without spinning: a dot with a soft ring that breathes. */
