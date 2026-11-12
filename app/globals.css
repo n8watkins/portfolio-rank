@@ -559,28 +559,35 @@
     padding: 0 !important;
   }
 
-  /* The printed report (components/grade/PrintReport.tsx). */
-  .print-report {
-    font-size: 10pt;
-    line-height: 1.4;
+  /* The grade report on paper (components/grade/Report.tsx): the screen
+     layout, a little smaller, so a typical report fits two pages of Letter
+     or A4. */
+  .grade-report {
+    font-size: 9.5pt;
+    line-height: 1.35;
   }
-  .print-report .pr-cover {
-    break-after: page;
+  .grade-report h1 {
+    font-size: 17pt;
   }
-  .print-report .pr-block {
-    break-inside: avoid;
-  }
-  .print-report .pr-h2 {
-    font-size: 15pt;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+  .grade-report h2 {
+    font-size: 11pt;
     break-after: avoid;
   }
-  .print-report .pr-bar-on {
-    background: #b7861c;
+  .grade-report .text-sm,
+  .grade-report .text-\[15px\] {
+    font-size: 9.5pt;
   }
-  .print-report .pr-bar-off {
-    background: #e4e4e7;
+  .grade-report .text-\[13px\],
+  .grade-report .text-xs {
+    font-size: 8.5pt;
+  }
+  .grade-report li,
+  .grade-report tr {
+    break-inside: avoid;
+  }
+  .grade-report a {
+    color: inherit;
+    text-decoration: none;
   }
 }
 
