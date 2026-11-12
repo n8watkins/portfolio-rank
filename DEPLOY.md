@@ -96,6 +96,9 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
   Never add those two secrets to staging.
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
   The staging build adds a robots meta tag and a red "Staging" ribbon in the bottom-left corner (`components/StagingRibbon.tsx`).
+- **Locked:** a zone custom rule on n8builds.dev (Managed Challenge) covers the staging host except `/healthz` and any request carrying the header `X-Staging-Gate`.
+  The key is `portfolio-rank/STAGING_GATE_KEY` in pass and the `STAGING_GATE_KEY` Actions secret; `scripts/smoke.mjs` sends it when run against staging.
+  Anything else that calls staging must send the same header.
 - **Sign-in:** a separate GitHub OAuth app, "PortfolioRank (staging)", with the callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, so a staging secret never unlocks the production app.
 - **Secrets on the staging Worker:** `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, each kept in pass as `portfolio-rank/STAGING_<NAME>` and sent with `pass-env pipe portfolio-rank/STAGING_<NAME> -- npx wrangler secret put <NAME> --env staging`.
   `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.

@@ -16,6 +16,10 @@ const staging = flags.includes("--staging");
 const failures = [];
 
 const UA = "portfolio-rank-smoke (+https://github.com/n8watkins/portfolio-rank)";
+// Staging sits behind a Cloudflare rule that challenges requests lacking this
+// header (DEPLOY.md "Staging"); the deploy workflow passes the key.
+const GATE_KEY = process.env.STAGING_GATE_KEY;
+const gate = staging && GATE_KEY ? { "x-staging-gate": GATE_KEY } : {};
 
 async function get(path, init = {}) {
   let last;
@@ -24,7 +28,7 @@ async function get(path, init = {}) {
       const res = await fetch(origin + path, {
         redirect: "manual",
         ...init,
-        headers: { "user-agent": UA, ...init.headers },
+        headers: { "user-agent": UA, ...gate, ...init.headers },
         signal: AbortSignal.timeout(20_000),
       });
       if (res.status < 500) return res;
