@@ -185,6 +185,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const [rater, setRater] = useState<Rater | null>(null);
   const [pick, setPick] = useState<Side | null>(null);
   // After a vote, the portfolio in the spotlight (first the one picked).
+  const spotlightRef = useRef<HTMLElement>(null);
   const [focus, setFocus] = useState<Side | null>(null);
   const [busy, setBusy] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -219,8 +220,11 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const [counted, setCounted] = useState(0);
   useEffect(() => {
     // The spotlight lands a frame after the vote (view transition): focus Next once it is there.
-    if (counted && focus) nextRef.current?.focus({ preventScroll: true });
-  }, [counted, focus]);
+    if (!counted || !focus) return;
+    nextRef.current?.focus({ preventScroll: true });
+    // On a phone the spotlight may sit above the fold: bring its top into view.
+    if (window.matchMedia("(max-width: 767px)").matches) spotlightRef.current?.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+  }, [counted, focus, reduced]);
   const seq = useRef(0);
 
   const finished = done >= ROUND && pick === null;
@@ -562,8 +566,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
             return (
               <article
                 key={`${pair.token}-${focus}`}
+                ref={spotlightRef}
                 aria-label={`${e.name}, in focus`}
-                className={`card relative flex min-w-0 flex-col overflow-hidden ${mine ? "shadow-[0_0_0_3px_var(--color-fill)]" : ""}`}
+                className={`card relative flex min-w-0 scroll-mt-20 flex-col overflow-hidden ${mine ? "shadow-[0_0_0_3px_var(--color-fill)]" : ""}`}
                 style={{ viewTransitionName: `faceoff-card-${focus}` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
