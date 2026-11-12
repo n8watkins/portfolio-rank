@@ -38,7 +38,9 @@ import {
   removalProof,
   reviewQueue,
   setClaimStatus,
+  logRemovalRestored,
   undoRemoval,
+  undoneRemovals,
   verifiedCount,
 } from "../lib/games/claims.mjs";
 import { planOwnerRemovals } from "../pipeline/owner-removals.mjs";
@@ -485,6 +487,41 @@ test("owner removals join data/excluded.json as owner requests, without names, a
   assert.deepEqual(plan.feed.map((p) => p.url), ["https://a.dev"]);
   assert.equal(plan.excluded.length, 2);
   assert.equal(planOwnerRemovals({ removals: [], excluded, feed }).added.length, 0);
+});
+
+test("an undone removal comes back out of data/excluded.json, owner requests only, and the restore is logged once", async () => {
+  const db = await freshDb();
+  const feed = [{ url: "https://a.dev", name: "A" }];
+  const excluded = [
+    { url: "https://b.dev/", reason: "owner request", kind: "owner_request", removed: "2026-11-10" },
+    { url: "https://c.dev", reason: "owner request", kind: "owner_request", removed: "2026-11-10" },
+    { url: "https://down.dev", kind: "down" },
+    "https://legacy.dev",
+  ];
+  const at = new Date("2026-11-10T20:00:00Z");
+  for (const u of ["https://b.dev/", "https://c.dev", "https://down.dev"]) {
+    await db.execute({ sql: "INSERT INTO portfolio_owner (url, removed_at, updated_at) VALUES (?, ?, ?)", args: [u, at.toISOString(), at.toISOString()] });
+  }
+  // The admin undoes b and down.dev; c stays removed.
+  for (const u of ["https://b.dev/", "https://down.dev"]) await undoRemoval(db, { url: u, actor: "admin:me", now: new Date("2026-11-11T10:00:00Z") });
+  const removals = await ownerRemovals(db);
+  const undone = await undoneRemovals(db);
+  assert.deepEqual(undone.map((u) => u.url), ["https://b.dev/", "https://down.dev"]);
+  const plan = planOwnerRemovals({ removals, undone, excluded, feed });
+  assert.deepEqual(plan.restored, ["https://b.dev/"]);
+  assert.deepEqual(plan.excluded.map((e) => (typeof e === "string" ? e : e.url)), ["https://c.dev", "https://down.dev", "https://legacy.dev"]);
+  // Run again on the result: nothing more to do.
+  assert.deepEqual(planOwnerRemovals({ removals, undone, excluded: plan.excluded, feed }).restored, []);
+
+  // Audit: one removal_restored row per undo, however often the job runs.
+  assert.deepEqual(await logRemovalRestored(db, plan.restored, { now: new Date("2026-11-15T17:00:00Z") }), ["https://b.dev/"]);
+  assert.deepEqual(await logRemovalRestored(db, plan.restored, { now: new Date("2026-11-16T17:00:00Z") }), []);
+  const log = (await db.execute("SELECT action, actor FROM claim_log WHERE url = 'https://b.dev/' ORDER BY id")).rows.map((r) => `${r.actor}:${r.action}`);
+  assert.deepEqual(log, ["admin:me:removal_undone", "system:removal_restored"]);
+
+  // Removed again later: not undone any more, so it is excluded again and not restored.
+  await db.execute({ sql: "UPDATE portfolio_owner SET removed_at = ? WHERE url = 'https://b.dev/'", args: ["2026-11-20T00:00:00Z"] });
+  assert.deepEqual((await undoneRemovals(db)).map((u) => u.url), ["https://down.dev"]);
 });
 
 test("live stats: one pass over the list, today's votes by Pacific day, GitHub numbers", async () => {

@@ -292,6 +292,7 @@ test("claims: sign-in required, review by the site owner, then owner actions; st
   const undone = await call(admin, "POST", "/api/admin/removals", { url: OWNED, action: "undo" });
   assert.equal(undone.status, 200, undone.text);
   assert.deepEqual([undone.body.wasRemoved, undone.body.state.removedAt], [true, null]);
+  assert.match(undone.body.note, /restored in the next weekly update/);
   assert.equal((await call(j, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 200, "listed again");
   assert.equal((await call(admin, "POST", "/api/admin/removals", { url: OWNED, action: "undo" })).status, 404);
 });

@@ -15,15 +15,18 @@ import { fileURLToPath } from "url";
 import { normKey } from "./health.mjs";
 import { excludedUrl, readJson } from "./exclusions.mjs";
 import { pipelineDb } from "./roster.mjs";
-import { ownerRemovals } from "../lib/games/claims.mjs";
+import { logRemovalRestored, ownerRemovals, undoneRemovals } from "../lib/games/claims.mjs";
 
 export const OWNER_REASON = "owner request";
 
 /**
- * Adds every owner removal not yet excluded. Pure: returns { added,
- * excluded, feed } without writing.
+ * Adds every owner removal not yet excluded, and takes out the owner_request
+ * entries of removals the admin undid (`undone`: urls listed again). Pure:
+ * returns { added, restored, excluded, feed } without writing. A restored
+ * site comes back to the feed with the next daily upstream sync
+ * (generate_feed.py), which no longer excludes it.
  */
-export function planOwnerRemovals({ removals, excluded, feed }) {
+export function planOwnerRemovals({ removals, undone = [], excluded, feed }) {
   const have = new Set(excluded.map((e) => normKey(excludedUrl(e))));
   const onFeed = new Map(feed.map((p) => [normKey(p.url), p]));
   const added = [];
@@ -39,8 +42,18 @@ export function planOwnerRemovals({ removals, excluded, feed }) {
       removed: String(r.removedAt).slice(0, 10),
     });
   }
+  // Only owner requests: a site excluded as down stays out even if its removal was undone.
+  const back = new Set(undone.map((u) => normKey(u.url ?? u)));
+  const current = new Set(removals.map((r) => normKey(r.url)));
+  const restored = [];
+  const kept = excluded.filter((e) => {
+    const key = normKey(excludedUrl(e));
+    if (typeof e === "string" || e?.kind !== "owner_request" || !back.has(key) || current.has(key)) return true;
+    restored.push(excludedUrl(e));
+    return false;
+  });
   const drop = new Set(added.map((a) => normKey(a.url)));
-  return { added, excluded: [...excluded, ...added], feed: feed.filter((p) => !drop.has(normKey(p.url))) };
+  return { added, restored, excluded: [...kept, ...added], feed: feed.filter((p) => !drop.has(normKey(p.url))) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -50,15 +63,18 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const db = pipelineDb(ROOT);
   const plan = planOwnerRemovals({
     removals: await ownerRemovals(db),
+    undone: await undoneRemovals(db),
     excluded: readJson(excludedPath, []),
     feed: readJson(feedPath, []),
   });
-  if (plan.added.length && !process.argv.includes("--dry-run")) {
+  const dry = process.argv.includes("--dry-run");
+  if ((plan.added.length || plan.restored.length) && !dry) {
     fs.writeFileSync(excludedPath, `${JSON.stringify(plan.excluded, null, 2)}\n`);
     fs.writeFileSync(feedPath, `${JSON.stringify(plan.feed, null, 2)}\n`);
   }
+  if (plan.restored.length && !dry) await logRemovalRestored(db, plan.restored);
   // Counted, never named: the job summary is public on a public repository.
-  const line = `Owner removals: ${plan.added.length} new`;
+  const line = `Owner removals: ${plan.added.length} new, ${plan.restored.length} restored`;
   console.log(line);
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Owner removals\n\n${plan.added.length} new.\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Owner removals\n\n${plan.added.length} new, ${plan.restored.length} restored (undone by the admin).\n`);
 }

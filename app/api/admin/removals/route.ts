@@ -11,7 +11,8 @@ import { PRIVATE, fail, forgetPool } from "@/lib/games/server";
 // POST /api/admin/removals { url, action: "undo" } -> { state, wasRemoved }
 //   takes a removal back, held or done; when it had taken effect
 //   (wasRemoved), the weekly exclusions pull request may already have added
-//   it to data/excluded.json, whose entry then comes out by hand.
+//   it to data/excluded.json; the next weekly update takes the entry out
+//   again (pipeline/owner-removals.mjs, logged as removal_restored).
 //   400 bad_request, 401/403, 404 not_removed
 // Undos go to the claims audit log under "admin:<login>".
 export const dynamic = "force-dynamic";
@@ -44,5 +45,12 @@ export async function POST(req: Request) {
   // The site is back in the quiz pool.
   await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
   forgetPool();
-  return NextResponse.json({ state: out.state, wasRemoved: out.wasRemoved }, { headers: PRIVATE });
+  return NextResponse.json(
+    {
+      state: out.state,
+      wasRemoved: out.wasRemoved,
+      ...(out.wasRemoved ? { note: "The site is listed again; it will be restored in the next weekly update." } : {}),
+    },
+    { headers: PRIVATE }
+  );
 }
