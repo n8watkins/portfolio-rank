@@ -1,9 +1,9 @@
 // The image library's hourly batch (docs/CONTENT-ENGINE.md, "The image
 // library"), run by the hourly Cron Trigger ("15 * * * *", worker/index.ts)
-// after people's queued grades: up to LIBRARY_PER_HOUR (2) images, never
+// after people's queued grades: up to LIBRARY_PER_HOUR (40) images, never
 // between 20:00 and midnight Pacific, every Workers AI call through the
 // portfoliorank-ai AI Gateway (lib/ai-gateway.mjs) and the never-pay limits
-// (lib/content/neurons.mjs: 40 a UTC day, 2 a rolling hour, 2,500 neurons).
+// (lib/content/neurons.mjs: 40 a UTC day, 2,500 neurons).
 // A failure or the gateway's 429 stops the batch; the next tick tries again.
 import { db as database } from "../lib/db";
 import { withGateway } from "../lib/ai-gateway.mjs";

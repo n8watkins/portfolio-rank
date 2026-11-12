@@ -229,10 +229,12 @@ The engine counts Pexels searches per UTC month (`pexels_searches`) and shows th
 
 Owner decisions 2026-11-10: never pay; every image comes from free daily allowances only ([DECISIONS.md](DECISIONS.md#content-engine)).
 
-**The limit: at most 40 AI images a UTC day** (`MAX_AI_IMAGES_PER_DAY`, counted per image, that is per Workers AI call, whether it succeeds or not), **and at most 2 in any rolling hour** (the `portfoliorank-ai` AI Gateway's sliding rate limit, [AI-GATEWAY.md](AI-GATEWAY.md)).
-That covers the library's hourly batches and each post's one fresh image together.
+**The limit: at most 40 AI images a UTC day** (`MAX_AI_IMAGES_PER_DAY`, counted per image, that is per Workers AI call, whether it succeeds or not), with no hourly cap of its own.
+Owner, 2026-11-11: "40 a day only", replacing the earlier 2 in any rolling hour, so "Make now" can make a batch at once; the `portfoliorank-ai` AI Gateway's sliding rate limit of 40 per 3,600 seconds is the burst backstop ([AI-GATEWAY.md](AI-GATEWAY.md)).
+That covers the library's hourly batches, the owner's "Make now" and each post's one fresh image together.
+The day's 40 and the neurons did not change, so the most a day can cost is the same: about 2,320 neurons, $0.
 Behind it, a neuron guard: at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`); 40 Schnell images are about 2,320.
-Both settings can be lowered, never raised: a value above 40 or 2,500, or one that isn't a whole number, is rejected and fails closed (no Workers AI call at all; the library says why and `GET /api/admin/quota` shows it as `aiImages.problem`).
+The settings can be lowered, never raised: a value above 40 or 2,500, or one that isn't a whole number, is rejected and fails closed (no Workers AI call at all; the library says why and `GET /api/admin/quota` shows it as `aiImages.problem`).
 Staging's limits are 0.
 
 - Before each call, one image and the call's estimated neurons are reserved for the UTC day ([lib/content/neurons.mjs](../lib/content/neurons.mjs), table `ai_image_calls`, one row per call) in one statement that only succeeds while the day's images, the last hour's images and the day's neurons all stay within their limits; without room the call is skipped, never retried, and a reservation is never given back.
@@ -242,19 +244,22 @@ Staging's limits are 0.
 
   | Slice | Neurons a UTC day | Enforced by |
   | --- | ---: | --- |
-  | PortfolioRank images | 2,500 at most (40 images, about 2,320) | `MAX_AI_IMAGES_PER_DAY`, `AI_NEURON_CEILING`, the `ai_image_calls` counter in this repository, and the AI Gateway's 2 an hour and $1 a month Workers AI spend limit |
+  | PortfolioRank images | 2,500 at most (40 images, about 2,320) | `MAX_AI_IMAGES_PER_DAY`, `AI_NEURON_CEILING`, the `ai_image_calls` counter in this repository, and the AI Gateway's 40 an hour and $1 a month Workers AI spend limit |
   | Everything else on the account | 1,000 | each app's own guard |
   | Buffer, never used | 6,500 | nobody spends it; demo-kit uses no Workers AI (local voice and render) |
   | **Total** | **10,000** | the free allowance |
 
 | Model | Size and steps | Neurons an image (tiles rounded up) | Use |
 | --- | --- | ---: | --- |
-| Flux Schnell | 1024 x 1024, 4 steps | 58 | the library (2 an hour) and 1 per post |
+| Flux Schnell | 1024 x 1024, 4 steps | 58 | the library (the hourly tick and "Make now") and 1 per post, 40 a day in all |
 | Lucid Origin | 768 x 432, 20 steps | 1,512 | only when Schnell errors, if the day has room |
 | Flux 2 Dev | 1024 x 576, 16 steps | 2,400 | off; `LIBRARY_MODEL` "flux2dev" (one a day at most) |
 
-The library runs on the hourly tick (2 images, every hour from midnight to 19:15 Pacific: 40 a day at most), and not from 20:00 to midnight Pacific, so the night's post gets the gateway's hourly allowance (its Schnell call, and Lucid if Schnell errors).
+The library runs on the hourly tick (up to `LIBRARY_PER_HOUR`, 40, every hour from midnight to 19:15 Pacific, within 40 a day), and not from 20:00 to midnight Pacific.
+When the library has used the day's 40, the night's post gets no fresh illustration and fills its slots from the library, Pexels or a chart.
 A Lucid fallback only runs while it fits the hour and the 2,500 neurons; otherwise the slot falls back to the library or a chart.
-A 429 from the gateway means stop: no retry, the next tick tries again.
+The owner's "Make now" and "Make your own" on `/admin/images` may use what is left of the same 40 a day.
+Every Workers AI call path (the hourly tick, "Make now", "Make your own" and a post's fresh illustration) goes through `generateIllustration` ([pipeline/content/workers-ai.mjs](../pipeline/content/workers-ai.mjs)), which reserves the image and its neurons before calling the model; the tests prove each path is refused once 40 images or 2,500 neurons are reserved for the UTC day.
+A 429 from the gateway means stop: no retry, the next tick tries again, and the page says how many the gateway allows an hour.
 Each library image also takes one Gemini check (job `library`, at most 40 a day, inside the free Gemini quota and the reserve for people).
-"AI images today: N of 40" shows on `/admin/images` and in `GET /api/admin/quota` as `aiImages`, with the neurons.
+"How images are made" on `/admin/images` and `GET /api/admin/quota` (`aiImages`) show today's images, the hour's and the neurons.

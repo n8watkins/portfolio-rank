@@ -26,7 +26,7 @@ import crypto from "node:crypto";
 import { renderChart } from "./charts.mjs";
 import { AI_CAPTION, imagePrompt } from "./house-style.mjs";
 import { GENERATED, buildCheckRequest, checkPasses, generateIllustration } from "./workers-ai.mjs";
-import { insertImage, libraryKey, matchLibrary, recordUse } from "../../lib/content/library.mjs";
+import { altFor, insertImage, libraryKey, matchLibrary, rankLibrary, recordConsidered, recordUse, tagsFor } from "../../lib/content/library.mjs";
 import { PEXELS_PER_POST, reserveSearch } from "../../lib/content/pexels-searches.mjs";
 
 /** Gemini image checks a post may make (Pexels choices and fresh illustrations). */
@@ -237,8 +237,8 @@ export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }
       key,
       width: gen.width,
       height: gen.height,
-      tags: keywords,
-      alt: slot.alt,
+      tags: tagsFor({ extra: keywords, subject }),
+      alt: slot.alt || altFor(subject),
       ...GENERATED,
       status: error ? "pending" : pass ? "pending" : "rejected-auto",
       check: answer ?? { error },
@@ -277,7 +277,10 @@ export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }
       } else {
         const keywords = briefKeywords(slot);
         const para = paragraphBefore(filledBody, slot.slot);
-        const match = ctx.db ? await matchLibrary(ctx.db, { keywords, exclude: usedLibrary }) : null;
+        // The close matches are recorded as considered (shown on /admin/images), the best is used.
+        const ranked = ctx.db ? await rankLibrary(ctx.db, { keywords, exclude: usedLibrary }) : [];
+        const match = ranked[0]?.img ?? null;
+        for (const { img } of ranked.slice(1)) await recordConsidered(ctx.db, { imageId: img.id, postId: ctx.postId, slot: slot.slot, now: now() });
         if (match) image = await libraryImage(slot, match, "matched by tags");
         const whys = [];
         if (!image) {
