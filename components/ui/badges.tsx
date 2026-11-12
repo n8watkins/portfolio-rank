@@ -1,7 +1,7 @@
 import type React from "react";
 import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
 import { medalFor } from "@/lib/ranking/places.mjs";
-import { BELOW_TOP_TIERS, familyOf, isPublicTier, modifierOf } from "@/lib/tiers.mjs";
+import { BELOW_TOP_TIERS, familyOf, isPublicTier, modifierOf, tierLabel } from "@/lib/tiers.mjs";
 
 // Small marks shared by the leaderboard, reports, cards and Play.
 
@@ -25,27 +25,18 @@ const TIER_FRAME: Record<string, React.CSSProperties> = {
 };
 
 const SIZE = {
-  md: { box: "h-8 w-8 rounded-lg", letter: "text-sm", sss: "text-[11px] tracking-tighter", mod: "h-[9px] w-[9px] -right-[7px] -top-[1px]" },
-  lg: { box: "h-16 w-16 rounded-2xl", letter: "text-3xl", sss: "text-xl tracking-tight", mod: "h-[15px] w-[15px] -right-[13px] top-[1px]" },
+  md: { box: "h-8 w-8 rounded-lg", letter: "text-sm", sss: "text-[11px] tracking-tighter" },
+  lg: { box: "h-16 w-16 rounded-2xl", letter: "text-3xl", sss: "text-xl tracking-tight" },
 } as const;
 
 const MOD_NAME: Record<string, string> = { "+": "plus", "-": "minus" };
 
 /**
- * The plus or minus of a tier, drawn rather than typed: a short bar (and a
- * crossing one for plus) at the letter's top right, the weight of the
- * letter's own strokes, so "A+" and "B-" read as one mark.
+ * A grade tier (SSS, S+ ... D, by rank: lib/tiers.mjs) as a square badge: the
+ * letter with a typeset plus or minus right beside it, in the same face and
+ * weight, a little smaller and centred on the letter ("S−", "A+"). The minus
+ * is a real minus sign, as wide as the plus.
  */
-function Modifier({ mod, className }: { mod: string; className: string }) {
-  return (
-    <svg viewBox="0 0 10 10" className={`absolute ${className}`} aria-hidden>
-      <rect x="1" y="4" width="8" height="2.2" rx="1.1" fill="currentColor" />
-      {mod === "+" && <rect x="3.9" y="1.1" width="2.2" height="8" rx="1.1" fill="currentColor" />}
-    </svg>
-  );
-}
-
-/** A grade tier (SSS, S+ ... D, by rank: lib/tiers.mjs) as a square badge: its letter, the plus or minus drawn beside it. */
 export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "lg" }) {
   const z = SIZE[size];
   const family = familyOf(tier) ?? "C";
@@ -55,7 +46,7 @@ export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "
     <span
       role="img"
       aria-label={`Tier ${tier === "SSS" ? "SSS" : family}${mod ? ` ${MOD_NAME[mod]}` : ""}`}
-      title={`Tier ${tier}`}
+      title={`Tier ${tierLabel(tier)}`}
       className={`grid shrink-0 place-items-center font-bold leading-none ${z.box} ${look}`}
       style={TIER_FRAME[tier]}
     >
@@ -64,10 +55,9 @@ export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "
           SSS
         </span>
       ) : (
-        // Nudged left by half the mark's width, so letter and mark sit centred together.
-        <span aria-hidden className={`relative ${z.letter} ${mod ? (size === "lg" ? "-translate-x-[6px]" : "-translate-x-[3px]") : ""}`}>
+        <span aria-hidden className={`inline-flex items-center ${z.letter}`}>
           {family}
-          {mod && <Modifier mod={mod} className={z.mod} />}
+          {mod && <span className="-translate-y-[0.06em] pl-[0.03em] text-[0.8em]">{mod === "+" ? "+" : "\u2212"}</span>}
         </span>
       )}
     </span>
