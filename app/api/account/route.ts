@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
-import { accountData, deleteAccount } from "@/lib/account.mjs";
+import { accountData, deleteAccount, gradeShotKeys } from "@/lib/account.mjs";
 import { sameOrigin } from "@/lib/polls/server";
 import { getRater } from "@/lib/rater";
+// The grader's keyed requester id: grade requests made while signed in are the account's too.
+import { deleteGradeShots, keyed } from "@/lib/grader/server";
 
 // The signed-in account's own data (lib/account.mjs), self-serve from /settings.
 // GET    /api/account -> a JSON file of everything held about the account
@@ -21,7 +23,7 @@ export async function GET() {
   await ensureSchema();
   const me = await human();
   if (!me) return NextResponse.json({ error: "signin_required" }, { status: 401, headers: PRIVATE });
-  const data = await accountData(db(), me.id, { login: me.login });
+  const data = await accountData(db(), me.id, { login: me.login, gradeVisitor: keyed("visitor", me.id) });
   return new NextResponse(JSON.stringify(data, null, 2), {
     headers: {
       ...PRIVATE,
@@ -43,6 +45,9 @@ export async function DELETE(req: Request) {
   if (!me.login || confirm.toLowerCase() !== me.login.toLowerCase()) {
     return NextResponse.json({ error: "confirm_mismatch" }, { status: 400, headers: PRIVATE });
   }
-  const deleted = await deleteAccount(db(), me.id);
+  const gradeVisitor = keyed("visitor", me.id);
+  const shots = await gradeShotKeys(db(), gradeVisitor);
+  const deleted = await deleteAccount(db(), me.id, { gradeVisitor });
+  for (const key of shots) await deleteGradeShots(key);
   return NextResponse.json({ deleted }, { headers: PRIVATE });
 }
