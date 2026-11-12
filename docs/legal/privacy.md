@@ -173,9 +173,9 @@ None of them get your data to sell, and neither do I.
 
 All of these are self-serve, on the site's Settings page, and take effect at once.
 
-- **Download my data**: signed in, one click gives you a JSON file of everything stored against your account: votes, likes, lists, badges, quiz plays, poll votes, claims and the portfolio actions you took.
+- **Download my data**: signed in, one click gives you a JSON file of everything stored against your account: votes, likes, lists, badges, quiz plays, poll votes, claims, the portfolio actions you took and the grades you asked for while signed in.
 - **Delete my account**: signed in, type your GitHub username to confirm.
-  Your votes, likes, lists, badges, quiz plays, poll votes and claims are deleted together in one step, and you are signed out (your session lives only in your browser's cookie, so signing out ends it).
+  Your votes, likes, lists, badges, quiz plays, poll votes, claims and the grades you asked for while signed in (with their reports and any email waiting to be sent) are deleted together in one step, and you are signed out (your session lives only in your browser's cookie, so signing out ends it).
   Your votes leave the vote log, and the leaderboard drops them at its next recompute.
   Kept, because they name no one: anonymous counts (how many quizzes were played, how many votes each poll option got) and a portfolio's own state, so a removal or a hidden grade you made stays in force, with your account struck from the record of who made it.
 - **Remove my portfolio**: prove the site is yours (a link from the site to your GitHub profile, or a code you put on the page), then hide its grade or remove it from PortfolioRank.
