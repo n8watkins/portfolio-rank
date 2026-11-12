@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { insertImage } from "../lib/content/library.mjs";
+import { QUIET_HOURS } from "../pipeline/content/library-stage.mjs";
+import { pacificParts } from "../pipeline/quota-day.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -136,8 +138,14 @@ test("review page: only the admin sees it; images are served to the admin only",
   const html = await page.text();
   const text = html.replace(/<!-- -->/g, "");
   assert.match(text, /Image library/);
-  assert.match(text, /Make 2 now/);
-  assert.match(text, /Make up to 40/);
+  // From 20:00 to midnight Pacific the library is paused, and the page says so instead of offering a batch.
+  if (QUIET_HOURS.includes(pacificParts(Date.now()).hour)) {
+    assert.match(text, /Paused 8 pm to midnight Pacific/);
+    assert.doesNotMatch(text, /Make 2 now/);
+  } else {
+    assert.match(text, /Make 2 now/);
+    assert.match(text, /Make up to 40/);
+  }
   assert.match(text, /How images are made/);
   assert.match(text, /Made today<\/dt><dd[^>]*>0 of 40/);
   assert.match(text, /no hourly cap/);

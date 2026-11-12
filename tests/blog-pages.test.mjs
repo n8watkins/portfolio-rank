@@ -109,5 +109,5 @@ test("the list, the feed and the review queue answer", async () => {
   assert.equal((await fetch(`${BASE}/admin/blog`)).status, 404);
   const q = await fetch(`${BASE}/admin/blog`, { headers: { cookie: await cookieFor("e2e-admin", ADMIN_ID) } });
   assert.equal(q.status, 200);
-  assert.ok((await q.text()).includes("Blog review"));
+  assert.ok((await q.text()).includes("Blog drafts"));
 });

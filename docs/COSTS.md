@@ -215,7 +215,7 @@ The count is the `tavily_credits` table (one row per month), and each search res
 At the cap outside claims are cut, exactly as when `TAVILY_API_KEY` is missing.
 The credit is given back when Tavily answers with an error.
 The month's use and the cap show in `GET /api/admin/quota` as `tavily`.
-The weekly cap (40 searches) and the per-post cap (10) still apply on top of the monthly one.
+The weekly cap (50 searches, a quarter of the monthly 200; 40 until 2026-11-11, raised so "Write a draft now" fits beside the nights) and the per-post cap (10) still apply on top of the monthly one.
 
 ## Pexels
 

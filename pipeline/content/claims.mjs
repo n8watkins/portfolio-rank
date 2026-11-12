@@ -12,7 +12,9 @@ import { denied } from "./topic.mjs";
 /** Claims searched per post per pass, and Tavily searches a post and a week may use (gate 6). */
 export const MAX_CLAIMS = 6;
 export const TAVILY_PER_POST = 10;
-export const TAVILY_PER_WEEK = 40;
+// A quarter of the monthly 200 (TAVILY_MONTHLY_CREDITS), which stays the hard cap;
+// raised from 40 on 2026-11-11 so the owner's "Write a draft now" fits beside the nights.
+export const TAVILY_PER_WEEK = 50;
 export const TAVILY_API = "https://api.tavily.com/search";
 
 export const LIST_SCHEMA = {

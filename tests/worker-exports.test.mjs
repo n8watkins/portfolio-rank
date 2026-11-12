@@ -5,16 +5,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { boundClasses, exportedNames, parseJsonc } from "../scripts/check-worker-exports.mjs";
 
-test("wrangler.jsonc parses with its comments, and binds the ISR queue and the night Workflow", () => {
+test("wrangler.jsonc parses with its comments, and binds the ISR queue, the night Workflow and the draft Workflow", () => {
   const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
   assert.match(config.vars.SENTRY_DSN, /^https:\/\//, "a // inside a string is not a comment");
-  assert.deepEqual(boundClasses(config).sort(), ["DOQueueHandler", "EndOfDayWorkflow"]);
+  assert.deepEqual(boundClasses(config).sort(), ["DOQueueHandler", "DraftWorkflow", "EndOfDayWorkflow"]);
+  assert.deepEqual(boundClasses(config.env.staging).sort(), ["DOQueueHandler", "DraftWorkflow", "EndOfDayWorkflow"]);
 });
 
-test("worker/index.ts re-exports both classes", () => {
+test("worker/index.ts re-exports every bound class", () => {
   const src = readFileSync("worker/index.ts", "utf8");
   assert.match(src, /export \{ DOQueueHandler \} from "\.\.\/\.open-next\/worker\.js"/);
   assert.match(src, /export \{ EndOfDayWorkflow \} from "\.\/night"/);
+  assert.match(src, /export \{ DraftWorkflow \} from "\.\/draft"/);
 });
 
 test("exportedNames reads an esbuild export list, renames included", () => {

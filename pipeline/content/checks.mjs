@@ -7,9 +7,10 @@
 import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, fill, oneSentencePerLine } from "./writer.mjs";
 import { checkActions, checkCallout, checkHook, checkParagraphs, checkSuperlatives } from "./quality.mjs";
 import { SITE_URL, domainOf } from "./facts.mjs";
+import { editorialChecks } from "./scorecard.mjs";
 
-/** The template's word range (POST_TEMPLATE.md; owner decision 2026-11-10: 250 to 400 words), with 10% slack either side. */
-export const WORDS = { min: 250, max: 400, slack: 0.1 };
+/** The template's word range (POST_TEMPLATE.md; owner, 2026-11-11: about 500 to 800 words), with 5% slack either side. */
+export const WORDS = { min: 500, max: 800, slack: 0.05 };
 
 // Digits a post may hold outside placeholders: years, the numbers of a
 // numbered list, the Gemini model names and the rubric's 1 to 5 scale.
@@ -178,8 +179,8 @@ export function checkTemplate(draft, sheet) {
   const words = wordCount(fill(assembleBody(draft), sheet.facts));
   const lo = Math.floor(WORDS.min * (1 - WORDS.slack));
   const hi = Math.ceil(WORDS.max * (1 + WORDS.slack));
-  if (words < lo) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: add about ${325 - words} words, for example a longer paragraph`);
-  if (words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: cut about ${words - 325} words`);
+  if (words < lo) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: add about ${600 - words} words of substance, for example a concrete example from the facts`);
+  if (words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: cut about ${words - 700} words, starting with throat-clearing and repetition`);
   return result("template", p);
 }
 
@@ -196,6 +197,8 @@ export function codeChecks(draft, sheet, { roster, allowedSentences = [], claimU
     checkCallout(draft, sheet),
     checkHook(draft, sheet),
     checkActions(draft, sheet),
+    // The owner's two rules (pipeline/content/scorecard.mjs): no dev meta, and an early payoff.
+    editorialChecks(filled.filter(([k]) => k === "title" || k === "subtitle" || k === "body").map(([, v]) => v).join("\n")),
   ];
   return { ok: checks.every((c) => c.ok), checks, failures: checks.flatMap((c) => c.problems.map((x) => `${c.name}: ${x}`)) };
 }

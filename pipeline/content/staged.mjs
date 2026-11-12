@@ -130,7 +130,7 @@ function factsFor(sheet, ids) {
 
 export function buildSectionsRequest(sheet, outline, indexes) {
   const text = [
-    "Write these sections of a blog post. Each section is one or two paragraphs; every paragraph has two to four sentences, with each sentence on its own line and no paragraph of one sentence. Use only the facts listed for that section, written as their {{placeholders}}; never type a digit. Where a tie is listed, say the items tie. Be concrete, no filler. About 55 to 65 words per section; the whole post must stay under 380 words.",
+    "Write these sections of a blog post. Each section is one or two paragraphs; every paragraph has two to four sentences, with each sentence on its own line and no paragraph of one sentence. Use only the facts listed for that section, written as their {{placeholders}}; never type a digit. Where a tie is listed, say the items tie. Be concrete, no filler, nothing about how PortfolioRank is built or run. About 110 to 140 words per section; the whole post must stay under 800 words.",
     "",
     `Post title: ${outline.title}`,
     ...indexes.flatMap((i) => {
@@ -143,7 +143,7 @@ export function buildSectionsRequest(sheet, outline, indexes) {
 
 export function buildFinishRequest(sheet, outline, sections) {
   const text = [
-    "Finish this post. Write the body in Markdown from the plan and the sections below: an opener paragraph that starts with the hook (two to four sentences), then the three sections (smooth the transitions, remove repetition, keep each paragraph two to four sentences, keep their {{placeholders}}), the callout of two quote lines, \"### Try this\" with the three numbered steps, and a closing takeaway paragraph of two or three sentences. Put [[image:inline-1]], [[image:inline-2]] (and inline-3 if planned) after the paragraph each supports. Finalise the title and alt titles. Return the whole post in the response shape; tldr, tags, share_line, newsletter_blurb and images may stay as planned. Total body: 300 to 350 words; under 270 or over 380 fails, so cut sentences that repeat another.",
+    "Finish this post. Write the body in Markdown from the plan and the sections below: an opener paragraph that starts with the hook and ends with the one takeaway the reader can use on their own portfolio, addressed to them (two to four sentences), then the three sections (smooth the transitions, remove repetition, keep each paragraph two to four sentences, keep their {{placeholders}}), the callout of two quote lines, \"### Try this\" with the three numbered steps, and a closing takeaway paragraph of two or three sentences. Put [[image:inline-1]], [[image:inline-2]] (and inline-3 if planned) after the paragraph each supports. Finalise the title and alt titles. Return the whole post in the response shape; tldr, tags, share_line, newsletter_blurb and images may stay as planned. Total body: 550 to 700 words; under 475 or over 840 fails, so cut sentences that repeat another.",
     "",
     "<plan>",
     json({ ...outline, sections: outline.sections.map((s, i) => ({ ...s, written: sections[i] })) }),

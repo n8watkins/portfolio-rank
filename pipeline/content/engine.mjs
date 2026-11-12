@@ -13,7 +13,7 @@
 //          review), revise at most twice, images, store.
 //
 // Caps (gate 6): 1 draft a night, 2 revision rounds, Tavily 10 a post and
-// 40 a week, 1 fresh illustration, 2 Pexels searches and 3 image checks a
+// 50 a week, 1 fresh illustration, 2 Pexels searches and 3 image checks a
 // post (images.mjs), 2 published posts in any 7
 // days (lib/content/store.mjs storePost), and the stage's Gemini cap and
 // time cap from the budget accountant. All requests go to 3.5 Flash-Lite
@@ -33,7 +33,7 @@ import { assembleBody, buildReviseRequest, buildWriteRequest, cutSentences, draf
 import { checkLinksLoad, codeChecks, urlsIn } from "./checks.mjs";
 import { creditsFor, monthlyCap } from "../../lib/content/tavily-credits.mjs";
 import { TAVILY_PER_POST, TAVILY_PER_WEEK, checkClaims } from "./claims.mjs";
-import { buildPickRequest, buildReviewRequest, choosePicks, reviewCheck } from "./topic.mjs";
+import { KIND_TOPIC, TOPICS, buildPickRequest, buildReviewRequest, choosePicks, reviewCheck } from "./topic.mjs";
 import { fillImages } from "./images.mjs";
 import { aiLimits } from "../../lib/content/neurons.mjs";
 import { pexelsCap } from "../../lib/content/pexels-searches.mjs";
@@ -51,6 +51,17 @@ export const DRAFT_NIGHTS = [1, 3];
 export const PICK_NIGHT = 0;
 
 export class ContentBudgetError extends Error {}
+
+/** What a draft is doing, for the live status of "Write a draft now" (in order). */
+export const PHASES = {
+  facts: "Reading the data",
+  writing: "Writing",
+  researching: "Researching outside claims",
+  checking: "Checking",
+  revising: "Revising",
+  images: "Picking images",
+  saving: "Saving the draft",
+};
 
 const iso = (ms) => new Date(ms).toISOString();
 const msg = (e) => String(e?.message ?? e).slice(0, 300);
@@ -118,7 +129,7 @@ export async function runPick(ctx, gemini, { night, budget }) {
   let chosen;
   let requests = 0;
   if (ideas.length === 0) chosen = { picks: [], reserve: null, skipped: [] };
-  else if (ideas.length === 1) chosen = { picks: [{ kind: ideas[0].kind, score: null, topic: "PortfolioRank data and method", tone: "neutral" }], reserve: null, skipped: [] };
+  else if (ideas.length === 1) chosen = { picks: [{ kind: ideas[0].kind, score: null, topic: KIND_TOPIC[ideas[0].kind] ?? TOPICS[1], tone: "neutral" }], reserve: null, skipped: [] };
   else {
     const g = budgeted(gemini, Math.min(1, budget));
     const answer = await g.generate(buildPickRequest(ideas, { lastKinds }));
@@ -150,21 +161,38 @@ export function linkSources(markdown, supported) {
  * Stages 3 to 8 for one idea. Returns { status: "ok" | "dropped" |
  * "skipped" | "deferred", postId, requests, ... }. Throws Gemini's own
  * errors (quota, key, retries) so the night stops the way it always does.
+ * `step` is the content_runs step: "draft" for the night (which the
+ * schedule counts), "manual" for the owner's "Write a draft now"
+ * (pipeline/content/manual.mjs). `focus` is the owner's optional angle,
+ * which steers the writer over the same facts. `extras` adds to the sheet
+ * what the writer should also follow: `guidelines` (the editor's
+ * guidelines), `ownerNotes` (a rewrite's notes) and `rewriteOf`.
+ * `onPhase(phase, detail)` reports progress (PHASES) for the live status.
+ * Returns also `searches` (Tavily) and `aiImages` (Workers AI) spent.
  */
-export async function runDraft(ctx, gemini, { kind, night, budget }) {
+export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft", focus = null, extras = {}, onPhase = async () => {} }) {
   const now = ctx.now();
   const mode = ctx.flags.contentMode;
   const db = ctx.db;
   const log = (line) => ctx.log(`Content: ${kind}: ${line}`);
+  const phase = async (name, detail = null) => {
+    try {
+      await onPhase(name, detail);
+    } catch {
+      // The live status is a convenience; it never fails a draft.
+    }
+  };
   const staged = ctx.flags.writerMode === "staged";
   const minRequests = staged ? STAGED_REQUESTS + 2 : MIN_DRAFT_REQUESTS;
   if (budget < minRequests) {
-    await recordRun(db, { night, now, step: "draft", mode, status: "deferred", kind, detail: { reason: `only ${budget} request(s) left in this batch; ${minRequests} needed` } });
+    await recordRun(db, { night, now, step, mode, status: "deferred", kind, detail: { reason: `only ${budget} request(s) left in this batch; ${minRequests} needed` } });
     return { status: "deferred", requests: 0 };
   }
-  const sheet = await BUILDERS[kind](db, { now });
+  await phase("facts");
+  const built = await BUILDERS[kind](db, { now });
+  const sheet = built.ready ? { ...built, ...(focus ? { focus } : {}), ...extras } : built;
   if (!sheet.ready) {
-    await recordRun(db, { night, now, step: "draft", mode, status: "skipped", kind, detail: { reason: sheet.reason } });
+    await recordRun(db, { night, now, step, mode, status: "skipped", kind, detail: { reason: sheet.reason } });
     log(`not ready: ${sheet.reason}`);
     return { status: "skipped", requests: 0 };
   }
@@ -185,9 +213,11 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
         failures.push(`no budget for revision ${round} (${g.left()} request(s) left)`);
         break;
       }
+      await phase(round === 0 ? "writing" : "revising", round === 0 ? null : `round ${round} of ${MAX_REVISIONS}`);
       if (round === 0 && staged) draft = normalizeDraft((await stagedWrite(sheet, g.generate, { onOutlineFail: (p) => log(`outline retry: ${p.slice(0, 2).join("; ")}`) })).draft);
       else draft = normalizeDraft(await g.generate(round === 0 ? buildWriteRequest(sheet) : buildReviseRequest(sheet, draft, failures)));
       // Gate 2: outside claims, on the unfilled draft.
+      await phase("researching");
       const text = draftTexts(draft)
         .filter(([k]) => !k.startsWith("images."))
         .map(([, v]) => v)
@@ -199,6 +229,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
       );
       draft = cutSentences(draft, claims.cut.map((c) => c.sentence));
       // Gates 1 and 4 and the template, by code.
+      await phase("checking");
       const code = codeChecks(draft, sheet, { roster, allowedSentences: supported.map((c) => c.sentence), claimUrls: supported.map((c) => c.url) });
       const filled = draftTexts(draft).map(([k, v]) => [k, fill(v, sheet.facts)]);
       const links = await checkLinksLoad(filled.flatMap(([, v]) => urlsIn(v)), ctx.fetchImpl);
@@ -229,7 +260,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
     }
   } catch (e) {
     if (!(e instanceof ContentBudgetError) && !(e instanceof OutlineError)) {
-      await recordRun(db, { night, now, step: "draft", mode, status: "failed", kind, gemini: g.used.n, tavily: searches, detail: { error: msg(e), history } });
+      await recordRun(db, { night, now, step, mode, status: "failed", kind, gemini: g.used.n, tavily: searches, detail: { error: msg(e), history } });
       throw e;
     }
     failures.push(msg(e));
@@ -240,12 +271,13 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
   if (!passed && draft) checks.proposedImages = draft.images ?? [];
   if (!passed) {
     if (draft) await storePost(db, postOf({ id: postId, kind, sheet, draft, images: [], supported, checks, night, ctx, requests: g.used.n, status: "dropped" }), { mode, publishAt: null, now });
-    await recordRun(db, { night, now, step: "draft", mode, status: "dropped", kind, postId: draft ? postId : null, gemini: g.used.n, tavily: searches, detail: { failures: failures.slice(0, 20) } });
+    await recordRun(db, { night, now, step, mode, status: "dropped", kind, postId: draft ? postId : null, gemini: g.used.n, tavily: searches, detail: { failures: failures.slice(0, 20) } });
     log(`dropped after ${history.length} round(s): ${failures.slice(0, 3).join("; ")}`);
-    return { status: "dropped", postId: draft ? postId : null, requests: g.used.n, failures };
+    return { status: "dropped", postId: draft ? postId : null, requests: g.used.n, searches, aiImages: 0, failures };
   }
 
   // Stage 7: images.
+  await phase("images");
   const body = assembleBody(draft);
   const img = await fillImages(draft.images ?? [], {
     sheet,
@@ -264,6 +296,8 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
       limits: aiLimits(ctx.content?.aiEnv ?? {}),
       store: ctx.content?.store ?? (async (key) => key),
       generate: g.generate,
+      // The post's own tags also count when matching approved library images, so the writer prefers ones that fit the post.
+      postTags: (draft.tags ?? []).map((t) => fill(t, sheet.facts)),
     },
   }).catch(async (e) => {
     if (e instanceof ContentBudgetError) return { images: [], dropped: (draft.images ?? []).map((i) => i.slot), requests: 0, aiImages: 0, pexels: 0, notes: [msg(e)], body };
@@ -271,13 +305,14 @@ export async function runDraft(ctx, gemini, { kind, night, budget }) {
   });
   checks.images = img.notes;
 
+  await phase("saving");
   // Stage 8: store (published at the next 08:00 Pacific in publish mode, else private).
   const publishAt = nextMorning(now);
   const post = postOf({ id: postId, kind, sheet, draft, body: img.body, images: img.images, supported, checks, night, ctx, requests: g.used.n });
   const stored = await storePost(db, post, { mode, publishAt, now });
-  await recordRun(db, { night, now, step: "draft", mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
+  await recordRun(db, { night, now, step, mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
   log(`${stored.status}${stored.capped ? " (held back by the weekly cap)" : ""} after ${history.length} round(s), ${g.used.n} request(s), ${img.images.length} image(s)`);
-  return { status: "ok", postId, stored: stored.status, requests: g.used.n };
+  return { status: "ok", postId, stored: stored.status, requests: g.used.n, searches, aiImages: img.aiImages };
 }
 
 /** The row storePost writes, from a draft (filled) and its checks. */
@@ -376,7 +411,7 @@ export async function contentSummaryConditions(db, { now, mode }) {
       return {};
     }
   };
-  const drafts = rows.filter((r) => r.step === "draft");
+  const drafts = rows.filter((r) => r.step === "draft" || r.step === "manual");
   const published = drafts.filter((r) => r.status === "ok" && parse(r.detail).stored === "published").length;
   const queued = drafts.filter((r) => r.status === "ok" && parse(r.detail).stored === "draft").length;
   const dropped = drafts.filter((r) => r.status === "dropped");

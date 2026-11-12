@@ -4,14 +4,26 @@
 // review (topic, tone, naming and voice on the finished draft).
 import { sheetForWriter } from "./writer.mjs";
 
+// Owner direction (2026-11-11): posts are about portfolios, never about
+// building PortfolioRank. No bug postmortems, build-in-public, running
+// costs, our stack, our pipeline or our model setup.
 export const TOPICS = [
-  "developer portfolios",
-  "hiring and the developer job market",
-  "developer careers and skills",
-  "PortfolioRank data and method",
-  "AI in hiring and developer work",
-  "Gemini model news for our judge",
+  "what people vote for and against in portfolios",
+  "what the AI grader rewards and penalizes",
+  "how portfolios change over time",
+  "portfolios worth seeing",
+  "trends across the leaderboard",
+  "portfolio and developer-hiring news with a practical angle",
 ];
+
+/** The topic each story kind is about (pipeline/content/facts.mjs BUILDERS). */
+export const KIND_TOPIC = {
+  "top-grades": TOPICS[1],
+  "vote-patterns": TOPICS[0],
+  "regrade-changes": TOPICS[2],
+  "leaderboard-movement": TOPICS[4],
+  "page-craft": TOPICS[1],
+};
 
 // Search and news results whose title or source matches are dropped before
 // Gemini sees them: politics, crime, disasters, named lawsuits, layoffs.
@@ -119,7 +131,8 @@ export const REVIEW_SCHEMA = {
 export function buildReviewRequest(sheet, filledPost) {
   const text = [
     "Review this finished blog post for PortfolioRank before it is published. Answer strictly.",
-    `- on_topic: it stays on these topics only: ${TOPICS.join("; ")}.`,
+    `- on_topic: it stays on these topics only: ${TOPICS.join("; ")}. A post about how PortfolioRank is built or run (its code, pipeline, stack, vendors, costs, quotas, bugs or models) is off topic.`,
+    "- Also a problem: any claim about PortfolioRank's own infrastructure or vendors, and any fact that is neither in the fact sheet nor followed by a cited source link.",
     "- positive: it is constructive and never mocks, shames or criticises a person or a company.",
     "- names_ok: every person or site it names appears in the names list below, and only for that positive reason; nobody is named next to a low score, a drop or a weakness.",
     "- voice_ok: plain, direct, first person plural, no hype, no em dashes, no exclamation marks, no invented facts beyond the fact sheet.",
