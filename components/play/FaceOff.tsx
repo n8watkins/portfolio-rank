@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Flame, RotateCcw, SkipForward, Star, Target, Undo2, Users, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Flame, RotateCcw, SkipForward, Star, Target, Undo2, Users, X } from "lucide-react";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
-import { ChecksSummary, DetailsPanel, GradeLine, PlayActions, Record, SiteLink } from "@/components/play/PlayCardParts";
-import type { PlayCard } from "@/lib/play/card";
+import { DetailsPanel, NameLine, PlayActions } from "@/components/play/PlayCardParts";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { INTRO_COOKIE } from "@/components/play/intro";
@@ -17,11 +16,12 @@ import { frameOf } from "@/lib/shot-url";
 // you'd hire from, then see how the crowd leans on the cards themselves.
 // Rounds of ten with "with the crowd" and a streak; practice votes for
 // guests until they sign in. ← and → pick, S or ↓ skips, Enter, N or → goes
-// on, D opens both Details panels. Each card shows the facts beside a smaller
-// screenshot; the scores (tier, "top N%", win rate, ELO) wait for the vote
-// unless "Show scores before voting" is on.
+// on, D opens both Details panels. The screenshots are the hero, with only
+// the name and link above; "About this portfolio" opens below a card, and
+// its AI grade, record and share card wait for the vote unless "Show scores
+// before voting" is on.
 
-type Entry = { name: string; url: string; tagline?: string; elo: number; votes: number; shot?: string | null; liked?: boolean; card?: PlayCard | null };
+type Entry = { name: string; url: string; tagline?: string; elo: number; votes: number; shot?: string | null; liked?: boolean };
 type Pair = { a: Entry; b: Entry; token: string };
 type Rater = { signedIn: boolean; login: string | null; anonVotesUsed: number | null; anonVoteLimit: number; stars: number };
 type Side = "a" | "b";
@@ -57,17 +57,17 @@ function Frame({ e }: { e: Entry }) {
         {domain}
       </span>
     );
+  // The desktop frame at every width: on a phone the two cards stack, each a
+  // landscape screenshot across the full width.
   return (
-    <picture>
-      <source media="(max-width: 767px)" srcSet={frameOf(e.shot, "mobile.jpg")} />
-      <img
-        src={frameOf(e.shot, "hero.jpg")}
-        alt={`Screenshot of ${domain}`}
-        fetchPriority="high"
-        onError={() => setFailed(true)}
-        className="h-full w-full bg-raised object-cover object-top"
-      />
-    </picture>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={frameOf(e.shot, "hero.jpg")}
+      alt={`Screenshot of ${domain}`}
+      fetchPriority="high"
+      onError={() => setFailed(true)}
+      className="h-full w-full bg-raised object-cover object-top"
+    />
   );
 }
 
@@ -399,9 +399,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
           </button>
         </div>
       ) : pair && shares ? (
-        // Cards first, then each side's Details: below its own card from md
-        // up, full width under the pair on a phone (the columns are narrow).
-        <div className="grid grid-cols-2 items-start gap-x-3 gap-y-3 sm:gap-x-5">
+        // The screenshots are the hero: side by side from md up, stacked on a phone.
+        <div className="grid grid-cols-1 items-start gap-3 sm:gap-5 md:grid-cols-2">
           {(["a", "b"] as const).map((side) => {
             const e = pair[side];
             const mine = pick === side;
@@ -410,10 +409,11 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
               <article
                 key={`${pair.token}-${side}`}
                 aria-label={e.name}
-                className={`card group/card relative flex min-w-0 flex-col overflow-hidden ${pick === null ? "deal-in" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
+                className={`card relative flex min-w-0 flex-col overflow-hidden ${pick === null ? "deal-in" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
                 style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
               >
-                <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                <NameLine name={e.name} url={e.url} className="border-b border-edge" />
+                <div className="relative">
                   <button
                     type="button"
                     onClick={() => vote(side)}
@@ -421,7 +421,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                     aria-label={`Pick ${e.name}`}
                     aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
                     aria-pressed={pick === null ? undefined : mine}
-                    className="group relative block aspect-[390/330] w-full overflow-hidden text-left focus-visible:-outline-offset-4 disabled:cursor-default md:aspect-[16/10] lg:border-r lg:border-edge"
+                    className="group relative block aspect-[16/9] w-full overflow-hidden text-left focus-visible:-outline-offset-4 disabled:cursor-default md:aspect-[16/10]"
                   >
                     <Frame e={e} />
                     {pick === null && (
@@ -431,31 +431,21 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                     )}
                     {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
                   </button>
-                  <div className="flex min-w-0 flex-col gap-2 p-2.5 sm:p-4">
-                    <div className="min-w-0">
-                      <h3 className="line-clamp-2 leading-snug font-semibold sm:truncate sm:text-lg">{e.name}</h3>
-                      {e.tagline && <p className="mt-0.5 line-clamp-2 text-xs text-mute sm:text-sm">{e.tagline}</p>}
-                      <SiteLink url={e.url} className="mt-0.5 max-w-full text-xs sm:text-sm" />
-                    </div>
-                    {e.card && e.card.roles.length > 0 && (
-                      <ul className="flex flex-wrap gap-1 max-sm:hidden" aria-label="Roles">
-                        {e.card.roles.map((r) => (
-                          <li key={r} className="rounded-md bg-raised px-1.5 py-0.5 text-[11px] font-medium text-mute">
-                            {r}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <GradeLine card={e.card ?? null} reveal={reveal} hint="After you pick" />
-                    <ChecksSummary card={e.card ?? null} dense />
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <Record card={e.card ?? null} reveal={reveal} />
-                      {reveal && <span className="text-xs text-mute tabular-nums">ELO {Math.round(e.elo)}</span>}
-                    </span>
-                  </div>
+                  {canStar && pick === null && (
+                    <button
+                      type="button"
+                      onClick={() => vote(side, true)}
+                      disabled={busy}
+                      aria-label={`Super-vote ${e.name}: spend a Superstar for double weight`}
+                      title="Spend a Superstar: double weight and a Most Loved star"
+                      className="absolute top-2 left-2 z-10 inline-flex h-9 items-center gap-1 rounded-full bg-black/55 px-3 text-xs font-bold text-white backdrop-blur transition hover:bg-fill hover:text-on-fill"
+                    >
+                      <Star className="h-3.5 w-3.5" aria-hidden /> Super
+                    </button>
+                  )}
                 </div>
-                <div className="mt-auto flex flex-col gap-2 border-t border-edge p-2.5 sm:p-3 lg:flex-row lg:items-center">
-                  <div className="min-w-0 lg:flex-1">
+                <div className="flex items-center gap-2 border-t border-edge p-2.5 sm:p-3">
+                  <div className="min-w-0 flex-1">
                     <PlayActions
                       url={e.url}
                       name={e.name}
@@ -473,7 +463,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                       disabled={busy}
                       tabIndex={-1}
                       aria-hidden
-                      className={`${btnSecondary} shrink-0 gap-2 border-accent/50 max-md:hidden`}
+                      className={`${btnSecondary} shrink-0 gap-2 border-accent/50 max-lg:hidden`}
                     >
                       {side === "a" && <kbd className={kbd}>←</kbd>}
                       Pick this one
@@ -481,53 +471,26 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                     </button>
                   )}
                 </div>
-                {canStar && pick === null && (
-                  <button
-                    type="button"
-                    onClick={() => vote(side, true)}
-                    disabled={busy}
-                    aria-label={`Super-vote ${e.name}: spend a Superstar for double weight`}
-                    title="Spend a Superstar: double weight and a Most Loved star"
-                    className="absolute top-2 left-2 z-10 inline-flex h-9 items-center gap-1 rounded-full bg-black/55 px-3 text-xs font-bold text-white backdrop-blur transition hover:bg-fill hover:text-on-fill"
-                  >
-                    <Star className="h-3.5 w-3.5" aria-hidden /> Super
-                  </button>
-                )}
+                {openSide[side] && <DetailsPanel id={`details-${side}`} url={e.url} name={e.name} reveal={reveal} />}
               </article>
             );
           })}
-          {(["a", "b"] as const).map((side) =>
-            openSide[side] ? (
-              <DetailsPanel
-                key={`${pair.token}-details-${side}`}
-                id={`details-${side}`}
-                url={pair[side].url}
-                name={pair[side].name}
-                reveal={reveal}
-                className={`col-span-2 md:col-span-1 ${side === "b" ? "md:col-start-2" : "md:col-start-1"}`}
-              />
-            ) : null
-          )}
         </div>
       ) : (
         // Skeleton in the cards' own shape, so nothing jumps when the pair arrives.
-        <div className="grid grid-cols-2 gap-3 sm:gap-5" aria-busy="true">
+        <div className="grid grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2" aria-busy="true">
           {[0, 1].map((k) => (
             <div key={k} aria-hidden className="card overflow-hidden">
-              <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                <div className="aspect-[390/330] w-full animate-pulse bg-raised md:aspect-[16/10]" />
-                <div className="grid content-start gap-2 p-2.5 sm:p-4">
-                  <div className="h-5 w-3/5 animate-pulse rounded bg-raised" />
-                  <div className="h-4 w-4/5 animate-pulse rounded bg-raised" />
-                  <div className="h-6 w-2/5 animate-pulse rounded bg-raised" />
-                  <div className="h-6 w-3/5 animate-pulse rounded bg-raised" />
-                </div>
+              <div className="flex h-[2.3rem] items-center border-b border-edge px-3 sm:px-4">
+                <div className="h-4 w-2/5 animate-pulse rounded bg-raised" />
               </div>
-              <div className="h-[6.4rem] border-t border-edge lg:h-[4.25rem]" />
+              <div className="aspect-[16/9] w-full animate-pulse bg-raised md:aspect-[16/10]" />
+              <div className="h-[4.1rem] border-t border-edge sm:h-[4.35rem]" />
             </div>
           ))}
         </div>
       )}
+
 
       {/* Results, errors and loading, announced without moving focus. */}
       <p role="status" aria-live="polite" className="sr-only">
@@ -545,7 +508,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
             {pick === null ? (
               <>
                 <button type="button" onClick={() => vote("a")} disabled={busy || !pair} aria-keyshortcuts="ArrowLeft" className={`${btnSecondary} flex-1 px-2 whitespace-nowrap md:hidden`}>
-                  <ArrowLeft className="h-4 w-4" aria-hidden /> Pick left
+                  <ArrowUp className="h-4 w-4" aria-hidden /> Pick top
                 </button>
                 <p className="hidden min-w-0 flex-1 px-2 text-sm text-mute md:block">
                   {note ? (
@@ -564,7 +527,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                   <SkipForward className="h-4 w-4" aria-hidden /> Skip
                 </button>
                 <button type="button" onClick={() => vote("b")} disabled={busy || !pair} aria-keyshortcuts="ArrowRight" className={`${btnSecondary} flex-1 px-2 whitespace-nowrap md:hidden`}>
-                  Pick right <ArrowRight className="h-4 w-4" aria-hidden />
+                  Pick bottom <ArrowDown className="h-4 w-4" aria-hidden />
                 </button>
               </>
             ) : (

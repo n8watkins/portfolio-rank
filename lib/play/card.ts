@@ -8,8 +8,8 @@ import { hiringGroups, placeIn } from "@/lib/grader/present.mjs";
 // manager's three questions as a one-word answer each, and its face-off
 // record. Public data only: nothing here depends on who is looking.
 //
-// Two shapes: `PlayCard` rides along with every face-off pair (/api/rank),
-// `PlayDetails` adds what the inline Details panel opens (/api/play/card).
+// Two shapes: `PlayCard` is the summary (the share card uses it),
+// `PlayDetails` adds what "About this portfolio" shows (/api/play/card).
 
 const PUBLIC_TIERS = new Set(["S", "A", "B"]);
 

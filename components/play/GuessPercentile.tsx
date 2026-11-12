@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Bot, Check, Merge, Share2, Shuffle, Swords, Target, Users, X } from "lucide-react";
 import { isModalOpen } from "@/components/Modal";
-import { DetailsPanel, PlayActions, SiteLink } from "@/components/play/PlayCardParts";
+import { DetailsPanel, NameLine, PlayActions } from "@/components/play/PlayCardParts";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
@@ -407,27 +407,22 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <div className="grid min-w-0 content-start gap-4 sm:gap-5">
-          <figure key={r.index} className="card deal-in flex flex-col overflow-hidden">
-            <div className="relative aspect-[390/260] w-full md:aspect-[16/7]">
+          {/* The screenshot is the hero: the name and link above, the actions and "About this portfolio" below. */}
+          <figure key={r.index} className="card deal-in flex min-w-0 flex-col self-start overflow-hidden">
+            <figcaption>
+              <NameLine name={r.name} url={r.url} className="border-b border-edge" />
+            </figcaption>
+            <div className="relative aspect-[16/10] w-full">
               {r.shot ? (
-                <picture>
-                  <source media="(max-width: 767px)" srcSet={frameOf(r.shot, "mobile.jpg")} />
-                  <img src={frameOf(r.shot, "hero.jpg")} alt={`Screenshot of ${r.domain}`} fetchPriority="high" className="absolute inset-0 h-full w-full bg-raised object-cover object-top" />
-                </picture>
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={frameOf(r.shot, "hero.jpg")} alt={`Screenshot of ${r.domain}`} fetchPriority="high" className="absolute inset-0 h-full w-full bg-raised object-cover object-top" />
               ) : (
                 <span role="img" aria-label={`No screenshot of ${r.domain}`} className="absolute inset-0 grid place-items-center bg-raised text-sm text-mute">
                   {r.domain}
                 </span>
               )}
             </div>
-            <figcaption className="grid gap-3 border-t border-edge p-3 sm:p-4">
-              <span className="min-w-0">
-                <span className="block truncate font-semibold sm:text-lg">{r.name}</span>
-                {r.tagline && <span className="block truncate text-sm text-mute">{r.tagline}</span>}
-                <SiteLink url={r.url} className="mt-0.5 max-w-full" />
-              </span>
-              {/* Details opens below; the grade, the AI's scores and the share card wait for the guess. */}
+            <div className="border-t border-edge p-2.5 sm:p-3">
               <PlayActions
                 url={r.url}
                 name={r.name}
@@ -436,12 +431,9 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                 onDetails={() => setDetailsOpen((o) => !o)}
                 onSaved={() => onBadgeCheck()}
               />
-            </figcaption>
+            </div>
+            {detailsOpen && <DetailsPanel id="guess-details" url={r.url} name={r.name} reveal={shown} after="you lock in your guess" />}
           </figure>
-          {detailsOpen && (
-            <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} name={r.name} reveal={shown} after="you lock in your guess" />
-          )}
-          </div>
 
           <section aria-label={shown ? "Result" : "Your guess"} className="card flex flex-col self-start p-5 sm:p-6 lg:sticky lg:top-20">
             {!shown || !last ? (
