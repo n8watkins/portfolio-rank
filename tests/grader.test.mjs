@@ -566,25 +566,55 @@ test("config: the grader ships off everywhere, the tick is scheduled in producti
   assert.match(workflow, /GEMINI_FALLBACK: "off"/);
 });
 
-test("Turnstile: skipped without a secret; with one, a token for another action or a failed check is refused", async () => {
-  const { verifyTurnstile } = await import("../lib/turnstile.ts");
-  const saved = process.env.TURNSTILE_SECRET_KEY;
+test("Turnstile: a deployed Worker without a usable secret refuses; local runs and test keys pass; hostname and action are checked", async () => {
+  const { verifyTurnstile, turnstileRequired, isDeployed } = await import("../lib/turnstile.ts");
+  const PROD = { NODE_ENV: "production", SITE_ENV: "production", AUTH_URL: "https://portfoliorank.n8builds.dev" };
+  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", AUTH_URL: "https://staging.portfoliorank.n8builds.dev" };
+  const LOCAL = { NODE_ENV: "production", SITE_ENV: "test" };
+  const TEST_SECRET = "1x0000000000000000000000000000000AA";
+  const answer = (body, secret = "turnstile-test-secret") => async (url, init) => {
+    assert.equal(String(url), "https://challenges.cloudflare.com/turnstile/v0/siteverify");
+    assert.equal(init.body.get("secret"), secret);
+    return new Response(JSON.stringify(body));
+  };
+  const never = async () => assert.fail("Siteverify must not be called");
+  const log = console.error;
+  console.error = () => {};
   try {
-    delete process.env.TURNSTILE_SECRET_KEY;
-    assert.equal(await verifyTurnstile(undefined, "", { action: "grade" }), "skipped");
-    process.env.TURNSTILE_SECRET_KEY = "turnstile-test-secret";
-    const answer = (body) => async (url, init) => {
-      assert.equal(String(url), "https://challenges.cloudflare.com/turnstile/v0/siteverify");
-      assert.equal(init.body.get("secret"), "turnstile-test-secret");
-      return new Response(JSON.stringify(body));
-    };
-    assert.equal(await verifyTurnstile(undefined, "", { action: "grade", fetchImpl: answer({ success: true }) }), "failed", "a missing token");
-    assert.equal(await verifyTurnstile("tok", "203.0.113.1", { action: "grade", fetchImpl: answer({ success: true, action: "grade" }) }), "ok");
-    assert.equal(await verifyTurnstile("tok", "", { action: "grade", fetchImpl: answer({ success: true, action: "poll-vote" }) }), "failed");
-    assert.equal(await verifyTurnstile("tok", "", { action: "grade", fetchImpl: answer({ success: false }) }), "failed");
-    assert.equal(await verifyTurnstile("tok", "", { action: "grade", fetchImpl: async () => { throw new Error("down"); } }), "failed", "fails closed");
+    // Production and staging refuse with no secret, and never call Siteverify.
+    assert.equal(await verifyTurnstile("tok", "", { action: "grade", env: PROD, fetchImpl: never }), "failed", "production, no secret");
+    assert.equal(await verifyTurnstile("tok", "", { action: "grade", env: STAGING, fetchImpl: never }), "failed", "staging, no secret");
+    assert.equal(await verifyTurnstile("tok", "", { action: "grade", env: { NODE_ENV: "production" }, fetchImpl: never }), "failed", "no SITE_ENV counts as deployed");
+    assert.equal(await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: TEST_SECRET }, fetchImpl: never }), "failed", "a test secret in production");
+    assert.equal(turnstileRequired(PROD), true);
+    // Local runs may skip it.
+    assert.equal(await verifyTurnstile(undefined, "", { action: "grade", env: LOCAL, fetchImpl: never }), "skipped");
+    assert.equal(await verifyTurnstile(undefined, "", { action: "grade", env: { NODE_ENV: "development", SITE_ENV: "production" }, fetchImpl: never }), "skipped", "next dev");
+    assert.equal(turnstileRequired(LOCAL), false);
+    assert.equal(isDeployed(LOCAL), false);
+    // Cloudflare's test keys pass locally (hostname example.com).
+    const local = { ...LOCAL, TURNSTILE_SECRET_KEY: TEST_SECRET };
+    assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: true, hostname: "example.com" }, TEST_SECRET) }), "ok");
+    assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: false }, TEST_SECRET) }), "failed");
+    // A real secret: token, action and hostname must all fit, in production and in staging.
+    for (const [env, host] of [[PROD, "portfoliorank.n8builds.dev"], [STAGING, "staging.portfoliorank.n8builds.dev"]]) {
+      const e = { ...env, TURNSTILE_SECRET_KEY: "turnstile-test-secret" };
+      const run = (token, body, fetchImpl = answer(body)) => verifyTurnstile(token, "203.0.113.1", { action: "grade", env: e, fetchImpl });
+      assert.equal(await run(undefined, { success: true }), "failed", "a missing token");
+      assert.equal(await run("tok", { success: true, action: "grade", hostname: host }), "ok", host);
+      assert.equal(await run("tok", { success: true, action: "poll-vote", hostname: host }), "failed", "another action");
+      assert.equal(await run("tok", { success: true, action: "grade", hostname: "localhost" }), "failed", "a localhost token");
+      assert.equal(await run("tok", { success: true, action: "grade", hostname: "evil.example" }), "failed", "another host");
+      assert.equal(await run("tok", { success: true, action: "grade" }), "failed", "no hostname");
+      assert.equal(await run("tok", { success: false }), "failed");
+      assert.equal(await run("tok", null, async () => { throw new Error("down"); }), "failed", "fails closed");
+    }
+    // The staging Worker's token does not pass on production.
+    assert.equal(
+      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.n8builds.dev" }) }),
+      "failed"
+    );
   } finally {
-    if (saved === undefined) delete process.env.TURNSTILE_SECRET_KEY;
-    else process.env.TURNSTILE_SECRET_KEY = saved;
+    console.error = log;
   }
 });

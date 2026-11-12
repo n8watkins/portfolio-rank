@@ -108,8 +108,8 @@
   // grades), GITHUB_DISPATCH_TOKEN (starts the nightly checks and the
   // grader's captures on GitHub Actions; a fine-grained token for
   // n8watkins/portfolio-rank with Actions read and write only) and
-  // TURNSTILE_SECRET_KEY (poll votes and grade requests; skipped without
-  // it). See DEPLOY.md.
+  // TURNSTILE_SECRET_KEY (poll votes and grade requests; both Workers
+  // refuse them without it). See DEPLOY.md.
   // The end-of-day run: Cloudflare's clock instead of GitHub's schedule,
   // which starts jobs hours late. Cron Triggers run in UTC; 03:30 is 20:30
   // in Los Angeles under daylight time and 04:30 under standard time, and

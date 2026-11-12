@@ -278,7 +278,7 @@ How it works is in [AUTOMATION.md](../AUTOMATION.md#grade-my-portfolio); the red
   A night writes 4 candidates in one 3.5 Flash-Lite request only when fewer than 2 future weeks have a poll; code validates them and picks the screenshots (sites graded S or A only), and when nothing is ready, code makes the week's poll without Gemini.
   Why: a weekly poll gathers enough votes to mean something, and the content budget stays almost untouched.
 - **Results are totals only; one vote per account and per browser** (agent, 2026-11-10). Status: built.
-  Vote rows exist only for the one-vote rule and are deleted 30 days after a poll closes; rate limits key on the browser and a hashed IP; Turnstile switches on with its secret.
+  Vote rows exist only for the one-vote rule and are deleted 30 days after a poll closes; rate limits key on the browser and a hashed IP; Turnstile is required on the deployed Workers (no secret means votes are refused); only local runs skip it.
   Why: the people who vote never asked to be on record, and a cookie alone is easy to clear.
 
 ## Content engine
