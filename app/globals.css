@@ -535,6 +535,46 @@
   body {
     padding: 0 !important;
   }
+  html,
+  body {
+    background: #ffffff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  main {
+    padding: 0 !important;
+  }
+
+  /* The grade report on paper (components/grade/Report.tsx): the screen
+     layout, a little smaller, so a typical report fits two pages of Letter
+     or A4. */
+  .grade-report {
+    font-size: 9.5pt;
+    line-height: 1.35;
+  }
+  .grade-report h1 {
+    font-size: 17pt;
+  }
+  .grade-report h2 {
+    font-size: 11pt;
+    break-after: avoid;
+  }
+  .grade-report .text-sm,
+  .grade-report .text-\[15px\] {
+    font-size: 9.5pt;
+  }
+  .grade-report .text-\[13px\],
+  .grade-report .text-xs {
+    font-size: 8.5pt;
+  }
+  .grade-report li,
+  .grade-report tr {
+    break-inside: avoid;
+  }
+  .grade-report a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 /* Attention without spinning: a dot with a soft ring that breathes. */
