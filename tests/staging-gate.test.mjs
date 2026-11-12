@@ -36,6 +36,13 @@ test("staging answers a plain 404 with no header or cookie", async () => {
   for (const path of ["/", "/leaderboard", "/api/x", "/robots.txt"]) await assertPlain404(await stagingGate(req(path), STAGING));
 });
 
+test("the manifest and its icons pass without a cookie (browsers fetch them without one); nothing else does", async () => {
+  for (const path of ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-maskable-512.png"]) assert.equal(await stagingGate(req(path), STAGING), null, path);
+  assert.equal(await stagingGate(req("/manifest.webmanifest", {}, "HEAD"), STAGING), null);
+  await assertPlain404(await stagingGate(req("/manifest.webmanifest", {}, "POST"), STAGING));
+  for (const path of ["/manifest.webmanifest/x", "/icons/../api/x", "/icons/a/b.png", "/icons/x.svg", "/manifest.json"]) await assertPlain404(await stagingGate(req(path), STAGING));
+});
+
 test("the right x-staging-gate header lets a request through; a wrong one does not", async () => {
   assert.equal(await stagingGate(req("/", { "x-staging-gate": KEY }), STAGING), null);
   await assertPlain404(await stagingGate(req("/", { "x-staging-gate": KEY + "x" }), STAGING));
