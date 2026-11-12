@@ -8,7 +8,7 @@ import { publicJob } from "@/lib/grader/view.mjs";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
-import { fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
+import { displayName, fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
 import { listedSite, type Job } from "@/lib/me";
 import { reportPath } from "@/lib/home";
 
@@ -85,8 +85,8 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   const [owned, emails] = await Promise.all([ownedJobs(), emailState(client, id)]);
   const job = publicJob(raw, { mine: owned.includes(id), emails }) as PageJob;
   const site = listedSite(String(raw.site_key));
-  const title = job.checks?.ok && typeof job.checks.title === "string" ? job.checks.title.replace(/\s+/g, " ").trim() : "";
-  const name = site?.name ?? (title && title.length <= 60 ? title : job.domain);
+  const title = job.checks?.ok && typeof job.checks.title === "string" ? job.checks.title : "";
+  const name = displayName({ listedName: site?.name, title, domain: job.domain });
   let hero = job.shots?.hero ?? null;
   if (!hero && site) {
     const shots = await shotBases([site.url]);
