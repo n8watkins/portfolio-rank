@@ -315,6 +315,8 @@ Owner request of 2026-11-12: the schedule is the owner's to change from `/admin/
 - **Fail closed:** when the settings can't be read (a missing table, a row that isn't valid JSON), the night writes nothing and the panel says why.
 - **Before the owner saves:** the config's schedule applies (Monday and Wednesday, `CONTENT_DRAFTS_PER_WEEK` drafts, for review while `CONTENT_MODE` allows any).
 - **Publishing automatically** keeps every limit: 2 published posts in any 7 days, the 08:00 Pacific slot, and a clean quality scorecard; a draft the scorecard flags is kept for review with the reason (`checks.publishHeld`).
+- **Drafts to keep ready** (owner, 2026-11-12; 0 to 5, 0 by default): while fewer drafts than this wait for review, any night from Monday to Saturday writes one more, beyond the drafts a week, so the owner always has a queue to read.
+  It keeps one draft a night and every cap (Gemini, Tavily's 50 a week, images); once the week's ideas were all tried, it writes from them again in turn.
 - **The topic queue:** at most 20 topics of at most 200 characters; the next scheduled draft takes the first one as its angle (the same `focus` as Write a draft now), and the week's pick still chooses the data it is written from; a used topic is marked with its post, and a dropped draft marks it dropped.
 - **API:** `GET` and `POST /api/admin/content/automation` (`{ op: "save", settings }`, `{ op: "add-topic", topic }`, `{ op: "remove-topic", id }`), admin only, POSTs with this site's Origin and a JSON body.
 

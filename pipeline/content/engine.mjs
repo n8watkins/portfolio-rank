@@ -43,7 +43,7 @@ import { fillImages } from "./images.mjs";
 import { aiLimits } from "../../lib/content/neurons.mjs";
 import { pexelsCap } from "../../lib/content/pexels-searches.mjs";
 import { OutlineError, STAGED_REQUESTS, stagedWrite } from "./staged.mjs";
-import { draftsDueBy, nextTopic, readAutomation, markTopicUsed } from "../../lib/content/automation.mjs";
+import { draftsDueBy, draftsWaiting, nextTopic, readAutomation, markTopicUsed } from "../../lib/content/automation.mjs";
 import { scorecard } from "./scorecard.mjs";
 import { linkPortfoliosToPages } from "../../lib/content/portfolio-links.mjs";
 
@@ -113,14 +113,17 @@ export async function contentJob(ctx, { done = [] } = {}) {
   const drafts = await runsOfWeek(ctx.db, week, "draft");
   const ok = drafts.filter((r) => r.status === "ok").length;
   const due = draftsDueBy(settings, weekday);
-  const draftTonight = !done.includes("draft") && ok < due && !drafts.some((r) => r.night === nightOf(ctx, now) && r.status !== "deferred");
+  const draftedTonight = drafts.some((r) => r.night === nightOf(ctx, now) && r.status !== "deferred");
+  // "Drafts to keep ready": any night but Sunday tops up the drafts waiting for review, one a night.
+  const topUp = (settings.keepReady ?? 0) > 0 && weekday !== PICK_NIGHT && ok >= due ? (await draftsWaiting(ctx.db)) < settings.keepReady : false;
+  const draftTonight = !done.includes("draft") && (ok < due || topUp) && !draftedTonight;
   const mode = settings.engineMode;
   if (!pick) {
     if (done.includes("pick")) return { job: null, reason: "no ideas picked this week" };
     if (weekday === PICK_NIGHT || draftTonight) return { job: { step: "pick" }, mode, reason: "the week's pick" };
     return { job: null, reason: "no pick yet; waiting for Sunday" };
   }
-  if (!draftTonight) return { job: null, reason: ok >= due ? `${ok} of ${due} draft(s) due this week done` : "a draft already ran tonight" };
+  if (!draftTonight) return { job: null, reason: draftedTonight || done.includes("draft") ? "a draft already ran tonight" : `${ok} of ${due} draft(s) due this week done${settings.keepReady ? `, and ${settings.keepReady} or more drafts are waiting` : ""}` };
   const tried = new Set(drafts.filter((r) => r.status !== "deferred").map((r) => r.kind));
   const order = [...(pick.detail.picks ?? []).map((p) => p.kind), ...(pick.detail.reserve ? [pick.detail.reserve.kind] : [])];
   const fresh = order.find((k) => !tried.has(k)) ?? null;
@@ -128,7 +131,8 @@ export async function contentJob(ctx, { done = [] } = {}) {
   // pick still chooses the data it is written from (a fresh idea first, else
   // the week's best one again, from the new angle).
   const topic = await nextTopic(ctx.db);
-  const kind = fresh ?? (topic && order.length ? order[0] : null);
+  // A queued topic, or a top-up once every idea was tried, writes again from the week's ideas in turn.
+  const kind = fresh ?? (!order.length ? null : topic ? order[0] : topUp ? order[tried.size % order.length] : null);
   if (!kind) return { job: null, reason: "every idea picked this week was tried" };
   return { job: { step: "draft", kind, ...(topic ? { topic } : {}) }, mode, reason: topic ? `draft ${kind} on the queued topic "${topic.topic}"` : `draft ${kind}` };
 }

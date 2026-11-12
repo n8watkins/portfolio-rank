@@ -795,16 +795,16 @@ test("automation: the owner's settings live in the database, inside the config's
   assert.match(validateAutomation({ enabled: true, mode: "review", days: [1], perWeek: 2 }, env).error, /at least 2 days/);
   assert.match(validateAutomation({ enabled: true, mode: "review", days: [1], perWeek: 1 }, { CONTENT_MODE: "off" }).error, /off/);
   assert.match(validateAutomation({ enabled: true, mode: "review", days: [], perWeek: 1 }, env).error, /at least one day/);
-  assert.deepEqual(validateAutomation({ enabled: true, mode: "review", days: [5, 2, 2, 0, 9], perWeek: 1 }, env).settings, { enabled: true, mode: "review", days: [2, 5], perWeek: 1 }, "Sunday and unknown days are dropped");
+  assert.deepEqual(validateAutomation({ enabled: true, mode: "review", days: [5, 2, 2, 0, 9], perWeek: 1 }, env).settings, { enabled: true, mode: "review", days: [2, 5], perWeek: 1, keepReady: 0 }, "Sunday and unknown days are dropped");
 
   const db = await fixture();
   const read = await readAutomation(db, env);
-  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, engineMode: "dry-run" }, "the config's schedule until the owner saves");
+  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, keepReady: 0, engineMode: "dry-run" }, "the config's schedule until the owner saves");
   assert.equal(read.saved, null);
   assert.ok((await saveAutomation(db, { enabled: true, mode: "publish", days: [2, 4], perWeek: 2 }, { env: { CONTENT_MODE: "publish" }, by: "owner" })).settings);
   // A later config lowers what was saved; it never raises it.
   const lowered = await readAutomation(db, { CONTENT_MODE: "dry-run", CONTENT_DRAFTS_PER_WEEK: "1" });
-  assert.deepEqual(lowered.settings, { enabled: true, mode: "review", days: [2, 4], perWeek: 1, engineMode: "dry-run" });
+  assert.deepEqual(lowered.settings, { enabled: true, mode: "review", days: [2, 4], perWeek: 1, keepReady: 0, engineMode: "dry-run" });
   assert.equal((await readAutomation(db, { CONTENT_MODE: "off" })).settings.engineMode, "off");
 });
 
@@ -836,6 +836,28 @@ test("automation: the chosen days drive the schedule, off writes nothing, and un
   await db.execute("ALTER TABLE content_settings RENAME TO content_settings_moved");
   assert.equal((await contentJob(tuesday)).job, null, "a missing table fails closed too");
   assert.ok(await removeTopic(db, added.topic.id));
+});
+
+test("automation: drafts to keep ready top up the review queue one a night, beyond the drafts a week", async () => {
+  const env = { CONTENT_MODE: "dry-run" };
+  assert.match(validateAutomation({ enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 6 }, env).error, /0 to 5/);
+  assert.equal(validateAutomation({ enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 3 }, env).settings.keepReady, 3);
+  const db = await fixture();
+  const g = fakeGemini({ pick: (n, parts) => ({ ideas: JSON.parse(parts[0].text.split("<ideas>\n")[1].split("\n</ideas>")[0]).map((i, k) => ({ kind: i.kind, interest: 9 - k, topic: "what the AI grader rewards and penalizes", tone: "positive" })) }) });
+  await runPick(contentCtx(db, { now: SUNDAY }).ctx, g, { night: "2026-11-15", budget: 20 });
+  // Tuesdays only, one a week, and 2 kept ready: Monday isn't a drafting night, but it tops up.
+  await saveAutomation(db, { enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 2 }, { env });
+  const monday = contentCtx(db, { now: MONDAY }).ctx;
+  assert.equal((await contentJob(monday)).job?.step, "draft");
+  // With 2 drafts waiting, no top-up.
+  for (const id of ["ee00000000000001", "ee00000000000002"]) await db.execute({ sql: "INSERT INTO posts (id, slug, kind, status, mode, title, ai_line, ai_note, body, facts, checks, images, claims, data_as_of, created_at, updated_at) VALUES (?, ?, 'top-grades', 'draft', 'dry-run', 't', 'a', 'n', 'b', '{}', '{}', '[]', '[]', ?, ?, ?)", args: [id, id, new Date(MONDAY).toISOString(), new Date(MONDAY).toISOString(), new Date(MONDAY).toISOString()] });
+  const r = await contentJob(monday);
+  assert.equal(r.job, null);
+  assert.match(r.reason, /2 or more drafts are waiting/);
+  // Off (0): only the drafting nights.
+  await db.execute("DELETE FROM posts");
+  await saveAutomation(db, { enabled: true, mode: "review", days: [2], perWeek: 1, keepReady: 0 }, { env });
+  assert.equal((await contentJob(monday)).job, null);
 });
 
 test("automation: the next run, in words", () => {
