@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Bot, Check, Merge, Share2, Shuffle, Swords, Target, Users, X } from "lucide-react";
 import { isModalOpen } from "@/components/Modal";
-import { DetailsPanel, NameLine, PlayActions } from "@/components/play/PlayCardParts";
+import { useSignIn } from "@/components/SignInModal";
+import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
@@ -18,11 +20,43 @@ import { frameOf } from "@/lib/shot-url";
 // friend. A percentile never reaches the page before its guess: the API
 // sends it only in the answer to that guess.
 
-type Round = { index: number; url: string; name: string; tagline: string | null; domain: string; path: string; shot: string | null };
-type Result = { index: number; guess: number; merged: number | null; ai: number | null; people: number | null; points: number; hit: boolean };
-type Progress = { results: Result[]; finished: boolean; score: number; hits: number };
-type Quiz = { id: string; kind: string; day: string | null; challenge: string; hit: number; rounds: Round[]; progress: Progress };
-type Eye = { crowd: { agree: number; of: number; pct: number | null }; ai: { agree: number; of: number; pct: number | null } };
+type Round = {
+  index: number;
+  url: string;
+  name: string;
+  tagline: string | null;
+  domain: string;
+  path: string;
+  shot: string | null;
+};
+type Result = {
+  index: number;
+  guess: number;
+  merged: number | null;
+  ai: number | null;
+  people: number | null;
+  points: number;
+  hit: boolean;
+};
+type Progress = {
+  results: Result[];
+  finished: boolean;
+  score: number;
+  hits: number;
+};
+type Quiz = {
+  id: string;
+  kind: string;
+  day: string | null;
+  challenge: string;
+  hit: number;
+  rounds: Round[];
+  progress: Progress;
+};
+type Eye = {
+  crowd: { agree: number; of: number; pct: number | null };
+  ai: { agree: number; of: number; pct: number | null };
+};
 
 // Evenly spaced over the whole scale (owner, 2026-11-11): each is the middle
 // of one fifth of the board, the same fifths a quiz draws its five sites from
@@ -32,7 +66,14 @@ const QUICK = [10, 30, 50, 70, 90];
 const NEAR = 25;
 const START = 50;
 
-const dayLabel = (day: string | null) => (day ? new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "");
+const dayLabel = (day: string | null) =>
+  day
+    ? new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      })
+    : "";
 const off = (r: Result) => (r.merged == null ? null : Math.abs(r.guess - r.merged));
 
 function verdict(d: number | null, hit: number) {
@@ -48,8 +89,6 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const [state, setState] = useState<"loading" | "ready" | "missing" | "empty" | "error">("loading");
   const [i, setI] = useState(0);
   const [guess, setGuess] = useState(START);
-  // The inline Details panel under the portfolio; each new portfolio starts closed.
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -57,6 +96,16 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const [final, setFinal] = useState<{ score: number; hits: number } | null>(null);
   const [eye, setEye] = useState<Eye | null>(null);
   const reduced = useReducedMotion();
+  const openSignIn = useSignIn();
+  // From lg up the details sit in the right column, under the guess.
+  const [wideGuess, setWideGuess] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia("(min-width: 1024px)");
+    const on = () => setWideGuess(m.matches);
+    on();
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
   const nextRef = useRef<HTMLButtonElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
   const [focusHead, setFocusHead] = useState(0);
@@ -66,7 +115,6 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
     setQuiz(q);
     setResults(done);
     setI(Math.min(done.length, q.rounds.length));
-    setDetailsOpen(false);
     setShown(false);
     setGuess(START);
     setFinal(q.progress.finished ? { score: q.progress.score, hits: q.progress.hits } : null);
@@ -86,7 +134,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
         setState("error");
       }
     },
-    [start]
+    [start],
   );
 
   useEffect(() => {
@@ -164,7 +212,6 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
     setShown(false);
     setGuess(START);
     setI((n) => n + 1);
-    setDetailsOpen(false);
     setFocusHead((n) => n + 1);
   }, []);
 
@@ -246,7 +293,15 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
             </div>
           </div>
         ) : state === "missing" ? (
-          <EmptyState icon={Target} title="That quiz link doesn't work." action={<button type="button" onClick={() => switchTo("daily")} className={btnPrimary}>Play today&apos;s Daily 5</button>}>
+          <EmptyState
+            icon={Target}
+            title="That quiz link doesn't work."
+            action={
+              <button type="button" onClick={() => switchTo("daily")} className={btnPrimary}>
+                Play today&apos;s Daily 5
+              </button>
+            }
+          >
             It may have been mistyped. Today&apos;s Daily 5 is ready.
           </EmptyState>
         ) : state === "empty" ? (
@@ -254,11 +309,23 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
             The quiz needs graded portfolios to guess. Try the face-off meanwhile.
           </EmptyState>
         ) : (
-          <EmptyState icon={Target} title="Couldn't load the quiz." action={<button type="button" onClick={() => open(quizId)} className={btnPrimary}>Retry</button>}>
+          <EmptyState
+            icon={Target}
+            title="Couldn't load the quiz."
+            action={
+              <button type="button" onClick={() => open(quizId)} className={btnPrimary}>
+                Retry
+              </button>
+            }
+          >
             Check your connection and try again.
           </EmptyState>
         )}
-        {note && <p role="status" className="mt-3 text-sm font-medium text-accent">{note}</p>}
+        {note && (
+          <p role="status" className="mt-3 text-sm font-medium text-accent">
+            {note}
+          </p>
+        )}
       </>
     );
   }
@@ -271,7 +338,11 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
     const link = typeof window === "undefined" ? quiz.challenge : `${window.location.origin}${quiz.challenge}`;
     const text = `I guessed ${hits} of ${n} within ${quiz.hit} points on PortfolioRank${daily ? ` (Daily 5, ${dayLabel(quiz.day)})` : ""}. Can you beat it? ${link}`;
     const shared = () => {
-      fetch("/api/badges", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "share" }) })
+      fetch("/api/badges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "share" }),
+      })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => d?.badges?.length && onBadgeCheck(true))
         .catch(() => {});
@@ -338,6 +409,28 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                 <CopyButton text={link} label="Challenge a friend" icon={Swords} buttonClass={btnSecondary} onCopied={shared} />
               </div>
               <p className="mt-3 text-xs text-mute">A friend who opens the challenge link gets the same five portfolios.</p>
+              <Link href="/top" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent underline-offset-4 hover:underline">
+                See the portfolios that did best <ArrowRight className="h-4 w-4" aria-hidden />
+              </Link>
+              {guest && (
+                <div className="mt-5 grid gap-2 rounded-xl border border-accent/40 bg-accent-soft p-4">
+                  <p className="text-sm">
+                    <strong>Sign in to save your votes and badges.</strong> This score and your badges move to your account, and you come back to this page.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openSignIn({
+                        title: "Save your votes and badges",
+                        body: "Sign in and this quiz, your votes and your badges stay with your account.",
+                      })
+                    }
+                    className={`${btnPrimary} justify-self-start`}
+                  >
+                    Sign in
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -377,7 +470,11 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                   Face-off instead
                 </a>
               </div>
-              {note && <p role="status" className="mt-3 text-sm font-medium text-accent">{note}</p>}
+              {note && (
+                <p role="status" className="mt-3 text-sm font-medium text-accent">
+                  {note}
+                </p>
+              )}
             </section>
           </div>
         </div>
@@ -410,9 +507,9 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
           {/* The screenshot is the hero: the name and link above, the actions and "About this portfolio" below. */}
           <figure key={r.index} className="card deal-in flex min-w-0 flex-col self-start overflow-hidden">
             <figcaption>
-              <NameLine name={r.name} url={r.url} className="border-b border-edge" />
+              <NameLine name={r.name} url={r.url} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
             </figcaption>
-            <div className="relative aspect-[16/10] w-full">
+            <div className="relative aspect-[16/10] w-full lg:aspect-[16/9]">
               {r.shot ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={frameOf(r.shot, "hero.jpg")} alt={`Screenshot of ${r.domain}`} fetchPriority="high" className="absolute inset-0 h-full w-full bg-raised object-cover object-top" />
@@ -422,110 +519,113 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                 </span>
               )}
             </div>
-            <div className="border-t border-edge p-2.5 sm:p-3">
-              <PlayActions
-                url={r.url}
-                name={r.name}
-                detailsId="guess-details"
-                open={detailsOpen}
-                onDetails={() => setDetailsOpen((o) => !o)}
-                onSaved={() => onBadgeCheck()}
-              />
-            </div>
-            {detailsOpen && <DetailsPanel id="guess-details" url={r.url} name={r.name} reveal={shown} after="you lock in your guess" />}
+            {/* Shown while guessing; the grade, the AI's scores and the share card's tier and result wait for Lock in. */}
+            {!wideGuess && <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} name={r.name} grade={shown} record={false} />}
           </figure>
 
-          <section aria-label={shown ? "Result" : "Your guess"} className="card flex flex-col self-start p-5 sm:p-6 lg:sticky lg:top-20">
-            {!shown || !last ? (
-              <>
-                <h3 className="text-lg font-bold tracking-tight">Where does it land?</h3>
-                <p className="mt-1 text-sm text-mute">Guess its place among every graded portfolio, as a top percentage. Visit the site first if you like.</p>
-                <p className="mt-5 text-center">
-                  <span className="text-xs tracking-wider text-mute uppercase">Your guess</span>
-                  <span className="block text-5xl font-bold tracking-tight tabular-nums">Top {guess}%</span>
-                </p>
-                <label htmlFor="guess" className="sr-only">
-                  Your guess, top 1 to 100 percent
-                </label>
-                <input
-                  id="guess"
-                  type="range"
-                  min={1}
-                  max={100}
-                  value={guess}
-                  onChange={(e) => setGuess(Number(e.target.value))}
-                  aria-valuetext={`Top ${guess} percent`}
-                  className="mt-4 h-2 w-full cursor-pointer accent-[var(--color-fill)]"
-                />
-                <div className="mt-1 flex justify-between text-xs text-mute tabular-nums" aria-hidden>
-                  <span>Top 1%</span>
-                  <span>Top 50%</span>
-                  <span>100%</span>
-                </div>
-                <div className="mt-4 grid grid-cols-5 gap-1.5" role="group" aria-label="Quick picks">
-                  {QUICK.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => setGuess(q)}
-                      aria-pressed={guess === q}
-                      className="card-hover h-11 rounded-lg border border-edge bg-card px-0.5 text-[11px] font-semibold whitespace-nowrap aria-pressed:border-accent aria-pressed:text-accent sm:h-10 sm:text-xs"
-                    >
-                      Top {q}%
-                    </button>
-                  ))}
-                </div>
-                <button type="button" onClick={submit} disabled={busy} className={`${btnPrimary} mt-5 h-12 text-[15px]`}>
-                  <Target className="icon-twinkle h-4 w-4" aria-hidden /> Lock in top {guess}%
-                </button>
-                <p className="mt-2 text-center text-xs text-mute">Within {quiz.hit} points is a hit; every guess scores at least 20.</p>
-                {note && <p role="status" className="mt-2 text-center text-sm font-medium text-accent">{note}</p>}
-              </>
-            ) : (
-              <>
-                <p role="status" className="pop-in flex items-baseline justify-between gap-3">
-                  <Burst on={last.hit}>
-                    <span className="text-xl font-bold tracking-tight">{verdict(d, quiz.hit)}</span>
-                  </Burst>
-                  <span className="text-sm tabular-nums">
-                    <Count v={last.points} k={i} prefix="+" className="text-2xl font-bold" /> <span className="text-mute">points</span>
-                    <span className="sr-only">
-                      . You said top {last.guess}%
-                      {last.merged != null ? `; it's top ${last.merged}% merged, ${d} ${d === 1 ? "point" : "points"} off.` : "; it has left the board, so this round isn't counted."}
-                    </span>
-                  </span>
-                </p>
-                {last.merged != null && <Meter guess={last.guess} actual={last.merged} />}
-                <p className="mt-2 text-sm text-mute" aria-hidden>
-                  {last.merged != null
-                    ? `You said top ${last.guess}%; it's top ${last.merged}% merged. ${d === 0 ? "Exactly right." : `${d} ${d === 1 ? "point" : "points"} off.`}`
-                    : "This portfolio has left the board since the quiz was made, so this round isn't counted."}
-                </p>
-                <ul className="mt-4 grid grid-cols-3 gap-2">
-                  {[
-                    { label: "Merged", Icon: Merge, v: last.merged },
-                    { label: "AI", Icon: Bot, v: last.ai },
-                    { label: "People", Icon: Users, v: last.people },
-                  ].map(({ label, Icon, v }) => (
-                    <li key={label} className="rounded-xl border border-edge bg-bg/40 px-3 py-2.5">
-                      <span className="flex items-center gap-1.5 text-xs text-mute">
-                        <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
-                      </span>
-                      <span className="mt-0.5 block text-base font-bold whitespace-nowrap tabular-nums sm:text-lg">{v != null ? `Top ${v}%` : <span className="text-mute">-</span>}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
-                  <button ref={nextRef} type="button" onClick={next} className={`${btnPrimary} h-12 flex-1 text-[15px]`}>
-                    {i === quiz.rounds.length - 1 ? "See your result" : "Next portfolio"} <ArrowRight className="nudge h-4 w-4" aria-hidden />
+          <div className="grid min-w-0 content-start gap-4 self-start sm:gap-5">
+            <section aria-label={shown ? "Result" : "Your guess"} className="card flex flex-col p-5 sm:p-6">
+              {!shown || !last ? (
+                <>
+                  <h3 className="text-lg font-bold tracking-tight">Where does it land?</h3>
+                  <p className="mt-1 text-sm text-mute">Guess its place among every graded portfolio, as a top percentage. Visit the site first if you like.</p>
+                  <p className="mt-5 text-center">
+                    <span className="text-xs tracking-wider text-mute uppercase">Your guess</span>
+                    <span className="block text-5xl font-bold tracking-tight tabular-nums">Top {guess}%</span>
+                  </p>
+                  <label htmlFor="guess" className="sr-only">
+                    Your guess, top 1 to 100 percent
+                  </label>
+                  <input
+                    id="guess"
+                    type="range"
+                    min={1}
+                    max={100}
+                    value={guess}
+                    onChange={(e) => setGuess(Number(e.target.value))}
+                    aria-valuetext={`Top ${guess} percent`}
+                    className="mt-4 h-2 w-full cursor-pointer accent-[var(--color-fill)]"
+                  />
+                  <div className="mt-1 flex justify-between text-xs text-mute tabular-nums" aria-hidden>
+                    <span>Top 1%</span>
+                    <span>Top 50%</span>
+                    <span>100%</span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-5 gap-1.5" role="group" aria-label="Quick picks">
+                    {QUICK.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setGuess(q)}
+                        aria-pressed={guess === q}
+                        className="card-hover h-11 rounded-lg border border-edge bg-card px-0.5 text-[11px] font-semibold whitespace-nowrap aria-pressed:border-accent aria-pressed:text-accent sm:h-10 sm:text-xs"
+                      >
+                        Top {q}%
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" onClick={submit} disabled={busy} className={`${btnPrimary} mt-5 h-12 text-[15px]`}>
+                    <Target className="icon-twinkle h-4 w-4" aria-hidden /> Lock in top {guess}%
                   </button>
-                  <a href={r.path} target="_blank" rel="noopener" className={`${btnSecondary} h-12`}>
-                    Report
-                  </a>
-                </div>
-              </>
+                  <p className="mt-2 text-center text-xs text-mute">Within {quiz.hit} points is a hit; every guess scores at least 20.</p>
+                  {note && (
+                    <p role="status" className="mt-2 text-center text-sm font-medium text-accent">
+                      {note}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p role="status" className="pop-in flex items-baseline justify-between gap-3">
+                    <Burst on={last.hit}>
+                      <span className="text-xl font-bold tracking-tight">{verdict(d, quiz.hit)}</span>
+                    </Burst>
+                    <span className="text-sm tabular-nums">
+                      <Count v={last.points} k={i} prefix="+" className="text-2xl font-bold" /> <span className="text-mute">points</span>
+                      <span className="sr-only">
+                        . You said top {last.guess}%
+                        {last.merged != null ? `; it's top ${last.merged}% merged, ${d} ${d === 1 ? "point" : "points"} off.` : "; it has left the board, so this round isn't counted."}
+                      </span>
+                    </span>
+                  </p>
+                  {last.merged != null && <Meter guess={last.guess} actual={last.merged} />}
+                  <p className="mt-2 text-sm text-mute" aria-hidden>
+                    {last.merged != null
+                      ? `You said top ${last.guess}%; it's top ${last.merged}% merged. ${d === 0 ? "Exactly right." : `${d} ${d === 1 ? "point" : "points"} off.`}`
+                      : "This portfolio has left the board since the quiz was made, so this round isn't counted."}
+                  </p>
+                  <ul className="mt-4 grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Merged", Icon: Merge, v: last.merged },
+                      { label: "AI", Icon: Bot, v: last.ai },
+                      { label: "People", Icon: Users, v: last.people },
+                    ].map(({ label, Icon, v }) => (
+                      <li key={label} className="rounded-xl border border-edge bg-bg/40 px-3 py-2.5">
+                        <span className="flex items-center gap-1.5 text-xs text-mute">
+                          <Icon className="h-3.5 w-3.5" aria-hidden /> {label}
+                        </span>
+                        <span className="mt-0.5 block text-base font-bold whitespace-nowrap tabular-nums sm:text-lg">{v != null ? `Top ${v}%` : <span className="text-mute">-</span>}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
+                    <button ref={nextRef} type="button" onClick={next} className={`${btnPrimary} h-12 flex-1 text-[15px]`}>
+                      {i === quiz.rounds.length - 1 ? "See your result" : "Next portfolio"} <ArrowRight className="nudge h-4 w-4" aria-hidden />
+                    </button>
+                    <a href={r.path} target="_blank" rel="noopener" className={`${btnSecondary} h-12`}>
+                      Report
+                    </a>
+                  </div>
+                </>
+              )}
+            </section>
+            {/* From lg up, "About this portfolio" fills the column under the guess. */}
+            {wideGuess && (
+              <div className="card overflow-hidden [&>div]:border-t-0">
+                <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} name={r.name} grade={shown} record={false} />
+              </div>
             )}
-          </section>
+          </div>
         </div>
       </div>
       {guest && i === 0 && !shown && <p className="mt-3 text-xs text-mute">Playing as a guest: sign in to keep your scores and badges.</p>}

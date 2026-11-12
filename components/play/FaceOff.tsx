@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Flame, RotateCcw, Star, Target, Undo2, Users, X } from "lucide-react";
+import { ArrowRight, Check, Flame, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
-import { DetailsPanel, NameLine, PlayActions } from "@/components/play/PlayCardParts";
+import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { INTRO_COOKIE } from "@/components/play/intro";
@@ -13,17 +15,34 @@ import { frameOf } from "@/lib/shot-url";
 
 // The face-off on the real votes (/api/rank): two portfolios, pick the one
 // you'd hire from, then see how the crowd leans on the cards themselves.
-// Rounds of five with "with the crowd" and a streak; practice votes for
-// guests until they sign in. Clicking a screenshot picks it; ← and → pick,
-// S or ↓ skips ("Can't decide, skip"), Enter, N or → goes on, D opens both
-// Details panels. The screenshots are the hero, with only the name and the
-// address above; "About this portfolio" opens below a card (beside it from
-// 1440 px up), and its AI grade, record and share card wait for the vote.
-// No portfolio is shown twice in a session (?seen=, kept in sessionStorage).
+// Rounds of five with "with the crowd" and a streak. Guests vote without
+// interruption (their votes are practice: logged, never counted, and up to
+// ANON_VOTE_LIMIT convert when they sign in); sign-in is offered at the end
+// of a round, and the round is kept in sessionStorage so a sign-in returns to
+// it. Clicking a screenshot or the centered Pick picks it; ← and → pick, S or
+// ↓ skips ("Can't decide, skip"), Enter, N or → goes on. "About this
+// portfolio" (share card, hiring basics, AI grade) is shown while deciding;
+// only the record (win rate) waits for the vote. No portfolio is shown twice
+// in a session (?seen=, kept in sessionStorage).
 
-type Entry = { id?: number; name: string; url: string; tagline?: string; elo: number; votes: number; shot?: string | null; liked?: boolean };
+type Entry = {
+  id?: number;
+  name: string;
+  url: string;
+  tagline?: string;
+  elo: number;
+  votes: number;
+  shot?: string | null;
+  liked?: boolean;
+};
 type Pair = { a: Entry; b: Entry; token: string };
-type Rater = { signedIn: boolean; login: string | null; anonVotesUsed: number | null; anonVoteLimit: number; stars: number };
+type Rater = {
+  signedIn: boolean;
+  login: string | null;
+  anonVotesUsed: number | null;
+  anonVoteLimit: number;
+  stars: number;
+};
 type Side = "a" | "b";
 
 const ROUND = 5;
@@ -45,6 +64,38 @@ function addSeen(ids: (number | undefined)[]) {
     sessionStorage.setItem(SEEN_KEY, JSON.stringify(next));
   } catch {
     /* storage off: repeats are possible, nothing breaks */
+  }
+}
+
+type RoundState = {
+  done: number;
+  agreed: number;
+  streak: number;
+  best: number;
+};
+const EMPTY_ROUND: RoundState = { done: 0, agreed: 0, streak: 0, best: 0 };
+const ROUND_KEY = "pr-faceoff-round";
+
+function readRound(): RoundState {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(ROUND_KEY) ?? "null");
+    if (v && [v.done, v.agreed, v.streak, v.best].every((x) => Number.isInteger(x) && x >= 0))
+      return {
+        done: Math.min(v.done, ROUND),
+        agreed: v.agreed,
+        streak: v.streak,
+        best: v.best,
+      };
+  } catch {
+    /* storage off */
+  }
+  return EMPTY_ROUND;
+}
+function writeRound(r: RoundState) {
+  try {
+    sessionStorage.setItem(ROUND_KEY, JSON.stringify(r));
+  } catch {
+    /* storage off: the round lives in memory only */
   }
 }
 
@@ -78,13 +129,14 @@ const domainOf = (url: string) => {
 const shareOf = (mine: number, theirs: number) => Math.round(100 / (1 + Math.pow(10, (theirs - mine) / 400)));
 
 const leanOf = (share: number) => (share > 50 ? "with" : share < 50 ? "under" : "even");
-const LEAN = { with: "With the crowd.", under: "You picked the underdog.", even: "A dead heat for the crowd." } as const;
+const LEAN = {
+  with: "With the crowd.",
+  under: "You picked the underdog.",
+  even: "A dead heat for the crowd.",
+} as const;
 
-function Frame({ e, tall }: { e: Entry; tall: boolean }) {
+function Frame({ e }: { e: Entry }) {
   const [failed, setFailed] = useState(false);
-  // A tall box (beside the details, 1440 px up) shows the top of the full-page
-  // capture rather than a cropped hero; without one it falls back to the hero.
-  const [noFull, setNoFull] = useState(false);
   const domain = domainOf(e.url);
   if (!e.shot || failed)
     return (
@@ -94,16 +146,9 @@ function Frame({ e, tall }: { e: Entry; tall: boolean }) {
     );
   // The desktop frame at every width: on a phone the two cards stack, each a
   // landscape screenshot across the full width.
-  const full = tall && !noFull;
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={frameOf(e.shot, full ? "full.jpg" : "hero.jpg")}
-      alt={`Screenshot of ${domain}`}
-      fetchPriority="high"
-      onError={() => (full ? setNoFull(true) : setFailed(true))}
-      className="h-full w-full bg-raised object-cover object-top"
-    />
+    <img src={frameOf(e.shot, "hero.jpg")} alt={`Screenshot of ${domain}`} fetchPriority="high" onError={() => setFailed(true)} className="h-full w-full bg-raised object-cover object-top" />
   );
 }
 
@@ -136,16 +181,26 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const [loadError, setLoadError] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [official, setOfficial] = useState(false);
-  const [done, setDone] = useState(0);
-  const [agreed, setAgreed] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [best, setBest] = useState(0);
+  // The round so far; kept in this tab's session so a reload or a sign-in
+  // comes back to the same round and position.
+  const [round, setRound] = useState<RoundState>(EMPTY_ROUND);
+  const { done, agreed, streak, best } = round;
+  useEffect(() => {
+    // Read once after hydration (sessionStorage is not on the server).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRound(readRound());
+  }, []);
+  const saveRound = useCallback((f: (r: RoundState) => RoundState) => {
+    setRound((r) => {
+      const next = f(r);
+      writeRound(next);
+      return next;
+    });
+  }, []);
   // A guest's practice intro, until they vote or dismiss it (drawn by the server: no shift).
   const [intro, setIntro] = useState(introAtFirst);
   // The widest screens show "About this portfolio" beside each screenshot.
   const wide = useWide();
-  // Which side's Details panel is open; a new pair starts closed.
-  const [openSide, setOpenSide] = useState({ a: false, b: false });
   const openSignIn = useSignIn();
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -157,17 +212,17 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const seq = useRef(0);
 
   const finished = done >= ROUND && pick === null;
-  const gated = rater !== null && !rater.signedIn && (rater.anonVotesUsed ?? 0) >= rater.anonVoteLimit;
-  const practiceLeft = rater && !rater.signedIn ? rater.anonVoteLimit - (rater.anonVotesUsed ?? 0) : null;
+  const guest = rater !== null && !rater.signedIn;
 
+  // Never a wall mid-play: sign-in is offered at the end of a round (and in
+  // the guest intro). After it, the page comes back here, to the same round.
   const signIn = useCallback(
-    (out: boolean) =>
-      openSignIn(
-        out
-          ? { title: "You're out of practice votes", body: "Sign in to keep voting. Your practice votes convert into official ones.", skipLabel: "Not now" }
-          : { title: "Make your votes count", body: "Sign in so your picks move the official rankings. Your practice votes convert when you do." }
-      ),
-    [openSignIn]
+    () =>
+      openSignIn({
+        title: "Save your votes and badges",
+        body: `Sign in and your votes count on the People board (up to ${rater?.anonVoteLimit ?? 10} from before you signed in), and your badges stay with you.`,
+      }),
+    [openSignIn, rater?.anonVoteLimit],
   );
 
   const load = useCallback(async () => {
@@ -200,7 +255,6 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     setLoadError(false);
     setPair({ a: data.a, b: data.b, token: data.token });
     addSeen([data.a.id, data.b.id]);
-    setOpenSide({ a: false, b: false });
     const r = data.rater;
     if (r) setRater(r);
     setPick(null);
@@ -220,18 +274,28 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
 
   const vote = useCallback(
     async (side: Side, star = false) => {
-      if (!pair || busy || pick || gated || finished) return;
+      if (!pair || busy || pick || finished) return;
       const other: Side = side === "a" ? "b" : "a";
       setBusy(true);
       setPick(side); // at once: the winner pops, the other dims
       setNote(null);
       let res: Response;
-      let data: { error?: string; official?: boolean; anonVotesUsed?: number | null; stars?: number };
+      let data: {
+        error?: string;
+        official?: boolean;
+        anonVotesUsed?: number | null;
+        stars?: number;
+      };
       try {
         res = await fetch("/api/rank", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ winner: pair[side].url, loser: pair[other].url, star, token: pair.token }),
+          body: JSON.stringify({
+            winner: pair[side].url,
+            loser: pair[other].url,
+            star,
+            token: pair.token,
+          }),
         });
         data = await res.json();
       } catch {
@@ -245,11 +309,6 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         setPick(null);
         setBusy(false);
       };
-      if (res.status === 403 && data.error === "signin_required") {
-        setRater((r) => (r ? { ...r, anonVotesUsed: r.anonVoteLimit } : r));
-        signIn(true);
-        return undoPick("You're out of practice votes.");
-      }
       if (res.status === 403 && data.error === "account_too_new") return undoPick("Votes from GitHub accounts this new don't count yet. Thanks for looking!");
       if ((res.status === 403 && data.error === "stale_matchup") || res.status === 409) {
         setNote(res.status === 409 ? "You already voted on this pair. Here's a fresh one." : "That pair expired. Here's a fresh one.");
@@ -263,28 +322,38 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       setOfficial(Boolean(data.official));
       const used = data.anonVotesUsed;
       const stars = data.stars;
-      setRater((r) => (r ? { ...r, ...(typeof used === "number" ? { anonVotesUsed: used } : {}), ...(typeof stars === "number" ? { stars } : {}) } : r));
+      setRater((r) =>
+        r
+          ? {
+              ...r,
+              ...(typeof used === "number" ? { anonVotesUsed: used } : {}),
+              ...(typeof stars === "number" ? { stars } : {}),
+            }
+          : r,
+      );
       setIntro(false);
       const lean = leanOf(shareOf(pair[side].elo, pair[other].elo));
-      setDone((d) => d + 1);
       // A dead heat is neither with nor against the crowd: the streak holds.
-      if (lean === "with") setAgreed((a) => a + 1);
-      if (lean !== "even") {
-        const s = lean === "with" ? streak + 1 : 0;
-        setStreak(s);
-        setBest((b) => Math.max(b, s));
-      }
+      saveRound((r) => {
+        const s = lean === "even" ? r.streak : lean === "with" ? r.streak + 1 : 0;
+        return {
+          done: r.done + 1,
+          agreed: r.agreed + (lean === "with" ? 1 : 0),
+          streak: s,
+          best: Math.max(r.best, s),
+        };
+      });
       setBusy(false);
       setCounted((c) => c + 1);
       onBadgeCheck();
     },
-    [pair, busy, pick, gated, finished, reduced, streak, signIn, load, onBadgeCheck]
+    [pair, busy, pick, finished, reduced, saveRound, load, onBadgeCheck],
   );
 
   const next = useCallback(() => {
     if (busy) return;
     setNote(null);
-    // The tenth vote ends the round: its summary first, a new pair after.
+    // The last vote ends the round: its summary first, a new pair after.
     if (done >= ROUND && pick !== null) setPick(null);
     else load();
   }, [busy, done, pick, load]);
@@ -303,11 +372,20 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         return;
       }
       setRater((r) =>
-        r ? { ...r, ...(typeof data.anonVotesUsed === "number" ? { anonVotesUsed: data.anonVotesUsed } : {}), ...(typeof data.stars === "number" ? { stars: data.stars } : {}) } : r
+        r
+          ? {
+              ...r,
+              ...(typeof data.anonVotesUsed === "number" ? { anonVotesUsed: data.anonVotesUsed } : {}),
+              ...(typeof data.stars === "number" ? { stars: data.stars } : {}),
+            }
+          : r,
       );
-      setDone((d) => Math.max(0, d - 1));
-      if (withCrowd) setAgreed((a) => Math.max(0, a - 1));
-      setStreak(0);
+      saveRound((r) => ({
+        ...r,
+        done: Math.max(0, r.done - 1),
+        agreed: Math.max(0, r.agreed - (withCrowd ? 1 : 0)),
+        streak: 0,
+      }));
       // A vote spends its pair, so the next pick is on a fresh one.
       setNote("Undid your last vote. Here's a fresh pair.");
       load();
@@ -315,13 +393,10 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       setNote("Undo failed. Try again.");
       setBusy(false);
     }
-  }, [pick, busy, pair, load]);
+  }, [pick, busy, pair, load, saveRound]);
 
   const again = () => {
-    setDone(0);
-    setAgreed(0);
-    setStreak(0);
-    setBest(0);
+    saveRound(() => EMPTY_ROUND);
     load();
   };
 
@@ -336,7 +411,6 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       else if (pick === null && key === "ArrowRight") vote("b");
       else if (pick === null && (key === "s" || key === "ArrowDown")) next();
       else if (pick !== null && (key === "ArrowRight" || key === "n" || (key === "Enter" && !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement)))) next();
-      else if (key === "d" && pair) setOpenSide((o) => (o.a && o.b ? { a: false, b: false } : { a: true, b: true }));
       else return;
       e.preventDefault();
     };
@@ -345,7 +419,6 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   }, [pick, vote, next, finished, pair]);
 
   const shares = pair ? { a: shareOf(pair.a.elo, pair.b.elo), b: shareOf(pair.b.elo, pair.a.elo) } : null;
-  const canStar = Boolean(rater?.signedIn && rater.stars > 0);
   const kbd = "inline-grid h-6 min-w-6 place-items-center rounded-md border border-edge px-1 text-[11px] font-semibold text-mute";
 
   return (
@@ -376,14 +449,14 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         </span>
       </div>
 
-      {intro && !rater?.signedIn && !gated && (
-        <div className="mb-3 flex items-start gap-3 rounded-xl border border-accent/40 bg-accent-soft p-3 text-sm">
+      {intro && guest && (
+        <div className="mb-3 flex items-start gap-3 rounded-xl border border-edge bg-raised p-3 text-sm">
           <p className="min-w-0 flex-1">
-            <strong>Pick the portfolio you&apos;d rather hire from.</strong> Your first {rater?.anonVoteLimit ?? 10} votes are practice: you see how others lean, and they count once you{" "}
-            <button type="button" onClick={() => signIn(false)} className="font-semibold text-accent underline underline-offset-2">
+            <strong>Pick the portfolio you&apos;d rather hire from.</strong> Vote as long as you like. Your votes count on the People board once you{" "}
+            <button type="button" onClick={signIn} className="font-semibold text-accent underline underline-offset-2">
               sign in
             </button>
-            .
+            , whenever suits you.
           </p>
           <button type="button" onClick={dismissIntro} aria-label="Dismiss" className="-m-2 grid h-10 w-10 shrink-0 place-items-center rounded-lg text-mute hover:text-ink">
             <X className="h-4 w-4" aria-hidden />
@@ -391,21 +464,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         </div>
       )}
 
-      {gated ? (
-        <section aria-labelledby="gated" className="card pop-in grid place-items-center gap-2 px-6 py-14 text-center">
-          <span className="icon-tile h-14 w-14">
-            <Target className="h-7 w-7" aria-hidden />
-          </span>
-          <h2 id="gated" className="mt-3 text-2xl font-bold tracking-tight">
-            You&apos;re out of practice votes
-          </h2>
-          <p className="max-w-md text-mute">Sign in to keep voting. Your {rater?.anonVoteLimit} practice votes convert into official ones, and everything after counts too.</p>
-          <button type="button" onClick={() => signIn(true)} className={`${btnPrimary} mt-4`}>
-            Sign in
-          </button>
-        </section>
-      ) : finished ? (
-        <section aria-labelledby="round-done" className="card pop-in grid place-items-center gap-2 px-6 py-14 text-center">
+      {finished ? (
+        <section aria-labelledby="round-done" className="card pop-in grid place-items-center gap-2 px-6 py-12 text-center">
           <span className="icon-tile h-14 w-14">
             <Target className="h-7 w-7" aria-hidden />
           </span>
@@ -419,12 +479,31 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
             <button type="button" onClick={again} autoFocus className={btnPrimary}>
               <RotateCcw className="h-4 w-4" aria-hidden /> Play another round
             </button>
-            {games && (
-              <a href="/play?mode=guess" className={btnSecondary}>
-                Try Guess the percentile
-              </a>
-            )}
+            <CopyButton
+              text={`I picked with the crowd ${agreed} of ${ROUND} times in PortfolioRank's face-off. Which portfolio would you hire from? ${typeof window === "undefined" ? "" : `${window.location.origin}/play`}`}
+              label="Share your result"
+              icon={Share2}
+              buttonClass={btnSecondary}
+            />
+            <Link href="/top" className={btnSecondary}>
+              <Trophy className="h-4 w-4" aria-hidden /> See the portfolios that did best
+            </Link>
           </div>
+          {guest && (
+            <div className="mt-5 grid max-w-md gap-2 rounded-xl border border-accent/40 bg-accent-soft p-4">
+              <p className="text-sm">
+                <strong>Sign in to save your votes and badges.</strong> Your votes then count on the People board, and you come back to this page.
+              </p>
+              <button type="button" onClick={signIn} className={`${btnPrimary} justify-self-center`}>
+                Sign in
+              </button>
+            </div>
+          )}
+          {games && (
+            <a href="/play?mode=guess" className="mt-3 text-sm font-semibold text-accent underline-offset-4 hover:underline">
+              Try Guess the percentile
+            </a>
+          )}
         </section>
       ) : loadError && !pair ? (
         <div role="alert" className="card grid place-items-center gap-2 px-6 py-14 text-center">
@@ -436,9 +515,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         </div>
       ) : pair && shares ? (
         // The screenshots are the hero: side by side from md up, stacked on a
-        // phone. From 1440 px up each card shows "About this portfolio" beside
-        // its screenshot; below that, Details opens it under the screenshot.
-        <div className="grid grid-cols-1 items-start gap-3 sm:gap-5 md:grid-cols-2">
+        // phone. "About this portfolio" is always shown: beside the screenshot
+        // from 1440 px up, below it on smaller screens.
+        <div className="grid grid-cols-1 items-stretch gap-3 sm:gap-5 md:grid-cols-2">
           {(["a", "b"] as const).map((side) => {
             const e = pair[side];
             const mine = pick === side;
@@ -450,57 +529,46 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 className={`card relative flex min-w-0 flex-col overflow-hidden transition-shadow ${pick === null ? "deal-in has-[.pick:hover]:ring-2 has-[.pick:hover]:ring-accent/70 has-[.pick:focus-visible]:ring-2 has-[.pick:focus-visible]:ring-accent" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
                 style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
               >
-                <NameLine name={e.name} url={e.url} className="border-b border-edge" />
-                <div className="min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                  <div className="relative min-[1440px]:min-h-72">
+                <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
+                {/* From 1440 px up: the screenshot with the share card under it on
+                    the left, the facts on the right. Below that, everything stacks
+                    under the screenshot. */}
+                <div className="flex-1 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                  <div className="min-w-0">
                     <button
                       type="button"
                       onClick={() => vote(side)}
                       disabled={pick !== null || busy}
-                      aria-label={`Pick ${e.name}`}
-                      aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
-                      aria-pressed={pick === null ? undefined : mine}
-                      className="pick group relative block aspect-[16/9] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-[16/10] min-[1440px]:absolute min-[1440px]:inset-0 min-[1440px]:aspect-auto min-[1440px]:h-full"
+                      tabIndex={-1}
+                      aria-hidden
+                      className="pick group relative block aspect-[16/9] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-[16/10]"
                     >
-                      <Frame e={e} tall={wide} />
-                      {pick === null && (
-                        <span className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/45 via-transparent to-transparent p-3 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                          <span className="inline-flex items-center gap-2 rounded-full bg-fill px-4 py-2 text-sm font-bold text-on-fill shadow-lg">
-                            <Check className="h-4 w-4" aria-hidden /> Pick {e.name.split(" ")[0]}
-                            <kbd className="hidden rounded border border-on-fill/30 px-1 text-[11px] md:inline">{side === "a" ? "←" : "→"}</kbd>
-                          </span>
-                        </span>
-                      )}
+                      <Frame e={e} />
+                      {pick === null && <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />}
                       {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
                     </button>
-                    {canStar && pick === null && (
-                      <button
-                        type="button"
-                        onClick={() => vote(side, true)}
-                        disabled={busy}
-                        aria-label={`Super-vote ${e.name}: spend a Superstar for double weight`}
-                        title="Spend a Superstar: double weight and a Most Loved star"
-                        className="absolute top-2 left-2 z-10 inline-flex h-9 items-center gap-1 rounded-full bg-black/55 px-3 text-xs font-bold text-white backdrop-blur transition hover:bg-fill hover:text-on-fill"
-                      >
-                        <Star className="h-3.5 w-3.5" aria-hidden /> Super
-                      </button>
-                    )}
+                    {wide && <DetailsPanel id={`share-${side}`} url={e.url} name={e.name} grade record={false} part="share" />}
                   </div>
-                  {wide && <DetailsPanel id={`details-${side}`} url={e.url} name={e.name} reveal={pick !== null} side />}
+                  <DetailsPanel id={`details-${side}`} url={e.url} name={e.name} grade record={pick !== null} part={wide ? "facts" : "all"} side={wide} />
                 </div>
-                <div className="border-t border-edge p-2.5 sm:p-3">
-                  <PlayActions
-                    url={e.url}
-                    name={e.name}
-                    liked={e.liked}
-                    detailsId={`details-${side}`}
-                    open={wide || openSide[side]}
-                    onDetails={() => setOpenSide((o) => ({ ...o, [side]: !o[side] }))}
-                    onSaved={() => onBadgeCheck()}
-                    detailsClassName="min-[1440px]:hidden"
-                  />
+                {/* The pick, centered under its card. */}
+                <div className="flex min-h-16 items-center justify-center border-t border-edge p-2.5 sm:p-3">
+                  {pick === null ? (
+                    <button
+                      type="button"
+                      onClick={() => vote(side)}
+                      disabled={busy}
+                      aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
+                      className={`${btnSecondary} pick min-w-48 border-accent/50 hover:border-accent`}
+                    >
+                      {side === "a" && <kbd className={`${kbd} max-md:hidden`}>←</kbd>}
+                      <Check className="h-4 w-4 text-accent" aria-hidden /> Pick {e.name.split(" ")[0]}
+                      {side === "b" && <kbd className={`${kbd} max-md:hidden`}>→</kbd>}
+                    </button>
+                  ) : (
+                    <p className="text-sm text-mute">{mine ? "Your pick" : " "}</p>
+                  )}
                 </div>
-                {!wide && openSide[side] && <DetailsPanel id={`details-${side}`} url={e.url} name={e.name} reveal={pick !== null} />}
               </article>
             );
           })}
@@ -529,7 +597,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       </p>
 
       {/* Right under the cards, centered where the eye already is; on a phone it stays above the tab bar. */}
-      {!finished && !gated && (pair || loadError) && (
+      {!finished && (pair || loadError) && (
         <div className="max-md:sticky max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 mt-3 flex min-h-14 flex-col items-center justify-center gap-1 text-center max-md:-mx-1 max-md:rounded-2xl max-md:border max-md:border-edge max-md:bg-card/92 max-md:p-2 max-md:shadow-[var(--card-hi),var(--card-drop)] max-md:backdrop-blur">
           {pick === null ? (
             <>
@@ -558,10 +626,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
           ) : (
             <>
               <p className="pop-in text-sm" aria-hidden>
-                <span className="font-semibold">{shares && LEAN[leanOf(shares[pick])]}</span>{" "}
-                <span className="text-mute">
-                  {official ? "Counted." : practiceLeft != null ? `Practice vote ${rater!.anonVoteLimit - practiceLeft} of ${rater!.anonVoteLimit}.` : "Practice vote."}
-                </span>
+                <span className="font-semibold">{shares && LEAN[leanOf(shares[pick])]}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
               </p>
               <div className="flex items-center gap-3">
                 <button ref={nextRef} type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N ArrowRight" className={`${btnPrimary} min-w-44 whitespace-nowrap`}>

@@ -1,19 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Check, ChevronDown, X } from "lucide-react";
+import { ArrowUpRight, Check, X } from "lucide-react";
 import { LikeButton } from "@/components/LikeButton";
 import { GitHubMark } from "@/components/ui/GitHubMark";
 import type { PlayDetails } from "@/lib/play/card";
 
 // The pieces the games draw around a portfolio (face-off and Guess the
-// percentile). The screenshot is the hero: above it only a slim line with
-// the name and the site's address (the visit link), below it Details and
-// Save, and "About this portfolio" in plain words, either opened below or
-// (on the widest screens) beside the screenshot. `reveal` false hides
-// whatever gives a grade away (the AI grade, the face-off record, the share
-// card and the full profile, which shows them): before a face-off vote, or
-// before a guess is locked in.
+// percentile). The screenshot is the hero: above it a slim line with the
+// name, the site's address (the visit link) and a small Save; with it,
+// always shown, "About this portfolio" in plain words, below the screenshot
+// or (from 1440 px up in the face-off) beside it.
 
 export const domainOf = (url: string) => {
   try {
@@ -23,12 +20,26 @@ export const domainOf = (url: string) => {
   }
 };
 
-/** The slim line above a screenshot: the name and the site, which opens in a new tab. */
-export function NameLine({ name, url, className = "" }: { name: string; url: string; className?: string }) {
+/**
+ * The slim line above a screenshot: the name, the site's address (the visit
+ * link) and a small Save: a heart that keeps the portfolio on your profile
+ * (the saves behind the portfolio page's "saved" count), never a vote.
+ */
+export function NameLine({ name, url, liked, onSaved, className = "" }: { name: string; url: string; liked?: boolean; onSaved?: () => void; className?: string }) {
   return (
-    <div className={`flex min-w-0 items-baseline gap-x-2 px-3 py-2 sm:px-4 ${className}`}>
+    <div className={`flex min-w-0 items-center gap-x-2 py-1.5 pr-1.5 pl-3 sm:pl-4 ${className}`}>
       <h3 className="min-w-0 shrink truncate font-semibold">{name}</h3>
       <SiteLink url={url} className="min-w-0 shrink-[2]" />
+      <div onClickCapture={onSaved} className="ml-auto shrink-0">
+        <LikeButton
+          url={url}
+          name={name}
+          variant="action"
+          verb="Save"
+          initialLiked={liked}
+          className="inline-flex h-9 min-w-11 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium text-mute transition hover:bg-raised hover:text-ink"
+        />
+      </div>
     </div>
   );
 }
@@ -52,56 +63,6 @@ export function SiteLink({ url, className = "" }: { url: string; className?: str
         </span>
       )}
     </a>
-  );
-}
-
-export const actionBtn =
-  "inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-edge bg-card px-3 text-sm font-semibold text-ink shadow-[var(--card-hi)] transition hover:border-edge-strong active:scale-[0.97] disabled:opacity-50";
-
-/**
- * Details (opens "About this portfolio" below; `details` false where it is
- * already beside the screenshot) and Save: a heart that keeps the portfolio
- * on your profile (the saves behind the portfolio page's "saved" count),
- * never a vote.
- */
-export function PlayActions({
-  url,
-  name,
-  liked,
-  detailsId,
-  open,
-  onDetails,
-  onSaved,
-  detailsClassName = "",
-}: {
-  url: string;
-  name: string;
-  liked?: boolean;
-  detailsId: string;
-  open: boolean;
-  onDetails: () => void;
-  /** After Save is pressed (a badge may follow). */
-  onSaved?: () => void;
-  /** Hides Details where the panel is always shown (the face-off on the widest screens). */
-  detailsClassName?: string;
-}) {
-  return (
-    <div className="flex gap-1.5">
-      <button
-        type="button"
-        data-details
-        onClick={onDetails}
-        aria-expanded={open}
-        aria-controls={detailsId}
-        className={`${actionBtn} flex-1 sm:flex-none ${open ? "border-accent/60 text-accent" : ""} ${detailsClassName}`}
-      >
-        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
-        <span>Details</span>
-      </button>
-      <div onClickCapture={onSaved} className="contents">
-        <LikeButton url={url} name={name} variant="action" verb="Save" initialLiked={liked} className={`${actionBtn} flex-1 sm:flex-none`} />
-      </div>
-    </div>
   );
 }
 
@@ -171,26 +132,42 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-/** "About this portfolio", loaded on first open; it sits below the card's actions. */
+/**
+ * "About this portfolio", always shown with the card: the share card, the
+ * hiring basics, the AI grade and (after a vote) the face-off record.
+ * - `grade` false (Guess the percentile before Lock in) hides the AI grade
+ *   and the full profile and shows the share card with the tier and the
+ *   result masked, since they give the answer away.
+ * - `record` false hides the win rate, so it can't steer a face-off vote.
+ * - `part` splits it for the widest face-off layout: "share" (the share card,
+ *   under the screenshot) and "facts" (everything else, beside it).
+ * - `side` is the look beside the screenshot rather than below it.
+ * Below the screenshot ("all"), the share card and the facts sit side by side
+ * when the card is wide enough (a container query), else stacked.
+ */
 export function DetailsPanel({
   id,
   url,
   name,
-  reveal,
-  after = "you vote",
+  grade,
+  record,
+  part = "all",
+  maskedNote = "The tier and result are hidden until you lock in your guess.",
   side = false,
   className = "",
 }: {
   id: string;
   url: string;
   name: string;
-  reveal: boolean;
-  /** When the hidden parts show: "you vote", "you lock in your guess". */
-  after?: string;
-  /** Beside the screenshot (the face-off on the widest screens) rather than below it. */
+  grade: boolean;
+  record: boolean;
+  part?: "all" | "share" | "facts";
+  maskedNote?: string;
   side?: boolean;
   className?: string;
 }) {
+  const showShare = part !== "facts";
+  const showFacts = part !== "share";
   const [d, setD] = useState<PlayDetails | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
@@ -204,113 +181,134 @@ export function DetailsPanel({
   const scores = d?.judgments.filter((j) => j.score != null) ?? [];
 
   return (
-    <div id={id} className={`${side ? "min-w-0 border-l border-edge p-4" : "details-in border-t border-edge bg-bg/40 p-3 sm:p-4"} ${className}`}>
-      <h4 className="font-semibold">About this portfolio</h4>
+    <div id={id} className={`@container ${side ? "min-w-0 border-l border-edge p-4" : part === "share" ? "border-t border-edge p-3 sm:p-4" : "border-t border-edge bg-bg/40 p-3 sm:p-4"} ${className}`}>
+      {showFacts && <h4 className="sr-only">About this portfolio</h4>}
       {d === undefined ? (
-        <div role="status" aria-label="Loading" className="mt-3 grid gap-2">
-          <div className="h-4 w-2/5 animate-pulse rounded bg-raised" />
-          <div className="h-16 animate-pulse rounded-lg bg-raised" />
+        <div role="status" aria-label="Loading details" className="grid gap-3">
+          {showShare && <div className="aspect-[1200/630] w-full max-w-sm animate-pulse rounded-lg bg-raised" />}
+          {showFacts && <div className="h-16 animate-pulse rounded-lg bg-raised" />}
         </div>
       ) : d === null ? (
-        <p role="alert" className="mt-2 text-sm text-mute">
-          Couldn&apos;t load this. Try again in a moment.
+        <p role="alert" className="text-sm text-mute">
+          Couldn&apos;t load the details. Try again in a moment.
         </p>
       ) : (
-        <div className="mt-3 grid gap-4">
-          <Group title="Hiring basics">
-            {d.groups.length ? (
-              <ul className="grid gap-1.5">
-                {d.groups.map((g) => {
-                  // Older grades have no measured checks: a neutral mark, not a tick.
-                  const unknown = g.missing.length === 0 && g.ok.length === 0;
-                  const ok = !unknown && g.missing.length === 0;
-                  return (
-                    <li key={g.key} className="flex gap-2 text-sm">
-                      <span
-                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                          unknown ? "border border-dashed border-edge-strong text-mute" : ok ? "bg-up/15 text-up" : "bg-accent-soft text-accent"
-                        }`}
-                      >
-                        {unknown ? <span aria-label="Not checked">?</span> : ok ? <Check className="h-3.5 w-3.5" aria-label="Yes" /> : <X className="h-3.5 w-3.5" aria-label="Not fully" />}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="font-medium">{BASICS[g.key] ?? g.title}</span> <span className="text-mute">{basicsLine(g)}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="text-sm text-mute">Not checked yet.</p>
-            )}
-          </Group>
+        <div className={`grid gap-4 ${part === "all" ? "@lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] @lg:items-start" : ""}`}>
+          {showShare && (
+            <Group title="Share card">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={grade ? d.shareImage : `${d.shareImage}?masked=1`}
+                alt={`Share card for ${name}`}
+                loading="lazy"
+                width={1200}
+                height={630}
+                className="aspect-[1200/630] w-full max-w-sm rounded-lg border border-edge bg-raised object-cover"
+              />
+              <p className="text-xs text-mute">{grade ? "The picture people see when this portfolio is shared." : maskedNote}</p>
+            </Group>
+          )}
 
-          {!reveal ? (
-            <p className="text-sm text-mute">The AI grade, this portfolio&apos;s record and its share card show after {after}.</p>
-          ) : (
-            <>
-              <Group title="AI grade">
-                {!d.graded ? (
-                  <p className="text-sm text-mute">Not graded yet.</p>
+          {showFacts && (
+            <div className="grid gap-4">
+              <Group title="Hiring basics">
+                {d.groups.length ? (
+                  <ul className="grid gap-1.5">
+                    {d.groups.map((g) => {
+                      // Older grades have no measured checks: a neutral mark, not a tick.
+                      const unknown = g.missing.length === 0 && g.ok.length === 0;
+                      const ok = !unknown && g.missing.length === 0;
+                      return (
+                        <li key={g.key} className="flex gap-2 text-sm">
+                          <span
+                            className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
+                              unknown ? "border border-dashed border-edge-strong text-mute" : ok ? "bg-up/15 text-up" : "bg-accent-soft text-accent"
+                            }`}
+                          >
+                            {unknown ? <span aria-label="Not checked">?</span> : ok ? <Check className="h-3.5 w-3.5" aria-label="Yes" /> : <X className="h-3.5 w-3.5" aria-label="Not fully" />}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="font-medium">{BASICS[g.key] ?? g.title}</span> <span className="text-mute">{basicsLine(g)}</span>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 ) : (
-                  <>
-                    <p className="text-sm">
-                      {d.tier ? (
-                        <>
-                          Tier <strong>{d.tier}</strong>
-                          {d.topPct != null && (
-                            <>
-                              , in the top <strong>{d.topPct}%</strong> of graded portfolios
-                            </>
-                          )}
-                          .
-                        </>
-                      ) : (
-                        "Graded, below the top tiers (only S, A and B are shown)."
-                      )}
-                    </p>
-                    {scores.length > 0 && (
-                      <>
-                        <p className="text-xs text-mute">An AI (Google Gemini) scored the page from 1 to 5 on five things a hiring manager notices.</p>
-                        <ul className={`grid gap-x-5 gap-y-1.5 ${side ? "" : "sm:grid-cols-2"}`}>
-                          {scores.map((j) => (
-                            <li key={j.id} title={j.note}>
-                              <span className="flex justify-between text-xs">
-                                <span>{PLAIN_SCORE[j.id] ?? j.label}</span>
-                                <span className="font-semibold tabular-nums">{j.score} of 5</span>
-                              </span>
-                              <span className="mt-1 block h-1.5 rounded-full bg-edge" aria-hidden>
-                                <span className="block h-full rounded-full bg-accent" style={{ width: `${((j.score ?? 0) / 5) * 100}%` }} />
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                  </>
+                  <p className="text-sm text-mute">Not checked yet.</p>
                 )}
               </Group>
-              <Group title="Record">
-                <p className="text-sm">
-                  {d.votes > 0 ? (
-                    <>
-                      In {d.votes} face-{d.votes === 1 ? "off" : "offs"}, people picked it <strong>{rate}%</strong> of the time.
-                    </>
+
+              {grade && (
+                <Group title="AI grade">
+                  {!d.graded ? (
+                    <p className="text-sm text-mute">Not graded yet.</p>
                   ) : (
-                    "No face-offs yet."
+                    <>
+                      <p className="text-sm">
+                        {d.tier ? (
+                          <>
+                            Tier <strong>{d.tier}</strong>
+                            {d.topPct != null && (
+                              <>
+                                , in the top <strong>{d.topPct}%</strong> of graded portfolios
+                              </>
+                            )}
+                            .
+                          </>
+                        ) : (
+                          "Graded, below the top tiers (only S, A and B are shown)."
+                        )}
+                      </p>
+                      {scores.length > 0 && (
+                        <>
+                          <p className="text-xs text-mute">An AI (Google Gemini) scored the page from 1 to 5 on five things a hiring manager notices.</p>
+                          <ul className={`grid gap-x-5 gap-y-1.5 ${side ? "" : "sm:grid-cols-2"}`}>
+                            {scores.map((j) => (
+                              <li key={j.id} title={j.note}>
+                                <span className="flex justify-between text-xs">
+                                  <span>{PLAIN_SCORE[j.id] ?? j.label}</span>
+                                  <span className="font-semibold tabular-nums">{j.score} of 5</span>
+                                </span>
+                                <span className="mt-1 block h-1.5 rounded-full bg-edge" aria-hidden>
+                                  <span
+                                    className="block h-full rounded-full bg-accent"
+                                    style={{
+                                      width: `${((j.score ?? 0) / 5) * 100}%`,
+                                    }}
+                                  />
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </>
                   )}
-                </p>
-              </Group>
-              <Group title="Share card">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={d.shareImage} alt={`Share card for ${name}`} loading="lazy" width={1200} height={630} className="aspect-[1200/630] w-full max-w-sm rounded-lg border border-edge bg-raised object-cover" />
-                <p className="text-xs text-mute">The picture people see when this portfolio is shared.</p>
-              </Group>
-              <a href={d.profile} target="_blank" rel="noopener" className="group inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent">
-                Full profile <ArrowUpRight className="h-4 w-4 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
-            </>
+                </Group>
+              )}
+
+              {record && (
+                <Group title="Record">
+                  <p className="text-sm">
+                    {d.votes > 0 ? (
+                      <>
+                        In {d.votes} face-{d.votes === 1 ? "off" : "offs"}, people picked it <strong>{rate}%</strong> of the time.
+                      </>
+                    ) : (
+                      "No face-offs yet."
+                    )}
+                  </p>
+                </Group>
+              )}
+
+              {grade && (
+                <a href={d.profile} target="_blank" rel="noopener" className="group inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent">
+                  Full profile <ArrowUpRight className="h-4 w-4 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
+            </div>
           )}
         </div>
       )}
