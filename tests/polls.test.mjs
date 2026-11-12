@@ -9,7 +9,7 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
-import { castVote, myVote, percents, pollResults, prunePolls, rateLimit, readPoll, readPolls } from "../lib/polls/store.mjs";
+import { castVote, myVote, myVotes, percents, pollResults, prunePolls, rateLimit, readGenerations, readPoll, readPolls, readSchedule } from "../lib/polls/store.mjs";
 import {
   EVERGREEN,
   HERO_QUESTION,
@@ -90,8 +90,19 @@ test("one vote per visitor: per account and per browser; totals only, never who 
   assert.equal((await castVote(db, { pollId: next.id, option: 0, voter: "anon:d", browser: "anon:d", now })).error, "not_found");
   assert.equal(await readPoll(db, next.id, { now }), null);
 
-  const { active, past } = await readPolls(db, { now });
+  const { active, past, upcoming } = await readPolls(db, { now });
   assert.equal(active.id, week.id);
+  // Upcoming polls are listed by question and week only: no options, so no sites, before they open.
+  assert.deepEqual(upcoming, [{ id: next.id, kind: "text", question: "Dark or light portfolio?", opensAt: next.opensAt.toISOString(), closesAt: next.closesAt.toISOString() }]);
+  assert.deepEqual((await readPolls(db, { now, upcoming: 0 })).upcoming, []);
+  // A visitor's own votes, by poll, matched on account or browser.
+  assert.deepEqual(await myVotes(db, { pollIds: [week.id, next.id], voter: "gh:2", browser: "anon:zzz" }), { [week.id]: 1 });
+  assert.deepEqual(await myVotes(db, { pollIds: [week.id], voter: "anon:new", browser: "anon:a" }), { [week.id]: 0 });
+  assert.deepEqual(await myVotes(db, { pollIds: [], voter: "gh:2", browser: "anon:a" }), {});
+  // The owner's schedule: this week and next, with options, upcoming flagged.
+  const schedule = await readSchedule(db, { now });
+  assert.deepEqual(schedule.map((p) => [p.id, p.upcoming, p.state, p.source, p.options.length]), [[week.id, false, "scheduled", "code", 2], [next.id, true, "scheduled", "code", 2]]);
+  assert.deepEqual(await readGenerations(db), []);
   assert.equal(active.status, "active");
   assert.equal(active.total, 2);
   assert.deepEqual(active.options.map((o) => [o.label, o.votes, o.percent]), [["Yes", 1, 50], ["No", 1, 50]]);
