@@ -8,6 +8,8 @@ import { pexelsCap, searchUsage } from "@/lib/content/pexels-searches.mjs";
 import { aiLimits, aiUsage } from "@/lib/content/neurons.mjs";
 import { librarySummary } from "@/lib/content/library.mjs";
 import { modelWatchSummary } from "@/pipeline/model-watch.mjs";
+import { freshnessSummary } from "@/lib/freshness.mjs";
+import { ACTIVE } from "@/pipeline/roster.mjs";
 
 // What the site spends of its free allowances, read once for both
 // GET /api/admin/quota (JSON) and the /admin/usage page: Gemini use by quota
@@ -16,7 +18,8 @@ import { modelWatchSummary } from "@/pipeline/model-watch.mjs";
 // items, the owner alerts that hold, people's queued requests and the
 // grader's waiting jobs, the weekly model watch, the monthly Tavily credits
 // and Pexels searches, today's AI images (and neurons) and the image
-// library's counts. Read-only; no metered call.
+// library's counts, and when checks re-ran (sites unchanged, changed this
+// week, re-measured today; lib/freshness.mjs). Read-only; no metered call.
 
 // A table that doesn't exist yet (no request logged, no night run) reads as empty.
 async function orEmpty<T>(read: () => Promise<T>, empty: T): Promise<T> {
@@ -39,7 +42,7 @@ export async function adminUsage({ days = 30, now = new Date() }: { days?: numbe
   const emptyUsage = { day: "", start: "", end: "", byModel: {}, byJob: {}, peopleLastHour: 0, peopleRecent: 0 };
   const tavilyCap = monthlyCap(process.env.TAVILY_MONTHLY_CREDITS);
   const pexelsMax = pexelsCap(process.env.PEXELS_MONTHLY_SEARCHES);
-  const [history, usage, nights, parked, alerts, peopleQueue, gradeJobs, modelWatch, tavily, pexels, aiImages, library] = await Promise.all([
+  const [history, usage, nights, parked, alerts, peopleQueue, gradeJobs, modelWatch, tavily, pexels, aiImages, library, freshness] = await Promise.all([
     orEmpty(() => usageHistory(client, { now, days, quota }), null),
     orEmpty(() => usageToday(client, { now, plan }), emptyUsage),
     orEmpty(() => recentNights(client, { limit: 14 }), []),
@@ -57,6 +60,8 @@ export async function adminUsage({ days = 30, now = new Date() }: { days?: numbe
     orEmpty(() => aiUsage(client, { limits: aiLimits(process.env), now }), null),
     // The image library: images by status and queue items left (/admin/images).
     orEmpty(() => librarySummary(client), null),
+    // When checks re-run (lib/freshness.mjs): sites unchanged, changed this week, re-measured today.
+    orEmpty(() => freshnessSummary(client, { now: now.getTime(), active: ACTIVE }), null),
   ]);
   return {
     timezone: QUOTA_TZ,
@@ -96,6 +101,8 @@ export async function adminUsage({ days = 30, now = new Date() }: { days?: numbe
     // problem names a rejected setting (Workers AI is off until it is fixed).
     aiImages,
     library,
+    // { unchanged, changedThisWeek, unchecked, checkedToday, remeasuredToday: { lighthouse, polish, screenshots, links, total } }
+    freshness,
   };
 }
 

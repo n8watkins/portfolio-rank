@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cached, peekCached, type CacheMeta } from "@/lib/cache";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
+import { CHECK_KINDS } from "@/lib/freshness.mjs";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
 // set PSI_API_KEY (free, no billing) for the 25k/day quota.
@@ -83,7 +84,8 @@ async function runPsi(target: string, strategy: Strategy): Promise<PsiResult> {
   return { ok: true, scores, metrics, weight };
 }
 
-const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
+// The maximum age of a result (lib/freshness.mjs; mobile and desktop alike).
+const PSI_TTL_MS = CHECK_KINDS.lighthouse.maxAgeMs;
 
 /**
  * PageSpeed strategies: mobile (the default, cached as psi:<url>, as before)
@@ -109,15 +111,19 @@ export async function GET(req: Request) {
   }
   // ?cached=1: only a result already stored, never a PageSpeed run
   // ("not_measured" otherwise); Play reads it first and measures on a miss.
+  // It says whether the result is due by the same rule, without a refresh.
   if (params.get("cached") === "1") {
-    const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS);
+    const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS, { isFailure: (d) => !d.ok, freshness: { kind: "lighthouse", url } });
     return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
   }
-  // A result stays fresh for 30 days; a failure (quota, timeout, a site that
-  // won't load) for an hour, so a broken site can't burn the quota by being
+  // When Lighthouse runs again (lib/freshness.mjs, AUTOMATION.md "When checks
+  // re-run"): a result is reused while the site is unchanged, and measured
+  // again when its change fingerprint moved, the admin pressed "Re-measure",
+  // or it is 90 days old. A failure (quota, timeout, a site that won't load)
+  // is retried after an hour, so a broken site can't burn the quota by being
   // asked again and again, and a good result is never replaced by a failure.
   // A miss takes the lease first: one PageSpeed run per site at a time, the
-  // other callers hear "in_progress" and retry. A stale result is served at
+  // other callers hear "in_progress" and retry. A due result is served at
   // once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
     NAMESPACE[strategy],
@@ -125,8 +131,9 @@ export async function GET(req: Request) {
     {
       ttlMs: PSI_TTL_MS,
       isFailure: (d) => !d.ok,
-      failureTtlMs: 3600 * 1000,
+      failureTtlMs: CHECK_KINDS.lighthouse.failureRetryMs,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
+      freshness: { kind: "lighthouse", url },
     },
     () => runPsi(url, strategy)
   );

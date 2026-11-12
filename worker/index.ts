@@ -22,6 +22,7 @@ import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { emailAlertsTick } from "./email-alerts";
+import { freshnessTick } from "./freshness";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -75,8 +76,9 @@ const worker = {
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
   // applies owners' held removals (./owner-removals.ts),
-  // finishes people's grade requests that waited for Gemini 3.5 and makes the
-  // image library's hourly batch (./library.ts); the weekly
+  // finishes people's grade requests that waited for Gemini 3.5, makes the
+  // image library's hourly batch (./library.ts) and checks a 168th of the
+  // list's change fingerprints (./freshness.ts); the weekly
   // one is model watch (./model-watch.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
@@ -86,6 +88,8 @@ const worker = {
       // An alert at 80% of any email cap (./email-alerts.ts).
       await emailAlertsTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
+      // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts).
+      await freshnessTick(controller.scheduledTime);
       // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }
