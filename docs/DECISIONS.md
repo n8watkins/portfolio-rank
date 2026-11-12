@@ -371,6 +371,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
 - **The image library** (owner, 2026-11-10). Status: built (#94).
   26 tech-first themes (the 13 of the style sample plus AI and agents, open source, remote work, interviews, side projects, accessibility, mobile, security, deployment and cloud, learning and growth, the job market, frontend frameworks, backend and data, freelancing) x 5 subjects = 130 images in the house style.
   The Worker's hourly tick makes up to 2 an hour (the AI Gateway's sliding limit), never from 20:00 to midnight Pacific so the night's post gets the hour, within the 40 AI images a day, one Gemini check each on the 16:9 crop; a pass is pending for the owner, a fail is rejected-auto and kept for the owner to see.
+  Owner, 2026-11-11: no more hourly batches; one automatic run a day at 23:15 UTC (`LIBRARY_RUN_HOUR_UTC`) takes whatever Make now left of the day's 40.
   The owner keeps or drops each on `/admin/images` (server-checked admin, CSRF-protected POSTs), which also lists the library with usage counts and a retire button; only approved images are used.
   Images live in the `SHOTS` bucket under `private/library/<SITE_ENV>/` and in `image_library` (schema version 9).
   The round-1 and round-2 samples were not imported (agent): the night makes the same subjects in the final style.
