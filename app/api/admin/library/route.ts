@@ -4,7 +4,7 @@ import { adminErrorStatus, requireAdmin, requireAdminPost } from "@/lib/admin";
 import { ACTIONS, decide, librarySummary, listImages } from "@/lib/content/library.mjs";
 
 // The image library's review (docs/CONTENT-ENGINE.md, "The image library"),
-// only for the GitHub login in ADMIN_GITHUB_LOGIN; the page is /admin/images.
+// only for the GitHub account in ADMIN_GITHUB_ID; the page is /admin/images.
 //   GET  /api/admin/library -> { summary, images }, newest first
 //   POST /api/admin/library { id, action: "keep" | "drop" | "retire" }
 //     -> { image }; 400 bad_request, 401, 403 (forbidden or bad_origin),

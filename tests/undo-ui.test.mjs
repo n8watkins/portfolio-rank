@@ -5,7 +5,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { sessionToken } from "./helpers/session.mjs";
 import { chromium } from "playwright";
 import feed from "../data/feed.json" with { type: "json" };
 
@@ -34,12 +34,7 @@ after(async () => {
 /** A fresh signed-in browser page with a controllable clock; native dialogs fail the test. */
 async function signedInPage({ width = 1280, height = 800 } = {}) {
   const id = String(800000000 + seq++);
-  const token = await encode({
-    token: { raterId: `gh:${id}`, login: `e2e-${id}`, sub: id },
-    secret: process.env.AUTH_SECRET,
-    salt: "authjs.session-token",
-    maxAge: 3600,
-  });
+  const token = await sessionToken({ id });
   const context = await browser.newContext({ viewport: { width, height } });
   await context.addCookies([{ name: "authjs.session-token", value: token, url: BASE }]);
   const page = await context.newPage();

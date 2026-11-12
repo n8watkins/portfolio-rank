@@ -143,7 +143,7 @@ Decisions only the owner can make, oldest first.
    Still open: should graded sites join the leaderboard only by an opt-in request the owner approves (question 8)?
 8. **Leaderboard requests**: since publishing is fully automatic, should "add me to the leaderboard" requests also be automatic, or wait for the owner?
 9. **Required checks**: add the Worker build and browser tests to the required checks on `main` (a GitHub setting).
-10. **Minimum GitHub account age for votes** (`MIN_GITHUB_ACCOUNT_AGE_DAYS`, off today) and a limit for anonymous visitors (Turnstile or a firewall rule).
+10. **Minimum GitHub account age for votes** (`MIN_GITHUB_ACCOUNT_AGE_DAYS`, 30 days since 2026-11-11, for votes, claims and owner actions) and a limit for anonymous visitors (Turnstile or a firewall rule).
 11. **When to turn on billing** for a paid Gemini key, and its daily cap.
 12. **A note to the community-list maintainer** about PortfolioRank mirroring and grading the list: send one, and from whom?
 13. **ELO-era AI votes**: they no longer run on a schedule (only `RANKING_V2` comparisons run in the background); should they continue until ranking v2 is switched on?

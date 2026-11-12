@@ -6,6 +6,7 @@ import { readAnonId } from "@/lib/matchup";
 import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, accountTooNew, getRater } from "@/lib/rater";
 import { mergeGuest } from "@/lib/games/merge.mjs";
 import { gamesEnabled } from "@/lib/games/server";
+import { sameOrigin } from "@/lib/polls/server";
 
 // Fold a visitor's practice votes into their signed-in identity: each becomes
 // an official human vote and moves ELO, except pairs they've already voted on
@@ -26,7 +27,8 @@ import { gamesEnabled } from "@/lib/games/server";
 // cookie is cleared at the end.
 // With GAMES_V2 on, the guest's quizzes, badges and badge counters move to
 // the account first (lib/games/merge.mjs).
-export async function POST() {
+export async function POST(req: Request) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   await ensureSchema();
   const rater = await getRater();
   if (rater.type !== "human") {

@@ -16,7 +16,7 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
   Optional: `GITHUB_API_TOKEN` (a fine-grained token with no permissions, public data only) raises the GitHub API rate limit for claims and the live stats.
   Without `GITHUB_DISPATCH_TOKEN` the nightly checks are not started from Cloudflare (one log line says so) and their GitHub schedule runs as the fallback.
   `SHOTS_BASE_URL` and `AUTH_URL` (the site's address) are plain variables in `wrangler.jsonc`; `lib/site.ts` holds the same address for canonical URLs, share links and the sitemap.
-  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_LOGIN`, `GRADER_ENABLED`, `GAMES_V2` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_ID` (the admin's numeric GitHub id), `MIN_GITHUB_ACCOUNT_AGE_DAYS`, `GRADER_ENABLED`, `GAMES_V2` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
 - **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
   Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
   Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.

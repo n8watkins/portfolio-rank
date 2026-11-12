@@ -9,7 +9,7 @@ import { contentMode, listPosts, recentRuns } from "@/lib/content/store.mjs";
 // unpublished posts, each with its Markdown body, fact sheet, checks,
 // images (source, licence, credit, review) and outside claims with their
 // sources, plus the latest content runs and the current CONTENT_MODE.
-// Read-only, and only for the GitHub login in ADMIN_GITHUB_LOGIN.
+// Read-only, and only for the GitHub account in ADMIN_GITHUB_ID.
 //   GET /api/admin/content[?status=draft|published|dropped|unpublished|all][&limit=20]
 export const dynamic = "force-dynamic";
 

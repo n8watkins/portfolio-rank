@@ -3,16 +3,18 @@ import { sameOrigin } from "@/lib/polls/server";
 
 /**
  * The signed-in admin's GitHub login, or why not: "signin_required" when no
- * one is signed in, "forbidden" for anyone whose login isn't
- * ADMIN_GITHUB_LOGIN (wrangler.jsonc vars; no admin at all when it's unset).
- * The login comes from the signed session cookie, so it can't be forged.
+ * one is signed in, "forbidden" for anyone whose GitHub account isn't
+ * ADMIN_GITHUB_ID (wrangler.jsonc vars; no admin at all when it's unset).
+ * The admin is matched by the account's numeric id (raterId gh:<id>), never
+ * by login: a login can be renamed and then registered by someone else, an
+ * id never changes hands. Both come from the signed session cookie.
  */
 export async function requireAdmin(): Promise<{ login: string } | { error: "signin_required" | "forbidden" }> {
   const session = await auth();
   const login = session?.login;
-  if (!login) return { error: "signin_required" };
-  const admin = (process.env.ADMIN_GITHUB_LOGIN ?? "").trim().toLowerCase();
-  if (!admin || login.toLowerCase() !== admin) return { error: "forbidden" };
+  if (!login || !session?.raterId) return { error: "signin_required" };
+  const admin = (process.env.ADMIN_GITHUB_ID ?? "").trim();
+  if (!/^\d{1,12}$/.test(admin) || session.raterId !== `gh:${admin}`) return { error: "forbidden" };
   return { login };
 }
 

@@ -5,6 +5,7 @@ import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
 import { ownerAction } from "@/lib/games/claims.mjs";
 import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } from "@/lib/games/server";
+import { accountTooNew, guardConfig } from "@/lib/rater";
 
 // What a verified owner can do with their portfolio (remove and hide always; regrade with GAMES_V2).
 // POST /api/owner/actions { url, action, confirm? }
@@ -16,7 +17,7 @@ import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } 
 //               one open request per site)
 //   200 { state: { hideGrade, removedAt }, regrade? }
 //   400 bad_request | bad_action | confirm_required, 401 signin_required,
-//   403 bad_origin | not_owner, 429 rate_limited
+//   403 bad_origin | not_owner | account_too_new, 429 rate_limited
 // Every action is written to the claims audit log.
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
@@ -26,6 +27,11 @@ export async function POST(req: Request) {
   if (!sameOrigin(req)) return fail("bad_origin", 403);
   const s = await auth();
   if (!s?.raterId?.startsWith("gh:")) return fail("signin_required", 401);
+  // A GitHub account younger than MIN_GITHUB_ACCOUNT_AGE_DAYS can't act as an
+  // owner (lib/rater.ts): throwaway accounts are what a stranger would use.
+  if (accountTooNew({ type: "human", accountCreatedAt: s.accountCreatedAt })) {
+    return NextResponse.json({ error: "account_too_new", minAccountAgeDays: guardConfig().minAccountAgeDays }, { status: 403, headers: PRIVATE });
+  }
   let body: { url?: unknown; action?: unknown; confirm?: unknown };
   try {
     body = await req.json();

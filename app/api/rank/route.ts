@@ -16,6 +16,7 @@ import {
 } from "@/lib/rater";
 import { MATCHUP_TTL_MS, issueMatchupToken, verifyMatchupToken } from "@/lib/matchup";
 import { starBalance } from "@/lib/stats";
+import { sameOrigin } from "@/lib/polls/server";
 import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
 
@@ -166,6 +167,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // Votes ride on the session cookie: only this site's pages may cast them.
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   const body = await req.json().catch(() => null);
   const winner = body?.winner;
   const loser = body?.loser;
