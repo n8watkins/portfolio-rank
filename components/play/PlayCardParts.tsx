@@ -135,6 +135,7 @@ const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, 
 function basicsLine(g: PlayDetails["groups"][number]) {
   const has = g.ok.map((f) => NOUN[f.id] ?? f.short.toLowerCase());
   const missing = g.missing.map((f) => `${MISSING[f.id] ?? `No ${f.short.toLowerCase()}`}.`);
+  if (missing.length === 0 && has.length === 0) return "Not checked on this page yet.";
   if (missing.length === 0) return `Yes: ${list(has)}.`;
   return [has.length ? `Has ${list(has)}.` : "", ...missing].filter(Boolean).join(" ");
 }
@@ -220,11 +221,17 @@ export function DetailsPanel({
             {d.groups.length ? (
               <ul className="grid gap-1.5">
                 {d.groups.map((g) => {
-                  const ok = g.missing.length === 0;
+                  // Older grades have no measured checks: a neutral mark, not a tick.
+                  const unknown = g.missing.length === 0 && g.ok.length === 0;
+                  const ok = !unknown && g.missing.length === 0;
                   return (
                     <li key={g.key} className="flex gap-2 text-sm">
-                      <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${ok ? "bg-up/15 text-up" : "bg-accent-soft text-accent"}`}>
-                        {ok ? <Check className="h-3.5 w-3.5" aria-label="Yes" /> : <X className="h-3.5 w-3.5" aria-label="Not fully" />}
+                      <span
+                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
+                          unknown ? "border border-dashed border-edge-strong text-mute" : ok ? "bg-up/15 text-up" : "bg-accent-soft text-accent"
+                        }`}
+                      >
+                        {unknown ? <span aria-label="Not checked">?</span> : ok ? <Check className="h-3.5 w-3.5" aria-label="Yes" /> : <X className="h-3.5 w-3.5" aria-label="Not fully" />}
                       </span>
                       <span className="min-w-0">
                         <span className="font-medium">{BASICS[g.key] ?? g.title}</span> <span className="text-mute">{basicsLine(g)}</span>
