@@ -310,6 +310,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   The engine writes drafts (`CONTENT_MODE` "dry-run" is the draft mode); the owner reads each one on `/admin/blog/[id]`, as readers would see it plus its checks, fact sheet, claims and image sources, and publishes or rejects it.
   Publish goes live at the draft's scheduled 08:00 Pacific while that is still ahead, else at once, and keeps the cap of 2 posts in any 7 days in the same write; Reject and Unpublish take an optional note; every decision is stored on the post (`checks.owner`) with who and when.
   A draft that fails its checks after two rounds is still dropped and never reaches the queue; the "publish" mode (automatic publishing) stays in the code, unused.
+  Draft mode is on in production since 2026-11-11 (owner); staging stays "off".
   Why: the posts appear in the owner's name, and a person reading each one is the strongest check while the engine is new.
 - **Fully automatic and fail-closed** (owner, 2026-11-10). Status: the review part is superseded by the decision above (2026-11-11); failing closed still holds.
   A draft that fails a check is revised automatically, and if it still fails after two rounds it is dropped, never published and never queued for the owner.
