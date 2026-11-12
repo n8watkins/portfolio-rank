@@ -1,5 +1,7 @@
 // Prewarm the PSI (Lighthouse) + inspect (polish) caches for graded S/A/B sites
-// by hitting the prod API endpoints, which cache results to Turso (shared with
+// whose results are due by the check rule (lib/freshness.mjs: never measured,
+// the site changed, the admin asked, or past the maximum age) by hitting the
+// prod API endpoints, which cache results to Turso (shared with
 // the pipeline). This is what makes the daily voting robot's metrics-enriched
 // comparisons actually have metrics; otherwise the cache is only filled lazily
 // by real visitors. Paced; safe to re-run (endpoints serve cache when fresh).
@@ -11,6 +13,7 @@ import { appendFileSync, existsSync, readFileSync } from "fs";
 import path from "path";
 import { runPrewarm } from "./lib/prewarm.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb, syncRoster } from "../pipeline/roster.mjs";
+import { ensureFreshnessSchema, lighthouseDue } from "../lib/freshness.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 if (existsSync(".env.local")) {
@@ -23,32 +26,20 @@ if (existsSync(".env.local")) {
 const PROD = process.env.PROD_BASE_URL || "https://portfoliorank.n8builds.dev";
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const LIMIT = limitArg ? Number(limitArg.split("=")[1]) : 150;
-// Same TTL as app/api/psi/route.ts: a PSI result younger than this is fresh.
-const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
 
 const db = pipelineDb(path.join(import.meta.dirname, ".."));
 await ensureRosterSchema(db);
+await ensureFreshnessSchema(db);
 // Only sites on the current list (data/feed.json) can be scored: rows that
 // left it are marked delisted and skipped.
 await syncRoster(db, feed);
 
 // Listed, not confirmed down, graded S/A/B (the voting robot's pool), and
-// without a fresh PSI result: never-measured sites first, then the oldest.
-const urls = (
-  await db.execute({
-    sql: `SELECT p.url FROM portfolios p
-          LEFT JOIN cache c ON c.k = 'psi:' || p.url
-          WHERE p.status = 'live' AND ${ACTIVE("p")}
-            AND json_valid(p.ai_rubric)
-            AND json_extract(p.ai_rubric, '$.tier') IN ('S', 'A', 'B')
-            AND (c.at IS NULL OR c.at < ?)
-          ORDER BY COALESCE(c.at, 0), p.url
-          LIMIT ?`,
-    args: [Date.now() - PSI_TTL_MS, LIMIT],
-  })
-).rows.map((r) => String(r.url));
+// with a Lighthouse or polish result that is due: never measured first, then
+// sites that changed or the admin re-measured, then the oldest.
+const urls = await lighthouseDue(db, { limit: LIMIT, active: ACTIVE });
 
-console.log(`prewarming PSI + inspect for ${urls.length} S/A/B site(s) without fresh metrics via ${PROD}`);
+console.log(`prewarming PSI + inspect for ${urls.length} S/A/B site(s) whose metrics are due via ${PROD}`);
 const { exitCode, summary, verdict } = await runPrewarm({
   urls,
   base: PROD,

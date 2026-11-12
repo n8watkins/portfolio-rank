@@ -4,6 +4,7 @@ import { rateLimit } from "@/lib/polls/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeGradeUrl } from "@/lib/grader/url.mjs";
 import { quickFacts } from "@/lib/grader/quick";
+import { listedSite } from "@/lib/me";
 import { createJob, countWaiting, readJob, regradeCheck } from "@/lib/grader/jobs.mjs";
 import { graderCaps, reserveCaps } from "@/lib/grader/caps.mjs";
 import { startCapture } from "@/lib/grader/dispatch.mjs";
@@ -75,8 +76,10 @@ export async function POST(req: Request) {
 
   if ((await verifyTurnstile(body.turnstileToken, who.ip, { action: "grade" })) === "failed") return fail("turnstile_failed", 403);
 
-  // The free checks, at once (cached per address for a day).
-  const quick = await quickFacts(client, { url: target.url, siteKey: target.siteKey, fetcher: graderFetcher(), now });
+  // The free checks, at once: the page is fetched again (its fingerprint is
+  // what the cooldown compares), its link checks reused while it is
+  // unchanged, a failure reused for 10 minutes (lib/grader/quick.ts).
+  const quick = await quickFacts(client, { url: target.url, siteKey: target.siteKey, fetcher: graderFetcher(), now, listedUrl: listedSite(target.siteKey)?.url ?? null });
   if (!quick.ok) {
     const { cached, ...checks } = quick;
     void cached;

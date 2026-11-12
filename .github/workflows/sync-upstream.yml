@@ -6,9 +6,12 @@ name: Sync upstream + ingest
 #      (trust gate = "Emma merged it"; open PRs are NOT pulled),
 #   2. if upstream actually changed, open (or refresh) one pull request with it
 #      and let it auto-merge once the required checks pass,
-#   3. screenshot whatever is new, re-capture the sites captured longest ago
-#      (--refresh), measure page text and facts for rows waiting for a grade,
-#      and record page fingerprint changes.
+#   3. screenshot whatever is new, re-capture the sites whose screenshots are
+#      due (--refresh: the page changed, someone asked, or 90 days old; see
+#      AUTOMATION.md "When checks re-run"), measure page text and facts for
+#      rows waiting for a grade, check again the project links that are due
+#      (--links: changed, asked for, or 30 days old), and record page
+#      fingerprint changes.
 # Cloudflare's end-of-day Workflow starts this at 20:30 Pacific and waits for
 # it, then grades new and changed sites on Cloudflare the same night
 # (pipeline/night.mjs). capture.mjs reads feed.json, marks database rows that
@@ -21,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       refresh:
-        description: "Sites to re-capture, captured longest ago first (finds redesigns)"
+        description: "Most sites to re-capture: changed or asked for first, then captures 90 days old (finds redesigns)"
         required: false
         default: "150"
       rubric_regrade:
@@ -202,17 +205,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Capture new portfolios, re-capture the oldest
+      - name: Capture new portfolios, re-capture the due ones
         env:
           REFRESH: ${{ inputs.refresh || '150' }}
         run: node pipeline/capture.mjs --concurrency 4 --refresh "$REFRESH"
       # Page text and facts for rows waiting for a grade that have none
       # (captured before rubric v2): the end-of-day grading on Cloudflare
-      # reads only stored evidence.
-      - name: Measure page evidence for the grading queue
+      # reads only stored evidence. Then the project link checks that are
+      # due (about 70 a night: the list over 30 days, plus changed sites).
+      - name: Measure page evidence for the grading queue, re-check due links
         env:
           RUBRIC_REGRADE: ${{ inputs.rubric_regrade || vars.RUBRIC_REGRADE || 'false' }}
-        run: node pipeline/evidence.mjs --limit 300
+        run: node pipeline/evidence.mjs --limit 300 --links 120
       # Fingerprint changes become "Grade changed sites" tonight.
       - name: Record page changes
         run: node scripts/detect-changes.mjs

@@ -1,12 +1,20 @@
 import { db, ensureSchema } from "./db";
 import { runInBackground } from "./background";
+import { decide, type CheckKind } from "./freshness.mjs";
+
+/** Why a stored result is being measured again (lib/freshness.mjs decide). */
+export type StaleReason = "changed" | "forced" | "max_age" | "failed";
 
 /** What every cached lookup returns on top of its own fields. */
 export type CacheMeta = {
   /** When this result was measured (ISO 8601). */
   measuredAt?: string;
-  /** True when the result is older than its TTL and a refresh is under way. */
+  /** True when the result is due again and a refresh is under way. */
   stale?: boolean;
+  /** With `stale`, why: the site changed, the admin asked, or it is past its maximum age. */
+  staleReason?: StaleReason;
+  /** When a later check found the site unchanged since this was measured (ISO 8601). */
+  unchangedSince?: string;
 };
 
 // Only one isolate refreshes a given key at a time: it takes a lease row in the
@@ -53,17 +61,68 @@ export type CacheOptions<T> = {
    * others get `busy()` at once.
    */
   leaseOnMiss?: { busy: () => T };
+  /**
+   * The site's change rule instead of a fixed TTL (lib/freshness.mjs): the
+   * result is reused while the page is unchanged, and due again when its
+   * fingerprint changed, the admin pressed "Re-measure", or it is older
+   * than the kind's maximum age; a failure keeps its short retry window.
+   */
+  freshness?: { kind: CheckKind; url: string };
 };
+
+type Entry<T> = { data: T; at: number; due: { run: boolean; reason: StaleReason | "missing" | null; unchangedSince: number | null } };
+
+/**
+ * The stored result for `k` and whether it is due again: by the site's
+ * change rule when `freshness` is given (one query reads the result and the
+ * site's fingerprint row together), else by age against `ttlOf`.
+ */
+export async function readEntry<T>(k: string, ttlOf: (data: T) => number, isFailure: (data: T) => boolean, freshness?: { kind: CheckKind; url: string }): Promise<Entry<T> | null> {
+  const row = freshness
+    ? (
+        await db().execute({
+          sql: `SELECT c.v, c.at, f.checked_at, f.changed_at, f.forced_at
+                FROM (SELECT ? AS k, ? AS u) q
+                LEFT JOIN cache c ON c.k = q.k
+                LEFT JOIN site_freshness f ON f.url = q.u`,
+          args: [k, freshness.url],
+        })
+      ).rows[0]
+    : (await db().execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [k] })).rows[0];
+  if (!row || row.v == null || row.v === "") return null;
+  const at = Number(row.at);
+  const data = JSON.parse(String(row.v)) as T;
+  if (freshness) {
+    const due = decide(freshness.kind, { result: { at, failed: isFailure(data) }, page: row });
+    return { data, at, due: due as Entry<T>["due"] };
+  }
+  const old = Date.now() - at >= ttlOf(data);
+  return { data, at, due: { run: old, reason: old ? (isFailure(data) ? "failed" : "max_age") : null, unchangedSince: null } };
+}
+
+/** The CacheMeta for a stored entry. */
+export function metaOf<T>(entry: Entry<T>): CacheMeta {
+  const meta: CacheMeta = { measuredAt: new Date(entry.at).toISOString() };
+  if (entry.due.run) {
+    meta.stale = true;
+    if (entry.due.reason && entry.due.reason !== "missing") meta.staleReason = entry.due.reason;
+  } else if (entry.due.unchangedSince != null) {
+    meta.unchangedSince = new Date(entry.due.unchangedSince).toISOString();
+  }
+  return meta;
+}
 
 /**
  * Read-through cache in the `cache` table (`<namespace>:<key>` → JSON, `at` =
  * when it was measured).
  *
- * - Fresh hit: returned as is.
- * - Stale hit (older than its TTL): returned at once with `stale: true`, and a
- *   refresh runs in the background (Workers `ctx.waitUntil`), at most one per
- *   key across isolates. A failed refresh keeps the old good result and is
- *   retried after the lease expires.
+ * - Fresh hit: returned as is (with `unchangedSince` when a fingerprint check
+ *   since found the site unchanged).
+ * - Due hit (older than its TTL, or by the site's change rule with
+ *   `freshness`): returned at once with `stale: true` and `staleReason`, and
+ *   a refresh runs in the background (Workers `ctx.waitUntil`), at most one
+ *   per key across isolates. A failed refresh keeps the old good result and
+ *   is retried after the lease expires.
  * - Miss: computed while the caller waits (concurrent misses in an isolate
  *   share one call; with `leaseOnMiss`, across isolates too).
  */
@@ -73,7 +132,7 @@ export async function cached<T extends object>(
   options: CacheOptions<T>,
   compute: () => Promise<T>
 ): Promise<T & CacheMeta> {
-  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss } = options;
+  const { ttlMs, isFailure = () => false, failureTtlMs = ttlMs, leaseOnMiss, freshness } = options;
   const ttlOf = (data: T) => (isFailure(data) ? failureTtlMs : ttlMs);
   await ensureSchema();
   const k = `${namespace}:${key}`;
@@ -109,16 +168,11 @@ export async function cached<T extends object>(
     await releaseLease(k);
   };
 
-  const row = (
-    await db().execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [k] })
-  ).rows[0];
-  if (!row) return once(k, fill);
+  const entry = await readEntry<T>(k, ttlOf, isFailure, freshness);
+  if (!entry) return once(k, fill);
+  const meta = metaOf(entry);
+  if (!entry.due.run) return { ...entry.data, ...meta };
 
-  const at = Number(row.at);
-  const data = JSON.parse(String(row.v)) as T;
-  const measuredAt = new Date(at).toISOString();
-  if (Date.now() - at < ttlOf(data)) return { ...data, measuredAt };
-
-  if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(data))));
-  return { ...data, measuredAt, stale: true };
+  if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(entry.data))));
+  return { ...entry.data, ...meta };
 }

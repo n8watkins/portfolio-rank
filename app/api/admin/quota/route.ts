@@ -10,6 +10,8 @@ import { pexelsCap, searchUsage } from "@/lib/content/pexels-searches.mjs";
 import { aiLimits, aiUsage } from "@/lib/content/neurons.mjs";
 import { librarySummary } from "@/lib/content/library.mjs";
 import { modelWatchSummary } from "@/pipeline/model-watch.mjs";
+import { freshnessSummary } from "@/lib/freshness.mjs";
+import { ACTIVE } from "@/pipeline/roster.mjs";
 
 // The admin quota view's data (no page yet; the redesign's admin page reads
 // it): Gemini use by job and model for today's quota day and the last 30,
@@ -17,7 +19,8 @@ import { modelWatchSummary } from "@/pipeline/model-watch.mjs";
 // end-of-day runs, the parked items, the owner alerts that hold, people's
 // queued requests, the weekly model watch's latest report, and the monthly
 // Tavily credits and Pexels searches, today's AI images (and neurons) and the
-// image library's counts. Read-only, and only for the GitHub account in
+// image library's counts, and the check freshness counts (sites unchanged,
+// changed this week, re-measured today). Read-only, and only for the GitHub account in
 // ADMIN_GITHUB_ID.
 //   GET /api/admin/quota[?days=30]
 export const dynamic = "force-dynamic";
@@ -46,7 +49,7 @@ export async function GET(req: Request) {
   const quota = dailyQuota(process.env.GEMINI_DAILY_QUOTA);
   const client = db();
   const emptyUsage = { day: "", start: "", end: "", byModel: {}, byJob: {}, peopleLastHour: 0, peopleRecent: 0 };
-  const [history, usage, nights, parked, alerts, peopleQueue, modelWatch, tavily, pexels, aiImages, library] = await Promise.all([
+  const [history, usage, nights, parked, alerts, peopleQueue, modelWatch, tavily, pexels, aiImages, library, freshness] = await Promise.all([
     orEmpty(() => usageHistory(client, { now, days, quota }), null),
     orEmpty(() => usageToday(client, { now, plan }), emptyUsage),
     orEmpty(() => recentNights(client, { limit: 14 }), []),
@@ -66,6 +69,8 @@ export async function GET(req: Request) {
     orEmpty(() => aiUsage(client, { limits: aiLimits(process.env), now }), null),
     // The image library: images by status and queue items left (/admin/images).
     orEmpty(() => librarySummary(client), null),
+    // When checks re-run (lib/freshness.mjs): sites unchanged, changed this week, re-measured today.
+    orEmpty(() => freshnessSummary(client, { now: now.getTime(), active: ACTIVE }), null),
   ]);
   return NextResponse.json(
     {
@@ -95,6 +100,8 @@ export async function GET(req: Request) {
       // problem names a rejected setting (Workers AI is off until it is fixed).
       aiImages,
       library,
+      // { unchanged, changedThisWeek, unchecked, checkedToday, remeasuredToday: { lighthouse, polish, screenshots, links, total } }
+      freshness,
     },
     { headers: PRIVATE }
   );

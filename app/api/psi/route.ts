@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cached, type CacheMeta } from "@/lib/cache";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
+import { CHECK_KINDS } from "@/lib/freshness.mjs";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
 // set PSI_API_KEY (free, no billing) for the 25k/day quota.
@@ -88,20 +89,24 @@ export async function GET(req: Request) {
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
-  // A result stays fresh for 30 days; a failure (quota, timeout, a site that
-  // won't load) for an hour, so a broken site can't burn the quota by being
+  // When Lighthouse runs again (lib/freshness.mjs, AUTOMATION.md "When checks
+  // re-run"): a result is reused while the site is unchanged, and measured
+  // again when its change fingerprint moved, the admin pressed "Re-measure",
+  // or it is 90 days old. A failure (quota, timeout, a site that won't load)
+  // is retried after an hour, so a broken site can't burn the quota by being
   // asked again and again, and a good result is never replaced by a failure.
   // A miss takes the lease first: one PageSpeed run per site at a time, the
-  // other callers hear "in_progress" and retry. A stale result is served at
+  // other callers hear "in_progress" and retry. A due result is served at
   // once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
     "psi",
     url,
     {
-      ttlMs: 30 * 24 * 3600 * 1000,
+      ttlMs: CHECK_KINDS.lighthouse.maxAgeMs,
       isFailure: (d) => !d.ok,
-      failureTtlMs: 3600 * 1000,
+      failureTtlMs: CHECK_KINDS.lighthouse.failureRetryMs,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
+      freshness: { kind: "lighthouse", url },
     },
     () => runPsi(url)
   );
