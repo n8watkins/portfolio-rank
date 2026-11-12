@@ -321,6 +321,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Pages are ISR with a 5-minute revalidate, like `/top`: anonymous visitors are served from the cache, and a post shows up within 5 minutes of its publish time, whether the owner published it or its scheduled time came.
   On-demand revalidation would need an OpenNext tag cache (none is configured, and a scheduled 08:00 publish has no request to trigger it), so time-based revalidation is the simpler, complete answer.
   Images are served by `/blog/media/<post id>/<slot>` from the post's own row (never a key from the address): public and cached for a day once the post is live, admin-only before.
+  The header, footer and phone More sheet show their Blog link only once a post is published (owner, 2026-11-11), from `GET /api/blog/live` (edge-cached 5 minutes); `/blog` itself is always reachable and shows an empty state until then.
   Why: the redesign's blog, in the same shell and tokens as home, `/top` and `/grading`.
 - **Positive by design** (owner, 2026-11-10, security review). Status: planned.
   Posts are about what the best developers are doing and how to fit the job market; topics and news are limited to careers, hiring and portfolios, and anything hostile or off-topic is skipped.

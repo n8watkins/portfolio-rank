@@ -10,7 +10,7 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { PUBLISH_CAP, storePost } from "../lib/content/store.mjs";
-import { getPost, getPublished, listPublished, publishTime, readingMinutes, review, reviewQueue, tagSlug, tagsOf } from "../lib/content/blog.mjs";
+import { getPost, getPublished, hasPublished, listPublished, publishTime, readingMinutes, review, reviewQueue, tagSlug, tagsOf } from "../lib/content/blog.mjs";
 
 async function freshDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "blog-"));
@@ -135,4 +135,15 @@ test("reject a draft; only the right status moves; unknown posts and actions", a
   assert.equal((await review(db, d.id, { action: "delete", by: "owner", now: NOW })).error, "bad_action");
   const q = await reviewQueue(db);
   assert.deepEqual([q.drafts.length, q.published.length, q.closed.length], [0, 0, 2]);
+});
+
+test("hasPublished: only a live post counts", async () => {
+  const db = await freshDb();
+  assert.equal(await hasPublished(db, { now: NOW }), false);
+  const d = post();
+  await put(db, d, { publishAt: NOW + 3600000 });
+  assert.equal(await hasPublished(db, { now: NOW }), false, "a draft doesn't count");
+  await review(db, d.id, { action: "publish", by: "owner", now: NOW });
+  assert.equal(await hasPublished(db, { now: NOW }), false, "scheduled, not yet live");
+  assert.equal(await hasPublished(db, { now: NOW + 7200000 }), true);
 });

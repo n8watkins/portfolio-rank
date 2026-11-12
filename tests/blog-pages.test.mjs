@@ -44,8 +44,11 @@ async function seed(status, { publishAt = Date.now() - 60000 } = {}) {
   return p;
 }
 
-test("a published post: the article, its AI note, sources, JSON-LD and images", async () => {
+test("a published post: the article, its AI note, sources, JSON-LD and images; the shell's Blog links turn on", async () => {
   const p = await seed("published");
+  const live = await fetch(`${BASE}/api/blog/live`);
+  assert.equal(live.status, 200);
+  assert.deepEqual(await live.json(), { live: true });
   const res = await fetch(`${BASE}/blog/${p.slug}`);
   assert.equal(res.status, 200);
   const html = await res.text();

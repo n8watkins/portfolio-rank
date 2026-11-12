@@ -3,13 +3,16 @@
 import { usePathname } from "next/navigation";
 import { Gamepad2 } from "lucide-react";
 import { NAV, navKeyFor } from "@/lib/nav";
+import { useBlogLive } from "@/components/shell/useBlogLive";
 
 /** The desktop header's destinations; the current one is underlined in amber. */
 export function HeaderNav() {
   const current = navKeyFor(usePathname() ?? "/");
+  // Blog is last, so it appears without moving the others.
+  const blogLive = useBlogLive();
   return (
     <nav aria-label="Main" className="hidden shrink-0 items-center gap-1 lg:flex">
-      {NAV.map((n) => (
+      {NAV.filter((n) => n.key !== "blog" || blogLive).map((n) => (
         <a
           key={n.key}
           href={n.href}

@@ -2,6 +2,7 @@ import { Coffee } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
 import { Wordmark } from "@/components/shell/Wordmark";
+import { BlogFooterLink } from "@/components/shell/useBlogLive";
 import { CONTRIBUTOR_COUNT_LABEL, PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
 
 type Link = { href: string | null; label: string; ext?: boolean };
@@ -86,7 +87,11 @@ export function SiteFooter() {
             <ul className="mt-3 grid grid-cols-1 gap-2 text-sm">
               {c.links
                 .filter((l): l is Link & { href: string } => l.href !== null)
-                .map((l) => (
+                .map((l) =>
+                  // Shown once a post is published (components/shell/useBlogLive.ts).
+                  l.href === ROUTES.blog ? (
+                    <BlogFooterLink key={l.label} href={l.href} className="inline-block py-0.5 text-ink/80 transition hover:text-ink" />
+                  ) : (
                   <li key={l.label}>
                     <a
                       href={l.href}
@@ -96,7 +101,8 @@ export function SiteFooter() {
                       {l.label}
                     </a>
                   </li>
-                ))}
+                  )
+                )}
             </ul>
           </nav>
         ))}
