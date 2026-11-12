@@ -60,7 +60,7 @@ const rubric = (tier, score, over = {}) => ({
   ...over,
 });
 
-// The tier by rank each fixture grade carries (lib/tiers.mjs; refreshTiers writes it as grade.rank): Gemini's S sites are the top 2%.
+// The tier by rank each fixture grade carries (lib/tiers.mjs; refreshTiers writes it as grade.rank): Gemini's S sites hold the top tier.
 const RANKED = { S: "SSS", A: "A", B: "B", C: "C", D: "D" };
 
 async function fixture({ motion = null } = {}) {
@@ -110,7 +110,7 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "graded SSS, the top 2%" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason === "graded SSS, one of the top 3" && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
   assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are graded A or higher").display, "50%");
   assert.equal(tg.charts.length, 1);
@@ -1097,7 +1097,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
     tldr: goodDraft(sheet).tldr,
     sections: [
       { subhead: "Top portfolios lead on most axes", intent: "the gap", fact_ids: [f("The biggest lead, in points on a 1 to 5 scale")] },
-      { subhead: "The first screen carries the most weight", intent: "first screen", fact_ids: [f("Portfolios graded SSS, the top tier (the top 2%)")] },
+      { subhead: "The first screen carries the most weight", intent: "first screen", fact_ids: [f("Portfolios graded SSS, the top tier (the top 3)")] },
       { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge")] },
     ],
     callout_fact_id: f("The biggest lead, in points on a 1 to 5 scale"),
@@ -1137,9 +1137,9 @@ test("staged writer: outline, two section requests, finish; then the same code c
   assert.equal(r.requests, STAGED_REQUESTS + 2);
   // A section sees only its own facts, never another section's.
   const first = g.calls[1].text;
-  assert.ok(first.includes("Portfolios graded SSS, the top tier (the top 2%)") && !first.includes("graded by the AI judge\""), "section 1 and 2 facts only");
+  assert.ok(first.includes("Portfolios graded SSS, the top tier (the top 3)") && !first.includes("graded by the AI judge\""), "section 1 and 2 facts only");
   const second = g.calls[2].text;
-  assert.ok(second.includes("Portfolios graded by the AI judge") && !second.includes("Portfolios graded SSS, the top tier (the top 2%)"));
+  assert.ok(second.includes("Portfolios graded by the AI judge") && !second.includes("Portfolios graded SSS, the top tier (the top 3)"));
   const [post] = await listPosts(db, { status: "draft" });
   assert.equal(post.checks.passed, true);
 });

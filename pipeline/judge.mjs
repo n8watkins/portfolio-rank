@@ -422,7 +422,7 @@ async function runRubric() {
         return false;
       }
       // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
-      await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, out.rubric)), "write");
+      await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, out.rubric, { url })), "write");
       if (regrade) regraded++;
       else ok++;
       console.log(

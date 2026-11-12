@@ -39,7 +39,7 @@ export const ACCEPT_MAX = 3;
 export const SITE_COOLDOWN_WEEKS = 12;
 /** Polls are scheduled at most this many weeks ahead. */
 export const MAX_WEEKS_AHEAD = 8;
-/** Only sites graded this well are ever shown in a poll: the top 20%, tiers by rank (lib/tiers.mjs). */
+/** Only sites graded this well are ever shown in a poll: the top 15%, tiers by rank (lib/tiers.mjs). */
 export const SHOWN_TIERS = TIERS.slice(0, TIERS.indexOf("A") + 1);
 
 export const TOPICS = [
