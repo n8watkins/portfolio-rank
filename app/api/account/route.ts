@@ -8,7 +8,7 @@ import { deleteGradeShots, keyed } from "@/lib/grader/server";
 
 // The signed-in account's own data (lib/account.mjs), self-serve from /settings.
 // GET    /api/account -> a JSON file of everything held about the account
-// DELETE /api/account { confirm: "<GitHub username>" } -> { deleted: { table: rows } }
+// DELETE /api/account { confirm: "<GitHub username or the email address>" } -> { deleted: { table: rows } }
 //        deletes it all in one transaction; the page then signs out
 //   401 signin_required, 403 bad_origin, 400 confirm_mismatch
 export const dynamic = "force-dynamic";
@@ -28,7 +28,7 @@ export async function GET() {
     headers: {
       ...PRIVATE,
       "content-type": "application/json; charset=utf-8",
-      "content-disposition": `attachment; filename="portfoliorank-${me.login ?? "account"}.json"`,
+      "content-disposition": `attachment; filename="portfoliorank-${me.id.startsWith("gh:") && me.login ? me.login.replace(/[^A-Za-z0-9-]/g, "") : "account"}.json"`,
     },
   });
 }

@@ -277,7 +277,7 @@ export function AccountMenu({ action }: { action: PrimaryAction | null }) {
         <div ref={menu} id="account-menu" role="menu" aria-label="Account" className={panel}>
           <div className="px-2.5 pb-2 pt-1.5">
             <p className="truncate text-sm font-semibold">{display}</p>
-            <p className="truncate text-xs text-mute">{session.email ?? `@${session.login}`}</p>
+            <p className="truncate text-xs text-mute">{session.provider === "email" ? "Signed in with email" : (session.email ?? `@${session.login}`)}</p>
           </div>
           {rule}
           {action && (

@@ -32,7 +32,13 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
   // The revalidation queue renders pages again by calling the worker itself.
-  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" },
+    // Sign-in links go through the shared mailroom (n8watkins/mailroom), app
+    // "portfoliorank": its caps there are 60 a day, 150 a month and 6 per
+    // address a day, with sign-in links kept a share of the day.
+    { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank" } }
+  ],
   // Email (grade reports, owner alerts) goes through Cloudflare Email Service
   // from EMAIL_FROM, an address on n8builds.dev, which is onboarded for
   // sending; every send passes the shared gate's caps (lib/email/gate.mjs).
@@ -179,7 +185,11 @@
         "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
       },
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
-      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" }],
+      "services": [
+        { "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" },
+        // The same mailroom app as production: staging's sign-in links count against PortfolioRank's share.
+        { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank" } }
+      ],
       "send_email": [{ "name": "SEND_EMAIL" }],
       "ai": { "binding": "AI" },
       "vars": {
