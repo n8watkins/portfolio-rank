@@ -16,7 +16,7 @@ import { capturePage } from "../pipeline/grade-capture.mjs";
 // Fake DNS: public.test is public, evil.test resolves to the metadata
 // service, mixed.test to one public and one private address.
 const lookup = async (host) => {
-  const table = { "public.test": ["93.184.216.34"], "evil.test": ["169.254.169.254"], "mixed.test": ["93.184.216.34", "10.0.0.7"], "v6.test": ["::1"] };
+  const table = { "public.test": ["93.184.216.34"], "evil.test": ["169.254.169.254"], "wire.test": ["168.63.129.16"], "mixed.test": ["93.184.216.34", "10.0.0.7"], "v6.test": ["::1"] };
   if (!table[host]) throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
   return table[host].map((address) => ({ address, family: address.includes(":") ? 6 : 4 }));
 };
@@ -46,6 +46,11 @@ after(() => site.close());
 test("DNS check: a name is public only when every address it resolves to is", async () => {
   assert.deepEqual(await resolvePublic("public.test", { lookup }), { ok: true, address: "93.184.216.34" });
   assert.equal((await resolvePublic("evil.test", { lookup })).ok, false);
+  // Azure's WireServer: public-range, but it reaches the runner's host.
+  assert.equal((await resolvePublic("wire.test", { lookup })).ok, false);
+  assert.equal((await resolvePublic("168.63.129.16", { lookup })).ok, false);
+  assert.equal((await resolvePublic("::ffff:168.63.129.16", { lookup })).ok, false);
+  assert.equal((await resolvePublic("168.63.129.17", { lookup })).ok, true, "only the WireServer, not its neighbours");
   assert.equal((await resolvePublic("mixed.test", { lookup })).ok, false);
   assert.equal((await resolvePublic("v6.test", { lookup })).ok, false);
   assert.equal((await resolvePublic("nowhere.test", { lookup })).ok, false);
@@ -72,6 +77,24 @@ test("guarded fetch: private hops, odd ports and redirects into the private netw
   await assert.rejects(f("http://127.0.0.1/"), /blocked/);
   await assert.rejects(f("file:///etc/passwd"), /blocked/);
   assert.deepEqual(seen, ["https://public.test/ok", "https://public.test/r", "https://public.test/r2"], "nothing private was ever requested");
+});
+
+test("guarded fetch: connects only to the address it checked, so DNS rebinding can't reach the runner", async () => {
+  // Local stand-ins: the site on 127.0.0.1 plays a public host; any other address is "private".
+  const allow = (a) => a === "127.0.0.1";
+  const ports = new Set([sitePort]);
+  const pinned = guardedFetch({ lookup: async () => [{ address: "127.0.0.1", family: 4 }], allow, ports });
+  const ok = await pinned(`http://pinned.test:${sitePort}/`);
+  assert.equal(ok.status, 200, "the connection used the checked address, not the system's DNS");
+  await ok.text();
+
+  // A rebinding name: the check sees the allowed address, the next answer is another.
+  let answers = 0;
+  const rebinding = async () => [{ address: answers++ === 0 ? "127.0.0.1" : "127.0.0.2", family: 4 }];
+  const before = hits;
+  await assert.rejects(guardedFetch({ lookup: rebinding, allow, ports })(`http://rebind.test:${sitePort}/secret`), /blocked: resolves to a private address/);
+  assert.equal(hits, before, "nothing was requested");
+  assert.ok(answers >= 2, "the connection resolved the name through the guard");
 });
 
 function connect(proxyPort, target) {

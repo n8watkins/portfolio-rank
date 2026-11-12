@@ -12,11 +12,13 @@
 //                         connection); only ports 80 and 443; WebSocket
 //                         upgrades refused; bytes counted against a cap
 //   guardedFetch          fetch for Node with redirects followed by hand,
-//                         every hop's address checked the same way
+//                         every hop's address checked the same way and
+//                         pinned for the connection (pinnedLookup)
 //   resolvePublic         the DNS check both use
 import dns from "node:dns/promises";
 import http from "node:http";
 import net from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
 import { isPublicHttpUrl, isPublicIp } from "../lib/net-guard.mjs";
 
 export const ALLOWED_PORTS = new Set([80, 443]);
@@ -145,21 +147,55 @@ export async function createFilteringProxy({ lookup = dns.lookup, allow = isPubl
 }
 
 /**
+ * A `lookup` for net.connect and tls.connect that answers only with an
+ * address resolvePublic checked, so the connection goes to the very address
+ * that passed (a DNS answer that changes between a check and the connection,
+ * "DNS rebinding", can't reach the runner's network). Fails with
+ * code EBLOCKED otherwise.
+ */
+export function pinnedLookup({ lookup = dns.lookup, allow = isPublicIp } = {}) {
+  return (hostname, options, callback) => {
+    resolvePublic(hostname, { lookup, allow }).then(
+      (r) => {
+        if (!r.ok) return callback(Object.assign(new Error(`blocked: ${r.reason}`), { code: "EBLOCKED" }));
+        const family = net.isIP(r.address);
+        if (options?.all) callback(null, [{ address: r.address, family }]);
+        else callback(null, r.address, family);
+      },
+      (e) => callback(e)
+    );
+  };
+}
+
+/**
  * fetch for Node that refuses private addresses: redirects are followed by
  * hand, each hop must be http(s) on port 80 or 443 and resolve to public
- * addresses only. Throws "blocked: ..." for a refused hop. (Node's fetch
- * resolves the name again when it connects; the browser's traffic, which a
- * page fully controls, goes through createFilteringProxy, which pins the
- * checked address.)
+ * addresses only. Throws "blocked: ..." for a refused hop. Every connection
+ * resolves its name through pinnedLookup (an undici Agent's connect
+ * lookup), so it connects only to an address that passed the check, like
+ * createFilteringProxy does for the browser's traffic. A test may pass its
+ * own fetchImpl (no connections) or ports.
  */
-export function guardedFetch({ lookup = dns.lookup, allow = isPublicIp, fetchImpl = globalThis.fetch, maxHops = 5 } = {}) {
+export function guardedFetch({ lookup = dns.lookup, allow = isPublicIp, fetchImpl, ports = ALLOWED_PORTS, maxHops = 5 } = {}) {
+  if (!fetchImpl) {
+    const dispatcher = new Agent({ connect: { lookup: pinnedLookup({ lookup, allow }) } });
+    fetchImpl = async (url, init) => {
+      try {
+        return await undiciFetch(url, { ...init, dispatcher });
+      } catch (e) {
+        // undici reports "fetch failed" with the lookup's refusal as the cause.
+        if (e?.cause?.code === "EBLOCKED") throw new Error(e.cause.message);
+        throw e;
+      }
+    };
+  }
   return async (input, init = {}) => {
     let url = String(input?.url ?? input);
     for (let hop = 0; hop <= maxHops; hop++) {
       if (!isPublicHttpUrl(url)) throw new Error("blocked: not a public http(s) address");
       const u = new URL(url);
       const port = Number(u.port || (u.protocol === "https:" ? 443 : 80));
-      if (!ALLOWED_PORTS.has(port)) throw new Error(`blocked: port ${port}`);
+      if (!ports.has(port)) throw new Error(`blocked: port ${port}`);
       const r = await resolvePublic(u.hostname, { lookup, allow });
       if (!r.ok) throw new Error(`blocked: ${r.reason}`);
       const res = await fetchImpl(url, { ...init, redirect: "manual" });
