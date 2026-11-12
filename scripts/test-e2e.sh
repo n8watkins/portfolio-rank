@@ -47,6 +47,9 @@ export CONTENT_MODE=dry-run CONTENT_DRAFTS_PER_WEEK=2
 # The blog (tests/blog-pages.test.mjs): post images from the fixture folder
 # instead of the R2 bucket (lib/blog-media.ts, ignored on the deployed Workers).
 export BLOG_TEST_MEDIA_DIR="$PWD/tests/fixtures/blog/media"
+# The blog newsletter (tests/newsletter-e2e.test.mjs): on, with the owner's
+# address for "Send test to me"; its emails land in the outbox too.
+export NEWSLETTER_ENABLED=true OWNER_EMAIL=owner@example.com
 export E2E_GAMES_GH_PORT="${E2E_GAMES_GH_PORT:-7694}"
 export GAMES_TEST_GITHUB_API="http://127.0.0.1:$E2E_GAMES_GH_PORT"
 unset GITHUB_API_TOKEN

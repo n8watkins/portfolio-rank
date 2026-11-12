@@ -19,6 +19,7 @@ import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
+import { NEWSLETTER_CRON, newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { emailAlertsTick } from "./email-alerts";
@@ -78,7 +79,10 @@ const worker = {
   // finishes people's grade requests that waited for Gemini 3.5 and makes the
   // image library's hourly batch (./library.ts); the weekly
   // one is model watch (./model-watch.ts); the five-minute one is the
-  // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
+  // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off;
+  // the ten-minute one is the newsletter's (./newsletter.ts), which does
+  // nothing while NEWSLETTER_ENABLED is off. Every cron is matched by name
+  // before the last line, which starts tonight's run.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
     if (controller.cron === PEOPLE_QUEUE_CRON) {
       // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
@@ -91,6 +95,7 @@ const worker = {
     }
     else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     else if (controller.cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
+    else if (controller.cron === NEWSLETTER_CRON) await newsletterTick(env as unknown as NewsletterEnv, controller.scheduledTime);
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };

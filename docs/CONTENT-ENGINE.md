@@ -262,7 +262,7 @@ Owner decision of 2026-11-11: the engine writes drafts, the owner approves each 
 - **Links to portfolios** go to the portfolio's PortfolioRank page (`/p/<url>`), which links on to the site (owner, 2026-11-12; [lib/content/portfolio-links.mjs](../lib/content/portfolio-links.mjs)): the engine stores a new post with every `[Name](site_url)` of a portfolio on its fact sheet pointing at our page (after the checks, which still check and load the site itself), and the article renderer sends any link that matches a portfolio we list (`data/feed.json`, the list `/p/` answers for) to its page, so older posts link the same way; a stored `/p/` link to a portfolio no longer listed opens the site instead of a 404.
   Outside sources keep their own addresses.
 - **More articles:** under a post, up to 3 other published posts, those sharing the most tags first, then the newest (`morePosts` in [lib/content/blog.mjs](../lib/content/blog.mjs)).
-  There is no newsletter sign-up yet: the newsletter is planned (DECISIONS.md "A weekly newsletter") but has no back end here, in mailroom (which is transactional only) or elsewhere, so the post page shows none rather than a form that goes nowhere.
+  The newsletter sign-up sits in the right-hand margin on wide screens and after the post below that, while `NEWSLETTER_ENABLED` is on (AUTOMATION.md "Newsletter").
 - **The pages** are ISR with a 5-minute revalidate, so a published post is on `/blog`, its tag pages and the feed within 5 minutes of its publish time, and anonymous visitors cost no database read in between; the sitemap lists posts once a day.
   Drafts and unpublished posts are a 404 on `/blog/[slug]`; their images (`/blog/media/<post id>/<slot>`) are served only to the admin, and a live post's images are public and cached for a day.
 
@@ -334,12 +334,11 @@ Owner request of 2026-11-12: the schedule is the owner's to change from `/admin/
 The content engine never sends email itself.
 
 - Publishing a post sets `newsletter_pending` on it.
-- The weekly newsletter job (built with the newsletter, DECISIONS.md "A weekly newsletter") collects the posts published since the last issue, adds the top 5 and the biggest climber, and sends through the shared email gate with its hard caps.
+- The newsletter's ten-minute cron (AUTOMATION.md "Newsletter") turns each live post with it set into one email to confirmed subscribers and clears it, sending in paced batches through the shared email gate and the newsletter's mailroom app; unpublishing clears it too.
 - Email goes through Cloudflare Email Service (owner, 2026-11-10, after the content plan was written); the gate is the only code that knows that, so a later change of provider doesn't touch the content engine.
-- Until the newsletter exists, `newsletter_pending` just stays set, and the first issue can pick up the latest posts.
+- A post that went live more than 3 days before the newsletter saw it is not emailed, so switching the newsletter on never mails a backlog.
 
-**Owner decision (2026-11-10): the newsletter in a week with no post.**
-Send it anyway with the top 5 and the biggest climber, since those change every week.
+The owner's request of 2026-11-12 (one email per post) replaces the weekly digest with the top 5 and the biggest climber, and with it the decision of 2026-11-10 to send that digest in a week with no post.
 
 ## What the owner sees
 

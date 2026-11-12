@@ -398,6 +398,32 @@ Owner request of 2026-11-12: besides GitHub, anyone can sign in with an emailed 
   Settings shows "Email" and the address; deleting the account asks for the address instead of a username, and deletes `email_accounts` and pending links with everything else.
 - **Retention:** links leave the database at the next request and in the nightly retention a day after they expire; they are left out of the backup, accounts are in it.
 
+## Newsletter
+
+Owner request of 2026-11-12: people sign up on the blog and get each new post by email; the owner sees who signs up.
+It replaces the planned weekly digest (docs/DECISIONS.md "A weekly newsletter"): one email per published post, at most two a week (the blog's publish cap).
+Switched by `NEWSLETTER_ENABLED` (wrangler.jsonc: `"false"` in production, `"true"` on staging), which the build also inlines for the forms (`NEXT_PUBLIC_NEWSLETTER_ENABLED`, next.config.ts).
+
+- **The forms** ([components/newsletter/NewsletterSignup.tsx](components/newsletter/NewsletterSignup.tsx)): beside a post in the right-hand margin on wide screens (1280 px and up, sticky while you read), after the post below that, on `/blog`, and in the site footer on every other page.
+  An address ("Email for new posts") and Turnstile (action `newsletter`, loaded on first hover or focus); the sign-up stores the page and the form it came from.
+- **The request** (`POST /api/newsletter/subscribe { email, turnstileToken?, source?, form? }`, [app/api/newsletter/subscribe/route.ts](app/api/newsletter/subscribe/route.ts)): this site's Origin, a plausible address, 10 attempts an hour and 30 a day per network, Turnstile (refused on the deployed Workers without the secret), then 3 sign-ups a day per address, all as keyed hashes in `rate_limits` like email sign-in.
+  The answer is the same `{ ok: true }` for a new, pending or confirmed address; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited`, 503 `email_unavailable`.
+- **Double opt-in** ([lib/newsletter/store.mjs](lib/newsletter/store.mjs)): a new, pending or unsubscribed address becomes `pending` with a confirm link (256 random bits, only its SHA-256 stored, 3 days); a confirmed one gets no email.
+  The link opens `/newsletter/confirm`, which only reads it; its button confirms (`POST /api/newsletter/confirm`), so mail scanners can't subscribe anyone.
+  Only `confirmed` addresses get posts.
+- **Unsubscribe:** every post email has `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) pointing at `POST /api/newsletter/unsubscribe?s=<subscriber id>&k=<key>`, where the key is a keyed hash of the random id, so mail apps' own Unsubscribe button works in one click.
+  The footer's Unsubscribe link is the same address: a browser's GET goes to `/newsletter/unsubscribe`, whose one button unsubscribes.
+  Unsubscribing works even while `NEWSLETTER_ENABLED` is off.
+- **Sending** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the ten-minute cron (`*/10 * * * *`, production and staging) turns each such post, once it is live, into an issue and sends the next batch of up to 10 emails to subscribers confirmed before the issue was queued.
+  A post that went live more than 3 days before the newsletter saw it is recorded as "Not sent", so switching the newsletter on never mails a backlog; an unpublished post's issue stops.
+  Each email: the title, the post's newsletter blurb (else its subtitle), the cover image, "Read the post" and the unsubscribe link, as HTML and text ([lib/newsletter/emails.mjs](lib/newsletter/emails.mjs)); an idempotency key per issue and subscriber means a retry never sends twice.
+- **Caps, failing closed:** the shared gate (kinds `newsletter`, 40 a day and 3 to one address, and `newsletter-confirm`, 20 a day and 3 to one address, inside the gate's 100 a day; Pacific days), then the mailroom app `portfoliorank-news` through the `MAILROOM_NEWS` binding (40 a day, 150 a month, 3 to one address a day, inside the account's 2,500 a month), so email never bills.
+  A cap, a missing binding, a paused or unknown mailroom app or any other error stops the tick and leaves the rest for a later one; a refusal about one address (suppressed after a bounce, invalid) is recorded as failed and the batch goes on.
+- **Admin** (`/admin/blog/newsletter`, linked from Blog drafts with the confirmed count): confirmed, pending and unsubscribed counts, every subscriber with status, sign-up date and source page, the recent sends with sent, failed and still to go, today's caps, and "Send test to me", which sends the latest live post's email, marked as a test, to `OWNER_EMAIL` through the same gate and mailroom app (`POST /api/admin/newsletter/test`).
+- **Privacy and retention:** only the address, its status, the sign-up, confirm and unsubscribe times and the source page are stored (`newsletter_subscribers`); deliveries name the subscriber id, never the address.
+  Unconfirmed sign-ups are deleted 7 days after they were made, unsubscribed addresses 30 days after the unsubscribe, with their delivery rows, on every newsletter tick; settings "Cookies and privacy" says so.
+- **Tests:** [tests/newsletter.test.mjs](tests/newsletter.test.mjs) (store, retention, batches, caps, refusals, the emails) and [tests/newsletter-e2e.test.mjs](tests/newsletter-e2e.test.mjs) (production build: guards, rate limits, confirm, unsubscribe by page and one-click POST, the admin page and test email, the forms at 1440 and 390 px).
+
 ## Model watch
 
 Owner decision of 2026-11-10: model watch is news only; nothing switches on its own.

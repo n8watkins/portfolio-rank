@@ -252,6 +252,14 @@ export default function SettingsPage() {
             <p className="mt-2 text-mute">A few notes last only while the tab is open: whether the sign-in reminder was shown, and your own Gemini key if you grade with one, until the grade is done.</p>
             <p className="mt-2 text-mute">The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.</p>
           </details>
+          <div className="p-4 sm:p-5" id="newsletter">
+            <p className="font-semibold">The blog newsletter</p>
+            <p className="mt-0.5 text-mute">
+              If you sign up for new posts by email, we keep only your address, whether you confirmed or unsubscribed, when, and the page you signed up on. It is used for
+              the newsletter alone, never shared or sold, and the emails have no tracking pixels or tracked links. An address that isn&apos;t confirmed is deleted after 7
+              days. Every email has an Unsubscribe link that works in one click; we stop at once and delete the address 30 days after you leave. The emails go out through Cloudflare Email Service.
+            </p>
+          </div>
           <Row id="forget" inline title="Forget my preferences" desc="Clears the choices saved in this browser. Your votes and sign-in stay.">
             <button type="button" onClick={forget} className={smallBtn} aria-describedby="forget-desc">
               {forgot ? "Forgotten" : "Forget"}
