@@ -14,6 +14,7 @@ import { ADMIN_ID, sessionToken } from "./helpers/session.mjs";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
 import { CELEBRATIONS, celebrationLevel } from "../lib/grader/present.mjs";
+import { NO_TOKEN_REASON } from "../lib/grader/dispatch.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -184,6 +185,32 @@ test("grade yours: the form, the progress page, then the report as approved", { 
 
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+test("no capture service (staging): the free checks are the answer, said plainly, not a failure", { skip: !grading }, async () => {
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ]) {
+    const { page: p, context, errors } = await freshPage(width, height);
+    const id = await startGrade(p, `grade-off-${RUN}-${width}.dev`);
+    // What POST /api/grade stores without GITHUB_DISPATCH_TOKEN (lib/grader/dispatch.mjs).
+    await db.execute({ sql: "UPDATE grade_jobs SET status = 'unavailable', reason = ? WHERE id = ?", args: [NO_TOKEN_REASON, id] });
+    await p.reload();
+    await p.getByRole("heading", { level: 1, name: "Grade UI Tester" }).waitFor();
+    assert.equal(await p.getByText(/couldn.t grade/i).count(), 0, "not called a failure");
+    await p.getByRole("status").filter({ hasText: "the capture service isn't connected" }).waitFor();
+    const steps = p.getByRole("list", { name: "What ran" });
+    assert.match(await steps.textContent(), /Measuring: resume, GitHub, links, domain: done.*taking screenshots: not available.*Gemini .*: not available/s);
+    const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
+    assert.match(await hiring.textContent(), /Can they see your work\?/);
+    assert.match(await hiring.textContent(), /Resume: .*Fix: Link a PDF/s);
+    await p.getByRole("link", { name: "Grade another portfolio" }).waitFor();
+    const overflow = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.equal(overflow, 0, `no sideways scroll at ${width}px`);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
 });
 
 test("nothing to fix: the calm empty state, and a stranger sees no owner tools", { skip: !grading }, async () => {
