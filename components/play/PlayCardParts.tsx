@@ -76,7 +76,7 @@ function loadDetails(url: string) {
   return p;
 }
 
-function useCard(url: string) {
+export function useCard(url: string) {
   const [d, setD] = useState<PlayDetails | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
@@ -153,5 +153,23 @@ export function DetailsPanel({
         </a>
       )}
     </div>
+  );
+}
+
+/** "ELO 1,532 · #84 of 2,106": its place on the ELO board, from the face-off's votes. */
+export function EloLine({ url, className = "" }: { url: string; className?: string }) {
+  const card = useCard(url);
+  if (card === undefined) return <span className={`inline-block h-4 w-36 rounded bg-raised motion-safe:animate-pulse ${className}`} aria-hidden />;
+  if (!card || card.elo == null) return <span className={`text-sm text-mute ${className}`}>No ELO yet: this was among its first face-offs.</span>;
+  return (
+    <span className={`details-in text-sm tabular-nums ${className}`} title="Its ELO rating and place on the ELO board, from everyone's face-off votes">
+      <strong>ELO {card.elo.toLocaleString("en-US")}</strong>
+      {card.eloRank != null && (
+        <span className="text-mute">
+          {" "}
+          · #{card.eloRank.toLocaleString("en-US")} of {card.eloTotal.toLocaleString("en-US")}
+        </span>
+      )}
+    </span>
   );
 }

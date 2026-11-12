@@ -17,6 +17,8 @@ export function ViewControls({ prefs, choose, toggle }: { prefs: ViewPrefs; choo
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && menu.current?.open) {
+        // Closing the menu is all Escape does here (Play leaves it alone).
+        e.preventDefault();
         menu.current.open = false;
         menu.current.querySelector("summary")?.focus();
       }

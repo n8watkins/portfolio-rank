@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Flame, MousePointerClick, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Check, ExternalLink, Flame, MousePointerClick, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
 import { PlaySummary, prefetchPlayData } from "@/components/Diagnostics";
-import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
+import { DetailsPanel, EloLine, NameLine } from "@/components/play/PlayCardParts";
 import { ViewControls } from "@/components/play/ViewControls";
-import { useViewPrefs } from "@/lib/play/view-prefs";
+import { animated, useViewPrefs } from "@/lib/play/view-prefs";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { INTRO_COOKIE } from "@/components/play/intro";
@@ -184,6 +184,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const [pair, setPair] = useState<Pair | null>(null);
   const [rater, setRater] = useState<Rater | null>(null);
   const [pick, setPick] = useState<Side | null>(null);
+  // After a vote, the portfolio in the spotlight (first the one picked).
+  const [focus, setFocus] = useState<Side | null>(null);
   const [busy, setBusy] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -210,15 +212,15 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const { prefs, choose, toggle } = useViewPrefs();
   // Simple has its own strip; Detailed and custom views show the chosen parts.
   const simple = prefs.mode === "simple";
-  const rich = prefs.sections.length > 0;
   const openSignIn = useSignIn();
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
   // Bumped when a vote is counted: focus then moves to Next pair, once it is on the page.
   const [counted, setCounted] = useState(0);
   useEffect(() => {
-    if (counted) nextRef.current?.focus();
-  }, [counted]);
+    // The spotlight lands a frame after the vote (view transition): focus Next once it is there.
+    if (counted && focus) nextRef.current?.focus({ preventScroll: true });
+  }, [counted, focus]);
   const seq = useRef(0);
 
   const finished = done >= ROUND && pick === null;
@@ -274,6 +276,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     const r = data.rater;
     if (r) setRater(r);
     setPick(null);
+    setFocus(null);
     setBusy(false);
   }, []);
 
@@ -360,6 +363,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         };
       });
       setBusy(false);
+      // The picked portfolio moves to the front (a view transition where the browser has one).
+      animated(() => setFocus(side));
       setCounted((c) => c + 1);
       onBadgeCheck();
       // The vote spent this pair: draw the next one now, while the result is
@@ -440,7 +445,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       if (pick === null && key === "ArrowLeft") vote("a");
       else if (pick === null && key === "ArrowRight") vote("b");
       else if (pick === null && (key === "s" || key === "ArrowDown")) next();
-      else if (pick !== null && (key === "ArrowRight" || key === "n" || (key === "Enter" && !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement)))) next();
+      else if (pick !== null && (key === "ArrowRight" || key === "n" || key === "Escape" || (key === "Enter" && !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement))))
+        next();
       else return;
       e.preventDefault();
     };
@@ -544,73 +550,149 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
             Retry
           </button>
         </div>
+      ) : pair && shares && pick !== null && focus ? (
+        // After the vote: the spotlight. The portfolio in focus (first the one
+        // picked) moves to the front with its result, ELO and actions; the
+        // other waits at the side, and clicking it swaps them. It lives in
+        // the page: Next (or Escape) moves on whenever the viewer is ready.
+        <div className="grid grid-cols-1 items-start gap-3 sm:gap-5 md:grid-cols-[minmax(0,2.6fr)_minmax(0,1fr)]">
+          {(() => {
+            const e = pair[focus];
+            const mine = pick === focus;
+            return (
+              <article
+                key={`${pair.token}-${focus}`}
+                aria-label={`${e.name}, in focus`}
+                className={`card relative flex min-w-0 flex-col overflow-hidden ${mine ? "shadow-[0_0_0_3px_var(--color-fill)]" : ""}`}
+                style={{ viewTransitionName: `faceoff-card-${focus}` } as React.CSSProperties}
+              >
+                <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
+                <div className="relative">
+                  <div className="h-[clamp(160px,30vh,340px)] w-full overflow-hidden">
+                    <Frame e={e} />
+                  </div>
+                  <Share pct={shares[focus]} mine={mine} k={`${pair.token}-${focus}`} />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-edge px-3 py-2.5 sm:px-4">
+                  <EloLine url={e.url} />
+                  <span className="ml-auto flex flex-wrap items-center gap-2">
+                    <a href={e.url} target="_blank" rel="noopener noreferrer" className={`${btnSecondary} h-10 px-3`}>
+                      <ExternalLink className="h-4 w-4" aria-hidden /> Visit site
+                    </a>
+                    <a href={`/p/${encodeURIComponent(e.url)}`} target="_blank" rel="noopener" className={`${btnSecondary} h-10 px-3`}>
+                      <ArrowUpRight className="h-4 w-4" aria-hidden /> Full profile
+                    </a>
+                    <ViewControls prefs={prefs} choose={choose} toggle={toggle} />
+                  </span>
+                </div>
+                {simple ? <PlaySummary url={e.url} /> : <DetailsPanel id={`details-${focus}`} url={e.url} record profile={false} metrics={prefs.metrics} sections={prefs.sections} />}
+              </article>
+            );
+          })()}
+          {(() => {
+            const side: Side = focus === "a" ? "b" : "a";
+            const e = pair[side];
+            return (
+              // The side column stays in view: the other portfolio, then Next.
+              <div className="grid gap-3 md:sticky md:top-20">
+                {/* Next is always one look away; on a phone the bar at the bottom carries it. */}
+                <div className="card grid gap-2 p-3 text-center max-md:hidden">
+                  <p className="text-sm" aria-hidden>
+                    <span className="font-semibold">{LEAN[leanOf(shares[pick])]}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
+                  </p>
+                  <button ref={nextRef} type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N Escape" className={`${btnPrimary} w-full`}>
+                    {done >= ROUND ? "See results" : "Next pair"} <ArrowRight className="nudge h-4 w-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={undo}
+                    disabled={busy}
+                    className="inline-flex min-h-9 items-center justify-center gap-1 px-2 text-xs text-mute transition hover:text-ink disabled:opacity-50"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" aria-hidden /> Undo
+                  </button>
+                </div>
+                <button
+                  key={`${pair.token}-${side}`}
+                  type="button"
+                  onClick={() => animated(() => setFocus(side))}
+                  aria-label={`Bring ${e.name} to the front`}
+                  className="card group relative flex min-w-0 flex-col overflow-hidden text-left transition hover:shadow-[0_0_0_2px_var(--color-edge-strong)]"
+                  style={{ viewTransitionName: `faceoff-card-${side}` } as React.CSSProperties}
+                >
+                  <span className="relative block aspect-[16/10] w-full overflow-hidden">
+                    <Frame e={e} />
+                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2.5 pt-8 text-white">
+                      {pick === side && (
+                        <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-fill px-2 py-0.5 text-[11px] font-bold text-on-fill">
+                          <Check className="h-3 w-3" aria-hidden /> Your pick
+                        </span>
+                      )}
+                      <span className="block text-xl font-bold tabular-nums">{shares[side]}%</span>
+                      <span className="block text-[11px] text-white/80">would pick this one</span>
+                    </span>
+                  </span>
+                  <span className="flex items-center justify-between gap-2 p-2.5">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{e.name}</span>
+                      <span className="block truncate text-xs text-mute">{domainOf(e.url)}</span>
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold text-accent group-hover:underline">Look closer</span>
+                  </span>
+                </button>
+              </div>
+            );
+          })()}
+        </div>
       ) : pair && shares ? (
         // The screenshots are the hero: side by side from md up, stacked on a
-        // phone. "About this portfolio" is always shown: beside the screenshot
-        // from 1440 px up, below it on smaller screens.
+        // phone, short enough that both cards, their details and Pick fit on
+        // a 1440x900 or 1920x1080 screen.
         <div className="grid grid-cols-1 items-stretch gap-3 sm:gap-5 md:grid-cols-2">
           {(["a", "b"] as const).map((side) => {
             const e = pair[side];
-            const mine = pick === side;
-            const state = pick === null ? "" : mine ? "win-pop" : "lose-dim";
             return (
               <article
                 key={`${pair.token}-${side}`}
                 aria-label={e.name}
-                className={`card relative flex min-w-0 flex-col overflow-hidden transition-shadow ${
-                  pick === null
-                    ? "deal-in has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
-                    : ""
-                } ${state} ${mine ? "shadow-[0_0_0_3px_var(--color-fill)]" : ""}`}
-                // The card's view-transition name lets it ease to its new height when the view changes.
+                className="card deal-in relative flex min-w-0 flex-col overflow-hidden transition-shadow has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
+                // The card's view-transition name lets it ease to its new size when the view changes or the spotlight opens.
                 style={{ "--d": `${side === "a" ? 0 : 90}ms`, viewTransitionName: `faceoff-card-${side}` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
                 {/* The screenshot across the card, then Simple's strip or the chosen details under it. */}
                 <div className="flex-1">
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => vote(side)}
-                      disabled={pick !== null || busy}
-                      tabIndex={-1}
-                      aria-hidden
-                      className="pick group relative block aspect-[16/9] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-[16/10]"
-                    >
-                      <Frame e={e} />
-                      {pick === null && (
-                        <>
-                          <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-                          {/* Always visible, so it's clear the screenshot picks (no hover needed, touch too). */}
-                          <span className="pointer-events-none absolute bottom-2.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-lg backdrop-blur transition group-hover:bg-fill group-hover:text-on-fill">
-                            <MousePointerClick className="h-3.5 w-3.5" aria-hidden />
-                            <span className="pointer-coarse:hidden">Click to pick</span>
-                            <span className="hidden pointer-coarse:inline">Tap to pick</span>
-                          </span>
-                        </>
-                      )}
-                      {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
-                    </button>
-                  </div>
-                  {simple ? (
-                    <PlaySummary url={e.url} />
-                  ) : (
-                    <DetailsPanel id={`details-${side}`} url={e.url} record={pick !== null} profile={rich} metrics={prefs.metrics} sections={prefs.sections} />
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => vote(side)}
+                    disabled={busy}
+                    tabIndex={-1}
+                    aria-hidden
+                    className="pick group relative block aspect-[16/9] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-auto md:h-[clamp(150px,25vh,290px)]"
+                  >
+                    <Frame e={e} />
+                    <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                    {/* Always visible, so it's clear the screenshot picks (no hover needed, touch too). */}
+                    <span className="pointer-events-none absolute bottom-2.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-lg backdrop-blur transition group-hover:bg-fill group-hover:text-on-fill">
+                      <MousePointerClick className="h-3.5 w-3.5" aria-hidden />
+                      <span className="pointer-coarse:hidden">Click to pick</span>
+                      <span className="hidden pointer-coarse:inline">Tap to pick</span>
+                    </span>
+                  </button>
+                  {simple ? <PlaySummary url={e.url} /> : <DetailsPanel id={`details-${side}`} url={e.url} record={false} profile={false} metrics={prefs.metrics} sections={prefs.sections} />}
                 </div>
                 {/* The pick, centered under its card. */}
-                <div className="flex min-h-16 items-center justify-center border-t border-edge p-2.5 sm:p-3">
-                  {pick === null ? (
-                    <button type="button" onClick={() => vote(side)} disabled={busy} aria-label={`Pick ${e.name}`} aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"} className={`${btnPrimary} pick min-w-48`}>
-                      <Check className="h-4 w-4" aria-hidden /> Pick {e.name.split(" ")[0]}
-                    </button>
-                  ) : mine ? (
-                    <p className="inline-flex items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-sm font-semibold text-on-fill">
-                      <Check className="h-4 w-4" aria-hidden /> Your pick
-                    </p>
-                  ) : (
-                    <p className="text-sm text-mute">&nbsp;</p>
-                  )}
+                <div className="flex items-center justify-center border-t border-edge p-2">
+                  <button
+                    type="button"
+                    onClick={() => vote(side)}
+                    disabled={busy}
+                    aria-label={`Pick ${e.name}`}
+                    aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
+                    className={`${btnPrimary} pick min-w-48`}
+                  >
+                    <Check className="h-4 w-4" aria-hidden /> Pick {e.name.split(" ")[0]}
+                  </button>
                 </div>
               </article>
             );
@@ -642,7 +724,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
 
       {/* Right under the cards, centered where the eye already is; on a phone it stays above the tab bar. */}
       {!finished && (pair || loadError) && (
-        <div className="max-md:sticky max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 mt-3 flex min-h-14 flex-col items-center justify-center gap-1 text-center max-md:-mx-1 max-md:rounded-2xl max-md:border max-md:border-edge max-md:bg-card/92 max-md:p-2 max-md:shadow-[var(--card-hi),var(--card-drop)] max-md:backdrop-blur">
+        <div
+          className={`${pick !== null && focus ? "md:hidden" : ""} max-md:sticky max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 mt-3 flex min-h-14 flex-col items-center justify-center gap-1 text-center max-md:-mx-1 max-md:rounded-2xl max-md:border max-md:border-edge max-md:bg-card/92 max-md:p-2 max-md:shadow-[var(--card-hi),var(--card-drop)] max-md:backdrop-blur`}
+        >
           {pick === null ? (
             <>
               <p className="text-sm text-mute">
@@ -673,7 +757,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 <span className="font-semibold">{shares && LEAN[leanOf(shares[pick])]}</span> <span className="text-mute">{official ? "Counted." : "Practice vote: it counts once you sign in."}</span>
               </p>
               <div className="flex items-center gap-3">
-                <button ref={nextRef} type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N ArrowRight" className={`${btnPrimary} min-w-44 whitespace-nowrap`}>
+                <button type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N ArrowRight" className={`${btnPrimary} min-w-44 whitespace-nowrap`}>
                   {done >= ROUND ? "See results" : "Next pair"} <ArrowRight className="nudge h-4 w-4" aria-hidden />
                   <kbd className="hidden rounded border border-on-fill/30 px-1 text-[11px] md:inline">Enter</kbd>
                 </button>

@@ -29,7 +29,17 @@ export type PlayCard = {
   votes: number;
   wins: number;
 };
-export type PlayDetails = PlayCard;
+export type PlayDetails = PlayCard & EloStanding;
+
+/** A site's place on the ELO board (the face-off's votes; /top when the ranking views are off). */
+export type EloStanding = {
+  /** Its ELO, or null before its first face-off. */
+  elo: number | null;
+  /** 1 is the best; null before its first face-off. */
+  eloRank: number | null;
+  /** Sites on the ELO board (at least one face-off). */
+  eloTotal: number;
+};
 
 const parse = (v: unknown): Record<string, unknown> | null => {
   if (typeof v !== "string" || !v) return null;
@@ -103,6 +113,29 @@ export async function playCards(urls: string[]): Promise<Map<string, PlayCard>> 
 
 /** One listed portfolio's card, for the games' details (its face-off record) and its share card. */
 export async function playDetails(url: string): Promise<PlayDetails> {
-  const [rs, pool] = await Promise.all([rows([url]), gradedPool(db()).catch(() => [])]);
-  return cardOf(rs.get(url)!, pool);
+  const [rs, pool, standing] = await Promise.all([rows([url]), gradedPool(db()).catch(() => []), eloStanding(url)]);
+  return { ...cardOf(rs.get(url)!, pool), ...standing };
+}
+
+/**
+ * Its ELO and place among the sites with at least one face-off, as the ELO
+ * board counts them (lib/leaderboard.ts loadElo: votes >= 1, best first).
+ * Two indexed reads (ratings_elo_idx).
+ */
+export async function eloStanding(url: string): Promise<EloStanding> {
+  await ensureSchema();
+  const [me, all] = await db().batch(
+    [
+      {
+        sql: "SELECT r.elo, r.votes, (SELECT COUNT(*) FROM ratings o WHERE o.votes >= 1 AND o.elo > r.elo) AS above FROM ratings r WHERE r.url = ?",
+        args: [url],
+      },
+      "SELECT COUNT(*) AS n FROM ratings WHERE votes >= 1",
+    ],
+    "read",
+  );
+  const row = me.rows[0];
+  const eloTotal = Number(all.rows[0]?.n ?? 0);
+  if (!row || Number(row.votes) < 1) return { elo: null, eloRank: null, eloTotal };
+  return { elo: Math.round(Number(row.elo)), eloRank: Number(row.above) + 1, eloTotal };
 }
