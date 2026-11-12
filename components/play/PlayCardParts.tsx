@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Bookmark, Check, ChevronDown, ExternalLink, X } from "lucide-react";
-import { AddToListButton } from "@/components/AddToListButton";
+import { ArrowUpRight, Check, ChevronDown, X } from "lucide-react";
 import { LikeButton } from "@/components/LikeButton";
+import { GitHubMark } from "@/components/ui/GitHubMark";
 import type { PlayDetails } from "@/lib/play/card";
 
 // The pieces the games draw around a portfolio (face-off and Guess the
 // percentile). The screenshot is the hero: above it only a slim line with
-// the name and the site link, below it the action row (Details, Visit, Save,
-// Like) and, when opened, "About this portfolio" in plain words. `reveal`
-// false hides whatever gives a grade away (the AI grade, the face-off
-// record, the share card and the full profile, which shows them): before a
-// face-off vote, or before a guess is locked in.
+// the name and the site's address (the visit link), below it Details and
+// Save, and "About this portfolio" in plain words, either opened below or
+// (on the widest screens) beside the screenshot. `reveal` false hides
+// whatever gives a grade away (the AI grade, the face-off record, the share
+// card and the full profile, which shows them): before a face-off vote, or
+// before a guess is locked in.
 
 export const domainOf = (url: string) => {
   try {
@@ -32,13 +33,24 @@ export function NameLine({ name, url, className = "" }: { name: string; url: str
   );
 }
 
-/** The site's address as a readable link that opens it in a new tab. */
+const onGitHubPages = (url: string) => /(^|\.)github\.io$/i.test(domainOf(url));
+
+/**
+ * The site's address as the visit link (a new tab). A site hosted on GitHub
+ * Pages (github.io) gets GitHub's mark on the right, "hosted on GitHub".
+ */
 export function SiteLink({ url, className = "" }: { url: string; className?: string }) {
+  const gh = onGitHubPages(url);
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" className={`group inline-flex min-w-0 items-center gap-1 text-sm text-mute underline-offset-4 hover:text-ink hover:underline ${className}`}>
       <span className="truncate">{domainOf(url)}</span>
       <ArrowUpRight className="h-3.5 w-3.5 shrink-0 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
-      <span className="sr-only"> (opens in a new tab)</span>
+      <span className="sr-only"> (opens in a new tab{gh ? ", hosted on GitHub" : ""})</span>
+      {gh && (
+        <span title="Hosted on GitHub" className="ml-1 inline-grid shrink-0 place-items-center">
+          <GitHubMark className="h-3.5 w-3.5" />
+        </span>
+      )}
     </a>
   );
 }
@@ -47,9 +59,10 @@ export const actionBtn =
   "inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg border border-edge bg-card px-3 text-sm font-semibold text-ink shadow-[var(--card-hi)] transition hover:border-edge-strong active:scale-[0.97] disabled:opacity-50";
 
 /**
- * Details (opens "About this portfolio" below), Visit, Save (a list) and
- * Like (a personal bookmark on your profile, never a vote), each a full
- * 44 px target with its word.
+ * Details (opens "About this portfolio" below; `details` false where it is
+ * already beside the screenshot) and Save: a heart that keeps the portfolio
+ * on your profile (the saves behind the portfolio page's "saved" count),
+ * never a vote.
  */
 export function PlayActions({
   url,
@@ -59,6 +72,7 @@ export function PlayActions({
   open,
   onDetails,
   onSaved,
+  detailsClassName = "",
 }: {
   url: string;
   name: string;
@@ -66,26 +80,27 @@ export function PlayActions({
   detailsId: string;
   open: boolean;
   onDetails: () => void;
+  /** After Save is pressed (a badge may follow). */
   onSaved?: () => void;
+  /** Hides Details where the panel is always shown (the face-off on the widest screens). */
+  detailsClassName?: string;
 }) {
-  const btn = `${actionBtn} max-sm:gap-1 max-sm:px-1.5`;
   return (
-    <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap">
-      <button type="button" data-details onClick={onDetails} aria-expanded={open} aria-controls={detailsId} className={`${btn} ${open ? "border-accent/60 text-accent" : ""}`}>
+    <div className="flex gap-1.5">
+      <button
+        type="button"
+        data-details
+        onClick={onDetails}
+        aria-expanded={open}
+        aria-controls={detailsId}
+        className={`${actionBtn} flex-1 sm:flex-none ${open ? "border-accent/60 text-accent" : ""} ${detailsClassName}`}
+      >
         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
         <span>Details</span>
       </button>
-      <a href={url} target="_blank" rel="noopener noreferrer" className={btn} aria-label={`Visit ${name} (opens in a new tab)`}>
-        <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
-        <span>Visit</span>
-      </a>
       <div onClickCapture={onSaved} className="contents">
-        <AddToListButton url={url} className="contents" buttonClassName={btn} ariaLabel={`Save ${name} to a list`}>
-          <Bookmark className="h-4 w-4 shrink-0" aria-hidden />
-          <span>Save</span>
-        </AddToListButton>
+        <LikeButton url={url} name={name} variant="action" verb="Save" initialLiked={liked} className={`${actionBtn} flex-1 sm:flex-none`} />
       </div>
-      <LikeButton url={url} name={name} variant="action" initialLiked={liked} className={btn} />
     </div>
   );
 }
@@ -162,6 +177,7 @@ export function DetailsPanel({
   name,
   reveal,
   after = "you vote",
+  side = false,
   className = "",
 }: {
   id: string;
@@ -170,6 +186,8 @@ export function DetailsPanel({
   reveal: boolean;
   /** When the hidden parts show: "you vote", "you lock in your guess". */
   after?: string;
+  /** Beside the screenshot (the face-off on the widest screens) rather than below it. */
+  side?: boolean;
   className?: string;
 }) {
   const [d, setD] = useState<PlayDetails | null | undefined>(undefined);
@@ -185,7 +203,7 @@ export function DetailsPanel({
   const scores = d?.judgments.filter((j) => j.score != null) ?? [];
 
   return (
-    <div id={id} className={`details-in border-t border-edge bg-bg/40 p-3 sm:p-4 ${className}`}>
+    <div id={id} className={`${side ? "min-w-0 border-l border-edge p-4" : "details-in border-t border-edge bg-bg/40 p-3 sm:p-4"} ${className}`}>
       <h4 className="font-semibold">About this portfolio</h4>
       {d === undefined ? (
         <div role="status" aria-label="Loading" className="mt-3 grid gap-2">
@@ -247,7 +265,7 @@ export function DetailsPanel({
                     {scores.length > 0 && (
                       <>
                         <p className="text-xs text-mute">An AI (Google Gemini) scored the page from 1 to 5 on five things a hiring manager notices.</p>
-                        <ul className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
+                        <ul className={`grid gap-x-5 gap-y-1.5 ${side ? "" : "sm:grid-cols-2"}`}>
                           {scores.map((j) => (
                             <li key={j.id} title={j.note}>
                               <span className="flex justify-between text-xs">
@@ -278,7 +296,7 @@ export function DetailsPanel({
               </Group>
               <Group title="Share card">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={d.shareImage} alt={`Share card for ${name}`} loading="lazy" width={1200} height={630} className="aspect-[1200/630] w-full max-w-md rounded-lg border border-edge bg-raised object-cover" />
+                <img src={d.shareImage} alt={`Share card for ${name}`} loading="lazy" width={1200} height={630} className="aspect-[1200/630] w-full max-w-sm rounded-lg border border-edge bg-raised object-cover" />
                 <p className="text-xs text-mute">The picture people see when this portfolio is shared.</p>
               </Group>
               <a href={d.profile} target="_blank" rel="noopener" className="group inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent">
