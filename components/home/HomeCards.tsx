@@ -9,6 +9,7 @@ import { ViewTabs } from "@/components/home/ViewTabs";
 import { ROUTES } from "@/lib/nav";
 import type { BoardItem, GradedItem, LiveStat, PortfolioOfTheDay as Potd, ShowItem, TopTen as TopTenData } from "@/lib/home";
 import { topPct } from "@/lib/home";
+import { voteCount } from "@/lib/polls/format";
 import type { PublicPoll } from "@/lib/polls/server";
 
 const RELATIVE = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
@@ -363,7 +364,7 @@ export function PastPolls({ past }: { past: PublicPoll[] }) {
           return (
             <li key={p.id}>
               <p className="text-xs text-mute">
-                {shortDate(p.opensAt)} · {p.total.toLocaleString("en-US")} votes
+                {shortDate(p.opensAt)} · {voteCount(p.total)}
               </p>
               <p className="mt-0.5 text-sm font-semibold">{p.question}</p>
               <div className="mt-2">

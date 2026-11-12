@@ -3,6 +3,7 @@ import { GradeForm } from "@/components/grade/GradeForm";
 import { AboutCard, LiveCard, PastPolls, PlayBand, PortfolioOfTheDay, RecentlyGraded, TopTen } from "@/components/home/HomeCards";
 import { BrowseRedirect } from "@/components/home/BrowseRedirect";
 import { PollCard } from "@/components/home/PollCard";
+import { NextPollCard } from "@/components/polls/NextPollCard";
 import { Showcase } from "@/components/home/Showcase";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
@@ -10,6 +11,7 @@ import { gamesEnabled } from "@/lib/games/server";
 import { graderEnabled } from "@/lib/grader/server";
 import { homeData } from "@/lib/home";
 import { ROUTES } from "@/lib/nav";
+import { nextPollOpens } from "@/lib/polls/format";
 
 // Rendered at most every 5 minutes (ISR), the same page for everyone: every
 // render costs database reads (docs/COSTS.md section C). What is the
@@ -30,7 +32,6 @@ export default async function Home() {
   const grading = graderEnabled();
   const total = data.total.toLocaleString("en-US");
   const poll = data.polls;
-  const hasPolls = Boolean(poll.active) || poll.past.length > 0;
 
   return (
     <>
@@ -132,17 +133,20 @@ export default async function Home() {
       )}
 
       {/* 5. Have your say */}
-      {hasPolls && (
-        <div className="band py-14 lg:py-20">
-          <section aria-labelledby="polls" className="wrap">
-            <SectionHeader eyebrow="Community" title="Have your say" id="polls" href={ROUTES.polls ?? undefined} link="All polls" className="rise mb-7" />
-            <div className={`reveal grid grid-cols-1 gap-5 ${poll.active && poll.past.length ? "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" : ""}`}>
-              {poll.active && <PollCard poll={poll.active} />}
-              {poll.past.length > 0 && <PastPolls past={poll.past} />}
-            </div>
-          </section>
-        </div>
-      )}
+      {/* Always there: between polls the card says what is next and when, never nothing. */}
+      <div className="band py-14 lg:py-20">
+        <section aria-labelledby="polls" className="wrap">
+          <SectionHeader eyebrow="Community" title="Have your say" id="polls" href={ROUTES.polls ?? undefined} link="All polls" className="rise mb-7" />
+          <div className={`reveal grid grid-cols-1 gap-5 ${poll.past.length ? "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" : ""}`}>
+            {poll.active ? (
+              <PollCard poll={poll.active} />
+            ) : (
+              <NextPollCard question={poll.upcoming[0]?.question ?? null} opensAt={poll.upcoming[0]?.opensAt ?? nextPollOpens(new Date(data.at))} later={poll.upcoming.slice(1)} />
+            )}
+            {poll.past.length > 0 && <PastPolls past={poll.past} />}
+          </div>
+        </section>
+      </div>
 
       {/* The newsletter and the blog join here once they have a back end and a route (ROUTES.blog). */}
     </>

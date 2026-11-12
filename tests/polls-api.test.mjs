@@ -92,7 +92,7 @@ before(async () => {
   await insertPoll(db, { week: nextWeek(week), kind: "text", question: "Not open yet?", options: [{ label: "A" }, { label: "B" }], source: "code", now });
 });
 
-test("polls API: the public read has this week's poll and past results, never the upcoming one", async () => {
+test("polls API: the public read has this week's poll, past results, and the upcoming one's question only", async () => {
   const res = await fetch(`${BASE}/api/polls`);
   assert.equal(res.status, 200);
   assert.match(res.headers.get("cache-control"), /public, max-age=60/);
@@ -108,7 +108,19 @@ test("polls API: the public read has this week's poll and past results, never th
   const past = body.past.find((p) => p.id === last.id);
   assert.equal(past.status, "closed");
   assert.deepEqual(past.options.map((o) => [o.label, o.votes, o.percent]), [["Dark", 7, 70], ["Light", 3, 30]]);
-  assert.ok(!JSON.stringify(body).includes("Not open yet"));
+  // The upcoming poll is listed by question and week, never with its options or totals.
+  const soon = body.upcoming.find((p) => p.id === nextWeek(week).id);
+  assert.deepEqual(Object.keys(soon).sort(), ["closesAt", "id", "kind", "opensAt", "question"]);
+  assert.equal(soon.question, "Not open yet?");
+  assert.ok(!body.past.some((p) => p.id === soon.id));
+
+  // The current poll and the next one, always a 200.
+  const current = await fetch(`${BASE}/api/polls/current`);
+  assert.equal(current.status, 200);
+  const cur = await current.json();
+  assert.equal(cur.poll.id, week.id);
+  assert.equal(cur.next.id, nextWeek(week).id);
+  assert.equal(cur.next.options, undefined);
 
   assert.equal((await fetch(`${BASE}/api/polls/${last.id}`)).status, 200);
   assert.equal((await fetch(`${BASE}/api/polls/${nextWeek(week).id}`)).status, 404);
