@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
+import { sameOrigin } from "@/lib/polls/server";
 import {
   STAR_BANK_CAP,
   STAR_PER_VOTES,
@@ -12,7 +13,8 @@ import {
 // applied (winner got +delta, loser got -delta) - all in one write transaction
 // so it can't half-apply. Every vote that moved ratings stores its delta
 // (live votes and claimed practice votes alike), so undo is exact.
-export async function POST() {
+export async function POST(req: Request) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   await ensureSchema();
   const rater = await getRater();
 

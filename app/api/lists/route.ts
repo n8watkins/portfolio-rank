@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { getRater } from "@/lib/rater";
+import { sameOrigin } from "@/lib/polls/server";
 import { newSlug } from "@/lib/slug";
 import { purgeDeletedLists } from "@/lib/list-trash";
 
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
 
 /** POST /api/lists { name } → create a named list, return it (with a fresh slug). */
 export async function POST(req: Request) {
+  if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   const body = await req.json().catch(() => null);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   if (!name || name.length > MAX_NAME_LEN) {

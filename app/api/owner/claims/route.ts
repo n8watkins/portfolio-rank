@@ -7,6 +7,7 @@ import { isKnownPortfolio } from "@/lib/roster";
 import { MAX_VERIFIED, META_NAME, NOTE_MAX, autoProof, listClaims, metaProof, openClaim, ownerState, setClaimStatus, verifiedCount } from "@/lib/games/claims.mjs";
 import { fetchPage, githubProfile, templateOf } from "@/lib/games/owner";
 import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
+import { accountTooNew, guardConfig } from "@/lib/rater";
 
 // Claim your portfolio: always on, so removal is self-serve. Signed in with GitHub only.
 // GET  /api/owner/claims -> { claims: [{ url, status, method, meta, state, ... }] }
@@ -20,7 +21,9 @@ import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
 //       add the meta tag or ask for review), "review" or "rejected"
 //   400 bad_request | unknown_portfolio, 401 signin_required,
 //   403 bad_origin, 429 rate_limited
-// An account verifies at most 3 portfolios by itself; more go to review.
+// An account verifies at most 3 portfolios by itself; more go to review, and
+// so does every claim from a GitHub account younger than
+// MIN_GITHUB_ACCOUNT_AGE_DAYS.
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
 
@@ -40,7 +43,7 @@ async function shape(c: Claim) {
 
 async function signedIn() {
   const s = await auth();
-  return s?.raterId?.startsWith("gh:") && s.login ? { id: s.raterId, login: s.login } : null;
+  return s?.raterId?.startsWith("gh:") && s.login ? { id: s.raterId, login: s.login, tooNew: accountTooNew({ type: "human", accountCreatedAt: s.accountCreatedAt }) } : null;
 }
 
 export async function GET() {
@@ -95,13 +98,15 @@ export async function POST(req: Request) {
   }
   if (!proof) return NextResponse.json({ claim: await shape(claim), reason: page ? "no_proof" : "unreachable" }, { headers: PRIVATE });
 
-  // Proof holds; past the automatic limit, the site owner confirms by hand.
+  // Proof holds; past the automatic limit, or from a GitHub account younger
+  // than MIN_GITHUB_ACCOUNT_AGE_DAYS, the site owner confirms by hand.
   const over3 = (await verifiedCount(db(), me.id)) >= MAX_VERIFIED;
+  const hold = me.tooNew ? `proof ${proof}; the GitHub account is younger than ${guardConfig().minAccountAgeDays} days` : over3 ? `proof ${proof}; over the automatic limit of ${MAX_VERIFIED}` : null;
   claim = (await setClaimStatus(db(), {
     claim,
-    status: over3 ? "review" : "verified",
+    status: hold ? "review" : "verified",
     method: proof,
-    note: over3 ? `proof ${proof}; over the automatic limit of ${MAX_VERIFIED}` : null,
+    note: hold,
     actor: me.id,
     now,
   })) as Claim;

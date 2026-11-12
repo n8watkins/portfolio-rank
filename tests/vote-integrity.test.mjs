@@ -12,7 +12,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { sessionCookie } from "./helpers/session.mjs";
 import { randomUUID } from "node:crypto";
 import feed from "../data/feed.json" with { type: "json" };
 
@@ -24,15 +24,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PACE = 2100; // the server rejects a rater's votes closer than 2s apart
 
 let accountSeq = Math.floor(Math.random() * 1e6);
-async function signedIn() {
-  const id = String(900000000 + accountSeq++);
-  const token = await encode({
-    token: { raterId: `gh:${id}`, login: `e2e-${id}`, sub: id },
-    secret: process.env.AUTH_SECRET,
-    salt: "authjs.session-token",
-    maxAge: 3600,
-  });
-  return { raterId: `gh:${id}`, cookie: `authjs.session-token=${token}` };
+async function signedIn({ ageDays } = {}) {
+  const id = 900000000 + accountSeq++;
+  return { raterId: `gh:${id}`, cookie: await sessionCookie({ id, ageDays }) };
 }
 
 /** A browser-like cookie jar: keeps whatever cookies the server sets. */
@@ -52,10 +46,12 @@ function jar(initial = "") {
   };
 }
 
-async function call(j, method, path, body) {
+// Like a browser, every call but a GET carries this site's Origin unless a
+// test forges another (or none).
+async function call(j, method, path, body, { origin = BASE } = {}) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { cookie: j.header(), ...(body ? { "content-type": "application/json" } : {}) },
+    headers: { cookie: j.header(), ...(body ? { "content-type": "application/json" } : {}), ...(origin && method !== "GET" ? { origin } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   j.absorb(res);
@@ -232,4 +228,57 @@ test("concurrent claims can't convert more than the lifetime allowance", async (
   assert.ok(total <= 10, `claimed ${total}`);
   const rows = await db.execute({ sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ? AND claimed = 1", args: [me.raterId] });
   assert.ok(Number(rows.rows[0].n) <= 10, `${rows.rows[0].n} claimed rows`);
+});
+
+test("votes from GitHub accounts younger than 30 days don't count, nor do their claimed practice votes", async () => {
+  for (const ageDays of [3, null]) {
+    // null: a session from before the account date was recorded.
+    const me = await signedIn({ ageDays });
+    const j = jar(me.cookie);
+    const s = await call(j, "GET", "/api/rank");
+    const w0 = await elo(s.body.a.url);
+    const v = await call(j, "POST", "/api/rank", { winner: s.body.a.url, loser: s.body.b.url, token: s.body.token });
+    assert.equal(v.status, 403, JSON.stringify(v.body));
+    assert.equal(v.body.error, "account_too_new");
+    assert.deepEqual(await elo(s.body.a.url), w0);
+  }
+  // Practice votes wait for the account to be old enough.
+  const anon = jar();
+  const s = await call(anon, "GET", "/api/rank");
+  assert.equal((await call(anon, "POST", "/api/rank", { winner: s.body.a.url, loser: s.body.b.url, token: s.body.token })).status, 200);
+  const young = await signedIn({ ageDays: 29 });
+  const c = await call(jar(`${young.cookie}; ${anon.header()}`), "POST", "/api/claim");
+  assert.equal(c.body.error, "account_too_new");
+  assert.equal(c.body.claimed, 0);
+});
+
+test("cookie-authenticated writes refuse another site's Origin, or none", async () => {
+  const me = await signedIn();
+  const j = jar(me.cookie);
+  const s = await call(j, "GET", "/api/rank");
+  const vote = { winner: s.body.a.url, loser: s.body.b.url, token: s.body.token };
+  // A sibling app on *.n8builds.dev is same-site, so SameSite=Lax lets the cookie through.
+  for (const origin of ["https://evil.n8builds.dev", null]) {
+    const writes = [
+      ["POST", "/api/rank", vote],
+      ["POST", "/api/rank/undo"],
+      ["POST", "/api/claim"],
+      ["POST", "/api/likes", { url: TARGET }],
+      ["POST", "/api/lists", { name: "Forged" }],
+      ["PATCH", "/api/lists/1", { name: "Forged" }],
+      ["DELETE", "/api/lists/1"],
+      ["POST", "/api/lists/1/items", { url: TARGET }],
+      ["DELETE", "/api/lists/1/items", { url: TARGET }],
+      ["POST", "/api/lists/1/trash", { action: "restore" }],
+    ];
+    for (const [method, path, body] of writes) {
+      const r = await call(j, method, path, body, { origin });
+      assert.equal(r.status, 403, `${method} ${path} from ${origin}: ${r.status}`);
+      assert.equal(r.body?.error, "bad_origin", `${method} ${path}`);
+    }
+  }
+  const votes = await db.execute({ sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ?", args: [me.raterId] });
+  assert.equal(Number(votes.rows[0].n), 0);
+  const lists = await db.execute({ sql: "SELECT COUNT(*) AS n FROM lists WHERE owner = ?", args: [me.raterId] });
+  assert.equal(Number(lists.rows[0].n), 0);
 });

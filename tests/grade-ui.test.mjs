@@ -10,7 +10,7 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { ADMIN_ID, sessionToken } from "./helpers/session.mjs";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
 import { CELEBRATIONS, celebrationLevel } from "../lib/grader/present.mjs";
@@ -258,8 +258,8 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   await context.close();
 
   // A GitHub account, verified by the site owner's review (as tests/games-api.test.mjs does).
-  const gh = String(800000000 + Math.floor(Math.random() * 1e6));
-  const token = (login) => encode({ token: { raterId: `gh:${login === "e2e-admin" ? gh + 1 : gh}`, login, sub: gh }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
+  const gh = 800000000 + Math.floor(Math.random() * 1e6);
+  const token = (login) => sessionToken(login === "e2e-admin" ? { id: ADMIN_ID, login } : { id: gh, login });
   const call = (cookie, path, body) =>
     fetch(BASE + path, { method: body ? "POST" : "GET", headers: { cookie: `authjs.session-token=${cookie}`, origin: BASE, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
   const mine = await token("claim-ui");

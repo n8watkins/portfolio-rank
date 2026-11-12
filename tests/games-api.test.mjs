@@ -9,7 +9,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
@@ -35,10 +35,9 @@ const gh = createServer((req, res) => {
 });
 
 let seq = Math.floor(Math.random() * 1e6);
-async function account({ login } = {}) {
-  const id = String(700000000 + seq++);
-  const token = await encode({ token: { raterId: `gh:${id}`, login: login ?? `e2e-${id}`, sub: id }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
-  return { id: `gh:${id}`, cookie: `authjs.session-token=${token}` };
+async function account({ login, admin = false, ageDays } = {}) {
+  const id = admin ? ADMIN_ID : 700000000 + seq++;
+  return { id: `gh:${id}`, cookie: await sessionCookie({ id, login, ageDays }) };
 }
 
 function jar(initial = "") {
@@ -250,9 +249,9 @@ test("claims: sign-in required, review by the site owner, then owner actions; st
   assert.equal((await call(j, "GET", "/api/owner/claims")).body.claims[0].url, OWNED);
   assert.equal((await call(j, "POST", "/api/owner/actions", { url: OWNED, action: "hide_grade" })).body.error, "not_owner");
 
-  // Only the admin login reviews.
+  // Only the admin account reviews.
   assert.equal((await call(j, "GET", "/api/admin/claims")).status, 403);
-  const admin = jar((await account({ login: "e2e-admin" })).cookie);
+  const admin = jar((await account({ admin: true })).cookie);
   const queue = (await call(admin, "GET", "/api/admin/claims")).body.claims;
   const mine = queue.find((c) => c.url === OWNED && c.owner === owner.id);
   assert.ok(mine);
@@ -277,6 +276,27 @@ test("claims: sign-in required, review by the site owner, then owner actions; st
   assert.equal((await call(j, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 404);
   const log = (await db.execute({ sql: "SELECT action FROM claim_log WHERE url = ? ORDER BY id", args: [OWNED] })).rows.map((r) => String(r.action));
   assert.deepEqual(log.slice(-7), ["claim_started", "claim_review", "claim_verified", "hide_grade", "regrade_requested", "regrade_already_pending", "remove"]);
+});
+
+test("claims: a GitHub account younger than 30 days can't act as an owner, even once verified", async () => {
+  const site = feed[151].url;
+  const admin = jar((await account({ admin: true })).cookie);
+  for (const ageDays of [5, null]) {
+    // null: a session from before the account date was recorded.
+    const fresh = await account({ ageDays });
+    const j = jar(fresh.cookie);
+    assert.equal((await call(j, "POST", "/api/owner/claims", { url: site, method: "manual" })).body.claim.status, "review");
+    const mine = (await call(admin, "GET", "/api/admin/claims")).body.claims.find((c) => c.url === site && c.owner === fresh.id);
+    assert.equal((await call(admin, "POST", "/api/admin/claims", { id: mine.id, decision: "verified" })).body.claim.status, "verified");
+    for (const body of [{ url: site, action: "hide_grade" }, { url: site, action: "remove", confirm: true }]) {
+      const res = await call(j, "POST", "/api/owner/actions", body);
+      assert.equal(res.status, 403, res.text);
+      assert.equal(res.body.error, "account_too_new");
+      assert.equal(res.body.minAccountAgeDays, 30);
+    }
+  }
+  const state = (await db.execute({ sql: "SELECT hide_grade, removed_at FROM portfolio_owner WHERE url = ?", args: [site] })).rows[0];
+  assert.ok(!state || (Number(state.hide_grade) === 0 && state.removed_at == null), "nothing changed");
 });
 
 test("live stats: many numbers in one cached answer, GitHub numbers included", async () => {

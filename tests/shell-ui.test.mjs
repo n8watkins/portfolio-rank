@@ -4,7 +4,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { encode } from "@auth/core/jwt";
+import { sessionToken } from "./helpers/session.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 // "Grade yours" is in the shell only while grading is on (lib/nav.ts ROUTES.grade).
@@ -196,12 +196,7 @@ test("phones: a bottom tab bar with More, which holds settings and sign-in; the 
 
 test("signed in: the avatar opens an account menu that works from the keyboard", async () => {
   const id = "800900001";
-  const token = await encode({
-    token: { raterId: `gh:${id}`, login: "e2e-shell", sub: id },
-    secret: process.env.AUTH_SECRET,
-    salt: "authjs.session-token",
-    maxAge: 3600,
-  });
+  const token = await sessionToken({ id, login: "e2e-shell" });
   const { page, context, errors } = await freshPage(1440);
   await context.addCookies([{ name: "authjs.session-token", value: token, url: BASE }]);
   await page.goto(BASE + "/settings");

@@ -1,12 +1,12 @@
 // The content engine's admin API (GET /api/admin/content), end to end
 // against the running production build (scripts/test-e2e.sh, which sets
-// ADMIN_GITHUB_LOGIN=e2e-admin): only that login may read it, and it lists
+// ADMIN_GITHUB_ID): only that account may read it, and it lists
 // drafts with their fact sheet, checks and images, plus the content runs
 // and the current CONTENT_MODE ("off" unless set).
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { migrate } from "../lib/schema.mjs";
 import { recordRun, storePost } from "../lib/content/store.mjs";
 
@@ -14,10 +14,7 @@ const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
 const db = createClient({ url: DB_URL, timeout: 10000 });
 
-async function cookieFor(login, id) {
-  const token = await encode({ token: { raterId: `gh:${id}`, login, sub: String(id) }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
-  return `authjs.session-token=${token}`;
-}
+const cookieFor = (login, id) => sessionCookie({ id, login });
 
 before(async () => {
   for (let i = 0; i < 60; i++) {
@@ -64,7 +61,7 @@ test("admin content API: drafts with their fact sheet, checks and images; droppe
   await storePost(db, post(`${id}d`, "dropped"), { mode: "dry-run", publishAt: null, now });
   await recordRun(db, { night: "2026-11-16", now, step: "draft", mode: "dry-run", status: "ok", kind: "top-grades", postId: id, gemini: 3 });
 
-  const cookie = await cookieFor("e2e-admin", 990000003);
+  const cookie = await cookieFor("e2e-admin", ADMIN_ID);
   const res = await get(cookie);
   assert.equal(res.status, 200);
   const body = await res.json();
