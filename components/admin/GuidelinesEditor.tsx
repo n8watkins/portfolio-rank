@@ -41,7 +41,7 @@ export function GuidelinesEditor({ initial, suggestions, max }: { initial: Guide
         {list.length === 0 && <p className="mt-2 text-sm text-mute">No rules yet. Add one below, or turn a note from a draft into one.</p>}
         <ol className="mt-3 grid gap-2">
           {list.map((g, i) => (
-            <li key={g.id} className="card flex flex-wrap items-start gap-3 p-3 text-sm" data-guideline={g.id}>
+            <li key={g.id} className={`card flex flex-wrap gap-3 p-3 text-sm ${editing === g.id ? "items-start" : "items-center"}`} data-guideline={g.id}>
               <span className="w-6 shrink-0 font-semibold text-mute tabular-nums">{i + 1}.</span>
               {editing === g.id ? (
                 <div className="grid min-w-0 flex-1 gap-2">
@@ -78,7 +78,7 @@ export function GuidelinesEditor({ initial, suggestions, max }: { initial: Guide
           <label htmlFor="new-rule" className="text-sm font-semibold">
             Add a rule
           </label>
-          <textarea id="new-rule" value={draft} onChange={(e) => setDraft(e.target.value.slice(0, max + 20))} rows={2} placeholder="Lead with what a reader should change on their own portfolio." className="w-full rounded-lg border border-edge bg-card px-3 py-2 text-sm" />
+          <textarea id="new-rule" value={draft} onChange={(e) => setDraft(e.target.value.slice(0, max + 20))} rows={2} placeholder="Name one real portfolio that does it well." className="w-full rounded-lg border border-edge bg-card px-3 py-2 text-sm" />
           <div className="flex items-center gap-3">
             <button type="button" className={btnSecondary} onClick={async () => (await send({ op: "add", text: draft })) && setDraft("")}>
               <Plus className="h-4 w-4" aria-hidden /> Add
