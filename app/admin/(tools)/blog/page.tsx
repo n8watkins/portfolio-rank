@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { notFound } from "next/navigation";
-import { ArrowRight, Inbox, ListChecks } from "lucide-react";
+import { ArrowRight, Inbox, ListChecks, Mail } from "lucide-react";
+import { newsletterCounts } from "@/lib/newsletter/store.mjs";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { jobCalls, recentJobs } from "@/lib/content/jobs.mjs";
 import { BUILDERS, KIND_LABELS } from "@/pipeline/content/facts.mjs";
@@ -121,14 +122,21 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
   const mode = contentMode(process.env.CONTENT_MODE);
   const automation = (await automationView(db(), { CONTENT_MODE: process.env.CONTENT_MODE, CONTENT_DRAFTS_PER_WEEK: process.env.CONTENT_DRAFTS_PER_WEEK })) as AutomationView;
   const g = costs.gemini;
+  const subscribers = await newsletterCounts(db());
   return (
     <>
       <AdminHeader
         title="Blog drafts"
         actions={
-          <Link href="/admin/blog/guidelines" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
-            <ListChecks className="h-4 w-4" aria-hidden /> Editor&apos;s guidelines
-          </Link>
+          <>
+            <Link href="/admin/blog/newsletter" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
+              <Mail className="h-4 w-4" aria-hidden /> Newsletter
+              <span className="tabular-nums text-xs font-medium">({subscribers.confirmed} confirmed)</span>
+            </Link>
+            <Link href="/admin/blog/guidelines" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
+              <ListChecks className="h-4 w-4" aria-hidden /> Editor&apos;s guidelines
+            </Link>
+          </>
         }
       >
         Content engine: <span className="font-semibold text-ink">{mode}</span> · published within 7 days: {thisWeek} of {PUBLISH_CAP}

@@ -9,11 +9,14 @@ import { Card } from "@/components/blog/BlogIndex";
 import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
 import { postLinkFor } from "@/lib/portfolio-links";
+import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
 // the body (components/blog/Markdown.tsx), the portfolios it names, its
-// sources, the full AI note and the share links.
+// sources, the full AI note and the share links. Readers also get the
+// newsletter sign-up (`signup`): in the right-hand margin beside the body on
+// wide screens (sticky while you read), after the post below that.
 
 export type Related = { name: string; url: string; domain: string; reason?: string; shot: string | null };
 
@@ -67,7 +70,20 @@ const domainOf = (url: string) => {
   }
 };
 
-export function Article({ post, related, banner, more = [] }: { post: BlogPost; related: Related[]; banner?: ReactNode; more?: BlogListItem[] }) {
+export function Article({
+  post,
+  related,
+  banner,
+  more = [],
+  signup = false,
+}: {
+  post: BlogPost;
+  related: Related[];
+  banner?: ReactNode;
+  more?: BlogListItem[];
+  /** Show the newsletter sign-up (the public post; not the owner's draft preview). */
+  signup?: boolean;
+}) {
   const cover = coverOf(post.images);
   const bySlot = new Map(post.images.map((im) => [im.slot, im]));
   const sources = post.claims.map((c) => c.url);
@@ -111,7 +127,13 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
         </div>
       )}
 
-      <div className="mx-auto max-w-[42rem] px-4 pt-8 text-[17px] leading-[1.75] sm:px-6 sm:text-lg sm:leading-[1.75]">
+      <div className="relative mx-auto max-w-[42rem] px-4 pt-8 text-[17px] leading-[1.75] sm:px-6 sm:text-lg sm:leading-[1.75]">
+        {signup && (
+          // The reading column stays centred; the sign-up sits in the margin to its right.
+          <div className="absolute bottom-0 left-full top-8 ml-6 hidden w-64 xl:block 2xl:ml-10 2xl:w-72">
+            <NewsletterSignup form="sidebar" className="sticky top-24 text-base leading-normal" />
+          </div>
+        )}
         <Markdown
           body={post.body}
           sources={sources}
@@ -209,6 +231,8 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
           <p className="mb-3 text-sm font-semibold">Share this post</p>
           <ShareLinks url={postUrl(post.slug)} text={post.shareLine || post.title} />
         </div>
+
+        {signup && <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal xl:hidden" />}
       </div>
 
       {more.length > 0 && (

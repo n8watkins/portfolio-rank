@@ -654,7 +654,7 @@ test("config: the grader is off in production and on in staging, the tick is sch
     assert.deepEqual(env.send_email, [{ name: "SEND_EMAIL" }]);
   }
   assert.ok(config.triggers.crons.includes("*/5 * * * *"));
-  assert.deepEqual(config.env.staging.triggers.crons, []);
+  assert.ok(!config.env.staging.triggers.crons.includes("*/5 * * * *"), "the grader's tick never runs on staging");
   const workflow = fs.readFileSync(".github/workflows/grade.yml", "utf8");
   assert.match(workflow, /on:\n  workflow_dispatch:\n\n/, "no inputs: the run's page is public");
   assert.doesNotMatch(workflow, /schedule:|inputs\./);

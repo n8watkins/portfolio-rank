@@ -12,9 +12,17 @@ const staging = config.env.staging;
 const STAGING = { SITE_ENV: "staging" };
 const PRODUCTION = { SITE_ENV: "production" };
 
-test("staging has no Cron Triggers, so nothing there calls Gemini", () => {
-  assert.deepEqual(staging.triggers, { crons: [] });
-  assert.ok(config.triggers.crons.length > 0, "production keeps its crons");
+test("staging's only Cron Trigger is the newsletter's, so nothing there calls Gemini", () => {
+  assert.deepEqual(staging.triggers, { crons: ["*/10 * * * *"] });
+  assert.ok(config.triggers.crons.length > 1, "production keeps its crons");
+  // The scheduled handler matches the newsletter's cron by name before its
+  // last line, which would otherwise start tonight's run (worker/index.ts).
+  const handler = readFileSync("worker/index.ts", "utf8");
+  assert.match(handler, /controller\.cron === NEWSLETTER_CRON\) await newsletterTick\(/);
+  assert.ok(handler.indexOf("NEWSLETTER_CRON) await") < handler.indexOf("else await startTonight"));
+  assert.match(readFileSync("worker/newsletter.ts", "utf8"), /export const NEWSLETTER_CRON = "\*\/10 \* \* \* \*";/);
+  assert.equal(staging.vars.NEWSLETTER_ENABLED, "true");
+  assert.equal(config.vars.NEWSLETTER_ENABLED, "false", "off in production until the owner switches it on");
 });
 
 test("staging has its own address, Worker, ISR cache bucket and Workflow", () => {
@@ -22,10 +30,11 @@ test("staging has its own address, Worker, ISR cache bucket and Workflow", () =>
   assert.equal(config.vars.SITE_ENV, "production");
   assert.equal(staging.vars.AUTH_URL, "https://staging.portfoliorank.n8builds.dev");
   assert.deepEqual(staging.routes, [{ pattern: "staging.portfoliorank.n8builds.dev", custom_domain: true }]);
-  // Its own Worker calls itself; the mailroom (sign-in links) is shared with production, under PortfolioRank's app.
+  // Its own Worker calls itself; the mailroom (sign-in links, the newsletter) is shared with production, under PortfolioRank's apps.
   assert.deepEqual(staging.services, [
     { binding: "WORKER_SELF_REFERENCE", service: `${config.name}-staging` },
     { binding: "MAILROOM", service: "mailroom", entrypoint: "Mailroom", props: { app: "portfoliorank" } },
+    { binding: "MAILROOM_NEWS", service: "mailroom", entrypoint: "Mailroom", props: { app: "portfoliorank-news" } },
   ]);
   const bucket = (c, binding) => c.r2_buckets.find((b) => b.binding === binding).bucket_name;
   assert.notEqual(bucket(staging, "NEXT_INC_CACHE_R2_BUCKET"), bucket(config, "NEXT_INC_CACHE_R2_BUCKET"));

@@ -21,6 +21,9 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
   Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
   Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
+- **Newsletter (`NEWSLETTER_ENABLED`, off in production, on in staging):** the sign-up forms, its API and the ten-minute cron (AUTOMATION.md "Newsletter").
+  It sends through the `MAILROOM_NEWS` service binding (mailroom app `portfoliorank-news`), so deploy that mailroom change first (n8watkins/mailroom#21); until then every newsletter email is refused and the batch waits.
+  "Send test to me" on `/admin/blog/newsletter` needs `OWNER_EMAIL` on the Worker; keep it out of this public file as a secret: `! pass-env set portfolio-rank/OWNER_EMAIL`, then `pass-env pipe portfolio-rank/OWNER_EMAIL -- npx wrangler secret put OWNER_EMAIL --env staging`.
 - **Cron Triggers and the Workflow:** `triggers.crons` and `workflows` in `wrangler.jsonc`; `npx wrangler triggers deploy` is not needed, a deploy registers them (they can take up to 15 minutes to reach every location).
   Check them in the dashboard (Workers & Pages, portfolio-rank, Settings, Triggers) or with `npx wrangler workflows instances list portfolio-rank-night`.
 - **Screenshots and favicons:** the Worker answers `/shots/<shot_key>/<file>` and `/favicon/<domain>` itself, before the app (`worker/assets.ts`), from the edge cache when it can.

@@ -471,8 +471,10 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 
 ## Newsletter and email
 
-- **A weekly newsletter** (owner, 2026-11-10). Status: planned.
-  Sign-up on every post and on the site, confirm by email (double opt-in), one-click unsubscribe, a weekly digest of new posts, the top 5 and the biggest climber.
+- **A newsletter: one email per post** (owner, 2026-11-12, replacing "a weekly newsletter" of 2026-11-10). Status: building (staging), `NEWSLETTER_ENABLED` off in production.
+  Sign-up beside every post, on `/blog` and in the footer, confirm by email (double opt-in), one-click unsubscribe, and one email per published post (at most two a week) instead of a weekly digest with the top 5 and the biggest climber; the owner sees every subscriber, where they signed up and every send on `/admin/blog/newsletter` (AUTOMATION.md "Newsletter").
+  It sends through the shared mailroom as its own app (`portfoliorank-news`, 150 a month), so it can't use up sign-in links; caps fail closed and never bill.
+  Cloudflare Email Service is for transactional email only (its FAQ: no marketing email); this is an editorial, double opt-in list that sells nothing, the same as the n8builds.dev blog's, and pausing its mailroom app stops it without touching the other apps. If the list outgrows a few hundred emails a month or Cloudflare objects, it moves to a newsletter service.
   Why: a way to bring readers back that doesn't depend on search or social.
 - **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (#81, `lib/email/gate.mjs`; the games' report links use it too).
   Newsletter, queued grade reports, the games' report links and owner updates all pass one module that counts every send and stops at a daily cap.
