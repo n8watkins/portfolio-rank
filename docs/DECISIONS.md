@@ -446,6 +446,8 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Why: the owner's existing removal flow, with no wait for the person asking.
   Superseded 2026-11-11 (security review M4, owner-approved): a removal needs the meta tag or a reviewed claim, is held 24 hours with an owner alert, can be cancelled by the claimant and undone by the admin.
   Why: a link to someone's GitHub profile or repository is common on portfolios, so a link alone let collaborators remove a site for good with no one told.
+  Tightened 2026-11-12 (owner's question: could a fork or a collaborator take over a listing?): hiding or showing the grade needs the same proof as removal (meta tag, a reviewed claim, or `github_pages`, the site being `<login>.github.io`); a profile link proves only enough to ask for a re-grade, and counts for nothing on another account's github.io site.
+  Why: a collaborator, designer or template author linked from someone's page could otherwise hide their grade; a fork lives at the forker's own address, and proofs are only ever checked on the listed address, so a fork never could.
 - **Live stats in one cached endpoint** (owner, 2026-11-10). Status: building.
   Portfolios listed, graded, graded this week, votes today, quizzes played, % own domain, % resume link, most common role, average tier, sites changed this month, newest entry, community list contributors and the repository's stars (GitHub API, cached daily).
   Why: one request for the home page's numbers, cheap on Turso (an hour's cache for the list, a day's for GitHub).
