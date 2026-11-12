@@ -135,8 +135,8 @@ export function ipKey(ip: string): string {
 
 /**
  * Cloudflare Turnstile for a poll vote (lib/turnstile.ts, action
- * "poll-vote"), when the TURNSTILE_SECRET_KEY secret is set; without it the
- * check is skipped. "ok", "skipped" or "failed".
+ * "poll-vote"). The deployed Workers refuse without a usable secret; only
+ * local runs skip it. "ok", "skipped" or "failed".
  */
 export async function verifyTurnstile(token: unknown, ip: string): Promise<"ok" | "skipped" | "failed"> {
   return verifyTurnstileFor(token, ip, { action: "poll-vote" });

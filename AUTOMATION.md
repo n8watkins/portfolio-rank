@@ -172,7 +172,7 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 
 - **One vote per visitor:** per signed-in account and per browser (the signed `pr_anon` cookie, issued on the first vote), enforced by unique indexes, so concurrent requests can't vote twice.
   Signing in or out on the same browser, or using the same account on another browser, doesn't give a second vote.
-- **Guards on a vote:** the `Origin` header must be the site's own; at most 20 attempts per browser and 60 per IP an hour (`rate_limits`, the IP stored only as a keyed hash); Cloudflare Turnstile when the `TURNSTILE_SECRET_KEY` Worker secret is set (widget action `poll-vote`), skipped without it.
+- **Guards on a vote:** the `Origin` header must be the site's own; at most 20 attempts per browser and 60 per IP an hour (`rate_limits`, the IP stored only as a keyed hash); Cloudflare Turnstile (widget action `poll-vote`); the deployed Workers refuse a vote while the `TURNSTILE_SECRET_KEY` secret is missing, and only local runs skip it.
 - **Privacy:** no API returns who voted for what; results are totals and percentages.
 - **Results feed:** `pollResults(db, { since })` in [lib/polls/store.mjs](lib/polls/store.mjs) returns closed polls with totals, the winning option and the margin in points, for the content engine and the AI vs people comparisons; the public `past` list carries the same totals.
 - **Turso reads:** a public read is a handful of indexed rows, at most once a minute per data center; a vote is one insert (plus the trigger's update) and two rate-limit upserts.
@@ -289,7 +289,7 @@ report ◄── GET /api/grade/<id> (progress, then the report) ── email: o
 1. The flag, the `Origin` header (the site's own) and a JSON body of at most 8 KB.
 2. The address ([lib/grader/url.mjs](lib/grader/url.mjs)): http or https (https when no scheme is given), ports 80 and 443 only, no user name or password, a public host name with a dot (never an IP literal, a local name or a private range, [lib/net-guard.mjs](lib/net-guard.mjs)), at most 500 characters; the query and fragment are dropped, so `?x=1` makes no new address for the caches, the caps or the cooldown.
 3. A rate limit on attempts, before any work: 20 an hour per visitor and 60 per network (`rate_limits`).
-4. Cloudflare Turnstile (action `grade`) when the `TURNSTILE_SECRET_KEY` secret is set; skipped without it ([lib/turnstile.ts](lib/turnstile.ts)).
+4. Cloudflare Turnstile (action `grade`), refused on the deployed Workers when the `TURNSTILE_SECRET_KEY` secret is missing; the token's hostname must be the Worker's own (`AUTH_URL`); only local runs skip it ([lib/turnstile.ts](lib/turnstile.ts)).
 5. An own key, if sent, is checked with a free metadata call (`models.get` for `gemini-3.5-flash-lite`, no generate quota).
 6. The free checks ([lib/grader/quick.ts](lib/grader/quick.ts)): one plain fetch from the Worker through `safeFetch` (every redirect hop re-checked, 10-second timeout, 1.5 MB cap, and `global_fetch_strictly_public` refuses names that resolve to private addresses), then the facts code can check (`pipeline/facts.mjs`, project links checked through the same fetch) and a fingerprint of the HTML's structure.
    Cached per address for a day (failures for 10 minutes) in the `cache` table.
