@@ -55,7 +55,7 @@ function write(p: ViewPrefs) {
  * and motion is welcome: the old and new layouts cross-fade and each card
  * eases to its new height (app/globals.css). Otherwise the change is instant.
  */
-function animated(update: () => void) {
+export function animated(update: () => void) {
   const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
   const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   if (!doc.startViewTransition || still) return update();

@@ -14,6 +14,7 @@ import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { BELOW_TOP_TIERS, isPublicTier, tierOf } from "@/lib/tiers.mjs";
 import { TierBadge } from "@/components/ui/badges";
+import { eloStanding } from "@/lib/play/card";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -133,6 +134,9 @@ export default async function PortfolioPage({
   ).rows[0];
   if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
 
+  // Its place on the ELO board (the face-off's votes), as Play shows it after a vote.
+  const standing = await eloStanding(url);
+
   const stars = Number(
     (
       await db().execute({
@@ -187,6 +191,11 @@ export default async function PortfolioPage({
                 <p className="text-xs text-mute">
                   ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
                 </p>
+                {standing.eloRank != null && (
+                  <p className="text-xs text-mute tabular-nums">
+                    #{standing.eloRank.toLocaleString("en-US")} of {standing.eloTotal.toLocaleString("en-US")}
+                  </p>
+                )}
                 {stars > 0 && (
                   <p className="text-xs font-semibold text-accent">
                     ⭐ {stars} loved

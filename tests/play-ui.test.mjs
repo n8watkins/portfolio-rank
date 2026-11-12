@@ -91,9 +91,16 @@ test("face-off: pick with a key, the crowd's lean is announced, Undo takes it ba
   await page.keyboard.press("ArrowLeft");
   await page.getByRole("status").filter({ hasText: `You picked ${left}.` }).waitFor();
   assert.match(await page.getByRole("status").filter({ hasText: "You picked" }).textContent(), /\d+% of people would pick it\. (With the crowd|The underdog|A dead heat for the crowd)\./);
-  // The share shows on the cards; the next step has focus.
-  assert.equal(await page.getByText("of people would pick this").count(), 2);
+  // The spotlight: the picked one in front with its share and ELO, the other at the side with its own.
+  await page.getByText("of people would pick this").waitFor();
+  assert.equal(await page.getByText("would pick this one").count(), 1);
+  await page.getByText(/^(ELO [0-9,]+|No ELO yet)/).first().waitFor();
   await page.waitForFunction(() => /^Next pair/.test(document.activeElement?.textContent?.trim() ?? ""));
+  // Clicking the other brings it to the front; Next is still the next step.
+  const other = page.getByRole("button", { name: /^Bring .* to the front$/ });
+  const otherName = (await other.getAttribute("aria-label")).replace(/^Bring | to the front$/g, "");
+  await other.click();
+  await page.getByRole("article", { name: `${otherName}, in focus` }).waitFor();
   assert.match(await page.getByText(/^\d+ \/ 5$/).textContent(), /^1 \/ 5$/);
   await page.getByRole("button", { name: "Undo" }).click();
   await page.getByText("Undid your last vote. Here's a fresh pair.").first().waitFor();
@@ -110,7 +117,8 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   // Detailed by default: the polish checklist and the full Lighthouse rows.
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   await page.getByRole("button", { name: "Simple" }).click();
-  assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
+  // The swap runs inside a view transition, so it lands a moment later.
+  await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor({ state: "detached" });
   // Simple: the strip under the screenshot (performance rings, built with, polish count).
   await page.getByLabel("Lighthouse performance").first().waitFor();
   // Remembered in this browser.
@@ -120,7 +128,8 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
   // Ticking a part adds it, and the view becomes the viewer's own.
   await page.getByText("Show", { exact: true }).click();
-  await page.getByRole("checkbox", { name: "Polish checklist" }).check();
+  // A click, not check(): the box flips when the view transition lands, a frame later.
+  await page.getByRole("checkbox", { name: "Polish checklist" }).click();
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   assert.equal(await page.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed"), "false");
   await context.close();
