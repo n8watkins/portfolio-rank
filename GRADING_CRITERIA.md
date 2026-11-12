@@ -133,21 +133,20 @@ Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and a
 
 **Tiers by rank** (`lib/tiers.mjs`, owner decision 2026-11-12): the tier a portfolio shows is its place in the graded library, written into its grade as `rank` = { tier, score, top }.
 The score (0-100) is 80% the AI quality score (1-5 put on 0-100) and 20% `checks_score`; a grade without code checks counts 85, about the library's median.
-SSS and S+ are counts: the library is put in one full order (score, then Gemini's letter, then people's ELO, then the address), and exactly the first 3 places are SSS and places 4 to 10 S+.
+The library is put in one full order: the score, then Lighthouse performance on mobile, then on desktop, then polish checks passed, then Gemini's letter, then people's ELO (counted after 5 face-offs), then the date first graded (earlier first); the address never decides.
+The S band is the top 1% by place in that order, so it is exact: SSS the first 3, then S+, S and S- split the rest in thirds.
 The other tiers go by share: equal scores (with the same Gemini letter) share a place, the middle of their group, and so a tier.
 
 | Tier | Place in the library |
 | --- | --- |
 | SSS | the top 3 portfolios |
-| S+ | places 4 to 10 |
-| S | the rest of the top 0.5% |
-| S- | the rest of the top 1% |
+| S+, S, S- | the rest of the top 1%, in thirds by place |
 | A+, A, A- | 1% to 15%, in thirds by rank |
 | B+, B, B- | 15% to 70%, in thirds (shown publicly down to B-) |
 | C+, C, C- | 70% to 85%, in thirds |
 | D | the bottom 15% |
 
-SSS and S+ need a library of at least 100; a share tier is only given when its band holds at least one whole portfolio (S needs 200, S- 100); otherwise the next tier toward B.
+The S band needs a library of at least 100 and fills every S tier from 600; a share tier is only given when its band holds at least one whole portfolio; otherwise the next tier toward B.
 Boards and filters group by the letter family (S, A, B, C, D; SSS counts as S); the badge shows the plus or minus.
 The public page `/grading` explains all of this with today's counts.
 `refreshTiers` places every grade again hourly (`worker/tiers.ts`) and at each deploy (`scripts/refresh-tiers.mjs`); a new grade is placed against the last library as it is written.

@@ -123,8 +123,9 @@ export default async function GradingPage() {
             <div className="card p-5">
               <dt className="font-bold">Ties</dt>
               <dd className="mt-2 text-sm text-mute text-pretty">
-                Equal scores are split by the AI&apos;s overall letter. For SSS and S+, which are exact places, any tie left is split by
-                people&apos;s ELO, then by the address. Below that, portfolios still tied share a tier.
+                Equal scores are split by Lighthouse performance (mobile, then desktop), then polish checks passed, then the AI&apos;s
+                overall letter, then people&apos;s ELO once a portfolio has 5 face-offs, then who was graded first. The S tiers are exact
+                places in that order; below them, portfolios still tied share a tier.
               </dd>
             </div>
             <div className="card p-5">

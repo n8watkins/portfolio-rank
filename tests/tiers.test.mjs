@@ -18,6 +18,7 @@ import {
   isPublicTier,
   modifierOf,
   tierLabel,
+  entryOf,
   orderLibrary,
   placeNew,
   rankKey,
@@ -54,7 +55,7 @@ test("the ladder: owner's cut-offs in order, B public, C and D private", () => {
   assert.deepEqual(TIERS, ["SSS", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D"]);
   assert.deepEqual(
     TIER_LADDER.map((t) => t.count ?? t.top),
-    [3, 10, 0.5, 1, 5.667, 10.333, 15, 33.333, 51.667, 70, 75, 80, 85, 100]
+    [3, 1, 1, 1, 5.667, 10.333, 15, 33.333, 51.667, 70, 75, 80, 85, 100]
   );
   assert.deepEqual(PUBLIC_TIERS, ["SSS", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-"]);
   assert.equal(isPublicTier("B-"), true);
@@ -89,41 +90,69 @@ test("the score: 80% the AI's weighted scores, 20% the code checks; unknown chec
 /** A library of distinct keys, best first: n entries, urls s0 (best) to s<n-1>. */
 const lib = (n, key = (i) => (n - i) * 10, elo = () => null) => orderLibrary(Array.from({ length: n }, (_, i) => ({ url: `https://s${String(i).padStart(5, "0")}.dev`, key: key(i), elo: elo(i) })));
 
-test("a library of 3,000 distinct scores: exactly 3 SSS and 7 S+, then the owner's shares in thirds", () => {
+test("a library of 3,000 distinct scores: 3 SSS, the rest of the top 1% in thirds, then the owner's shares in thirds", () => {
   const order = lib(3000);
-  // S to the 0.5% line (place 15), S- to 1% (30); A+ 1-5.667% (170), A to 10.333% (310), A- to 15% (450);
+  // The top 1% is 30 places: SSS 3, then 9 each; A+ 1-5.667% (170), A to 10.333% (310), A- to 15% (450);
   // B+ to 33.333% (1,000), B to 51.667% (1,550), B- to 70% (2,100); C+ to 75%, C to 80%, C- to 85%; D the rest.
   assert.deepEqual(distribution(order), {
-    SSS: 3, "S+": 7, S: 5, "S-": 15, "A+": 140, A: 140, "A-": 140, "B+": 550, B: 550, "B-": 550, "C+": 150, C: 150, "C-": 150, D: 450,
+    SSS: 3, "S+": 9, S: 9, "S-": 9, "A+": 140, A: 140, "A-": 140, "B+": 550, B: 550, "B-": 550, "C+": 150, C: 150, "C-": 150, D: 450,
   });
   const ranks = rankLibrary(order);
   assert.equal(ranks.get(order[2].url).tier, "SSS");
   assert.equal(ranks.get(order[3].url).tier, "S+");
-  assert.equal(ranks.get(order[9].url).tier, "S+");
-  assert.equal(ranks.get(order[10].url).tier, "S");
+  assert.equal(ranks.get(order[11].url).tier, "S+");
+  assert.equal(ranks.get(order[12].url).tier, "S");
+  assert.equal(ranks.get(order[29].url).tier, "S-");
+  assert.equal(ranks.get(order[30].url).tier, "A+");
   assert.equal(ranks.get(order[0].url).top, 1);
   assert.equal(topPctAt(1, 1000), 1);
   assert.equal(topPctAt(11, 1000), 2);
   assert.equal(tierAt(3000, 3000), "D");
 });
 
-test("count tiers break every tie: score, Gemini's letter, then ELO, then the address", () => {
-  // 20 sites tied on score and letter at the top, then 980 distinct below.
-  const order = lib(1000, (i) => (i < 20 ? 99990 : 50000 - i), (i) => (i < 20 ? 1200 + (i % 4) * 10 : null));
+test("the S band breaks every tie: Lighthouse, polish, Gemini's letter, ELO after 5 face-offs, then who was graded first", () => {
+  const T0 = Date.parse("2026-06-01T00:00:00Z");
+  // 1,000 portfolios (S band: the top 10 places): 12 tie on score at the top, then 988 below.
+  const top = [
+    { url: "https://a-lh-low.dev", lhm: 80 },
+    { url: "https://b-lh-high.dev", lhm: 95 },
+    { url: "https://c-desktop.dev", lhm: 90, lhd: 99 },
+    { url: "https://d-desktop-low.dev", lhm: 90, lhd: 50 },
+    { url: "https://e-polish.dev", lhm: 70, polish: 9 },
+    { url: "https://f-letter.dev", lhm: 70, polish: 5, letter: 4 },
+    { url: "https://g-elo.dev", lhm: 60, elo: 1400, faceoffs: 12 },
+    { url: "https://h-elo-few.dev", lhm: 60, elo: 1900, faceoffs: 3 },
+    { url: "https://i-early.dev", lhm: 50, first: T0 },
+    { url: "https://j-late.dev", lhm: 50, first: T0 + 1000 },
+    { url: "https://a-same-but-later.dev", lhm: 40, first: T0 + 5000 },
+    { url: "https://z-same-but-earlier.dev", lhm: 40, first: T0 },
+  ].map((e) => entryOf({ score: 10000, letter: 2, first: T0 - 1, ...e }));
+  const order = orderLibrary([...top, ...Array.from({ length: 988 }, (_, i) => entryOf({ url: `https://s${String(i).padStart(4, "0")}.dev`, key: (5000 - i) * 10 }))]);
+  assert.deepEqual(order.slice(0, 12).map((e) => e.url.slice(8, -4)), [
+    "b-lh-high", "c-desktop", "d-desktop-low", "a-lh-low", "e-polish", "f-letter", "g-elo", "h-elo-few", "i-early", "j-late",
+    // The address never decides: the earlier grade wins although its address sorts last.
+    "z-same-but-earlier", "a-same-but-later",
+  ]);
   const ranks = rankLibrary(order);
-  const tier = (t) => order.filter((e) => ranks.get(e.url).tier === t);
-  assert.equal(tier("SSS").length, 3);
-  assert.equal(tier("S+").length, 7);
-  // Highest ELO first (1230 on i = 3, 7, 11 ...), then the address.
-  assert.deepEqual(tier("SSS").map((e) => e.url), ["https://s00003.dev", "https://s00007.dev", "https://s00011.dev"]);
-  // The tied group's rest share a tier by the middle of their group (share tiers): all S or all A, never split.
-  const rest = order.slice(10, 20).map((e) => ranks.get(e.url).tier);
-  assert.equal(new Set(rest).size, 1);
-  // A newcomer that ties exactly loses the tie to the library's members.
-  const tied = placeNew(order, { url: "", key: 99990, elo: 1230 });
-  assert.equal(tied.place, 6);
-  assert.equal(tied.tier, "S+");
-  assert.equal(placeNew(order, { url: "https://new.dev", key: 999999 }).tier, "SSS");
+  const tiers = order.slice(0, 12).map((e) => ranks.get(e.url).tier);
+  // SSS the first 3; the other 7 places of the top 1% in thirds (3, 2, 2); the 11th place is already past the band.
+  assert.deepEqual(tiers.slice(0, 10), ["SSS", "SSS", "SSS", "S+", "S+", "S+", "S", "S", "S-", "S-"]);
+  assert.ok(!tiers.slice(10).some((t) => familyOf(t) === "S"));
+  // ELO counts only after 5 face-offs: a 1,900 with 3 face-offs is the starting 1200, below a 1,400 with 12.
+  assert.ok(order.indexOf(top[6]) < order.indexOf(top[7]));
+  // A newcomer that ties on everything was graded last, so it loses the tie.
+  const tied = placeNew(order, entryOf({ url: "https://new.dev", score: 10000, letter: 2, lhm: 95, first: Date.now() }));
+  assert.equal(tied.place, 2);
+  assert.equal(tied.tier, "SSS");
+});
+
+test("every S tier is filled once the library has 600 portfolios", () => {
+  for (const n of [600, 1369, 1855]) {
+    const d = distribution(lib(n));
+    assert.equal(d.SSS, 3, String(n));
+    assert.ok(d["S+"] > 0 && d.S > 0 && d["S-"] > 0, `${n}: ${JSON.stringify(d)}`);
+    assert.ok(d["S+"] - d["S-"] <= 1, "thirds as even as places allow");
+  }
 });
 
 test("share tiers: equal scores share a place and a tier", () => {
@@ -208,8 +237,9 @@ test("refreshTiers writes each grade's rank, only when it changed, and ranks old
   assert.equal(first.jobs, 2);
   const sum = Object.values(first.distribution).reduce((a, b) => a + b, 0);
   assert.equal(sum, 120);
-  assert.equal(first.distribution.SSS, 3);
-  assert.equal(first.distribution["S+"], 7);
+  // 120 portfolios: the top 1% is one place, so one SSS and no other S tier.
+  assert.equal(first.distribution.SSS, 1);
+  assert.equal(first.distribution["S+"], 0);
   const read = async (url) => JSON.parse(String((await client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0].ai_rubric));
   const best = await read("https://site119.example/");
   assert.ok(TIERS.includes(best.rank.tier));

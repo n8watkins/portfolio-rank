@@ -22,9 +22,9 @@ const LOOK: Record<string, { background: string; color: string; border: string; 
 };
 
 /**
- * The tier chip at `box` pixels square: the letter, and a plus or minus
- * drawn as bars at its top right (the badge's design, components/ui/badges.tsx),
- * so "A+" reads as one mark. `style` places it (position, left, bottom).
+ * The tier chip at `box` pixels square: the letter with a typeset plus or
+ * minus beside it, a little smaller and centred on the letter (the badge's
+ * design, components/ui/badges.tsx). `style` places it (position, left, bottom).
  */
 export function TierChip({ tier, box = 132, style = {} }: { tier: string; box?: number; style?: CSSProperties }) {
   const family = familyOf(tier) ?? "C";
@@ -33,8 +33,6 @@ export function TierChip({ tier, box = 132, style = {} }: { tier: string; box?: 
   const sss = tier === "SSS";
   const size = Math.round(box * (sss ? 0.4 : 0.58));
   const shadows = [look.ring ? `0 0 0 5px ${look.ring}` : null, look.glow ? `0 0 46px ${look.glow}` : null, "0 18px 40px rgba(0,0,0,0.5)"].filter(Boolean);
-  const bar = Math.round(size * 0.13);
-  const len = Math.round(size * 0.42);
   return (
     <div
       style={{
@@ -54,14 +52,9 @@ export function TierChip({ tier, box = 132, style = {} }: { tier: string; box?: 
         ...style,
       }}
     >
-      <div style={{ display: "flex", position: "relative", marginLeft: mod ? -len * 0.6 : 0 }}>
-        {sss ? "SSS" : family}
-        {mod && (
-          <div style={{ display: "flex", position: "absolute", right: -len - bar, top: size * 0.12, width: len, height: len }}>
-            <div style={{ position: "absolute", left: 0, top: (len - bar) / 2, width: len, height: bar, borderRadius: bar / 2, background: look.color }} />
-            {mod === "+" && <div style={{ position: "absolute", left: (len - bar) / 2, top: 0, width: bar, height: len, borderRadius: bar / 2, background: look.color }} />}
-          </div>
-        )}
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <div style={{ display: "flex" }}>{sss ? "SSS" : family}</div>
+        {mod && <div style={{ display: "flex", fontSize: Math.round(size * 0.8), marginLeft: Math.round(size * 0.03), marginTop: -Math.round(size * 0.06) }}>{mod === "+" ? "+" : "\u2212"}</div>}
       </div>
     </div>
   );
