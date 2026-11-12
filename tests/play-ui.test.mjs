@@ -110,7 +110,8 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   // Detailed by default: the polish checklist and the full Lighthouse rows.
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   await page.getByRole("button", { name: "Simple" }).click();
-  assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
+  // The swap runs inside a view transition, so it lands a moment later.
+  await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor({ state: "detached" });
   // Simple: the strip under the screenshot (performance rings, built with, polish count).
   await page.getByLabel("Lighthouse performance").first().waitFor();
   // Remembered in this browser.
