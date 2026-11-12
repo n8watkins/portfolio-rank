@@ -192,6 +192,10 @@ export function createGemini({
   // rule: the backup gets one try after the last retry. The content engine
   // moves after 1, since a different model is rarely busy at the same time.
   fallbackAfter = retryDelaysMs.length,
+  // The thinking level to send a model, given the one the call asked for.
+  // The content engine sends the backup "minimal": 3.1 Flash-Lite spent a
+  // whole 4,096-token budget thinking at "low" and cut the answer off.
+  thinkingFor = (model, level) => level,
   // With a chain only: "fallback" moves the run to the next model when a
   // daily quota is spent, "stop" ends it instead (GeminiQuotaError). With
   // one model a spent quota always ends the run.
@@ -305,7 +309,8 @@ export function createGemini({
 
   // Models that rejected a thinking level this run; they get none.
   const noThinking = new Set();
-  function bodyFor(model, parts, schema, { systemInstruction, thinkingLevel, maxOutputTokens, temperature = 0.2 }) {
+  function bodyFor(model, parts, schema, { systemInstruction, thinkingLevel: asked, maxOutputTokens, temperature = 0.2 }) {
+    const thinkingLevel = asked ? thinkingFor(model, asked) : asked;
     const generationConfig = { temperature, responseMimeType: "application/json", responseSchema: schema };
     if (maxOutputTokens) generationConfig.maxOutputTokens = maxOutputTokens;
     const thinking = Boolean(thinkingLevel) && !noThinking.has(model);

@@ -105,7 +105,7 @@ test("the Automation panel: save the nights and drafts a week, queue a topic, se
 
   await panel.getByRole("button", { name: "Wednesday" }).click();
   await panel.getByRole("button", { name: "Thursday" }).click();
-  await panel.getByRole("radio", { name: "1" }).click();
+  await panel.getByRole("radio", { name: "1", exact: true }).click();
   await panel.getByRole("button", { name: "Save automation" }).click();
   await panel.getByText("Saved. It applies from tonight's run.").waitFor();
   await panel.getByText("On: 1 draft a week on Monday and Thursday nights, for your review").waitFor();
