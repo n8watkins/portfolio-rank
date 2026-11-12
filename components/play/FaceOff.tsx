@@ -530,7 +530,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                {/* From 1440 px up the details sit beside the screenshot; below that, under it. */}
+                {/* From 1440 px up the "Built with" list fills the space under the
+                    screenshot and the checks sit beside it; below that, all of it
+                    follows the screenshot. */}
                 <div className="flex-1 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
                   <div className="min-w-0">
                     <button
@@ -545,8 +547,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                       {pick === null && <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />}
                       {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
                     </button>
+                    {wide && <DetailsPanel id={`spec-${side}`} url={e.url} record={false} profile={false} part="spec" />}
                   </div>
-                  <DetailsPanel id={`details-${side}`} url={e.url} record={pick !== null} profile side={wide} />
+                  <DetailsPanel id={`details-${side}`} url={e.url} record={pick !== null} profile part={wide ? "checks" : "all"} side={wide} />
                 </div>
                 {/* The pick, centered under its card. */}
                 <div className="flex min-h-16 items-center justify-center border-t border-edge p-2.5 sm:p-3">
