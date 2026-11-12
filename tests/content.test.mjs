@@ -1548,3 +1548,19 @@ test("portfolio links: the writer points a named portfolio at its PortfolioRank 
   assert.ok(out.includes("[leaderboard](https://portfoliorank.n8builds.dev/top)"), out);
   assert.ok(out.includes("[elsewhere](https://example.com)"), out);
 });
+
+test("busy Google: the backup model thinks minimally, so its answer isn't cut off", async () => {
+  const { createGemini } = await import("../pipeline/gemini.mjs");
+  const { CONTENT_GEMINI } = await import("../pipeline/content/busy.mjs");
+  const sent = [];
+  const fetchImpl = async (url, init) => {
+    const model = String(url).match(/models\/([^:]+):/)[1];
+    sent.push({ model, level: JSON.parse(String(init.body)).generationConfig.thinkingConfig?.thinkingLevel });
+    if (model === PRIMARY_MODEL) return OVERLOADED();
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "{}" }] }, finishReason: "STOP" }] }), { status: 200 });
+  };
+  const g = createGemini({ apiKey: "k", ...CONTENT_GEMINI, rpm: 6000, sleep: async () => {}, fetchImpl, log: () => {} });
+  const out = await g.generate([{ text: "x" }], { type: "OBJECT" }, { thinkingLevel: "low" });
+  assert.equal(out.model, BACKUP_MODEL);
+  assert.deepEqual(sent, [{ model: PRIMARY_MODEL, level: "low" }, { model: PRIMARY_MODEL, level: "low" }, { model: BACKUP_MODEL, level: "minimal" }]);
+});

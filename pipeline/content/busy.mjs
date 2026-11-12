@@ -16,7 +16,7 @@
 //      same way (pipeline/night.mjs).
 //
 // A spent daily quota or a rejected key is not "busy": those still stop.
-import { FLASH_LITE_CHAIN, GeminiAuthError, GeminiQuotaError, GeminiUnavailableError } from "../gemini.mjs";
+import { FLASH_LITE_CHAIN, GeminiAuthError, GeminiQuotaError, GeminiUnavailableError, PRIMARY_MODEL } from "../gemini.mjs";
 
 /** The models a draft may use, in order: 3.5 Flash-Lite, then 3.1 Flash-Lite when 3.5 is busy. */
 export const CONTENT_MODELS = FLASH_LITE_CHAIN;
@@ -31,6 +31,9 @@ export const CONTENT_GEMINI = {
   // Spread tries from 0.5x to 1.5x of the delay, so tries don't line up with everyone else's.
   jitter: () => 0.5 + Math.random(),
   fallbackAfter: 1,
+  // 3.1 Flash-Lite thinks far longer than 3.5 at the same level and ran out of
+  // output tokens on a staging draft (2026-11-12), so it thinks "minimal".
+  thinkingFor: (model, level) => (model === PRIMARY_MODEL ? level : "minimal"),
 };
 
 /** Retries one draft may make in all (5xx, timeouts, rate limits), across its requests. */
