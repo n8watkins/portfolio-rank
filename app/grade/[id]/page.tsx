@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Bot, Briefcase, CircleAlert, ExternalLink, Link2Off, PartyPopper, Rocket, Sparkles, TrendingUp, Wrench } from "lucide-react";
+import { ArrowRight, Bot, Briefcase, CircleAlert, CircleCheck, CircleMinus, ExternalLink, Link2Off, PartyPopper, Rocket, Sparkles, TrendingUp, Wrench } from "lucide-react";
 import { Celebration } from "@/components/grade/Celebration";
 import { GradeForm } from "@/components/grade/GradeForm";
 import { GradeProgress } from "@/components/grade/GradeProgress";
@@ -58,6 +59,70 @@ function LinkNote({ link }: { link?: string }) {
   );
 }
 
+/**
+ * A grade whose screenshots and AI grade can't start ("unavailable": the
+ * capture service isn't connected, as on staging): the free checks are the
+ * whole answer, so the page shows them as the report does and says plainly
+ * what is missing, instead of calling it a failure.
+ */
+function ChecksOnly({ page, link }: { page: GradePage; link?: string }) {
+  const { job } = page;
+  const steps = job.steps;
+  return (
+    <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-5 px-4 py-10 sm:px-6 sm:py-14">
+      <LinkNote link={link} />
+      <section aria-labelledby="checks-only" className="card rise p-5 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-mute">Free checks</p>
+        <h1 id="checks-only" className="mt-1 break-words text-2xl font-bold tracking-tight">
+          {page.name}
+        </h1>
+        <a href={job.url} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-flex w-fit max-w-full items-center gap-1 text-sm text-mute hover:text-accent">
+          <span className="truncate">{job.domain}</span> <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+        <ol className="mt-5 grid grid-cols-1 gap-2 text-sm" aria-label="What ran">
+          {steps.map((s) => (
+            <li key={s.key} className="flex items-center gap-2.5">
+              {s.state === "done" ? (
+                <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden />
+              ) : (
+                <CircleMinus className="h-4 w-4 shrink-0 text-mute" aria-hidden />
+              )}
+              <span className={s.state === "done" ? "" : "text-mute"}>{s.label}</span>
+              <span className="sr-only">: {s.state === "done" ? "done" : "not available"}</span>
+            </li>
+          ))}
+        </ol>
+        <p role="status" className="mt-5 flex items-start gap-2 rounded-xl bg-raised p-3.5 text-sm">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
+          <span>
+            Screenshots and the AI grade can&apos;t run right now (the capture service isn&apos;t connected), so there&apos;s no tier or rank. The free checks did run, and this is what they found.
+          </span>
+        </p>
+      </section>
+
+      <section aria-labelledby="hiring" className="card rise p-5 sm:p-6" style={d(80)}>
+        <h2 id="hiring" className="flex items-center gap-2 text-lg font-bold tracking-tight">
+          <Briefcase className="h-4 w-4 text-mute" aria-hidden /> What a hiring manager sees
+        </h2>
+        <p className="mt-1 text-sm text-mute">Checked by code{job.checks && "measuredAt" in job.checks && typeof job.checks.measuredAt === "string" ? ` on ${day(job.checks.measuredAt)}` : ""}.</p>
+        <div className="mt-4">
+          <HiringView groups={page.checks!} whyHref={ROUTES.grading} />
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap print:hidden">
+        <Link href="/grade" className={btnSecondary}>
+          Grade another portfolio
+        </Link>
+        <Link href={ROUTES.top ?? "/"} className={btnSecondary}>
+          See the leaderboard
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default async function GradeReportPage({ params, searchParams }: Params & { searchParams: Promise<{ link?: string }> }) {
   const { id } = await params;
   const { link } = await searchParams;
@@ -76,10 +141,12 @@ export default async function GradeReportPage({ params, searchParams }: Params &
     );
   }
 
+  if (job.status === "unavailable" && page.checks) return <ChecksOnly page={page} link={link} />;
+
   if (!job.report || !page.report) {
     const message =
       job.status === "unavailable"
-        ? "Grading couldn't start this time. Try again in a little while."
+        ? "Screenshots and the AI grade can't start right now, and the free checks didn't finish either. Try again in a little while."
         : (job.reason ?? (job.checks && !job.checks.ok ? job.checks.message : null) ?? "Something went wrong while grading. Try again.");
     return (
       <div className="mx-auto flex w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-14">
