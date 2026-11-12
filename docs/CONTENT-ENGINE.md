@@ -287,6 +287,21 @@ The owner's draft on demand, from `/admin/blog` (only the `ADMIN_GITHUB_ID` acco
 - **From the command line:** `wrangler workflows trigger portfolio-rank-draft '{"topic":"..."}'` queues and writes one draft under the same daily cap; only someone with the account's Cloudflare API token can run it.
 - **Images:** a slot's library match now also counts the post's own tags, so the writer prefers approved library images that fit the whole post.
 
+## Automation
+
+Owner request of 2026-11-12: the schedule is the owner's to change from `/admin/blog`, without a deploy ([lib/content/automation.mjs](../lib/content/automation.mjs), tables `content_settings` and `content_topics`).
+
+- **The panel** ("Automation" on `/admin/blog`): on or off; the drafting nights (Monday to Saturday; Sunday night picks the week's ideas); drafts a week; "Drafts for my review" (the default) or "Publish automatically", behind a warning; an optional topic queue; and "Next run" and "Last run" lines with the result.
+- **Read by the night:** the Content stage's `contentJob` reads the settings at every batch; a change applies from that night's run.
+- **The config is the ceiling:** `CONTENT_MODE` "off" turns everything off whatever is saved; "dry-run" allows drafts for review only; only "publish" lets the page choose publishing automatically.
+  `CONTENT_DRAFTS_PER_WEEK` (2, at most 4) is the most drafts a week the page may ask for, and one draft a night still holds, so drafts a week never exceed the nights chosen.
+  The API refuses a value above the ceiling; a saved value a later config lowered is clamped when read.
+- **Fail closed:** when the settings can't be read (a missing table, a row that isn't valid JSON), the night writes nothing and the panel says why.
+- **Before the owner saves:** the config's schedule applies (Monday and Wednesday, `CONTENT_DRAFTS_PER_WEEK` drafts, for review while `CONTENT_MODE` allows any).
+- **Publishing automatically** keeps every limit: 2 published posts in any 7 days, the 08:00 Pacific slot, and a clean quality scorecard; a draft the scorecard flags is kept for review with the reason (`checks.publishHeld`).
+- **The topic queue:** at most 20 topics of at most 200 characters; the next scheduled draft takes the first one as its angle (the same `focus` as Write a draft now), and the week's pick still chooses the data it is written from; a used topic is marked with its post, and a dropped draft marks it dropped.
+- **API:** `GET` and `POST /api/admin/content/automation` (`{ op: "save", settings }`, `{ op: "add-topic", topic }`, `{ op: "remove-topic", id }`), admin only, POSTs with this site's Origin and a JSON body.
+
 ## Quality tools
 
 - **Reject with notes, and "Rewrite with these notes":** on the review page, Reject keeps the owner's note on the draft; "Rewrite with these notes" rejects the draft with the notes and starts a new draft of the same kind and angle with the notes passed to the writer as `owner_notes` (same caps as Write a draft now; a rejected or dropped draft can be rewritten too).

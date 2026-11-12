@@ -6,6 +6,8 @@ import { contentCosts } from "@/lib/content/costs.mjs";
 import { recentJobs } from "@/lib/content/jobs.mjs";
 import { BUILDERS, KIND_LABELS } from "@/pipeline/content/facts.mjs";
 import { DraftNow, type Job } from "@/components/admin/DraftNow";
+import { AutomationPanel, type AutomationView } from "@/components/admin/AutomationPanel";
+import { automationView } from "@/lib/content/automation.mjs";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { publishedAround, reviewQueue } from "@/lib/content/blog.mjs";
@@ -14,8 +16,9 @@ import { type BlogPost, coverOf, imageSrc } from "@/lib/blog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill, closedReason, pacificTime } from "@/components/admin/postStatus";
 
-// The blog's drafts (docs/CONTENT-ENGINE.md, "Review and publish" and
-// "Write a draft now"): "Write a draft now" with its live status, the cost
+// The blog's drafts (docs/CONTENT-ENGINE.md, "Review and publish",
+// "Write a draft now" and "Automation"): "Write a draft now" with its live
+// status, the automation the owner controls (lib/content/automation.mjs), the cost
 // panel, the engine's drafts waiting for the owner, what is published, and
 // what was rejected, dropped by the checks or unpublished. Only the admin
 // sees it; anyone else gets a 404.
@@ -114,6 +117,7 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const { queue, thisWeek, now, costs, job, kinds } = await load(typeof sp.job === "string" && /^[0-9a-f]{16}$/.test(sp.job) ? sp.job : null);
   const mode = contentMode(process.env.CONTENT_MODE);
+  const automation = (await automationView(db(), { CONTENT_MODE: process.env.CONTENT_MODE, CONTENT_DRAFTS_PER_WEEK: process.env.CONTENT_DRAFTS_PER_WEEK })) as AutomationView;
   const g = costs.gemini;
   return (
     <div className="mx-auto max-w-4xl px-4 pb-20 sm:px-6">
@@ -135,6 +139,7 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
       <DraftNow kinds={kinds} initialJob={job as Job | null} left={Math.max(0, costs.drafts.cap - costs.drafts.today)} />
+      <AutomationPanel initial={automation} kindLabels={KIND_LABELS as Record<string, string>} />
       <section aria-label="What the blog may still spend" className="mt-4">
         <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-cost-panel>
           <Cost label="Gemini today" value={`${n(g.used)} used, ${n(g.left)} left`} hint={`${n(g.reserve)} kept for people; a draft may take ${g.draftNow} now`} />
