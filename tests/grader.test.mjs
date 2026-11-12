@@ -467,10 +467,10 @@ test("report: strengths, fixes, percentile, similar portfolios and who does it b
   ];
   const r = compareWithPool(g, pool, { isSelf: (u) => siteKeyOf(u) === "jane.dev" });
   assert.equal(r.percentile.total, 40, "39 others plus this one");
-  // Ten A sites above it by score: 11th of 40, the top 27%, tier B by rank.
+  // Ten A sites above it by score: 11th of 40, the top 27%, tier B+ by rank (15% to 33%).
   assert.equal(r.percentile.rank, 11);
   assert.equal(r.percentile.topPct, 27);
-  assert.equal(r.rank.tier, "B");
+  assert.equal(r.rank.tier, "B+");
   assert.equal(r.similar.length, 4);
   assert.ok(r.similar.every((s) => s.tier === "B"));
   assert.ok(!JSON.stringify(r).includes("jane.dev"), "the site is never its own neighbour");

@@ -23,7 +23,7 @@ import { ACTIVE, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { AXES, TIER } from "../grade-pairs.mjs";
-import { orderLibrary, placeNew, rankKey, rankLibrary, tierIndex, tierOf, tierValue } from "../../lib/tiers.mjs";
+import { atLeast, orderLibrary, placeNew, rankKey, rankLibrary, tierOf, tierValue } from "../../lib/tiers.mjs";
 
 export const SITE_URL = "https://portfoliorank.n8builds.dev";
 /** The smallest group a share or average is computed over. */
@@ -166,7 +166,7 @@ function placedTier(rows, grade, member, url = "") {
 }
 
 /** Graded A or higher: the top 15% by rank (lib/tiers.mjs). */
-const top = (r) => r.tier != null && tierIndex(r.tier) <= tierIndex("A");
+const top = (r) => atLeast(r.tier, "A");
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const median = (xs) => {
   if (!xs.length) return null;

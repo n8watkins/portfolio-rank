@@ -239,7 +239,9 @@ export default async function PortfolioPage({
           <div className="mt-4 rounded-xl border border-edge bg-card p-5">
             <div className="flex items-center gap-3">
               {grade.showTier && grade.tier ? (
-                <TierBadge tier={grade.tier} />
+                <a href="/grading#tiers" aria-label={`Tier ${grade.tier}: how tiers work`} className="rounded-lg">
+                  <TierBadge tier={grade.tier} />
+                </a>
               ) : (
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-edge text-sm font-bold text-ink">AI</span>
               )}
@@ -250,7 +252,10 @@ export default async function PortfolioPage({
                 </p>
                 <p className="text-xs text-mute">
                   by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
-                  a verdict
+                  a verdict ·{" "}
+                  <a href="/grading" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
+                    how grading works
+                  </a>
                 </p>
                 {(grade.quality !== undefined || grade.checks !== undefined) && (
                   <p className="mt-0.5 text-xs text-mute">

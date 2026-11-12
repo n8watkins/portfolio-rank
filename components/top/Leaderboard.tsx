@@ -103,6 +103,12 @@ export function Leaderboard({ board }: { board: Board }) {
                 <Split className="h-3.5 w-3.5" aria-hidden /> AI and people strongly disagree
               </li>
             )}
+            <li>
+              Tier from the review, ELO from votes:{" "}
+              <a href="/grading#tiers" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                how grading works
+              </a>
+            </li>
           </ul>
 
           <BoardCard

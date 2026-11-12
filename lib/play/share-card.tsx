@@ -6,7 +6,8 @@ import { db, ensureSchema } from "@/lib/db";
 import { isHidden } from "@/lib/roster";
 import { playCards } from "@/lib/play/card";
 import { readGradeShot } from "@/lib/grader/server";
-import { tierChipStyle } from "@/lib/og-tier";
+import { TierChip } from "@/lib/og-tier";
+import { tierLabel } from "@/lib/tiers.mjs";
 
 // A listed portfolio's share card: its name, its public grade and "top N%"
 // (top tiers only, as on the page) beside its own screenshot. It is the
@@ -60,7 +61,7 @@ export async function listedShareCard(url: string): Promise<Response> {
   const tagline = !p
     ? "The best developer portfolios, ranked."
     : tier && p.card.topPct
-      ? `${p.domain}: tier ${tier}, top ${p.card.topPct}% of graded developer portfolios.`
+      ? `${p.domain}: tier ${tierLabel(tier)}, top ${p.card.topPct}% of graded developer portfolios.`
       : `${p.domain}, a developer portfolio on PortfolioRank.`;
 
   return shareCard({
@@ -99,9 +100,7 @@ export async function listedShareCard(url: string): Promise<Response> {
           <div style={{ display: "flex", width: 640, height: 400, borderRadius: 18, border: "1.5px solid #26262b", background: "#121215" }} />
         )}
         {tier && (
-          <div style={{ ...tierChipStyle(tier), position: "absolute", left: -36, bottom: 0 }}>
-            {tier}
-          </div>
+          <TierChip tier={tier} style={{ position: "absolute", left: -36, bottom: 0 }} />
         )}
       </div>
     ),

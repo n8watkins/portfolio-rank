@@ -8,6 +8,7 @@ import { Thumb } from "@/components/home/Thumb";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { PublicTierBadge, TierBadge } from "@/components/ui/badges";
+import { tierLabel } from "@/lib/tiers.mjs";
 import { btnPrimary, btnSecondary, sectionTitle } from "@/components/ui/styles";
 import { BADGES } from "@/lib/games/badges.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
@@ -143,7 +144,7 @@ function Report({ mine }: { mine: Mine }) {
             {rep.tier && <TierBadge tier={rep.tier} size="lg" />}
             <div className="min-w-0">
               <p className="text-lg font-bold">
-                {rep.tier ? `Tier ${rep.tier}` : "Graded"}
+                {rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded"}
                 {pct ? `, top ${pct.topPct}%` : ""}
               </p>
               {pct && (

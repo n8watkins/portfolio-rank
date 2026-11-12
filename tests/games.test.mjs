@@ -571,8 +571,8 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   assert.equal(s.ownDomainPct, 67);
   assert.equal(s.resumePct, 67);
   assert.deepEqual(s.commonRole, { key: "fullstack", label: "Full stack", pct: 67 });
-  // A 4, B 3, C 2 on the D 1 to SSS 7 scale.
-  assert.deepEqual(s.averageTier, { value: 3, tier: "B" });
+  // A 9, B 6, C 3 on the D 1 to SSS 14 scale.
+  assert.deepEqual(s.averageTier, { value: 6, tier: "B" });
   assert.equal(s.changedThisMonth, 1);
   assert.deepEqual(s.newest, { url: "https://d.dev", name: "D" });
   assert.equal(pacificMonthStart(T0).toISOString(), "2026-11-01T07:00:00.000Z");

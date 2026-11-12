@@ -12,8 +12,12 @@ import {
   PUBLIC_TIERS,
   TIERS,
   TIER_LADDER,
+  atLeast,
   distribution,
+  familyOf,
   isPublicTier,
+  modifierOf,
+  tierLabel,
   orderLibrary,
   placeNew,
   rankKey,
@@ -47,19 +51,25 @@ const grade = (axis, checks = 80, letter = "B", extra = {}) => ({
 });
 
 test("the ladder: owner's cut-offs in order, B public, C and D private", () => {
-  assert.deepEqual(TIERS, ["SSS", "SS", "S", "A", "B", "C", "D"]);
+  assert.deepEqual(TIERS, ["SSS", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D"]);
   assert.deepEqual(
-    TIER_LADDER.map((t) => t.count ?? `${t.top}%`),
-    [3, 10, "1%", "15%", "70%", "85%", "100%"]
+    TIER_LADDER.map((t) => t.count ?? t.top),
+    [3, 10, 0.5, 1, 5.667, 10.333, 15, 33.333, 51.667, 70, 75, 80, 85, 100]
   );
-  assert.deepEqual(PUBLIC_TIERS, ["SSS", "SS", "S", "A", "B"]);
-  assert.equal(isPublicTier("B"), true);
-  assert.equal(isPublicTier("C"), false);
+  assert.deepEqual(PUBLIC_TIERS, ["SSS", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-"]);
+  assert.equal(isPublicTier("B-"), true);
+  assert.equal(isPublicTier("C+"), false);
   assert.equal(isPublicTier(null), false);
-  assert.equal(tierValue("SSS"), 7);
+  assert.equal(tierValue("SSS"), 14);
   assert.equal(tierValue("D"), 1);
-  assert.equal(tierOfValue(3.4), "B");
-  assert.equal(tierOfValue(4.4), "A");
+  assert.equal(tierOfValue(6), "B");
+  // Families: SSS counts as S; the badge carries the plus or minus.
+  assert.deepEqual(["SSS", "S+", "A-", "B", "D"].map(familyOf), ["S", "S", "A", "B", "D"]);
+  assert.deepEqual(["SSS", "S+", "A-", "B"].map(modifierOf), ["", "+", "-", ""]);
+  assert.equal(atLeast("A-", "A"), true);
+  assert.equal(atLeast("B+", "A"), false);
+  assert.equal(atLeast("SSS", "A"), true);
+  assert.equal(tierLabel("A-"), "A\u2212");
 });
 
 test("the score: 80% the AI's weighted scores, 20% the code checks; unknown checks count the typical result", () => {
@@ -79,19 +89,22 @@ test("the score: 80% the AI's weighted scores, 20% the code checks; unknown chec
 /** A library of distinct keys, best first: n entries, urls s0 (best) to s<n-1>. */
 const lib = (n, key = (i) => (n - i) * 10, elo = () => null) => orderLibrary(Array.from({ length: n }, (_, i) => ({ url: `https://s${String(i).padStart(5, "0")}.dev`, key: key(i), elo: elo(i) })));
 
-test("a library of 2,000 distinct scores: exactly 3 SSS and 7 SS, then the owner's shares", () => {
-  const order = lib(2000);
-  // S: places 11 to the 1% line (20); A to 15% (300); B to 70% (1,400); C to 85% (1,700); D the rest.
-  assert.deepEqual(distribution(order), { SSS: 3, SS: 7, S: 10, A: 280, B: 1100, C: 300, D: 300 });
+test("a library of 3,000 distinct scores: exactly 3 SSS and 7 S+, then the owner's shares in thirds", () => {
+  const order = lib(3000);
+  // S to the 0.5% line (place 15), S- to 1% (30); A+ 1-5.667% (170), A to 10.333% (310), A- to 15% (450);
+  // B+ to 33.333% (1,000), B to 51.667% (1,550), B- to 70% (2,100); C+ to 75%, C to 80%, C- to 85%; D the rest.
+  assert.deepEqual(distribution(order), {
+    SSS: 3, "S+": 7, S: 5, "S-": 15, "A+": 140, A: 140, "A-": 140, "B+": 550, B: 550, "B-": 550, "C+": 150, C: 150, "C-": 150, D: 450,
+  });
   const ranks = rankLibrary(order);
   assert.equal(ranks.get(order[2].url).tier, "SSS");
-  assert.equal(ranks.get(order[3].url).tier, "SS");
-  assert.equal(ranks.get(order[9].url).tier, "SS");
+  assert.equal(ranks.get(order[3].url).tier, "S+");
+  assert.equal(ranks.get(order[9].url).tier, "S+");
   assert.equal(ranks.get(order[10].url).tier, "S");
   assert.equal(ranks.get(order[0].url).top, 1);
   assert.equal(topPctAt(1, 1000), 1);
   assert.equal(topPctAt(11, 1000), 2);
-  assert.equal(tierAt(2000, 2000), "D");
+  assert.equal(tierAt(3000, 3000), "D");
 });
 
 test("count tiers break every tie: score, Gemini's letter, then ELO, then the address", () => {
@@ -100,7 +113,7 @@ test("count tiers break every tie: score, Gemini's letter, then ELO, then the ad
   const ranks = rankLibrary(order);
   const tier = (t) => order.filter((e) => ranks.get(e.url).tier === t);
   assert.equal(tier("SSS").length, 3);
-  assert.equal(tier("SS").length, 7);
+  assert.equal(tier("S+").length, 7);
   // Highest ELO first (1230 on i = 3, 7, 11 ...), then the address.
   assert.deepEqual(tier("SSS").map((e) => e.url), ["https://s00003.dev", "https://s00007.dev", "https://s00011.dev"]);
   // The tied group's rest share a tier by the middle of their group (share tiers): all S or all A, never split.
@@ -109,23 +122,24 @@ test("count tiers break every tie: score, Gemini's letter, then ELO, then the ad
   // A newcomer that ties exactly loses the tie to the library's members.
   const tied = placeNew(order, { url: "", key: 99990, elo: 1230 });
   assert.equal(tied.place, 6);
-  assert.equal(tied.tier, "SS");
+  assert.equal(tied.tier, "S+");
   assert.equal(placeNew(order, { url: "https://new.dev", key: 999999 }).tier, "SSS");
 });
 
 test("share tiers: equal scores share a place and a tier", () => {
   const order = lib(1000, (i) => (i < 100 ? 10000 - i : i < 200 ? 5000 : 4000 - i));
   const ranks = rankLibrary(order);
-  // Places 101-200 tie: middle 150.5 of 1,000 is 15%: all A, none split.
-  assert.deepEqual([...new Set(order.slice(100, 200).map((e) => ranks.get(e.url).tier))], ["A"]);
+  // Places 101-200 tie: their middle, 150.5 of 1,000, is 15%: all A-, none split.
+  assert.deepEqual([...new Set(order.slice(100, 200).map((e) => ranks.get(e.url).tier))], ["A-"]);
 });
 
 test("a small library hands out no tier it has no room for", () => {
   assert.equal(tierAt(1, 1), "B");
-  assert.deepEqual(distribution(lib(3)), { SSS: 0, SS: 0, S: 0, A: 0, B: 3, C: 0, D: 0 });
-  // 50: no count tiers (they need 100) and no S (the top 1% holds no one): the best are A.
+  // 3: the B family only (no band above or below has room).
+  assert.ok(Object.entries(distribution(lib(3))).every(([t, n]) => !n || familyOf(t) === "B"));
+  // 50: no count tiers (they need 100) and no S family (the top 1% holds no one): the best is A+.
   const fifty = rankLibrary(lib(50));
-  assert.equal(fifty.get("https://s00000.dev").tier, "A");
+  assert.equal(fifty.get("https://s00000.dev").tier, "A+");
   assert.equal(fifty.get("https://s00049.dev").tier, "D");
   // 100: the count tiers start.
   assert.equal(rankLibrary(lib(100)).get("https://s00000.dev").tier, "SSS");
@@ -134,8 +148,8 @@ test("a small library hands out no tier it has no room for", () => {
 
 test("tierOf reads only the rank, never Gemini's letter", () => {
   assert.equal(tierOf(grade(5, 100, "S")), null);
-  assert.equal(tierOf(grade(5, 100, "S", { rank: { tier: "SS", score: 99, top: 1 } })), "SS");
-  assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "SS" } })), null);
+  assert.equal(tierOf(grade(5, 100, "S", { rank: { tier: "S+", score: 99, top: 1 } })), "S+");
+  assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S+" } })), null);
 });
 
 test("a visitor's grade is ranked against the pool, with 'graded against N' and a matching tier", () => {
@@ -152,11 +166,11 @@ test("a visitor's grade is ranked against the pool, with 'graded against N' and 
 });
 
 test("the printable report shows public tiers only, and the note below them", () => {
-  const ss = printView(JSON.stringify(grade(5, 100, "S", { rank: { tier: "SS", score: 99, top: 4 } })));
-  assert.equal(ss.tier, "SS");
+  const ss = printView(JSON.stringify(grade(5, 100, "S", { rank: { tier: "A-", score: 99, top: 4 } })));
+  assert.equal(ss.tier, "A-");
   assert.equal(ss.showTier, true);
-  const c = printView(JSON.stringify(grade(2, 40, "A", { rank: { tier: "C", score: 30, top: 90 } })));
-  assert.equal(c.tier, "C");
+  const c = printView(JSON.stringify(grade(2, 40, "A", { rank: { tier: "C+", score: 30, top: 72 } })));
+  assert.equal(c.tier, "C+");
   assert.equal(c.showTier, false);
   // Gemini's letter alone shows nothing.
   assert.equal(printView(JSON.stringify(grade(5, 100, "S"))).showTier, false);
@@ -195,7 +209,7 @@ test("refreshTiers writes each grade's rank, only when it changed, and ranks old
   const sum = Object.values(first.distribution).reduce((a, b) => a + b, 0);
   assert.equal(sum, 120);
   assert.equal(first.distribution.SSS, 3);
-  assert.equal(first.distribution.SS, 7);
+  assert.equal(first.distribution["S+"], 7);
   const read = async (url) => JSON.parse(String((await client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0].ai_rubric));
   const best = await read("https://site119.example/");
   assert.ok(TIERS.includes(best.rank.tier));

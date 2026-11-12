@@ -6,10 +6,13 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
-import { SCORE_WEIGHTS, TIER_LADDER } from "@/lib/tiers.mjs";
+import { BELOW_TOP_TIERS, FAMILIES, SCORE_WEIGHTS, TIER_LADDER, distribution, familyOf } from "@/lib/tiers.mjs";
+import { cachedLibrary } from "@/lib/tiers-store.mjs";
+import { db, ensureSchema } from "@/lib/db";
 
-// How grading works, kept short: the tiers, what "top X%" means, what is
-// checked and how votes combine. The criteria come from the rubric
+// How grading works, kept short and public: the score, the tier ladder with
+// today's counts, ties, how often it updates, grade versus ELO, how to
+// improve, what is checked and how votes combine. The criteria come from the rubric
 // (pipeline/rubric.mjs), so this page follows it when it changes.
 
 export const metadata: Metadata = {
@@ -20,7 +23,16 @@ export const metadata: Metadata = {
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
 // The ladder, from lib/tiers.mjs (the owner's settings).
-const TIERS = TIER_LADDER;
+/** Today's count in each tier, from the last refresh's library (lib/tiers-store.mjs); null when the database can't be read. */
+async function liveCounts(): Promise<{ counts: Record<string, number>; total: number } | null> {
+  try {
+    await ensureSchema();
+    const order = await cachedLibrary(db());
+    return order.length ? { counts: distribution(order), total: order.length } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The bands a report names, best first: `of` is the band's share in twentieths, drawn as a little bar. */
 const BANDS = [
@@ -43,7 +55,11 @@ const FACT_NAMES: Record<string, string> = {
 
 const pct = (w: number) => `${Math.round(w * 100)}%`;
 
-export default function GradingPage() {
+// The live counts change as grades land: re-rendered at most hourly.
+export const revalidate = 3600;
+
+export default async function GradingPage() {
+  const live = await liveCounts();
   const facts = CODE_CRITERIA.filter((c) => c.weight > 0);
   return (
     <div className="pb-20">
@@ -60,24 +76,83 @@ export default function GradingPage() {
       </section>
 
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        {/* The tiers */}
+        {/* The tiers, with today's counts */}
         <section aria-labelledby="tiers" className="mt-12">
-          <SectionHeader id="tiers" eyebrow="The grade" title={`${TIERS.length} tiers, ${TIERS[0].tier} to ${TIERS[TIERS.length - 1].tier}`} className="mb-5" />
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:gap-3">
-            {TIERS.map(({ tier, name, note }) => (
-              <li key={tier} className="card flex items-center gap-3 px-4 py-3 sm:flex-col sm:items-start sm:p-4">
-                <TierBadge tier={tier} />
-                <span className="min-w-0">
-                  <span className="block font-semibold">{name}</span>
-                  <span className="block text-sm text-mute">{note}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-sm text-mute text-pretty">
-            Your tier is your place among every graded portfolio. The AI&apos;s five scores make up {pct(SCORE_WEIGHTS.quality)} of
-            the score and the code checks {pct(SCORE_WEIGHTS.checks)}. Only tiers B and up are shown in public.
+          <SectionHeader id="tiers" eyebrow="The grade" title="Your tier is your place in the library" className="mb-3" />
+          <p className="max-w-2xl text-[15px] text-mute text-pretty">
+            Every grade gets a score from 0 to 100: the AI&apos;s five scores make up {pct(SCORE_WEIGHTS.quality)}, the code checks{" "}
+            {pct(SCORE_WEIGHTS.checks)}. Then every graded portfolio is put in order, and your place sets your tier.
+            {live ? ` Graded against ${live.total.toLocaleString("en-US")} portfolios today.` : ""}
           </p>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[30rem] text-sm">
+              <thead>
+                <tr className="border-b border-edge text-left text-xs uppercase tracking-wider text-mute">
+                  <th className="py-2 pr-3 font-medium">Tier</th>
+                  <th className="py-2 pr-3 font-medium">Who gets it</th>
+                  <th className="py-2 text-right font-medium">Today</th>
+                </tr>
+              </thead>
+              {FAMILIES.map((f) => (
+                <tbody key={f.family} className="border-b border-edge last:border-b-0">
+                  {TIER_LADDER.filter((t) => familyOf(t.tier) === f.family).map((t, i) => (
+                    <tr key={t.tier}>
+                      <td className="py-1.5 pr-3">
+                        <span className="flex items-center gap-3">
+                          <TierBadge tier={t.tier} />
+                          {(t.tier === "SSS" || i === (f.family === "S" ? 1 : 0)) && <span className="font-semibold">{t.tier === "SSS" ? "Elite" : f.name}</span>}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-3 text-mute">{t.note}</td>
+                      <td className="py-1.5 text-right tabular-nums">{live ? live.counts[t.tier].toLocaleString("en-US") : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+            </table>
+          </div>
+          <p className="mt-3 text-sm text-mute text-pretty">
+            Tiers SSS to B&minus; are shown in public. C and D are not: the page says &ldquo;{BELOW_TOP_TIERS}&rdquo;, and only the owner sees the letter.
+          </p>
+        </section>
+
+        {/* Ties, updates, grade and ELO */}
+        <section aria-labelledby="rules" className="mt-14">
+          <SectionHeader id="rules" eyebrow="The fine print" title="Ties, updates and ELO" className="mb-5" />
+          <dl className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="card p-5">
+              <dt className="font-bold">Ties</dt>
+              <dd className="mt-2 text-sm text-mute text-pretty">
+                Equal scores are split by the AI&apos;s overall letter. For SSS and S+, which are exact places, any tie left is split by
+                people&apos;s ELO, then by the address. Below that, portfolios still tied share a tier.
+              </dd>
+            </div>
+            <div className="card p-5">
+              <dt className="font-bold">When it updates</dt>
+              <dd className="mt-2 text-sm text-mute text-pretty">
+                A new grade gets its tier at once. Every tier is placed again each hour, because new grades move the library. Your
+                report keeps the place it had when it was graded.
+              </dd>
+            </div>
+            <div className="card p-5">
+              <dt className="font-bold">Grade or ELO</dt>
+              <dd className="mt-2 text-sm text-mute text-pretty">
+                The grade comes from the review: the AI and the code checks. ELO comes from people&apos;s votes in face-offs. The
+                leaderboard shows both, side by side.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        {/* How to improve */}
+        <section aria-labelledby="improve" className="mt-14">
+          <SectionHeader id="improve" eyebrow="Climbing" title="How to improve your tier" className="mb-5" />
+          <ol className="grid max-w-2xl list-decimal gap-2 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
+            <li>Pass every code check: link a resume, your GitHub and a way to reach you; fix broken project links; use your own domain and a current footer year.</li>
+            <li>Show each project with the problem, your part and the outcome, not just a list of tools.</li>
+            <li>Make the first screen say who you are and what you do, in your own design.</li>
+            <li>Re-grade after a real change, {REGRADE_COOLDOWN_DAYS} days after your last grade at the earliest.</li>
+          </ol>
         </section>
 
         {/* Top X% */}

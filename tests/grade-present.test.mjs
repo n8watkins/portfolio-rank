@@ -82,7 +82,8 @@ test("a fix says what it changes: places gained for an AI axis, the checks score
 test("verdicts by tier, and a pool site's place", () => {
   assert.match(verdictOf("S"), /One of the best/);
   assert.match(verdictOf("SSS"), /very best/);
-  assert.match(verdictOf("SS"), /Outstanding/);
+  assert.match(verdictOf("S+"), /Outstanding/);
+  assert.equal(verdictOf("A-"), verdictOf("A"), "plus and minus share their letter's line");
   assert.equal(verdictOf("Z"), verdictOf("C"));
   // The place by score (rank key, lib/tiers.mjs), not by the seed level.
   const pool = [
