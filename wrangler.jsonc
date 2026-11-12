@@ -97,6 +97,10 @@
     // Email sign-in (a one-time link beside GitHub, lib/signin): the option in
     // the sign-in dialog and its routes are off until this is "true" (decision D3).
     "EMAIL_SIGNIN_ENABLED": "false",
+    // "When checks re-run" (lib/freshness-flag.ts, AUTOMATION.md): the hourly
+    // change fingerprints and the profile's "site unchanged since" lines are
+    // off until this is "true".
+    "FRESHNESS_ENABLED": "false",
     // Games, badges, claims, live stats and report downloads (lib/games):
     // every one of their routes answers 404 until this is "true", which
     // happens with the redesign.
@@ -237,6 +241,7 @@
         "GRADER_ENABLED": "true",
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
+        "FRESHNESS_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         // Staging's own, lower email caps (lib/email/gate.mjs): it sends from the
