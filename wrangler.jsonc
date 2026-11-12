@@ -182,14 +182,20 @@
         // https://staging.portfoliorank.n8builds.dev/api/auth/callback/github.
         "AUTH_URL": "https://staging.portfoliorank.n8builds.dev",
         "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
-        "RANKING_V2": "false",
+        // Staging runs the launch features ahead of production (the launch
+        // walkthrough, 2026-11-11). It has no crons, so RANKING_V2 only
+        // switches the leaderboard views; the boards come from
+        // scripts/recompute-ratings.mjs run against the staging database.
+        "RANKING_V2": "true",
         "RUBRIC_REGRADE": "false",
         "GEMINI_RPM": "8",
         "NIGHTLY_REFRESH": "150",
         "ADMIN_GITHUB_ID": "8055935",
         "MIN_GITHUB_ACCOUNT_AGE_DAYS": "30",
-        "GRADER_ENABLED": "false",
-        "GAMES_V2": "false",
+        // Without GITHUB_DISPATCH_TOKEN a grade stops after the free checks
+        // ("unavailable"); DEPLOY.md "Staging" says how prep grades finish.
+        "GRADER_ENABLED": "true",
+        "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         "CONTENT_MODE": "off",
         // How the content engine writes a post: "staged" (outline, sections, finish;

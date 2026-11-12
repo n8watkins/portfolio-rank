@@ -94,6 +94,11 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
 - **No Gemini:** no Cron Triggers, and no `GEMINI_API_KEY` or `GITHUB_DISPATCH_TOKEN` secret, so staging never spends the production quota or starts production's GitHub jobs.
   Its Workflow is `portfolio-rank-night-staging`; nothing starts it, and a run started by hand skips without the key.
   Never add those two secrets to staging.
+- **Launch features on:** `GRADER_ENABLED`, `GAMES_V2` and `RANKING_V2` are `"true"` in `env.staging` (production keeps all three `"false"`), so the launch can be walked through on staging first.
+  The build reads all three for the Worker it builds (`next.config.ts` `launchSwitch`; the staging job sets `NEXT_PUBLIC_SITE_ENV=staging`), because the pages prerendered at build time (home, `/top` and its views, the sitemap) depend on them.
+  Without crons, `RANKING_V2` only switches the leaderboard views; fill them with `scripts/recompute-ratings.mjs` run with the `portfolio-rank/STAGING_TURSO_*` pair.
+  Without the dispatch token a grade asked for on staging stops after the free checks ("unavailable").
+  To finish one by hand, set its job back to `capturing` in the staging database and run `scripts/grade-jobs.mjs` locally with the staging Turso pair and the Gemini key; it keeps the screenshots on disk without `R2_*`, so upload `hero.jpg` and `mobile.jpg` to `private/grades/<id>/` in the `portfolio-rank` bucket.
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
   The staging build adds a robots meta tag and a red "Staging" ribbon in the bottom-left corner (`components/StagingRibbon.tsx`).
 - **Locked:** the Worker locks staging itself, ahead of Next.js (`worker/staging-gate.ts`, only when `SITE_ENV` is `staging`; production never runs it).
