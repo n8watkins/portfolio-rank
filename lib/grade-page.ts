@@ -22,6 +22,8 @@ import { reportPath } from "@/lib/home";
 type PoolSite = { url: string; name: string; mu: number; tier: string };
 export type PageJob = Job & { mine: boolean; checks: (Job["checks"] & { title?: string }) | null };
 
+export type BrokenLink = { url: string; kind: "broken" | "blocked"; status: number | null; reason: string; text: string | null; section: string | null };
+
 export type ShownSite = { url: string; name: string; domain: string; tier: string; path: string; hero: string | null; rank: number | null; topPct: number | null };
 
 export type GradePage = {
@@ -37,6 +39,14 @@ export type GradePage = {
   at: number;
   /** The free checks in the hiring manager's three groups, for a job with no report (yet). */
   checks: ReturnType<typeof hiringGroups> | null;
+  /**
+   * The project links that failed, from the capture's check (else the free
+   * checks'): each URL, why ("404 Not Found", "timed out after 8 s") and
+   * where it is on the page. Empty for grades from before the details were kept.
+   */
+  brokenLinks: BrokenLink[];
+  /** How many links the checks found broken, for grades from before the details were kept. */
+  brokenCount: number;
   report: null | {
     verdict: string;
     groups: ReturnType<typeof hiringGroups>;
@@ -93,7 +103,10 @@ export async function gradePage(id: string): Promise<GradePage | null> {
     hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
   }
   const freeChecks = job.checks?.ok ? hiringGroups((job.checks as { facts?: Parameters<typeof hiringGroups>[0] }).facts ?? []) : null;
-  const base = { job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
+  type LinkCheck = { broken?: number; failures?: BrokenLink[] } | null | undefined;
+  const linkCheck = ((raw.facts as { project_links?: LinkCheck } | null)?.project_links ?? (raw.quick as { facts?: { project_links?: LinkCheck } } | null)?.facts?.project_links) ?? null;
+  const brokenLinks = (linkCheck?.failures ?? []).filter((f) => f && typeof f.url === "string" && f.kind === "broken").slice(0, 10);
+  const base = { brokenLinks, brokenCount: Number(linkCheck?.broken ?? 0), job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
   if (!job.report || !raw.result) return { ...base, report: null };
 
   const rep = job.report;

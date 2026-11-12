@@ -151,19 +151,18 @@ test("grade yours: the form, the progress page, then the report as approved", { 
     assert.equal(await banner.count(), 0);
   }
 
-  const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
-  assert.match(await hiring.textContent(), /Can they reach you\?.*1 to fix/s);
-  assert.match(await hiring.textContent(), /Resume: .*Recruiters look for a resume first.*Fix: Link a PDF/s);
-  assert.equal(await p.getByRole("region", { name: "How it looks and reads" }).getByRole("listitem").count(), AI_CRITERIA.length);
-  const fixes = p.getByRole("region", { name: "Fix these first" });
-  await fixes.getByText("Biggest win").waitFor();
+  // A report, not a sales page: the fixes in order, then the findings, dense.
+  const fixes = p.getByRole("region", { name: "Fix these, in order" });
   assert.match(await fixes.textContent(), /Expected:/);
-  await p.getByRole("region", { name: "Portfolios doing it better" }).getByRole("link", { name: "See its report" }).waitFor();
-  assert.equal(await p.getByRole("region", { name: "Similar portfolios" }).getByRole("link").count(), 4);
+  const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
+  assert.match(await hiring.textContent(), /Resume link.*No resume link/s);
+  assert.equal(await p.getByRole("region", { name: "How it looks and reads" }).getByRole("listitem").count(), AI_CRITERIA.length);
+  // One portfolio doing it better and four similar ones, as names with links.
+  assert.equal(await p.getByRole("region", { name: "Portfolios to learn from" }).getByRole("link").count(), 5);
 
   // Share is the primary action; the PDF is the browser's own print.
-  await p.getByRole("button", { name: "Share your result" }).waitFor();
-  await p.getByRole("button", { name: "Download PDF" }).waitFor();
+  await p.getByRole("button", { name: "Share" }).waitFor();
+  await p.getByRole("button", { name: "PDF" }).waitFor();
   // Not on the list: the request goes to the community list's form.
   assert.match(await p.getByRole("link", { name: /Add me to the leaderboard/ }).getAttribute("href"), /submit-portfolio\.yml&url=/);
   // The owner's own panel.
@@ -172,9 +171,9 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   // The print view: the report alone, no shell, no buttons.
   await p.emulateMedia({ media: "print" });
   assert.equal(await p.getByRole("banner").isVisible(), false);
-  assert.equal(await p.getByRole("button", { name: "Share your result" }).isVisible(), false);
+  assert.equal(await p.getByRole("button", { name: "Share" }).isVisible(), false);
   assert.equal(await p.getByRole("region", { name: "Your report" }).isVisible(), false);
-  assert.ok(await p.getByText(/Graded by Gemini \(gemini-3\.5-flash-lite\)/).isVisible());
+  assert.ok(await p.getByText(/Gemini's scores \(gemini-3\.5-flash-lite\) are an opinion/).isVisible());
   await p.emulateMedia({ media: "screen" });
 
   // The share image says the grade, for the report's link only.
@@ -239,7 +238,7 @@ test("the report by email: a one-time link makes another browser the owner, once
   assert.ok(reportId, "the first test made a report");
   const reader = await freshPage(1440);
   await reader.page.goto(`${BASE}/grade/${reportId}`);
-  await reader.page.getByRole("button", { name: /Email me the report/ }).click();
+  await reader.page.getByRole("button", { name: "Email it to me" }).click();
   await reader.page.getByLabel("Your email").fill("reader@example.com");
   await reader.page.getByRole("button", { name: "Email me the link" }).click();
   await reader.page.getByText(/Check your inbox for the link/).waitFor();
