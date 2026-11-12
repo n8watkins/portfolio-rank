@@ -33,6 +33,7 @@ import { withGateway } from "../lib/ai-gateway.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
+import { isRemovalAlert } from "../lib/games/claims.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
 import { writerMode } from "../pipeline/content/staged.mjs";
@@ -233,8 +234,9 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
       ];
-      // The weekly model watch owns its own alerts (./model-watch.ts); the night never clears them.
-      const r = await reconcileAlerts(ctx.db, { conditions, scope: (key: string) => !isModelWatchAlert(key), email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
+      // The weekly model watch and the hourly removals own their alerts
+      // (./model-watch.ts, ./owner-removals.ts); the night never clears them.
+      const r = await reconcileAlerts(ctx.db, { conditions, scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key), email: ctx.email, to: this.env.OWNER_EMAIL ?? null, log: ctx.log });
       log("night.alerts", r);
       return r;
     });

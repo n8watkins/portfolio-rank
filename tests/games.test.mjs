@@ -18,19 +18,27 @@ import { BADGES, checkBadges, listBadges, longestRun, recordEvent, VISIT_CAP } f
 import { mergeGuest } from "../lib/games/merge.mjs";
 import {
   MAX_VERIFIED,
+  REMOVAL_HOLD_MS,
+  applyDueRemovals,
   autoProof,
   claimById,
   hostOf,
+  isRemovalAlert,
   isVerifiedOwner,
   linksToGithub,
+  logClaim,
   metaProof,
   metaTokens,
   openClaim,
   ownerAction,
   ownerRemovals,
   ownerState,
+  pendingRemovals,
+  removalConditions,
+  removalProof,
   reviewQueue,
   setClaimStatus,
+  undoRemoval,
   verifiedCount,
 } from "../lib/games/claims.mjs";
 import { planOwnerRemovals } from "../pipeline/owner-removals.mjs";
@@ -345,7 +353,14 @@ test("a guest's quizzes, badges and counters move to the account at sign-in; the
 test("claims: the GitHub link and the meta tag", () => {
   const html = `<a href="https://github.com/Octo-Cat">GitHub</a><meta content="tok123" name="portfoliorank-verify">`;
   assert.equal(linksToGithub(html, "octo-cat"), true);
-  assert.equal(linksToGithub(`<a href="https://github.com/octo-cat/repo">`, "octo-cat"), true);
+  for (const href of ["https://github.com/octo-cat/", "https://www.github.com/octo-cat?tab=repositories", "//github.com/octo-cat#top"]) {
+    assert.equal(linksToGithub(`<a href="${href}">`, "octo-cat"), true, href);
+  }
+  assert.equal(linksToGithub(`<a href=https://github.com/octo-cat>`, "octo-cat"), true, "unquoted");
+  // A collaborator's or a library's repository says nothing about who owns the site.
+  for (const html of [`<a href="https://github.com/octo-cat/repo">`, `<a href="https://github.com/octo-cat/repo/">`, `<a href=https://github.com/octo-cat/shared-app>`, `<a href="https://github.com/octo-cat/lib">x</a><a href="https://github.com/bob">`]) {
+    assert.equal(linksToGithub(html, "octo-cat"), false, html);
+  }
   assert.equal(linksToGithub(`<a href="https://github.com/octo-catalog">`, "octo-cat"), false);
   assert.equal(linksToGithub(`<p>github.com/octo-cat</p>`, "octo-cat"), false, "a link, not text");
   assert.equal(linksToGithub(html, "bad login!"), false);
@@ -381,19 +396,67 @@ test("claims: owner actions need a verified claim, and every step is in the audi
   assert.equal(await isVerifiedOwner(db, { url, owner: "gh:1" }), true);
   assert.equal(await isVerifiedOwner(db, { url, owner: "gh:2" }), false);
 
-  assert.deepEqual((await ownerAction(db, { url, owner: "gh:1", action: "hide_grade", now: T0 })).state, { hideGrade: true, removedAt: null });
+  assert.deepEqual((await ownerAction(db, { url, owner: "gh:1", action: "hide_grade", now: T0 })).state, { hideGrade: true, removedAt: null, removeAfter: null });
   assert.deepEqual((await ownerAction(db, { url, owner: "gh:1", action: "regrade", now: T0 })).regrade, { queued: true, pending: true });
   assert.deepEqual((await ownerAction(db, { url, owner: "gh:1", action: "regrade", now: T0 })).regrade, { queued: false, pending: true });
-  const removed = await ownerAction(db, { url, owner: "gh:1", action: "remove", now: T0 });
-  assert.equal(removed.state.removedAt, T0.toISOString());
-  assert.equal(removed.state.hideGrade, true, "removing keeps the hidden grade");
-  assert.equal((await ownerAction(db, { url, owner: "gh:1", action: "remove", now: new Date(T0.getTime() + 1000) })).state.removedAt, T0.toISOString(), "the first removal date stays");
+  // Reviewed by the site owner, so it may remove; the removal waits a day.
+  assert.equal(await removalProof(db, { url, owner: "gh:1" }), true);
+  const held = await ownerAction(db, { url, owner: "gh:1", action: "remove", now: T0 });
+  const after = new Date(T0.getTime() + REMOVAL_HOLD_MS).toISOString();
+  assert.deepEqual(held.state, { hideGrade: true, removedAt: null, removeAfter: after }, "removing keeps the hidden grade");
+  assert.equal((await ownerAction(db, { url, owner: "gh:1", action: "remove", now: new Date(T0.getTime() + 1000) })).state.removeAfter, after, "asking again doesn't move the date");
+  assert.deepEqual(await ownerRemovals(db), [], "not removed while held");
+  assert.deepEqual((await pendingRemovals(db)).map((p) => [p.url, p.removeAfter, p.requestedBy, p.login]), [[url, after, "gh:1", "jane"]]);
+  const [alert] = await removalConditions(db);
+  assert.equal(alert.key, `removal:${url}`);
+  assert.ok(isRemovalAlert(alert.key));
+  assert.match(alert.detail, /@jane asked to remove/);
+  assert.match(alert.detail, /\/api\/admin\/removals/);
+  // An hour early: still held. On time: removed.
+  assert.deepEqual(await applyDueRemovals(db, { now: new Date(T0.getTime() + REMOVAL_HOLD_MS - 3600000) }), []);
+  assert.deepEqual(await applyDueRemovals(db, { now: new Date(T0.getTime() + REMOVAL_HOLD_MS) }), [url]);
+  assert.deepEqual(await applyDueRemovals(db, { now: new Date(T0.getTime() + REMOVAL_HOLD_MS + 1000) }), [], "once");
+  assert.deepEqual(await ownerRemovals(db), [{ url, removedAt: after }]);
+  assert.deepEqual(await removalConditions(db), []);
+  assert.equal((await ownerAction(db, { url, owner: "gh:1", action: "cancel_remove", now: T0 })).state.removedAt, after, "too late to cancel");
   assert.equal((await ownerAction(db, { url, owner: "gh:1", action: "nuke", now: T0 })).error, "bad_action");
-  assert.deepEqual(await ownerRemovals(db), [{ url, removedAt: T0.toISOString() }]);
-  assert.deepEqual(await ownerState(db, site(2)), { hideGrade: false, removedAt: null });
+  assert.deepEqual(await ownerState(db, site(2)), { hideGrade: false, removedAt: null, removeAfter: null });
   const log = (await db.execute({ sql: "SELECT action FROM claim_log WHERE url = ? ORDER BY id", args: [url] })).rows.map((r) => String(r.action));
-  assert.deepEqual(log, ["claim_started", "claim_review", "claim_verified", "hide_grade", "regrade_requested", "regrade_already_pending", "remove", "remove"]);
+  assert.deepEqual(log, ["claim_started", "claim_review", "claim_verified", "hide_grade", "regrade_requested", "regrade_already_pending", "remove_requested", "remove"]);
   assert.equal(MAX_VERIFIED, 3);
+
+  // The admin undoes it: listed again, and the audit log says who.
+  const undone = await undoRemoval(db, { url, actor: "admin:n8", now: T0 });
+  assert.deepEqual([undone.ok, undone.wasRemoved, undone.state.removedAt], [true, true, null]);
+  assert.deepEqual(await ownerRemovals(db), []);
+  assert.equal((await undoRemoval(db, { url, actor: "admin:n8", now: T0 })).error, "not_removed");
+});
+
+test("claims: a link proves enough to hide a grade, not to remove the site; the meta tag does", async () => {
+  const db = await freshDb();
+  const url = site(4);
+  const claim = await openClaim(db, { url, owner: "gh:7", login: "bob", token: "tok", now: T0 });
+  await setClaimStatus(db, { claim, status: "verified", method: "github_link", actor: "gh:7", now: T0 });
+  assert.equal(await removalProof(db, { url, owner: "gh:7" }), false);
+  assert.deepEqual(await ownerAction(db, { url, owner: "gh:7", action: "remove", now: T0 }), { ok: false, error: "remove_needs_meta" });
+  assert.equal((await ownerAction(db, { url, owner: "gh:7", action: "hide_grade", now: T0 })).ok, true);
+  assert.deepEqual(await ownerState(db, url), { hideGrade: true, removedAt: null, removeAfter: null });
+  // A verification logged by someone who isn't the admin is no review.
+  await logClaim(db, { url, actor: "gh:7", action: "claim_verified", detail: { claim: claim.id }, now: T0 });
+  assert.equal(await removalProof(db, { url, owner: "gh:7" }), false);
+
+  // With the meta tag it may; and while held, the owner can cancel.
+  await setClaimStatus(db, { claim: await claimById(db, claim.id), status: "verified", method: "meta", actor: "gh:7", now: T0 });
+  assert.equal(await removalProof(db, { url, owner: "gh:7" }), true);
+  assert.ok((await ownerAction(db, { url, owner: "gh:7", action: "remove", now: T0 })).state.removeAfter);
+  assert.deepEqual((await ownerAction(db, { url, owner: "gh:7", action: "cancel_remove", now: T0 })).state, { hideGrade: true, removedAt: null, removeAfter: null });
+  assert.deepEqual(await applyDueRemovals(db, { now: new Date(T0.getTime() + 2 * REMOVAL_HOLD_MS) }), [], "a cancelled removal never happens");
+  // A held removal the admin undoes never happens either.
+  await ownerAction(db, { url, owner: "gh:7", action: "remove", now: T0 });
+  assert.equal((await undoRemoval(db, { url, actor: "admin:n8", now: T0 })).wasRemoved, false);
+  assert.deepEqual(await applyDueRemovals(db, { now: new Date(T0.getTime() + 2 * REMOVAL_HOLD_MS) }), []);
+  const log = (await db.execute({ sql: "SELECT action FROM claim_log WHERE url = ? ORDER BY id", args: [url] })).rows.map((r) => String(r.action));
+  assert.deepEqual(log.slice(-4), ["remove_requested", "remove_cancelled", "remove_requested", "removal_undone"]);
 });
 
 test("claims: a claim verified by the retired profile-Website proof gives no owner rights", async () => {
@@ -406,7 +469,7 @@ test("claims: a claim verified by the retired profile-Website proof gives no own
   assert.equal(await verifiedCount(db, "gh:66"), 0);
   assert.deepEqual(await ownerAction(db, { url, owner: "gh:66", action: "remove", now: T0 }), { ok: false, error: "not_owner" });
   assert.deepEqual(await ownerAction(db, { url, owner: "gh:66", action: "hide_grade", now: T0 }), { ok: false, error: "not_owner" });
-  assert.deepEqual(await ownerState(db, url), { hideGrade: false, removedAt: null });
+  assert.deepEqual(await ownerState(db, url), { hideGrade: false, removedAt: null, removeAfter: null });
   // The claim reads as pending, so its owner can prove it again with a link or the meta tag.
   assert.equal((await claimById(db, claim.id)).status, "pending");
   assert.equal((await openClaim(db, { url, owner: "gh:66", login: "mallory", token: "x", now: T0 })).status, "pending");

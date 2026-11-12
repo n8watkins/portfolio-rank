@@ -20,6 +20,7 @@ import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./n
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { libraryTick } from "./library";
+import { removalsTick } from "./owner-removals";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -70,12 +71,15 @@ const worker = {
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
+  // applies owners' held removals (./owner-removals.ts),
   // finishes people's grade requests that waited for Gemini 3.5 and makes the
   // image library's hourly batch (./library.ts); the weekly
   // one is model watch (./model-watch.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
     if (controller.cron === PEOPLE_QUEUE_CRON) {
+      // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
+      await removalsTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
       // The image library's hourly batch (./library.ts): up to 2 images, never in the evening.
       await libraryTick(env as NightEnv, controller.scheduledTime);

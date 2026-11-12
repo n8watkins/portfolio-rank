@@ -13,10 +13,18 @@ type Claim = {
   status: "pending" | "verified" | "review" | "rejected";
   method: string | null;
   meta: { name: string; content: string; tag: string };
-  state: { hideGrade: boolean; removedAt: string | null };
+  state: { hideGrade: boolean; removedAt: string | null; removeAfter: string | null };
+  /** Removal needs the meta tag or a review, not just a link (lib/games/claims.mjs removalProof). */
+  removable: boolean;
 };
 
-type Step = "loading" | "signin" | "checking" | "fallback" | "verified" | "review" | "rejected" | "manage" | "confirm-remove" | "removed";
+type Step = "loading" | "signin" | "checking" | "fallback" | "verified" | "review" | "rejected" | "manage" | "remove-proof" | "confirm-remove" | "scheduled" | "removed";
+
+/** Where a verified claim picks up: removed, a removal waiting, or the owner's options. */
+const ownerStep = (c: Claim): Step => (c.state.removedAt ? "removed" : c.state.removeAfter ? "scheduled" : "manage");
+
+const when = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
 
 const STEPS = ["Sign in with GitHub", "Verify ownership", "Manage"];
 const stepIndex = (s: Step) => (s === "loading" || s === "signin" ? 0 : ["checking", "fallback", "review", "rejected", "verified"].includes(s) ? 1 : 2);
@@ -34,6 +42,7 @@ const ERRORS: Record<string, string> = {
   rate_limited: "That's a lot of checks in a short time. Try again in a little while.",
   not_owner: "This account isn't the verified owner of this portfolio.",
   account_too_new: "Owner actions need a GitHub account at least 30 days old. Ask through GitHub if this can't wait.",
+  remove_needs_meta: "Removing your portfolio needs the meta tag on your site first.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };
 const errorText = (b: Record<string, unknown>) => ERRORS[String(b.error)] ?? "That didn't work. Try again in a moment.";
@@ -87,7 +96,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
         if (!live) return;
         if (c?.status === "verified") {
           setClaim(c);
-          setStep(c.state.removedAt ? "removed" : "manage");
+          setStep(ownerStep(c));
           return;
         }
         if (c?.status === "review" || c?.status === "rejected") {
@@ -105,7 +114,22 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
     };
   }, [session, url, check]);
 
-  const act = async (action: "regrade" | "hide_grade" | "show_grade" | "remove") => {
+  // A claim verified by its link adds the meta tag before it can remove the site.
+  const proveForRemoval = async () => {
+    setBusy(true);
+    setError("");
+    const r = await post("/api/owner/claims", { url, method: "meta" });
+    setBusy(false);
+    if (!r.ok) return setError(errorText(r.body));
+    const c = r.body.claim as Claim;
+    setClaim(c);
+    if (c.removable) {
+      setConfirmText("");
+      setStep("confirm-remove");
+    } else setError(r.body.reason === "unreachable" ? `We couldn't open ${domain} just now. Try again in a moment.` : "We didn't find the tag on the home page yet. Check it's inside <head> and deployed, then try again.");
+  };
+
+  const act = async (action: "regrade" | "hide_grade" | "show_grade" | "remove" | "cancel_remove") => {
     setBusy(true);
     setError("");
     setNote("");
@@ -114,7 +138,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
     if (!r.ok) return setError(errorText(r.body));
     const state = r.body.state as Claim["state"];
     setClaim((c) => (c ? { ...c, state } : c));
-    if (action === "remove") setStep("removed");
+    if (action === "remove" || action === "cancel_remove") setStep(ownerStep({ ...(claim as Claim), state }));
     if (action === "regrade") setNote((r.body.regrade as { queued?: boolean } | undefined)?.queued === false ? "A re-grade is already waiting for this site." : "Re-grade requested. A fresh grade follows, at most once a week.");
   };
 
@@ -310,13 +334,16 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
                 <Trash2 className="h-5 w-5 shrink-0 text-down" aria-hidden />
                 <span className="min-w-0 flex-1 text-sm">
                   <span className="block font-semibold">Remove from PortfolioRank</span>
-                  <span className="block text-mute">Takes it off the leaderboard, games and browse, for good.</span>
+                  <span className="block text-mute">
+                    {claim.removable ? "Takes it off the leaderboard, games and browse, for good, a day after you ask." : "Takes it off the leaderboard, games and browse, for good. First, add a meta tag to your site."}
+                  </span>
                 </span>
                 <button
                   type="button"
                   onClick={() => {
                     setConfirmText("");
-                    setStep("confirm-remove");
+                    setError("");
+                    setStep(claim.removable ? "confirm-remove" : "remove-proof");
                   }}
                   className="inline-flex h-11 items-center rounded-lg border border-down/50 px-4 text-sm font-semibold text-down transition hover:bg-down/10"
                 >
@@ -332,6 +359,30 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
           </>
         )}
 
+        {step === "remove-proof" && claim && (
+          <>
+            <span className="grid h-12 w-12 place-items-center rounded-xl bg-raised text-mute">
+              <Code2 className="h-6 w-6" aria-hidden />
+            </span>
+            <h1 id="claim-t" className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
+              One more check before removing {domain}
+            </h1>
+            <p className="mt-2 text-mute">
+              A link to your GitHub profile is enough to manage the grade. Removing the site asks for proof only its owner can add: put this line inside the &lt;head&gt; of {domain}&apos;s home page, deploy, then check.
+            </p>
+            <pre className="mt-4 overflow-x-auto rounded-lg bg-raised p-3 font-mono text-[12.5px]">{claim.meta.tag}</pre>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <CopyButton text={claim.meta.tag} label="Copy tag" />
+              <button type="button" disabled={busy} onClick={proveForRemoval} className="group btn-sheen inline-flex h-11 items-center gap-1.5 rounded-lg bg-fill px-4 text-sm font-semibold text-on-fill sm:h-9">
+                <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} aria-hidden /> Check the tag
+              </button>
+              <button type="button" onClick={() => setStep("manage")} className={btnSecondary}>
+                Back
+              </button>
+            </div>
+          </>
+        )}
+
         {step === "confirm-remove" && (
           <>
             <span className="grid h-12 w-12 place-items-center rounded-xl bg-down/10 text-down">
@@ -342,7 +393,8 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
             </h1>
             <ul className="mt-4 grid gap-2 text-sm">
               {[
-                "It leaves the leaderboard, face-offs, quizzes and browse.",
+                "It's removed 24 hours from now. Until then you can cancel it here.",
+                "It then leaves the leaderboard, face-offs, quizzes and browse.",
                 "It's added to our exclusion list, so it won't come back from the community list.",
                 "The removed page counts it as removed at the owner's request, with no other details.",
               ].map((t) => (
@@ -381,6 +433,23 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
                 </button>
               </div>
             </form>
+          </>
+        )}
+
+        {step === "scheduled" && claim && (
+          <>
+            <span className="grid h-12 w-12 place-items-center rounded-xl bg-raised text-mute">
+              <Clock className="h-6 w-6" aria-hidden />
+            </span>
+            <h1 id="claim-t" className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
+              {domain} will be removed
+            </h1>
+            <p className="mt-2 text-mute">
+              It leaves PortfolioRank on {when(claim.state.removeAfter)}, then joins our exclusion list. Changed your mind? Cancel before then.
+            </p>
+            <button type="button" disabled={busy} onClick={() => act("cancel_remove")} className={`${btnSecondary} mt-6`}>
+              Keep {domain} listed
+            </button>
           </>
         )}
 
