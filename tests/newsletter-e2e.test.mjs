@@ -212,6 +212,9 @@ test("the forms: beside a post on desktop, after it on a phone, on /blog and in 
   await desk.locator('[data-newsletter="blog"]').waitFor();
   await desk.goto(`${BASE}/top`);
   await desk.locator('[data-newsletter="footer"]').waitFor();
+  await desk.goto(`${BASE}/newsletter/unsubscribe`);
+  await desk.getByRole("heading", { level: 1 }).waitFor();
+  assert.equal(await desk.locator('[data-newsletter="footer"]').count(), 0, "none on the newsletter's own pages");
   await desk.close();
 
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
