@@ -8,16 +8,21 @@ import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } 
 import { accountTooNew, guardConfig } from "@/lib/rater";
 
 // What a verified owner can do with their portfolio (remove and hide always; regrade with GAMES_V2).
+// A held removal takes effect hourly (worker/owner-removals.ts), which also clears the quiz pool's cache.
 // POST /api/owner/actions { url, action, confirm? }
-//   remove      (needs confirm: true) hidden from the site at once, then
-//               moved to data/excluded.json as an owner request by the weekly
-//               exclusions pull request; /removed counts it without details
-//   hide_grade  the AI grade is no longer shown; show_grade shows it again
-//   regrade     asks the grade service for a new grade (its cooldown applies;
-//               one open request per site)
-//   200 { state: { hideGrade, removedAt }, regrade? }
+//   remove         (needs confirm: true, and the meta tag or a reviewed
+//                  claim) held for 24 hours with an alert to the site's
+//                  owner, then hidden from the site, then moved to
+//                  data/excluded.json as an owner request by the weekly
+//                  exclusions pull request; /removed counts it without details
+//   cancel_remove  withdraws a removal that is still held
+//   hide_grade     the AI grade is no longer shown; show_grade shows it again
+//   regrade        asks the grade service for a new grade (its cooldown
+//                  applies; one open request per site)
+//   200 { state: { hideGrade, removedAt, removeAfter }, regrade? }
 //   400 bad_request | bad_action | confirm_required, 401 signin_required,
-//   403 bad_origin | not_owner | account_too_new, 429 rate_limited
+//   403 bad_origin | not_owner | account_too_new | remove_needs_meta,
+//   429 rate_limited
 // Every action is written to the claims audit log.
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
@@ -48,8 +53,8 @@ export async function POST(req: Request) {
   const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);
   if (over) return rateLimited(over);
   const out = await ownerAction(db(), { url, owner: s.raterId, action, now: new Date() });
-  if (!out.ok) return fail(out.error ?? "bad_request", out.error === "not_owner" ? 403 : 400);
-  if (action !== "regrade") {
+  if (!out.ok) return fail(out.error ?? "bad_request", out.error === "not_owner" || out.error === "remove_needs_meta" ? 403 : 400);
+  if (action === "hide_grade" || action === "show_grade") {
     // The quiz pool leaves out removed sites and hidden grades.
     await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
     forgetPool();

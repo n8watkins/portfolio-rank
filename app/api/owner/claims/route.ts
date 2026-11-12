@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
-import { MAX_VERIFIED, META_NAME, NOTE_MAX, autoProof, listClaims, metaProof, openClaim, ownerState, setClaimStatus, verifiedCount } from "@/lib/games/claims.mjs";
+import { MAX_VERIFIED, META_NAME, NOTE_MAX, autoProof, listClaims, metaProof, openClaim, ownerState, removalProof, setClaimStatus, verifiedCount } from "@/lib/games/claims.mjs";
 import { fetchPage, githubProfile, templateOf } from "@/lib/games/owner";
 import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
 import { accountTooNew, guardConfig } from "@/lib/rater";
@@ -12,10 +12,13 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 // Claim your portfolio: always on, so removal is self-serve. Signed in with GitHub only.
 // GET  /api/owner/claims -> { claims: [{ url, status, method, meta, state, ... }] }
 // POST /api/owner/claims { url, method?: "auto" | "meta" | "manual", note? }
-//   auto    (default) checks that the home page links to github.com/<you>
-//           (never the GitHub profile's Website field, which anyone can set)
+//   auto    (default) checks that the home page links to github.com/<you>,
+//           the profile itself, not a repository (never the GitHub
+//           profile's Website field, which anyone can set)
 //   meta    checks for <meta name="portfoliorank-verify" content="<token>">
-//           on the home page (the token is in every claim this returns)
+//           on the home page (the token is in every claim this returns);
+//           also on a claim verified by its link, since removal needs the
+//           tag or a review (claim.removable)
 //   manual  asks the site owner to review it (note: up to 500 characters)
 //   200 { claim } with claim.status "verified", "pending" (not proven yet:
 //       add the meta tag or ask for review), "review" or "rejected"
@@ -36,6 +39,8 @@ async function shape(c: Claim) {
     method: c.method,
     meta: { name: META_NAME, content: c.token, tag: `<meta name="${META_NAME}" content="${c.token}">` },
     state: await ownerState(db(), c.url),
+    // Removal asks for the meta tag or a review, not just a link (lib/games/claims.mjs removalProof).
+    removable: c.status === "verified" && (await removalProof(db(), { url: c.url, owner: c.owner })),
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
   };
@@ -79,6 +84,13 @@ export async function POST(req: Request) {
 
   const now = new Date();
   let claim = (await openClaim(db(), { url, owner: me.id, login: me.login, token: randomBytes(12).toString("base64url"), now })) as Claim;
+  // A claim verified by its link can add the meta tag later, which removal asks for.
+  if (claim.status === "verified" && method === "meta" && claim.method !== "meta") {
+    const page = await fetchPage(url);
+    if (!metaProof({ url, page, token: claim.token })) return NextResponse.json({ claim: await shape(claim), reason: page ? "no_proof" : "unreachable" }, { headers: PRIVATE });
+    claim = (await setClaimStatus(db(), { claim, status: "verified", method: "meta", note: null, actor: me.id, now })) as Claim;
+    return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
+  }
   if (claim.status === "verified" || claim.status === "rejected") return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
 
   if (method === "manual") {

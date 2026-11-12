@@ -11,6 +11,7 @@ import { createServer } from "node:http";
 import { createClient } from "@libsql/client";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
+import { applyDueRemovals, autoProof } from "../lib/games/claims.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
@@ -260,7 +261,7 @@ test("claims: sign-in required, review by the site owner, then owner actions; st
   assert.equal((await call(admin, "POST", "/api/admin/claims", { id: mine.id, decision: "rejected" })).status, 409);
 
   // The owner hides the grade: the report is the owner's alone.
-  assert.deepEqual((await call(j, "POST", "/api/owner/actions", { url: OWNED, action: "hide_grade" })).body.state, { hideGrade: true, removedAt: null });
+  assert.deepEqual((await call(j, "POST", "/api/owner/actions", { url: OWNED, action: "hide_grade" })).body.state, { hideGrade: true, removedAt: null, removeAfter: null });
   const stranger = jar((await account()).cookie);
   assert.equal((await call(stranger, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 403);
   assert.equal((await call(j, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 200);
@@ -270,12 +271,50 @@ test("claims: sign-in required, review by the site owner, then owner actions; st
   assert.deepEqual(regrade.body.regrade, { queued: true, pending: true });
   assert.equal((await call(j, "POST", "/api/owner/actions", { url: OWNED, action: "regrade" })).body.regrade.queued, false);
   assert.equal((await call(j, "POST", "/api/owner/actions", { url: OWNED, action: "remove" })).body.error, "confirm_required");
+  // The claim was reviewed, so it may remove; the removal is held a day.
+  assert.equal((await call(j, "GET", "/api/owner/claims")).body.claims.find((c) => c.url === OWNED).removable, true);
   const removed = await call(j, "POST", "/api/owner/actions", { url: OWNED, action: "remove", confirm: true });
-  assert.ok(removed.body.state.removedAt);
-  // Gone from the site at once.
+  assert.equal(removed.body.state.removedAt, null);
+  const removeAfter = Date.parse(removed.body.state.removeAfter);
+  assert.ok(Math.abs(removeAfter - Date.now() - 24 * 3600000) < 60000, "a day from now");
+  assert.equal((await call(j, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 200, "still listed while held");
+  const held = (await call(admin, "GET", "/api/admin/removals")).body.pending.find((p) => p.url === OWNED);
+  assert.equal(held.requestedBy, owner.id);
+  // The hourly tick (worker/owner-removals.ts) once the day is up: gone from the site.
+  assert.deepEqual(await applyDueRemovals(db, { now: new Date(removeAfter) }), [OWNED]);
   assert.equal((await call(j, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 404);
   const log = (await db.execute({ sql: "SELECT action FROM claim_log WHERE url = ? ORDER BY id", args: [OWNED] })).rows.map((r) => String(r.action));
-  assert.deepEqual(log.slice(-7), ["claim_started", "claim_review", "claim_verified", "hide_grade", "regrade_requested", "regrade_already_pending", "remove"]);
+  assert.deepEqual(log.slice(-8), ["claim_started", "claim_review", "claim_verified", "hide_grade", "regrade_requested", "regrade_already_pending", "remove_requested", "remove"]);
+
+  // Only the admin can take it back, from this site's pages.
+  assert.equal((await call(j, "POST", "/api/admin/removals", { url: OWNED, action: "undo" })).status, 403);
+  assert.equal((await call(admin, "POST", "/api/admin/removals", { url: OWNED, action: "undo" }, { origin: "https://evil.example" })).status, 403);
+  const undone = await call(admin, "POST", "/api/admin/removals", { url: OWNED, action: "undo" });
+  assert.equal(undone.status, 200, undone.text);
+  assert.deepEqual([undone.body.wasRemoved, undone.body.state.removedAt], [true, null]);
+  assert.equal((await call(j, "GET", `/report/print?url=${encodeURIComponent(OWNED)}`)).status, 200, "listed again");
+  assert.equal((await call(admin, "POST", "/api/admin/removals", { url: OWNED, action: "undo" })).status, 404);
+});
+
+test("claims: a repository link proves nothing, and a link alone can't remove a site", async () => {
+  // Bob's repository is linked from Jane's page: no claim for Bob.
+  const site = feed[152].url;
+  const page = { html: `<a href="https://github.com/bob/shared-app">Code</a>`, finalUrl: site };
+  assert.equal(autoProof({ url: site, page, login: "bob" }), null);
+  // A claim verified by a profile link may hide the grade but not remove the site.
+  const bob = await account({ login: "bob" });
+  const j = jar(bob.cookie);
+  await call(j, "GET", "/api/owner/claims");
+  await call(j, "POST", "/api/owner/claims", { url: site, method: "manual" });
+  await db.execute({ sql: "UPDATE claims SET status = 'verified', method = 'github_link' WHERE url = ? AND owner = ?", args: [site, bob.id] });
+  const claim = (await call(j, "GET", "/api/owner/claims")).body.claims.find((c) => c.url === site);
+  assert.equal(claim.removable, false);
+  const res = await call(j, "POST", "/api/owner/actions", { url: site, action: "remove", confirm: true });
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error, "remove_needs_meta");
+  assert.equal((await call(j, "POST", "/api/owner/actions", { url: site, action: "hide_grade" })).status, 200);
+  assert.equal((await call(j, "POST", "/api/owner/actions", { url: site, action: "show_grade" })).status, 200);
+  assert.deepEqual((await db.execute({ sql: "SELECT removed_at, remove_after FROM portfolio_owner WHERE url = ?", args: [site] })).rows.map((r) => [r.removed_at, r.remove_after]), [[null, null]]);
 });
 
 test("claims: a GitHub account younger than 30 days can't act as an owner, even once verified", async () => {

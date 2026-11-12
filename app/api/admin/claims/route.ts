@@ -3,9 +3,10 @@ import { db, ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { sameOrigin } from "@/lib/polls/server";
 import { RETIRED_PROOFS, claimById, reviewQueue, setClaimStatus } from "@/lib/games/claims.mjs";
-import { PRIVATE, fail, gamesEnabled, off } from "@/lib/games/server";
+import { PRIVATE, fail } from "@/lib/games/server";
 
-// The site owner's review of portfolio claims (GAMES_V2), only for
+// The site owner's review of portfolio claims (always on, like claims: a
+// removal needs the meta tag or this review), only for
 // the GitHub account in ADMIN_GITHUB_ID.
 // GET  /api/admin/claims -> { claims } waiting for review, oldest first
 // POST /api/admin/claims { id, decision: "verified" | "rejected", note? }
@@ -16,7 +17,6 @@ export const dynamic = "force-dynamic";
 const denied = (error: "signin_required" | "forbidden") => fail(error, error === "signin_required" ? 401 : 403);
 
 export async function GET() {
-  if (!gamesEnabled()) return off();
   const admin = await requireAdmin();
   if ("error" in admin) return denied(admin.error);
   await ensureSchema();
@@ -24,7 +24,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!gamesEnabled()) return off();
   if (!sameOrigin(req)) return fail("bad_origin", 403);
   const admin = await requireAdmin();
   if ("error" in admin) return denied(admin.error);

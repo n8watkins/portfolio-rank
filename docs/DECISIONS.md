@@ -429,6 +429,8 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 - **An owner's removal is immediate on the site, permanent through the exclusions pull request** (owner, 2026-11-10; the timing is the agent's). Status: building.
   The site hides it at once; the weekly health workflow adds it to `data/excluded.json` with reason "owner request", without the name, through its bot pull request; `/removed` counts these without details.
   Why: the owner's existing removal flow, with no wait for the person asking.
+  Superseded 2026-11-11 (security review M4, owner-approved): a removal needs the meta tag or a reviewed claim, is held 24 hours with an owner alert, can be cancelled by the claimant and undone by the admin.
+  Why: a link to someone's GitHub profile or repository is common on portfolios, so a link alone let collaborators remove a site for good with no one told.
 - **Live stats in one cached endpoint** (owner, 2026-11-10). Status: building.
   Portfolios listed, graded, graded this week, votes today, quizzes played, % own domain, % resume link, most common role, average tier, sites changed this month, newest entry, community list contributors and the repository's stars (GitHub API, cached daily).
   Why: one request for the home page's numbers, cheap on Turso (an hour's cache for the list, a day's for GitHub).

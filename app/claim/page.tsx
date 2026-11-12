@@ -49,7 +49,7 @@ export default async function ClaimPage({ searchParams }: { searchParams: Promis
             Remove or manage your portfolio
           </h1>
           <p className="mt-2 text-sm text-mute">
-            First prove it&apos;s yours: a link to your GitHub profile on the site, or a short code you add to the page. Then you can hide its grade or remove it.
+            First prove it&apos;s yours: a link to your GitHub profile on the site, or a short code you add to the page. Then you can hide its grade, or, with the code, remove it.
           </p>
           <form method="get" className="mt-5 flex flex-col gap-2 sm:flex-row">
             <label className="sr-only" htmlFor="claim-url">
