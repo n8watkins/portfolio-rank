@@ -1,5 +1,5 @@
 // The blog pages and the owner's review, end to end against the running
-// production build (scripts/test-e2e.sh: ADMIN_GITHUB_LOGIN=e2e-admin,
+// production build (scripts/test-e2e.sh: ADMIN_GITHUB_ID,
 // BLOG_TEST_MEDIA_DIR=tests/fixtures/blog/media). A published post renders
 // with its JSON-LD, images and AI note; a draft is a 404 for the public and
 // a preview for the admin, who can publish it; its images follow the same
@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { migrate } from "../lib/schema.mjs";
 import { AI_LINE, storePost } from "../lib/content/store.mjs";
 
@@ -18,10 +18,7 @@ const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliora
 const db = createClient({ url: DB_URL, timeout: 10000 });
 const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/blog/posts.json", import.meta.url), "utf8"))[0];
 
-async function cookieFor(login, id) {
-  const token = await encode({ token: { raterId: `gh:${id}`, login, sub: String(id) }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
-  return `authjs.session-token=${token}`;
-}
+const cookieFor = (login, id) => sessionCookie({ id, login });
 
 before(async () => {
   for (let i = 0; i < 60; i++) {
@@ -73,7 +70,7 @@ test("a draft is a 404 for the public, a preview for the admin, who publishes it
   assert.equal((await fetch(`${BASE}/blog/media/${p.id}/hero`)).status, 404, "a draft's images are private");
   assert.equal((await fetch(`${BASE}/admin/blog/${p.id}`)).status, 404, "the admin pages are a 404 for anyone else");
 
-  const admin = await cookieFor("e2e-admin", 990000101);
+  const admin = await cookieFor("e2e-admin", ADMIN_ID);
   const preview = await fetch(`${BASE}/admin/blog/${p.id}`, { headers: { cookie: admin } });
   assert.equal(preview.status, 200);
   const html = await preview.text();
@@ -110,7 +107,7 @@ test("the list, the feed and the review queue answer", async () => {
   assert.match(await rss.text(), /<channel>/);
   assert.equal((await fetch(`${BASE}/about-posts`)).status, 200);
   assert.equal((await fetch(`${BASE}/admin/blog`)).status, 404);
-  const q = await fetch(`${BASE}/admin/blog`, { headers: { cookie: await cookieFor("e2e-admin", 990000103) } });
+  const q = await fetch(`${BASE}/admin/blog`, { headers: { cookie: await cookieFor("e2e-admin", ADMIN_ID) } });
   assert.equal(q.status, 200);
   assert.ok((await q.text()).includes("Blog review"));
 });

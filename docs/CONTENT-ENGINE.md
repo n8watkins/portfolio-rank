@@ -242,7 +242,7 @@ Owner decision of 2026-11-11: the engine writes drafts, the owner approves each 
 
 - **Draft mode** is `CONTENT_MODE` "dry-run": every draft that passes its checks is stored as `draft` with its scheduled `publish_at` (the next 08:00 Pacific); nothing reaches `/blog`, RSS or the newsletter on its own.
   "publish" (automatic publishing) stays in the code and is not used.
-- **The queue,** `/admin/blog` (only `ADMIN_GITHUB_LOGIN`; a 404 for anyone else): drafts waiting for review, published and scheduled posts, and rejected, dropped or unpublished ones with why.
+- **The queue,** `/admin/blog` (only the `ADMIN_GITHUB_ID` account; a 404 for anyone else): drafts waiting for review, published and scheduled posts, and rejected, dropped or unpublished ones with why.
 - **The review page,** `/admin/blog/[id]`: the post exactly as readers will see it (the same article component as `/blog/[slug]`), with Publish and Reject on top and, under it, the checks of every round, the outside claims kept and cut, the fact sheet and each image's source, licence and approval.
 - **Publish** (`POST /api/admin/content/<id>`, `{ "action": "publish" }`, same-origin JSON like the image library's): the post goes live at its scheduled time while that is still ahead, else at once; the cap of 2 posts in any 7 days is counted in the same write, and a full week answers "weekly cap" and leaves the draft as it is; it sets `newsletter_pending`.
 - **Reject** a draft or **Unpublish** a published post, each with an optional note; every decision is kept on the post as `checks.owner` (action, who, when, note).
