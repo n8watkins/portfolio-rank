@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Flame, RotateCcw, SkipForward, Star, Target, Undo2, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Flame, RotateCcw, SkipForward, Star, Target, Undo2, Users, X } from "lucide-react";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
-import { SiteActions } from "@/components/play/SiteActions";
+import { ChecksSummary, DetailsPanel, GradeLine, PlayActions, Record, SiteLink } from "@/components/play/PlayCardParts";
+import type { PlayCard } from "@/lib/play/card";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { INTRO_COOKIE } from "@/components/play/intro";
@@ -15,9 +16,12 @@ import { frameOf } from "@/lib/shot-url";
 // The face-off on the real votes (/api/rank): two portfolios, pick the one
 // you'd hire from, then see how the crowd leans on the cards themselves.
 // Rounds of ten with "with the crowd" and a streak; practice votes for
-// guests until they sign in. ← and → pick, S or ↓ skips, Enter or → goes on.
+// guests until they sign in. ← and → pick, S or ↓ skips, Enter, N or → goes
+// on, D opens both Details panels. Each card shows the facts beside a smaller
+// screenshot; the scores (tier, "top N%", win rate, ELO) wait for the vote
+// unless "Show scores before voting" is on.
 
-type Entry = { name: string; url: string; tagline?: string; elo: number; votes: number; shot?: string | null };
+type Entry = { name: string; url: string; tagline?: string; elo: number; votes: number; shot?: string | null; liked?: boolean; card?: PlayCard | null };
 type Pair = { a: Entry; b: Entry; token: string };
 type Rater = { signedIn: boolean; login: string | null; anonVotesUsed: number | null; anonVoteLimit: number; stars: number };
 type Side = "a" | "b";
@@ -104,6 +108,8 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const [intro, setIntro] = useState(introAtFirst);
   // Off by default so votes stay honest; remembered in this browser.
   const [showScores, setShowScores] = useStoredFlag(SCORES_KEY);
+  // Which side's Details panel is open; a new pair starts closed.
+  const [openSide, setOpenSide] = useState({ a: false, b: false });
   const openSignIn = useSignIn();
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -156,6 +162,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     }
     setLoadError(false);
     setPair({ a: data.a, b: data.b, token: data.token });
+    setOpenSide({ a: false, b: false });
     const r = data.rater;
     if (r) setRater(r);
     setPick(null);
@@ -290,22 +297,27 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       if (pick === null && key === "ArrowLeft") vote("a");
       else if (pick === null && key === "ArrowRight") vote("b");
       else if (pick === null && (key === "s" || key === "ArrowDown")) next();
-      else if (pick !== null && (key === "ArrowRight" || (key === "Enter" && !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement)))) next();
+      else if (pick !== null && (key === "ArrowRight" || key === "n" || (key === "Enter" && !(e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement)))) next();
+      else if (key === "d" && pair) setOpenSide((o) => (o.a && o.b ? { a: false, b: false } : { a: true, b: true }));
       else return;
       e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pick, vote, next, finished]);
+  }, [pick, vote, next, finished, pair]);
 
   const shares = pair ? { a: shareOf(pair.a.elo, pair.b.elo), b: shareOf(pair.b.elo, pair.a.elo) } : null;
   const canStar = Boolean(rater?.signedIn && rater.stars > 0);
+  // Scores (ELO, tier, "top N%", win rate) show after the vote, or before it when asked.
+  const reveal = showScores || pick !== null;
+  const kbd = "inline-grid h-6 min-w-6 place-items-center rounded-md border border-edge px-1 text-[11px] font-semibold text-mute";
 
   return (
     <div>
-      {/* Progress through the round */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <div className="flex min-w-[8rem] flex-1 items-center gap-3">
+      {/* The question, the round and the score in one line. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 sm:mb-4">
+        <h2 className="w-full text-base font-bold tracking-tight sm:w-auto sm:text-xl">Which one would you hire from?</h2>
+        <div className="flex min-w-[10rem] flex-1 items-center gap-3">
           <span className="shrink-0 text-sm font-semibold tabular-nums">
             {Math.min(done, ROUND)} / {ROUND}
           </span>
@@ -317,7 +329,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         </div>
         <span className="flex items-center gap-4 text-sm text-mute">
           <span className="flex items-center gap-1.5" title="Picked the side most people would">
-            <Users className="h-4 w-4" aria-hidden /> <span className="font-semibold text-ink tabular-nums">{agreed}</span> with the crowd
+            <Users className="h-4 w-4" aria-hidden /> <span className="font-semibold text-ink tabular-nums">{agreed}</span> <span className="max-sm:sr-only">with the crowd</span>
           </span>
           <span className="flex items-center gap-1.5">
             <Flame className={`h-4 w-4 ${streak > 1 ? "flicker text-accent" : ""}`} aria-hidden /> streak{" "}
@@ -329,7 +341,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       </div>
 
       {intro && !rater?.signedIn && !gated && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-accent/40 bg-accent-soft p-3.5 text-sm">
+        <div className="mb-3 flex items-start gap-3 rounded-xl border border-accent/40 bg-accent-soft p-3 text-sm">
           <p className="min-w-0 flex-1">
             <strong>Pick the portfolio you&apos;d rather hire from.</strong> Your first {rater?.anonVoteLimit ?? 10} votes are practice: you see how others lean, and they count once you{" "}
             <button type="button" onClick={() => signIn(false)} className="font-semibold text-accent underline underline-offset-2">
@@ -387,34 +399,88 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
           </button>
         </div>
       ) : pair && shares ? (
-        <div className="grid grid-cols-2 gap-3 sm:gap-5">
+        // Cards first, then each side's Details: below its own card from md
+        // up, full width under the pair on a phone (the columns are narrow).
+        <div className="grid grid-cols-2 items-start gap-x-3 gap-y-3 sm:gap-x-5">
           {(["a", "b"] as const).map((side) => {
             const e = pair[side];
             const mine = pick === side;
             const state = pick === null ? "" : mine ? "win-pop" : "lose-dim";
             return (
-              <div
+              <article
                 key={`${pair.token}-${side}`}
-                className={`card group relative min-w-0 overflow-hidden ${pick === null ? "card-hover deal-in" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
+                aria-label={e.name}
+                className={`card group/card relative flex min-w-0 flex-col overflow-hidden ${pick === null ? "deal-in" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
                 style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
               >
-                <button
-                  type="button"
-                  onClick={() => vote(side)}
-                  disabled={pick !== null || busy}
-                  aria-label={`Pick ${e.name}`}
-                  aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
-                  aria-pressed={pick === null ? undefined : mine}
-                  className="relative block aspect-[390/560] w-full text-left focus-visible:-outline-offset-4 disabled:cursor-default md:aspect-[16/10]"
-                >
-                  <Frame e={e} />
-                  {pick === null && (
-                    <span className="pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/25 group-hover:opacity-100 md:flex">
-                      <span className="rounded-full bg-fill px-4 py-2 text-sm font-bold text-on-fill shadow-lg">Pick this one</span>
+                <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                  <button
+                    type="button"
+                    onClick={() => vote(side)}
+                    disabled={pick !== null || busy}
+                    aria-label={`Pick ${e.name}`}
+                    aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
+                    aria-pressed={pick === null ? undefined : mine}
+                    className="group relative block aspect-[390/330] w-full overflow-hidden text-left focus-visible:-outline-offset-4 disabled:cursor-default md:aspect-[16/10] lg:border-r lg:border-edge"
+                  >
+                    <Frame e={e} />
+                    {pick === null && (
+                      <span className="pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/25 group-hover:opacity-100 md:flex">
+                        <span className="rounded-full bg-fill px-4 py-2 text-sm font-bold text-on-fill shadow-lg">Pick this one</span>
+                      </span>
+                    )}
+                    {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
+                  </button>
+                  <div className="flex min-w-0 flex-col gap-2 p-2.5 sm:p-4">
+                    <div className="min-w-0">
+                      <h3 className="line-clamp-2 leading-snug font-semibold sm:truncate sm:text-lg">{e.name}</h3>
+                      {e.tagline && <p className="mt-0.5 line-clamp-2 text-xs text-mute sm:text-sm">{e.tagline}</p>}
+                      <SiteLink url={e.url} className="mt-0.5 max-w-full text-xs sm:text-sm" />
+                    </div>
+                    {e.card && e.card.roles.length > 0 && (
+                      <ul className="flex flex-wrap gap-1 max-sm:hidden" aria-label="Roles">
+                        {e.card.roles.map((r) => (
+                          <li key={r} className="rounded-md bg-raised px-1.5 py-0.5 text-[11px] font-medium text-mute">
+                            {r}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <GradeLine card={e.card ?? null} reveal={reveal} hint="After you pick" />
+                    <ChecksSummary card={e.card ?? null} dense />
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Record card={e.card ?? null} reveal={reveal} />
+                      {reveal && <span className="text-xs text-mute tabular-nums">ELO {Math.round(e.elo)}</span>}
                     </span>
+                  </div>
+                </div>
+                <div className="mt-auto flex flex-col gap-2 border-t border-edge p-2.5 sm:p-3 lg:flex-row lg:items-center">
+                  <div className="min-w-0 lg:flex-1">
+                    <PlayActions
+                      url={e.url}
+                      name={e.name}
+                      liked={e.liked}
+                      detailsId={`details-${side}`}
+                      open={openSide[side]}
+                      onDetails={() => setOpenSide((o) => ({ ...o, [side]: !o[side] }))}
+                      onSaved={() => onBadgeCheck()}
+                    />
+                  </div>
+                  {pick === null && (
+                    <button
+                      type="button"
+                      onClick={() => vote(side)}
+                      disabled={busy}
+                      tabIndex={-1}
+                      aria-hidden
+                      className={`${btnSecondary} shrink-0 gap-2 border-accent/50 max-md:hidden`}
+                    >
+                      {side === "a" && <kbd className={kbd}>←</kbd>}
+                      Pick this one
+                      {side === "b" && <kbd className={kbd}>→</kbd>}
+                    </button>
                   )}
-                  {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
-                </button>
+                </div>
                 {canStar && pick === null && (
                   <button
                     type="button"
@@ -427,43 +493,37 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                     <Star className="h-3.5 w-3.5" aria-hidden /> Super
                   </button>
                 )}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 p-2.5 sm:flex-nowrap sm:p-4">
-                  <span className="w-full min-w-0 sm:w-auto sm:flex-1">
-                    <span className="block truncate font-semibold">{e.name}</span>
-                    <span className="block truncate text-xs text-mute sm:text-sm">
-                      {domainOf(e.url)}
-                      {(showScores || pick !== null) && (
-                        <span className="tabular-nums">
-                          {" "}
-                          · ELO {Math.round(e.elo)}
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                  <SiteActions url={e.url} name={e.name} compact onSaved={() => onBadgeCheck()} />
-                  <kbd className={`hidden h-7 min-w-7 place-items-center rounded-md border border-edge px-1.5 text-xs text-mute ${pick === null ? "lg:grid" : ""}`} aria-hidden>
-                    {side === "a" ? "←" : "→"}
-                  </kbd>
-                </div>
-              </div>
+              </article>
             );
           })}
+          {(["a", "b"] as const).map((side) =>
+            openSide[side] ? (
+              <DetailsPanel
+                key={`${pair.token}-details-${side}`}
+                id={`details-${side}`}
+                url={pair[side].url}
+                name={pair[side].name}
+                reveal={reveal}
+                className={`col-span-2 md:col-span-1 ${side === "b" ? "md:col-start-2" : "md:col-start-1"}`}
+              />
+            ) : null
+          )}
         </div>
       ) : (
         // Skeleton in the cards' own shape, so nothing jumps when the pair arrives.
         <div className="grid grid-cols-2 gap-3 sm:gap-5" aria-busy="true">
           {[0, 1].map((k) => (
             <div key={k} aria-hidden className="card overflow-hidden">
-              <div className="aspect-[390/560] w-full animate-pulse bg-raised md:aspect-[16/10]" />
-              <div className="p-2.5 sm:p-4">
-                <div className="h-6 py-1">
-                  <div className="h-full w-2/5 animate-pulse rounded bg-raised" />
+              <div className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                <div className="aspect-[390/330] w-full animate-pulse bg-raised md:aspect-[16/10]" />
+                <div className="grid content-start gap-2 p-2.5 sm:p-4">
+                  <div className="h-5 w-3/5 animate-pulse rounded bg-raised" />
+                  <div className="h-4 w-4/5 animate-pulse rounded bg-raised" />
+                  <div className="h-6 w-2/5 animate-pulse rounded bg-raised" />
+                  <div className="h-6 w-3/5 animate-pulse rounded bg-raised" />
                 </div>
-                <div className="h-4 py-0.5 sm:h-5 sm:py-1">
-                  <div className="h-full w-3/5 animate-pulse rounded bg-raised" />
-                </div>
-                <div className="mt-2 h-9 sm:hidden" />
               </div>
+              <div className="h-[6.4rem] border-t border-edge lg:h-[4.25rem]" />
             </div>
           ))}
         </div>
@@ -474,52 +534,57 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         {busy && !pair ? "Loading a pair" : pick && pair && shares ? `You picked ${pair[pick].name}. ${shares[pick]}% of people would pick it. ${LEAN[leanOf(shares[pick])]}` : (note ?? "")}
       </p>
 
+      {/* The decision bar: stays in view (above the phone's tab bar), where the thumb and eye already are. */}
       {!finished && !gated && (pair || loadError) && (
-        <div className="mt-4 flex min-h-12 flex-wrap items-center justify-between gap-2">
-          {pick === null ? (
-            <>
-              {note ? (
-                <p className="min-w-0 text-sm font-medium text-accent">{note}</p>
-              ) : (
-                <>
-                  <p className="hidden text-sm text-mute md:block">
-                    Press <kbd className="rounded border border-edge px-1.5 text-xs">←</kbd> or <kbd className="rounded border border-edge px-1.5 text-xs">→</kbd> to pick,{" "}
-                    <kbd className="rounded border border-edge px-1.5 text-xs">S</kbd> to skip.
-                  </p>
-                  <p className="text-sm text-mute md:hidden">Tap the one you&apos;d hire from.</p>
-                </>
-              )}
-              <label className="flex min-h-11 items-center gap-2 text-xs text-mute max-sm:hidden">
-                <input
-                  type="checkbox"
-                  checked={showScores}
-                  onChange={(e) => setShowScores(e.target.checked)}
-                  className="h-4 w-4 accent-[var(--color-fill)]"
-                />
-                Show scores before voting
-              </label>
-              <button type="button" onClick={next} disabled={busy} aria-keyshortcuts="S" className={`${btnGhost} px-3`}>
-                <SkipForward className="h-4 w-4" aria-hidden /> Skip
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="pop-in min-w-0 text-sm" aria-hidden>
-                <span className="font-semibold">{shares && LEAN[leanOf(shares[pick])]}</span>{" "}
-                <span className="text-mute">
-                  {official ? "Counted." : practiceLeft != null ? `Practice vote ${rater!.anonVoteLimit - practiceLeft} of ${rater!.anonVoteLimit}.` : "Practice vote."}
-                </span>
-              </p>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button type="button" onClick={undo} disabled={busy} className={`${btnGhost} px-3`}>
+        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-1 mt-3 lg:bottom-0">
+          <div
+            className={`flex min-h-14 items-center gap-2 rounded-2xl border border-edge bg-card/92 p-1.5 shadow-[var(--card-hi),var(--card-drop)] backdrop-blur sm:p-2 ${
+              pick === null ? "max-md:grid max-md:grid-cols-[1fr_auto_1fr]" : ""
+            }`}
+          >
+            {pick === null ? (
+              <>
+                <button type="button" onClick={() => vote("a")} disabled={busy || !pair} aria-keyshortcuts="ArrowLeft" className={`${btnSecondary} flex-1 px-2 whitespace-nowrap md:hidden`}>
+                  <ArrowLeft className="h-4 w-4" aria-hidden /> Pick left
+                </button>
+                <p className="hidden min-w-0 flex-1 px-2 text-sm text-mute md:block">
+                  {note ? (
+                    <span className="font-medium text-accent">{note}</span>
+                  ) : (
+                    <>
+                      <kbd className={kbd}>←</kbd> <kbd className={kbd}>→</kbd> pick · <kbd className={kbd}>S</kbd> skip · <kbd className={kbd}>D</kbd> details
+                    </>
+                  )}
+                </p>
+                <label className="hidden min-h-11 items-center gap-2 px-2 text-xs text-mute md:flex">
+                  <input type="checkbox" checked={showScores} onChange={(e) => setShowScores(e.target.checked)} className="h-4 w-4 accent-[var(--color-fill)]" />
+                  Show scores before voting
+                </label>
+                <button type="button" onClick={next} disabled={busy} aria-keyshortcuts="S" className={`${btnGhost} shrink-0 px-3`}>
+                  <SkipForward className="h-4 w-4" aria-hidden /> Skip
+                </button>
+                <button type="button" onClick={() => vote("b")} disabled={busy || !pair} aria-keyshortcuts="ArrowRight" className={`${btnSecondary} flex-1 px-2 whitespace-nowrap md:hidden`}>
+                  Pick right <ArrowRight className="h-4 w-4" aria-hidden />
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="pop-in min-w-0 flex-1 px-2 text-sm" aria-hidden>
+                  <span className="font-semibold">{shares && LEAN[leanOf(shares[pick])]}</span>{" "}
+                  <span className="text-mute max-sm:block max-sm:text-xs">
+                    {official ? "Counted." : practiceLeft != null ? `Practice vote ${rater!.anonVoteLimit - practiceLeft} of ${rater!.anonVoteLimit}.` : "Practice vote."}
+                  </span>
+                </p>
+                <button type="button" onClick={undo} disabled={busy} className={`${btnGhost} shrink-0 px-3 max-sm:px-2`}>
                   <Undo2 className="h-4 w-4" aria-hidden /> Undo
                 </button>
-                <button ref={nextRef} type="button" onClick={next} disabled={busy} className={btnPrimary}>
-                  {done >= ROUND ? "See results" : "Next pair"} <ArrowRight className="nudge h-4 w-4" aria-hidden />
+                <button ref={nextRef} type="button" onClick={next} disabled={busy} aria-keyshortcuts="Enter N ArrowRight" className={`${btnPrimary} shrink-0 whitespace-nowrap max-sm:px-4`}>
+                  {done >= ROUND ? "See results" : "Next pair"} <kbd className="hidden rounded border border-on-fill/30 px-1 text-[11px] md:inline">Enter</kbd>
+                  <ArrowRight className="nudge h-4 w-4 md:hidden" aria-hidden />
                 </button>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

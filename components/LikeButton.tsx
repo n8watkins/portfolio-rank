@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Heart } from "lucide-react";
 import { useSignIn } from "@/components/SignInModal";
 
-type Variant = "button" | "icon";
+type Variant = "button" | "icon" | "action";
 
 const SIGN_IN_PROMPT = {
   title: "Sign in to like portfolios",
@@ -117,6 +118,25 @@ export function LikeButton({
 
   const heart = liked ? "♥" : "♡";
   const label = `${liked ? "Liked" : "Like"}${showCount && n > 0 ? ` · ${n}` : ""}`;
+
+  // The games' action row (components/play/PlayCardParts.tsx): an outline
+  // heart and a word, in the caller's button shape; filled when liked.
+  if (variant === "action") {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy}
+        aria-pressed={liked}
+        aria-label={name ? `${liked ? "Liked" : "Like"} ${name}` : undefined}
+        title={liked ? "Liked: saved to your profile. Click to remove." : "Like: saved to your profile, separate from your vote"}
+        className={`${className} ${liked ? "!border-rose-400/50 !text-rose-500" : ""}`}
+      >
+        <Heart className={`h-4 w-4 shrink-0 ${liked ? "fill-current" : ""}`} aria-hidden />
+        <span className="label">{liked ? "Liked" : "Like"}</span>
+      </button>
+    );
+  }
 
   if (variant === "icon") {
     return (

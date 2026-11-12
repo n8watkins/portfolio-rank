@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Bot, Check, Merge, Share2, Shuffle, Swords, Target, Users, X } from "lucide-react";
 import { isModalOpen } from "@/components/Modal";
-import { SiteActions } from "@/components/play/SiteActions";
+import { DetailsPanel, PlayActions, SiteLink } from "@/components/play/PlayCardParts";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
@@ -24,10 +24,13 @@ type Progress = { results: Result[]; finished: boolean; score: number; hits: num
 type Quiz = { id: string; kind: string; day: string | null; challenge: string; hit: number; rounds: Round[]; progress: Progress };
 type Eye = { crowd: { agree: number; of: number; pct: number | null }; ai: { agree: number; of: number; pct: number | null } };
 
-const QUICK = [1, 10, 25, 50, 75];
+// Evenly spaced over the whole scale (owner, 2026-11-11): each is the middle
+// of one fifth of the board, the same fifths a quiz draws its five sites from
+// (lib/games/pool.mjs pickFive). The slider gives any exact value.
+const QUICK = [10, 30, 50, 70, 90];
 /** Misses within this many points are "so close" (owner: generous scoring). */
 const NEAR = 25;
-const START = 25;
+const START = 50;
 
 const dayLabel = (day: string | null) => (day ? new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "");
 const off = (r: Result) => (r.merged == null ? null : Math.abs(r.guess - r.merged));
@@ -45,6 +48,8 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const [state, setState] = useState<"loading" | "ready" | "missing" | "empty" | "error">("loading");
   const [i, setI] = useState(0);
   const [guess, setGuess] = useState(START);
+  // The inline Details panel under the portfolio; each new portfolio starts closed.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,6 +66,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
     setQuiz(q);
     setResults(done);
     setI(Math.min(done.length, q.rounds.length));
+    setDetailsOpen(false);
     setShown(false);
     setGuess(START);
     setFinal(q.progress.finished ? { score: q.progress.score, hits: q.progress.hits } : null);
@@ -158,6 +164,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
     setShown(false);
     setGuess(START);
     setI((n) => n + 1);
+    setDetailsOpen(false);
     setFocusHead((n) => n + 1);
   }, []);
 
@@ -400,8 +407,9 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <div className="grid min-w-0 content-start gap-4 sm:gap-5">
           <figure key={r.index} className="card deal-in flex flex-col overflow-hidden">
-            <div className="relative aspect-[390/290] w-full md:aspect-[16/10]">
+            <div className="relative aspect-[390/260] w-full md:aspect-[16/7]">
               {r.shot ? (
                 <picture>
                   <source media="(max-width: 767px)" srcSet={frameOf(r.shot, "mobile.jpg")} />
@@ -413,17 +421,29 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                 </span>
               )}
             </div>
-            <figcaption className="flex flex-wrap items-center justify-between gap-3 border-t border-edge px-4 py-3">
+            <figcaption className="grid gap-3 border-t border-edge p-3 sm:p-4">
               <span className="min-w-0">
-                <span className="block truncate font-semibold">{r.name}</span>
-                <span className="block truncate text-sm text-mute">{r.tagline ?? r.domain}</span>
+                <span className="block truncate font-semibold sm:text-lg">{r.name}</span>
+                {r.tagline && <span className="block truncate text-sm text-mute">{r.tagline}</span>}
+                <SiteLink url={r.url} className="mt-0.5 max-w-full" />
               </span>
-              {/* Details (the report) only after the guess: it shows the answer. */}
-              <SiteActions url={r.url} name={r.name} details={shown} onSaved={() => onBadgeCheck()} />
+              {/* Details opens below; the grade, the AI's scores and the share card wait for the guess. */}
+              <PlayActions
+                url={r.url}
+                name={r.name}
+                detailsId="guess-details"
+                open={detailsOpen}
+                onDetails={() => setDetailsOpen((o) => !o)}
+                onSaved={() => onBadgeCheck()}
+              />
             </figcaption>
           </figure>
+          {detailsOpen && (
+            <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} name={r.name} reveal={shown} after="you lock in your guess" />
+          )}
+          </div>
 
-          <section aria-label={shown ? "Result" : "Your guess"} className="card flex flex-col p-5 sm:p-6">
+          <section aria-label={shown ? "Result" : "Your guess"} className="card flex flex-col self-start p-5 sm:p-6 lg:sticky lg:top-20">
             {!shown || !last ? (
               <>
                 <h3 className="text-lg font-bold tracking-tight">Where does it land?</h3>
@@ -459,11 +479,11 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
                       aria-pressed={guess === q}
                       className="card-hover h-11 rounded-lg border border-edge bg-card px-0.5 text-[11px] font-semibold whitespace-nowrap aria-pressed:border-accent aria-pressed:text-accent sm:h-10 sm:text-xs"
                     >
-                      {q === 75 ? "Bottom" : `Top ${q}%`}
+                      Top {q}%
                     </button>
                   ))}
                 </div>
-                <button type="button" onClick={submit} disabled={busy} className={`${btnPrimary} mt-auto h-12 text-[15px] max-lg:mt-5`}>
+                <button type="button" onClick={submit} disabled={busy} className={`${btnPrimary} mt-5 h-12 text-[15px]`}>
                   <Target className="icon-twinkle h-4 w-4" aria-hidden /> Lock in top {guess}%
                 </button>
                 <p className="mt-2 text-center text-xs text-mute">Within {quiz.hit} points is a hit; every guess scores at least 20.</p>

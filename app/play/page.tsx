@@ -20,8 +20,8 @@ export const metadata: Metadata = {
 };
 
 const MODES = [
-  { key: "faceoff", href: "/play", label: "Face-off", hint: "Two portfolios side by side. Pick the one you'd hire from, then see how everyone leans.", Icon: Swords, icon: "icon-shake" },
-  { key: "guess", href: "/play?mode=guess", label: "Guess the percentile", hint: "Five portfolios. Guess where each lands among all of them. A new Daily 5 every day.", Icon: Target, icon: "icon-twinkle" },
+  { key: "faceoff", href: "/play", label: "Face-off", short: "Face-off", hint: "Two portfolios side by side. Pick the one you'd hire from, then see how everyone leans.", Icon: Swords, icon: "icon-shake" },
+  { key: "guess", href: "/play?mode=guess", label: "Guess the percentile", short: "Guess", hint: "Five portfolios. Guess where each lands among all of them. A new Daily 5 every day.", Icon: Target, icon: "icon-twinkle" },
 ] as const;
 
 /** Two of the best-rated sites' screenshots for the mode cards (two indexed reads). */
@@ -46,32 +46,34 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
   const intro = !(await auth())?.user && (await cookies()).get(INTRO_COOKIE)?.value !== "1";
 
   return (
-    <div className="wrap py-4 sm:py-8">
+    <div className="wrap py-3 sm:py-5">
       <h1 className="sr-only">{games ? "Play" : "Face-off"}</h1>
       {games && (
-        <nav aria-label="Game mode" className="rise mb-5 grid grid-cols-2 gap-3 sm:mb-7 sm:gap-4">
-          {MODES.map(({ key, href, label, hint, Icon, icon }, k) => (
+        // Compact, so the game itself fits on the first screen.
+        <nav aria-label="Game mode" className="rise mb-4 grid grid-cols-2 gap-2 sm:gap-3">
+          {MODES.map(({ key, href, label, short, hint, Icon, icon }, k) => (
             <a
               key={key}
               href={href}
               aria-current={mode === key ? "page" : undefined}
-              className="card card-hover group relative flex items-stretch overflow-hidden aria-[current=page]:ring-2 aria-[current=page]:ring-accent"
+              className="card card-hover group relative flex h-12 items-stretch overflow-hidden aria-[current=page]:ring-2 aria-[current=page]:ring-accent sm:h-16"
             >
               {shots[k] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={shots[k]!} alt="" className="hidden w-40 shrink-0 border-r border-edge bg-raised object-cover object-top md:block lg:w-56" />
+                <img src={shots[k]!} alt="" className="hidden w-28 shrink-0 border-r border-edge bg-raised object-cover object-top lg:block" />
               ) : (
-                <span className="hidden w-40 shrink-0 border-r border-edge bg-raised md:block lg:w-56" aria-hidden />
+                <span className="hidden w-28 shrink-0 border-r border-edge bg-raised lg:block" aria-hidden />
               )}
-              <span className="flex min-w-0 flex-1 items-start gap-3 p-3 sm:p-5">
-                <span className="icon-tile hidden h-11 w-11 shrink-0 sm:grid">
-                  <Icon className={`h-5 w-5 ${icon}`} aria-hidden />
+              <span className="flex min-w-0 flex-1 items-center gap-3 px-3 sm:px-4">
+                <span className="icon-tile hidden h-9 w-9 shrink-0 sm:grid">
+                  <Icon className={`h-4 w-4 ${icon}`} aria-hidden />
                 </span>
                 <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-base font-bold sm:text-lg">
-                    <Icon className="h-4 w-4 shrink-0 text-accent sm:hidden" aria-hidden /> {label}
+                  <span className="flex items-center gap-2 text-sm font-bold sm:text-base">
+                    <Icon className="h-4 w-4 shrink-0 text-accent sm:hidden" aria-hidden /> <span className="sm:hidden">{short}</span>
+                    <span className="max-sm:hidden">{label}</span>
                   </span>
-                  <span className="mt-0.5 block text-xs text-mute sm:text-sm">{hint}</span>
+                  <span className="hidden truncate text-xs text-mute md:block">{hint}</span>
                 </span>
               </span>
             </a>
