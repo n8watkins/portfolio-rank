@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { sameOrigin } from "@/lib/polls/server";
-import { claimById, reviewQueue, setClaimStatus } from "@/lib/games/claims.mjs";
+import { RETIRED_PROOFS, claimById, reviewQueue, setClaimStatus } from "@/lib/games/claims.mjs";
 import { PRIVATE, fail, gamesEnabled, off } from "@/lib/games/server";
 
 // The site owner's review of portfolio claims (GAMES_V2), only for
@@ -42,6 +42,8 @@ export async function POST(req: Request) {
   const claim = await claimById(db(), id);
   if (!claim) return fail("not_found", 404);
   if (claim.status !== "review") return fail("not_in_review", 409);
-  const out = await setClaimStatus(db(), { claim, status: decision, method: claim.method ?? "manual", note, actor: `admin:${admin.login}`, now: new Date() });
+  // A retired proof was never real proof: an approval stands on the admin's own review.
+  const method = claim.method && !RETIRED_PROOFS.includes(claim.method) ? claim.method : "manual";
+  const out = await setClaimStatus(db(), { claim, status: decision, method, note, actor: `admin:${admin.login}`, now: new Date() });
   return NextResponse.json({ claim: out }, { headers: PRIVATE });
 }

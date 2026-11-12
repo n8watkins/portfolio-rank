@@ -11,8 +11,8 @@ import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
 // Claim your portfolio: always on, so removal is self-serve. Signed in with GitHub only.
 // GET  /api/owner/claims -> { claims: [{ url, status, method, meta, state, ... }] }
 // POST /api/owner/claims { url, method?: "auto" | "meta" | "manual", note? }
-//   auto    (default) checks that the home page links to github.com/<you>,
-//           or that your GitHub profile's Website is the portfolio's domain
+//   auto    (default) checks that the home page links to github.com/<you>
+//           (never the GitHub profile's Website field, which anyone can set)
 //   meta    checks for <meta name="portfoliorank-verify" content="<token>">
 //           on the home page (the token is in every claim this returns)
 //   manual  asks the site owner to review it (note: up to 500 characters)
@@ -89,8 +89,9 @@ export async function POST(req: Request) {
   if (method === "meta") {
     proof = metaProof({ url, page, token: claim.token }) ? "meta" : null;
   } else {
+    // The account's current login (by numeric id, so a renamed account still matches its links).
     const profile = await githubProfile(me.id.slice(3));
-    proof = autoProof({ url, page, profile, ownerId: me.id, login: profile?.login ?? me.login, template: await templateOf(url) });
+    proof = autoProof({ url, page, login: profile?.login ?? me.login, template: await templateOf(url) });
   }
   if (!proof) return NextResponse.json({ claim: await shape(claim), reason: page ? "no_proof" : "unreachable" }, { headers: PRIVATE });
 
