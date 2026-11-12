@@ -39,7 +39,7 @@ async function shape(c: Claim) {
     method: c.method,
     meta: { name: META_NAME, content: c.token, tag: `<meta name="${META_NAME}" content="${c.token}">` },
     state: await ownerState(db(), c.url),
-    // Removal asks for the meta tag or a review, not just a link (lib/games/claims.mjs removalProof).
+    // Hiding the grade and removal ask for the meta tag, github_pages or a review, not just a link (lib/games/claims.mjs controlProof).
     removable: c.status === "verified" && (await removalProof(db(), { url: c.url, owner: c.owner })),
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
