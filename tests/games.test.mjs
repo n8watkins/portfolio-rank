@@ -548,9 +548,10 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   const old = new Date(T0.getTime() - 30 * 86400000).toISOString();
   await db.batch(
     [
-      ["https://a.dev", grade("S", 5, { ...facts(true, true), judged_at: recent })],
-      ["https://b.dev", grade("B", 3, { ...facts(false, true), judged_at: old })],
-      ["https://c.dev", grade("C", 2, { ...facts(true, false), judged_at: old })],
+      // Tiers by rank (lib/tiers.mjs) as refreshTiers stores them: the average uses these, not Gemini's letters.
+      ["https://a.dev", grade("S", 5, { ...facts(true, true), judged_at: recent, rank: { tier: "A" } })],
+      ["https://b.dev", grade("B", 3, { ...facts(false, true), judged_at: old, rank: { tier: "B" } })],
+      ["https://c.dev", grade("C", 2, { ...facts(true, false), judged_at: old, rank: { tier: "C" } })],
       ["https://d.dev", null],
     ].map(([url, g]) => ({ sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: [url, g] })),
     "write"
@@ -570,7 +571,8 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   assert.equal(s.ownDomainPct, 67);
   assert.equal(s.resumePct, 67);
   assert.deepEqual(s.commonRole, { key: "fullstack", label: "Full stack", pct: 67 });
-  assert.deepEqual(s.averageTier, { value: 3.33, tier: "B" });
+  // A 4, B 3, C 2 on the D 1 to SSS 7 scale.
+  assert.deepEqual(s.averageTier, { value: 3, tier: "B" });
   assert.equal(s.changedThisMonth, 1);
   assert.deepEqual(s.newest, { url: "https://d.dev", name: "D" });
   assert.equal(pacificMonthStart(T0).toISOString(), "2026-11-01T07:00:00.000Z");

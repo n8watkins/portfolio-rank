@@ -1,6 +1,7 @@
 import { db, ensureSchema } from "@/lib/db";
 import { factLines, gradedPool } from "@/lib/grader/report.mjs";
 import { hiringGroups, placeIn } from "@/lib/grader/present.mjs";
+import { isPublicTier, tierOf } from "@/lib/tiers.mjs";
 
 // A listed portfolio's public summary: the public grade (only the top tiers
 // get a letter and a "top N%", as on the portfolio page, so no one gets a
@@ -11,13 +12,12 @@ import { hiringGroups, placeIn } from "@/lib/grader/present.mjs";
 // The share card (lib/play/share-card.tsx) and the games' face-off record
 // (/api/play/card) read it.
 
-const PUBLIC_TIERS = new Set(["S", "A", "B"]);
 
 export type CheckState = "ok" | "fix" | "unknown";
 export type PlayCard = {
   /** Graded at all (the tier itself may stay private). */
   graded: boolean;
-  /** S, A or B; null for an ungraded site, a lower tier or a hidden grade. */
+  /** A public tier by rank (lib/tiers.mjs, SSS to B); null for an ungraded site, a lower tier or a hidden grade. */
   tier: string | null;
   /** "Top N%" among graded portfolios, shown with a public tier only. */
   topPct: number | null;
@@ -71,11 +71,12 @@ const projectCount = (g: Record<string, unknown> | null): number | null => {
   return typeof n === "number" && n > 0 ? n : null;
 };
 
-function cardOf(row: Row, pool: { url: string; mu: number }[]): PlayCard {
+function cardOf(row: Row, pool: { url: string; mu: number; key: number | null }[]): PlayCard {
   const g = row.hidden ? null : row.grade;
-  const tierRaw = typeof g?.tier === "string" ? g.tier.toUpperCase() : null;
-  const graded = Boolean(tierRaw);
-  const tier = tierRaw && PUBLIC_TIERS.has(tierRaw) ? tierRaw : null;
+  // Graded: Gemini answered. The tier shown is the one by rank in the library, never Gemini's letter.
+  const graded = typeof g?.tier === "string" && g.tier !== "";
+  const ranked = tierOf(g);
+  const tier = isPublicTier(ranked) ? ranked : null;
   const place = tier ? placeIn(pool, row.url) : null;
   const groups = g ? hiringGroups(factLines(g)) : [];
   return {

@@ -2,7 +2,7 @@ import { ArrowRight, Check, ExternalLink, Minus, X } from "lucide-react";
 import { Celebration } from "@/components/grade/Celebration";
 import { OwnerPanel } from "@/components/grade/OwnerPanel";
 import { ReportToolbar } from "@/components/grade/ReportToolbar";
-import { TierBadge } from "@/components/ui/badges";
+import { PublicTierBadge, TierBadge } from "@/components/ui/badges";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import type { GradePage } from "@/lib/grade-page";
 import { ROUTES } from "@/lib/nav";
@@ -71,17 +71,21 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 text-right">
           <span id="report-tier">
-            <TierBadge tier={rep.tier} size="lg" />
+            {rep.tier ? (
+              <TierBadge tier={rep.tier} size="lg" />
+            ) : (
+              <span className="grid h-16 w-16 place-items-center rounded-2xl bg-raised text-lg font-bold text-mute ring-1 ring-inset ring-edge" role="img" aria-label="No tier">
+                AI
+              </span>
+            )}
           </span>
           {pct ? (
             <>
               <p className="text-xl font-bold leading-none tabular-nums">Top {pct.topPct}%</p>
-              <p className="text-[11px] text-mute tabular-nums">
-                #{pct.rank.toLocaleString("en-US")} of {pct.total.toLocaleString("en-US")}
-              </p>
+              <p className="text-[11px] text-mute tabular-nums">Graded against {(pct.total - 1).toLocaleString("en-US")} portfolios</p>
             </>
           ) : (
-            <p className="text-xs text-mute">Rank once more are graded</p>
+            <p className="text-xs text-mute">{rep.isPortfolio === false ? "Not ranked: not a portfolio" : "Rank once more are graded"}</p>
           )}
         </div>
       </header>
@@ -166,7 +170,7 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
           <ul className="mt-1 divide-y divide-edge text-sm">
             {view.better && (
               <li className="flex items-center gap-3 py-2">
-                <TierBadge tier={view.better.site.tier} />
+                <PublicTierBadge tier={view.better.site.tier} />
                 <div className="min-w-0 flex-1">
                   <a href={view.better.site.path} className="font-semibold hover:text-accent">
                     {view.better.site.name}
@@ -180,7 +184,7 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
             )}
             {view.similar.map((s) => (
               <li key={s.url} className="flex items-center gap-3 py-2">
-                <TierBadge tier={s.tier} />
+                <PublicTierBadge tier={s.tier} />
                 <div className="min-w-0 flex-1">
                   <a href={s.path} className="font-semibold hover:text-accent">
                     {s.name}

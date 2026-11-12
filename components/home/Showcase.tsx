@@ -90,7 +90,8 @@ export function Showcase({ items }: { items: ShowItem[] }) {
             <a key={it.url} href={it.href} aria-label={`See the report for ${it.name}`} className={`${frame} group cursor-pointer`} style={style}>
               {img}
               <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur" aria-hidden>
-                #{it.rank} · Tier {it.tier}
+                #{it.rank}
+                {it.tier ? ` · Tier ${it.tier}` : ""}
               </span>
               <span className="absolute inset-0 grid place-items-center bg-black/0 transition-colors duration-200 group-hover:bg-black/35 group-focus-visible:bg-black/35" aria-hidden>
                 <span className="translate-y-1 rounded-full bg-black/75 px-4 py-2 text-sm font-semibold text-white opacity-0 shadow-lg backdrop-blur transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
@@ -110,7 +111,8 @@ export function Showcase({ items }: { items: ShowItem[] }) {
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold">{cur.name}</span>
             <span className="block truncate text-xs text-mute">
-              {cur.domain} · Tier {cur.tier}
+              {cur.domain}
+              {cur.tier ? ` · Tier ${cur.tier}` : ""}
             </span>
           </span>
         </p>

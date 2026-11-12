@@ -1,9 +1,14 @@
+import type React from "react";
 import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
 import { medalFor } from "@/lib/ranking/places.mjs";
+import { BELOW_TOP_TIERS, isPublicTier } from "@/lib/tiers.mjs";
 
 // Small marks shared by the leaderboard, reports, cards and Play.
 
 export const TIER_STYLE: Record<string, string> = {
+  // The top 2% and 5% (lib/tiers.mjs): gold, framed by a thin ring (TIER_FRAME), so they read above a plain S.
+  SSS: "text-[#2a1d06]",
+  SS: "bg-fill text-on-fill",
   S: "bg-fill text-on-fill",
   A: "bg-accent-soft text-accent ring-1 ring-inset ring-accent/25",
   B: "bg-raised text-ink ring-1 ring-inset ring-edge-strong",
@@ -11,13 +16,47 @@ export const TIER_STYLE: Record<string, string> = {
   D: "bg-raised text-mute ring-1 ring-inset ring-edge",
 };
 
-/** A grade tier (S to D) as a square badge. */
+/** SS gets a gold ring around the amber tile; SSS a metallic gold tile (the gold medal's) with the ring and a soft glow. */
+const TIER_FRAME: Record<string, React.CSSProperties> = {
+  SSS: {
+    background: "linear-gradient(145deg, #fde68a, #e9b949 55%, #b7861c)",
+    boxShadow: "0 0 0 2px var(--color-card), 0 0 0 3.5px #e9b949, 0 6px 16px -6px rgba(233, 185, 73, 0.75)",
+  },
+  SS: { boxShadow: "0 0 0 2px var(--color-card), 0 0 0 3.5px var(--color-fill)" },
+};
+
+/** Letter sizes that keep SS and SSS inside the square. */
+const TIER_TEXT = {
+  md: { 1: "text-sm", 2: "text-[13px] tracking-tight", 3: "text-[11px] tracking-tighter" },
+  lg: { 1: "text-3xl", 2: "text-[26px] tracking-tight", 3: "text-xl tracking-tight" },
+} as const;
+
+/** A grade tier (SSS to D, by rank: lib/tiers.mjs) as a square badge. */
 export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "lg" }) {
-  const s = size === "lg" ? "h-16 w-16 rounded-2xl text-3xl" : "h-8 w-8 rounded-lg text-sm";
+  const box = size === "lg" ? "h-16 w-16 rounded-2xl" : "h-8 w-8 rounded-lg";
+  const text = TIER_TEXT[size][Math.min(3, Math.max(1, tier.length)) as 1 | 2 | 3];
   return (
-    <span role="img" aria-label={`Tier ${tier}`} className={`grid shrink-0 place-items-center font-bold ${s} ${TIER_STYLE[tier] ?? TIER_STYLE.C}`}>
+    <span
+      role="img"
+      aria-label={`Tier ${tier}`}
+      className={`grid shrink-0 place-items-center font-bold leading-none ${box} ${text} ${TIER_STYLE[tier] ?? TIER_STYLE.C}`}
+      style={TIER_FRAME[tier]}
+    >
       <span aria-hidden>{tier}</span>
     </span>
+  );
+}
+
+/**
+ * Another portfolio's tier where the public can see it: the letter for the
+ * top tiers (SSS to B, lib/tiers.mjs PUBLIC_TIERS), else a blank square the
+ * same size that says "Graded, below the top tiers" to screen readers, so
+ * no one gets a public C or D.
+ */
+export function PublicTierBadge({ tier }: { tier: string | null | undefined }) {
+  if (tier && isPublicTier(tier)) return <TierBadge tier={tier} />;
+  return (
+    <span role="img" aria-label={tier ? BELOW_TOP_TIERS : "Not graded yet"} title={tier ? BELOW_TOP_TIERS : undefined} className="h-8 w-8 shrink-0 rounded-lg ring-1 ring-inset ring-edge" />
   );
 }
 

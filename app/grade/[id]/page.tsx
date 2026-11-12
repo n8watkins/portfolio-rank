@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const rep = page.job.report;
   const title = rep ? `${page.job.domain} - grade report - PortfolioRank` : `Grading ${page.job.domain} - PortfolioRank`;
   const description = rep
-    ? `Tier ${rep.tier}${rep.percentile ? `, about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
+    ? `${rep.tier ? `Tier ${rep.tier}` : "Graded"}${rep.percentile ? `, top ${rep.percentile.topPct}% graded against ${(rep.percentile.total - 1).toLocaleString("en-US")} developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
     : "A PortfolioRank grade on its way.";
   return { title, description, robots, openGraph: { title, description, type: "article" }, twitter: { card: "summary_large_image", title, description } };
 }

@@ -1,5 +1,5 @@
 import { Activity, ArrowRight, BookOpen, Bot, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
-import { RankBadge, TierBadge } from "@/components/ui/badges";
+import { PublicTierBadge, RankBadge, TierBadge } from "@/components/ui/badges";
 import { sectionTitle } from "@/components/ui/styles";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { LiveStats } from "@/components/home/LiveStats";
@@ -24,7 +24,7 @@ function ago(iso: string, now: number) {
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-function BoardRow({ r, tier }: { r: BoardItem; tier: boolean }) {
+function BoardRow({ r }: { r: BoardItem }) {
   return (
     <li>
       <a href={r.href} className="group flex items-center gap-3.5 rounded-xl px-2 py-3 transition hover:bg-raised">
@@ -36,24 +36,30 @@ function BoardRow({ r, tier }: { r: BoardItem; tier: boolean }) {
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.line}</span>
         </span>
-        <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? <TierBadge tier={r.score} /> : r.score}</span>
+        {/* The tier (public ones only) and people's ELO side by side. */}
+        <span className="flex w-8 shrink-0 justify-center">{r.tier && <TierBadge tier={r.tier} />}</span>
+        <span className="w-11 shrink-0 text-right text-sm font-semibold tabular-nums">
+          <span className="sr-only">ELO </span>
+          {r.elo ?? "-"}
+        </span>
       </a>
     </li>
   );
 }
 
-function Board({ rows, scoreLabel }: { rows: BoardItem[]; scoreLabel: string }) {
+function Board({ rows }: { rows: BoardItem[] }) {
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex items-center gap-3.5 px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-mute" aria-hidden>
         <span className="w-9 text-right">#</span>
         <span className="w-[4.5rem] max-sm:hidden" />
         <span className="flex-1">Portfolio</span>
-        <span className="w-12 text-right">{scoreLabel}</span>
+        <span className="w-8 text-center">Tier</span>
+        <span className="w-11 text-right">ELO</span>
       </div>
       <ol className="flex flex-1 flex-col justify-between">
         {rows.map((r) => (
-          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} />
+          <BoardRow key={r.url} r={r} />
         ))}
       </ol>
     </div>
@@ -79,9 +85,9 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
         <ViewTabs
           label="Leaderboard view"
           panels={{
-            merged: <Board rows={top.views[0].rows} scoreLabel="Tier" />,
-            ai: <Board rows={top.views[1].rows} scoreLabel="Tier" />,
-            people: <Board rows={top.views[2].rows} scoreLabel="Tier" />,
+            merged: <Board rows={top.views[0].rows} />,
+            ai: <Board rows={top.views[1].rows} />,
+            people: <Board rows={top.views[2].rows} />,
           }}
         />
       ) : empty ? (
@@ -98,7 +104,7 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           )}
         </div>
       ) : (
-        <Board rows={top.rows} scoreLabel="Tier" />
+        <Board rows={top.rows} />
       )}
     </section>
   );
@@ -129,7 +135,7 @@ export function RecentlyGraded({ items, now, className = "" }: { items: GradedIt
                   </span>
                 </span>
               </span>
-              <TierBadge tier={r.tier} />
+              <PublicTierBadge tier={r.tier} />
             </a>
           </li>
         ))}
@@ -269,7 +275,7 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
         </h2>
         <p className="mt-0.5 text-sm text-mute">{p.line}</p>
         <div className="mt-4 flex items-center gap-3">
-          <TierBadge tier={p.tier} size="lg" />
+          {p.tier && <TierBadge tier={p.tier} size="lg" />}
           <p className="text-sm">
             <span className="block font-semibold">
               Top {topPct(p.rank, p.total)}% · #{p.rank} by AI grade

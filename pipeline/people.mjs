@@ -177,7 +177,8 @@ async function notifyPerson(ctx, id) {
   await ctx.email.send({
     to: String(req.email),
     subject: `Your PortfolioRank ${req.kind === "regrade" ? "re-grade" : "grade"} is ready`,
-    text: `Your portfolio (${req.url}) was graded: tier ${req.result?.tier ?? "?"}.`,
+    // No tier here: the tier comes from the portfolio's rank in the library (lib/tiers.mjs), which the report shows.
+    text: `Your portfolio (${req.url}) was graded. Open your report to see your tier and where you rank.`,
   });
   await setStatus(ctx.db, id, { notified_at: iso(ctx.now()) }, ctx.now());
 }

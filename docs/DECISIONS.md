@@ -107,6 +107,15 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: building (#81).
   Every grade (the nightly ones and "grade my portfolio") also returns up to three roles the page claims, cleaned by code; they are labels, never scored, so the rubric version stays 2.
   Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
+- **Tiers by rank in the library, not Gemini's letter** (owner, 2026-11-12). Status: building.
+  Gemini's own letter was too generous (live: S 4%, A 37%, B 27%, C 25%, D 6%).
+  The tier a portfolio shows is now its place among the graded library: SSS the top 2%, SS 5%, S 10%, A 20%, B through the 80th percentile, C the next 15%, D the bottom 5% (`lib/tiers.mjs` `TIER_LADDER`, the one place to tune them).
+  The place comes from a score recomputed from the stored grade, no new AI request: the five AI scores (weighted as the rubric weights them) count 80%, the code checks 20%; equal scores are split by Gemini's letter, and still-equal ones share a tier.
+  A small library only hands out a tier its band has room for (the top 2% needs 50 graded portfolios).
+  Gemini's letter stays in the grade and still seeds the leaderboard's ratings; ELO is unchanged.
+  Only SSS to B show publicly; lower tiers read "Graded, below the top tiers".
+  Tiers are placed again hourly and at each deploy (`lib/tiers-store.mjs`), and a new grade is placed as it is written; "Grade my portfolio" ranks a report against the library and says how many portfolios it was graded against.
+  Why: a letter that means a place in the library stays meaningful as the library grows, and the owner sets how rare each tier is.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
 

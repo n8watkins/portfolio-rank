@@ -11,6 +11,7 @@ import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { displayName, fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
 import { listedSite, type Job } from "@/lib/me";
 import { reportPath } from "@/lib/home";
+import { isPublicTier, tierIndex } from "@/lib/tiers.mjs";
 
 // What the grade report page (app/grade/[id]) reads for one job: the public
 // job (lib/grader/view.mjs, the same answer GET /api/grade/<id> gives), plus
@@ -19,12 +20,13 @@ import { reportPath } from "@/lib/home";
 // the wording from lib/grader/present.mjs. Reports are unlisted: the id is
 // the only key, and nothing here names the visitor.
 
-type PoolSite = { url: string; name: string; mu: number; tier: string };
+type PoolSite = { url: string; name: string; mu: number; key: number | null; tier: string | null };
 export type PageJob = Job & { mine: boolean; checks: (Job["checks"] & { title?: string }) | null };
 
 export type BrokenLink = { url: string; kind: "broken" | "blocked"; status: number | null; reason: string; text: string | null; section: string | null };
 
-export type ShownSite = { url: string; name: string; domain: string; tier: string; path: string; hero: string | null; rank: number | null; topPct: number | null };
+/** `tier` is the site's current tier by rank (lib/tiers.mjs); shown only when it is a public one. */
+export type ShownSite = { url: string; name: string; domain: string; tier: string | null; path: string; hero: string | null; rank: number | null; topPct: number | null };
 
 export type GradePage = {
   job: PageJob;
@@ -125,12 +127,16 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   const urls = [...similar.map((s) => s.url), ...(betterGroup ? [betterGroup.sites[0].url] : [])];
   const shots = await shotBases([...new Set(urls)]);
   const place = (url: string) => placeIn(pool, url);
+  const tierNow = new Map(pool.map((p) => [p.url, p.tier]));
   const toShown = (s: (typeof similar)[number]): ShownSite => ({
     ...s,
+    // Today's tier, not the one stored with the report (older reports stored Gemini's letter).
+    tier: tierNow.get(s.url) ?? null,
     domain: s.domain || domainOf(s.url),
     hero: shots.has(s.url) ? heroOf(shots.get(s.url)!) : null,
-    rank: place(s.url)?.rank ?? null,
-    topPct: place(s.url)?.topPct ?? null,
+    // Another person's place shows with a public tier only (lib/tiers.mjs PUBLIC_TIERS).
+    rank: isPublicTier(tierNow.get(s.url)) ? (place(s.url)?.rank ?? null) : null,
+    topPct: isPublicTier(tierNow.get(s.url)) ? (place(s.url)?.topPct ?? null) : null,
   });
 
   let better: NonNullable<GradePage["report"]>["better"] = null;
@@ -157,7 +163,8 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
     await ensureSchema();
     const pool = (await gradedPool(db())) as PoolSite[];
     const hidden = await gradeHiddenUrls();
-    const pick = pool.filter((p) => !hidden.has(p.url) && p.tier && ["S", "A"].includes(p.tier));
+    // The top 20% (SSS to A, lib/tiers.mjs).
+    const pick = pool.filter((p) => !hidden.has(p.url) && p.tier && tierIndex(p.tier) >= 0 && tierIndex(p.tier) <= tierIndex("A"));
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pick[i], pick[j]] = [pick[j], pick[i]];
