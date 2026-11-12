@@ -23,6 +23,12 @@ declare module "next-auth" {
     accountCreatedAt?: string;
     /** How the account signs in. */
     provider?: "github" | "email";
+    /**
+     * This is the admin's account (ADMIN_GITHUB_ID), so the menus show an
+     * "Admin" link. Display only: every admin page and API checks again on
+     * the server (lib/admin.ts requireAdmin).
+     */
+    isAdmin?: boolean;
   }
 }
 
@@ -73,6 +79,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.login = token.login as string | undefined;
       session.accountCreatedAt = token.accountCreatedAt as string | undefined;
       session.provider = (token.provider as "github" | "email" | undefined) ?? (String(token.raterId ?? "").startsWith("em:") ? "email" : "github");
+      const admin = (process.env.ADMIN_GITHUB_ID ?? "").trim();
+      session.isAdmin = /^\d{1,12}$/.test(admin) && token.raterId === `gh:${admin}`;
       return session;
     },
   },

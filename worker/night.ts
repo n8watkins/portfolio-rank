@@ -113,6 +113,8 @@ export function engine(env: NightEnv, runId: string) {
     },
     flags: {
       contentMode: contentMode(env.CONTENT_MODE),
+      // The most drafts a week the owner's automation settings may ask for (lib/content/automation.mjs).
+      contentDraftsPerWeek: env.CONTENT_DRAFTS_PER_WEEK,
       writerMode: writerMode(env.WRITER_MODE),
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
