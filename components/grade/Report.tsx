@@ -72,7 +72,9 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
         <div className="flex shrink-0 flex-col items-end gap-1 text-right">
           <span id="report-tier">
             {rep.tier ? (
-              <TierBadge tier={rep.tier} size="lg" />
+              <a href="/grading#tiers" aria-label={`Tier ${rep.tier}: how tiers work`} className="block rounded-2xl focus-visible:outline-offset-4">
+                <TierBadge tier={rep.tier} size="lg" />
+              </a>
             ) : (
               <span className="grid h-16 w-16 place-items-center rounded-2xl bg-raised text-lg font-bold text-mute ring-1 ring-inset ring-edge" role="img" aria-label="No tier">
                 AI
@@ -83,6 +85,9 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
             <>
               <p className="text-xl font-bold leading-none tabular-nums">Top {pct.topPct}%</p>
               <p className="max-w-[7.5rem] text-[11px] leading-snug text-mute tabular-nums sm:max-w-none">Graded against {(pct.total - 1).toLocaleString("en-US")} portfolios</p>
+              <a href="/grading#tiers" className="text-[11px] font-medium text-accent hover:underline print:hidden">
+                How tiers work
+              </a>
             </>
           ) : (
             <p className="text-xs text-mute">{rep.isPortfolio === false ? "Not ranked: not a portfolio" : "Rank once more are graded"}</p>

@@ -91,9 +91,10 @@ export default async function UiKit({ searchParams }: { searchParams: Promise<{ 
             <TierBadge key={t} tier={t} />
           ))}
           <TierBadge tier="SSS" size="lg" />
-          <TierBadge tier="SS" size="lg" />
+          <TierBadge tier="S+" size="lg" />
           <TierBadge tier="S" size="lg" />
-          <TierBadge tier="A" size="lg" />
+          <TierBadge tier="A-" size="lg" />
+          <TierBadge tier="B+" size="lg" />
           <RankBadge rank={1} />
           <RankBadge rank={2} />
           <RankBadge rank={3} />

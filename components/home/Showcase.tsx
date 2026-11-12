@@ -1,5 +1,6 @@
 "use client";
 
+import { tierLabel } from "@/lib/tiers.mjs";
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { RankBadge } from "@/components/ui/badges";
@@ -91,7 +92,7 @@ export function Showcase({ items }: { items: ShowItem[] }) {
               {img}
               <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur" aria-hidden>
                 #{it.rank}
-                {it.tier ? ` · Tier ${it.tier}` : ""}
+                {it.tier ? ` · Tier ${tierLabel(it.tier)}` : ""}
               </span>
               <span className="absolute inset-0 grid place-items-center bg-black/0 transition-colors duration-200 group-hover:bg-black/35 group-focus-visible:bg-black/35" aria-hidden>
                 <span className="translate-y-1 rounded-full bg-black/75 px-4 py-2 text-sm font-semibold text-white opacity-0 shadow-lg backdrop-blur transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
@@ -112,7 +113,7 @@ export function Showcase({ items }: { items: ShowItem[] }) {
             <span className="block truncate text-sm font-semibold">{cur.name}</span>
             <span className="block truncate text-xs text-mute">
               {cur.domain}
-              {cur.tier ? ` · Tier ${cur.tier}` : ""}
+              {cur.tier ? ` · Tier ${tierLabel(cur.tier)}` : ""}
             </span>
           </span>
         </p>

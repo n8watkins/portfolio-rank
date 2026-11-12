@@ -6,7 +6,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
-import { isPublicTier, tierIndex } from "@/lib/tiers.mjs";
+import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { readBoard, VIEWS, type View } from "@/lib/ranking/board";
 import { eloOf } from "@/lib/leaderboard";
@@ -207,8 +207,8 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
       return { n: Number(r.rows[0]?.n ?? 0) };
     }),
   ]);
-  // The top 10% (SSS, SS and S, lib/tiers.mjs).
-  const sGrades = pool.filter((p) => p.tier && tierIndex(p.tier) >= 0 && tierIndex(p.tier) <= tierIndex("S")).length;
+  // The S family: the top 1% (SSS to S-, lib/tiers.mjs).
+  const sGrades = pool.filter((p) => atLeast(p.tier, "S")).length;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
@@ -249,8 +249,8 @@ export type PortfolioOfTheDay = {
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
 async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  // The top 15% (SSS to A, lib/tiers.mjs).
-  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && p.tier && tierIndex(p.tier) >= 0 && tierIndex(p.tier) <= tierIndex("A")).slice(0, 100);
+  // The A family or better: the top 15% (SSS to A-, lib/tiers.mjs).
+  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && atLeast(p.tier, "A")).slice(0, 100);
   if (candidates.length === 0) return null;
   const day = Math.floor(now.getTime() / 86_400_000);
   // Walk from today's pick to the first one with a capture.

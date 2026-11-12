@@ -11,7 +11,7 @@ import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { displayName, fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
 import { listedSite, type Job } from "@/lib/me";
 import { reportPath } from "@/lib/home";
-import { isPublicTier, tierIndex } from "@/lib/tiers.mjs";
+import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 
 // What the grade report page (app/grade/[id]) reads for one job: the public
 // job (lib/grader/view.mjs, the same answer GET /api/grade/<id> gives), plus
@@ -163,8 +163,8 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
     await ensureSchema();
     const pool = (await gradedPool(db())) as PoolSite[];
     const hidden = await gradeHiddenUrls();
-    // The top 15% (SSS to A, lib/tiers.mjs).
-    const pick = pool.filter((p) => !hidden.has(p.url) && p.tier && tierIndex(p.tier) >= 0 && tierIndex(p.tier) <= tierIndex("A"));
+    // The A family or better: the top 15% (SSS to A-, lib/tiers.mjs).
+    const pick = pool.filter((p) => !hidden.has(p.url) && atLeast(p.tier, "A"));
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pick[i], pick[j]] = [pick[j], pick[i]];

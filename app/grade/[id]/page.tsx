@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { tierLabel } from "@/lib/tiers.mjs";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Briefcase, CircleAlert, CircleCheck, CircleMinus, ExternalLink, Link2Off } from "lucide-react";
@@ -36,7 +37,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const rep = page.job.report;
   const title = rep ? `${page.job.domain} - grade report - PortfolioRank` : `Grading ${page.job.domain} - PortfolioRank`;
   const description = rep
-    ? `${rep.tier ? `Tier ${rep.tier}` : "Graded"}${rep.percentile ? `, top ${rep.percentile.topPct}% graded against ${(rep.percentile.total - 1).toLocaleString("en-US")} developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
+    ? `${rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded"}${rep.percentile ? `, top ${rep.percentile.topPct}% graded against ${(rep.percentile.total - 1).toLocaleString("en-US")} developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
     : "A PortfolioRank grade on its way.";
   return { title, description, robots, openGraph: { title, description, type: "article" }, twitter: { card: "summary_large_image", title, description } };
 }

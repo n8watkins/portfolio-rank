@@ -3,7 +3,7 @@ import { OG_SIZE, dataUrl } from "@/lib/og-card";
 import { readPublicFile } from "@/lib/publicFile";
 import { SITE_URL } from "@/lib/site";
 import { fitName, fitSize, friendlyCount } from "@/lib/og-fit.mjs";
-import { tierChipStyle } from "@/lib/og-tier";
+import { TierChip } from "@/lib/og-tier";
 
 /**
  * The share card of one portfolio (1200x630), shared by a grade report
@@ -116,9 +116,7 @@ export async function portfolioCard(c: PortfolioCardInput, extraHeaders: Record<
             </div>
           )}
           {c.tier && (
-            <div style={{ ...tierChipStyle(c.tier), position: "absolute", left: -36, bottom: 0 }}>
-              {c.tier}
-            </div>
+            <TierChip tier={c.tier} style={{ position: "absolute", left: -36, bottom: 0 }} />
           )}
         </div>
 
