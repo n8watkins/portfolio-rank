@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { auth } from "@/auth";
 import { readAnonId, signAnonId } from "@/lib/matchup";
 
-export const ANON_VOTE_LIMIT = 5; // free votes before the sign-in gate (owner, 2026-11-11: 5, one round)
+export const ANON_VOTE_LIMIT = 10; // practice votes an account converts at sign-in (no sign-in wall since 2026-11-12)
 export const DAILY_VOTE_LIMIT = 100; // per rater, signed-in or not
 export const STAR_PER_VOTES = 5; // earn 1 Superstar per N votes
 export const STAR_BANK_CAP = 5; // bank at most this many unspent stars

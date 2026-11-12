@@ -111,7 +111,7 @@ export async function playDetails(url: string): Promise<PlayDetails> {
     groups: g ? hiringGroups(factLines(g)) : [],
     judgments: g ? judgmentLines(g) : [],
     model: typeof g?.model === "string" ? g.model : null,
-    shareImage: `/p/${slug}/opengraph-image`,
+    shareImage: `/p/${slug}/share-card`,
     profile: `/p/${slug}`,
   };
 }

@@ -244,21 +244,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
 
-    // Anon votes are logged (they're still signal) but never move official ELO,
-    // and after the free allowance the gate asks for sign-in.
-    if (rater.type === "anon") {
-      const used = await tx.execute({
-        sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ?",
-        args: [rater.id],
-      });
-      if (Number(used.rows[0].n) >= ANON_VOTE_LIMIT) {
-        await tx.rollback();
-        return NextResponse.json(
-          { error: "signin_required", anonVoteLimit: ANON_VOTE_LIMIT },
-          { status: 403 }
-        );
-      }
-    }
+    // Anon votes are logged (they're still signal) but never move official ELO
+    // or any board. There is no sign-in wall (owner, 2026-11-12): a guest
+    // keeps voting, within the same daily limit as everyone, and up to
+    // ANON_VOTE_LIMIT of these practice votes convert at sign-in (/api/claim).
 
     // Superstar super-vote: only a signed-in rater with a banked star can spend
     // one. It doubles the ELO weight and flags the vote (= the ⭐ for the winner).
