@@ -85,6 +85,8 @@ const pool = feed.slice(300, 312).map((f, i) => ({
   name: f.name,
   mu: i < 6 ? 40 - i : 20 - i,
   tier: i < 6 ? "A" : "B",
+  // Rank keys (lib/tiers.mjs): one portfolio above the graded one, eleven below, so its report is 2nd of 13: tier A.
+  key: i === 0 ? 999999 : 1000 - i,
   quality: 4,
   axes: Object.fromEntries(AI_CRITERIA.map((c) => [c.id, 5])),
   roles: ["designer"],
@@ -227,7 +229,7 @@ test("nothing to fix: the calm empty state, and a stranger sees no owner tools",
   // A shared link is not celebrated: that is for the owner.
   await p.waitForTimeout(800);
   assert.equal(await p.locator("canvas[data-celebration]").count(), 0);
-  assert.equal(await p.getByRole("status").filter({ hasText: "S tier!" }).count(), 0);
+  assert.equal(await p.getByRole("status").filter({ hasText: "SSS tier!" }).count(), 0);
   // No sideways scroll on a phone.
   assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
@@ -318,13 +320,13 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   await owner.context.close();
 });
 
-test("how grading works: the five tiers, the bands, what's checked, how votes combine; in the sitemap", async () => {
+test("how grading works: the seven tiers, the bands, what's checked, how votes combine; in the sitemap", async () => {
   for (const width of [1440, 390]) {
     const { page: p, context, errors } = await freshPage(width);
     await p.goto(`${BASE}/grading`);
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
-    for (const t of ["S", "A", "B", "C", "D"]) await p.getByRole("img", { name: `Tier ${t}` }).first().waitFor();
-    for (const name of ["Five tiers, S to D", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
+    for (const t of ["SSS", "SS", "S", "A", "B", "C", "D"]) await p.getByRole("img", { name: `Tier ${t}` }).first().waitFor();
+    for (const name of ["7 tiers, SSS to D", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
     assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
