@@ -1,16 +1,17 @@
 // The image library's work (docs/CONTENT-ENGINE.md, "The image library"):
-// the Worker's hourly tick (worker/library.ts, the existing "15 * * * *"
-// cron) makes up to LIBRARY_PER_HOUR (40; the day's 40 is the only real
-// limit, and the owner's "Make now" may use what is left of it)
-// illustrations from the queue of themes x subjects
-// (pipeline/content/house-style.mjs), never between 20:00 and midnight
-// Pacific, so the night's post gets its image. Each image:
+// once a day, near the end of the image day (which resets at 00:00 UTC), the
+// existing "15 * * * *" cron (worker/library.ts) runs only in the UTC hour
+// LIBRARY_RUN_HOUR_UTC (23 by default, so 23:15 UTC) and makes whatever is
+// left of the day's 40 images and 2,500 neurons from the queue of themes x
+// subjects (pipeline/content/house-style.mjs). The owner's "Make now" and
+// "Make your own" may use the 40 at any time of the day; the daily run only
+// takes what they left. Each image:
 //
 //   1. one Workers AI call through the portfoliorank-ai gateway (Flux
 //      Schnell; Lucid Origin only if Schnell errors), its image and neurons
 //      reserved first against 40 a UTC day and 2,500
 //      neurons a day (lib/content/neurons.mjs); no room, or the gateway's
-//      429, means stop until the next tick;
+//      429, means stop until tomorrow's run;
 //   2. a center crop to 16:9 and the image stored in R2 under a private
 //      prefix;
 //   3. one Gemini check of the cropped image (one request, no retry, job
@@ -28,14 +29,33 @@ import { MAX_AI_IMAGES_PER_HOUR, aiHeadroom, aiLimits, aiUsage, neuronsFor, prun
 import { pacificParts } from "../quota-day.mjs";
 import { GENERATED, buildCheckRequest, checkPasses, generateIllustration, libraryModel } from "./workers-ai.mjs";
 
+/** The UTC hour of the daily automatic run when LIBRARY_RUN_HOUR_UTC is missing: 23 (23:15 UTC, before the 00:00 reset). */
+export const DEFAULT_RUN_HOUR_UTC = 23;
+/** The daily run starts no new image this close to 00:00 UTC, so it never spills into the next image day. */
+export const RUN_MARGIN_MS = 5 * 60000;
+
 /**
- * LIBRARY_PER_HOUR: how many images the hourly tick makes, a whole number from
- * 0 (off) to 40 (the day's cap), else 40.
+ * LIBRARY_RUN_HOUR_UTC: the UTC hour (0 to 23) the daily automatic run
+ * happens in, 23 when missing; "off" (or anything else) means no automatic
+ * run (null). Make now and Make your own are not affected.
  */
-export function perHour(value) {
+export function runHour(value) {
   const raw = String(value ?? "").trim();
+  if (raw === "") return DEFAULT_RUN_HOUR_UTC;
   const n = Number(raw);
-  return raw !== "" && Number.isInteger(n) && n >= 0 ? Math.min(n, MAX_AI_IMAGES_PER_HOUR) : MAX_AI_IMAGES_PER_HOUR;
+  return Number.isInteger(n) && n >= 0 && n <= 23 && /^\d+$/.test(raw) ? n : null;
+}
+
+/** Whether the cron firing at `scheduledTime` is the daily automatic run. */
+export function libraryRunDue(scheduledTime, env = {}) {
+  const h = runHour(env.LIBRARY_RUN_HOUR_UTC);
+  return h != null && new Date(scheduledTime).getUTCHours() === h;
+}
+
+/** When a run started at `at` must stop starting images: RUN_MARGIN_MS before the next 00:00 UTC. */
+export function runDeadline(at) {
+  const d = new Date(at);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - RUN_MARGIN_MS;
 }
 
 /** Images one call of "Make now" may ask for: the day's 40 (the page asks for one a request, so it shows progress). */
@@ -47,7 +67,7 @@ export const QUIET_HOURS = [20, 21, 22, 23];
 /** The library settings from the Worker's environment. */
 export function libraryConfig(env = {}) {
   return {
-    perHour: perHour(env.LIBRARY_PER_HOUR),
+    runHour: runHour(env.LIBRARY_RUN_HOUR_UTC),
     model: libraryModel(env.LIBRARY_MODEL),
     // The AI image limits; a rejected setting fails closed (0) and says why.
     limits: aiLimits(env),
@@ -113,14 +133,13 @@ export async function makeLibraryImage(ctx, generate, item) {
 }
 
 // In the end-of-day run the "Image library" stage is only the Gemini cap for
-// job "library" (pipeline/budget.mjs); the work runs on the hourly tick.
-export const libraryStage = { parkable: false, off: () => "runs on the hourly tick (worker/library.ts), not in the night" };
+// job "library" (pipeline/budget.mjs); the work runs once a day on the hourly cron.
+export const libraryStage = { parkable: false, off: () => "runs once a day on the hourly cron (worker/library.ts), not in the night" };
 
 /** Why the library does nothing now: { code, text } ("quiet" for the nightly pause, else "off"), or null. */
 export function libraryOffReason(lib, now) {
   if (!lib?.ai) return { code: "off", text: "no Workers AI binding" };
   if (lib.limits?.problem) return { code: "off", text: lib.limits.problem };
-  if (!lib.perHour) return { code: "off", text: "LIBRARY_PER_HOUR is 0" };
   if (!lib.limits?.maxImages || !lib.limits?.ceiling || !lib.limits?.perHour) return { code: "off", text: "MAX_AI_IMAGES_PER_DAY or AI_NEURON_CEILING is 0" };
   if (now != null && QUIET_HOURS.includes(pacificParts(now).hour)) return { code: "quiet", text: "quiet hours (20:00 to midnight Pacific): the night's post gets the AI Gateway's hourly allowance" };
   return null;
@@ -133,8 +152,9 @@ export function libraryOff(lib, now) {
 
 
 /**
- * One batch of library images: the hourly tick (up to LIBRARY_PER_HOUR) or
- * the owner's "Make now" (POST /api/admin/library/generate), up to what is
+ * One batch of library images: the daily automatic run (no count: whatever
+ * is left of the day, starting no image within RUN_MARGIN_MS of 00:00 UTC;
+ * reason "deadline" when it stops for that) or the owner's "Make now" (POST /api/admin/library/generate), up to what is
  * left of the day's 40, or one image from the owner's own subject (`custom`:
  * { subject, theme? }, cleaned here). Same limits every way: the AI image
  * limits (40 a day, 2,500 neurons), one Gemini check each within
@@ -178,8 +198,10 @@ async function batchWork({ db, env, apiKey, runId, count, custom = null, fetchIm
   const plan = budgetPlan(env.GEMINI_BUDGET);
   const usage = await usageToday(db, { now: new Date(now()), plan });
   const allowed = backgroundAllowance("library", usage, { plan, quota: dailyQuota(env.GEMINI_DAILY_QUOTA) }).allowed;
-  // The tick makes LIBRARY_PER_HOUR; the owner's "Make now" what it asks for, within what is left of the day.
-  const n = Math.min(custom ? 1 : (count ?? lib.perHour), manual ? MAX_MANUAL : lib.perHour, allowed, room.remaining);
+  // The daily run makes whatever is left of the day; the owner's "Make now" what it asks for, within the same.
+  const n = Math.min(custom ? 1 : (count ?? MAX_MANUAL), MAX_MANUAL, allowed, room.remaining);
+  // The daily run starts no image close to 00:00 UTC: one that spans midnight would count against the next day.
+  const deadline = manual ? Infinity : runDeadline(now());
   if (n < 1) return { made: [], error: "no_gemini_budget", reason: "no_gemini_budget" };
   const requestLog = createRequestLog({ db, job: "library", runId });
   const gemini = createGemini({
@@ -197,6 +219,7 @@ async function batchWork({ db, env, apiKey, runId, count, custom = null, fetchIm
   const items = custom ? [customItem({ subject: cleaned.subject, theme: custom.theme })] : await queuedSubjects(db, { limit: n });
   if (!items.length) return { made, reason: "queue_empty", stopped: "every subject has an image or is skipped" };
   for (const item of items) {
+    if (now() >= deadline) return { made, reason: "deadline", stopped: "the image day is about to reset (00:00 UTC); the rest waits for tomorrow's run" };
     try {
       const r = await makeLibraryImage(ctx, (q) => gemini.generate(q.parts, q.schema, q.options), item);
       if (r.status === "budget") {

@@ -41,7 +41,7 @@ const HINT: Record<string, string> = {
   all: "Every image, whatever its status.",
 };
 const EMPTY: Record<string, string> = {
-  review: "Nothing to review. Make some above, or new ones arrive on the hourly run.",
+  review: "Nothing to review. Make some above, or new ones arrive with the daily run.",
   approved: "Nothing approved yet.",
   dropped: "Nothing dropped.",
   failed: "Nothing failed the check.",
@@ -450,7 +450,7 @@ function ImageCard({ img, showStatus, onAct, onTag, post, onSaved }: { img: Libr
   );
 }
 
-/** The queued subjects: what the hourly run will make next, each editable or skippable. */
+/** The queued subjects: what the daily run and Make now will make next, each editable or skippable. */
 function UpNext({ queue, subjects, busy, onChanged, post }: { queue: QueueItem[]; subjects: number; busy: boolean; onChanged: () => void; post: Post }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -475,7 +475,7 @@ function UpNext({ queue, subjects, busy, onChanged, post }: { queue: QueueItem[]
       <h2 id="h-next" className="text-xl font-bold tracking-tight">
         Up next <span className="text-mute" data-queue-count>({live.length} of {subjects} left{skipped ? `, ${skipped} skipped` : ""})</span>
       </h2>
-      <p className="mt-1 text-sm text-mute">The hourly run makes these in order, one from each theme in turn. Edit the wording or skip one before it is made; every prompt ends with the house style (flat 2D vector, warm greys with one amber accent, no text, no people).</p>
+      <p className="mt-1 text-sm text-mute">The daily run and Make now take these in order, one from each theme in turn. Edit the wording or skip one before it is made; every prompt ends with the house style (flat 2D vector, warm greys with one amber accent, no text, no people).</p>
       {error && <p className="mt-2 text-sm text-down">{error}</p>}
       <ol className="mt-4 space-y-2">
         {rows.map((q) => (
