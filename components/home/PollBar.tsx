@@ -1,4 +1,5 @@
 import { Crown } from "lucide-react";
+import { voteCount } from "@/lib/polls/format";
 
 /** One labelled result row: label, count, percent, and a bar that says the same. */
 export function PollBar({ label, votes, pct, lead, mine = false }: { label: string; votes: number; pct: number; lead: boolean; mine?: boolean }) {
@@ -11,7 +12,7 @@ export function PollBar({ label, votes, pct, lead, mine = false }: { label: stri
           {mine && <span className="shrink-0 rounded-full border border-edge-strong px-1.5 text-[10px] font-semibold uppercase tracking-wide text-mute">Your vote</span>}
         </span>
         <span className="shrink-0 tabular-nums">
-          <strong>{pct}%</strong> <span className="text-mute">· {votes.toLocaleString()} votes</span>
+          <strong>{pct}%</strong> <span className="text-mute">· {voteCount(votes)}</span>
         </span>
       </div>
       <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-raised" aria-hidden>

@@ -28,6 +28,9 @@ export type StoredPoll = {
   options: StoredOption[];
 };
 
+/** A scheduled poll that has not opened: its question and week only (lib/polls/store.mjs readPolls). */
+export type UpcomingPoll = { id: string; kind: string; question: string; opensAt: string; closesAt: string };
+
 export type PollSite = {
   url: string;
   name: string;

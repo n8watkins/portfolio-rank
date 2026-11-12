@@ -32,6 +32,7 @@ const CACHEABLE: Record<string, number> = {
   "/top": PAGE_TTL_SECONDS,
   "/browse": PAGE_TTL_SECONDS,
   "/play": PAGE_TTL_SECONDS,
+  "/polls": PAGE_TTL_SECONDS,
   "/how": SLOW_TTL_SECONDS,
   "/grading": SLOW_TTL_SECONDS,
   "/sitemap.xml": SLOW_TTL_SECONDS,

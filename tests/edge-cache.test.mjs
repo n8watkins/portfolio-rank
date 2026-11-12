@@ -10,13 +10,13 @@ const BASE = `https://${HOST}`;
 const get = (path, headers = {}) => new Request(`${BASE}${path}`, { headers });
 
 test("public pages, sitemap, robots.txt and the share image may be cached", () => {
-  for (const path of ["/", "/top", "/top/new", "/browse", "/play", "/play?mode=guess", "/how", "/grading", "/p/https%3A%2F%2Fexample.com", "/sitemap.xml", "/robots.txt", "/opengraph-image"]) {
+  for (const path of ["/", "/top", "/top/new", "/browse", "/play", "/play?mode=guess", "/polls", "/how", "/grading", "/p/https%3A%2F%2Fexample.com", "/sitemap.xml", "/robots.txt", "/opengraph-image"]) {
     assert.equal(mayUseEdgeCache(get(path), HOST), true, path);
   }
 });
 
 test("the API, grade reports, personal pages and the admin never are", () => {
-  for (const path of ["/api/polls", "/api/leaderboard", "/grade", "/grade/abc", "/me", "/profile", "/settings", "/votes", "/claim", "/admin/images", "/report/print", "/p/a/b"]) {
+  for (const path of ["/api/polls", "/api/polls/mine", "/api/leaderboard", "/grade", "/grade/abc", "/me", "/profile", "/settings", "/votes", "/claim", "/admin/images", "/report/print", "/p/a/b"]) {
     assert.equal(mayUseEdgeCache(get(path), HOST), false, path);
   }
 });
