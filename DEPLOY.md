@@ -96,8 +96,12 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
   Never add those two secrets to staging.
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
   The staging build adds a robots meta tag and a red "Staging" ribbon in the bottom-left corner (`components/StagingRibbon.tsx`).
-- **Locked:** a zone custom rule on n8builds.dev (Managed Challenge) covers the staging host except `/healthz` and any request carrying the header `X-Staging-Gate`.
-  The key is `portfolio-rank/STAGING_GATE_KEY` in pass and the `STAGING_GATE_KEY` Actions secret; `scripts/smoke.mjs` sends it when run against staging.
+- **Locked:** the Worker locks staging itself, ahead of Next.js (`worker/staging-gate.ts`, only when `SITE_ENV` is `staging`; production never runs it).
+  It lets through `/healthz`, a request with the header `X-Staging-Gate` equal to the `STAGING_GATE_KEY` secret, and a request with the `__Host-staging_gate` cookie (an HMAC of an expiry, 30 days).
+  `GET /__gate?key=<secret>` sets that cookie and redirects to `/`; every other request gets a plain 404 `not found`.
+  Wrong keys count against 10 a day per address in the `rate_limits` table; a missing secret or database failure keeps the site locked.
+  The key is `portfolio-rank/STAGING_GATE_KEY` in pass, the `STAGING_GATE_KEY` Actions secret (`scripts/smoke.mjs` sends it as the header) and a secret on the staging Worker: `pass-env pipe portfolio-rank/STAGING_GATE_KEY -- npx wrangler secret put STAGING_GATE_KEY --env staging`.
+  To open staging in your browser without printing the key: `pass-env run -e STAGING_GATE_KEY=portfolio-rank/STAGING_GATE_KEY -- node scripts/open-staging.mjs`.
   Anything else that calls staging must send the same header.
 - **Sign-in:** a separate GitHub OAuth app, "PortfolioRank (staging)", with the callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, so a staging secret never unlocks the production app.
 - **Secrets on the staging Worker:** `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, each kept in pass as `portfolio-rank/STAGING_<NAME>` and sent with `pass-env pipe portfolio-rank/STAGING_<NAME> -- npx wrangler secret put <NAME> --env staging`.

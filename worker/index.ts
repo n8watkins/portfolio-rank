@@ -15,6 +15,7 @@ import { serveImage } from "./assets";
 import { healthCheck } from "./health";
 import { forEdge, mayUseEdgeCache, probeAnswer } from "./edge-cache";
 import { markStaging, stagingRobots } from "./staging";
+import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
@@ -55,6 +56,9 @@ const worker = {
   async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
     const health = healthCheck(request);
     if (health) return health;
+    // The staging lock: off unless SITE_ENV is "staging" (./staging-gate.ts).
+    const locked = await stagingGate(request, env as unknown as GateEnv);
+    if (locked) return locked;
     const robots = stagingRobots(request, env);
     if (robots) return robots;
     const probe = probeAnswer(request);
