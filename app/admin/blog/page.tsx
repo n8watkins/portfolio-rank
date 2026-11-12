@@ -1,6 +1,7 @@
+import { AdminNav } from "@/components/admin/AdminNav";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Images, Inbox, ListChecks } from "lucide-react";
+import { ArrowRight, Inbox, ListChecks } from "lucide-react";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { recentJobs } from "@/lib/content/jobs.mjs";
 import { BUILDERS, KIND_LABELS } from "@/pipeline/content/facts.mjs";
@@ -116,7 +117,10 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
   const g = costs.gemini;
   return (
     <div className="mx-auto max-w-4xl px-4 pb-20 sm:px-6">
-      <div className="flex flex-wrap items-end justify-between gap-4 py-6">
+      <div className="pt-6">
+        <AdminNav current="/admin/blog" />
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-4 pb-6 pt-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Admin</p>
           <h1 className="mt-1.5 text-3xl font-bold tracking-tight">Blog drafts</h1>
@@ -127,9 +131,6 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
         <div className="flex flex-wrap gap-x-4">
           <Link href="/admin/blog/guidelines" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
             <ListChecks className="h-4 w-4" aria-hidden /> Editor&apos;s guidelines
-          </Link>
-          <Link href="/admin/images" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
-            <Images className="h-4 w-4" aria-hidden /> Image library
           </Link>
         </div>
       </div>
