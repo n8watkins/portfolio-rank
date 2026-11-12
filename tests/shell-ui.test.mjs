@@ -53,7 +53,7 @@ test("desktop header: one Main nav, the current page marked, the maker link name
   const banner = page.getByRole("banner");
   const nav = banner.getByRole("navigation", { name: "Main" });
   await nav.waitFor();
-  assert.deepEqual(await nav.getByRole("link").allTextContents(), ["Leaderboard", "Play", "Browse"]);
+  assert.deepEqual(await nav.getByRole("link").allTextContents(), ["Leaderboard", "Play", "Browse", "Blog"]);
   assert.equal(await nav.getByRole("link", { name: "Leaderboard" }).getAttribute("aria-current"), "page");
   assert.equal(await nav.getByRole("link", { name: "Play" }).getAttribute("aria-current"), null);
   // Every link in the shell goes somewhere that exists.

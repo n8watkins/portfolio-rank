@@ -5,6 +5,8 @@ import type { Portfolio } from "@/app/page";
 import { hiddenUrls } from "@/lib/roster";
 import { graderEnabled } from "@/lib/grader/server";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
+import { publishedPosts } from "@/lib/blog-server";
+import { tagsOf } from "@/lib/content/blog.mjs";
 
 const BASE = SITE_URL;
 
@@ -29,6 +31,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/grading`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/removed`, changeFrequency: "weekly", priority: 0.3 },
   ];
+  // The blog: the list, every published post and every tag page. Rebuilt
+  // with the sitemap once a day, so a new post is listed by the next day.
+  const posts = await publishedPosts({ limit: 1000 }).catch(() => []);
+  const blog: MetadataRoute.Sitemap = [
+    { url: `${BASE}/blog`, changeFrequency: "weekly", priority: 0.7, ...(posts[0] ? { lastModified: posts[0].publishAt } : {}) },
+    ...posts.map((p) => ({ url: `${BASE}/blog/${p.slug}`, lastModified: p.publishAt, changeFrequency: "monthly" as const, priority: 0.6 })),
+    ...tagsOf(posts).map((t: { slug: string }) => ({ url: `${BASE}/blog/tag/${t.slug}`, changeFrequency: "weekly" as const, priority: 0.3 })),
+    { url: `${BASE}/about-posts`, changeFrequency: "monthly", priority: 0.3 },
+  ];
   const hidden = await hiddenUrls().catch(() => new Set<string>());
   const detail: MetadataRoute.Sitemap = (feed as Portfolio[])
     .filter((p) => !hidden.has(p.url))
@@ -37,5 +48,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly",
       priority: 0.5,
     }));
-  return [...staticPages, ...detail];
+  return [...staticPages, ...blog, ...detail];
 }

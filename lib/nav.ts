@@ -28,7 +28,9 @@ export const ROUTES: Record<
   // quiz is hidden and its APIs answer 404 (lib/games/server.ts).
   guess: null,
   browse: "/browse",
-  blog: null, // "/blog"
+  // The blog's pages always exist; the shell shows its links only once a
+  // post is published (components/shell/useBlogLive.ts).
+  blog: "/blog",
   polls: "/polls",
   // "/about" when the about page ships.
   about: "/how",

@@ -390,7 +390,7 @@ export async function contentSummaryConditions(db, { now, mode }) {
     ...dropped.map((r) => `- ${r.kind} dropped on ${r.night}: ${(parse(r.detail).failures ?? []).slice(0, 3).join("; ")}`),
     `Gemini requests: ${gem}. Tavily searches: ${tav} of ${TAVILY_PER_WEEK}. Workers AI images: ${ai}.`,
     ...(capped ? [`${capped} post(s) held back by the 2-a-week publish cap.`] : []),
-    "Drafts, checks and images: GET /api/admin/content.",
+    "Review the drafts: /admin/blog.",
   ];
   return [{ key: "content-weekly", kind: "info", title: "PortfolioRank content: the week's summary", detail: lines.join("\n") }];
 }
