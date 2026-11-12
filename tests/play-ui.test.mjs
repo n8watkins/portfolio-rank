@@ -93,29 +93,49 @@ test("face-off: pick with a key, the crowd's lean is announced, Undo takes it ba
   assert.match(await page.getByRole("status").filter({ hasText: "You picked" }).textContent(), /\d+% of people would pick it\. (With the crowd|The underdog|A dead heat for the crowd)\./);
   // The share shows on the cards; the next step has focus.
   assert.equal(await page.getByText("of people would pick this").count(), 2);
-  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Next pair");
-  assert.match(await page.getByText(/^\d+ \/ 10$/).textContent(), /^1 \/ 10$/);
+  await page.waitForFunction(() => /^Next pair/.test(document.activeElement?.textContent?.trim() ?? ""));
+  assert.match(await page.getByText(/^\d+ \/ 5$/).textContent(), /^1 \/ 5$/);
   await page.getByRole("button", { name: "Undo" }).click();
   await page.getByText("Undid your last vote. Here's a fresh pair.").first().waitFor();
   await picks.first().waitFor();
-  assert.match(await page.getByText(/^\d+ \/ 10$/).textContent(), /^0 \/ 10$/);
+  assert.match(await page.getByText(/^\d+ \/ 5$/).textContent(), /^0 \/ 5$/);
   assert.deepEqual(errors, []);
   await context.close();
 });
 
-test("face-off cards fit side by side on a 320px phone", async () => {
+test("face-off: Simple and Detailed are remembered, and Show picks the parts", async () => {
+  const { page, context } = await freshPage();
+  await page.goto(BASE + "/play");
+  await page.getByRole("button", { name: /^Pick / }).first().waitFor();
+  // Detailed by default: the polish checklist and the full Lighthouse rows.
+  await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
+  await page.getByRole("button", { name: "Simple" }).click();
+  assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
+  await page.getByRole("heading", { name: "Lighthouse performance" }).first().waitFor();
+  // Remembered in this browser.
+  await page.reload();
+  await page.getByRole("button", { name: /^Pick / }).first().waitFor();
+  assert.equal(await page.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed"), "true");
+  assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
+  // Ticking a part adds it, and the view becomes the viewer's own.
+  await page.getByText("Show", { exact: true }).click();
+  await page.getByRole("checkbox", { name: "Polish checklist" }).check();
+  await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
+  assert.equal(await page.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed"), "false");
+  await context.close();
+});
+
+test("face-off on a 320px phone: no sideways scroll, and Save and Pick stay inside each card", async () => {
   const { page, context } = await freshPage(320, 640);
   await page.goto(BASE + "/play");
   await page.getByRole("button", { name: /^Pick / }).first().waitFor();
   // The cards are dealt in one after the other: measure once they've landed.
   await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
-  const [a, b] = await page.getByRole("button", { name: /^Pick / }).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
-  assert.equal(Math.round(a), Math.round(b));
-  // Each card's actions stay on one row inside the card.
-  for (const save of await page.getByRole("button", { name: /^Save .* to a list$/ }).all()) {
-    const box = await save.boundingBox();
-    assert.ok(box.x + box.width <= 320, JSON.stringify(box));
+  for (const b of [...(await page.getByRole("button", { name: /^Pick / }).all()), ...(await page.getByRole("button", { name: /^Save / }).all())]) {
+    const box = await b.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= 320, JSON.stringify(box));
+    assert.ok(box.height >= 44, `tap target ${box.height}px`);
   }
   await context.close();
 });
@@ -133,11 +153,11 @@ test("guess the percentile: no percentile before the guess, five rounds, the end
     await page.getByRole("button", { name: /^Lock in top \d+%$/ }).waitFor();
     // Nothing on the page tells the answer yet: no Merged/AI/People, no report link.
     assert.equal(await page.getByRole("main").getByText(/^(Merged|AI|People)$/).count(), 0);
-    assert.equal(await page.getByRole("link", { name: /^Details for / }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: /^Full profile/ }).count(), 0);
     await page.getByRole("slider", { name: /Your guess/ }).focus();
     await page.keyboard.press("End");
     assert.equal(await page.getByRole("slider", { name: /Your guess/ }).getAttribute("aria-valuetext"), "Top 100 percent");
-    await page.getByRole("group", { name: "Quick picks" }).getByRole("button", { name: k % 2 ? "Bottom" : "Top 10%" }).click();
+    await page.getByRole("group", { name: "Quick picks" }).getByRole("button", { name: k % 2 ? "Top 90%" : "Top 10%" }).click();
     // Enter on the slider locks the guess in, as the button does.
     if (k === 0) {
       await page.getByRole("slider", { name: /Your guess/ }).focus();
@@ -145,8 +165,8 @@ test("guess the percentile: no percentile before the guess, five rounds, the end
     } else await page.getByRole("button", { name: /^Lock in/ }).click();
     const status = page.getByRole("status").filter({ hasText: "points" });
     await status.waitFor();
-    assert.match(await status.textContent(), /You said top (10|75)%/);
-    await page.getByRole("link", { name: /^Details for / }).waitFor();
+    assert.match(await status.textContent(), /You said top (10|90)%/);
+    await page.getByRole("link", { name: /^Full profile/ }).first().waitFor();
     // The last round leads to the result; every other one to the next portfolio.
     const last = k === quiz.rounds.length - 1;
     await page.getByRole("button", { name: last ? "See your result" : "Next portfolio" }).click();

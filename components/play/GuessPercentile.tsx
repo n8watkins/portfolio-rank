@@ -6,6 +6,8 @@ import { ArrowRight, Bot, Check, Merge, Share2, Shuffle, Swords, Target, Users, 
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
 import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
+import { ViewControls } from "@/components/play/ViewControls";
+import { useViewPrefs } from "@/lib/play/view-prefs";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
@@ -97,6 +99,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const [eye, setEye] = useState<Eye | null>(null);
   const reduced = useReducedMotion();
   const openSignIn = useSignIn();
+  const { prefs, choose, toggle } = useViewPrefs();
   // From lg up the details sit in the right column, under the guess.
   const [wideGuess, setWideGuess] = useState(false);
   useEffect(() => {
@@ -255,26 +258,29 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const total = results.reduce((n, r) => n + r.points, 0);
 
   const tabs = (
-    <nav aria-label="Quiz" className="mb-4 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={() => switchTo("daily")}
-        aria-current={daily ? "page" : undefined}
-        className="inline-flex h-9 items-center rounded-full border border-edge bg-card px-3.5 text-sm font-medium transition hover:border-edge-strong aria-[current=page]:border-accent/60 aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent sm:h-8 sm:px-3"
-      >
-        Daily 5
-      </button>
-      <button
-        type="button"
-        onClick={() => switchTo("random")}
-        disabled={busy}
-        aria-current={quiz && !daily ? "page" : undefined}
-        className="inline-flex h-9 items-center rounded-full border border-edge bg-card px-3.5 text-sm font-medium transition hover:border-edge-strong disabled:opacity-60 aria-[current=page]:border-accent/60 aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent sm:h-8 sm:px-3"
-      >
-        Random quiz
-      </button>
-      <span className="text-xs text-mute">{daily || !quiz ? "Same five for everyone today." : "Share the link and a friend gets the same five."}</span>
-    </nav>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <nav aria-label="Quiz" className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => switchTo("daily")}
+          aria-current={daily ? "page" : undefined}
+          className="inline-flex h-9 items-center rounded-full border border-edge bg-card px-3.5 text-sm font-medium transition hover:border-edge-strong aria-[current=page]:border-accent/60 aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent sm:h-8 sm:px-3"
+        >
+          Daily 5
+        </button>
+        <button
+          type="button"
+          onClick={() => switchTo("random")}
+          disabled={busy}
+          aria-current={quiz && !daily ? "page" : undefined}
+          className="inline-flex h-9 items-center rounded-full border border-edge bg-card px-3.5 text-sm font-medium transition hover:border-edge-strong disabled:opacity-60 aria-[current=page]:border-accent/60 aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent sm:h-8 sm:px-3"
+        >
+          Random quiz
+        </button>
+        <span className="text-xs text-mute">{daily || !quiz ? "Same five for everyone today." : "Share the link and a friend gets the same five."}</span>
+      </nav>
+      <ViewControls prefs={prefs} choose={choose} toggle={toggle} />
+    </div>
   );
 
   if (state !== "ready" || !quiz) {
@@ -520,7 +526,9 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
               )}
             </div>
             {/* Shown while guessing: what our tools measured, nothing that gives the answer away. */}
-            {!wideGuess && <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown} />}
+            {!wideGuess && (
+              <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown && prefs.sections.length > 0} metrics={prefs.metrics} sections={prefs.sections} />
+            )}
           </figure>
 
           <div className="grid min-w-0 content-start gap-4 self-start sm:gap-5">
@@ -622,7 +630,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
             {/* From lg up, "About this portfolio" fills the column under the guess. */}
             {wideGuess && (
               <div className="card overflow-hidden [&>div]:border-t-0">
-                <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown} />
+                <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown && prefs.sections.length > 0} metrics={prefs.metrics} sections={prefs.sections} />
               </div>
             )}
           </div>

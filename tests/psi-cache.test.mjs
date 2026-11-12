@@ -274,3 +274,26 @@ test("?cached=1 never runs PageSpeed, and says when a stored result is due by th
   await sleep(300);
   assert.equal(calls, 0, "a cached-only read never measures");
 });
+
+test("desktop is measured and stored apart from mobile, and cached=1 reads it without measuring", async () => {
+  const url = feed[111].url;
+  await clean(url);
+  await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi-desktop:${url}`, `lease:psi-desktop:${url}`] });
+  calls = 0;
+  const q = (extra) => fetch(`${BASE}/api/psi?url=${encodeURIComponent(url)}${extra}`).then((r) => r.json());
+  // Play reads the stored result first: a miss says so and spends nothing.
+  assert.equal((await q("&cached=1")).error, "not_measured");
+  assert.equal((await q("&strategy=desktop&cached=1")).error, "not_measured");
+  assert.equal(calls, 0);
+  // Measuring desktop fills only the desktop entry.
+  perf = 0.9;
+  const desktop = await q("&strategy=desktop");
+  assert.equal(desktop.ok, true);
+  assert.equal(desktop.scores.performance, 90);
+  assert.equal(calls, 1);
+  assert.equal((await q("&strategy=desktop&cached=1")).scores.performance, 90);
+  assert.equal((await q("&cached=1")).error, "not_measured");
+  assert.ok(await row("psi-desktop", url));
+  assert.equal(calls, 1);
+  await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`psi-desktop:${url}`] });
+});

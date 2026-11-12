@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Flame, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
+import { ArrowRight, Check, Flame, MousePointerClick, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
 import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
+import { ViewControls } from "@/components/play/ViewControls";
+import { useViewPrefs } from "@/lib/play/view-prefs";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { INTRO_COOKIE } from "@/components/play/intro";
@@ -201,6 +203,11 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   const [intro, setIntro] = useState(introAtFirst);
   // The widest screens show "About this portfolio" beside each screenshot.
   const wide = useWide();
+  // What the viewer chose to see (Simple, Detailed or their own mix).
+  const { prefs, choose, toggle } = useViewPrefs();
+  // Rich: anything beyond Lighthouse scores; then, from 1440 px up, the details split beside the screenshot.
+  const rich = prefs.sections.length > 0;
+  const split = wide && rich;
   const openSignIn = useSignIn();
   const reduced = useReducedMotion();
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -447,6 +454,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
             </span>
           </span>
         </span>
+        <ViewControls prefs={prefs} choose={choose} toggle={toggle} />
       </div>
 
       {intro && guest && (
@@ -526,14 +534,18 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
               <article
                 key={`${pair.token}-${side}`}
                 aria-label={e.name}
-                className={`card relative flex min-w-0 flex-col overflow-hidden transition-shadow ${pick === null ? "deal-in has-[.pick:hover]:ring-2 has-[.pick:hover]:ring-accent/70 has-[.pick:focus-visible]:ring-2 has-[.pick:focus-visible]:ring-accent" : ""} ${state} ${mine ? "ring-2 ring-accent" : ""}`}
+                className={`card relative flex min-w-0 flex-col overflow-hidden transition-shadow ${
+                  pick === null
+                    ? "deal-in has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
+                    : ""
+                } ${state} ${mine ? "shadow-[0_0_0_3px_var(--color-fill)]" : ""}`}
                 style={{ "--d": `${side === "a" ? 0 : 90}ms` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                {/* From 1440 px up the "Built with" list fills the space under the
-                    screenshot and the checks sit beside it; below that, all of it
+                {/* Detailed, from 1440 px up: "Built with" fills the space under the
+                    screenshot and the checks sit beside it. Otherwise everything
                     follows the screenshot. */}
-                <div className="flex-1 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                <div className={`flex-1 ${split ? "grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]" : ""}`}>
                   <div className="min-w-0">
                     <button
                       type="button"
@@ -544,29 +556,46 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                       className="pick group relative block aspect-[16/9] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-[16/10]"
                     >
                       <Frame e={e} />
-                      {pick === null && <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />}
+                      {pick === null && (
+                        <>
+                          <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                          {/* Always visible, so it's clear the screenshot picks (no hover needed, touch too). */}
+                          <span className="pointer-events-none absolute bottom-2.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-lg backdrop-blur transition group-hover:bg-fill group-hover:text-on-fill">
+                            <MousePointerClick className="h-3.5 w-3.5" aria-hidden />
+                            <span className="pointer-coarse:hidden">Click to pick</span>
+                            <span className="hidden pointer-coarse:inline">Tap to pick</span>
+                          </span>
+                        </>
+                      )}
                       {pick !== null && <Share pct={shares[side]} mine={mine} k={`${pair.token}-${side}`} />}
                     </button>
-                    {wide && <DetailsPanel id={`spec-${side}`} url={e.url} record={false} profile={false} part="spec" />}
+                    {split && <DetailsPanel id={`spec-${side}`} url={e.url} record={false} profile={false} part="spec" metrics={prefs.metrics} sections={prefs.sections} />}
                   </div>
-                  <DetailsPanel id={`details-${side}`} url={e.url} record={pick !== null} profile part={wide ? "checks" : "all"} side={wide} />
+                  <DetailsPanel
+                    id={`details-${side}`}
+                    url={e.url}
+                    record={pick !== null}
+                    profile={rich}
+                    part={split ? "checks" : "all"}
+                    side={split}
+                    metrics={prefs.metrics}
+                    sections={prefs.sections}
+                  />
                 </div>
                 {/* The pick, centered under its card. */}
                 <div className="flex min-h-16 items-center justify-center border-t border-edge p-2.5 sm:p-3">
                   {pick === null ? (
-                    <button
-                      type="button"
-                      onClick={() => vote(side)}
-                      disabled={busy}
-                      aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
-                      className={`${btnSecondary} pick min-w-48 border-accent/50 hover:border-accent`}
-                    >
-                      {side === "a" && <kbd className={`${kbd} max-md:hidden`}>←</kbd>}
-                      <Check className="h-4 w-4 text-accent" aria-hidden /> Pick {e.name.split(" ")[0]}
-                      {side === "b" && <kbd className={`${kbd} max-md:hidden`}>→</kbd>}
+                    <button type="button" onClick={() => vote(side)} disabled={busy} aria-label={`Pick ${e.name}`} aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"} className={`${btnPrimary} pick min-w-48`}>
+                      {side === "a" && <kbd className="rounded border border-on-fill/30 px-1 text-[11px] max-md:hidden">←</kbd>}
+                      <Check className="h-4 w-4" aria-hidden /> Pick {e.name.split(" ")[0]}
+                      {side === "b" && <kbd className="rounded border border-on-fill/30 px-1 text-[11px] max-md:hidden">→</kbd>}
                     </button>
+                  ) : mine ? (
+                    <p className="inline-flex items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-sm font-semibold text-on-fill">
+                      <Check className="h-4 w-4" aria-hidden /> Your pick
+                    </p>
                   ) : (
-                    <p className="text-sm text-mute">{mine ? "Your pick" : " "}</p>
+                    <p className="text-sm text-mute">&nbsp;</p>
                   )}
                 </div>
               </article>

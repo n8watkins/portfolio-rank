@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
-import { PlayDiagnostics } from "@/components/Diagnostics";
+import { PlayDiagnostics, SocialIcons } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import { GitHubMark } from "@/components/ui/GitHubMark";
 import type { PlayDetails } from "@/lib/play/card";
 
 // The pieces the games draw around a portfolio (face-off and Guess the
 // percentile). The screenshot is the hero: above it a slim line with the
-// name, the site's address (the visit link) and a small Save; with it,
+// name, the address (the visit link), socials and Save; with it,
 // always shown, "About this portfolio" (what our tools measured), below the screenshot
 // or (from 1440 px up in the face-off) beside it.
 
@@ -22,24 +22,29 @@ export const domainOf = (url: string) => {
 };
 
 /**
- * The slim line above a screenshot: the name, the site's address (the visit
- * link) and Save: a heart button that keeps the portfolio on your profile
- * (the saves behind the portfolio page's "saved" count), never a vote.
+ * The line above a screenshot: the name, the site's address (the visit
+ * link), the person's GitHub, LinkedIn and X when the page links them, and
+ * Save: a heart button, outlined in rose so it never reads as the gold Pick,
+ * that keeps the portfolio on your profile (the saves behind the portfolio
+ * page's "saved" count), never a vote.
  */
 export function NameLine({ name, url, liked, onSaved, className = "" }: { name: string; url: string; liked?: boolean; onSaved?: () => void; className?: string }) {
   return (
-    <div className={`flex min-w-0 items-center gap-x-2 py-2 pr-2 pl-3 sm:pl-4 ${className}`}>
+    <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-2 pr-2 pl-3 sm:flex-nowrap sm:pl-4 ${className}`}>
       <h3 className="min-w-0 shrink truncate font-semibold">{name}</h3>
       <SiteLink url={url} className="min-w-0 shrink-[2]" />
-      <div onClickCapture={onSaved} className="ml-auto shrink-0">
-        <LikeButton
-          url={url}
-          name={name}
-          variant="action"
-          verb="Save"
-          initialLiked={liked}
-          className="inline-flex h-11 min-w-24 items-center justify-center gap-2 rounded-lg border border-edge-strong bg-card px-4 text-sm font-semibold text-ink shadow-[var(--card-hi)] transition hover:border-rose-400/60 hover:text-rose-500 active:scale-[0.97] [&[aria-pressed=true]_svg]:fill-current"
-        />
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <SocialIcons url={url} name={name} />
+        <div onClickCapture={onSaved}>
+          <LikeButton
+            url={url}
+            name={name}
+            variant="action"
+            verb="Save"
+            initialLiked={liked}
+            className="inline-flex h-11 min-w-24 items-center justify-center gap-2 rounded-lg border-2 border-rose-500/60 bg-card px-4 text-sm font-semibold text-ink transition hover:border-rose-500 hover:bg-rose-500/10 active:scale-[0.97] aria-pressed:bg-rose-500/10 [&_svg]:text-rose-500"
+          />
+        </div>
       </div>
     </div>
   );
@@ -130,6 +135,8 @@ export function DetailsPanel({
   profile,
   part = "all",
   side = false,
+  metrics,
+  sections,
 }: {
   id: string;
   url: string;
@@ -137,13 +144,16 @@ export function DetailsPanel({
   profile: boolean;
   part?: "all" | "spec" | "checks";
   side?: boolean;
+  /** The viewer's choice of Lighthouse scores and sections (lib/play/view-prefs.ts). */
+  metrics?: string[];
+  sections?: string[];
 }) {
   const card = useCard(url);
   const rest = part !== "spec";
   return (
     <div id={id} className={`grid content-start gap-4 ${side ? "min-w-0 border-l border-edge p-4" : part === "spec" ? "border-t border-edge p-4" : "border-t border-edge bg-bg/40 p-3 sm:p-4"}`}>
       {rest && <h4 className="sr-only">About this portfolio</h4>}
-      <PlayDiagnostics url={url} part={part} projects={card?.projects} />
+      <PlayDiagnostics url={url} part={part} projects={card?.projects} metrics={metrics} sections={sections} />
       {rest && record && <RecordLine card={card} />}
       {rest && profile && (
         <a href={`/p/${encodeURIComponent(url)}`} target="_blank" rel="noopener" className="group inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent">

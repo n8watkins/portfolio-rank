@@ -219,6 +219,40 @@ export function Socials({ url }: { url: string }) {
   );
 }
 
+/**
+ * The person's GitHub, LinkedIn and X as small icon links (the games' name
+ * line): the profiles the polish fetch found on the page or its /about page
+ * (/api/inspect), nothing looked up elsewhere. Nothing while loading or when
+ * none were found.
+ */
+export function SocialIcons({ url, name }: { url: string; name: string }) {
+  const data = useInspection(url);
+  if (!data?.ok) return null;
+  const links = [
+    data.githubUrl && { href: data.githubUrl, label: `${name} on GitHub (${data.githubUrl.replace(/^https?:\/\/github\.com\//, "@")})`, path: GH_PATH },
+    data.linkedinUrl && { href: data.linkedinUrl, label: `${name} on LinkedIn`, path: LI_PATH },
+    data.xUrl && { href: data.xUrl, label: `${name} on X (${data.xUrl.replace(/^https?:\/\/x\.com\//, "@")})`, path: X_PATH },
+  ].filter(Boolean) as { href: string; label: string; path: string }[];
+  if (!links.length) return null;
+  return (
+    <span className="details-in inline-flex items-center gap-0.5">
+      {links.map((l) => (
+        <a
+          key={l.href}
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={l.label}
+          aria-label={`${l.label} (opens in a new tab)`}
+          className="grid h-9 w-9 place-items-center rounded-lg text-mute transition hover:bg-raised hover:text-ink"
+        >
+          <SocialIcon path={l.path} />
+        </a>
+      ))}
+    </span>
+  );
+}
+
 /** What a PageSpeed failure means for the visitor, and whether trying again can help. */
 function psiProblem(error: string | undefined): { text: string; retry: boolean } {
   if (error === "site_down") return { text: "This site is down or parked, so there's nothing to measure.", retry: false };
@@ -570,8 +604,9 @@ function usePsi(url: string, strategy: Strategy): PsiState {
 }
 
 /** One strategy's Lighthouse scores: a placeholder, "Measuring…", the four scores, or the reason with Retry. */
-function PsiRow({ label, state }: { label: string; state: PsiState }) {
+function PsiRow({ label, state, metrics }: { label: string; state: PsiState; metrics: string[] }) {
   const { phase, data } = state;
+  const cols = PLAY_PSI.filter(([id]) => metrics.includes(id));
   return (
     <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-center gap-2">
       <span className="text-xs text-mute">{label}</span>
@@ -583,8 +618,8 @@ function PsiRow({ label, state }: { label: string; state: PsiState }) {
           <span className="relative flex h-full items-center px-3 text-xs text-mute">Measuring with Google Lighthouse… (about 30 s)</span>
         </div>
       ) : data?.ok ? (
-        <div className="details-in grid grid-cols-4 gap-1.5">
-          {PLAY_PSI.map(([id, short]) => (
+        <div className="details-in grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, cols.length)}, minmax(0, ${cols.length === 1 ? "6rem" : "1fr"}))` }}>
+          {cols.map(([id, short]) => (
             <div key={id} className="rounded-lg border border-edge px-1 py-1 text-center" title={PSI_LABELS[id]}>
               <p className={`text-base leading-tight font-bold tabular-nums ${scoreColor(data.scores?.[id])}`}>{data.scores?.[id] ?? "-"}</p>
               <p className="text-[10px] text-mute">{short}</p>
@@ -616,17 +651,34 @@ function PsiRow({ label, state }: { label: string; state: PsiState }) {
  * polish fetch is the portfolio page's own (/api/inspect). Each part fades in when
  * its data arrives, over a placeholder of its shape.
  */
-export function PlayDiagnostics({ url, part = "all", projects }: { url: string; part?: "all" | "spec" | "checks"; projects?: number | null }) {
+export function PlayDiagnostics({
+  url,
+  part = "all",
+  projects,
+  metrics = PLAY_PSI.map(([id]) => id),
+  sections = ["preview", "polish", "built"],
+}: {
+  url: string;
+  part?: "all" | "spec" | "checks";
+  projects?: number | null;
+  /** Which Lighthouse scores to show (lib/play/view-prefs.ts); none hides Lighthouse. */
+  metrics?: string[];
+  /** Which other parts to show: "preview", "polish", "built". */
+  sections?: string[];
+}) {
   const { data: inspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
   const mobile = usePsi(url, "mobile");
   const desktop = usePsi(url, "desktop");
   const psi = mobile.data;
-  const spec = part !== "checks";
+  const spec = part !== "checks" && sections.includes("built");
   const checks = part !== "spec";
+  const preview = checks && sections.includes("preview");
+  const polish = checks && sections.includes("polish");
+  const lighthouse = checks && metrics.length > 0;
 
   return (
     <div className="@container grid gap-4">
-      {checks && (
+      {preview && (
         <section className="grid gap-2">
           <PlayLabel>Link preview</PlayLabel>
           {!inspect ? (
@@ -657,15 +709,15 @@ export function PlayDiagnostics({ url, part = "all", projects }: { url: string; 
         </section>
       )}
 
-      {checks && (
+      {lighthouse && (
         <section className="grid gap-2">
-          <PlayLabel>Lighthouse</PlayLabel>
-          <PsiRow label="Mobile" state={mobile} />
-          <PsiRow label="Desktop" state={desktop} />
+          <PlayLabel>{metrics.length === 1 ? `Lighthouse ${(PSI_LABELS[metrics[0]] ?? "").toLowerCase()}` : "Lighthouse"}</PlayLabel>
+          <PsiRow label="Mobile" state={mobile} metrics={metrics} />
+          <PsiRow label="Desktop" state={desktop} metrics={metrics} />
         </section>
       )}
 
-      {checks && (
+      {polish && (
         <section className="grid gap-2">
           <PlayLabel>Polish checklist</PlayLabel>
           {!inspect ? (
