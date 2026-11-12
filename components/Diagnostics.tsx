@@ -604,7 +604,7 @@ function usePsi(url: string, strategy: Strategy): PsiState {
 }
 
 /** One strategy's Lighthouse scores: a placeholder, "Measuring…", the four scores, or the reason with Retry. */
-function PsiRow({ label, state, metrics }: { label: string; state: PsiState; metrics: string[] }) {
+function PsiRow({ label, state, metrics, short = false }: { label: string; state: PsiState; metrics: string[]; short?: boolean }) {
   const { phase, data } = state;
   const cols = PLAY_PSI.filter(([id]) => metrics.includes(id));
   return (
@@ -615,7 +615,7 @@ function PsiRow({ label, state, metrics }: { label: string; state: PsiState; met
       ) : phase === "measuring" ? (
         <div role="status" className="relative h-11 overflow-hidden rounded-lg border border-edge bg-raised">
           <span className="absolute inset-y-0 left-0 w-1/3 rounded-lg bg-accent/15 motion-safe:animate-[measuring_1.6s_ease-in-out_infinite]" aria-hidden />
-          <span className="relative flex h-full items-center px-3 text-xs text-mute">Measuring with Google Lighthouse… (about 30 s)</span>
+          <span className="relative flex h-full items-center px-3 text-xs text-mute">{short ? "Measuring…" : "Measuring with Google Lighthouse… (about 30 s)"}</span>
         </div>
       ) : data?.ok ? (
         <div className="details-in grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, cols.length)}, minmax(0, ${cols.length === 1 ? "6rem" : "1fr"}))` }}>
@@ -712,8 +712,11 @@ export function PlayDiagnostics({
       {lighthouse && (
         <section className="grid gap-2">
           <PlayLabel>{metrics.length === 1 ? `Lighthouse ${(PSI_LABELS[metrics[0]] ?? "").toLowerCase()}` : "Lighthouse"}</PlayLabel>
-          <PsiRow label="Mobile" state={mobile} metrics={metrics} />
-          <PsiRow label="Desktop" state={desktop} metrics={metrics} />
+          {/* One score: mobile and desktop side by side on one row (Simple). */}
+          <div className={metrics.length === 1 ? "grid grid-cols-1 gap-2 @sm:grid-cols-2" : "grid gap-2"}>
+            <PsiRow label="Mobile" state={mobile} metrics={metrics} short={metrics.length === 1} />
+            <PsiRow label="Desktop" state={desktop} metrics={metrics} short={metrics.length === 1} />
+          </div>
         </section>
       )}
 
