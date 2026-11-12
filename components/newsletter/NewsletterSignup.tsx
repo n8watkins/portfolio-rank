@@ -35,8 +35,9 @@ export function NewsletterSignup({ form, layout = "stack", className = "" }: { f
   const [armed, setArmed] = useState(false);
   const path = usePathname() ?? "";
   if (!ENABLED) return null;
-  // The blog's pages have their own sign-up; the footer's would repeat it just below.
-  if (form === "footer" && (path === "/blog" || path.startsWith("/blog/"))) return null;
+  // The blog's pages have their own sign-up, which the footer's would repeat
+  // just below; the admin and the newsletter's own pages need none.
+  if (form === "footer" && /^\/(blog|admin|newsletter)(\/|$)/.test(path)) return null;
   const arm = () => {
     if (armed) return;
     prefetchTurnstile();
