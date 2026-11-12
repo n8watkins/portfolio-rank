@@ -438,9 +438,33 @@
 .burst > .ring {
   display: none;
 }
+/* Play's "Measuring…" bar: a soft highlight sweeping across (motion-safe only). */
+@keyframes measuring {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/* The games' inline Details panel opens in place. */
+@keyframes details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .deal-in {
     animation: deal-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms) both;
+  }
+  .details-in {
+    animation: details-in 180ms ease-out both;
   }
   .burst > .spark {
     display: block;
