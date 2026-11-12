@@ -6,6 +6,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
+import { shownPlaces } from "@/lib/ranking/places.mjs";
 
 // What the /top page shows, read on the server: one page of a ranking view
 // (lib/ranking/board.ts) when RANKING_V2 is on, else today's single ELO
@@ -31,6 +32,8 @@ export type Why = {
 export type Entry = {
   /** Place shown; equal for sites that share it. */
   rank: number;
+  /** Position in the board's order, 1 for the first row: what the medals go by (lib/ranking/places.mjs). */
+  place: number;
   tied: boolean;
   url: string;
   name: string;
@@ -234,17 +237,12 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
   ]);
   const likely = kind === "ai" ? null : likelyRanks(board.rows, board.total);
 
-  // Neighbours the board marks tied, with the same score as shown, share
-  // the higher one's place ("=3").
-  const rows: Entry[] = [];
-  board.rows.forEach((r, i) => {
-    const prev = board.rows[i - 1];
-    const shared = Boolean(prev?.tiedWithNext) && prev.mu.toFixed(1) === r.mu.toFixed(1);
-    if (shared) rows[i - 1].tied = true;
+  // Tied neighbours share the higher one's rank ("=3"); medals go by place.
+  const places = shownPlaces(board.rows);
+  const rows: Entry[] = board.rows.map((r, i) => {
     const p = byUrl.get(r.url);
-    rows.push({
-      rank: shared ? rows[i - 1].rank : r.rank,
-      tied: shared,
+    return {
+      ...places[i],
       url: r.url,
       name: p?.name ?? domainOf(r.url),
       tagline: p?.tagline ?? null,
@@ -258,7 +256,7 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
       disagree: split.get(r.url) ?? null,
       votes: null,
       why: why.get(r.url) ?? null,
-    });
+    };
   });
   return { kind, rows, total: board.total, totalVotes: null };
 }
@@ -295,6 +293,7 @@ async function loadElo(limit: number): Promise<Leaderboard> {
     const p = byUrl.get(r.url)!;
     return {
       rank: i + 1,
+      place: i + 1,
       tied: false,
       url: r.url,
       name: p.name,
