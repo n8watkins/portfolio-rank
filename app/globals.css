@@ -438,6 +438,16 @@
 .burst > .ring {
   display: none;
 }
+/* Play's "Measuring…" bar: a soft highlight sweeping across (motion-safe only). */
+@keyframes measuring {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
 /* The games' inline Details panel opens in place. */
 @keyframes details-in {
   from {
