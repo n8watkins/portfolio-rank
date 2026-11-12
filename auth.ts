@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { authLogger } from "@/lib/log";
+import { SESSION_VERSION, isCurrentSession } from "@/lib/session-version.mjs";
 
 // JWT sessions (no DB adapter): raterId is the stable GitHub identity
 // (gh:<github numeric id>); login is for display only. GitHub-only by design —
@@ -27,11 +28,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     jwt({ token, account, profile }) {
       if (account?.provider === "github" && profile) {
+        token.sv = SESSION_VERSION;
         token.raterId = `gh:${profile.id}`;
         token.login = String(profile.login);
         if (typeof profile.created_at === "string") token.accountCreatedAt = profile.created_at;
       }
-      return token;
+      // Returning null ends the session (the cookie is cleared): a session
+      // from before the current version is signed out, once.
+      return isCurrentSession(token) ? token : null;
     },
     session({ session, token }) {
       session.raterId = token.raterId as string | undefined;

@@ -6,7 +6,7 @@ import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { sessionCookie } from "./helpers/session.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -28,8 +28,7 @@ before(async () => {
 test("account: the download and the deletion include grades requested while signed in", async () => {
   const n = 960000000 + Math.floor(Math.random() * 1e6);
   const login = `e2e-acct-${n}`;
-  const token = await encode({ token: { raterId: `gh:${n}`, login, sub: String(n) }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
-  const cookie = `authjs.session-token=${token}`;
+  const cookie = await sessionCookie({ id: n, login });
   const job = `acct${n}`;
   const now = new Date().toISOString();
   await db.execute({

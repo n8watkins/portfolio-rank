@@ -5,7 +5,7 @@
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
-import { encode } from "@auth/core/jwt";
+import { sessionCookie } from "./helpers/session.mjs";
 import { insertPoll } from "../pipeline/polls.mjs";
 import { ensurePollsSchema } from "../lib/polls/schema.mjs";
 import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
@@ -22,9 +22,7 @@ const last = pollWeek(new Date(week.opensAt.getTime() - 3600000));
 
 let seq = Math.floor(Math.random() * 1e6);
 async function signedIn() {
-  const id = String(800000000 + seq++);
-  const token = await encode({ token: { raterId: `gh:${id}`, login: `e2e-${id}`, sub: id }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
-  return `authjs.session-token=${token}`;
+  return sessionCookie({ id: 800000000 + seq++ });
 }
 
 function jar(initial = "") {

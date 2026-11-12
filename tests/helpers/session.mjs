@@ -4,6 +4,7 @@
 // so MIN_GITHUB_ACCOUNT_AGE_DAYS (30 in the test run, as in wrangler.jsonc)
 // only matters where a test means it to.
 import { encode } from "@auth/core/jwt";
+import { SESSION_VERSION } from "../../lib/session-version.mjs";
 
 /** The admin's numeric GitHub id in the test run (scripts/test-e2e.sh ADMIN_GITHUB_ID). */
 export const ADMIN_ID = 990000000;
@@ -15,8 +16,9 @@ const DAY = 24 * 60 * 60 * 1000;
  * created `ageDays` ago (null: a session from before the account date was
  * recorded).
  */
-export async function sessionToken({ id, login = `e2e-${id}`, ageDays = 365 } = {}) {
+export async function sessionToken({ id, login = `e2e-${id}`, ageDays = 365, version = SESSION_VERSION } = {}) {
   const token = { raterId: `gh:${id}`, login, sub: String(id) };
+  if (version != null) token.sv = version; // null: a session from before the version claim
   if (ageDays != null) token.accountCreatedAt = new Date(Date.now() - ageDays * DAY).toISOString();
   return encode({ token, secret: process.env.AUTH_SECRET, salt: "authjs.session-token", maxAge: 3600 });
 }

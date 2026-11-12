@@ -253,7 +253,7 @@ The API:
 | `GET /api/owner/claims` | `{ claims: [{ url, status, method, meta, state }] }`; 401 |
 | `POST /api/owner/claims` `{ url, method?, note? }` | `{ claim }` with status `verified`, `pending`, `review` or `rejected`; 400, 401, 403, 429 |
 | `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new` or `remove_needs_meta`, 429 |
-| `GET`/`POST /api/admin/removals` `{ url, action: "undo" }` | the admin's view of held and done removals, and their undo; `{ state, wasRemoved }` (when `wasRemoved`, take its `data/excluded.json` entry out by hand if the weekly pull request already added it) |
+| `GET`/`POST /api/admin/removals` `{ url, action: "undo" }` | the admin's view of held and done removals, and their undo; `{ state, wasRemoved, note? }` (when `wasRemoved`, the weekly exclusions pull request takes its `data/excluded.json` entry out again, logged as `removal_restored`; the daily sync lists the site again) |
 | `GET /api/admin/claims`, `POST /api/admin/claims` `{ id, decision, note? }` | the review queue, and a decision; admin login only |
 | `GET /api/stats/live` | the live numbers; public, 60 s, edge cache |
 | `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` with `reason` |
