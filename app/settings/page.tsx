@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { useNewsletterOn } from "@/components/newsletter/useNewsletterOn";
 import { useSignIn } from "@/components/SignInModal";
 import { SHELL_SIGN_IN } from "@/components/shell/AccountMenu";
 import { ThemeChooser } from "@/components/shell/ThemeChooser";
@@ -137,6 +138,7 @@ const box = "divide-y divide-edge rounded-xl border border-edge bg-card";
 const smallBtn = "inline-flex h-10 items-center gap-2 rounded-lg border border-edge px-3.5 text-sm font-semibold transition hover:border-edge-strong";
 
 export default function SettingsPage() {
+  const newsletterOn = useNewsletterOn();
   const [autoOpen, setAutoOpen] = useStoredFlag("pr_autoopen");
   const session = useClientSession();
   const openSignIn = useSignIn();
@@ -252,14 +254,17 @@ export default function SettingsPage() {
             <p className="mt-2 text-mute">A few notes last only while the tab is open: whether the sign-in reminder was shown, and your own Gemini key if you grade with one, until the grade is done.</p>
             <p className="mt-2 text-mute">The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.</p>
           </details>
-          <div className="p-4 sm:p-5" id="newsletter">
-            <p className="font-semibold">The blog newsletter</p>
-            <p className="mt-0.5 text-mute">
-              If you sign up for new posts by email, your address goes to Kit (kit.com), the service that keeps the list and sends the emails; this site keeps no copy. Kit
-              sends one confirm email, and nothing else comes until you confirm. The address is used for the newsletter alone, never shared or sold. Every email has an
-              Unsubscribe link that works in one click. Kit counts opens and clicks of the emails.
-            </p>
-          </div>
+          {/* Only while the newsletter is live (useNewsletterOn). */}
+          {newsletterOn && (
+            <div className="p-4 sm:p-5" id="newsletter">
+              <p className="font-semibold">The blog newsletter</p>
+              <p className="mt-0.5 text-mute">
+                If you sign up for new posts by email, your address goes to Kit (kit.com), the service that keeps the list and sends the emails; this site keeps no copy. Kit
+                sends one confirm email, and nothing else comes until you confirm. The address is used for the newsletter alone, never shared or sold. Every email has an
+                Unsubscribe link that works in one click. Kit counts opens and clicks of the emails.
+              </p>
+            </div>
+          )}
           <Row id="forget" inline title="Forget my preferences" desc="Clears the choices saved in this browser. Your votes and sign-in stay.">
             <button type="button" onClick={forget} className={smallBtn} aria-describedby="forget-desc">
               {forgot ? "Forgotten" : "Forget"}

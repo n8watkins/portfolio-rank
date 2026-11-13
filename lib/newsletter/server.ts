@@ -1,15 +1,26 @@
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { cached } from "@/lib/cache";
-import { db } from "@/lib/db";
+import { db, ensureSchema } from "@/lib/db";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { SITE_URL } from "@/lib/site";
 import { kitClient } from "./kit.mjs";
+import { readSwitch } from "./switch.mjs";
 
 // What the newsletter's routes and admin pages share (AUTOMATION.md "Newsletter").
 
 /** NEWSLETTER_ENABLED: the sign-up route answers 404 and the cron does nothing while it is not "true". */
 export const newsletterEnabled = () => /^true$/i.test(String(process.env.NEWSLETTER_ENABLED ?? ""));
+
+/**
+ * Whether the newsletter is live: NEWSLETTER_ENABLED (the deploy-level kill
+ * switch) and the owner's stored switch (lib/newsletter/switch.mjs) both on.
+ */
+export async function newsletterLive(): Promise<boolean> {
+  if (!newsletterEnabled()) return false;
+  await ensureSchema();
+  return (await readSwitch(db())).on;
+}
 
 /** This site's address, for links in emails. */
 export const siteBase = () => (process.env.AUTH_URL || SITE_URL).replace(/\/$/, "");

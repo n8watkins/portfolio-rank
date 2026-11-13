@@ -21,7 +21,7 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 - **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
   Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
   Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
-- **Newsletter (`NEWSLETTER_ENABLED`, off in production, on in staging):** the sign-up forms, its API and the ten-minute cron (AUTOMATION.md "Newsletter").
+- **Newsletter (`NEWSLETTER_ENABLED`, on in production and staging):** the deploy-level kill switch for the sign-up forms, their API and the ten-minute cron (AUTOMATION.md "Newsletter"); the owner turns the newsletter on and off from `/admin/blog/newsletter` (stored, off by default), with no deploy.
   Kit keeps the list and sends: set the `KIT_API_KEY` secret on each Worker (`pass-env pipe portfolio-rank/KIT_API_KEY -- npx wrangler secret put KIT_API_KEY --env staging`, and without `--env` for production).
   The sign-up form is the Kit account's only form unless `KIT_FORM_ID` says which; `KIT_BROADCAST_MODE` is `"send"` in production (staging always makes drafts).
   The "draft ready in Kit" note goes to `OWNER_EMAIL`; keep it out of this public file as a secret: `! pass-env set portfolio-rank/OWNER_EMAIL`, then `pass-env pipe portfolio-rank/OWNER_EMAIL -- npx wrangler secret put OWNER_EMAIL --env staging`.

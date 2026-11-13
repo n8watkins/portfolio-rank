@@ -1,5 +1,6 @@
 "use client";
 
+import { useNewsletterOn } from "./useNewsletterOn";
 import { useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Mail } from "lucide-react";
@@ -10,7 +11,6 @@ import { eyebrow } from "@/components/ui/styles";
 /** Where the form sits; sent to Kit as the sign-up's referrer (lib/newsletter/store.mjs cleanSource). */
 export type SignupForm = "sidebar" | "after-post" | "blog" | "footer";
 
-const ENABLED = process.env.NEXT_PUBLIC_NEWSLETTER_ENABLED === "true";
 
 const ERRORS: Record<string, string> = {
   bad_email: "Enter an email address like you@example.com.",
@@ -25,8 +25,8 @@ const ERRORS: Record<string, string> = {
  * until it is used. Turnstile (action "newsletter") loads on first hover or
  * focus and stays invisible for most people. Two layouts: "stack" (a card
  * for the post's sidebar or the end of a post) and "wide" (text beside the
- * form, for /blog and the footer). Renders nothing while the newsletter is
- * off (NEXT_PUBLIC_NEWSLETTER_ENABLED, next.config.ts).
+ * form, for /blog and the footer). Renders nothing until the newsletter is
+ * known to be live (useNewsletterOn: the build flag and the owner's switch).
  */
 export function NewsletterSignup({ form, layout = "stack", className = "" }: { form: SignupForm; layout?: "stack" | "wide"; className?: string }) {
   const token = useRef<string | null>(null);
@@ -34,7 +34,8 @@ export function NewsletterSignup({ form, layout = "stack", className = "" }: { f
   const widget = useRef<TurnstileHandle>(null);
   const [armed, setArmed] = useState(false);
   const path = usePathname() ?? "";
-  if (!ENABLED) return null;
+  const on = useNewsletterOn();
+  if (!on) return null;
   // The blog's pages have their own sign-up, which the footer's would repeat
   // just below; the admin and the newsletter's own pages need none.
   if (form === "footer" && /^\/(blog|admin|newsletter)(\/|$)/.test(path)) return null;

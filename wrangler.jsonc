@@ -113,13 +113,15 @@
     // "flux2dev" (2,400 neurons an image at 1024x576 and 16 steps, so one a day).
     "LIBRARY_RUN_HOUR_UTC": "23",
     "LIBRARY_MODEL": "schnell",
-    // The blog newsletter (AUTOMATION.md "Newsletter"): the sign-up forms,
-    // its API and the ten-minute cron. Off in production until the owner
-    // switches it on; staging runs it. Kit keeps the list and sends: the
+    // The blog newsletter (AUTOMATION.md "Newsletter"): the deploy-level kill
+    // switch for the sign-up forms, their API and the ten-minute cron. On, so
+    // the owner's own switch on /admin/blog/newsletter (stored, off until
+    // they turn it on) is what decides; "false" hides it whatever that says.
+    // Kit keeps the list and sends: the
     // KIT_API_KEY secret, the sign-up form (KIT_FORM_ID, optional while the
     // account has exactly one form) and what a new post becomes: "send" (a
     // broadcast scheduled 10 minutes ahead) or "draft" (lib/newsletter/send.mjs).
-    "NEWSLETTER_ENABLED": "false",
+    "NEWSLETTER_ENABLED": "true",
     "KIT_BROADCAST_MODE": "send"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
