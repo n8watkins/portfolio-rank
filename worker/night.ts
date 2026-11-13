@@ -32,13 +32,12 @@ import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { withGateway } from "../lib/ai-gateway.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
-import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
+import { dispatchTokenConditions, emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
 import { isRemovalAlert } from "../lib/games/claims.mjs";
 import { isEmailCapAlert } from "../lib/email/gate.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
-import { writerMode } from "../pipeline/content/staged.mjs";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
@@ -117,7 +116,6 @@ export function engine(env: NightEnv, runId: string) {
       contentMode: contentMode(env.CONTENT_MODE),
       // The most drafts a week the owner's automation settings may ask for (lib/content/automation.mjs).
       contentDraftsPerWeek: env.CONTENT_DRAFTS_PER_WEEK,
-      writerMode: writerMode(env.WRITER_MODE),
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
       ranking: rankingConfig({
@@ -212,9 +210,9 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
     // 2. The AI stages.
     state = (await step.do("plan the AI work", ONCE_MORE, () => planNight(engine(this.env, runId), state))) as NightState;
     for (let i = 0; i < MAX_BATCHES && !state.done; i++) {
-      const r = (await step.do(`batch ${i}`, ONCE_MORE, () => runBatch(engine(this.env, runId), state))) as { state: NightState; pauseMs?: number };
+      const r = (await step.do(`batch ${i}`, ONCE_MORE, () => runBatch(engine(this.env, runId), state))) as { state: NightState; pauseMs?: number; pauseReason?: string };
       state = r.state;
-      if (r.pauseMs) await step.sleep(`people are grading, pause ${i}`, r.pauseMs);
+      if (r.pauseMs) await step.sleep(r.pauseReason === "busy" ? `Google's AI is busy, pause ${i}` : `people are grading, pause ${i}`, r.pauseMs);
     }
 
     // 3. The summary, then the owner alerts (one email per condition per
@@ -244,6 +242,8 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       const startedAt = Date.parse(String(state.startedAt));
       const conditions = [
         ...nightConditions(night, ctx.plan),
+        // A missing or expiring GITHUB_DISPATCH_TOKEN (GitHub says when it expires on the dispatch's answer).
+        ...dispatchTokenConditions((state.checks as { nightly?: { skipped?: string; tokenExpires?: string | null } } | undefined)?.nightly, { now: new Date(startedAt) }),
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
       ];

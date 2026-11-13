@@ -9,13 +9,14 @@
 //                             `wrangler workflows trigger portfolio-rank-draft`
 //                             (only someone with the account's API token can)
 //
-// One step, never retried (a retry would spend the caps twice); the job's
-// row says how it ended either way.
+// Each try is one step, never retried by the platform (a retry would spend
+// the caps twice); the job's row says how it ended either way. Only a busy
+// Google gets a new try, after a sleep, at most DRAFT_TRIES in all.
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { engine, type NightEnv } from "./night";
 import { cleanTopic, createJob } from "../lib/content/jobs.mjs";
 import { BUILDERS } from "../pipeline/content/facts.mjs";
-import { newJobId, runManualJob } from "../pipeline/content/manual.mjs";
+import { DRAFT_TRIES, newJobId, runManualJob } from "../pipeline/content/manual.mjs";
 
 type DraftParams = { jobId?: string; topic?: string; kind?: string };
 
@@ -39,11 +40,21 @@ export class DraftWorkflow extends WorkflowEntrypoint<NightEnv, DraftParams> {
       return id;
     });
     if (!jobId) return { skipped: "no job (a bad id or topic, or the day's 5 drafts are used)" };
-    const out = await step.do("write the draft", ONCE, async () => {
-      const ctx = { ...engine(this.env, `draft:${jobId}`), env: this.env as unknown as Record<string, unknown> };
-      const job = await runManualJob(ctx, jobId);
-      return { status: job?.status ?? "missing", postId: job?.postId ?? null, message: job?.message ?? null };
-    });
+    // When Google's AI is busy the try ends with the job waiting (phase
+    // "busy", "retrying at 3:42 PM PT"), and the Workflow sleeps before the
+    // next one: 15, 20, then 30 minutes (pipeline/content/busy.mjs). Sleeping
+    // costs nothing, and the page shows the wait while it lasts.
+    let out: { status: string; postId: string | null; message: string | null; retryInMs: number | null } = { status: "missing", postId: null, message: null, retryInMs: null };
+    for (let attempt = 1; attempt <= DRAFT_TRIES; attempt++) {
+      out = await step.do(attempt === 1 ? "write the draft" : `write the draft, try ${attempt}`, ONCE, async () => {
+        const ctx = { ...engine(this.env, `draft:${jobId}`), env: this.env as unknown as Record<string, unknown> };
+        const job = await runManualJob(ctx, jobId, { attempt, tries: DRAFT_TRIES });
+        return { status: job?.status ?? "missing", postId: job?.postId ?? null, message: job?.message ?? null, retryInMs: job?.retryInMs ?? null };
+      });
+      if (!out.retryInMs) break;
+      log("draft.busy", { jobId, attempt, retryInMs: out.retryInMs });
+      await step.sleep(`Google's AI is busy, wait ${attempt}`, out.retryInMs);
+    }
     log("draft.done", { jobId, ...out });
     return { jobId, ...out };
   }

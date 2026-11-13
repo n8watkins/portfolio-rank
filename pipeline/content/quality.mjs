@@ -126,3 +126,56 @@ export function checkActions(draft, sheet) {
   const allowed = new Set(examples.map((e) => e.url.replace(/\/$/, "")));
   return result("actions", links.some((u) => allowed.has(u)) ? [] : ["at least one Try this step should point to a named example site from example_sites, as a Markdown link"]);
 }
+
+// Phrasing that reads like a spreadsheet or misstates the data (the owner's
+// grade of the first staging posts, 2026-11-12), each with how to fix it.
+const ROBOTIC = [
+  [/\ba share of\b/i, 'drop "a share of": say "{{f3}} of the top-graded portfolios ..."'],
+  [/\bthe average (?:the )?[a-z -]+ score of\b/i, 'rewrite "the average <axis> score of <group> is": put the group first ("the top-graded portfolios average {{f4}} on visual design")'],
+  [/\brepresenting a tie\b|\ba tie across\b/i, 'say which items tie and at what, never "a tie across N axes"'],
+  [/\b(?:S and A|S or A|A and S)\b|\btop tier S\b|\btier S\b|\bS-tier\b|\bS tier\b/, 'call the top group "the top-graded portfolios" or "the top {{share}}", never by tier letters'],
+  [/\b(?:thousands|hundreds|dozens) of (?:sites|portfolios|developer)/i, "give the size of the data only with its count placeholder"],
+];
+
+/**
+ * Substance (owner, 2026-11-12): no robotic or garbled phrasing, every
+ * TL;DR point made in the body with the same placeholder, no subhead without
+ * content under it, no two sentences in a row starting with the same word,
+ * and at least three named, linked example sites when the sheet names three.
+ */
+export function checkSubstance(draft, sheet) {
+  const p = [];
+  const body = String(draft.body ?? "");
+  const prose = [body, ...(draft.tldr ?? []), draft.title ?? "", draft.subtitle ?? ""].join("\n");
+  for (const [re, fix] of ROBOTIC) {
+    const m = prose.match(re);
+    if (m) p.push(`"${m[0]}": ${fix}`);
+  }
+  const inBody = new Set(ids(body));
+  (draft.tldr ?? []).forEach((b, i) => {
+    const missing = ids(b).filter((id) => !inBody.has(id));
+    if (missing.length) p.push(`TL;DR bullet ${i + 1} uses ${missing.map((m) => `{{${m}}}`).join(", ")}, which the body never mentions: make that point in the body too, or change the bullet`);
+  });
+  const lines = body.split("\n");
+  lines.forEach((l, i) => {
+    if (!/^###\s/.test(l)) return;
+    const next = lines.slice(i + 1).findIndex((x) => /^###\s/.test(x));
+    const under = lines.slice(i + 1, next < 0 ? undefined : i + 1 + next).filter((x) => x.trim() && !/^\[\[image:/.test(x.trim()));
+    if (!under.length) p.push(`subhead "${l.slice(4).trim()}" has nothing under it`);
+  });
+  const starts = lines
+    .filter((l) => l.trim() && !/^(#|>|\[\[|\d+\.|[-*]\s)/.test(l.trim()))
+    .map((l) => l.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z{}0-9]/g, ""));
+  for (let i = 1; i < starts.length; i++) {
+    // Articles open sentences naturally; repeating any other first word in a row reads robotic.
+    if (starts[i] && starts[i] === starts[i - 1] && !starts[i].startsWith("{{") && !["the", "a", "an"].includes(starts[i])) {
+      p.push(`two sentences in a row start with "${starts[i]}": vary how sentences begin`);
+      break;
+    }
+  }
+  const sites = new Set((sheet.names ?? []).map((n) => String(n.url).replace(/\/$/, "")));
+  const need = Math.min(3, sites.size);
+  const linked = new Set([...body.matchAll(/\]\((https?:[^)\s]+)\)/g)].map((m) => m[1].replace(/\/$/, "")).filter((u) => sites.has(u)));
+  if (linked.size < need) p.push(`${linked.size} named example site(s) linked; link at least ${need} from the names list as [Name](site_url), each with what it does well`);
+  return result("substance", p);
+}
