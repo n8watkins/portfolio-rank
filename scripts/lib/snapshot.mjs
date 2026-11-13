@@ -14,6 +14,8 @@
 //   email_outbox emails kept by test runs instead of being sent.
 //   badge_checks the last badge check per player: a minute of state, redone
 //             from the tables it summarises.
+//   email_signin_tokens  one-time sign-in links: 15 minutes of state, and
+//             a backup has no use for a sign-in link.
 // Everything else is in, including the polls (lib/polls/schema.mjs: polls,
 // their totals, the vote rows behind the one-vote rule and the generation
 // log), comparisons (the source of truth for
@@ -22,7 +24,7 @@
 // queue. A table added later is included automatically.
 
 export const SNAPSHOT_FORMAT = 2;
-export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits", "grade_caps", "email_outbox", "badge_checks"]);
+export const SKIP_TABLES = new Set(["cache", "matchups", "rate_limits", "grade_caps", "email_outbox", "badge_checks", "email_signin_tokens"]);
 
 const internal = (name) => name.startsWith("sqlite_") || name.startsWith("libsql_") || name.startsWith("_litestream");
 

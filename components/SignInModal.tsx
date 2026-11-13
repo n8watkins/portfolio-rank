@@ -3,11 +3,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
 import { Modal } from "@/components/Modal";
+import { EmailSignIn } from "@/components/signin/EmailSignIn";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 
 // One sign-in dialog for the whole site, mounted in the root layout. Anything
 // that needs a signed-in user calls useSignIn()(...) with its own wording.
-// GitHub is the only provider (auth.ts), so its button starts OAuth directly:
-// one redirect to GitHub and back to the page you were on.
+// Two ways in (auth.ts): GitHub, whose button starts OAuth directly (one
+// redirect to GitHub and back to the page you were on), and an emailed
+// one-time link (components/signin/EmailSignIn) that comes back to the same
+// page.
 //
 // It also opens from the address bar: /?signin (with an optional callbackUrl
 // and error) is Auth.js's sign-in and error page (auth.ts pages), so its stock
@@ -59,7 +63,9 @@ function fromAddress(): State | null {
     error,
     title: error ? "Sign-in didn't finish" : "Sign in to PortfolioRank",
     body: error
-      ? "GitHub didn't complete the sign-in. Try again - if it keeps failing, open an issue on GitHub."
+      ? EMAIL_SIGNIN_ENABLED
+        ? "The sign-in didn't complete. Try again, or use the other way in below."
+        : "GitHub didn't complete the sign-in. Try again - if it keeps failing, open an issue on GitHub."
       : "Vote in the official rankings, like portfolios and keep lists. One account, one vote per matchup.",
   };
 }
@@ -107,8 +113,20 @@ export function SignInProvider({ children }: { children: React.ReactNode }) {
           Continue with GitHub
         </button>
 
+        {EMAIL_SIGNIN_ENABLED && (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-mute" aria-hidden>
+              <span className="h-px flex-1 bg-edge" /> or <span className="h-px flex-1 bg-edge" />
+            </div>
+
+            <EmailSignIn callbackUrl={s.callbackUrl ?? (typeof window === "undefined" ? "/" : window.location.pathname + window.location.search)} />
+          </>
+        )}
+
         <p className="mt-4 text-xs text-mute">
-          We only see your public profile - used to count one vote per person.
+          {EMAIL_SIGNIN_ENABLED
+            ? "GitHub shares only your public profile; email, only your address. Either way, one account counts one vote."
+            : "We only see your public profile - used to count one vote per person."}
         </p>
 
         {s.skipLabel && (

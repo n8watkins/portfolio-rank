@@ -357,8 +357,8 @@ test("email gate: report links can't spend the part of the day held back for gra
   assert.equal(capReason(caps, "grade-report", { "report-link": 2 }), null);
   assert.equal(capReason(caps, "report-link", { "report-link": 5 }), "cap:day");
   assert.equal(capReason(caps, "report-link", { "report-link": 3, "grade-report": 6 }), "cap:day", "a reserve used up holds nothing back");
-  assert.deepEqual(emailCaps('{"reserve":{"grade-report":50}}').reserve, { "grade-report": 50, "owner-alert": 10 });
-  assert.deepEqual(DEFAULT_EMAIL_CAPS.reserve, { "grade-report": 30, "owner-alert": 10 });
+  assert.deepEqual(emailCaps('{"reserve":{"grade-report":50}}').reserve, { "grade-report": 50, "owner-alert": 10, signin: 10 });
+  assert.deepEqual(DEFAULT_EMAIL_CAPS.reserve, { "grade-report": 30, "owner-alert": 10, signin: 10 });
 });
 
 test("email caps: the owner is alerted at 80% of a kind's cap or of the day's", async () => {
