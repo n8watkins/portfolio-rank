@@ -12,6 +12,10 @@ name: Discover portfolios
 # 22:00 UTC is the Pacific afternoon, clear of the 20:30 to 21:15 Pacific
 # nightly window.
 #
+# Every automated run is off until the owner turns it on: the schedule needs
+# the repository variable DISCOVERY_SCHEDULE=on (else each daily run is skipped
+# at once, without a runner).
+#
 # Target: the staging database unless the repository variable
 # DISCOVERY_TARGET is "production". Switches (repository variables, all off
 # until the owner turns them on): DISCOVERY_SCREEN=on (the AI screen; owner
@@ -43,6 +47,9 @@ permissions:
 
 jobs:
   discover:
+    # Off by default: the daily schedule runs only once the repository variable
+    # DISCOVERY_SCHEDULE is "on" (owner); a manual run (workflow_dispatch) always runs.
+    if: github.event_name == 'workflow_dispatch' || vars.DISCOVERY_SCHEDULE == 'on'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
