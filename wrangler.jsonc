@@ -97,6 +97,10 @@
     // Email sign-in (a one-time link beside GitHub, lib/signin): the option in
     // the sign-in dialog and its routes are off until this is "true" (decision D3).
     "EMAIL_SIGNIN_ENABLED": "false",
+    // "When checks re-run" (lib/freshness-flag.ts, AUTOMATION.md): the hourly
+    // change fingerprints and the profile's "site unchanged since" lines are
+    // off until this is "true".
+    "FRESHNESS_ENABLED": "false",
     // The blog newsletter on Kit (AUTOMATION.md "Newsletter"): the deploy-level
     // switch for the sign-up forms, their API and the newsletter's tick (on the
     // five-minute cron, no trigger of its own). Off in production: no form, no
@@ -246,6 +250,7 @@
         "GRADER_ENABLED": "true",
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
+        "FRESHNESS_ENABLED": "true",
         // The newsletter runs on staging first, against the owner's one Kit
         // account: sign-ups land on the real list (Kit's double opt-in), and new
         // posts only ever become drafts marked [staging] (worker/newsletter.ts).

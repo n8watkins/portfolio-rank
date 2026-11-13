@@ -51,7 +51,7 @@ function serveSite(u, res) {
   if (host === "down-e2e.dev") return res.writeHead(503).end("down");
   if (host === "broken-e2e.dev") return res.writeHead(404).end("gone");
   if (host === "github.com") return res.writeHead(200, { "content-type": "text/html" }).end("<title>GitHub</title>");
-  if (host.endsWith("-e2e.dev")) return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(PORTFOLIO.replace("Jane Doe", host));
+  if (host.endsWith("-e2e.dev")) return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(PORTFOLIO.replace("Jane Doe", host.replace(/^www\./, "")));
   res.writeHead(404).end();
 }
 before(async () => {
