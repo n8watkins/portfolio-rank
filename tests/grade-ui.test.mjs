@@ -137,11 +137,15 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   await finish(id);
   // The page notices on its next look and turns into the report.
   await p.getByRole("heading", { level: 1, name: "Grade UI Tester" }).waitFor({ timeout: 15000 });
-  // The tier is a starting rank from automated checks (votes move it later). The verdict and "top N%" are the grade's (Gemini's A).
+  // Before its face-offs the tier is still to come: no letter beside the grade's "top N%" to contradict it
+  // (owner, 2026-11-13). The verdict and "top N%" are the grade's (Gemini's A).
   const tierImg = p.locator("#report-tier").getByRole("img", { name: /^Tier / });
   await tierImg.waitFor();
   const tierName = await tierImg.getAttribute("aria-label");
-  await p.getByText("Starting rank from automated checks").waitFor();
+  assert.equal(tierName, "Tier still to come: set by face-off votes");
+  await p.getByText("Tier after 10 face-offs").waitFor();
+  // Every portfolio to learn from has a picture (its screenshot, icon or initials), never an empty box.
+  assert.equal(await p.getByRole("region", { name: "Portfolios to learn from" }).locator('[role="img"][aria-label="Graded, below the top tiers"], [role="img"][aria-label="Not graded yet"]').count(), 0);
   await p.getByText("Strong and clear, with a few rough edges.").waitFor();
   assert.match(await p.getByText(/^GradeTop \d+%$/).first().textContent(), /Top \d+%/);
 
