@@ -6,8 +6,11 @@
 //
 // Evidence per site, as in rubric v2: the top-of-page screenshot and the
 // start of the visible page text. The page text is untrusted and goes in a
-// <site_data> block the system instruction tells the model not to obey.
+// <site_data> block the system instruction tells the model not to obey, with
+// every marker in it removed first (pipeline/site-data.mjs), as in grading.
 import { redactContacts } from "./redact.mjs";
+import { stripSiteDataMarkers } from "./site-data.mjs";
+import { PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
 
 /** Characters of page text sent per site (one-on-one; batched sends half, it shows more sites). */
 export const PAGE_TEXT_ONE_ON_ONE = 1200;
@@ -29,12 +32,13 @@ export const SYSTEM_INSTRUCTION = [
 
 // Contact details never reach the model (pipeline/redact.mjs).
 const excerpt = (text, max) => {
-  const t = redactContacts(String(text ?? "")).replace(/\s+/g, " ").trim();
+  const t = redactContacts(stripSiteDataMarkers(text)).replace(/\s+/g, " ").trim();
   return t.length > max ? `${t.slice(0, max)}...` : t;
 };
 
-const siteBlock = (label, site, max) =>
-  `<site_data label="${label}">\nname: ${redactContacts(String(site.name ?? "").slice(0, 80))}\npage text: ${excerpt(site.pageText, max) || "(none captured)"}\n</site_data>`;
+/** One site's untrusted block: its name and page text, markers removed, contacts redacted. */
+export const siteBlock = (label, site, max) =>
+  `<site_data label="${label}">\nname: ${redactContacts(stripSiteDataMarkers(String(site.name ?? "").slice(0, 80)))}\npage text: ${excerpt(site.pageText, max) || "(none captured)"}\n</site_data>`;
 
 export const PAIR_SCHEMA = {
   type: "OBJECT",
@@ -59,7 +63,7 @@ export function buildPairRequest([a, b]) {
       { text: siteBlock("B", b, PAGE_TEXT_ONE_ON_ONE) },
       { text: 'Answer with the better one, "A" or "B", and one short reason. Use "skip" only if a screenshot is unusable.' },
     ],
-    options: { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+    options: { prompt: PROMPT_VERSION_ONE_ON_ONE, systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
   };
 }
 
@@ -98,7 +102,7 @@ export function buildBatchRequest(sites) {
   return {
     parts,
     schema: batchSchema(sites.length),
-    options: { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+    options: { prompt: PROMPT_VERSION_BATCHED, systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
   };
 }
 
