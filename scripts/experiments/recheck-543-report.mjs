@@ -1,26 +1,46 @@
 #!/usr/bin/env node
-// The report of "recheck-543": docs/experiments/recheck-543.md and .html,
-// from RECHECK_DIR (results.json from recheck-543-analyze.mjs, the Gemini
-// and Haiku state files, the capture meta). The owner's report format: a
-// TL;DR box, headline numbers, the verdict table, contents on the side,
-// "What this means" under each section, details in appendices. Every
-// sentence on its own line in the Markdown. Self-contained HTML, no scripts.
+// The report of "recheck-543", in the owner's report format: a TL;DR box,
+// headline numbers, the verdict table, contents on the side, "What this
+// means" under each section, details in appendices.
+//
+// It answers, in order: (a) where Gemini 3.1 and Haiku agree; (b) where they
+// disagree, each site listed; (c) which sites are not portfolios and why;
+// (d) batched against one at a time, per model; (e) retries and failures;
+// (f) cost and time. Plus the Gemini "no" answers on grounds v2.1 does not
+// allow (a blog, a missing role), next to Haiku's answer, and the sites
+// that could not be graded, by error type, with the retry from this machine.
+//
+// Outputs:
+//   RECHECK_DIR/report/index.html + img/   the page to publish: site cards
+//       with the first screens (click for full size) and, where captured
+//       (recheck-543-fullpages.mjs), the whole page in a scroll box
+//   docs/experiments/recheck-543.md and .html   the same text without images
+//       (543 sites of screenshots don't belong in git); every sentence on its
+//       own line in the Markdown
 //
 //   node scripts/experiments/recheck-543-report.mjs
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { readJson } from "./grading-two-sets-lib.mjs";
-import { DIR, GROUPS, GROUP_LABELS, SET } from "./recheck-543.mjs";
+import { DIR, GROUPS, GROUP_LABELS, PROMPT_VERSION, SET } from "./recheck-543.mjs";
 
-const OUT = path.join(import.meta.dirname, "..", "..", "docs", "experiments");
+const DOCS = path.join(import.meta.dirname, "..", "..", "docs", "experiments");
 const PARTS = ["visual_design", "project_presentation", "writing"];
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "-");
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const bare = (u) => String(u).replace(/^https?:\/\//, "").replace(/\/$/, "");
 const read = (p, d = null) => (fs.existsSync(p) ? readJson(p) : d);
+const yesNo = (v) => (v == null ? "-" : v.is_portfolio ? "portfolio" : "not a portfolio");
 
-/** Agreement between two verdict lists on the sites both answered. */
+// v2.1: is_portfolio is false only for parked or for sale, unedited placeholders,
+// pages not about a person, and broken, blank or error pages. A "no" whose reason
+// is only one of these is a reason v2.1 does not allow.
+const DISALLOWED = /\bblog\b|\brole\b|professional identity|personal identity|lacks (a )?(clear )?(name|identity)|no projects|lacks projects|without projects|no (project|work) (content|links)|way to (view|see) (their )?(work|projects)|contact page|gimmick|single project/i;
+const ALLOWED = /parked|for sale|placeholder|template|demo name|404|error|broken|blank|not load|inaccessible|security|bot|verification|checkpoint|repository|repo\b|readme|link-in-bio|linktree|company|studio|agency|product|tool|landing page|gambling|slot|spam|login|redirect|expired|deployment|loading screen/i;
+export const disallowedNo = (reason) => DISALLOWED.test(reason ?? "") && !ALLOWED.test(reason ?? "");
+
+/** Agreement between two verdict getters on the sites both answered. */
 export function agreement(results, a, b) {
   const both = results.filter((r) => a(r) && b(r));
   const same = both.filter((r) => a(r).is_portfolio === b(r).is_portfolio);
@@ -29,27 +49,36 @@ export function agreement(results, a, b) {
   const scores = Object.fromEntries(
     PARTS.map((p) => {
       const d = both.map((r) => Math.abs(a(r).scores[p] - b(r).scores[p]));
-      return [p, { exact: d.filter((x) => x === 0).length, mean: d.length ? d.reduce((s, x) => s + x, 0) / d.length : null }];
+      return [p, { exact: d.filter((x) => x === 0).length, within1: d.filter((x) => x <= 1).length, mean: d.length ? d.reduce((s, x) => s + x, 0) / d.length : null }];
     })
   );
   return { n: both.length, same: same.length, cells, scores };
 }
 
-/** The request log of a model's state file: requests, answered, status counts, minutes. */
-function requestStats(state) {
+/** Requests, statuses, broken answers, time and cost from a model's state file. */
+export function requestStats(state) {
   if (!state) return null;
   const attempts = state.attempts ?? [];
-  const by = {};
-  for (const a of attempts) by[a.status] = (by[a.status] ?? 0) + 1;
+  const statuses = {};
+  for (const a of attempts) statuses[a.status] = (statuses[a.status] ?? 0) + 1;
   const times = attempts.map((a) => Date.parse(a.at)).filter(Number.isFinite);
-  const usage = Object.values(state.items ?? {}).map((i) => i.usage).filter(Boolean);
+  const items = Object.values(state.items ?? {});
+  const usage = items.map((i) => i.usage).filter(Boolean);
+  const broken = items.flatMap((i) => (Array.isArray(i.broken) ? i.broken : []).map((b) => ({ key: i.key, why: typeof b === "string" ? b : b.why })));
+  const sum = (f) => usage.reduce((s, u) => s + (f(u) ?? 0), 0);
   return {
     http: state.http_requests ?? attempts.length,
-    statuses: by,
-    busy: Object.entries(by).filter(([s]) => Number(s) >= 500 || s === "0").reduce((n, [, c]) => n + c, 0),
+    retries: attempts.filter((a) => a.retry).length,
+    statuses,
+    busy: Object.entries(statuses).filter(([s]) => Number(s) >= 500 || s === "0").reduce((n, [, c]) => n + c, 0),
+    broken,
+    wrongCount: broken.filter((b) => /sites, expected|ids \[/.test(b.why)).length,
+    unanswered: items.filter((i) => i.broken_final).map((i) => i.key),
+    start: times.length ? new Date(Math.min(...times)).toISOString() : null,
+    end: times.length ? new Date(Math.max(...times)).toISOString() : null,
     minutes: times.length ? Math.round((Math.max(...times) - Math.min(...times)) / 60000) : 0,
     cost: state.cost_usd ?? null,
-    tokens: usage.length ? { input: usage.reduce((s, u) => s + (u.input_tokens ?? u.promptTokenCount ?? 0), 0), output: usage.reduce((s, u) => s + (u.output_tokens ?? u.candidatesTokenCount ?? 0), 0) } : null,
+    tokens: usage.length ? { input: sum((u) => u.input_tokens ?? u.inputTokens ?? u.promptTokenCount), output: sum((u) => u.output_tokens ?? u.outputTokens ?? u.candidatesTokenCount), thinking: sum((u) => u.thoughtsTokens ?? 0) } : null,
     stopped: state.stopped ?? state.paused ?? null,
   };
 }
@@ -57,34 +86,19 @@ function requestStats(state) {
 export function build(dir = DIR) {
   const results = readJson(path.join(dir, "results.json"));
   const g = requestStats(read(path.join(dir, "gemini31", "state.json")));
+  const gp = requestStats(read(path.join(dir, "gemini31-pilot", "state.json")));
   const h = requestStats(read(path.join(dir, "haiku", "state.json")));
-  const sel = readJson(path.join(dir, "selection.json"));
-  const metas = results.map((r) => read(path.join(dir, "bundles", SET, r.id, "meta.json"))).filter(Boolean);
+  const ungraded = read(path.join(dir, "ungraded.json"), []);
+  const retry = read(path.join(dir, "retry.json"), {});
+  const cancellations = read(path.join(dir, "cancellations.json"), []);
+  const metas = new Map(results.map((r) => [r.id, read(path.join(dir, "bundles", SET, r.id, "meta.json"))]));
   const count = (f) => results.filter(f).length;
   const v = (m, k) => (r) => r.verdicts?.[m]?.[k] ?? null;
-  const graded = results.filter((r) => r.path === "graders" && r.outcome !== "pending");
-  const relistAgreed = count((r) => r.proposed === "relist" && r.agreed);
-  const removeAgreed = count((r) => r.proposed === "remove" && r.agreed);
-  const flagged = count((r) => r.outcome === "disagree" && r.proposed);
-  const review = count((r) => r.proposed === "review");
-  const stayOut = count((r) => !r.proposed && r.outcome === "not_portfolio");
-  const blocked = count((r) => r.path === "capture_blocked");
-  const failed = count((r) => r.path === "capture_failed");
-  const pending = count((r) => r.outcome === "pending");
   const ag = {
     batch: agreement(results, v("gemini31", "batch"), v("haiku", "batch")),
     solo: agreement(results, v("gemini31", "solo"), v("haiku", "solo")),
     g31: agreement(results, v("gemini31", "batch"), v("gemini31", "solo")),
     haiku: agreement(results, v("haiku", "batch"), v("haiku", "solo")),
-  };
-  const capture = {
-    sites: results.length,
-    ok: count((r) => r.path !== "capture_failed" && r.path !== "capture_blocked"),
-    gate: metas.filter((m) => m.gate?.desktop || m.gate?.phone).length,
-    modal: metas.filter((m) => m.modal?.desktop || m.modal?.phone).length,
-    mode: metas.filter((m) => m.mode_pick?.desktop || m.mode_pick?.phone).length,
-    retried: metas.filter((m) => m.retried).length,
-    slow: metas.filter((m) => (m.content_wait_ms?.desktop ?? 0) > 3000).length,
   };
   const byGroup = GROUPS.map((gr) => {
     const rs = results.filter((r) => r.group === gr);
@@ -101,43 +115,87 @@ export function build(dir = DIR) {
       pending: c((r) => r.outcome === "pending"),
     };
   });
-  const disagree = results.filter((r) => r.outcome === "disagree");
-  const bothNot = results.filter((r) => r.verdicts?.gemini31?.batch?.is_portfolio === false && r.verdicts?.haiku?.batch?.is_portfolio === false);
-  return { results, sel, g, h, ag, capture, byGroup, disagree, bothNot, graded, numbers: { relistAgreed, removeAgreed, flagged, review, stayOut, blocked, failed, pending } };
+  const capture = {
+    gate: [...metas.values()].filter((m) => m?.gate?.desktop || m?.gate?.phone).length,
+    modal: [...metas.values()].filter((m) => m?.modal?.desktop || m?.modal?.phone).length,
+    mode: [...metas.values()].filter((m) => m?.mode_pick?.desktop || m?.mode_pick?.phone).length,
+    retried: [...metas.values()].filter((m) => m?.retried).length,
+  };
+  const ungradedKinds = {};
+  for (const u of ungraded) ungradedKinds[u.kind] = (ungradedKinds[u.kind] ?? 0) + 1;
+  const retryResults = {};
+  for (const x of Object.values(retry)) retryResults[x.result] = (retryResults[x.result] ?? 0) + 1;
+  return {
+    results,
+    metas,
+    g,
+    gp,
+    h,
+    ag,
+    byGroup,
+    capture,
+    ungraded,
+    ungradedKinds,
+    retry,
+    retryResults,
+    cancellations,
+    disagree: results.filter((r) => r.outcome === "disagree"),
+    bothNot: results.filter((r) => r.path === "graders" && r.outcome === "not_portfolio"),
+    codeRule: results.filter((r) => r.path === "code_rule"),
+    sameText: results.filter((r) => r.path === "same_text"),
+    geminiDisallowed: results.filter((r) => r.verdicts?.gemini31?.batch?.is_portfolio === false && disallowedNo(r.verdicts.gemini31.batch.reason)),
+    haikuDisallowed: results.filter((r) => r.verdicts?.haiku?.batch?.is_portfolio === false && disallowedNo(r.verdicts.haiku.batch.reason)),
+    n: {
+      sites: results.length,
+      graded: count((r) => r.path === "graders"),
+      relist: count((r) => r.proposed === "relist" && r.agreed),
+      remove: count((r) => r.proposed === "remove" && r.agreed),
+      flagged: count((r) => r.outcome === "disagree" && r.proposed),
+      review: count((r) => r.proposed === "review"),
+      blocked: count((r) => r.path === "capture_blocked"),
+      failed: count((r) => r.path === "capture_failed"),
+      bothPortfolio: count((r) => r.path === "graders" && r.outcome === "portfolio"),
+      bothNot: count((r) => r.path === "graders" && r.outcome === "not_portfolio"),
+      pending: count((r) => r.outcome === "pending"),
+    },
+  };
 }
 
-// ---------------------------------------------------------------- writing
+// ---------------------------------------------------------------- content
+
+const verdictLine = (label, x) => (x ? `${label}: ${yesNo(x)} (${PARTS.map((p) => x.scores[p]).join("/")}), "${x.reason}"` : `${label}: no answer`);
 
 function sections(d) {
-  const N = d.numbers;
-  const yesNo = (x) => (x == null ? "-" : x ? "portfolio" : "not");
-  const linkList = (rows, extra = () => "") => rows.map((r) => `- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]})${extra(r)}`);
-  const agreeLine = (a, label) => (a.n ? `${label}: ${a.same} of ${a.n} agree (${pct(a.same, a.n)}).` : `${label}: no overlap yet.`);
+  const N = d.n;
   const out = [];
+  const money = (x) => (x == null ? "free tier" : `$${x.toFixed(2)}`);
   out.push({
     id: "tldr",
     title: "TL;DR",
     box: true,
     lines: [
-      `We re-checked all ${d.results.length} sites that are not ranked, with a fresh capture, the code rules and two graders: Gemini 3.1 Flash-Lite and Claude Haiku 5.5, with the locked two-set prompts.`,
-      `${N.relistAgreed} sites would come back as portfolios where both graders agree, and ${N.removeAgreed} listed sites would leave as not portfolios.`,
-      `${N.flagged} sites are flagged because the graders disagree, and ${N.review} need a person (capture blocked or the same text on another domain).`,
-      `Nothing has changed on the site: every change waits on the owner's Confirm on /admin/review.`,
-      d.g ? `Gemini 3.1 used ${d.g.http} HTTP requests (cap 230)${d.h?.cost != null ? `; Haiku cost $${d.h.cost.toFixed(2)} (cap $3)` : ""}.` : "The graders have not run yet.",
+      `All ${N.sites} sites that are not ranked were captured fresh, and the ${N.graded} that could be graded went to Gemini 3.1 Flash-Lite and Claude Haiku 5.5 with the owner's definition (prompt ${PROMPT_VERSION}).`,
+      `Both say portfolio for ${N.bothPortfolio} sites and both say not a portfolio for ${N.bothNot}; they disagree on ${d.disagree.length}.`,
+      `${N.relist} sites would come back (both agree, pre-ticked), ${N.remove} listed sites would leave, ${N.flagged} disagreements are flagged, and ${N.review} need a person (a blocked capture or the same text on another domain).`,
+      `${N.failed} sites failed to load and ${N.blocked} captures stayed blocked, so they were never graded; most failed loads are names that no longer resolve.`,
+      `Gemini said no on grounds v2.1 does not allow (a blog, a missing role) for ${d.geminiDisallowed.length} sites; Haiku for ${d.haikuDisallowed.length}.`,
+      `Cost: Gemini ${d.g?.http ?? 0} HTTP requests on the free tier, Haiku ${money(d.h?.cost)}. Nothing has changed on the site: every change waits on the owner on /admin/review.`,
     ],
   });
   out.push({
     id: "numbers",
     title: "Headline numbers",
     cards: [
-      ["Sites re-checked", d.results.length],
-      ["Would relist (agreed)", N.relistAgreed],
-      ["Would remove (agreed)", N.removeAgreed],
-      ["Flagged (disagree)", N.flagged],
+      ["Sites re-checked", N.sites],
+      ["Graded by both models", N.graded],
+      ["Both: portfolio", N.bothPortfolio],
+      ["Both: not a portfolio", N.bothNot],
+      ["Models disagree", d.disagree.length],
+      ["Would relist (agreed)", N.relist],
+      ["Would remove (agreed)", N.remove],
       ["Needs a person", N.review],
       ["Capture blocked", N.blocked],
       ["Capture failed", N.failed],
-      ["Stay out (agreed)", N.stayOut],
     ],
   });
   out.push({
@@ -147,53 +205,73 @@ function sections(d) {
       head: ["Group", "Sites", "Would relist", "Would remove", "No change", "Flagged", "Needs a person", "Capture failed", ...(N.pending ? ["Waiting"] : [])],
       rows: [
         ...d.byGroup.map((g) => [GROUP_LABELS[g.group], g.n, g.relist, g.remove, g.stay, g.flagged, g.review, g.failed, ...(N.pending ? [g.pending] : [])]),
-        ["All", d.results.length, N.relistAgreed, N.removeAgreed, d.byGroup.reduce((s, g) => s + g.stay, 0), N.flagged, N.review, N.failed, ...(N.pending ? [N.pending] : [])],
+        ["All", N.sites, N.relist, N.remove, d.byGroup.reduce((s, g) => s + g.stay, 0), N.flagged, N.review, N.failed, ...(N.pending ? [N.pending] : [])],
       ],
     },
     lines: [
-      "\"Would relist\" and \"Would remove\" are rows both graders agree on, pre-ticked on the Review page.",
-      "\"Flagged\" rows are on the Review page unticked, with both verdicts side by side.",
+      "\"Would relist\" and \"Would remove\" are sites both models agree on; they are pre-ticked on the Review page.",
+      "\"Flagged\" sites are on the Review page unticked, with both verdicts side by side.",
       "\"No change\" means the verdict matches how the site is shown today.",
       "Delisted sites left the community list in the 2026-11-10 cleanup (#53); their rows say \"no longer on the community list\".",
     ],
-    means: [
-      "The owner's queue is the relist, remove, flagged and needs-a-person rows; nothing else needs a decision.",
-      "A delisted site that is a portfolio is still off the community list; relisting it is a separate choice from its grade.",
-    ],
+    means: ["The owner's queue is the relist, remove, flagged and needs-a-person rows; nothing else needs a decision."],
   });
+  // (a) agreement
   out.push({
-    id: "capture",
-    title: "Capture",
-    lines: [
-      `${d.capture.ok} of ${d.capture.sites} captures were gradable.`,
-      `${d.capture.gate} passed a splash gate, ${d.capture.modal} closed a dialog on top of the page, ${d.capture.mode} picked an option on a mode picker, and ${d.capture.retried} needed the one retry.`,
-      `${d.capture.slow} took more than 3 seconds to show content on the desktop (up to 15 seconds were allowed).`,
-      `${N.blocked} were still blocked after the click-through (a gate, a dialog, a picker, or under 40 words and no outbound links) and went to the queue without any model seeing them.`,
-      `${N.failed} failed to load twice and stay as they are.`,
-      "Only the screen after the click is stored and graded; the Review page shows what was clicked in one line.",
-    ],
-    means: [`Blocked captures (${N.blocked}) are the cases a grader would most likely have called "not a portfolio" by mistake; none of them cost a request.`],
-  });
-  out.push({
-    id: "agreement",
-    title: "Gemini 3.1 and Haiku agreement",
+    id: "agree",
+    title: "(a) Where Gemini 3.1 and Haiku agree",
     table: {
-      head: ["", "Haiku: portfolio", "Haiku: not"],
+      head: ["Batched answers", "Haiku: portfolio", "Haiku: not"],
       rows: [
         ["Gemini 3.1: portfolio", d.ag.batch.cells.pp, d.ag.batch.cells.pn],
         ["Gemini 3.1: not", d.ag.batch.cells.np, d.ag.batch.cells.nn],
       ],
     },
     lines: [
-      agreeLine(d.ag.batch, "Batched answers (5 sites a request), before the guard"),
-      agreeLine(d.ag.solo, "One at a time, on the sites both graded alone"),
-      ...PARTS.map((p) => `${p.replace("_", " ")}: same score on ${d.ag.batch.scores[p].exact} of ${d.ag.batch.n}, mean difference ${d.ag.batch.scores[p].mean?.toFixed(2) ?? "-"}.`),
+      `Batched (5 sites a request): ${d.ag.batch.same} of ${d.ag.batch.n} agree (${pct(d.ag.batch.same, d.ag.batch.n)}).`,
+      d.ag.solo.n ? `One at a time, on the ${d.ag.solo.n} sites both graded alone: ${d.ag.solo.same} agree (${pct(d.ag.solo.same, d.ag.solo.n)}).` : "One at a time: no overlap yet.",
+      ...PARTS.map((p) => `${p.replace("_", " ")}: the same score on ${d.ag.batch.scores[p].exact} of ${d.ag.batch.n} (${pct(d.ag.batch.scores[p].exact, d.ag.batch.n)}), within one point on ${pct(d.ag.batch.scores[p].within1, d.ag.batch.n)}, mean difference ${d.ag.batch.scores[p].mean?.toFixed(2) ?? "-"}.`),
     ],
-    means: ["Where they agree, the decision is pre-ticked; the disagreements are the owner's real work."],
+    means: ["Agreement is on the raw answers, before the strong-signals guard; the queue applies the guard to each model before comparing."],
   });
+  // (b) disagreements
+  out.push({
+    id: "disagree",
+    title: `(b) Where they disagree (${d.disagree.length})`,
+    lines: ["Each site with both answers and its screenshots. These are flagged, unticked, on the Review page."],
+    cards: null,
+    sites: d.disagree,
+    means: ["A disagreement is where a person adds the most: one model is wrong on each of these."],
+  });
+  // (c) not a portfolio, and why
+  out.push({
+    id: "not",
+    title: `(c) Not a portfolio, and why (${d.bothNot.length + d.codeRule.length})`,
+    lines: [
+      `${d.bothNot.length} sites both models call not a portfolio, and ${d.codeRule.length} a code rule settles without a model (an unedited placeholder, a parked page, a code host or link-in-bio address).`,
+      "Reasons, most common first, are in the list below; each site keeps both models' own words.",
+    ],
+    list: [
+      ...d.codeRule.map((r) => `- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]}): code rule, ${r.junk}`),
+      ...d.bothNot.map((r) => `- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]}): Gemini "${r.verdicts.gemini31.batch.reason}"; Haiku "${r.verdicts.haiku.batch.reason}"`),
+    ],
+    means: ["Most are broken deploys, 404 pages, parked or hijacked domains and code repositories: dead or not about a person, as v2.1 intends."],
+  });
+  // v2.1 grounds
+  out.push({
+    id: "v21",
+    title: `Gemini "no" on grounds v2.1 does not allow (${d.geminiDisallowed.length})`,
+    lines: [
+      "v2.1 says a site is a portfolio unless it is parked or for sale, an unedited placeholder, not about a person, or broken; a missing sign, a missing role included, is never a reason for no, and a blog is not an exclusion.",
+      `Gemini 3.1 still said no on such grounds for these sites; Haiku did for ${d.haikuDisallowed.length}.`,
+    ],
+    sites: d.geminiDisallowed,
+    means: ["Where Haiku says portfolio on these, the definition is working and Gemini 3.1 is not following it; that matters for which model grades in production."],
+  });
+  // (d) batch vs solo
   out.push({
     id: "batch-solo",
-    title: "Batched against one at a time",
+    title: "(d) Batched against one at a time",
     table: {
       head: ["Model", "Sites", "Same verdict", ...PARTS.map((p) => `${p.replace("_", " ")}: same score`)],
       rows: [
@@ -204,14 +282,51 @@ function sections(d) {
     lines: ["Gemini 3.1 graded 100 sites alone (20 per group, a fixed seed); Haiku graded every site alone."],
     means: ["If batching changes a verdict often, a batched answer is not a safe base for a decision on its own."],
   });
-  out.push({ id: "disagree", title: `Where the graders disagree (${d.disagree.length})`, lines: linkList(d.disagree, (r) => `: Gemini 3.1 ${yesNo(r.verdicts.gemini31.batch?.is_portfolio)}, Haiku ${yesNo(r.verdicts.haiku.batch?.is_portfolio)}${r.guarded?.gemini31?.guard || r.guarded?.haiku?.guard ? " (guard applied)" : ""}`), list: true });
-  out.push({ id: "both-not", title: `Both say not a portfolio (${d.bothNot.length})`, lines: linkList(d.bothNot, (r) => (r.signals?.score >= 4 ? " (strong signals: the guard keeps it a portfolio)" : "")), list: true });
-  const reqRow = (name, s, cap) => [name, s ? s.http : 0, cap, s ? s.busy : 0, s ? Object.entries(s.statuses).map(([k, n]) => `${k}: ${n}`).join(", ") : "-", s ? `${s.minutes} min` : "-", s?.cost != null ? `$${s.cost.toFixed(2)}` : "free tier"];
+  // (e) retries and failures
+  const fail = (s) => (s ? [s.http, s.retries, s.busy, Object.entries(s.statuses).map(([k, n]) => `${k}: ${n}`).join(", "), s.broken.length, s.wrongCount, s.unanswered.length] : ["-", "-", "-", "-", "-", "-", "-"]);
+  out.push({
+    id: "failures",
+    title: "(e) Retries and failures",
+    table: {
+      head: ["Run", "HTTP requests", "Retries", "Busy (5xx or network)", "Statuses", "Answers that did not parse", "Wrong site count", "Left unanswered"],
+      rows: [["Gemini 3.1 pilot", ...fail(d.gp)], ["Gemini 3.1 full run", ...fail(d.g)], ["Claude Haiku 5.5", ...fail(d.h)]],
+    },
+    lines: [
+      ...d.cancellations.map((c) => `The first full Gemini run (${c.run}) was cancelled at ${c.cancelled} for the owner (tests first); ${c.answered.length} batches were answered and kept, one request was in flight, and the run resumed from that state.`),
+      ...[...(d.g?.broken ?? []), ...(d.h?.broken ?? [])].map((b) => `${b.key}: ${b.why}`),
+    ],
+    means: ["Every busy answer was retried; nothing was dropped."],
+  });
+  // ungraded sites
+  out.push({
+    id: "ungraded",
+    title: `Sites that could not be graded (${d.ungraded.length})`,
+    table: { head: ["What happened", "Sites"], rows: Object.entries(d.ungradedKinds).sort((a, b) => b[1] - a[1]) },
+    lines: [
+      "The failed loads were retried once from this machine (not a GitHub address), with a 60-second load, 20 seconds for content and the capture fixes since; names that do not resolve here either are dead.",
+      ...Object.entries(d.retryResults).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}: ${n}`),
+    ],
+    means: ["A name that does not resolve from two networks is gone; those sites are dead, not broken by the capture."],
+  });
+  // (f) cost and time
+  const money2 = (s) => (s?.cost != null ? `$${s.cost.toFixed(2)}` : "free tier");
+  const tok = (s) => (s?.tokens ? `${Math.round(s.tokens.input / 1000)}k in, ${Math.round(s.tokens.output / 1000)}k out${s.tokens.thinking ? `, ${Math.round(s.tokens.thinking / 1000)}k thinking` : ""}` : "-");
   out.push({
     id: "cost",
-    title: "Cost, requests and timing",
-    table: { head: ["Grader", "HTTP requests", "Cap", "Busy (5xx or network)", "Statuses", "Wall time", "Cost"], rows: [reqRow("Gemini 3.1 Flash-Lite", d.g, "230"), reqRow("Claude Haiku 5.5", d.h, "$3")] },
-    lines: ["Gemini 3.5 was not used at all; production flags and GEMINI_BUDGET were unchanged.", "Every Gemini request is in gemini_requests as job recheck-543."],
+    title: "(f) Cost and time",
+    table: {
+      head: ["Run", "Requests", "Tokens", "Cost", "From", "To", "Wall time"],
+      rows: [
+        ["Gemini 3.1 pilot", d.gp?.http ?? 0, tok(d.gp), money2(d.gp), d.gp?.start ?? "-", d.gp?.end ?? "-", `${d.gp?.minutes ?? 0} min`],
+        ["Gemini 3.1 full run", d.g?.http ?? 0, tok(d.g), money2(d.g), d.g?.start ?? "-", d.g?.end ?? "-", `${d.g?.minutes ?? 0} min`],
+        ["Claude Haiku 5.5", d.h?.http ?? 0, tok(d.h), money2(d.h), d.h?.start ?? "-", d.h?.end ?? "-", `${d.h?.minutes ?? 0} min`],
+      ],
+    },
+    lines: [
+      "Gemini 3.1 runs on the free tier (500 requests a Pacific day assumed); the job stayed under its own cap of 230 and under 440 for the day, leaving room for mini test 8.",
+      "Gemini 3.5 was not used; production flags and GEMINI_BUDGET were unchanged.",
+      `Capture: ${d.capture.gate} splash gates passed, ${d.capture.modal} dialogs closed, ${d.capture.mode} mode pickers, ${d.capture.retried} captures needed their one retry (GitHub Actions, no AI).`,
+    ],
   });
   out.push({
     id: "appendix-sites",
@@ -222,8 +337,8 @@ function sections(d) {
         { link: r.url },
         GROUP_LABELS[r.group],
         r.path.replace("_", " "),
-        `${yesNo(r.verdicts.gemini31.batch?.is_portfolio)} / ${yesNo(r.verdicts.gemini31.solo?.is_portfolio)}`,
-        `${yesNo(r.verdicts.haiku.batch?.is_portfolio)} / ${yesNo(r.verdicts.haiku.solo?.is_portfolio)}`,
+        `${yesNo(r.verdicts.gemini31.batch)} / ${yesNo(r.verdicts.gemini31.solo)}`,
+        `${yesNo(r.verdicts.haiku.batch)} / ${yesNo(r.verdicts.haiku.solo)}`,
         r.signals?.score ?? "-",
         r.proposed ? `${r.proposed}${r.agreed ? "" : " (flagged)"}` : "-",
         r.capture.failed ?? r.capture.blocked ?? r.capture.action ?? "",
@@ -234,11 +349,12 @@ function sections(d) {
     id: "appendix-method",
     title: "Appendix B: method",
     lines: [
-      "The sites: every row of portfolios without tier membership, owner removals left out (there were none), grouped as graded not a portfolio, delisted after grading, delisted before grading, broken or dead never graded, and live never graded.",
-      "The capture (GitHub Actions, no AI): desktop 1440x900 and phone 390x844, the splash click-through, a dialog closed with its primary button or Escape, a mode-picker click, up to 15 seconds for content and one retry.",
-      "Code: the portfolio signals of the full page, and the narrow placeholder rules (templates are fine; only unedited placeholders count).",
-      "The graders: the locked grading-two-sets prompts, unchanged, at temperature 0.2 and thinking \"low\" for Gemini, default effort for Haiku; batches of 5 in a seeded order, the last batch filled from the first.",
-      "The decision: Gemini 3.1 batched and Haiku batched, each after the strong-signals guard (4 or more signals keep a site a portfolio).",
+      "The sites: every row of portfolios without tier membership (owner removals left out; there were none), in five groups: graded not a portfolio, delisted after grading, delisted before grading, broken or dead never graded, and live never graded.",
+      "The capture (GitHub Actions, no AI): desktop 1440x900 and phone 390x844, the splash click-through, a dialog closed with its primary button or Escape, a mode-picker click, up to 15 seconds for content and one retry; only the screens after a click are stored. 32 sites were captured again after the dialog fixes (#218).",
+      "Never graded: a capture still showing a gate, a dialog or a bot check, or under 40 words with no outbound links.",
+      "Code: the portfolio signals of the full page, and the narrow rules (unedited placeholders, parked pages, code-host and link-in-bio addresses; templates are fine).",
+      `The graders: prompt ${PROMPT_VERSION} (the locked two-sets prompts with the owner's definition in STEP 3), Gemini 3.1 Flash-Lite at temperature 0.2 and thinking "low", Haiku 5.5 at its defaults; the same 83 batches of 5 for both, the last filled up from the first.`,
+      "The decision: both models' batched answers, each after the strong-signals guard (4 or more signals keep a site a portfolio).",
       "Raw data stays local in ~/research/portfoliorank-experiments/recheck-543 and in the workflow artifacts.",
     ],
   });
@@ -246,47 +362,69 @@ function sections(d) {
 }
 
 const cell = (c) => (c && typeof c === "object" && c.link ? { md: `[${bare(c.link)}](${c.link})`, html: `<a href="${esc(c.link)}">${esc(bare(c.link))}</a>` } : { md: String(c ?? "").replace(/\|/g, "\\|"), html: esc(c) });
+const inline = (l) => esc(l).replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
 export function markdown(d, secs = sections(d)) {
-  const L = ["# Re-check of non-ranked sites (recheck-543)", "", `PortfolioRank experiment, ${new Date().toISOString().slice(0, 10)}. Branch \`exp/recheck-543\`.`, "Nothing here changed a grade, listing or rank.", ""];
+  const L = ["# Re-check of non-ranked sites (recheck-543)", "", `PortfolioRank experiment, ${new Date().toISOString().slice(0, 10)}.`, `Branch \`exp/recheck-543\`; prompt ${PROMPT_VERSION}.`, "Nothing here changed a grade, listing or rank.", ""];
   for (const s of secs) {
     L.push(`## ${s.title}`, "");
     if (s.box) L.push(...s.lines.map((l) => `> ${l}`), "");
     if (s.cards) L.push("| Number | Value |", "| --- | ---: |", ...s.cards.map(([k, v]) => `| ${k} | ${v} |`), "");
     if (s.table) L.push(`| ${s.table.head.join(" | ")} |`, `| ${s.table.head.map(() => "---").join(" | ")} |`, ...s.table.rows.map((r) => `| ${r.map((c) => cell(c).md).join(" | ")} |`), "");
-    if (s.lines && !s.box) L.push(...(s.list ? (s.lines.length ? s.lines : ["None."]) : s.lines), "");
+    if (s.lines && !s.box) L.push(...s.lines, "");
+    if (s.list) L.push(...(s.list.length ? s.list : ["None."]), "");
+    if (s.sites) {
+      if (!s.sites.length) L.push("None.", "");
+      for (const r of s.sites) L.push(`- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]}, signals ${r.signals?.score ?? "-"})`, `  - ${verdictLine("Gemini 3.1", r.verdicts.gemini31.batch)}`, `  - ${verdictLine("Haiku 5.5", r.verdicts.haiku.batch)}`);
+      if (s.sites.length) L.push("");
+    }
     if (s.means) L.push("**What this means**", "", ...s.means.map((m) => `- ${m}`), "");
   }
   return L.join("\n");
 }
 
-export function html(d, secs = sections(d)) {
+/** A site card: both verdicts, the first screens (click for full size) and the whole page in a scroll box when captured. */
+function siteCard(r, imgs) {
+  const shot = (file, label, cls) => (imgs?.[file] ? `<figure class="${cls}"><a href="${esc(imgs[file])}" target="_blank" rel="noopener"><img src="${esc(imgs[file])}" alt="${esc(label)}" loading="lazy"></a><figcaption>${esc(label)}, click for full size</figcaption></figure>` : "");
+  const full = (file, label) => (imgs?.[file] ? `<figure><a href="${esc(imgs[file])}" target="_blank" rel="noopener"><div class="scrollbox"><img src="${esc(imgs[file])}" alt="${esc(label)}" loading="lazy"></div></a><figcaption>${esc(label)}: scroll inside the box, or click for full size</figcaption></figure>` : "");
+  const v = (label, x) => `<tr><th>${label}</th><td>${x ? `<strong>${esc(yesNo(x))}</strong> (${PARTS.map((p) => x.scores[p]).join("/")})<div class="seen">${esc(x.reason)}</div>` : "no answer"}</td></tr>`;
+  return `<article class="site"><h3><a href="${esc(r.url)}">${esc(bare(r.url))}</a> <span class="tag">${esc(GROUP_LABELS[r.group])}</span> <span class="tag">signals ${esc(r.signals?.score ?? "-")}</span></h3>
+<div class="table"><table><tbody>${v("Gemini 3.1", r.verdicts.gemini31.batch)}${v("Haiku 5.5", r.verdicts.haiku.batch)}</tbody></table></div>
+${r.capture.action ? `<p class="meta">Before the screenshot: ${esc(r.capture.action)}</p>` : ""}
+<div class="shots">${shot("desktop", "Desktop first screen", "")}${shot("phone", "Phone first screen", "phone")}</div>
+<div class="shots">${full("full-desktop", "Desktop, whole page")}${full("full-phone", "Phone, whole page")}</div></article>`;
+}
+
+export function html(d, { images = null } = {}, secs = sections(d)) {
   const css = `
 :root{--bg:#fbfaf7;--fg:#1d1c1a;--muted:#5f5b54;--line:#e3dfd6;--card:#fff;--accent:#2f5f8a;--code:#f2efe8;--box:#eef4fa}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151618;--fg:#e8e6e1;--muted:#a9a49b;--line:#33353a;--card:#1c1e21;--accent:#8db8e0;--code:#22252a;--box:#1b2633}}
 :root[data-theme="dark"]{--bg:#151618;--fg:#e8e6e1;--muted:#a9a49b;--line:#33353a;--card:#1c1e21;--accent:#8db8e0;--code:#22252a;--box:#1b2633}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-.layout{max-width:1240px;margin:0 auto;padding:32px 16px 64px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px}
-aside nav{position:sticky;top:24px;font-size:14px}aside ol{list-style:none;margin:8px 0 0;padding:0}aside li{margin:4px 0}aside a{color:var(--muted);text-decoration:none}aside a:hover{color:var(--accent)}
-main{min-width:0}h1{font-size:1.9rem;line-height:1.25;margin:0 0 8px}h2{font-size:1.3rem;margin:40px 0 10px;padding-top:12px;border-top:1px solid var(--line)}
-p,li{max-width:76ch}a{color:var(--accent)}.sub{color:var(--muted);margin:0 0 20px}
+header.top{max-width:1240px;margin:0 auto;padding:32px 16px 0}.layout{max-width:1240px;margin:0 auto;padding:16px 16px 64px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:40px}
+aside nav{position:sticky;top:24px;font-size:14px;max-height:calc(100vh - 48px);overflow:auto}aside ol{list-style:none;margin:8px 0 0;padding:0}aside li{margin:4px 0}aside a{color:var(--muted);text-decoration:none}aside a:hover{color:var(--accent)}
+main{min-width:0}h1{font-size:1.9rem;line-height:1.25;margin:0 0 8px}h2{font-size:1.3rem;margin:40px 0 10px;padding-top:12px;border-top:1px solid var(--line)}h3{font-size:1.02rem;margin:0 0 8px}
+p,li{max-width:76ch}p,li,td,h3{overflow-wrap:anywhere}a{color:var(--accent)}.sub,.meta{color:var(--muted)}.sub{margin:0 0 20px}.meta{font-size:14px;margin:6px 0}
 .tldr{background:var(--box);border:1px solid var(--line);border-radius:10px;padding:14px 18px}.tldr h2{border:0;margin:0 0 6px;padding:0}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}.card b{display:block;font-size:1.6rem;font-variant-numeric:tabular-nums}.card span{color:var(--muted);font-size:13px}
-.table{overflow-x:auto;margin:12px 0 18px;border:1px solid var(--line);border-radius:8px;background:var(--card)}table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{background:var(--code);font-weight:600;white-space:nowrap}td{font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:none}
+.table{overflow-x:auto;margin:10px 0 14px;border:1px solid var(--line);border-radius:8px;background:var(--card)}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{background:var(--code);font-weight:600;white-space:nowrap}td{font-variant-numeric:tabular-nums}tr:last-child td,tr:last-child th{border-bottom:none}
+.seen{color:var(--muted);font-size:13px;margin-top:2px}
 .means{border-left:3px solid var(--accent);padding:2px 0 2px 14px;margin:14px 0}.means strong{display:block}
-@media (max-width:860px){.layout{grid-template-columns:1fr;gap:0}aside nav{position:static;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:16px}}`;
+.site{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:14px 0}.tag{font-size:12px;font-weight:500;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin-left:4px;white-space:nowrap}
+.shots{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}.shots figure{margin:6px 0;flex:1 1 360px;min-width:0}.shots figure.phone{flex:0 1 200px}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:6px}figcaption{font-size:12px;color:var(--muted);margin-top:4px}
+.scrollbox{max-height:520px;overflow-y:auto;border:1px solid var(--line);border-radius:6px}.scrollbox img{border:0;border-radius:0}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr);gap:0}header.top{padding-bottom:0}aside nav{position:static;max-height:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:16px}.shots figure.phone{flex:0 1 180px;max-width:60%}}`;
   const body = secs
     .map((s) => {
-      const parts = [];
       if (s.box) return `<section id="${s.id}" class="tldr"><h2>${esc(s.title)}</h2><ul>${s.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul></section>`;
-      parts.push(`<h2 id="${s.id}">${esc(s.title)}</h2>`);
+      const parts = [`<h2 id="${s.id}">${esc(s.title)}</h2>`];
       if (s.cards) parts.push(`<div class="cards">${s.cards.map(([k, v]) => `<div class="card"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("")}</div>`);
       if (s.table) parts.push(`<div class="table"><table><thead><tr>${s.table.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${s.table.rows.map((r) => `<tr>${r.map((c) => `<td>${cell(c).html}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
-      if (s.lines) {
-        const item = (l) => esc(l).replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-        parts.push(s.list ? (s.lines.length ? `<ul>${s.lines.map((l) => `<li>${item(l.replace(/^- /, ""))}</li>`).join("")}</ul>` : "<p>None.</p>") : s.lines.map((l) => `<p>${item(l)}</p>`).join(""));
-      }
+      if (s.lines) parts.push(s.lines.map((l) => `<p>${inline(l)}</p>`).join(""));
+      if (s.list) parts.push(s.list.length ? `<ul>${s.list.map((l) => `<li>${inline(l.replace(/^- /, ""))}</li>`).join("")}</ul>` : "<p>None.</p>");
+      if (s.sites) parts.push(s.sites.length ? s.sites.map((r) => siteCard(r, images?.[r.id])).join("\n") : "<p>None.</p>");
       if (s.means) parts.push(`<div class="means"><strong>What this means</strong><ul>${s.means.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>`);
       return `<section>${parts.join("\n")}</section>`;
     })
@@ -294,17 +432,45 @@ th,td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top;te
   const toc = secs.map((s) => `<li><a href="#${s.id}">${esc(s.title)}</a></li>`).join("");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Non-ranked Re-check</title><style>${css}</style></head>
-<body><div class="layout"><aside><nav><strong>Contents</strong><ol>${toc}</ol></nav></aside><main>
-<h1>Re-check of non-ranked sites (recheck-543)</h1><p class="sub">PortfolioRank experiment, ${new Date().toISOString().slice(0, 10)}. Branch <code>exp/recheck-543</code>. Nothing here changed a grade, listing or rank.</p>
+<body><header class="top"><h1>Re-check of non-ranked sites (recheck-543)</h1><p class="sub">PortfolioRank experiment, ${new Date().toISOString().slice(0, 10)}. Branch <code>exp/recheck-543</code>, prompt ${esc(PROMPT_VERSION)}. Nothing here changed a grade, listing or rank.</p></header>
+<div class="layout"><aside><nav><strong>Contents</strong><ol>${toc}</ol></nav></aside><main>
 ${body}
 </main></div></body></html>
 `;
 }
 
+/** Copies the first screens (and whole-page images, when captured) of the sites shown in cards into report/img/. */
+function copyImages(d, dir, outDir) {
+  const ids = new Set([...d.disagree, ...d.geminiDisallowed].map((r) => r.id));
+  const images = {};
+  for (const id of ids) {
+    const m = {};
+    const src = [
+      ["desktop", path.join(dir, "bundles", SET, id, "desktop.jpg"), "desktop.jpg"],
+      ["phone", path.join(dir, "bundles", SET, id, "phone.jpg"), "phone.jpg"],
+      ["full-desktop", path.join(dir, "fullpages", SET, id, "full-desktop.webp"), "full-desktop.webp"],
+      ["full-phone", path.join(dir, "fullpages", SET, id, "full-phone.webp"), "full-phone.webp"],
+    ];
+    for (const [k, from, name] of src) {
+      if (!fs.existsSync(from)) continue;
+      const rel = path.join("img", id, name);
+      fs.mkdirSync(path.join(outDir, "img", id), { recursive: true });
+      fs.copyFileSync(from, path.join(outDir, rel));
+      m[k] = rel;
+    }
+    images[id] = m;
+  }
+  return images;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const d = build();
-  fs.mkdirSync(OUT, { recursive: true });
-  fs.writeFileSync(path.join(OUT, "recheck-543.md"), markdown(d));
-  fs.writeFileSync(path.join(OUT, "recheck-543.html"), html(d));
-  console.log(`wrote ${path.join(OUT, "recheck-543.md")} and .html`);
+  const outDir = path.join(DIR, "report");
+  fs.mkdirSync(outDir, { recursive: true });
+  const images = copyImages(d, DIR, outDir);
+  fs.writeFileSync(path.join(outDir, "index.html"), html(d, { images }));
+  fs.mkdirSync(DOCS, { recursive: true });
+  fs.writeFileSync(path.join(DOCS, "recheck-543.md"), markdown(d));
+  fs.writeFileSync(path.join(DOCS, "recheck-543.html"), html(d));
+  console.log(`wrote ${path.join(outDir, "index.html")} (${Object.keys(images).length} site cards with images), ${path.join(DOCS, "recheck-543.md")} and .html`);
 }
