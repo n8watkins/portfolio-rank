@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Plus, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, Wrench, X } from "lucide-react";
+import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Plus, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, X } from "lucide-react";
 import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { useSignIn } from "@/components/SignInModal";
