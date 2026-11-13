@@ -40,6 +40,7 @@ import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
 import { writerMode } from "../pipeline/content/staged.mjs";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
+import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
@@ -244,12 +245,13 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
       ];
-      // The weekly model watch, the hourly removals and the hourly email caps
-      // own their alerts (./model-watch.ts, ./owner-removals.ts,
-      // ./email-alerts.ts); the night never clears them.
+      // The weekly model watch, the hourly removals, the hourly email caps
+      // and the hourly dead-man check own their alerts (./model-watch.ts,
+      // ./owner-removals.ts, ./email-alerts.ts, ./night-watch.ts); the night
+      // never clears them.
       const r = await reconcileAlerts(ctx.db, {
         conditions,
-        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key),
+        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key),
         email: ctx.email,
         to: this.env.OWNER_EMAIL ?? null,
         log: ctx.log,
@@ -304,8 +306,16 @@ export async function startTonight(scheduledTime: number, env: NightEnv) {
     log("night.cron.start", { id, scheduledTime: new Date(scheduledTime).toISOString() });
     return { started: true, night: t.night, id };
   } catch (e) {
-    // An instance with tonight's id exists: tonight already ran or is running.
-    log("night.cron.exists", { id, error: String((e as Error)?.message ?? e).slice(0, 200) });
-    return { started: false, night: t.night, id };
+    const error = String((e as Error)?.message ?? e).slice(0, 200);
+    if (isDuplicateInstance(e)) {
+      // An instance with tonight's id exists: tonight already ran or is running.
+      log("night.cron.exists", { id, error });
+      return { started: false, night: t.night, id };
+    }
+    // Anything else (a Workflows outage, a bad binding) is a real failure:
+    // thrown so Sentry records it; the hourly dead-man check
+    // (./night-watch.ts) emails the owner if the night never starts.
+    log("night.cron.failed", { id, error });
+    throw e;
   }
 }
