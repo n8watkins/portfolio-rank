@@ -50,6 +50,10 @@ test("the promises: checking adds a site, removal any time, backups expire in 35
   assert.ok(removal.includes("including while it's still waiting to be graded"));
   assert.ok(removal.includes("nate@n8builds.dev"));
   const terms = text(await (await fetch(BASE + "/terms")).text());
+  // Run by n8builds (owner decision 2026-11-13), with an X contact on every policy page.
+  for (const [name, body] of [["privacy", privacy], ["removal", removal], ["terms", terms]]) assert.ok(!/Nathan Watkins/.test(body), `${name} names n8builds, not a person`);
+  assert.ok(privacy.includes("run by n8builds") && terms.includes("run by n8builds"));
+  for (const path of ["/privacy", "/terms", "/removal"]) assert.ok((await (await fetch(BASE + path)).text()).includes('href="https://x.com/n8watkins"'), `${path} links the X contact`);
   assert.ok(terms.includes("Checking a site adds it to PortfolioRank; you can ask for removal at any time"));
 });
 

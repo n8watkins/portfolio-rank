@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Bullets, LegalPage, LegalSection, LegalTable, Mail, linkClass } from "@/components/legal/Legal";
+import { Bullets, LegalPage, LegalSection, LegalTable, Mail, XLink, linkClass } from "@/components/legal/Legal";
 
 // The privacy policy, from docs/legal/privacy.md (keep the two in step).
-// In Nathan's voice: plain, first person. Static: prerendered at build time.
+// In the owner's voice: plain, first person, run by n8builds. Static: prerendered at build time.
 
 export const metadata: Metadata = {
   title: "Privacy - PortfolioRank",
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       intro={
         <>
           <p>
-            PortfolioRank is a side project run by me, Nathan Watkins. This page says what the site stores about you, why, who else sees it, and how long
+            PortfolioRank is a side project run by n8builds. This page says what the site stores about you, why, who else sees it, and how long
             it&apos;s kept.
           </p>
           <p>
@@ -26,7 +26,7 @@ export default function PrivacyPage() {
             <a href="/settings" className={linkClass}>
               Settings
             </a>{" "}
-            page. Questions: <Mail />.
+            page. Questions: <Mail /> or <XLink />.
           </p>
         </>
       }

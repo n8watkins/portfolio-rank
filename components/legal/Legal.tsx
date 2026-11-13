@@ -7,6 +7,9 @@ import type { ReactNode } from "react";
 /** The date the policy pages last changed; shown at the top of each. */
 export const LEGAL_UPDATED = "November 12, 2026";
 export const CONTACT_EMAIL = "nate@n8builds.dev";
+/** Who runs PortfolioRank, as the policy pages name it (owner decision 2026-11-13). */
+export const OPERATOR = "n8builds";
+export const CONTACT_X = "https://x.com/n8watkins";
 
 export const linkClass = "font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent";
 
@@ -24,6 +27,7 @@ export function LegalPage({ title, intro, children }: { title: string; intro: Re
         <a href="/terms" className={linkClass}>Terms</a>
         <a href="/removal" className={linkClass}>Remove or don&apos;t name me</a>
         <a href={`mailto:${CONTACT_EMAIL}`} className={linkClass}>{CONTACT_EMAIL}</a>
+        <a href={CONTACT_X} className={linkClass} rel="me noopener">@n8watkins on X</a>
       </nav>
     </div>
   );
@@ -73,6 +77,15 @@ export function LegalTable({ head, rows }: { head: [string, string]; rows: [Reac
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** The X contact link: "@n8watkins on X". */
+export function XLink() {
+  return (
+    <a href={CONTACT_X} className={linkClass} rel="me noopener">
+      @n8watkins on X
+    </a>
   );
 }
 

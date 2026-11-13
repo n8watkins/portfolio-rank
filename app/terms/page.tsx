@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bullets, LegalPage, LegalSection, Mail, linkClass } from "@/components/legal/Legal";
+import { Bullets, LegalPage, LegalSection, Mail, XLink, linkClass } from "@/components/legal/Legal";
 
 // The terms of use, from docs/legal/terms.md (keep the two in step).
 // Static: prerendered at build time.
@@ -17,7 +17,7 @@ export default function TermsPage() {
       intro={
         <>
           <p>
-            PortfolioRank is a free side project run by me, Nathan Watkins. By using the site you agree to these terms. They&apos;re short on purpose; the{" "}
+            PortfolioRank is a free side project run by n8builds. By using the site you agree to these terms. They&apos;re short on purpose; the{" "}
             <a href="/privacy" className={linkClass}>
               privacy policy
             </a>{" "}
@@ -89,7 +89,7 @@ export default function TermsPage() {
       <LegalSection id="changes" title="Changes and law">
         <p>
           When these terms change, the date at the top changes too, and big changes get a note on the site. Governing law: California, United States.
-          Questions: <Mail />.
+          Questions: <Mail /> or <XLink />.
         </p>
       </LegalSection>
     </LegalPage>

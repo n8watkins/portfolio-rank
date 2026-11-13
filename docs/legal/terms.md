@@ -4,7 +4,7 @@
 
 Last updated: November 12, 2026.
 
-PortfolioRank is a free side project run by me, Nathan Watkins.
+PortfolioRank is a free side project run by n8builds.
 By using the site you agree to these terms.
 They're short on purpose; the privacy policy ([privacy.md](privacy.md)) says what's stored and why.
 
@@ -53,4 +53,4 @@ PortfolioRank is not meant for anyone under 16.
 
 When these terms change, the date at the top changes too, and big changes get a note on the site.
 Governing law: California, United States.
-Questions: nate@n8builds.dev.
+Questions: nate@n8builds.dev or [@n8watkins on X](https://x.com/n8watkins).

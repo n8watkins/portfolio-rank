@@ -4,7 +4,7 @@
 
 Last updated: November 12, 2026.
 
-PortfolioRank is a side project run by me, Nathan Watkins.
+PortfolioRank is a side project run by n8builds.
 This page says what the site stores about you, why, who else sees it, and how long it's kept.
 Short version: I store as little as I can, I never sell anything, and you can ask me to delete what's yours.
 
