@@ -45,6 +45,15 @@ export const SOLO_PER_GROUP = 20;
 export const DIR = process.env.RECHECK_DIR ?? path.join(os.homedir(), "research", "portfoliorank-experiments", "recheck-543");
 export const SET = "X";
 
+// Owner, 2026-11-13: grade with the new portfolio definition, the grading lane's prompt
+// version "portfolio-definition-v2" (experiments/grading-two-sets/prompts, logged in
+// prompt-log.md), for Gemini 3.1 and Haiku alike. Neither runner sends a request until
+// that version is in the prompt log, and every review row records it.
+export const PROMPT_VERSION = "portfolio-definition-v2";
+const PROMPT_LOG = path.join(import.meta.dirname, "..", "..", "experiments", "grading-two-sets", "prompt-log.md");
+/** Whether the prompts on disk are PROMPT_VERSION (the grading lane logs it in prompt-log.md). */
+export const promptReady = () => fs.existsSync(PROMPT_LOG) && fs.readFileSync(PROMPT_LOG, "utf8").includes(PROMPT_VERSION);
+
 // The five groups, in the order a site is put in the first that fits.
 export const GROUPS = ["not_portfolio", "delisted_graded", "delisted_ungraded", "broken", "live_ungraded"];
 export const GROUP_LABELS = {
@@ -188,7 +197,12 @@ async function gemini({ dryRun }) {
   console.log(`${left} requests left; ${state.http_requests} of the ${GEMINI31.hard_stop} HTTP requests used by this job`);
   console.log(`${GEMINI31.model}: ${used} requests this Pacific quota day (cap ${GEMINI31.day_cap})`);
   if (used + Math.min(left, GEMINI31.hard_stop - state.http_requests) > GEMINI31.day_cap) console.log(`note: the day cap stops the run at ${GEMINI31.day_cap}; run it again after the quota day turns`);
+  console.log(`prompt ${PROMPT_VERSION}: ${promptReady() ? "in place" : "NOT in place yet (prompt-log.md doesn't name it)"}`);
   if (dryRun) return 0;
+  if (!promptReady()) {
+    console.log(`refusing to run: the prompts are not ${PROMPT_VERSION} yet`);
+    return 3;
+  }
   if (state.http_requests >= GEMINI31.hard_stop) {
     console.log(`hard stop reached (${GEMINI31.hard_stop})`);
     return 3;

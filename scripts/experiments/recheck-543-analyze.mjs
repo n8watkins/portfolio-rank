@@ -26,7 +26,7 @@ import { buildDupIndex, junkCheck } from "../../pipeline/junk-rules.mjs";
 import { guardVerdict } from "../../pipeline/portfolio-guard.mjs";
 import { actionNote } from "../../pipeline/splash.mjs";
 import { readJson, writeJson } from "./grading-two-sets-lib.mjs";
-import { DIR, GROUPS, JOB, SET } from "./recheck-543.mjs";
+import { DIR, GROUPS, JOB, PROMPT_VERSION, SET } from "./recheck-543.mjs";
 
 const PARTS = ["visual_design", "project_presentation", "writing"];
 
@@ -164,6 +164,7 @@ export function analyze(dir = DIR) {
     const meta = metas.get(s.id);
     const d = decide(s, meta, { g: g31.batch.get(s.id), h: hk.batch.get(s.id), dupIndex });
     const verdicts = {
+      prompt: PROMPT_VERSION,
       gemini31: { batch: verdictOf(g31.batch.get(s.id)), solo: verdictOf(g31.solo.get(s.id)) },
       haiku: { batch: verdictOf(hk.batch.get(s.id)), solo: verdictOf(hk.solo.get(s.id)) },
     };

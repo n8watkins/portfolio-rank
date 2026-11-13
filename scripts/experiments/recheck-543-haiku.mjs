@@ -29,7 +29,7 @@ import { fileURLToPath } from "url";
 import { HAIKU, claudeBodyFor } from "./grading-two-sets-claude.mjs";
 import { readJson, sha256, writeJson } from "./grading-two-sets-lib.mjs";
 import { loadBundle, loadPrompts, parseResult } from "./grading-two-sets-run.mjs";
-import { DIR, capturedIds, makePlan } from "./recheck-543.mjs";
+import { DIR, PROMPT_VERSION, capturedIds, makePlan, promptReady } from "./recheck-543.mjs";
 
 export const SETTINGS = { ...HAIKU, folder: "haiku", hard_stop_usd: 3.0, first_output_estimate: { solo: 6000, batch: 30000 } };
 const SPEND = /spend|usage limit|credit|billing|quota|limit.*(reached|exceeded)/i;
@@ -59,6 +59,7 @@ export async function runHaiku({
   log = console.log,
 } = {}) {
   if (!apiKey) throw new Error("Needs ANTHROPIC_API_KEY (run through pass-env).");
+  if (!promptReady()) throw new Error(`The prompts are not ${PROMPT_VERSION} yet (experiments/grading-two-sets/prompt-log.md doesn't name it); nothing was sent.`);
   const sel = readJson(path.join(dir, "selection.json"));
   const requests = haikuRequests(sel.sites, capturedIds(path.join(dir, "bundles")));
   const prompts = loadPrompts();
@@ -150,7 +151,7 @@ export async function runHaiku({
         save();
         continue;
       }
-      writeJson(fileOf(req), { step: req.step, kind: req.kind, ids: req.ids, pad: req.pad ?? [], model: settings.model, body_sha256: bodySha, answers });
+      writeJson(fileOf(req), { step: req.step, kind: req.kind, ids: req.ids, pad: req.pad ?? [], model: settings.model, prompt: PROMPT_VERSION, body_sha256: bodySha, answers });
     }
   } catch (e) {
     if (!(e instanceof Stop)) throw e;
