@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { pipelineDb, purgeDelisted } from "./roster.mjs";
+import { PURGE_FILES } from "./shot-files.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const DRY = process.argv.includes("--dry-run");
@@ -25,12 +26,12 @@ const s3 = new S3Client({
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   },
 });
-// The frames capture.mjs uploads (pipeline/capture.mjs SERVE_FILES).
+// The frames capture.mjs uploads, and the old full.jpg (pipeline/shot-files.mjs).
 const deleteShots = async (key) => {
   const out = await s3.send(
     new DeleteObjectsCommand({
       Bucket: process.env.R2_BUCKET ?? "portfolio-rank",
-      Delete: { Objects: ["hero.jpg", "mobile.jpg", "full.jpg"].map((f) => ({ Key: `${key}/${f}` })) },
+      Delete: { Objects: PURGE_FILES.map((f) => ({ Key: `${key}/${f}` })) },
     })
   );
   if (out.Errors?.length) throw new Error(`R2: ${out.Errors[0].Code} ${out.Errors[0].Message}`);
