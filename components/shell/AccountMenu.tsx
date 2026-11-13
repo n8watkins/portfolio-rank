@@ -296,7 +296,7 @@ export function AccountMenu({ action }: { action: PrimaryAction | null }) {
             </a>
           )}
           {session.isAdmin && (
-            <a role="menuitem" href="/admin/usage" className={item}>
+            <a role="menuitem" href="/admin" className={item}>
               <ShieldCheck className="h-4 w-4 text-mute" aria-hidden /> Admin
             </a>
           )}
