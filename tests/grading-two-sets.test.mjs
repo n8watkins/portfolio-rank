@@ -398,6 +398,22 @@ test("batch prompts follow the batch size; a batch of 5 is unchanged", async () 
   }
 });
 
+test("extra screenshots (mini 8 version B) follow the phone screenshot, labelled, and only when listed", async () => {
+  const { buildRequest, loadBundle } = await import("../scripts/experiments/grading-two-sets-run.mjs");
+  const f = fixture();
+  const dir = path.join(f.root, "bundles", "A", "A01");
+  fs.writeFileSync(path.join(dir, "projects-1.jpg"), Buffer.from("projects-A01"));
+  fs.writeFileSync(path.join(dir, "extra.json"), JSON.stringify([{ file: "projects-1.jpg", label: "projects section, screen 1 of 1 (desktop)" }]));
+  const withExtra = buildRequest("solo", [loadBundle("A01", path.join(f.root, "bundles"))], prompts);
+  const kinds = withExtra.parts.map((p) => (p.inline_data ? "img" : p.text.split(":")[0]));
+  assert.deepEqual(kinds.slice(0, 7), ["desktop screenshot (1440x900), top of the home page", "img", "phone screenshot (390x844), top of the home page", "img", "projects section, screen 1 of 1 (desktop)", "img", kinds[6]]);
+  assert.match(withExtra.parts.at(-1).text, /^<site_data>/);
+  const plain = buildRequest("solo", [loadBundle("A02", path.join(f.root, "bundles"))], prompts);
+  assert.equal(plain.parts.filter((p) => p.inline_data).length, 2);
+  const batch = buildRequest("batch", ["A01", "A02", "A03", "A04", "A05"].map((id) => loadBundle(id, path.join(f.root, "bundles"))), prompts);
+  assert.ok(batch.parts.some((p) => p.text === "site_1: projects section, screen 1 of 1 (desktop):"));
+});
+
 test("first-screen helpers", () => {
   assert.deepEqual(linkKinds({ href: "/resume.pdf", text: "Resume" }), ["resume"]);
   assert.deepEqual(linkKinds({ href: "mailto:a@b.co", text: "" }), ["contact"]);
