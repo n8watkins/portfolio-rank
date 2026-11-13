@@ -86,6 +86,7 @@ function Rank({ p }: { p: Profile }) {
   const faceoffs = Math.floor(s.faceoffs);
   const strong = familyOf(p.tier) === "A" || familyOf(p.tier) === "S";
   const toGo = Math.max(0, MIN_FACEOFFS - faceoffs);
+  const votesText = `${s.votes.toLocaleString("en-US")} real vote${s.votes === 1 ? "" : "s"}`;
   return (
     <section aria-labelledby="rank" className={`card p-5 sm:p-6 ${strong ? "card-featured" : ""}`}>
       <SectionTitle id="rank" kicker="Rank" title={p.tier && !s.provisional ? (s.top != null ? `Top ${s.top}%` : `Tier ${tierLabel(p.tier)}`) : "Where it stands"} />
@@ -106,7 +107,16 @@ function Rank({ p }: { p: Profile }) {
               <p className="text-sm text-mute">It joins the face-offs once it&apos;s graded, starting at tier {STARTING_TIER}.</p>
             </>
           ) : p.hideGrade ? (
-            <p className="text-sm text-mute">ELO {s.elo} from {faceoffs} face-offs. The owner hid the grade.</p>
+            <p className="text-sm text-mute">ELO {s.elo} from {votesText}. The owner hid the grade.</p>
+          ) : s.tier && s.seeded ? (
+            <>
+              <p className="font-semibold">Starting rank from automated checks</p>
+              <p className="text-sm text-mute">
+                ELO <span className="font-semibold tabular-nums text-ink">{s.elo}</span> · {votesText}
+                {p.tier && s.of != null ? ` · among ${s.of.toLocaleString("en-US")} ranked portfolios` : ""}. Votes move it from here.
+              </p>
+              {!p.tier && <p className="text-sm text-mute">{BELOW_TOP_TIERS}.</p>}
+            </>
           ) : s.tier && s.provisional ? (
             <>
               <p className="font-semibold">
@@ -138,7 +148,37 @@ function Rank({ p }: { p: Profile }) {
           </a>
         )}
       </div>
+      {!p.hideGrade && s.check && <PointsBreakdown check={s.check} />}
     </section>
+  );
+}
+
+/** The points from automated checks behind the starting rank (lib/check-points.mjs), item by item. */
+function PointsBreakdown({ check }: { check: NonNullable<Profile["standing"]["check"]> }) {
+  return (
+    <div className="mt-5 border-t border-edge pt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">
+          Automated checks: <span className="tabular-nums">{check.total}</span> of 100 points
+        </h3>
+        <a href="/grading#points" className="text-xs font-medium text-accent hover:underline">
+          How the points work
+        </a>
+      </div>
+      <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
+        {check.items.map((i) => (
+          <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-1.5">
+            <span className={i.measured ? "" : "text-mute"}>
+              {i.name}
+              {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
+            </span>
+            <span className={`shrink-0 tabular-nums ${i.id === "template" && i.points < 0 ? "text-down" : i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
+              {i.id === "template" ? (i.points < 0 ? i.points : "0") : `${i.points}/${i.max}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

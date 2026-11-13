@@ -4,6 +4,7 @@ import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { tierOf, isPublicTier } from "@/lib/tiers.mjs";
 import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
+import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { seen } from "@/lib/discovery/sites.mjs";
 import type { QuickFacts } from "@/lib/grader/quick";
@@ -59,7 +60,19 @@ export function reportCard(raw: unknown): ReportCard | null {
   };
 }
 
-export type Standing = { tier: string | null; elo: number; faceoffs: number; top: number | null; of: number | null; provisional: boolean };
+export type Standing = {
+  tier: string | null;
+  elo: number;
+  faceoffs: number;
+  /** Real face-offs (people's votes and AI comparisons), each counted once. */
+  votes: number;
+  top: number | null;
+  of: number | null;
+  provisional: boolean;
+  /** Its starting rank came from automated checks (lib/check-points.mjs); `check` is the points breakdown. */
+  seeded: boolean;
+  check: ReturnType<typeof unpackCheck>;
+};
 
 function standingOf(raw: unknown): Standing | null {
   if (typeof raw !== "string") return null;
@@ -68,7 +81,17 @@ function standingOf(raw: unknown): Standing | null {
     const tier = tierOf(g);
     const r = g?.rank;
     if (!tier || typeof r?.elo !== "number") return null;
-    return { tier, elo: r.elo, faceoffs: Number(r.faceoffs ?? 0), top: typeof r.top === "number" ? r.top : null, of: typeof r.of === "number" ? r.of : null, provisional: r.provisional !== false };
+    return {
+      tier,
+      elo: r.elo,
+      faceoffs: Number(r.faceoffs ?? 0),
+      votes: Number(r.votes ?? 0),
+      top: typeof r.top === "number" ? r.top : null,
+      of: typeof r.of === "number" ? r.of : null,
+      provisional: r.provisional !== false,
+      seeded: r.seeded === true,
+      check: unpackCheck(r.check),
+    };
   } catch {
     return null;
   }
@@ -149,7 +172,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   let standing = standingOf(rubricRow?.ai_rubric);
   if (!standing) {
     const e = entryIn(await cachedLibraryState(client), url);
-    standing = { tier: null, elo: e.elo, faceoffs: e.faceoffs, top: null, of: null, provisional: true };
+    standing = { tier: null, elo: e.elo, faceoffs: e.faceoffs, votes: e.votes, top: null, of: null, provisional: true, seeded: false, check: null };
   }
   const tier = !owner.hideGrade && isPublicTier(standing.tier) ? standing.tier : null;
   const stage: Profile["stage"] = listed
