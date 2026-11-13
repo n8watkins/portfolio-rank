@@ -96,7 +96,7 @@ export const CRITERIA = [
     id: "resume",
     name: "Resume link",
     by: "code",
-    weight: 0.1,
+    weight: 2 / 17,
     what: "A link to a resume or CV.",
     evidence: "links on the page",
   },
@@ -104,7 +104,7 @@ export const CRITERIA = [
     id: "github",
     name: "GitHub link",
     by: "code",
-    weight: 0.1,
+    weight: 2 / 17,
     what: "A link to a GitHub profile.",
     evidence: "links on the page",
   },
@@ -112,7 +112,7 @@ export const CRITERIA = [
     id: "contact",
     name: "Contact path",
     by: "code",
-    weight: 0.2,
+    weight: 4 / 17,
     what: "A mailto link, a contact form, a contact page or a LinkedIn/social profile.",
     evidence: "links and forms on the page",
   },
@@ -120,7 +120,7 @@ export const CRITERIA = [
     id: "project_links",
     name: "Project links load",
     by: "code",
-    weight: 0.25,
+    weight: 5 / 17,
     what: "Project and demo links answer (up to 8 checked, HEAD then GET, 8 s timeout); passes when at least one was checked and none is broken.",
     evidence: "HTTP checks of the page's outbound project links",
   },
@@ -128,7 +128,7 @@ export const CRITERIA = [
     id: "own_domain",
     name: "Own domain",
     by: "code",
-    weight: 0.1,
+    weight: 2 / 17,
     what: "Served from the person's own domain, not a free hosting subdomain (vercel.app, github.io, netlify.app and similar).",
     evidence: "final URL after redirects",
   },
@@ -136,7 +136,7 @@ export const CRITERIA = [
     id: "fresh_footer",
     name: "Fresh footer year",
     by: "code",
-    weight: 0.1,
+    weight: 2 / 17,
     what: `The footer copyright year is at most ${STALE_FOOTER_YEARS} years old; unknown when the page shows no year.`,
     evidence: "page text",
   },
@@ -144,7 +144,9 @@ export const CRITERIA = [
     id: "original",
     name: "Not a known template",
     by: "code",
-    weight: 0.15,
+    // Never scored (owner, 2026-11-13: a template is not a fault). Its 0.15 went to the other checks in proportion
+    // (each divided by 0.85, so in seventeenths). Grades stored before keep their checks_score until regraded.
+    weight: 0,
     what: "No fingerprint of a known template (HTML5 UP, Start Bootstrap, BootstrapMade, Colorlib, a Brittany Chiang clone and others).",
     evidence: "page HTML",
   },
@@ -295,6 +297,13 @@ export function codeChecks(facts, now = new Date()) {
     original: facts.template === undefined ? null : !facts.template,
   };
 }
+
+/**
+ * Code checks that are never shown as a fault or a fix (owner, 2026-11-13: we
+ * grade the portfolio, not its origin). "original" (no known template) is
+ * still measured and kept with the grade.
+ */
+export const NOT_A_FAULT = new Set(["original"]);
 
 /** Weighted share (0-100) of passed code checks; unknown checks are left out. */
 export function checksScore(checks) {

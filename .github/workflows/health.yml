@@ -111,10 +111,15 @@ jobs:
       - name: Add owner removals
         run: node pipeline/owner-removals.mjs
 
+      # Sites the owner confirmed as portfolios on /admin/review that are off
+      # the list go into data/additions.json (pipeline/review-additions.mjs).
+      - name: Add owner-confirmed relists
+        run: node pipeline/review-additions.mjs
+
       - name: Detect exclusions
         id: excl
         run: |
-          if git diff --quiet -- data/excluded.json data/feed.json; then
+          if git diff --quiet -- data/excluded.json data/feed.json data/additions.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -141,26 +146,27 @@ jobs:
             const key = (e) => (typeof e === "string" ? e : e.url);
             const before = new Set(JSON.parse(require("child_process").execSync("git show HEAD:data/excluded.json")).map(key));
             const after = new Set(require("./data/excluded.json").map(key));
-            console.log([...after].filter((u) => !before.has(u)).length, [...before].filter((u) => !after.has(u)).length);')
-          added=${counts% *}
-          restored=${counts#* }
+            const was = new Set(JSON.parse(require("child_process").execSync("git show HEAD:data/additions.json")).map(key));
+            const relisted = require("./data/additions.json").map(key).filter((u) => !was.has(u)).length;
+            console.log([...after].filter((u) => !before.has(u)).length, [...before].filter((u) => !after.has(u)).length, relisted);')
+          read -r added restored relisted <<< "$counts"
           day=$(date -u +%Y-%m-%d)
-          if [ "$restored" -eq 0 ]; then
-            title="chore(data): exclude ${added} portfolio(s) $day"
-          elif [ "$added" -eq 0 ]; then
-            title="chore(data): restore ${restored} portfolio(s) $day"
-          else
-            title="chore(data): exclude ${added}, restore ${restored} portfolio(s) $day"
-          fi
+          parts=()
+          [ "$added" -gt 0 ] && parts+=("exclude ${added}")
+          [ "$restored" -gt 0 ] && parts+=("restore ${restored}")
+          [ "$relisted" -gt 0 ] && parts+=("relist ${relisted}")
+          [ ${#parts[@]} -eq 0 ] && parts+=("update")
+          joined=$(printf '%s, ' "${parts[@]}")
+          title="chore(data): ${joined%, } portfolio(s) $day"
           bot_id=$(gh api "/users/${BOT_SLUG}%5Bbot%5D" --jq .id)
           git config user.name "${BOT_SLUG}[bot]"
           git config user.email "${bot_id}+${BOT_SLUG}[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add data/excluded.json data/feed.json
+          git add data/excluded.json data/feed.json data/additions.json
           git commit -m "$title" -m "Release-note: skip"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin "HEAD:refs/heads/$BRANCH"
-          body="Sites the weekly health check confirmed down (3 failed checks in a row over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json; owner requests the admin undid come back out of data/excluded.json (the daily sync lists them again). They show on /removed once this merges; owner requests are counted there, never named.
+          body="Sites the weekly health check confirmed down (3 failed checks in a row over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json; owner requests the admin undid come back out of data/excluded.json (the daily sync lists them again); sites the owner confirmed as portfolios on /admin/review that had left the list go into data/additions.json. They show on /removed once this merges; owner requests are counted there, never named.
 
           Opened by the [Weekly health check run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
           open=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')

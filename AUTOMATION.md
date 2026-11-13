@@ -61,6 +61,11 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   `/removed` lists them with the reason and date; takedown requests are counted there but never named.
 - **Site visibility** (`lib/roster.ts hiddenUrls`): a roster site is hidden when it is confirmed down, or when its capture failed and the health check hasn't passed it since.
   Captures that fail are retried with backoff (1, 2, 4, 8, 16, then 30 days), and a passing health check schedules a recapture at once, so one transient error never hides a site for good.
+- **Owner review queue** ([lib/reviews/store.mjs](lib/reviews/store.mjs), `/admin/review`): a re-check (the first is "recheck-543") writes one `status_reviews` row per site whose listed or ranked state it would change, with fresh screenshots, each grader's verdict, the code's signals, the group and the reason.
+  Rows where the graders agree come ticked; disagreements are flagged and unticked; nothing changes until the owner confirms.
+  Confirm goes through the paths above: a "not a portfolio" grade with a tier is kept and flipped (the AI's answer in `ai_is_portfolio`, the owner's decision in `review`, re-ranked with `rankForWrite`), one without a tier is cleared for the nightly grade queue, a remove stores "not a portfolio" so the health check takes the site off the list, a site held out only for its grade gets its health back, a broken one gets a recapture, and a delisted one goes into `data/additions.json` through the weekly health pull request ([pipeline/review-additions.mjs](pipeline/review-additions.mjs)).
+  The owner's verdict holds over later grades (`withOwnerVerdict` in the night run, the judge and the re-grade scripts); who decided and when is kept on the row.
+  While rows wait, the Monday goals email carries their count and the link (see Owner goals).
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
 - **Upstream report** (`upstream-removals.yml`, monthly, report-only): the community list runs its own link checker every Saturday that removes broken and parked links (its CONTRIBUTING.md, sample report emmabostian/developer-portfolios#3696), so a removal PR for those would only duplicate it.
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
@@ -528,6 +533,7 @@ The check ([pipeline/goals.mjs](pipeline/goals.mjs), [worker/goals.ts](worker/go
 It measures the week that just finished (Monday to Monday, Pacific) and records each goal's numbers in `goal_progress`.
 The first time a goal is reached it records the event in `goal_events` and emails the owner through the owner-alert path (the email gate, kind `owner-alert`, to `OWNER_EMAIL`), with an `.ics` invite for a 30-minute decision slot three days later at 10:00 Pacific (moved to Monday from a weekend).
 Once that email went out the goal never emails again, even if its number drops and climbs back; an email that couldn't go out is tried again the next Monday.
+The same Monday email carries the owner review queue (`/admin/review`): while rows are pending, their count and the link go into the first goal email that goes out, or, when no goal fires, into a short email of their own; with nothing pending nothing is sent.
 `GET /api/admin/goals` (admin only) returns every goal with its numbers measured now, its last 12 weeks, its event and, for a goal that is reached and not yet emailed, the email the next check would send.
 By hand, always a dry run that writes and sends nothing (beyond refreshing the cached Kit count): `node scripts/goals-check.mjs [--now=2026-11-16T16:00:00Z] [--json]` (production numbers with `pass-env run --`).
 To add a goal, add an entry with a new id to the list; never reuse an id, since the id is what records that a goal fired.
@@ -647,6 +653,7 @@ serve images.
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
 - `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the weekly health workflow runs it)
+- `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed as portfolios on `/admin/review` that are off the list to `data/additions.json` (the weekly health workflow runs it)
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)

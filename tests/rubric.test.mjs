@@ -128,11 +128,11 @@ test("code checks: pass, fail or unknown; unknown is left out of checks_score", 
   };
   const c = codeChecks(facts, now);
   assert.deepEqual(c, { resume: true, github: false, contact: true, project_links: true, own_domain: true, fresh_footer: true, original: true });
-  assert.equal(checksScore(c), 90);
+  assert.equal(checksScore(c), Math.round((100 * 15) / 17), "GitHub missing: 2 of 17");
   const unknown = codeChecks({ ...facts, footer_year: null, project_links: { checked: 0, ok: 0, broken: 0, blocked: 2 } }, now);
   assert.equal(unknown.fresh_footer, null);
   assert.equal(unknown.project_links, null);
-  assert.equal(checksScore(unknown), Math.round((100 * 0.55) / 0.65));
+  assert.equal(checksScore(unknown), Math.round((100 * 8) / 10), "known: resume 2, GitHub 2 (missing), contact 4, domain 2 seventeenths; the template counts for nothing");
   assert.equal(codeChecks({ ...facts, footer_year: 2023 }, now).fresh_footer, false);
   assert.equal(codeChecks(null), null);
   assert.equal(checksScore(null), null);
@@ -263,4 +263,20 @@ test("the Gemini client sends the system instruction and thinking level, and rep
 test("GRADING_CRITERIA.md's rubric table matches pipeline/rubric.mjs (npm run docs:rubric)", () => {
   const doc = fs.readFileSync(DOC, "utf8");
   assert.equal(renderDoc(doc), doc);
+});
+
+test("a template never counts against the checks score; the other checks keep their proportions", async () => {
+  const { checksScore: score, CODE_CRITERIA: code } = await import("../pipeline/rubric.mjs");
+  const w = Object.fromEntries(code.map((c) => [c.id, c.weight]));
+  assert.equal(w.original, 0);
+  // The old 0.1 / 0.2 / 0.25 weights over 0.85: 2, 4 and 5 seventeenths, adding up to 1.
+  assert.deepEqual([w.resume, w.github, w.contact, w.project_links, w.own_domain, w.fresh_footer].map((x) => Math.round(x * 17)), [2, 2, 4, 5, 2, 2]);
+  assert.equal(Math.round(code.reduce((s, c) => s + c.weight, 0) * 1e9) / 1e9, 1);
+  const all = { resume: true, github: true, contact: true, project_links: true, own_domain: true, fresh_footer: true };
+  assert.equal(score({ ...all, original: false }), 100, "a template costs nothing");
+  assert.equal(score({ ...all, original: false }), score({ ...all, original: true }));
+  // Same ratios as before among the rest: missing the resume costs 2 of 17.
+  assert.equal(score({ ...all, resume: false, original: false }), Math.round((100 * 15) / 17));
+  // Not among the facts that count (the grading pages list the weighted ones).
+  assert.equal(code.filter((c) => c.weight > 0).some((c) => c.id === "original"), false);
 });
