@@ -107,6 +107,25 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: building (#81).
   Every grade (the nightly ones and "grade my portfolio") also returns up to three roles the page claims, cleaned by code; they are labels, never scored, so the rubric version stays 2.
   Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
+- **Starting ranks from automated checks** (owner, 2026-11-12, later still). Status: building.
+  Every graded portfolio gets up to 100 points from saved data (Lighthouse, the share card, project links, resume, GitHub, contact, own domain, phone fit, footer year, minus 15 for a known template; `lib/check-points.mjs` `CHECK_POINTS`), and its starting rating comes from its place by points, with high uncertainty, so letters appear at once and real votes refine them.
+  No vote is invented; a missing measurement gets the library median, never a zero.
+  This replaces "everyone starts at B until 10 face-offs" for graded portfolios.
+- **Tiers by ELO from face-offs, the grade as the report card** (owner, 2026-11-12, later the same day). Status: building, replaces the score-based tiers below.
+  The rank is the ELO: everyone starts at the same rating (tier B, ELO 1200) and stays B until 10 face-offs; then SSS is the top 3, S+, S and S- the rest of the top 1%, A+ to A- 1% to 30% (A is the top 30%, so many more people can be proud to share it, and it gets visual emphasis), B+ to B- 30% to 70%, C+ to C- 70% to 85%, D the bottom 15%, among the portfolios with 10 face-offs.
+  People's votes count fully and AI head-to-head comparisons at 0.25 of a vote (proposed, not yet confirmed by the owner; `AI_VOTE_WEIGHT`).
+  The rating is OpenSkill replayed from every face-off with no grade seed, ranked by a cautious value (mean minus two uncertainties) shown on an ELO scale, rather than plain ELO: OpenSkill takes the AI weight and the uncertainty natively, and the cautious value keeps a new site with a few lucky wins from jumping to the top.
+  The Gemini grade becomes the report card (scores and notes as "how to improve", the report's own top N%, the "not a portfolio" filter) and no longer sets the letter.
+  Play draws mostly from portfolios with fewer than 10 face-offs.
+- **Tiers by rank in the library, not Gemini's letter** (owner, 2026-11-12). Status: replaced the same day by tiers by ELO (above).
+  Gemini's own letter was too generous (live: S 4%, A 37%, B 27%, C 25%, D 6%).
+  The tier a portfolio shows is now its place among the graded library: SSS the top 3 portfolios, then S+, S and S- splitting the rest of the top 1% in thirds by place, then A+, A and A- splitting 1% to 15% in thirds, B+, B and B- splitting 15% to 70%, C+, C and C- splitting 70% to 85%, and D the bottom 15% (owner, 2026-11-12, revised three times the same day; `lib/tiers.mjs` `TIER_LADDER`, the one place to tune them).
+  The place comes from a score recomputed from the stored grade, no new AI request: the five AI scores (weighted as the rubric weights them) count 80%, the code checks 20%; ties are broken by Lighthouse performance (mobile, then desktop), polish checks passed, Gemini's letter, people's ELO (after 5 face-offs) and the date first graded, never the address; the S band is exact by place, and below it portfolios equal on everything but the date share a tier.
+  A small library only hands out a tier it has room for (the S band needs 100 graded portfolios, and fills every S tier from 600).
+  Gemini's letter stays in the grade and still seeds the leaderboard's ratings; ELO is unchanged.
+  Only SSS to B- show publicly; C and D read "Graded, below the top tiers". Boards and filters group by letter family; the badge shows the plus or minus. The public `/grading` page explains it with today's counts.
+  Tiers are placed again hourly and at each deploy (`lib/tiers-store.mjs`), and a new grade is placed as it is written; "Grade my portfolio" ranks a report against the library and says how many portfolios it was graded against.
+  Why: a letter that means a place in the library stays meaningful as the library grows, and the owner sets how rare each tier is.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
 

@@ -1,7 +1,6 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, shotBases } from "@/lib/shots";
-import { hiddenUrls } from "@/lib/roster";
 import { ownedJobs } from "@/lib/grader/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
@@ -10,6 +9,7 @@ import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { domainOf, reportPath } from "@/lib/home";
+import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 
 // The visitor's own portfolio page (/me): their latest grade, read through
 // the signed owner cookie (lib/grader/server.ts ownedJobs), so it is never
@@ -35,7 +35,7 @@ export function listedSite(siteKey: string): FeedRow | null {
 type Step = { key: string; label: string; state: "done" | "running" | "waiting" | "pending" | "needs_key" | "failed" | "off" };
 type Line = { id: string; label: string; pass?: boolean | null; detail?: string; score?: number | null; note?: string };
 type Fix = { criterion: string; title: string; why: string; by: "ai" | "code" };
-type SiteLink = { url: string; name: string; domain: string; tier: string; path: string };
+type SiteLink = { url: string; name: string; domain: string; tier: string | null; path: string };
 
 /** GET /api/grade/<id>'s answer (lib/grader/view.mjs publicJob). */
 export type Job = {
@@ -51,7 +51,13 @@ export type Job = {
   email: { requested: boolean; sent: boolean };
   checks: { ok: boolean; message?: string } | null;
   report: null | {
-    tier: string;
+    /** The tier by ELO from face-offs (lib/tiers.mjs); null when not ranked ("not a portfolio"). */
+    tier: string | null;
+    /** Too few face-offs yet: the tier is the starting B. */
+    provisional: boolean;
+    /** Its starting rank came from automated checks. */
+    seeded: boolean;
+    faceoffs: number | null;
     isPortfolio: boolean | number | null;
     roles: string[];
     facts: Line[];
@@ -73,8 +79,8 @@ export type Listed = {
   url: string;
   name: string;
   path: string;
-  /** Rank on the people's board (ELO), when it has votes. */
-  people: { rank: number; elo: number; votes: number } | null;
+  /** Its ELO from face-offs (lib/tiers.mjs) and, once it has enough face-offs, its place among the ranked portfolios; null without face-offs. */
+  people: { rank: number | null; of: number | null; elo: number; faceoffs: number } | null;
   fights: { won: boolean; other: { url: string; name: string; domain: string; hero: string | null }; at: string }[];
 };
 
@@ -125,8 +131,9 @@ async function standingsOf(job: Job): Promise<Mine["standings"]> {
 
 async function listedOf(site: FeedRow): Promise<Listed> {
   const client = db();
-  const [rating, fights] = await Promise.all([
-    client.execute({ sql: "SELECT elo, votes FROM ratings WHERE url = ?", args: [site.url] }),
+  const [row, meta, fights] = await Promise.all([
+    readSiteRow(client, site.url),
+    readTierMeta(client),
     client.execute({
       // votes_winner_idx and votes_loser_idx (lib/schema.mjs): a few rows, not the log.
       sql: `SELECT * FROM (
@@ -138,14 +145,9 @@ async function listedOf(site: FeedRow): Promise<Listed> {
     }),
   ]);
   let people: Listed["people"] = null;
-  const r = rating.rows[0];
-  if (r && Number(r.votes) > 0) {
-    const hidden = await hiddenUrls();
-    const above = await client.execute({ sql: "SELECT url FROM ratings WHERE votes >= 1 AND elo > ?", args: [Number(r.elo)] });
-    const listed = new Set(FEED.map((p) => p.url));
-    const rank = above.rows.filter((x) => listed.has(String(x.url)) && !hidden.has(String(x.url))).length + 1;
-    people = { rank, elo: Number(r.elo), votes: Number(r.votes) };
-  }
+  // Its standing on read: its rating row and the daily cutoffs (lib/tiers-db.mjs).
+  const s = standingOf(row, meta);
+  if (row.votes > 0 || row.seeded === 1) people = { rank: s.place, of: s.of, elo: s.elo, faceoffs: row.votes };
   const others = fights.rows.map((x) => String(x.other));
   const shots = await shotBases(others);
   const names = new Map(FEED.map((p) => [p.url, p.name]));
@@ -180,6 +182,13 @@ export async function myPortfolio(): Promise<Mine | null> {
     if (!hero && site) {
       const shots = await shotBases([site.url]);
       hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
+    }
+    if (job.report) {
+      // Today's tiers of the portfolios it points to (older reports stored Gemini's letters).
+      const tierNow = new Map(((await gradedPool(client)) as { url: string; tier: string | null }[]).map((p) => [p.url, p.tier]));
+      const now = <T extends { url: string }>(x: T) => ({ ...x, tier: tierNow.get(x.url) ?? null });
+      job.report.similar = job.report.similar.map(now);
+      job.report.better = job.report.better.map((b) => ({ ...b, sites: b.sites.map(now) }));
     }
     const linked = job.report ? [...job.report.similar, ...job.report.better.flatMap((b) => b.sites)].map((x) => x.url) : [];
     const [standings, listed, linkedShots] = await Promise.all([

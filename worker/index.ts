@@ -32,6 +32,7 @@ import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
+import { tiersTick } from "./tiers";
 import { nightWatchTick } from "./night-watch";
 import { jobCron } from "./crons";
 
@@ -81,6 +82,12 @@ type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): P
  * owner's removal took effect, and the blog when a post's scheduled time came in the
  * last hour. Best effort: a failure only means the page refreshes when its day is up.
  */
+/** CachedPages.purgeTags for scheduled work, when this Worker exposes it (./edge-cache.ts). */
+function purgeTagsOf(ctx: { exports?: unknown }) {
+  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
+  return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
+}
+
 async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   if (!cached) return;
@@ -131,7 +138,8 @@ const worker = {
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
   // applies owners' held removals (./owner-removals.ts), checks that last
   // night's run started and finished (./night-watch.ts),
-  // finishes people's grade requests that waited for Gemini 3.5 and makes the
+  // finishes people's grade requests that waited for Gemini 3.5, runs the daily
+  // tier update when it is due (./tiers.ts) and makes the
   // image library's hourly batch (./library.ts); the weekly
   // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
@@ -148,6 +156,8 @@ const worker = {
       // An alert when last night's run never started or died (./night-watch.ts).
       await nightWatchTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
+      // The daily tier update when it is due (./tiers.ts); the profiles whose letter changed leave the edge cache.
+      await tiersTick(controller.scheduledTime, { purgeTags: purgeTagsOf(ctx) });
       // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }

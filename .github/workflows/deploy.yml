@@ -62,6 +62,11 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
         run: node scripts/migrate.mjs
 
+      # Tiers by rank (lib/tiers.mjs) placed before the new code serves; the hourly cron keeps them current.
+      - name: Place the tiers
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
+        run: node scripts/refresh-tiers.mjs
+
       - name: Build
         run: |
           if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then

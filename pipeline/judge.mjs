@@ -40,6 +40,8 @@ import {
 import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import { rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
+import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
   RESPONSE_SCHEMA,
   RUBRIC_VERSION,
@@ -422,7 +424,8 @@ async function runRubric() {
         console.log(`${label} ${url} - answered by ${out.model}, not ${PRIMARY_MODEL}; re-grading stops`);
         return false;
       }
-      await db.batch(replaceGradeStatements(url, row.ai_rubric, out.rubric), "write");
+      // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
+      await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, out.rubric, { url })), "write");
       if (regrade) regraded++;
       else ok++;
       console.log(
@@ -695,6 +698,7 @@ async function runPairwise() {
 // the UNIQUE(rater_id, pair_key) index as the dup backstop. AI votes move
 // official ELO — that is the whole point of the bootstrap (GRADING §7).
 async function castVote(win, lose, model) {
+  await ensureTierSchema(db);
   const tx = await db.transaction("write");
   try {
     const rres = await tx.execute({
@@ -724,6 +728,8 @@ async function castVote(win, lose, model) {
         elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
     await tx.execute({ sql: upsert, args: [win.url, updated.winner, w.votes + 1] });
     await tx.execute({ sql: upsert, args: [lose.url, updated.loser, l.votes + 1] });
+    // The tier rating of the two moves at once, an AI vote at its lower weight (lib/tiers-db.mjs).
+    await applyFaceoff(tx, { winner: win.url, loser: lose.url, rater: "ai" });
     await tx.commit();
     // keep in-memory pool fresh so later pair picks use updated numbers
     win.elo = updated.winner;
@@ -775,6 +781,8 @@ try {
     console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
   }
   const counts = MODE === "rubric" ? await runRubric().finally(() => renderer?.close()) : await runPairwise();
+  // New grades move the library: every tier by rank is placed again (lib/tiers-store.mjs, no AI request).
+  if (MODE === "rubric") await refreshTiers(db, { log: console.log });
   const outcome = judgeOutcome({ mode: MODE, ...counts });
   await writeSummary(outcome, counts.stopped);
   console.log(outcome.verdict);

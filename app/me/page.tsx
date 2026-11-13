@@ -7,7 +7,8 @@ import { Regrade } from "@/components/me/Regrade";
 import { Thumb } from "@/components/home/Thumb";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
-import { TierBadge } from "@/components/ui/badges";
+import { PublicTierBadge, TierBadge } from "@/components/ui/badges";
+import { tierLabel } from "@/lib/tiers.mjs";
 import { btnPrimary, btnSecondary, sectionTitle } from "@/components/ui/styles";
 import { BADGES } from "@/lib/games/badges.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
@@ -140,15 +141,12 @@ function Report({ mine }: { mine: Mine }) {
             <span className="sr-only">(opens in a new tab)</span>
           </a>
           <div className="mt-5 flex items-center gap-4">
-            <TierBadge tier={rep.tier} size="lg" />
+            {rep.tier && <TierBadge tier={rep.tier} size="lg" />}
             <div className="min-w-0">
-              <p className="text-lg font-bold">
-                Tier {rep.tier}
-                {pct ? `, about top ${pct.topPct}%` : ""}
-              </p>
+              <p className="text-lg font-bold">{rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded"}</p>
               {pct && (
                 <p className="text-sm text-mute">
-                  Would rank around #{pct.rank.toLocaleString("en-US")} of {pct.total.toLocaleString("en-US")} on the AI grade alone.
+                  Your grade: top {pct.topPct}% of {(pct.total - 1).toLocaleString("en-US")} graded portfolios. The tier comes from face-offs.
                 </p>
               )}
             </div>
@@ -157,9 +155,15 @@ function Report({ mine }: { mine: Mine }) {
             <p className="mt-4 flex items-center gap-2 text-sm">
               <Trophy className="h-4 w-4 text-accent" aria-hidden />
               <span>
-                <strong className="tabular-nums">#{listed.people.rank.toLocaleString("en-US")}</strong> on the people&apos;s board{" "}
+                {listed.people.rank != null ? (
+                  <>
+                    <strong className="tabular-nums">#{listed.people.rank.toLocaleString("en-US")}</strong> of {listed.people.of?.toLocaleString("en-US")} ranked{" "}
+                  </>
+                ) : (
+                  <>Not ranked yet </>
+                )}
                 <span className="text-mute tabular-nums">
-                  · ELO {listed.people.elo} · {listed.people.votes.toLocaleString("en-US")} {listed.people.votes === 1 ? "vote" : "votes"}
+                  · ELO {listed.people.elo} · {listed.people.faceoffs.toLocaleString("en-US")} {listed.people.faceoffs === 1 ? "face-off" : "face-offs"}
                 </span>
               </span>
             </p>
@@ -326,7 +330,7 @@ function Report({ mine }: { mine: Mine }) {
                         {"why" in s ? ` · 5/5 for ${String(s.why).toLowerCase()}` : ""}
                       </span>
                     </span>
-                    <TierBadge tier={s.tier} />
+                    <PublicTierBadge tier={s.tier} />
                   </a>
                 </li>
               ))}

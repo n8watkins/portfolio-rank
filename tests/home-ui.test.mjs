@@ -211,7 +211,8 @@ test("a grade from home: its progress page, and /me follows it to the report", {
     judged_at: new Date().toISOString(),
     model: "gemini-e2e",
   };
-  const report = buildReport(grade, [], {});
+  // The tier by rank the report carries (lib/tiers.mjs; an empty pool ranks nothing, so it is given here).
+  const report = { ...buildReport(grade, [], {}), rank: { tier: "B", score: 60, top: 50 } };
   const now = new Date().toISOString();
   await db.execute({
     sql: "UPDATE grade_jobs SET status = 'done', reason = NULL, result = ?, report = ?, done_at = ?, captured_at = ? WHERE id = ?",
