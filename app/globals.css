@@ -817,3 +817,68 @@ dialog.modal[open]::backdrop {
     animation: ring-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
+
+/* --------------------------------------------------------- blog posts */
+/* Quiet motion on a post (components/blog): images lift a touch on hover,
+   the TL;DR settles in once, a subhead offers its "#" link on hover. Only
+   with a pointer that hovers, and none of it with reduced motion. */
+@keyframes tldr-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tldr {
+    animation: tldr-in 0.5s cubic-bezier(0.33, 1, 0.68, 1) 0.1s both;
+  }
+  .tldr-item {
+    animation: tldr-in 0.45s cubic-bezier(0.33, 1, 0.68, 1) calc(0.2s + var(--i, 0) * 70ms) both;
+  }
+}
+
+.heading-anchor {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.post-heading:hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 0.55;
+}
+.heading-anchor:hover {
+  opacity: 1;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .post-frame {
+    transition:
+      transform 0.35s cubic-bezier(0.33, 1, 0.68, 1),
+      box-shadow 0.35s ease;
+  }
+  .post-frame img,
+  .post-thumb {
+    transition: transform 0.6s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+  .post-figure:hover .post-frame {
+    transform: translateY(-2px);
+    box-shadow: var(--card-hi), var(--card-drop), 0 22px 44px -26px rgba(0, 0, 0, 0.45);
+  }
+  .post-figure:hover .post-frame img,
+  .post-related:hover .post-thumb {
+    transform: scale(1.02);
+  }
+
+  .tldr {
+    transition: border-color 0.3s ease;
+  }
+  .tldr:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-edge));
+  }
+  .tldr-dot {
+    transition: transform 0.3s ease;
+  }
+  .tldr-item:hover .tldr-dot {
+    transform: scale(1.5);
+  }
+}
