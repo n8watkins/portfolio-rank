@@ -55,10 +55,11 @@ export async function POST(req: Request) {
   if (action === "regrade" && !gamesEnabled()) return off();
   if (action === "remove" && body.confirm !== true) return fail("confirm_required", 400);
   await ensureSchema();
-  // With it on, every owner action needs proof only the site's owner can give
+  // With it on, a re-grade too needs proof only the site's owner can give
   // (the verification file, the meta tag, GitHub Pages or a review;
   // lib/ownership/verify.mjs), not a link from the page to a GitHub profile.
-  if (tools && !(await controlProof(db(), { url, owner: s.raterId }))) return fail("not_owner", 403);
+  // Hiding and removing already do (ownerAction: hide_needs_meta, remove_needs_meta).
+  if (tools && action === "regrade" && !(await controlProof(db(), { url, owner: s.raterId }))) return fail("not_owner", 403);
   const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);
   if (over) return rateLimited(over);
   const out = await ownerAction(db(), { url, owner: s.raterId, action, now: new Date() });
