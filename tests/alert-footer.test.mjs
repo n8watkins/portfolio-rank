@@ -14,7 +14,7 @@ import { alertFooter, emailSender } from "../pipeline/alerts.mjs";
 test("every owner alert ends with the line naming Cloudflare Email Service, the sender and Kit", async () => {
   const db = createClient({ url: `file:${path.join(fs.mkdtempSync(path.join(os.tmpdir(), "alert-footer-")), "db.sqlite")}` });
   await migrate(db);
-  const env = { OWNER_EMAIL: "owner@example.com", EMAIL_FROM: "portfoliorank@n8builds.dev", EMAIL_TRANSPORT: "outbox", AUTH_SECRET: "test" };
+  const env = { OWNER_EMAIL: "owner@example.com", EMAIL_FROM: "portfoliorank@n8builds.dev", EMAIL_TRANSPORT: "outbox", SITE_ENV: "test", AUTH_SECRET: "test" };
   await emailSender(env, { db }).send({ to: env.OWNER_EMAIL, subject: "s", text: "Something happened." });
   const { text, kind } = (await db.execute("SELECT text, kind FROM email_outbox")).rows[0];
   assert.equal(kind, "owner-alert");
