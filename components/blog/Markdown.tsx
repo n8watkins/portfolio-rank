@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { btnPrimary } from "@/components/ui/styles";
-import { SITE_URL } from "@/lib/site";
+import { sitePath } from "@/lib/site";
 
 // The strict Markdown renderer for posts (owner decision 4: Markdown bodies,
 // no raw HTML). It knows only what the engine writes (pipeline/content/
@@ -71,9 +71,9 @@ export function parseBlocks(body: string): Block[] {
   return out;
 }
 
-/** Where a link goes: our own pages as paths, anything else as it is. */
+/** Where a link goes: our own pages (on SITE_URL or an old address) as paths, anything else as it is. */
 export function linkHref(url: string): string {
-  return url.startsWith(SITE_URL) ? url.slice(SITE_URL.length) || "/" : url;
+  return sitePath(url) || "/";
 }
 
 const external = (href: string) => /^https?:/.test(href);

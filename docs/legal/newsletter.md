@@ -7,7 +7,7 @@ Last updated: [owner: date it goes live].
 ## What you get
 
 The weekly PortfolioRank report: new posts, the top 5, the biggest climber, and what the data showed that week.
-About one email a week, sent by [owner: legal name or business name] from [owner: sender address, e.g. report@portfoliorank.n8builds.dev].
+About one email a week, sent by [owner: legal name or business name] from [owner: sender address, e.g. report@portfoliorank.dev].
 
 ## Consent
 
