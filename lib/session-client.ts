@@ -9,6 +9,8 @@ import { useSyncExternalStore } from "react";
 
 export type ClientSession = {
   login: string;
+  /** The admin's account: the menus show "Admin" (display only; the server checks again). */
+  isAdmin: boolean;
   name: string | null;
   email: string | null;
   image: string | null;
@@ -26,9 +28,9 @@ function load() {
   started = true;
   fetch("/api/auth/session")
     .then((r) => (r.ok ? r.json() : null))
-    .then((s: { login?: string; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
+    .then((s: { login?: string; isAdmin?: boolean; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
       state = s?.login
-        ? { login: s.login, name: s.user?.name ?? null, email: s.user?.email ?? null, image: s.user?.image ?? null }
+        ? { login: s.login, isAdmin: s.isAdmin === true, name: s.user?.name ?? null, email: s.user?.email ?? null, image: s.user?.image ?? null }
         : null;
     })
     .catch(() => {

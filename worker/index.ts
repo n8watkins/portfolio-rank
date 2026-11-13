@@ -13,6 +13,7 @@ import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
 import { healthCheck } from "./health";
+import { anonymousSession } from "./anonymous-session";
 import { BLOG_TAG, appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag } from "./edge-cache";
 // The build's static-files fingerprint (scripts/assets-fingerprint.mjs, written after
 // the OpenNext build), part of every edge cache key (./edge-cache.ts).
@@ -25,6 +26,7 @@ import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
+import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
@@ -32,6 +34,7 @@ import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
+import { jobCron } from "./crons";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -98,8 +101,9 @@ const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerpri
 
 // Requests on the old address or www go to the same path on SITE_URL first
 // (./canonical-host.ts). Screenshots and favicons skip the Next.js app
-// (./assets.ts); scanner probes get
-// a plain 404 and the public pages go through the edge cache (./edge-cache.ts);
+// (./assets.ts); scanner probes get a plain 404, a signed-out session read
+// gets `null` (./anonymous-session.ts), and the public pages go through the
+// edge cache (./edge-cache.ts);
 // the rest is the app. On staging, robots.txt disallows everything and every
 // response says noindex (./staging.ts).
 const worker = {
@@ -116,6 +120,9 @@ const worker = {
     if (robots) return robots;
     const probe = probeAnswer(request);
     if (probe) return probe;
+    // A signed-out visitor's session read is `null` without starting Next (./anonymous-session.ts).
+    const anonymous = anonymousSession(request);
+    if (anonymous) return anonymous;
     if (mayUseEdgeCache(request, new URL(env.SITE_URL).hostname)) {
       return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(edgeRequest(request, ASSETS));
     }
@@ -127,10 +134,12 @@ const worker = {
   // night's run started and finished (./night-watch.ts),
   // finishes people's grade requests that waited for Gemini 3.5 and makes the
   // image library's hourly batch (./library.ts); the weekly
-  // one is model watch (./model-watch.ts); the five-minute one is the
+  // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
-    if (controller.cron === PEOPLE_QUEUE_CRON) {
+    // Staging's less frequent crons run the same jobs (./crons.ts).
+    const cron = jobCron(controller.cron);
+    if (cron === PEOPLE_QUEUE_CRON) {
       // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
       // Sentry and the log, and the rest still run this hour.
       const at = controller.scheduledTime;
@@ -158,8 +167,13 @@ const worker = {
         }
       );
     }
-    else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
-    else if (controller.cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
+    else if (cron === MODEL_WATCH_CRON) {
+      // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).
+      // First, since it never throws, so a model-watch failure can't skip it.
+      await goalsTick(env as NightEnv, controller.scheduledTime);
+      await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+    }
+    else if (cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };

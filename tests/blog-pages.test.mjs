@@ -64,6 +64,38 @@ test("a published post: the article, its AI note, sources, JSON-LD and images; t
   assert.equal((await fetch(`${BASE}/blog/media/${p.id}/nope`)).status, 404);
 });
 
+/** The page's JSON-LD document. */
+function jsonLdOf(html) {
+  const m = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s);
+  assert.ok(m, "the page has JSON-LD");
+  return JSON.parse(m[1]);
+}
+
+test("a post's structured data: the owner as author, its real edit time and a breadcrumb trail", async () => {
+  // Published a month ago, outside the weekly publish cap the next test publishes under.
+  const p = await seed("published", { publishAt: Date.now() - 30 * 86400000 });
+  // Edited after it went live: dateModified and og:article:modified_time follow the edit.
+  const edited = new Date(Date.now() - 1000).toISOString();
+  await db.execute({ sql: "UPDATE posts SET updated_at = ? WHERE id = ?", args: [edited, p.id] });
+  const html = await (await fetch(`${BASE}/blog/${p.slug}`)).text();
+  const ld = jsonLdOf(html);
+  assert.equal(ld["@context"], "https://schema.org");
+  const post = ld["@graph"].find((n) => n["@type"] === "BlogPosting");
+  const crumbs = ld["@graph"].find((n) => n["@type"] === "BreadcrumbList");
+  assert.equal(post.author["@type"], "Person");
+  assert.equal(post.author.name, "Nathan Watkins");
+  assert.equal(post.publisher["@type"], "Organization");
+  assert.equal(post.dateModified, edited);
+  assert.ok(Date.parse(post.datePublished) < Date.parse(post.dateModified));
+  assert.match(post.url, new RegExp(`/blog/${p.slug}$`));
+  assert.deepEqual(
+    crumbs.itemListElement.map((c) => [c.position, c.name]),
+    [[1, "PortfolioRank"], [2, "Blog"], [3, p.title]]
+  );
+  assert.equal(crumbs.itemListElement[2].item, post.url);
+  assert.ok(html.includes(`<meta property="article:modified_time" content="${edited}"`));
+});
+
 test("a draft is a 404 for the public, a preview for the admin, who publishes it", async () => {
   const p = await seed("draft");
   assert.equal((await fetch(`${BASE}/blog/${p.slug}`)).status, 404);
