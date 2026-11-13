@@ -1,0 +1,484 @@
+{
+ "kind": "top-grades",
+ "ready": true,
+ "headline": "What the AI grader rewards, and what it marks down",
+ "angle": "Compare the AI judge's scores on each axis for portfolios graded A or higher (the top 15%) with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
+ "dataAsOf": "2026-11-13T02:12:10.196Z",
+ "dataLink": "https://portfoliorank.n8builds.dev/top",
+ "facts": [
+  {
+   "id": "f1",
+   "label": "Portfolios graded by the AI judge",
+   "value": 1369,
+   "display": "1,369",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f2",
+   "label": "Share of all graded portfolios that are graded A or higher",
+   "value": 0.14974433893352812,
+   "display": "15%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z",
+   "scope": {
+    "need": "graded|all portfolios|every portfolio|everyone",
+    "avoid": "of (?:the )?(?:top|best|leading) (?:portfolios|sites)"
+   }
+  },
+  {
+   "id": "f3",
+   "label": "Portfolios graded SSS, the top tier (the top 3)",
+   "value": 3,
+   "display": "3",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f4",
+   "label": "Average visual design score (1 to 5) of portfolios graded A or higher",
+   "value": 4.9609756097560975,
+   "display": "5.0",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f5",
+   "label": "Average visual design score (1 to 5) of all other graded portfolios",
+   "value": 3.359106529209622,
+   "display": "3.4",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f6",
+   "label": "Average the five-second test score (1 to 5) of portfolios graded A or higher",
+   "value": 4.975609756097561,
+   "display": "5.0",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f7",
+   "label": "Average the five-second test score (1 to 5) of all other graded portfolios",
+   "value": 4.524054982817869,
+   "display": "4.5",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f8",
+   "label": "Average project storytelling score (1 to 5) of portfolios graded A or higher",
+   "value": 3.9902439024390244,
+   "display": "4.0",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f9",
+   "label": "Average project storytelling score (1 to 5) of all other graded portfolios",
+   "value": 2.22766323024055,
+   "display": "2.2",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f10",
+   "label": "Average writing score (1 to 5) of portfolios graded A or higher",
+   "value": 4.902439024390244,
+   "display": "4.9",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f11",
+   "label": "Average writing score (1 to 5) of all other graded portfolios",
+   "value": 3.4579037800687287,
+   "display": "3.5",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f12",
+   "label": "Average memorability score (1 to 5) of portfolios graded A or higher",
+   "value": 4.248780487804878,
+   "display": "4.2",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f13",
+   "label": "Average memorability score (1 to 5) of all other graded portfolios",
+   "value": 2.56872852233677,
+   "display": "2.6",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f14",
+   "label": "Average motion score (1 to 5) of portfolios graded A or higher",
+   "value": 2.478048780487805,
+   "display": "2.5",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f15",
+   "label": "Average motion score (1 to 5) of all other graded portfolios",
+   "value": 1.7199312714776633,
+   "display": "1.7",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f16",
+   "label": "The axis where portfolios graded A or higher lead the rest by the most",
+   "value": "project storytelling",
+   "display": "project storytelling",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f17",
+   "label": "The biggest lead, in points on a 1 to 5 scale",
+   "value": 1.7625806721984745,
+   "display": "1.8 points",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f18",
+   "label": "Number of axes sharing the biggest lead",
+   "value": 1,
+   "display": "1",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f19",
+   "label": "The axis where the gap is smallest",
+   "value": "the five-second test",
+   "display": "the five-second test",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f20",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) is graded",
+   "value": "SSS",
+   "display": "SSS",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f21",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing and memorability",
+   "value": 5,
+   "display": "visual design, the five-second test, project storytelling, writing and memorability",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f22",
+   "label": "Marcus Sánchez (marcuss.pro) is graded",
+   "value": "SSS",
+   "display": "SSS",
+   "tone": "positive",
+   "about": "https://marcuss.pro",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f23",
+   "label": "Marcus Sánchez (marcuss.pro) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing and memorability",
+   "value": 5,
+   "display": "visual design, the five-second test, project storytelling, writing and memorability",
+   "tone": "positive",
+   "about": "https://marcuss.pro",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f24",
+   "label": "Tanay Shah (tanayshah.dev) is graded",
+   "value": "SSS",
+   "display": "SSS",
+   "tone": "positive",
+   "about": "https://tanayshah.dev",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f25",
+   "label": "Tanay Shah (tanayshah.dev) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing and memorability",
+   "value": 5,
+   "display": "visual design, the five-second test, project storytelling, writing and memorability",
+   "tone": "positive",
+   "about": "https://tanayshah.dev",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f26",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on visual design",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f27",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on the five-second test",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f28",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on project storytelling",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f29",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on writing",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f30",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on memorability",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  },
+  {
+   "id": "f31",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 3 out of 5 on motion",
+   "value": 3,
+   "display": "3",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:12:10.196Z"
+  }
+ ],
+ "charts": [
+  {
+   "id": "c1",
+   "title": "Average score by axis: portfolios graded A or higher against the rest",
+   "unit": "",
+   "max": 5,
+   "categories": [
+    "visual design",
+    "the five-second test",
+    "project storytelling",
+    "writing",
+    "memorability",
+    "motion"
+   ],
+   "series": [
+    {
+     "name": "Graded A or higher",
+     "facts": [
+      "f4",
+      "f6",
+      "f8",
+      "f10",
+      "f12",
+      "f14"
+     ]
+    },
+    {
+     "name": "Everyone else",
+     "facts": [
+      "f5",
+      "f7",
+      "f9",
+      "f11",
+      "f13",
+      "f15"
+     ]
+    }
+   ],
+   "alt": "Bar chart of the average AI score per axis, portfolios graded A or higher next to all others; the top group leads on every axis."
+  }
+ ],
+ "names": [
+  {
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com",
+   "domain": "malakavenu.com",
+   "reason": "graded SSS, one of the top 3"
+  },
+  {
+   "name": "Marcus Sánchez",
+   "url": "https://marcuss.pro",
+   "domain": "marcuss.pro",
+   "reason": "graded SSS, one of the top 3"
+  },
+  {
+   "name": "Tanay Shah",
+   "url": "https://tanayshah.dev",
+   "domain": "tanayshah.dev",
+   "reason": "graded SSS, one of the top 3"
+  }
+ ],
+ "screenshots": [
+  {
+   "url": "https://malakavenu.com",
+   "name": "Malaka Venugopal Reddy",
+   "shotKey": "2ac94d15ab783b67"
+  },
+  {
+   "url": "https://marcuss.pro",
+   "name": "Marcus Sánchez",
+   "shotKey": "16062680d9cb3208"
+  },
+  {
+   "url": "https://tanayshah.dev",
+   "name": "Tanay Shah",
+   "shotKey": "bcabaf8a7f39ddc3"
+  }
+ ],
+ "notable": [
+  {
+   "factIds": [
+    "f14",
+    "f15"
+   ],
+   "why": "motion is the lowest-scoring axis for every group: {{f14}} on average for portfolios graded A or higher against {{f15}} for the rest"
+  },
+  {
+   "factIds": [
+    "f16",
+    "f17"
+   ],
+   "why": "the biggest lead of portfolios graded A or higher is {{f17}} on {{f16}}"
+  }
+ ],
+ "superlatives": [
+  {
+   "term": "biggest lead",
+   "factIds": [
+    "f16",
+    "f17"
+   ],
+   "tied": false,
+   "tieFactId": "f18"
+  },
+  {
+   "term": "smallest gap",
+   "factIds": [
+    "f19"
+   ],
+   "tied": false,
+   "tieFactId": "f18"
+  },
+  {
+   "term": "lowest score",
+   "factIds": [
+    "f14",
+    "f15"
+   ],
+   "tied": false,
+   "tieFactId": null
+  }
+ ],
+ "examples": [
+  {
+   "axis": "visual design",
+   "factId": "f26",
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com"
+  },
+  {
+   "axis": "the five-second test",
+   "factId": "f27",
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com"
+  },
+  {
+   "axis": "project storytelling",
+   "factId": "f28",
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com"
+  },
+  {
+   "axis": "writing",
+   "factId": "f29",
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com"
+  },
+  {
+   "axis": "memorability",
+   "factId": "f30",
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com"
+  },
+  {
+   "axis": "motion",
+   "factId": "f31",
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com"
+  }
+ ]
+}

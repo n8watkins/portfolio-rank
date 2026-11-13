@@ -8,6 +8,7 @@ import { parseJsonc } from "../scripts/check-worker-exports.mjs";
 import { OLD_SITE_HOSTS, PRODUCTION_SITE_URL, SITE_URL, STAGING_SITE_URL, sitePath, siteUrl } from "../lib/site.ts";
 import { canonicalRedirect } from "../worker/canonical-host.ts";
 import { SITE_URL as CONTENT_SITE_URL } from "../pipeline/content/facts.mjs";
+import { SITE_ORIGIN as LINKS_SITE_URL } from "../lib/content/portfolio-links.mjs";
 
 const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
 const staging = config.env.staging;
@@ -18,6 +19,7 @@ test("each Worker's SITE_URL is the address its build uses, and AUTH_URL is gone
   assert.equal(staging.vars.SITE_URL, STAGING_SITE_URL);
   assert.equal(SITE_URL, PRODUCTION_SITE_URL, "a build without NEXT_PUBLIC_SITE_ENV is production's");
   assert.equal(CONTENT_SITE_URL, PRODUCTION_SITE_URL, "the content engine links the production site");
+  assert.equal(LINKS_SITE_URL, PRODUCTION_SITE_URL, "post links to our portfolio pages use the production site");
   assert.equal("AUTH_URL" in config.vars, false, "auth.ts gives SITE_URL to Auth.js");
   assert.equal("AUTH_URL" in staging.vars, false);
 });

@@ -68,15 +68,17 @@ export const Turnstile = forwardRef<
     /** The token expired or the widget failed: clear any stored token. */
     onExpire?: () => void;
     onError?: () => void;
+    /** Cloudflare wants the visitor to tick the box: the token comes only after they do. */
+    onInteractive?: () => void;
     className?: string;
   }
->(function Turnstile({ action, onToken, onExpire, onError, className = "" }, ref) {
+>(function Turnstile({ action, onToken, onExpire, onError, onInteractive, className = "" }, ref) {
   const box = useRef<HTMLDivElement>(null);
   const id = useRef<string | null>(null);
   // The latest callbacks, without re-rendering the widget when they change.
-  const cb = useRef({ onToken, onExpire, onError });
+  const cb = useRef({ onToken, onExpire, onError, onInteractive });
   useEffect(() => {
-    cb.current = { onToken, onExpire, onError };
+    cb.current = { onToken, onExpire, onError, onInteractive };
   });
 
   useImperativeHandle(ref, () => ({
@@ -100,6 +102,7 @@ export const Turnstile = forwardRef<
           theme: dark ? "dark" : "light",
           callback: (token: string) => cb.current.onToken(token),
           "expired-callback": () => cb.current.onExpire?.(),
+          "before-interactive-callback": () => cb.current.onInteractive?.(),
           "error-callback": () => {
             cb.current.onExpire?.();
             cb.current.onError?.();

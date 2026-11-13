@@ -7,7 +7,7 @@ import { addTopic, automationView, removeTopic, saveAutomation } from "@/lib/con
 // in ADMIN_GITHUB_ID only; the panel is on /admin/blog.
 //   GET  /api/admin/content/automation -> the panel's view
 //   POST /api/admin/content/automation
-//        { op: "save", settings: { enabled, mode, days, perWeek } }
+//        { op: "save", settings: { enabled, mode, days, perWeek, keepReady } }
 //        { op: "add-topic", topic } | { op: "remove-topic", id }
 //     -> the panel's view; 400 with a plain message when a change is refused
 //        (above the config's ceiling, a bad topic), 401, 403
