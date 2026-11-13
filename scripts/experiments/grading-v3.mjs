@@ -302,8 +302,13 @@ export function jobsFor(plan, seed) {
       jobs.push({ id: `v2:${run}:${u}`, kind: "v2", run, urls: [u] });
       jobs.push({ id: `v3:${run}:${u}`, kind: "v3", run, urls: [u] });
       jobs.push({ id: `rich:${run}:${u}`, kind: "rich", run, urls: [u] });
+      // Follow-up after A, B and C (not one of the pre-set rules): the
+      // audit's open question, thinking "low" against "minimal".
+      jobs.push({ id: `v3low:${run}:${u}`, kind: "v3low", run, urls: [u] });
     }
     b5[run - 1].forEach((batch, b) => jobs.push({ id: `b5:${run}:${b}`, kind: "b5", run, batch: b, urls: batch }));
+    // Follow-up: the same batches with thinking "low".
+    b5[run - 1].forEach((batch, b) => jobs.push({ id: `b5low:${run}:${b}`, kind: "b5low", run, batch: b, urls: batch }));
   }
   return { jobs, b5 };
 }
@@ -361,7 +366,11 @@ async function run({ db, OUT, MODEL, SEED, RPM, MAX_REQUESTS, DAY_CAP }) {
           ? buildV3Request(sites[0])
           : job.kind === "rich"
             ? buildV3Request(sites[0], { rich: true })
-            : buildV3BatchRequest(sites);
+            : job.kind === "v3low"
+              ? (({ parts, schema, options }) => ({ parts, schema, options: { ...options, thinkingLevel: "low", prompt: "grade-v3-think-low" } }))(buildV3Request(sites[0]))
+              : job.kind === "b5low"
+                ? (({ parts, schema, options }) => ({ parts, schema, options: { ...options, thinkingLevel: "low", prompt: "grade-v3-batch-think-low" } }))(buildV3BatchRequest(sites))
+                : buildV3BatchRequest(sites);
     const item = { ...job, at: new Date().toISOString(), prompt: req.options.prompt };
     try {
       const { result, usage } = await gemini.generate(req.parts, req.schema, req.options);
@@ -369,7 +378,7 @@ async function run({ db, OUT, MODEL, SEED, RPM, MAX_REQUESTS, DAY_CAP }) {
       item.raw = result;
       try {
         if (job.kind === "v2") item.grades = { [job.urls[0]]: parseRubricResponse(result) };
-        else if (job.kind === "b5") {
+        else if (job.kind === "b5" || job.kind === "b5low") {
           const p = parseV3BatchResponse(result, job.urls.length);
           const ids = batchIds(job.urls.length);
           item.grades = Object.fromEntries(Object.entries(p.grades).map(([id, g]) => [job.urls[ids.indexOf(id)], g]));
@@ -482,8 +491,8 @@ export function analyze(OUT) {
       ((axes[i.kind] ??= {})[i.run] ??= {})[u] = Object.fromEntries(AI_CRITERIA.map((c) => [c.id, g[c.id].score]));
     }
   }
-  const modes = ["v2", "v3", "b5", "rich"];
-  const label = { stored: "Production v2 (stored grade)", v2: "v2 solo", v3: "v3 solo", b5: "v3 batch of 5", rich: "v3 solo, richer evidence" };
+  const modes = ["v2", "v3", "b5", "rich", "v3low", "b5low"];
+  const label = { stored: "Production v2 (stored grade)", v2: "v2 solo", v3: "v3 solo", b5: "v3 batch of 5", rich: "v3 solo, richer evidence", v3low: "v3 solo, thinking low (follow-up)", b5low: "v3 batch of 5, thinking low (follow-up)" };
   const meanOf = (m) => Object.fromEntries(urls.map((u) => {
     const xs = [1, 2].map((r) => q[m]?.[r]?.[u]).filter((x) => typeof x === "number");
     return [u, xs.length ? mean(xs) : null];
@@ -576,7 +585,7 @@ export function analyze(OUT) {
     const p2 = us.map((u) => sp.find((r) => r.url === u).place);
     res.key_consistency = { n: us.length, spearman: spearman(p1.map((x) => -x), p2.map((x) => -x)), kendall: kendall(p1.map((x) => -x), p2.map((x) => -x)), max_place_move: Math.max(...us.map((_, i) => Math.abs(p1[i] - p2[i]))) };
     // The models on the same 15, for scale.
-    res.key_consistency.models_on_same = Object.fromEntries(["v2", "v3", "b5", "rich"].filter((m) => q[m]).map((m) => {
+    res.key_consistency.models_on_same = Object.fromEntries(["v2", "v3", "b5", "rich", "v3low", "b5low"].filter((m) => q[m]).map((m) => {
       const v = meanOf(m);
       return [m, spearman(us.map((u) => v[u]), us.map((u) => keyScore[u]))];
     }));

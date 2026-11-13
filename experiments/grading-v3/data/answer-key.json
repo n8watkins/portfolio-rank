@@ -322,5 +322,100 @@
    "https://www.adityakr.com",
    "https://www.lexnguyen.dev"
   ]
- ]
+ ],
+ "second_pass": {
+  "method": "A fresh-context instance of the same model (Claude Opus 5.5, general-purpose agent) ranked 15 randomly chosen sites (seed 2026), shown in a new shuffled order under new labels, with the same sheets and criteria and no access to the first pass.",
+  "ranking": [
+   {
+    "place": 1,
+    "url": "https://aggelosladas.com",
+    "score": 78,
+    "reason": "Clean and clear backend/Android identity, an inventive API-console hero, and real projects with specific stack, role details and source links."
+   },
+   {
+    "place": 2,
+    "url": "https://andresilva.tech",
+    "score": 76,
+    "reason": "Minimal and readable, says who he is right away, and shows unusual real projects like an AI agent and a C language, with source and live links."
+   },
+   {
+    "place": 3,
+    "url": "https://www.osallak.tech",
+    "score": 71,
+    "reason": "Strong project write-ups with metrics such as 45% lower inference cost, but a generic neon template and a typing effect that cuts text off."
+   },
+   {
+    "place": 4,
+    "url": "https://batrasamarth.com",
+    "score": 70,
+    "reason": "Memorable desktop-OS concept with strong Amazon and Leidos experience, but overlapping windows hide content on first view."
+   },
+   {
+    "place": 5,
+    "url": "https://abhishek-kumar-t.vercel.app",
+    "score": 68,
+    "reason": "Polished terminal theme with a quantified spam-detection project and a contribution graph; 'aspiring' framing and thin other projects weaken it."
+   },
+   {
+    "place": 6,
+    "url": "https://abdulrehmanwaseem.me",
+    "score": 65,
+    "reason": "Polished, dense profile page, but leaked CSS class text, a role that differs between views and a contact-card focus push projects down."
+   },
+   {
+    "place": 7,
+    "url": "https://www.hafidziti.dev",
+    "score": 62,
+    "reason": "Clear senior front-end pitch with IBM and Eaton work, but 'projects' are job cards buried in tech-icon lists, and the styling looks dated."
+   },
+   {
+    "place": 8,
+    "url": "https://sambhusbabu.com",
+    "score": 60,
+    "reason": "Slick, with a clear ERPNext niche, but reads as SEO freelance marketing with little project proof; a chat bubble overlaps the phone CTA."
+   },
+   {
+    "place": 9,
+    "url": "https://althruist.fyi",
+    "score": 59,
+    "reason": "Charming and memorable game-dev identity, but project cards show only images, and a floating logo covers the heading on phone."
+   },
+   {
+    "place": 10,
+    "url": "https://www.pavangupta.in",
+    "score": 55,
+    "reason": "Competent but generic terminal-gradient template with stock projects like a QR generator and a Pokedex; descriptions are vague and truncated."
+   },
+   {
+    "place": 11,
+    "url": "https://www.mariokandut.com",
+    "score": 52,
+    "reason": "Clear consulting pitch but a dated look; the cookie banner covers content on desktop and phone, and no projects show early."
+   },
+   {
+    "place": 12,
+    "url": "https://ashleighsimonelli.co.uk",
+    "score": 48,
+    "reason": "Highly memorable retro CRT and Blockbuster concept, but an intro gate and nostalgia content hide who she is and what she builds."
+   },
+   {
+    "place": 13,
+    "url": "https://asfakur-portfolio-nextjs.vercel.app",
+    "score": 45,
+    "reason": "Role contradicts itself (UI/UX Designer vs Full Stack), cramped justified timeline text, repeated job descriptions, and overlays on phone."
+   },
+   {
+    "place": 14,
+    "url": "https://www.pawaret.dev",
+    "score": 43,
+    "reason": "Desktop hero gives no role, only a generic bio and a joke quote; skills icon grids stand in for project substance."
+   },
+   {
+    "place": 15,
+    "url": "https://sameer27.netlify.app",
+    "score": 25,
+    "reason": "Nearly empty page with only a one-line generic tagline, no visible projects, and the name overflowing the phone screen."
+   }
+  ]
+ }
 }

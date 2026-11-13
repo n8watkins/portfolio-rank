@@ -1,0 +1,1954 @@
+{
+ "modes": {
+  "stored": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.7489710993201694,
+     "kendall": 0.5850766355423249,
+     "top10": 8,
+     "bottom10": 7
+    }
+   }
+  },
+  "v2": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.7539063499231637,
+     "kendall": 0.5872488019928761,
+     "top10": 5,
+     "bottom10": 6
+    },
+    "2": {
+     "n": 40,
+     "spearman": 0.7847270230595648,
+     "kendall": 0.6254336928489939,
+     "top10": 7,
+     "bottom10": 8
+    }
+   },
+   "mean_of_runs": {
+    "n": 40,
+    "spearman": 0.8112590373343171,
+    "kendall": 0.6424584487726007,
+    "top10": 6,
+    "bottom10": 7
+   },
+   "mean_spearman": 0.7693166864913643,
+   "mean_kendall": 0.606341247420935,
+   "spearman_gap": 0.030820673136401022,
+   "retest": {
+    "n": 40,
+    "spearman": 0.8889267591362391,
+    "mean_abs_diff": 0.12999999999999998,
+    "axis_exact": 0.865
+   },
+   "spread": {
+    "visual_design": {
+     "fives": 0.3875,
+     "mean": 4.175,
+     "dist": [
+      1,
+      4,
+      6,
+      38,
+      31
+     ]
+    },
+    "five_second_test": {
+     "fives": 0.8,
+     "mean": 4.7125,
+     "dist": [
+      1,
+      1,
+      2,
+      12,
+      64
+     ]
+    },
+    "storytelling": {
+     "fives": 0.05,
+     "mean": 3.5375,
+     "dist": [
+      4,
+      5,
+      19,
+      48,
+      4
+     ]
+    },
+    "writing": {
+     "fives": 0.4125,
+     "mean": 4.1875,
+     "dist": [
+      2,
+      4,
+      4,
+      37,
+      33
+     ]
+    },
+    "memorability": {
+     "fives": 0.2,
+     "mean": 3.8125,
+     "dist": [
+      4,
+      5,
+      9,
+      46,
+      16
+     ]
+    }
+   },
+   "quality_sd": 0.7593572528790387,
+   "quality_range": [
+    1,
+    5
+   ]
+  },
+  "v3": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.7345579294999389,
+     "kendall": 0.5605416463932592,
+     "top10": 7,
+     "bottom10": 7
+    },
+    "2": {
+     "n": 40,
+     "spearman": 0.7472275447177255,
+     "kendall": 0.5659854859796056,
+     "top10": 6,
+     "bottom10": 6
+    }
+   },
+   "mean_of_runs": {
+    "n": 40,
+    "spearman": 0.7672728548012411,
+    "kendall": 0.5861494375467577,
+    "top10": 7,
+    "bottom10": 7
+   },
+   "mean_spearman": 0.7408927371088322,
+   "mean_kendall": 0.5632635661864325,
+   "spearman_gap": 0.012669615217786534,
+   "retest": {
+    "n": 40,
+    "spearman": 0.8508606166951471,
+    "mean_abs_diff": 0.26124999999999987,
+    "axis_exact": 0.76
+   },
+   "spread": {
+    "visual_design": {
+     "fives": 0.525,
+     "mean": 4.4125,
+     "dist": [
+      0,
+      3,
+      3,
+      32,
+      42
+     ]
+    },
+    "five_second_test": {
+     "fives": 0.725,
+     "mean": 4.625,
+     "dist": [
+      0,
+      1,
+      6,
+      15,
+      58
+     ]
+    },
+    "storytelling": {
+     "fives": 0.1875,
+     "mean": 3.7125,
+     "dist": [
+      4,
+      2,
+      22,
+      37,
+      15
+     ]
+    },
+    "writing": {
+     "fives": 0.4125,
+     "mean": 4.175,
+     "dist": [
+      0,
+      3,
+      13,
+      31,
+      33
+     ]
+    },
+    "memorability": {
+     "fives": 0.3875,
+     "mean": 4.0625,
+     "dist": [
+      0,
+      4,
+      18,
+      27,
+      31
+     ]
+    }
+   },
+   "quality_sd": 0.6703587542316428,
+   "quality_range": [
+    2.05,
+    5
+   ]
+  },
+  "b5": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.7332911755254642,
+     "kendall": 0.5569698237924426,
+     "top10": 7,
+     "bottom10": 8
+    },
+    "2": {
+     "n": 40,
+     "spearman": 0.7020762254189548,
+     "kendall": 0.5221219551334618,
+     "top10": 5,
+     "bottom10": 7
+    }
+   },
+   "mean_of_runs": {
+    "n": 40,
+    "spearman": 0.7536985705745168,
+    "kendall": 0.5751604164330975,
+    "top10": 8,
+    "bottom10": 7
+   },
+   "mean_spearman": 0.7176837004722094,
+   "mean_kendall": 0.5395458894629522,
+   "spearman_gap": 0.03121495010650943,
+   "retest": {
+    "n": 40,
+    "spearman": 0.7381874505036751,
+    "mean_abs_diff": 0.3737500000000001,
+    "axis_exact": 0.57
+   },
+   "spread": {
+    "visual_design": {
+     "fives": 0.4125,
+     "mean": 4.15,
+     "dist": [
+      0,
+      3,
+      15,
+      29,
+      33
+     ]
+    },
+    "five_second_test": {
+     "fives": 0.525,
+     "mean": 4.425,
+     "dist": [
+      0,
+      0,
+      8,
+      30,
+      42
+     ]
+    },
+    "storytelling": {
+     "fives": 0.125,
+     "mean": 3.55,
+     "dist": [
+      3,
+      4,
+      29,
+      34,
+      10
+     ]
+    },
+    "writing": {
+     "fives": 0.325,
+     "mean": 4.0625,
+     "dist": [
+      0,
+      4,
+      13,
+      37,
+      26
+     ]
+    },
+    "memorability": {
+     "fives": 0.325,
+     "mean": 3.925,
+     "dist": [
+      0,
+      8,
+      16,
+      30,
+      26
+     ]
+    }
+   },
+   "quality_sd": 0.7052257506465572,
+   "quality_range": [
+    2.15,
+    5
+   ]
+  },
+  "rich": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.7114804636380402,
+     "kendall": 0.5536172770703719,
+     "top10": 7,
+     "bottom10": 7
+    },
+    "2": {
+     "n": 40,
+     "spearman": 0.7318277408342282,
+     "kendall": 0.5580984222109746,
+     "top10": 6,
+     "bottom10": 7
+    }
+   },
+   "mean_of_runs": {
+    "n": 40,
+    "spearman": 0.7310366312551523,
+    "kendall": 0.5562970660127691,
+    "top10": 6,
+    "bottom10": 7
+   },
+   "mean_spearman": 0.7216541022361342,
+   "mean_kendall": 0.5558578496406732,
+   "spearman_gap": 0.020347277196188007,
+   "retest": {
+    "n": 40,
+    "spearman": 0.8267954298996881,
+    "mean_abs_diff": 0.21625,
+    "axis_exact": 0.745
+   },
+   "spread": {
+    "visual_design": {
+     "fives": 0.4625,
+     "mean": 4.3875,
+     "dist": [
+      0,
+      1,
+      4,
+      38,
+      37
+     ]
+    },
+    "five_second_test": {
+     "fives": 0.725,
+     "mean": 4.6125,
+     "dist": [
+      0,
+      2,
+      5,
+      15,
+      58
+     ]
+    },
+    "storytelling": {
+     "fives": 0.225,
+     "mean": 3.725,
+     "dist": [
+      4,
+      2,
+      24,
+      32,
+      18
+     ]
+    },
+    "writing": {
+     "fives": 0.3125,
+     "mean": 4.1125,
+     "dist": [
+      0,
+      3,
+      10,
+      42,
+      25
+     ]
+    },
+    "memorability": {
+     "fives": 0.275,
+     "mean": 4.0125,
+     "dist": [
+      0,
+      3,
+      15,
+      40,
+      22
+     ]
+    }
+   },
+   "quality_sd": 0.5948342074687704,
+   "quality_range": [
+    2.55,
+    5
+   ]
+  },
+  "v3low": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.7742705698452461,
+     "kendall": 0.6119670698846602,
+     "top10": 8,
+     "bottom10": 7
+    },
+    "2": {
+     "n": 40,
+     "spearman": 0.7436803659423521,
+     "kendall": 0.5806510577796882,
+     "top10": 8,
+     "bottom10": 6
+    }
+   },
+   "mean_of_runs": {
+    "n": 40,
+    "spearman": 0.7668045722476029,
+    "kendall": 0.6054582020790138,
+    "top10": 7,
+    "bottom10": 7
+   },
+   "mean_spearman": 0.7589754678937991,
+   "mean_kendall": 0.5963090638321742,
+   "spearman_gap": 0.03059020390289402,
+   "retest": {
+    "n": 40,
+    "spearman": 0.9442561372717528,
+    "mean_abs_diff": 0.13999999999999999,
+    "axis_exact": 0.855
+   },
+   "spread": {
+    "visual_design": {
+     "fives": 0.425,
+     "mean": 4.375,
+     "dist": [
+      0,
+      0,
+      4,
+      42,
+      34
+     ]
+    },
+    "five_second_test": {
+     "fives": 0.7125,
+     "mean": 4.6375,
+     "dist": [
+      0,
+      0,
+      6,
+      17,
+      57
+     ]
+    },
+    "storytelling": {
+     "fives": 0.1375,
+     "mean": 3.575,
+     "dist": [
+      2,
+      4,
+      31,
+      32,
+      11
+     ]
+    },
+    "writing": {
+     "fives": 0.3125,
+     "mean": 4.15,
+     "dist": [
+      0,
+      1,
+      11,
+      43,
+      25
+     ]
+    },
+    "memorability": {
+     "fives": 0.2125,
+     "mean": 3.9,
+     "dist": [
+      0,
+      3,
+      19,
+      41,
+      17
+     ]
+    }
+   },
+   "quality_sd": 0.5602329314669033,
+   "quality_range": [
+    2.7,
+    5
+   ]
+  },
+  "b5low": {
+   "runs": {
+    "1": {
+     "n": 40,
+     "spearman": 0.8085921302053571,
+     "kendall": 0.6363365187826067,
+     "top10": 7,
+     "bottom10": 7
+    },
+    "2": {
+     "n": 40,
+     "spearman": 0.7388208272017096,
+     "kendall": 0.5722301972873367,
+     "top10": 5,
+     "bottom10": 7
+    }
+   },
+   "mean_of_runs": {
+    "n": 40,
+    "spearman": 0.8047865738284349,
+    "kendall": 0.6305715446420824,
+    "top10": 8,
+    "bottom10": 7
+   },
+   "mean_spearman": 0.7737064787035334,
+   "mean_kendall": 0.6042833580349717,
+   "spearman_gap": 0.06977130300364753,
+   "retest": {
+    "n": 40,
+    "spearman": 0.9091637281971028,
+    "mean_abs_diff": 0.28499999999999986,
+    "axis_exact": 0.62
+   },
+   "spread": {
+    "visual_design": {
+     "fives": 0.375,
+     "mean": 4.0875,
+     "dist": [
+      0,
+      5,
+      13,
+      32,
+      30
+     ]
+    },
+    "five_second_test": {
+     "fives": 0.4875,
+     "mean": 4.3125,
+     "dist": [
+      0,
+      1,
+      12,
+      28,
+      39
+     ]
+    },
+    "storytelling": {
+     "fives": 0.1,
+     "mean": 3.5125,
+     "dist": [
+      4,
+      2,
+      31,
+      35,
+      8
+     ]
+    },
+    "writing": {
+     "fives": 0.2625,
+     "mean": 3.9875,
+     "dist": [
+      0,
+      6,
+      10,
+      43,
+      21
+     ]
+    },
+    "memorability": {
+     "fives": 0.2625,
+     "mean": 3.725,
+     "dist": [
+      1,
+      11,
+      18,
+      29,
+      21
+     ]
+    }
+   },
+   "quality_sd": 0.7222577448529022,
+   "quality_range": [
+    1.85,
+    5
+   ]
+  }
+ },
+ "rules": {
+  "A": "v3 passes when its mean Spearman with the answer key (over its 2 runs) is higher than v2's, and its run-1 vs run-2 Spearman is no more than 0.05 below v2's.",
+  "B": "Batches of 5 pass when (1) the mean per-site distance between a batch grade and a solo grade (quality, 1-5) is no more than solo-vs-solo distance + 0.05, and (2) the batch runs' mean Spearman with the key is no more than max(0.03, the gap between the two solo runs' Spearman) below the solo runs' mean.",
+  "C": "Richer evidence passes when its mean Spearman with the key is higher than v3 solo's by more than the gap between v3 solo's two runs (so the gain is larger than run-to-run noise), and its Kendall tau is higher too."
+ },
+ "verdicts": {
+  "A": {
+   "pass": false,
+   "better": false,
+   "steady": true,
+   "boot": {
+    "mean": -0.04362167643326983,
+    "lo": -0.1300407471551781,
+    "hi": 0.03509182611136097,
+    "p_gt0": 0.181
+   }
+  },
+  "B": {
+   "pass": false,
+   "drift_ok": false,
+   "agree_ok": true,
+   "solo_vs_solo": 0.26124999999999987,
+   "batch_vs_solo": 0.3431249999999999,
+   "mean_shift": -0.1900000000000001,
+   "tolerance": 0.03,
+   "order_pairs_like_key": 0.83125,
+   "batch_scores_pairs_like_key": 0.803125,
+   "solo_scores_pairs_like_key": 0.784375,
+   "position": [
+    {
+     "shown": 1,
+     "mean_offset": -0.1640625000000001,
+     "ordered_first": 2,
+     "n": 16
+    },
+    {
+     "shown": 2,
+     "mean_offset": -0.30312500000000003,
+     "ordered_first": 5,
+     "n": 16
+    },
+    {
+     "shown": 3,
+     "mean_offset": -0.27500000000000024,
+     "ordered_first": 2,
+     "n": 16
+    },
+    {
+     "shown": 4,
+     "mean_offset": -0.1453125,
+     "ordered_first": 6,
+     "n": 16
+    },
+    {
+     "shown": 5,
+     "mean_offset": -0.062499999999999944,
+     "ordered_first": 1,
+     "n": 16
+    }
+   ]
+  },
+  "C": {
+   "pass": false,
+   "gain": -0.019238634872697946,
+   "noise": 0.012669615217786534,
+   "boot": {
+    "mean": -0.03542029537022787,
+    "lo": -0.13651330914579252,
+    "hi": 0.0669422549246681,
+    "p_gt0": 0.27475
+   }
+  }
+ },
+ "key_consistency": {
+  "n": 15,
+  "spearman": 0.6964285714285714,
+  "kendall": 0.5238095238095238,
+  "max_place_move": 6,
+  "models_on_same": {
+   "v2": 0.7906989396148442,
+   "v3": 0.7703309599688514,
+   "b5": 0.6112602977015016,
+   "rich": 0.5433424868457791,
+   "v3low": 0.6863273518051948,
+   "b5low": 0.5308313111618302
+  }
+ },
+ "sites": [
+  {
+   "url": "https://dhruvjs.com",
+   "name": "Dhruv Parmar",
+   "key_place": 2,
+   "stored_quality": 5,
+   "v2": [
+    4.75,
+    4.75
+   ],
+   "v3": [
+    5,
+    5
+   ],
+   "b5": [
+    4.6,
+    4.75
+   ],
+   "rich": [
+    5,
+    5
+   ],
+   "v3low": [
+    5,
+    5
+   ],
+   "b5low": [
+    4.75,
+    4.75
+   ]
+  },
+  {
+   "url": "https://deveshchandan.me",
+   "name": "Devesh Chandan",
+   "key_place": 5,
+   "stored_quality": 4.9,
+   "v2": [
+    4.5,
+    4.5
+   ],
+   "v3": [
+    4.65,
+    4.75
+   ],
+   "b5": [
+    4.65,
+    4.6
+   ],
+   "rich": [
+    5,
+    5
+   ],
+   "v3low": [
+    4.65,
+    5
+   ],
+   "b5low": [
+    5,
+    4.5
+   ]
+  },
+  {
+   "url": "https://zalt.me",
+   "name": "Mahmoud Zalt",
+   "key_place": 13,
+   "stored_quality": 5,
+   "v2": [
+    5,
+    5
+   ],
+   "v3": [
+    5,
+    5
+   ],
+   "b5": [
+    4.75,
+    4.75
+   ],
+   "rich": [
+    5,
+    4.6
+   ],
+   "v3low": [
+    4.6,
+    4.6
+   ],
+   "b5low": [
+    5,
+    5
+   ]
+  },
+  {
+   "url": "https://custard.top/en",
+   "name": "Custard",
+   "key_place": 1,
+   "stored_quality": 5,
+   "v2": [
+    5,
+    5
+   ],
+   "v3": [
+    5,
+    5
+   ],
+   "b5": [
+    5,
+    4.8
+   ],
+   "rich": [
+    5,
+    5
+   ],
+   "v3low": [
+    5,
+    4.75
+   ],
+   "b5low": [
+    5,
+    4.8
+   ]
+  },
+  {
+   "url": "https://antonmanaev.name",
+   "name": "Anton Manaev",
+   "key_place": 29,
+   "stored_quality": 4.75,
+   "v2": [
+    4.5,
+    4.75
+   ],
+   "v3": [
+    4.75,
+    4.6
+   ],
+   "b5": [
+    4.75,
+    4.6
+   ],
+   "rich": [
+    5,
+    4.5
+   ],
+   "v3low": [
+    4.5,
+    4.5
+   ],
+   "b5low": [
+    4.75,
+    4.6
+   ]
+  },
+  {
+   "url": "https://thony32.tech",
+   "name": "Anthony MAHEFASOA",
+   "key_place": 8,
+   "stored_quality": 4.75,
+   "v2": [
+    4.6,
+    4.75
+   ],
+   "v3": [
+    5,
+    5
+   ],
+   "b5": [
+    5,
+    5
+   ],
+   "rich": [
+    4.2,
+    5
+   ],
+   "v3low": [
+    5,
+    5
+   ],
+   "b5low": [
+    4.5,
+    4.6
+   ]
+  },
+  {
+   "url": "https://jos.gg",
+   "name": "Barnav Mitra Jos",
+   "key_place": 3,
+   "stored_quality": 4.75,
+   "v2": [
+    4.75,
+    4.75
+   ],
+   "v3": [
+    4.75,
+    4.45
+   ],
+   "b5": [
+    4.1,
+    4.7
+   ],
+   "rich": [
+    4.75,
+    4.85
+   ],
+   "v3low": [
+    4.75,
+    4.45
+   ],
+   "b5low": [
+    5,
+    4.75
+   ]
+  },
+  {
+   "url": "https://batrasamarth.com",
+   "name": "Samarth Batra",
+   "key_place": 15,
+   "stored_quality": 4.75,
+   "v2": [
+    4.75,
+    4.75
+   ],
+   "v3": [
+    4.3,
+    4.75
+   ],
+   "b5": [
+    3.6,
+    3.25
+   ],
+   "rich": [
+    4.35,
+    4.35
+   ],
+   "v3low": [
+    4.45,
+    4.45
+   ],
+   "b5low": [
+    3.8,
+    2.85
+   ]
+  },
+  {
+   "url": "https://www.vishvajeetshukla.in",
+   "name": "Vishvajeet Shukla",
+   "key_place": 7,
+   "stored_quality": 4.65,
+   "v2": [
+    4.75,
+    4.65
+   ],
+   "v3": [
+    5,
+    5
+   ],
+   "b5": [
+    5,
+    4.3
+   ],
+   "rich": [
+    4.65,
+    4.4
+   ],
+   "v3low": [
+    5,
+    5
+   ],
+   "b5low": [
+    4.75,
+    5
+   ]
+  },
+  {
+   "url": "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+   "name": "Rajwardhan Patil",
+   "key_place": 20,
+   "stored_quality": 4.65,
+   "v2": [
+    3.9,
+    3.75
+   ],
+   "v3": [
+    3.45,
+    3.7
+   ],
+   "b5": [
+    3.9,
+    3.8
+   ],
+   "rich": [
+    3.55,
+    3.8
+   ],
+   "v3low": [
+    3.55,
+    3.45
+   ],
+   "b5low": [
+    3.45,
+    3.7
+   ]
+  },
+  {
+   "url": "https://maveeshah.github.io/projects.html",
+   "name": "Ameer Muavia Shah",
+   "key_place": 4,
+   "stored_quality": 4.65,
+   "v2": [
+    4.45,
+    4.45
+   ],
+   "v3": [
+    4.25,
+    4.25
+   ],
+   "b5": [
+    4.45,
+    4.8
+   ],
+   "rich": [
+    4.25,
+    4.25
+   ],
+   "v3low": [
+    3.8,
+    3.95
+   ],
+   "b5low": [
+    4.25,
+    4.3
+   ]
+  },
+  {
+   "url": "https://abhishek-kumar-t.vercel.app",
+   "name": "Abhishek Kumar T",
+   "key_place": 30,
+   "stored_quality": 4.6,
+   "v2": [
+    4.25,
+    3.95
+   ],
+   "v3": [
+    4.2,
+    4.2
+   ],
+   "b5": [
+    4.35,
+    4
+   ],
+   "rich": [
+    4.35,
+    4.2
+   ],
+   "v3low": [
+    4.2,
+    4.2
+   ],
+   "b5low": [
+    4,
+    4.3
+   ]
+  },
+  {
+   "url": "https://www.pavangupta.in",
+   "name": "Pavan Gupta",
+   "key_place": 25,
+   "stored_quality": 4.5,
+   "v2": [
+    4.2,
+    4.2
+   ],
+   "v3": [
+    4.1,
+    4.1
+   ],
+   "b5": [
+    3.85,
+    4
+   ],
+   "rich": [
+    4.1,
+    4.2
+   ],
+   "v3low": [
+    4.2,
+    4.2
+   ],
+   "b5low": [
+    3.85,
+    4.1
+   ]
+  },
+  {
+   "url": "https://ashutoshdash.in",
+   "name": "Ashutosh Dash",
+   "key_place": 9,
+   "stored_quality": 4.35,
+   "v2": [
+    4.2,
+    4.65
+   ],
+   "v3": [
+    4.6,
+    4.75
+   ],
+   "b5": [
+    4.75,
+    4.6
+   ],
+   "rich": [
+    4.45,
+    4.35
+   ],
+   "v3low": [
+    4.25,
+    4.5
+   ],
+   "b5low": [
+    4.75,
+    4.2
+   ]
+  },
+  {
+   "url": "https://alilinares.com",
+   "name": "Ali Linares",
+   "key_place": 11,
+   "stored_quality": 4.65,
+   "v2": [
+    4.65,
+    4.65
+   ],
+   "v3": [
+    4.65,
+    4.2
+   ],
+   "b5": [
+    3.75,
+    4.65
+   ],
+   "rich": [
+    4.9,
+    4.9
+   ],
+   "v3low": [
+    4.5,
+    4.5
+   ],
+   "b5low": [
+    3.9,
+    4.5
+   ]
+  },
+  {
+   "url": "https://sambhusbabu.com",
+   "name": "Sambhu Babu",
+   "key_place": 22,
+   "stored_quality": 4.4,
+   "v2": [
+    4,
+    4.1
+   ],
+   "v3": [
+    3.7,
+    4.25
+   ],
+   "b5": [
+    3.45,
+    4.25
+   ],
+   "rich": [
+    3.85,
+    4.25
+   ],
+   "v3low": [
+    3.7,
+    4.25
+   ],
+   "b5low": [
+    3.85,
+    4.25
+   ]
+  },
+  {
+   "url": "https://abdulrehmanwaseem.me",
+   "name": "Abdul Rehman Waseem",
+   "key_place": 12,
+   "stored_quality": 4.35,
+   "v2": [
+    4.2,
+    4.35
+   ],
+   "v3": [
+    4.6,
+    4
+   ],
+   "b5": [
+    4.75,
+    3.75
+   ],
+   "rich": [
+    4.35,
+    4.5
+   ],
+   "v3low": [
+    4.25,
+    4.25
+   ],
+   "b5low": [
+    4.35,
+    4
+   ]
+  },
+  {
+   "url": "https://aggelosladas.com",
+   "name": "Aggelos Ladas",
+   "key_place": 19,
+   "stored_quality": 4.2,
+   "v2": [
+    4.35,
+    4.35
+   ],
+   "v3": [
+    5,
+    4.75
+   ],
+   "b5": [
+    3.95,
+    5
+   ],
+   "rich": [
+    4.3,
+    4.85
+   ],
+   "v3low": [
+    4.2,
+    4.35
+   ],
+   "b5low": [
+    4.2,
+    4.6
+   ]
+  },
+  {
+   "url": "https://www.osallak.tech",
+   "name": "Oussama Sallak",
+   "key_place": 24,
+   "stored_quality": 4.2,
+   "v2": [
+    4.35,
+    4.2
+   ],
+   "v3": [
+    4.45,
+    5
+   ],
+   "b5": [
+    4.35,
+    5
+   ],
+   "rich": [
+    4.2,
+    4.9
+   ],
+   "v3low": [
+    4.75,
+    5
+   ],
+   "b5low": [
+    3.9,
+    4.6
+   ]
+  },
+  {
+   "url": "https://andresilva.tech",
+   "name": "Andre Nunes Da Silva",
+   "key_place": 14,
+   "stored_quality": 4.25,
+   "v2": [
+    4.2,
+    4.2
+   ],
+   "v3": [
+    4.2,
+    4.65
+   ],
+   "b5": [
+    4.35,
+    4.2
+   ],
+   "rich": [
+    4,
+    3.9
+   ],
+   "v3low": [
+    4.1,
+    4.1
+   ],
+   "b5low": [
+    3.85,
+    4.1
+   ]
+  },
+  {
+   "url": "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app",
+   "name": "Hussam Barqawi",
+   "key_place": 10,
+   "stored_quality": 4.65,
+   "v2": [
+    4.65,
+    4.65
+   ],
+   "v3": [
+    4.75,
+    4.65
+   ],
+   "b5": [
+    4.75,
+    4.5
+   ],
+   "rich": [
+    4.65,
+    4.75
+   ],
+   "v3low": [
+    4.75,
+    4.65
+   ],
+   "b5low": [
+    4.45,
+    4.5
+   ]
+  },
+  {
+   "url": "https://abhijeetbhale.github.io/Portfolio",
+   "name": "Abhijeet Bhale",
+   "key_place": 32,
+   "stored_quality": 4.2,
+   "v2": [
+    4.2,
+    4.2
+   ],
+   "v3": [
+    4.5,
+    3.8
+   ],
+   "b5": [
+    3.85,
+    4.3
+   ],
+   "rich": [
+    4.2,
+    4.5
+   ],
+   "v3low": [
+    3.75,
+    4
+   ],
+   "b5low": [
+    3.6,
+    3.75
+   ]
+  },
+  {
+   "url": "https://www.masabqurban.com",
+   "name": "Masab Qurban",
+   "key_place": 6,
+   "stored_quality": 4.2,
+   "v2": [
+    4.2,
+    4.2
+   ],
+   "v3": [
+    4.75,
+    4.65
+   ],
+   "b5": [
+    4.65,
+    4.5
+   ],
+   "rich": [
+    4.75,
+    4.65
+   ],
+   "v3low": [
+    4.65,
+    4.5
+   ],
+   "b5low": [
+    4.35,
+    4.5
+   ]
+  },
+  {
+   "url": "https://www.hafidziti.dev",
+   "name": "Hafid Ziti",
+   "key_place": 27,
+   "stored_quality": 4.1,
+   "v2": [
+    3.85,
+    3.85
+   ],
+   "v3": [
+    3.85,
+    3.7
+   ],
+   "b5": [
+    3.85,
+    3.15
+   ],
+   "rich": [
+    4.1,
+    4.1
+   ],
+   "v3low": [
+    3.85,
+    3.85
+   ],
+   "b5low": [
+    3.65,
+    3.4
+   ]
+  },
+  {
+   "url": "https://arkamahajan.in",
+   "name": "Arka Mahajan",
+   "key_place": 34,
+   "stored_quality": 4.2,
+   "v2": [
+    3.95,
+    3.95
+   ],
+   "v3": [
+    3.95,
+    3.8
+   ],
+   "b5": [
+    3.95,
+    4.2
+   ],
+   "rich": [
+    3.75,
+    3.6
+   ],
+   "v3low": [
+    3.95,
+    3.95
+   ],
+   "b5low": [
+    3.6,
+    3.7
+   ]
+  },
+  {
+   "url": "https://ashleighsimonelli.co.uk",
+   "name": "Aaryanna Simonelli",
+   "key_place": 23,
+   "stored_quality": 4.1,
+   "v2": [
+    3.9,
+    3.9
+   ],
+   "v3": [
+    4.2,
+    3.35
+   ],
+   "b5": [
+    3.25,
+    4.1
+   ],
+   "rich": [
+    3.05,
+    3.15
+   ],
+   "v3low": [
+    3.8,
+    3.55
+   ],
+   "b5low": [
+    3.15,
+    3.1
+   ]
+  },
+  {
+   "url": "https://althruist.fyi",
+   "name": "Althruist",
+   "key_place": 16,
+   "stored_quality": 3.95,
+   "v2": [
+    4.2,
+    3.95
+   ],
+   "v3": [
+    3.75,
+    4.5
+   ],
+   "b5": [
+    3.75,
+    3.95
+   ],
+   "rich": [
+    4.35,
+    3.75
+   ],
+   "v3low": [
+    4.1,
+    3.75
+   ],
+   "b5low": [
+    3.75,
+    3.95
+   ]
+  },
+  {
+   "url": "https://farhansegujja.com",
+   "name": "Farhan Segujja",
+   "key_place": 17,
+   "stored_quality": 4.2,
+   "v2": [
+    4.65,
+    4.65
+   ],
+   "v3": [
+    5,
+    5
+   ],
+   "b5": [
+    4.65,
+    5
+   ],
+   "rich": [
+    4.6,
+    4.7
+   ],
+   "v3low": [
+    4.9,
+    4.65
+   ],
+   "b5low": [
+    4.75,
+    4.75
+   ]
+  },
+  {
+   "url": "https://nikhilkumawat.netlify.app",
+   "name": "Nikhil Kumawat",
+   "key_place": 35,
+   "stored_quality": 4.2,
+   "v2": [
+    4.2,
+    3.85
+   ],
+   "v3": [
+    4.2,
+    3.95
+   ],
+   "b5": [
+    2.95,
+    3.2
+   ],
+   "rich": [
+    4.2,
+    4.2
+   ],
+   "v3low": [
+    3.95,
+    3.95
+   ],
+   "b5low": [
+    2.6,
+    3.2
+   ]
+  },
+  {
+   "url": "https://vineetcodes.vercel.app",
+   "name": "Vineet Machchal",
+   "key_place": 21,
+   "stored_quality": 3.95,
+   "v2": [
+    4.65,
+    4.65
+   ],
+   "v3": [
+    4.65,
+    4.65
+   ],
+   "b5": [
+    3.75,
+    3.95
+   ],
+   "rich": [
+    4.25,
+    4.25
+   ],
+   "v3low": [
+    4.25,
+    4.4
+   ],
+   "b5low": [
+    3.75,
+    3.85
+   ]
+  },
+  {
+   "url": "https://ajyendu.vercel.app",
+   "name": "Ajyendu Chaudhary",
+   "key_place": 18,
+   "stored_quality": 3.95,
+   "v2": [
+    4.65,
+    3.95
+   ],
+   "v3": [
+    4.5,
+    4.35
+   ],
+   "b5": [
+    4.25,
+    4.75
+   ],
+   "rich": [
+    3.95,
+    4.25
+   ],
+   "v3low": [
+    4.25,
+    4.4
+   ],
+   "b5low": [
+    4.05,
+    4.35
+   ]
+  },
+  {
+   "url": "https://mhuzaifa04.vercel.app",
+   "name": "Mohammad Huzaifa",
+   "key_place": 28,
+   "stored_quality": 3.6,
+   "v2": [
+    4.2,
+    4.2
+   ],
+   "v3": [
+    4.5,
+    4.25
+   ],
+   "b5": [
+    4.2,
+    3.5
+   ],
+   "rich": [
+    4.5,
+    4.5
+   ],
+   "v3low": [
+    4.1,
+    4.1
+   ],
+   "b5low": [
+    4,
+    4.1
+   ]
+  },
+  {
+   "url": "https://www.mariokandut.com",
+   "name": "Mario Kandut",
+   "key_place": 31,
+   "stored_quality": 3.4,
+   "v2": [
+    3.95,
+    3.6
+   ],
+   "v3": [
+    3.65,
+    3.4
+   ],
+   "b5": [
+    3.4,
+    3.65
+   ],
+   "rich": [
+    3.6,
+    3.9
+   ],
+   "v3low": [
+    3.4,
+    3.85
+   ],
+   "b5low": [
+    3.5,
+    3.65
+   ]
+  },
+  {
+   "url": "https://www.adityakr.com",
+   "name": "Aditya Kumar",
+   "key_place": 37,
+   "stored_quality": 3.55,
+   "v2": [
+    3.25,
+    3.35
+   ],
+   "v3": [
+    3.75,
+    3.75
+   ],
+   "b5": [
+    3.25,
+    3.4
+   ],
+   "rich": [
+    3.65,
+    3.75
+   ],
+   "v3low": [
+    3.5,
+    3.5
+   ],
+   "b5low": [
+    3.55,
+    3.1
+   ]
+  },
+  {
+   "url": "https://www.pawaret.dev",
+   "name": "Pawaret Meungkaew",
+   "key_place": 33,
+   "stored_quality": 3.25,
+   "v2": [
+    2.85,
+    2.95
+   ],
+   "v3": [
+    3.5,
+    3.5
+   ],
+   "b5": [
+    3.35,
+    3
+   ],
+   "rich": [
+    3.5,
+    3.5
+   ],
+   "v3low": [
+    3.5,
+    3.5
+   ],
+   "b5low": [
+    3.05,
+    2.9
+   ]
+  },
+  {
+   "url": "https://lorenkamau.com",
+   "name": "Loren Kamau",
+   "key_place": 26,
+   "stored_quality": 2.85,
+   "v2": [
+    3.45,
+    4.2
+   ],
+   "v3": [
+    3.65,
+    3.2
+   ],
+   "b5": [
+    3.15,
+    3.05
+   ],
+   "rich": [
+    3.5,
+    3.85
+   ],
+   "v3low": [
+    3.65,
+    3.65
+   ],
+   "b5low": [
+    3.35,
+    3.25
+   ]
+  },
+  {
+   "url": "https://www.lexnguyen.dev",
+   "name": "Qui Nguyen",
+   "key_place": 38,
+   "stored_quality": 2.8,
+   "v2": [
+    2.3,
+    2.3
+   ],
+   "v3": [
+    3,
+    2.8
+   ],
+   "b5": [
+    2.6,
+    2.8
+   ],
+   "rich": [
+    3.55,
+    2.65
+   ],
+   "v3low": [
+    3.1,
+    3.1
+   ],
+   "b5low": [
+    2.45,
+    2.65
+   ]
+  },
+  {
+   "url": "https://asfakur-portfolio-nextjs.vercel.app",
+   "name": "Asfakur Nariz",
+   "key_place": 36,
+   "stored_quality": 2.7,
+   "v2": [
+    3.55,
+    3.55
+   ],
+   "v3": [
+    3.55,
+    3.35
+   ],
+   "b5": [
+    2.95,
+    3.05
+   ],
+   "rich": [
+    3.7,
+    3.7
+   ],
+   "v3low": [
+    3.7,
+    2.95
+   ],
+   "b5low": [
+    3.5,
+    2.95
+   ]
+  },
+  {
+   "url": "https://sameer27.netlify.app",
+   "name": "Sameer",
+   "key_place": 40,
+   "stored_quality": 2.15,
+   "v2": [
+    2.6,
+    2.3
+   ],
+   "v3": [
+    2.3,
+    3
+   ],
+   "b5": [
+    2.15,
+    2.7
+   ],
+   "rich": [
+    3.1,
+    2.8
+   ],
+   "v3low": [
+    2.7,
+    3
+   ],
+   "b5low": [
+    2.45,
+    2.6
+   ]
+  },
+  {
+   "url": "https://toukoum.fr",
+   "name": "Raphaël Giraud",
+   "key_place": 39,
+   "stored_quality": 1.5,
+   "v2": [
+    1,
+    1.5
+   ],
+   "v3": [
+    3,
+    2.05
+   ],
+   "b5": [
+    3.25,
+    2.7
+   ],
+   "rich": [
+    2.55,
+    2.95
+   ],
+   "v3low": [
+    3.25,
+    3.35
+   ],
+   "b5low": [
+    2.95,
+    1.85
+   ]
+  }
+ ],
+ "requests": {
+  "http": 376,
+  "logged": 376,
+  "non200": 24,
+  "by_status": {
+   "200": 352,
+   "503": 24
+  },
+  "by_prompt": {
+   "grade-v2": {
+    "requests": 80,
+    "ok": 80,
+    "broken": 0,
+    "errors": 0,
+    "input": 204128,
+    "output": 17489,
+    "thoughts": 0
+   },
+   "grade-v3": {
+    "requests": 80,
+    "ok": 80,
+    "broken": 0,
+    "errors": 0,
+    "input": 252970,
+    "output": 26746,
+    "thoughts": 0
+   },
+   "grade-v3-rich": {
+    "requests": 80,
+    "ok": 80,
+    "broken": 0,
+    "errors": 0,
+    "input": 431168,
+    "output": 27011,
+    "thoughts": 0
+   },
+   "grade-v3-batch": {
+    "requests": 16,
+    "ok": 16,
+    "broken": 0,
+    "errors": 0,
+    "input": 184394,
+    "output": 27756,
+    "thoughts": 0
+   },
+   "grade-v3-think-low": {
+    "requests": 80,
+    "ok": 80,
+    "broken": 0,
+    "errors": 0,
+    "input": 252970,
+    "output": 26383,
+    "thoughts": 0
+   },
+   "grade-v3-batch-think-low": {
+    "requests": 16,
+    "ok": 16,
+    "broken": 0,
+    "errors": 0,
+    "input": 184394,
+    "output": 27158,
+    "thoughts": 0
+   }
+  }
+ },
+ "labels": {
+  "stored": "Production v2 (stored grade)",
+  "v2": "v2 solo",
+  "v3": "v3 solo",
+  "b5": "v3 batch of 5",
+  "rich": "v3 solo, richer evidence",
+  "v3low": "v3 solo, thinking low (follow-up)",
+  "b5low": "v3 batch of 5, thinking low (follow-up)"
+ }
+}
