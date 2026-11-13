@@ -25,3 +25,8 @@ retry-github.log
 .dev.vars*
 data/e2e.db*
 data/e2e-shots/
+
+# Experiment captures (third-party screenshots and page text) stay local
+experiments/*/data/sites/
+experiments/*/data/sheets/
+experiments/*/data/candidates.json
