@@ -13,6 +13,7 @@
 // Usage:
 //   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force] [--refresh N]
 //   node pipeline/capture.mjs --upload-only   # backfill captures/ to R2 later
+//   node pipeline/capture.mjs --recapture <file>   # exactly these listed addresses, as a refresh
 //
 // Failed captures are retried later with backoff (see recordCaptureFailure).
 //
@@ -72,6 +73,10 @@ const CONCURRENCY = Number(flag("concurrency", "3"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
 const REFRESH = Number(flag("refresh", "0")) || 0;
+// --recapture <file>: re-capture exactly the listed addresses in the file (one
+// a line), as a refresh: a failure keeps the old capture and marks nothing
+// (scripts/regrade-not-portfolio.mjs).
+const RECAPTURE = flag("recapture", "");
 
 // ---------------------------------------------------------------------------
 // DB + R2
@@ -347,14 +352,18 @@ const feed = JSON.parse(
 const roster = await syncRoster(db, feed);
 console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
 let queue = feed.filter((p) => !ONLY || p.url.includes(ONLY));
+if (RECAPTURE) {
+  const want = new Set(fs.readFileSync(RECAPTURE, "utf8").split("\n").map((l) => l.trim()).filter(Boolean));
+  queue = feed.filter((p) => want.has(p.url)).map((p) => ({ ...p, refresh: true }));
+}
 
-if (!FORCE) {
+if (!FORCE && !RECAPTURE) {
   queue = await dueForCapture(db, queue);
 }
 queue = queue.slice(0, LIMIT);
 // The nightly refresh: listed, healthy sites whose screenshots are due
 // (changed or asked for first, then captures past 90 days).
-if (REFRESH > 0 && !ONLY) {
+if (REFRESH > 0 && !ONLY && !RECAPTURE) {
   await ensureFreshnessSchema(db);
   const queued = new Set(queue.map((p) => p.url));
   const listed = new Map(feed.map((p) => [p.url, p]));
