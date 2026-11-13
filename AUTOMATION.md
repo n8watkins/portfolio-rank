@@ -188,6 +188,7 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 The automatic blog's back end ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md), [pipeline/content/engine.mjs](pipeline/content/engine.mjs)), built and off.
 
 - **The switch:** the Worker variable `CONTENT_MODE`: "off" (the default in both environments; the stage does no post work), "dry-run" (drafts stay private, status `draft`) or "publish" (posts go live at the next 08:00 Pacific); only the owner sets "publish".
+  It is the ceiling for the owner's Automation panel on `/admin/blog` (on or off, nights, drafts a week up to `CONTENT_DRAFTS_PER_WEEK`, review or publish, a topic queue), saved in the database and read by every night; unreadable settings mean no drafts ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#automation)).
 - **Schedule:** Sunday night picks the week's 2 ideas and a reserve (one request, or none when there is only one idea); Monday and Wednesday nights each draft one post for Tuesday and Thursday; a dropped or deferred draft is made up on a later night of the week.
 - **A draft:** facts from code, then the write request, the claim listing, the claim judgement (only with Tavily results) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
 - **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 50 a week, 1 fresh illustration, 2 Pexels searches and 3 Gemini image checks a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes; the owner's "Write a draft now" adds at most 5 drafts a Pacific day under the same per-post caps.
@@ -415,6 +416,23 @@ It goes to the owner through the owner alerts, keys `model-watch:*`:
 The weekly run reconciles only the `model-watch:*` keys and the end-of-day run never clears them.
 They are emailed like every owner alert once `OWNER_EMAIL` is set ("Owner alerts" above); `GET /api/admin/quota` returns `modelWatch` (the latest report with its text, and the last 8 runs).
 By hand: `pass-env run -- node scripts/model-watch.mjs [--dry-run]`.
+
+## Owner goals
+
+Milestones that call for a decision once they are reached, listed in [lib/goals/config.mjs](lib/goals/config.mjs) (owner decision 2026-11-13).
+The first two:
+
+- "Newsletter: 100 subscribers": 100 or more confirmed subscribers in Kit, which keeps the list; the count comes from Kit's API with `KIT_API_KEY` and is cached a day (`cache` row `kit:confirmed`), and without the key it is unknown and never reached.
+- "Library: 5,000 graded portfolios": 5,000 or more listed portfolios with an AI grade (not counting sites judged "not a portfolio").
+
+A goal is reached when any of its conditions holds; a condition may ask for two finished weeks in a row.
+The check ([pipeline/goals.mjs](pipeline/goals.mjs), [worker/goals.ts](worker/goals.ts)) runs on the weekly Cron Trigger with model watch, Mondays at 16:00 UTC (8 am Pacific in winter, 9 am in summer), and is plain code with no Gemini.
+It measures the week that just finished (Monday to Monday, Pacific) and records each goal's numbers in `goal_progress`.
+The first time a goal is reached it records the event in `goal_events` and emails the owner through the owner-alert path (the email gate, kind `owner-alert`, to `OWNER_EMAIL`), with an `.ics` invite for a 30-minute decision slot three days later at 10:00 Pacific (moved to Monday from a weekend).
+Once that email went out the goal never emails again, even if its number drops and climbs back; an email that couldn't go out is tried again the next Monday.
+`GET /api/admin/goals` (admin only) returns every goal with its numbers measured now, its last 12 weeks, its event and, for a goal that is reached and not yet emailed, the email the next check would send.
+By hand, always a dry run that writes and sends nothing (beyond refreshing the cached Kit count): `node scripts/goals-check.mjs [--now=2026-11-16T16:00:00Z] [--json]` (production numbers with `pass-env run --`).
+To add a goal, add an entry with a new id to the list; never reuse an id, since the id is what records that a goal fired.
 
 ## GitHub Actions
 

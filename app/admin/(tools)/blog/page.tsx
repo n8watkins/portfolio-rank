@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { AdminHeader } from "@/components/admin/AdminHeader";
 import { notFound } from "next/navigation";
-import { ArrowRight, Images, Inbox, ListChecks } from "lucide-react";
+import { ArrowRight, Inbox, ListChecks } from "lucide-react";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { recentJobs } from "@/lib/content/jobs.mjs";
 import { BUILDERS, KIND_LABELS } from "@/pipeline/content/facts.mjs";
 import { DraftNow, type Job } from "@/components/admin/DraftNow";
+import { AutomationPanel, type AutomationView } from "@/components/admin/AutomationPanel";
+import { automationView } from "@/lib/content/automation.mjs";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { publishedAround, reviewQueue } from "@/lib/content/blog.mjs";
@@ -13,8 +16,9 @@ import { type BlogPost, coverOf, imageSrc } from "@/lib/blog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusPill, closedReason, pacificTime } from "@/components/admin/postStatus";
 
-// The blog's drafts (docs/CONTENT-ENGINE.md, "Review and publish" and
-// "Write a draft now"): "Write a draft now" with its live status, the cost
+// The blog's drafts (docs/CONTENT-ENGINE.md, "Review and publish",
+// "Write a draft now" and "Automation"): "Write a draft now" with its live
+// status, the automation the owner controls (lib/content/automation.mjs), the cost
 // panel, the engine's drafts waiting for the owner, what is published, and
 // what was rejected, dropped by the checks or unpublished. Only the admin
 // sees it; anyone else gets a 404.
@@ -60,7 +64,7 @@ function Row({ post, now }: { post: BlogPost; now: number }) {
 function Group({ title, posts, now, empty }: { title: string; posts: BlogPost[]; now: number; empty?: string }) {
   if (!posts.length && !empty) return null;
   return (
-    <section className="mt-10" aria-label={title}>
+    <section className="mt-10 first:mt-0" aria-label={title}>
       <h2 className="text-lg font-bold tracking-tight">
         {title} <span className="text-mute tabular-nums">{posts.length}</span>
       </h2>
@@ -113,38 +117,40 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const { queue, thisWeek, now, costs, job, kinds } = await load(typeof sp.job === "string" && /^[0-9a-f]{16}$/.test(sp.job) ? sp.job : null);
   const mode = contentMode(process.env.CONTENT_MODE);
+  const automation = (await automationView(db(), { CONTENT_MODE: process.env.CONTENT_MODE, CONTENT_DRAFTS_PER_WEEK: process.env.CONTENT_DRAFTS_PER_WEEK })) as AutomationView;
   const g = costs.gemini;
   return (
-    <div className="mx-auto max-w-4xl px-4 pb-20 sm:px-6">
-      <div className="flex flex-wrap items-end justify-between gap-4 py-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Admin</p>
-          <h1 className="mt-1.5 text-3xl font-bold tracking-tight">Blog drafts</h1>
-          <p className="mt-2 text-sm text-mute">
-            Content engine: <span className="font-semibold text-ink">{mode}</span> · published within 7 days: {thisWeek} of {PUBLISH_CAP}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-x-4">
+    <>
+      <AdminHeader
+        title="Blog drafts"
+        actions={
           <Link href="/admin/blog/guidelines" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
             <ListChecks className="h-4 w-4" aria-hidden /> Editor&apos;s guidelines
           </Link>
-          <Link href="/admin/images" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
-            <Images className="h-4 w-4" aria-hidden /> Image library
-          </Link>
+        }
+      >
+        Content engine: <span className="font-semibold text-ink">{mode}</span> · published within 7 days: {thisWeek} of {PUBLISH_CAP}
+      </AdminHeader>
+      {/* The drafts are the page; writing one now, what is left to spend and the automation sit beside them (below on phones and tablets). */}
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_30rem] xl:items-start">
+        <div className="min-w-0">
+          <Group title="Waiting for you" posts={queue.drafts as BlogPost[]} now={now} empty="No drafts waiting. The engine writes them on Monday and Wednesday nights while it is on." />
+          <Group title="Published" posts={queue.published as BlogPost[]} now={now} />
+          <Group title="Rejected, dropped or unpublished" posts={queue.closed as BlogPost[]} now={now} />
         </div>
+        <aside aria-label="Write and automate" className="grid min-w-0 gap-4">
+          <DraftNow kinds={kinds} initialJob={job as Job | null} left={Math.max(0, costs.drafts.cap - costs.drafts.today)} />
+          <section aria-label="What the blog may still spend">
+            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2" data-cost-panel>
+              <Cost label="Gemini today" value={`${n(g.used)} used, ${n(g.left)} left`} hint={`${n(g.reserve)} kept for people; a draft may take ${g.draftNow} now`} />
+              <Cost label="Tavily this month" value={`${n(costs.tavily.used)} of ${n(costs.tavily.cap)}`} hint={`this week ${costs.tavily.week} of ${costs.tavily.weekCap}; ${costs.tavily.perPost} a post`} />
+              <Cost label="AI images today" value={`${costs.images.used} of ${costs.images.cap}`} hint={`1 a post; Pexels ${costs.pexels.used} this month, 2 a post`} />
+              <Cost label="Drafts today" value={`${costs.drafts.today} of ${costs.drafts.cap}`} hint="Write now and rewrites, Pacific day" />
+            </dl>
+          </section>
+          <AutomationPanel initial={automation} kindLabels={KIND_LABELS as Record<string, string>} />
+        </aside>
       </div>
-      <DraftNow kinds={kinds} initialJob={job as Job | null} left={Math.max(0, costs.drafts.cap - costs.drafts.today)} />
-      <section aria-label="What the blog may still spend" className="mt-4">
-        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-cost-panel>
-          <Cost label="Gemini today" value={`${n(g.used)} used, ${n(g.left)} left`} hint={`${n(g.reserve)} kept for people; a draft may take ${g.draftNow} now`} />
-          <Cost label="Tavily this month" value={`${n(costs.tavily.used)} of ${n(costs.tavily.cap)}`} hint={`this week ${costs.tavily.week} of ${costs.tavily.weekCap}; ${costs.tavily.perPost} a post`} />
-          <Cost label="AI images today" value={`${costs.images.used} of ${costs.images.cap}`} hint={`1 a post; Pexels ${costs.pexels.used} this month, 2 a post`} />
-          <Cost label="Drafts today" value={`${costs.drafts.today} of ${costs.drafts.cap}`} hint="Write now and rewrites, Pacific day" />
-        </dl>
-      </section>
-      <Group title="Waiting for you" posts={queue.drafts as BlogPost[]} now={now} empty="No drafts waiting. The engine writes them on Monday and Wednesday nights while it is on." />
-      <Group title="Published" posts={queue.published as BlogPost[]} now={now} />
-      <Group title="Rejected, dropped or unpublished" posts={queue.closed as BlogPost[]} now={now} />
-    </div>
+    </>
   );
 }
