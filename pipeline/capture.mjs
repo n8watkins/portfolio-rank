@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Phase 0 capture pipeline: gate every portfolio (dead/parked/blank), then
-// Playwright-capture the live ones - desktop hero and mobile - plus
+// Playwright-capture the live ones - desktop hero, mobile and the whole
+// page at both widths (pipeline/fullpage.mjs) - plus
 // diagnostics (console errors, page weight, broken assets, 390px overflow,
 // dark-mode support, motion from a frame difference, DOM-shape hash), the
 // page's visible text (capped) and the facts code can check
@@ -44,6 +45,8 @@ import {
   syncRoster,
 } from "./roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
+import { captureFullPages } from "./fullpage.mjs";
+import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -97,11 +100,9 @@ if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
   });
 }
 
-// Only the frames the app serves go to R2 (the AI grade uses hero.jpg too).
-// No full-page frame: nothing ever showed it, and at about 250 KB it was 70%
-// of a site's storage (docs/audits/free-tier-limits.md, R2 free 10 GB).
-const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg"]);
-
+// Only the frames the app serves go to R2 (pipeline/shot-files.mjs): the
+// hero (the AI grade's image too), the phone top and the two full-page
+// WebPs. The old full.jpg (JPEG, about 250 KB) is not stored any more.
 async function uploadDir(key, dir) {
   if (!s3) return;
   const { PutObjectCommand } = await import("@aws-sdk/client-s3");
@@ -112,7 +113,7 @@ async function uploadDir(key, dir) {
         Bucket: process.env.R2_BUCKET ?? "portfolio-rank",
         Key: `${key}/${f}`,
         Body: fs.readFileSync(path.join(dir, f)),
-        ContentType: f.endsWith(".jpg") ? "image/jpeg" : "image/png",
+        ContentType: contentTypeOf(f),
       })
     );
   }
@@ -291,14 +292,25 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       await mpage.screenshot({ type: "jpeg", quality: 75 })
     );
 
-    await ctx.close();
-
-    const meta = {
+    // The diagnostics as they stand now: the full-page scroll below loads
+    // lazy content, which must not change the page weight or the errors.
+    const diagnostics = {
       consoleErrors: consoleErrors.length,
       consoleSample: consoleErrors.slice(0, 5),
       requests,
       bytes,
       broken404s: broken,
+    };
+
+    // Full-page frames, desktop and phone (pipeline/fullpage.mjs), after
+    // the frames above so they never change them. A frame that fails is
+    // recorded as an error; the capture itself still counts.
+    const fullPage = await captureFullPages({ desktop: page, phone: mpage }, dir);
+
+    await ctx.close();
+
+    const meta = {
+      ...diagnostics,
       overflow390,
       darkMode,
       motion,
@@ -311,6 +323,7 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       ...(modal || mobileModal ? { modal: { ...(modal ?? {}), mobile: mobileModal ? mobileModal.passed : null } } : {}),
       // One line of what was done to reach the screenshots; only the screen after it is stored.
       ...(actionNote({ splash, modal }) ? { action: actionNote({ splash, modal }) } : {}),
+      fullPage,
     };
 
     await uploadDir(key, dir);

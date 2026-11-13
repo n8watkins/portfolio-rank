@@ -8,7 +8,9 @@ name: Sync upstream + ingest
 #      and let it auto-merge once the required checks pass,
 #   3. screenshot whatever is new, re-capture the sites whose screenshots are
 #      due (--refresh: the page changed, someone asked, or 90 days old; see
-#      AUTOMATION.md "When checks re-run"), measure page text and facts for
+#      AUTOMATION.md "When checks re-run"), add full-page screenshots to a
+#      capped number of older captures (pipeline/fullpage-backfill.mjs),
+#      measure page text and facts for
 #      rows waiting for a grade, check again the project links that are due
 #      (--links: changed, asked for, or 30 days old), and record page
 #      fingerprint changes.
@@ -27,6 +29,10 @@ on:
         description: "Most sites to re-capture: changed or asked for first, then captures 90 days old (finds redesigns)"
         required: false
         default: "150"
+      fullpage_backfill:
+        description: "Most sites to give full-page screenshots that have none (pipeline/fullpage-backfill.mjs)"
+        required: false
+        default: "200"
       rubric_regrade:
         description: "Also measure evidence for grades from an older rubric (the Worker's RUBRIC_REGRADE)"
         required: false
@@ -209,6 +215,14 @@ jobs:
         env:
           REFRESH: ${{ inputs.refresh || '150' }}
         run: node pipeline/capture.mjs --concurrency 4 --refresh "$REFRESH"
+      # Full-page frames (desktop and phone, for the report card's preview)
+      # for sites captured before the capture took them, a capped number a
+      # night (pipeline/fullpage-backfill.mjs); the capture above takes them
+      # for every site it captures. Changes no grade or capture date.
+      - name: Backfill full-page screenshots
+        env:
+          FULLPAGE_BACKFILL: ${{ inputs.fullpage_backfill || '200' }}
+        run: node pipeline/fullpage-backfill.mjs --concurrency 4 --limit "$FULLPAGE_BACKFILL"
       # Page text and facts for rows waiting for a grade that have none
       # (captured before rubric v2): the end-of-day grading on Cloudflare
       # reads only stored evidence. Then the project link checks that are

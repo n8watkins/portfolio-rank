@@ -15,6 +15,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
   roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
         ▼
   capture.mjs (new + --refresh)  ──►  screenshots ──► Cloudflare R2   + diagnostics, page text, facts ──► Turso
+  fullpage-backfill.mjs (capped)  ──►  full-page screenshots for older captures ──► R2 (+ portfolios.meta.fullPage)
   evidence.mjs, detect-changes.mjs  ──►  old rows' text and facts, page changes (rating_resets)
         ▼   (all of the above: the free checks on Actions, started by Cloudflare at 20:30 Pacific)
   end-of-day Workflow (Cloudflare)  ──►  new and changed sites graded (rubric v2) ──► Turso (portfolios.ai_rubric)
@@ -649,6 +650,7 @@ serve images.
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
 - `node scripts/model-watch.mjs [--dry-run]` - the weekly model watch by hand (needs `GEMINI_API_KEY` for the model list; no generate calls)
+- `node pipeline/fullpage-backfill.mjs [--limit N] [--concurrency C] [--only s] [--dry-run]` - full-page screenshots (`full-desktop.webp`, `full-phone.webp`) for up to N listed sites captured before the capture took them; changes no grade or capture date (the nightly free checks run it with a cap)
 - `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: changed or asked for, then 90 days old (finds redesigns)
 - `node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them; `--links N` also measures again up to N sites whose project link checks are due
 - `node scripts/detect-changes.mjs` - record page fingerprint changes (`rating_resets`)
