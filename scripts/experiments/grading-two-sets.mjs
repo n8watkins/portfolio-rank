@@ -146,7 +146,12 @@ export async function clickThrough(page) {
   return how;
 }
 
-export async function captureOne(browser, site, dir, { shots, click = false }) {
+/**
+ * `prepare(page, view)` (optional) runs after the page loads, on desktop and
+ * on phone, for pages that need a visitor action first (a theme picker, a
+ * modal); what it returns is recorded as prepared_desktop / prepared_phone.
+ */
+export async function captureOne(browser, site, dir, { shots, click = false, prepare = null }) {
   assertNotOurs(site.url);
   fs.mkdirSync(dir, { recursive: true });
   const out = { url: site.url, at: new Date().toISOString() };
@@ -157,6 +162,7 @@ export async function captureOne(browser, site, dir, { shots, click = false }) {
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
     if (click) out.clicked_desktop = await clickThrough(page);
+    if (prepare) out.prepared_desktop = await prepare(page, "desktop");
     const first = await page.evaluate(readRenderedPage);
     if (first.text.trim().length < 30 && !first.media) throw new Error("renders blank");
     await settle(page);
@@ -188,6 +194,7 @@ export async function captureOne(browser, site, dir, { shots, click = false }) {
     await m.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
     await m.waitForTimeout(3000);
     if (click) out.clicked_phone = await clickThrough(m);
+    if (prepare) out.prepared_phone = await prepare(m, "phone");
     if (shots) fs.writeFileSync(path.join(dir, "phone.jpg"), await shot(m, { type: "jpeg", quality: 75 }));
     out.phone = await m.evaluate(readFirstScreen);
   } finally {

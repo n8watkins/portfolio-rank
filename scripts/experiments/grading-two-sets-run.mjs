@@ -210,7 +210,9 @@ export async function run({
   const fetchImpl = async (url, init) => {
     if (stop) throw new Error(`${HARDSTOP}: ${stop}`);
     const body = JSON.parse(init.body);
-    if (body.generationConfig?.thinkingConfig?.thinkingLevel !== settings.thinkingLevel || body.generationConfig?.temperature !== settings.temperature) {
+    // settings.thinkingLevel null means "the model's default": no thinkingConfig at all.
+    const sentLevel = body.generationConfig?.thinkingConfig?.thinkingLevel ?? null;
+    if (sentLevel !== (settings.thinkingLevel ?? null) || body.generationConfig?.temperature !== settings.temperature) {
       stop = `request without thinking "${settings.thinkingLevel}" and temperature ${settings.temperature}`;
       throw new Error(`${HARDSTOP}: ${stop}`);
     }
