@@ -180,7 +180,8 @@ export const GEMINI31 = {
   retry_delays_ms: [30000, 60000, 120000, 300000],
   max_tries: 5,
   broken_answer_retries: 1,
-  day_cap: 480,
+  // 480 of the free 500 for the Pacific day, minus about 40 kept for mini test 8 on the same quota (owner, 2026-11-13).
+  day_cap: 440,
   prompt_ids: { solo: "portfolio-definition-v2.1-solo", solo_freetext: "portfolio-definition-v2.1-solo-freetext", batch: "portfolio-definition-v2.1-batch" },
   amendments: [
     "2026-11-13: recheck-543 on gemini-3.1-flash-lite with the two-sets settings",
