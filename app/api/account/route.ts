@@ -3,6 +3,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { accountData, deleteAccount, gradeShotKeys } from "@/lib/account.mjs";
 import { sameOrigin } from "@/lib/polls/server";
 import { getRater } from "@/lib/rater";
+import { revokeSessions } from "@/lib/session-revocation.mjs";
 // The grader's keyed requester id: grade requests made while signed in are the account's too.
 import { deleteGradeShots, keyed } from "@/lib/grader/server";
 
@@ -48,6 +49,8 @@ export async function DELETE(req: Request) {
   const gradeVisitor = keyed("visitor", me.id);
   const shots = await gradeShotKeys(db(), gradeVisitor);
   const deleted = await deleteAccount(db(), me.id, { gradeVisitor });
+  // Every session of the deleted account ends, on every device (lib/session-revocation.mjs).
+  await revokeSessions(db(), me.id);
   for (const key of shots) await deleteGradeShots(key);
   return NextResponse.json({ deleted }, { headers: PRIVATE });
 }

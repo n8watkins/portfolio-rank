@@ -2,6 +2,8 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { authLogger } from "@/lib/log";
 import { SESSION_VERSION, isCurrentSession } from "@/lib/session-version.mjs";
+import { adminRaterId, revokedAt, sessionValid, signedInAt } from "@/lib/session-revocation.mjs";
+import { db, ensureSchema } from "@/lib/db";
 
 // JWT sessions (no DB adapter): raterId is the stable GitHub identity
 // (gh:<github numeric id>); login is for display only. GitHub-only by design —
@@ -17,6 +19,25 @@ declare module "next-auth" {
   }
 }
 
+/**
+ * Whether a signed-in session may go on (lib/session-revocation.mjs): not
+ * signed out by "Sign out everywhere" or account deletion, and for the
+ * admin, signed in within ADMIN_SESSION_MS. If the database can't say, an
+ * admin session ends (it signs in again) and anyone else's goes on.
+ */
+async function stillValid(token: Record<string, unknown>): Promise<boolean> {
+  const raterId = typeof token.raterId === "string" ? token.raterId : null;
+  if (!raterId) return true;
+  const isAdmin = raterId === adminRaterId();
+  try {
+    await ensureSchema();
+    return sessionValid(token, { revokedAt: await revokedAt(db(), raterId), isAdmin, now: Date.now() });
+  } catch (e) {
+    console.error(JSON.stringify({ event: "session_check_failed", admin: isAdmin, error: String((e as Error)?.message ?? e).slice(0, 200) }));
+    return !isAdmin;
+  }
+}
+
 const config: NextAuthConfig = {
   providers: [GitHub],
   trustHost: true,
@@ -26,16 +47,20 @@ const config: NextAuthConfig = {
   // Error type and a masked message only; see lib/log.ts.
   logger: authLogger,
   callbacks: {
-    jwt({ token, account, profile }) {
+    async jwt({ token, account, profile }) {
       if (account?.provider === "github" && profile) {
         token.sv = SESSION_VERSION;
         token.raterId = `gh:${profile.id}`;
         token.login = String(profile.login);
         if (typeof profile.created_at === "string") token.accountCreatedAt = profile.created_at;
+        token.at = Date.now();
       }
       // Returning null ends the session (the cookie is cleared): a session
       // from before the current version is signed out, once.
-      return isCurrentSession(token) ? token : null;
+      if (!isCurrentSession(token)) return null;
+      // A session from before the sign-in time was kept counts from its issue time.
+      token.at ??= signedInAt(token) ?? Date.now();
+      return (await stillValid(token)) ? token : null;
     },
     session({ session, token }) {
       session.raterId = token.raterId as string | undefined;
