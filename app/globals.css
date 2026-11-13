@@ -438,9 +438,45 @@
 .burst > .ring {
   display: none;
 }
+/* Play's Simple and Detailed views swap with a short cross-fade, and each
+   card's frame eases to its new height (View Transitions; components/play/
+   FaceOff.tsx). Snapshots keep their top edge instead of stretching. Without
+   View Transitions, or with reduced motion, the swap is instant. */
+::view-transition-group(*) {
+  animation-duration: 260ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(*),
+::view-transition-new(*) {
+  height: 100%;
+  object-fit: none;
+  object-position: top;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* The games' inline Details panel opens in place. */
+@keyframes details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   .deal-in {
     animation: deal-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms) both;
+  }
+  .details-in {
+    animation: details-in 180ms ease-out both;
   }
   .burst > .spark {
     display: block;
@@ -727,5 +763,17 @@ dialog.modal[open]::backdrop {
 @media (prefers-reduced-motion: reduce) {
   .toast-in {
     animation: none;
+  }
+}
+
+/* Play's score rings draw their arc once (motion-safe only). */
+@keyframes ring-in {
+  from {
+    stroke-dasharray: 0 999;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ring-in {
+    animation: ring-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }

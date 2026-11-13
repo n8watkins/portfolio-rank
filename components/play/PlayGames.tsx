@@ -14,10 +14,7 @@ export function PlayGames({ mode, games, quizId, intro }: { mode: "faceoff" | "g
       {mode === "guess" && games ? (
         <GuessPercentile quizId={quizId} guest={session === null} onBadgeCheck={check} />
       ) : (
-        <>
-          <h2 className="mb-3 text-xl font-bold tracking-tight sm:mb-5 sm:text-2xl">Which one would you hire from?</h2>
-          <FaceOff games={games} intro={intro} onBadgeCheck={check} />
-        </>
+        <FaceOff games={games} intro={intro} onBadgeCheck={check} />
       )}
       {toast}
     </>

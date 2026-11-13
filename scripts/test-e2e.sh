@@ -51,6 +51,8 @@ DB="$PWD/data/e2e.db"
 rm -f "$DB"*
 rm -rf "$GRADER_TEST_SHOTS_DIR"
 export LOCAL_DB_FILE="$DB" E2E_DB_URL="file:$DB"
+# A library of graded portfolios, as every deployed site has (the face-off draws only graded sites).
+node scripts/e2e-seed.mjs
 export E2E_SERVER_LOG="${TMPDIR:-/tmp}/portfolio-rank-e2e.log"
 [ "${E2E_SKIP_BUILD:-}" = 1 ] || npx next build
 node node_modules/next/dist/bin/next start -p "$PORT" > "$E2E_SERVER_LOG" 2>&1 &
