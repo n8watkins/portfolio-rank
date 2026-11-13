@@ -1,7 +1,8 @@
 // The owner's goals (lib/goals/config.mjs, pipeline/goals.mjs): the weekly
 // check on a fake clock measures last week, records progress, emails the
 // owner once with a calendar invite when a goal is first reached, never
-// again after, and a dry run writes and sends nothing.
+// again after, and a dry run writes and sends nothing. Kit (the newsletter's
+// subscriber count) is mocked.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -10,7 +11,7 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { GOALS } from "../lib/goals/config.mjs";
-import { buildIcs, checkGoals, decisionSlot, finishedWeek, goalsHistory } from "../pipeline/goals.mjs";
+import { buildIcs, checkGoals, decisionSlot, finishedWeek, goalsHistory, kitConfirmed } from "../pipeline/goals.mjs";
 import { createEmailGate, emailTransport } from "../lib/email/gate.mjs";
 import { emailSender } from "../pipeline/alerts.mjs";
 
@@ -20,19 +21,24 @@ const MONDAY = new Date("2026-11-16T16:00:00Z");
 async function freshDb() {
   const db = createClient({ url: `file:${path.join(fs.mkdtempSync(path.join(os.tmpdir(), "goals-")), "db.sqlite")}` });
   await migrate(db);
-  await db.execute(`CREATE TABLE IF NOT EXISTS newsletter_subscribers (id TEXT PRIMARY KEY, email TEXT NOT NULL, email_hash TEXT NOT NULL UNIQUE, status TEXT NOT NULL,
-    source TEXT, created_at TEXT NOT NULL, confirmed_at TEXT, unsubscribed_at TEXT, confirm_hash TEXT, confirm_expires_at TEXT)`);
   return db;
 }
 
-async function subscribers(db, n, { confirmedAt = "2026-11-12T18:00:00.000Z", status = "confirmed" } = {}) {
-  for (let i = 0; i < n; i++) {
-    const id = `${status}-${confirmedAt}-${i}`;
-    await db.execute({
-      sql: "INSERT INTO newsletter_subscribers (id, email, email_hash, status, created_at, confirmed_at) VALUES (?, ?, ?, ?, ?, ?)",
-      args: [id, `${id}@example.com`, id, status, confirmedAt, status === "confirmed" ? confirmedAt : null],
-    });
-  }
+/** Kit's API, mocked: answers the confirmed count (`count`, changeable) or fails while `down`. */
+function mockKit(count) {
+  const k = {
+    count,
+    down: false,
+    calls: [],
+    kitApiKey: "test-kit-key",
+    kitApi: "https://kit.test/v4",
+    fetch: async (url, init) => {
+      k.calls.push({ url: String(url), key: init.headers["X-Kit-Api-Key"] });
+      if (k.down) return new Response(JSON.stringify({ errors: ["down"] }), { status: 503 });
+      return new Response(JSON.stringify({ subscribers: [], pagination: { has_next_page: false, total_count: k.count } }), { status: 200 });
+    },
+  };
+  return k;
 }
 
 /** `n` graded portfolios, plus some judged "not a portfolio" and some delisted, in one statement each. */
@@ -56,11 +62,11 @@ function owner() {
 const ctx = (db, o, extra = {}) => ({ db, email: o.email, to: "owner@example.com", siteUrl: "https://portfoliorank.dev", ...extra });
 const byId = (r, id) => r.goals.find((g) => g.id === id);
 
-test("the first goals: the newsletter moves to Kit at 40 confirmed, the library milestone at 5,000 graded", () => {
+test("the first goals: the newsletter at 100 confirmed in Kit, the library milestone at 5,000 graded", () => {
   assert.deepEqual(
     GOALS.map((g) => [g.id, g.conditions.map((c) => [c.metric, c.atLeast])]),
     [
-      ["newsletter-move-to-kit", [["newsletter_confirmed", 40]]],
+      ["newsletter-100-subscribers", [["newsletter_confirmed", 100]]],
       ["library-5000-graded", [["graded_portfolios", 5000]]],
     ]
   );
@@ -93,77 +99,91 @@ test("the decision slot is 3 days later at 10:00 Pacific, moved off weekends", (
 
 test("below every target: progress is recorded, nothing is sent", async () => {
   const db = await freshDb();
-  await subscribers(db, 39);
-  await subscribers(db, 5, { status: "pending" });
+  const kit = mockKit(99);
   await graded(db, 10, { notPortfolio: 3, delisted: 2 });
   const o = owner();
-  const r = await checkGoals(ctx(db, o), { now: MONDAY });
+  const r = await checkGoals(ctx(db, o, kit), { now: MONDAY });
   assert.equal(r.week, "2026-11-09");
-  assert.deepEqual(byId(r, "newsletter-move-to-kit").conditions[0].values, [39]);
+  assert.deepEqual(byId(r, "newsletter-100-subscribers").conditions[0].values, [99]);
   assert.deepEqual(byId(r, "library-5000-graded").conditions[0].values, [10], "not a portfolio and delisted sites don't count");
   assert.equal(o.sent.length, 0);
+  assert.deepEqual(kit.calls, [{ url: "https://kit.test/v4/subscribers?status=active&include_total_count=true&per_page=1", key: "test-kit-key" }]);
   const history = await goalsHistory(db);
-  assert.deepEqual(history.find((h) => h.id === "newsletter-move-to-kit").history.map((h) => [h.week, h.metrics, h.reached]), [["2026-11-09", { newsletter_confirmed: 39 }, false]]);
-  assert.equal(history.find((h) => h.id === "newsletter-move-to-kit").event, null);
+  assert.deepEqual(history.find((h) => h.id === "newsletter-100-subscribers").history.map((h) => [h.week, h.metrics, h.reached]), [["2026-11-09", { newsletter_confirmed: 99 }, false]]);
+  assert.equal(history.find((h) => h.id === "newsletter-100-subscribers").event, null);
 });
 
-test("a subscriber confirmed after the week ended counts next week, not this one", async () => {
+test("Kit's count: asked at most once a day, the last count when Kit is down, unknown without a key", async () => {
   const db = await freshDb();
-  await subscribers(db, 39);
-  await subscribers(db, 1, { confirmedAt: "2026-11-16T09:00:00.000Z" }); // Monday 01:00 Pacific
-  const o = owner();
-  assert.equal(byId(await checkGoals(ctx(db, o), { now: MONDAY }), "newsletter-move-to-kit").reached, false);
-  const next = await checkGoals(ctx(db, o), { now: new Date(MONDAY.getTime() + 7 * 86400000) });
-  assert.equal(byId(next, "newsletter-move-to-kit").fired, true);
+  const kit = mockKit(12);
+  const t = Date.now();
+  assert.equal(await kitConfirmed({ db, ...kit }, { now: t }), 12);
+  kit.count = 13;
+  assert.equal(await kitConfirmed({ db, ...kit }, { now: t + 3600000 }), 12, "cached for the day");
+  assert.equal(kit.calls.length, 1);
+  assert.equal(await kitConfirmed({ db, ...kit }, { now: t + 86400000 }), 13, "asked again after a day");
+  kit.down = true;
+  assert.equal(await kitConfirmed({ db, ...kit }, { now: t + 2 * 86400000 }), 13, "Kit down: the last count");
+  assert.equal(await kitConfirmed({ db: await freshDb(), ...kit }), null, "down with nothing cached: unknown");
+  assert.equal(await kitConfirmed({ db, ...kit, kitApiKey: null }), null, "no key: unknown");
+  // The app's admin pages share the row: { count } under kit:confirmed.
+  assert.deepEqual(JSON.parse(String((await db.execute("SELECT v FROM cache WHERE k = 'kit:confirmed'")).rows[0].v)), { count: 13 });
+  // Unknown is never "reached".
+  const r = await checkGoals(ctx(await freshDb(), owner()), { now: MONDAY, dryRun: true });
+  assert.deepEqual(byId(r, "newsletter-100-subscribers").conditions[0].values, [null]);
+  assert.equal(byId(r, "newsletter-100-subscribers").reached, false);
 });
 
 test("reaching a goal emails once with a 30-minute invite; later weeks never email again", async () => {
   const db = await freshDb();
-  await subscribers(db, 41);
+  const kit = mockKit(101);
   const o = owner();
-  const r = await checkGoals(ctx(db, o), { now: MONDAY });
-  const g = byId(r, "newsletter-move-to-kit");
+  const r = await checkGoals(ctx(db, o, kit), { now: MONDAY });
+  const g = byId(r, "newsletter-100-subscribers");
   assert.equal(g.reached, true);
   assert.equal(g.fired, true);
   assert.equal(byId(r, "library-5000-graded").fired, false);
   assert.equal(o.sent.length, 1);
   const m = o.sent[0];
   assert.equal(m.to, "owner@example.com");
-  assert.equal(m.subject, "Goal reached: Newsletter: move to Kit");
-  assert.match(m.text, /\[reached\] 40\+ confirmed newsletter subscribers: 41/);
+  assert.equal(m.subject, "Goal reached: Newsletter: 100 subscribers");
+  assert.match(m.text, /\[reached\] 100\+ confirmed newsletter subscribers \(Kit\): 101/);
   assert.match(m.text, /Thursday, November 19/);
   assert.equal(m.attachments.length, 1);
   const [ics] = m.attachments;
-  assert.equal(ics.filename, "newsletter-move-to-kit.ics");
+  assert.equal(ics.filename, "newsletter-100-subscribers.ics");
   assert.match(ics.type, /^text\/calendar/);
   assert.match(ics.content, /\r\nDTSTART:20261119T180000Z\r\n/);
   assert.match(ics.content, /\r\nDTEND:20261119T183000Z\r\n/);
-  assert.match(ics.content, /\r\nSUMMARY:Decide: move the newsletter to Kit\r\n/);
-  assert.match(ics.content, /\r\nUID:goal-newsletter-move-to-kit@portfoliorank\r\n/);
+  assert.match(ics.content, /\r\nSUMMARY:Decide: the newsletter at 100 subscribers\r\n/);
+  assert.match(ics.content, /\r\nUID:goal-newsletter-100-subscribers@portfoliorank\r\n/);
   assert.ok(ics.content.split("\r\n").every((line) => new TextEncoder().encode(line).length <= 75), "lines are folded at 75 octets");
 
   // Next Monday, and a month later: still reached, never emailed again.
   for (const days of [7, 35]) {
-    const later = await checkGoals(ctx(db, o), { now: new Date(MONDAY.getTime() + days * 86400000) });
-    assert.equal(byId(later, "newsletter-move-to-kit").fired, false);
-    assert.ok(byId(later, "newsletter-move-to-kit").notifiedAt);
+    const later = await checkGoals(ctx(db, o, kit), { now: new Date(MONDAY.getTime() + days * 86400000) });
+    assert.equal(byId(later, "newsletter-100-subscribers").fired, false);
+    assert.ok(byId(later, "newsletter-100-subscribers").notifiedAt);
   }
   assert.equal(o.sent.length, 1);
-  const event = (await goalsHistory(db)).find((h) => h.id === "newsletter-move-to-kit").event;
+  const event = (await goalsHistory(db)).find((h) => h.id === "newsletter-100-subscribers").event;
   assert.equal(event.week, "2026-11-09");
-  assert.deepEqual(event.met, ["40+ confirmed newsletter subscribers"]);
+  assert.deepEqual(event.met, ["100+ confirmed newsletter subscribers (Kit)"]);
   assert.equal(event.slotStart, "2026-11-19T18:00:00.000Z");
   assert.ok(event.notifiedAt);
 });
 
 test("a goal that fired stays fired even if the number drops back", async () => {
   const db = await freshDb();
-  await subscribers(db, 40);
+  const kit = mockKit(100);
   const o = owner();
-  await checkGoals(ctx(db, o), { now: MONDAY });
-  await db.execute("UPDATE newsletter_subscribers SET status = 'unsubscribed'");
-  await subscribers(db, 45, { confirmedAt: "2026-11-18T18:00:00.000Z" });
-  await checkGoals(ctx(db, o), { now: new Date(MONDAY.getTime() + 14 * 86400000) });
+  await checkGoals(ctx(db, o, kit), { now: MONDAY });
+  kit.count = 10;
+  await db.execute("DELETE FROM cache WHERE k = 'kit:confirmed'");
+  await checkGoals(ctx(db, o, kit), { now: new Date(MONDAY.getTime() + 7 * 86400000) });
+  kit.count = 105;
+  await db.execute("DELETE FROM cache WHERE k = 'kit:confirmed'");
+  await checkGoals(ctx(db, o, kit), { now: new Date(MONDAY.getTime() + 14 * 86400000) });
   assert.equal(o.sent.length, 1);
 });
 
@@ -206,11 +226,11 @@ test("a dry run shows the email it would send and writes nothing", async () => {
 
 test("the invite goes through the owner-alert path: the email gate counts it, and Email Service gets a base64 .ics", async () => {
   const db = await freshDb();
-  await subscribers(db, 40);
+  const kit = mockKit(100);
   const calls = [];
   const env = { OWNER_EMAIL: "owner@example.com", EMAIL_FROM: "portfoliorank@n8builds.dev", AUTH_SECRET: "test", SEND_EMAIL: { send: async (m) => void calls.push(m) } };
-  const r = await checkGoals({ db, email: emailSender(env, { db }), to: env.OWNER_EMAIL, siteUrl: "https://portfoliorank.dev" }, { now: MONDAY });
-  assert.equal(byId(r, "newsletter-move-to-kit").fired, true);
+  const r = await checkGoals({ db, email: emailSender(env, { db }), to: env.OWNER_EMAIL, siteUrl: "https://portfoliorank.dev", ...kit }, { now: MONDAY });
+  assert.equal(byId(r, "newsletter-100-subscribers").fired, true);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].from, { email: "portfoliorank@n8builds.dev", name: "PortfolioRank" });
   const [a] = calls[0].attachments;

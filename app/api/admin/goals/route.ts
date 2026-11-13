@@ -26,7 +26,7 @@ export async function GET() {
   const client = db();
   const now = new Date();
   const [dry, history] = await Promise.all([
-    checkGoals({ db: client, email: null, to: null, siteUrl: process.env.AUTH_URL ?? "" }, { now, dryRun: true }),
+    checkGoals({ db: client, email: null, to: null, siteUrl: process.env.AUTH_URL ?? "", kitApiKey: process.env.KIT_API_KEY ?? null }, { now, dryRun: true }),
     goalsHistory(client),
   ]);
   const goals = GOALS.map((g) => {

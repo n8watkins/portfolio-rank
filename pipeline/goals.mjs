@@ -12,8 +12,11 @@
 // tried on the next check.
 //
 // Metrics, each as of the end of the finished week:
-//   newsletter_confirmed  confirmed newsletter subscribers (0 until the
-//                         newsletter ships)
+//   newsletter_confirmed  confirmed newsletter subscribers, from Kit's API
+//                         (Kit keeps the list), as of the check; cached a
+//                         day in the cache table (kit:confirmed). Unknown
+//                         (null, never "reached") without KIT_API_KEY or
+//                         when Kit doesn't answer and nothing is cached
 //   graded_portfolios     portfolios in the library with an AI grade (listed,
 //                         graded, and not judged "not a portfolio")
 import { GOALS } from "../lib/goals/config.mjs";
@@ -52,17 +55,53 @@ async function count(db, sql, args = []) {
   try {
     return Number((await db.execute({ sql, args })).rows[0]?.n ?? 0);
   } catch (e) {
-    // A table that doesn't exist yet (the newsletter, the grader) counts 0.
+    // A table that doesn't exist yet counts 0.
     if (/no such table/i.test(String(e?.message ?? e))) return 0;
     throw e;
+  }
+}
+
+const KIT_API = "https://api.kit.com/v4";
+const KIT_CACHE_KEY = "kit:confirmed";
+
+/**
+ * Kit's confirmed (active) subscribers, cached a day in the cache table under
+ * the same key and shape the app's admin pages use ({ count }). A failed call
+ * falls back to the last cached count, else null.
+ * @param {{ db: any, kitApiKey?: string | null, kitApi?: string, fetch?: typeof fetch }} ctx
+ */
+export async function kitConfirmed(ctx, { now = Date.now() } = {}) {
+  if (!ctx.kitApiKey) return null;
+  let cached = null;
+  try {
+    const row = (await ctx.db.execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [KIT_CACHE_KEY] })).rows[0];
+    const v = row ? JSON.parse(String(row.v)) : null;
+    if (Number.isInteger(v?.count)) cached = { count: v.count, at: Number(row.at) };
+  } catch {}
+  if (cached && now - cached.at < DAY) return cached.count;
+  try {
+    const res = await (ctx.fetch ?? globalThis.fetch)(`${ctx.kitApi ?? KIT_API}/subscribers?status=active&include_total_count=true&per_page=1`, {
+      headers: { "X-Kit-Api-Key": ctx.kitApiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`kit ${res.status}`);
+    const data = await res.json();
+    const n = Number(data?.pagination?.total_count ?? data?.total_count);
+    if (!Number.isInteger(n)) throw new Error("kit count missing");
+    await ctx.db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [KIT_CACHE_KEY, JSON.stringify({ count: n }), now] });
+    return n;
+  } catch (e) {
+    ctx.log?.(`kit subscriber count failed: ${String(e?.message ?? e).slice(0, 120)}`);
+    return cached?.count ?? null;
   }
 }
 
 /** Each metric for one finished week (weekly ones) or as of its end (totals). */
 export const METRICS = {
   newsletter_confirmed: {
-    label: "Confirmed newsletter subscribers",
-    read: (ctx, w) => count(ctx.db, "SELECT COUNT(*) AS n FROM newsletter_subscribers WHERE status = 'confirmed' AND confirmed_at < ?", [iso(w.end)]),
+    label: "Confirmed newsletter subscribers (Kit)",
+    // Kit's count today, for whichever week asks.
+    read: (ctx) => kitConfirmed(ctx),
   },
   graded_portfolios: {
     label: "Graded portfolios in the library",
@@ -214,7 +253,7 @@ export function goalEmail(m, { now, slot, siteUrl }) {
  * The weekly check. Records progress and fires newly reached goals, unless
  * `dryRun`: then nothing is written or sent, and the result says what would
  * be. Returns { week, goals: [{ id, reached, conditions, fired, email?, error? }] }.
- * @param {{ db: any, email: null | { send(m: { to: string, subject: string, text: string, attachments?: unknown[] }): Promise<void> }, to: string | null, siteUrl?: string, log?: (line: string) => void }} ctx
+ * @param {{ db: any, email: null | { send(m: { to: string, subject: string, text: string, attachments?: unknown[] }): Promise<void> }, to: string | null, siteUrl?: string, kitApiKey?: string | null, kitApi?: string, fetch?: typeof fetch, log?: (line: string) => void }} ctx
  * @param {{ now: Date, dryRun?: boolean, goals?: typeof GOALS }} options
  */
 export async function checkGoals(ctx, { now, dryRun = false, goals = GOALS }) {

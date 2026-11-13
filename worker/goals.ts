@@ -10,11 +10,11 @@ import type { NightEnv } from "./night";
 
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 
-export async function goalsTick(env: NightEnv, scheduledTime: number) {
+export async function goalsTick(env: NightEnv & { KIT_API_KEY?: string }, scheduledTime: number) {
   const db = database();
   try {
     const r = await checkGoals(
-      { db, email: emailSender(env, { db }), to: env.OWNER_EMAIL ?? null, siteUrl: String(env.AUTH_URL ?? ""), log: (line: string) => log("goals.log", { line }) },
+      { db, email: emailSender(env, { db }), to: env.OWNER_EMAIL ?? null, siteUrl: String(env.AUTH_URL ?? ""), kitApiKey: env.KIT_API_KEY ?? null, log: (line: string) => log("goals.log", { line }) },
       { now: new Date(scheduledTime) }
     );
     log("goals.tick", { week: r.week, goals: r.goals.map((g) => ({ id: g.id, reached: g.reached, fired: g.fired, error: g.error ?? null })) });

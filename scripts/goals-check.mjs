@@ -6,7 +6,8 @@
 //   node scripts/goals-check.mjs [--now=2026-11-16T16:00:00Z] [--json]
 // Production numbers: run with TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in the
 // environment (pass-env run -- node scripts/goals-check.mjs); without them it
-// reads the local development file.
+// reads the local development file. The newsletter count asks Kit with
+// KIT_API_KEY in the environment (pass-env run), else it shows "unknown".
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { checkGoals } from "../pipeline/goals.mjs";
@@ -20,7 +21,7 @@ const db = url
   ? createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN })
   : createClient({ url: `file:${process.env.LOCAL_DB_FILE ?? path.join(process.cwd(), "data", "portfoliorank.db")}` });
 
-const r = await checkGoals({ db, email: null, to: "OWNER_EMAIL", siteUrl: process.env.AUTH_URL ?? "https://portfoliorank.n8builds.dev" }, { now, dryRun: true });
+const r = await checkGoals({ db, email: null, to: "OWNER_EMAIL", siteUrl: process.env.AUTH_URL ?? "https://portfoliorank.n8builds.dev", kitApiKey: process.env.KIT_API_KEY ?? null }, { now, dryRun: true });
 
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify(r, null, 2));
