@@ -2,9 +2,9 @@ import { db, ensureSchema } from "@/lib/db";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeGradeUrl } from "@/lib/grader/url.mjs";
-import { validOwnKey } from "@/lib/grader/own-key.mjs";
+import { checkOwnKey, validOwnKey } from "@/lib/grader/own-key.mjs";
 import { startGrade } from "@/lib/grader/start";
-import { disabled, fail, graderEnabled, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
+import { disabled, fail, graderEnabled, readJsonBody, requester, sameOrigin, testSeam } from "@/lib/grader/server";
 
 // "Grade my portfolio": start a grade (AUTOMATION.md "Grade my portfolio").
 //
@@ -54,5 +54,10 @@ export async function POST(req: Request) {
 
   if ((await verifyTurnstile(body.turnstileToken, who.ip, { action: "grade" })) === "failed") return fail("turnstile_failed", 403);
 
-  return startGrade(client, { who, target, geminiKey, now });
+  // The visitor's own key is checked with Google inside startGrade, after the caps.
+  const checkKey = (key: string) => {
+    const apiBase = testSeam("GRADER_TEST_GEMINI_API");
+    return checkOwnKey(key, apiBase ? { apiBase } : {});
+  };
+  return startGrade(client, { who, target, geminiKey, checkKey, now });
 }
