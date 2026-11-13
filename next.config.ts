@@ -9,7 +9,7 @@ import { parseJsonc } from "./scripts/check-worker-exports.mjs";
 // when the build environment sets it (the test runs), else wrangler.jsonc's
 // value for the Worker being built (staging or production). Flipping one in
 // wrangler.jsonc ships with a deploy, which rebuilds.
-function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED"): "true" | "false" {
+function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED" | "EMAIL_SIGNIN_ENABLED" | "NEWSLETTER_ENABLED"): "true" | "false" {
   if (process.env[name] !== undefined) return /^true$/i.test(String(process.env[name])) ? "true" : "false";
   try {
     const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
@@ -81,7 +81,14 @@ const nextConfig: NextConfig = {
   // Browser source maps only for the deploy that uploads them to Sentry; the
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
-  env: { NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED"), NEXT_PUBLIC_TOOLS_ENABLED: launchSwitch("TOOLS_ENABLED") },
+  env: {
+    NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED"),
+    NEXT_PUBLIC_TOOLS_ENABLED: launchSwitch("TOOLS_ENABLED"),
+    // Email sign-in (lib/signin/flag.ts): the option in the sign-in dialog and its routes.
+    NEXT_PUBLIC_EMAIL_SIGNIN_ENABLED: launchSwitch("EMAIL_SIGNIN_ENABLED"),
+    // The newsletter's sign-up forms (components/newsletter/useNewsletterOn.ts) ask for its status only when on.
+    NEXT_PUBLIC_NEWSLETTER_ENABLED: launchSwitch("NEWSLETTER_ENABLED"),
+  },
   async headers() {
     // Grade reports are unlisted (shareable by link only) and claims are
     // personal: never indexed, whatever a page's own metadata says.

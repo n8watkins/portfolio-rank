@@ -23,6 +23,10 @@
 //                    tick does the same hourly while it runs).
 //   badge_checks     a player's last badge check (a 15-second reuse) is
 //                    deleted after a day; the next check rebuilds it.
+//   email_signin_tokens  sign-in links (lib/signin/store.mjs), with the
+//                    address they were for, a day after they expire or once
+//                    used (each new request also clears them).
+import { pruneTokens } from "../lib/signin/store.mjs";
 import { GEMINI_DAILY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
 import { pruneLinks } from "../lib/grader/links.mjs";
@@ -135,6 +139,9 @@ export async function pruneLogs(db, { now = new Date() } = {}) {
   }
   if (await tableExists(db, "grade_links")) {
     out.links = await pruneLinks(db, { now: now.getTime() });
+  }
+  if (await tableExists(db, "email_signin_tokens")) {
+    out.signinTokens = await pruneTokens(db, { now: now.getTime() });
   }
   if (await tableExists(db, "badge_checks")) {
     out.badgeChecks = (await db.execute({ sql: "DELETE FROM badge_checks WHERE at < ?", args: [now.getTime() - DAY_MS] })).rowsAffected;
