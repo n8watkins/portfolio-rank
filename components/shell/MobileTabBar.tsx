@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Plus, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, X } from "lucide-react";
 import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
@@ -28,7 +29,10 @@ const TABS: Tab[] = ROUTES.add
 const tab =
   "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium text-mute transition aria-[current=page]:text-ink";
 
-/** Phones and tablets: Top, Play, Grade, Browse and More along the bottom. */
+/**
+ * Phones and tablets: Top, Play, Grade, Browse and More along the bottom.
+ * Client navigation without prefetch, like the header (HeaderNav).
+ */
 export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
   const current = navKeyFor(usePathname() ?? "/");
   const session = useClientSession();
@@ -67,20 +71,20 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
             if (key === "grade") {
               if (!action) return null;
               return (
-                <a key={key} href={action.href} aria-current={current === "grade" ? "page" : undefined} className={tab}>
+                <Link key={key} href={action.href} prefetch={false} aria-current={current === "grade" ? "page" : undefined} className={tab}>
                   <span className={`grid h-7 w-11 place-items-center rounded-full ${action.done ? "bg-accent-soft text-accent" : "bg-fill text-on-fill"}`}>
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                   <span className={action.done ? "text-accent" : "text-ink"}>{action.done ? "Yours" : label}</span>
-                </a>
+                </Link>
               );
             }
             if (!href) return null;
             return (
-              <a key={key} href={href} aria-current={current === key ? "page" : undefined} className={tab}>
+              <Link key={key} href={href} prefetch={false} aria-current={current === key ? "page" : undefined} className={tab}>
                 <Icon className="h-5 w-5" aria-hidden />
                 {label}
-              </a>
+              </Link>
             );
           })}
           <button
@@ -141,9 +145,9 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
                         {body}
                       </button>
                     ) : (
-                      <a href={href} className={row}>
+                      <Link href={href} prefetch={false} className={row} onClick={() => setMore(false)}>
                         {body}
-                      </a>
+                      </Link>
                     )}
                   </li>
                 );
