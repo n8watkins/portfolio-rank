@@ -136,7 +136,8 @@ export function Article({
       )}
 
       {/* The reading column stays centred under the header; on wide screens the
-          contents rail sits in the left gutter (the right one stays empty). */}
+          contents rail sits in the left gutter and the newsletter sign-up in the
+          right one (only while the newsletter is live). */}
       <div className="mx-auto max-w-[78rem] px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_39rem_minmax(0,1fr)] xl:gap-12">
         {toc.length > 1 && (
           <aside className="hidden pt-8 xl:block xl:justify-self-end">
@@ -147,7 +148,7 @@ export function Article({
         )}
       <div className="mx-auto w-full max-w-[39rem] pt-8 text-[17px] leading-[1.75] sm:text-lg sm:leading-[1.75] xl:col-start-2 xl:mx-0">
         {toc.length > 1 && (
-          <div className="xl:hidden">
+          <div className="sticky top-[4.5rem] z-10 mb-6 xl:hidden">
             <TocToggle items={toc} />
           </div>
         )}
@@ -245,8 +246,19 @@ export function Article({
         </div>
 
         {/* The newsletter sign-up for readers (not the owner's draft preview); it shows only while the newsletter is live. */}
-        {signup && <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal" />}
+        {signup && (
+          <div className="xl:hidden">
+            <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal" />
+          </div>
+        )}
       </div>
+        {signup && (
+          <aside aria-label="Newsletter" className="hidden pt-8 xl:col-start-3 xl:row-start-1 xl:block">
+            <div className="sticky top-24 w-72">
+              <NewsletterSignup form="sidebar" />
+            </div>
+          </aside>
+        )}
       </div>
 
       {more.length > 0 && (
