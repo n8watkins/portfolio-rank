@@ -131,6 +131,18 @@ jobs:
         if: steps.setup.outputs.ready == 'true'
         run: node scripts/migrate.mjs
 
+      # Tiers by rank (lib/tiers.mjs), placed at each staging deploy, since
+      # staging runs its scheduled jobs rarely. Only when what is on staging
+      # has tiers (the tiers pull requests, until they land on main).
+      - name: Place the staging tiers
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          if [ -f scripts/refresh-tiers.mjs ]; then
+            node scripts/refresh-tiers.mjs --daily
+          else
+            echo "No tiers on staging yet (scripts/refresh-tiers.mjs is not in this tree)."
+          fi
+
       - name: Build
         if: steps.setup.outputs.ready == 'true'
         env:
