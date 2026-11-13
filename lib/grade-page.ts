@@ -6,8 +6,9 @@ import { ownedJobs } from "@/lib/grader/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
 import { withEloLetters } from "@/lib/tiers-letters.mjs";
-import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
-import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
+import { readSiteRow, readTierMeta } from "@/lib/tiers-db.mjs";
+import { placeGrade } from "@/lib/tiers-store.mjs";
+import { MIN_FACEOFFS, familyOf } from "@/lib/tiers.mjs";
 import { tiersShown } from "@/lib/tiers-view";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
@@ -36,11 +37,13 @@ export type GradePage = {
   /** The phone screenshot (390 px wide), when the grade captured one. */
   mobile: string | null;
   /**
-   * The result's one consistent answer: a tier earned in face-offs with its
-   * own "top N%" (both from the same ranking, so they never disagree), or
-   * provisional with the face-offs so far (MIN_FACEOFFS earn a tier).
+   * The result, from day one (owner, 2026-11-13): the tier and its own "top
+   * N%" from the same ranking, so they never disagree, and the face-offs so
+   * far, which say how settled it is (MIN_FACEOFFS: settled). A starting
+   * tier from automated checks tops out at A: S is earned in face-offs.
+   * Null for "not a portfolio" or no usable grade.
    */
-  standing: { settled: true; tier: string; topPct: number; faceoffs: number } | { settled: false; faceoffs: number };
+  standing: { tier: string; topPct: number | null; faceoffs: number; starting: boolean } | null;
   /** The listed portfolio this grade is about, when it's on the list. */
   listed: { url: string; path: string } | null;
   /** GAMES_V2: claims and owner actions are open. */
@@ -108,7 +111,7 @@ export async function gradePage(id: string): Promise<GradePage | null> {
     hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
   }
   const freeChecks = job.checks?.ok ? hiringGroups((job.checks as { facts?: Parameters<typeof hiringGroups>[0] }).facts ?? []) : null;
-  const standing = await standingFor(client, site?.url ?? null);
+  const standing = await standingFor(client, site?.url ?? null, raw.result);
   const base = { job, name, hero, mobile: job.shots?.mobile ?? null, standing, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
   if (!job.report || !raw.result) return { ...base, report: null };
 
@@ -177,19 +180,24 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
 }
 
 /**
- * A listed site's earned tier (MIN_FACEOFFS face-offs or more, by the daily
- * cutoffs) with its "top N%", else provisional with its face-offs so far. A
- * visitor's own site has no face-offs: provisional.
+ * The grade's tier and "top N%" by ELO (lib/tiers-store.mjs placeGrade): a
+ * listed site's own rating row, else a starting rank from the points its
+ * grade shows, placed in the daily cutoffs. Before MIN_FACEOFFS face-offs it
+ * is a starting tier, and a starting tier is never S (owner: the best start
+ * is A; S is earned through face-off wins).
  */
-async function standingFor(client: ReturnType<typeof db>, url: string | null): Promise<GradePage["standing"]> {
-  if (!url || !tiersShown()) return { settled: false, faceoffs: 0 };
+async function standingFor(client: ReturnType<typeof db>, url: string | null, result: unknown): Promise<GradePage["standing"]> {
   try {
-    const [row, meta] = await Promise.all([readSiteRow(client, url), readTierMeta(client)]);
-    const faceoffs = Math.floor(Number(row?.faceoffs ?? 0));
-    const st = row && row.member === 1 ? standingOf(row, meta) : null;
-    if (st?.tier && typeof st.top === "number" && faceoffs >= MIN_FACEOFFS) return { settled: true, tier: st.tier, topPct: st.top, faceoffs };
-    return { settled: false, faceoffs };
+    const grade = typeof result === "string" ? JSON.parse(result) : result;
+    if (!grade || typeof grade !== "object" || (grade as { is_portfolio?: boolean }).is_portfolio === false) return null;
+    const [row, meta] = await Promise.all([url ? readSiteRow(client, url) : null, readTierMeta(client)]);
+    const rank = placeGrade(grade, { meta, row: row && !row.fresh ? row : null });
+    if (!rank?.tier) return null;
+    const faceoffs = Math.floor(Number(rank.faceoffs ?? 0));
+    const starting = faceoffs < MIN_FACEOFFS;
+    const tier = starting && familyOf(rank.tier) === "S" ? "A+" : String(rank.tier);
+    return { tier, topPct: typeof rank.top === "number" ? rank.top : null, faceoffs, starting };
   } catch {
-    return { settled: false, faceoffs: 0 };
+    return null;
   }
 }

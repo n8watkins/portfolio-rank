@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Bot, Briefcase, CircleAlert, CircleCheck, CircleMinus, ExternalLink, Link2Off, Swords, Wrench } from "lucide-react";
+import { ArrowRight, Bot, Briefcase, CircleAlert, CircleCheck, CircleMinus, ExternalLink, Link2Off, Wrench } from "lucide-react";
 import { Celebration } from "@/components/grade/Celebration";
 import { GradeForm } from "@/components/grade/GradeForm";
 import { GradeProgress } from "@/components/grade/GradeProgress";
@@ -173,7 +173,6 @@ export default async function GradeReportPage({ params, searchParams }: Params &
 
   const rep = job.report;
   const view = page.report;
-  const pct = rep.percentile;
   const judgments = rep.judgments.filter((j) => typeof j.score === "number");
   const joinHref = `${SITE.submit}&url=${encodeURIComponent(job.url)}`;
   const claimHref = page.games && page.listed ? `/claim?url=${encodeURIComponent(page.listed.url)}` : null;
@@ -211,44 +210,44 @@ export default async function GradeReportPage({ params, searchParams }: Params &
 
         {/* The result, front and center: one answer that never disagrees with itself. */}
         <aside aria-label="Result" className="card rise p-5 sm:p-6 lg:col-start-2 lg:row-span-2 lg:row-start-1" style={d(80)}>
-          {st.settled ? (
-            <div className="flex items-center gap-4">
-              <span id="report-tier" className="shrink-0">
-                <LetterBadge tier={st.tier} elo size="lg" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-4xl font-bold leading-none tracking-tight">
-                  Top {st.topPct}
-                  <span className="text-2xl">%</span>
-                </p>
-                <p className="mt-1.5 text-sm text-mute">
-                  Tier {tierLabel(st.tier)}, from {st.faceoffs.toLocaleString("en-US")} face-offs
-                </p>
-              </div>
-            </div>
-          ) : (
+          {st ? (
             <>
               <div className="flex items-center gap-4">
-                <span id="report-tier" className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border-2 border-dashed border-edge-strong text-mute" role="img" aria-label="Provisional: no tier yet">
-                  <Swords className="h-6 w-6" aria-hidden />
+                <span id="report-tier" className="shrink-0">
+                  <LetterBadge tier={st.tier} elo size="lg" />
                 </span>
-                <div className="min-w-0">
-                  <p className="text-2xl font-bold leading-tight tracking-tight">Provisional</p>
-                  <p className="mt-0.5 text-sm text-mute">
-                    A tier comes after {MIN_FACEOFFS} face-offs <span className="whitespace-nowrap">· {Math.min(st.faceoffs, MIN_FACEOFFS)} so far</span>
-                  </p>
-                </div>
+                {/* The badge is the letter; beside it its own "top N%", from the same ranking. */}
+                <p className="min-w-0 text-4xl font-bold leading-none tracking-tight">
+                  <span className="sr-only">Tier {tierLabel(st.tier)}, </span>
+                  {st.topPct != null ? (
+                    <span className="whitespace-nowrap">
+                      Top {st.topPct}
+                      <span className="text-2xl">%</span>
+                    </span>
+                  ) : (
+                    `Tier ${tierLabel(st.tier)}`
+                  )}
+                </p>
               </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-edge" aria-hidden>
+              {/* Face-offs say how settled the tier is, not whether there is one. */}
+              <p className="mt-3 text-sm text-mute">
+                {st.starting ? "Starting tier from automated checks" : "Tier from face-off votes"}
+                <span className="whitespace-nowrap">
+                  {" "}
+                  · {st.faceoffs.toLocaleString("en-US")} face-off{st.faceoffs === 1 ? "" : "s"} so far
+                </span>
+              </p>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-edge" role="img" aria-label={`How settled: ${Math.min(st.faceoffs, MIN_FACEOFFS)} of ${MIN_FACEOFFS} face-offs`}>
                 <span className="block h-full rounded-full bg-fill" style={{ width: `${(100 * Math.min(st.faceoffs, MIN_FACEOFFS)) / MIN_FACEOFFS}%` }} />
               </div>
-              {pct && (
-                <p className="mt-4 border-t border-edge pt-3 text-sm">
-                  <span className="text-mute">The AI grade alone:</span> <strong className="tabular-nums">top {pct.topPct}%</strong>{" "}
-                  <span className="text-mute">of {pct.total.toLocaleString("en-US")} graded portfolios</span>
-                </p>
-              )}
             </>
+          ) : (
+            <div className="flex items-center gap-4">
+              <span id="report-tier" className="shrink-0">
+                <LetterBadge tier={null} elo size="lg" />
+              </span>
+              <p className="text-sm text-mute">{rep.isPortfolio === false ? "Not ranked: this doesn't look like a portfolio." : "Its place shows once more portfolios are graded."}</p>
+            </div>
           )}
           {ROUTES.grading && (
             <a href={`${ROUTES.grading}#tiers`} className="mt-3 inline-block text-xs font-semibold text-accent hover:underline print:hidden">
