@@ -143,6 +143,20 @@ The new STEP 3 paragraph, word for word:
 
 > is_portfolio is true unless one of these exclusions applies: a parked or for-sale domain; an unedited placeholder (demo names like 'Aaaaby' or 'John Doe', or someone else's content); a page that is not about a person (a company or studio site, a bare code repository, a link-in-bio page like Linktree); a broken, blank or error page. The three signs of a portfolio, (1) who they are, a name or clear personal identity (stylized or spaced-out letters count), (2) what they do (developer, engineer, designer, and so on), and (3) a way to their work (a Projects button or link, a GitHub link, project links or a resume), feed the checklist, the scores and the tips only. A missing sign, a missing role included, is never a reason to say false: a weak portfolio is still a portfolio, with low scores and tips. Give the reason first, then the answer.
 
+## Mini test 8, 2026-11-13: prompt version "portfolio-definition-v2.1-projects" (version B)
+
+Owner-approved test "what the grader sees": the same 10 sites, the same definition (v2.1), graded twice with everything else equal.
+Version A sends what the grader gets today: the desktop and phone first screens and the page text, with the v2.1 prompts unchanged (`experiments/portfolio-definition-v2.1/`).
+Version B adds one or two desktop screens of the Projects section, cut from the tall desktop image (found from the outline's projects heading; the second screen when there is none), with `experiments/portfolio-definition-v2.1-projects/`.
+That folder is v2.1 with two changes only, in both solo and batch prompts:
+- under WHAT YOU GET, one new line saying what the extra screenshots are, that they serve project presentation, visual design and writing, and that the five-second checklist is still about the top of the page only;
+- the project_presentation line now says the projects screenshots count above all.
+The schema is a byte copy, so both versions answer in the same shape.
+Each extra screenshot is labelled in the request, right after the phone screenshot ("projects section, screen 1 of 2 (desktop, 1440 wide, cut from the whole page)" or "the second screen of the page (no projects heading found)").
+Prompt ids: `portfolio-definition-v2.1-solo` and `portfolio-definition-v2.1-batch` for A, `portfolio-definition-v2.1-projects-solo` and `portfolio-definition-v2.1-projects-batch` for B.
+Why I wrote B this way: the extra screens are evidence, not a new rule, so the definition and the rubric stay word for word; the one sentence keeps the checklist on the first screen, because a grader who sees projects lower down could otherwise answer "way forward" or "something notable" from them.
+What I expect: project presentation moves most (up on sites whose projects are below the fold and only named in the text, down where the screenshots show thin tutorial work); visual design moves a little; the portfolio verdict barely moves, since under v2.1 only the exclusions decide; Haiku moves more than Gemini 3.1, which leans on text.
+
 ## Amendment, 2026-11-13: the day cap
 
 The run paused at pass2/A-b3 because the model's requests this Pacific quota day reached the harness's day cap of 430 (376 from the first grading test, 54 from this run; the free quota is 500).

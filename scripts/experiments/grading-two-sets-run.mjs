@@ -66,8 +66,13 @@ export function loadBundle(id, root = path.join(RES, "bundles")) {
     const buf = fs.readFileSync(path.join(dir, f));
     return { data: buf.toString("base64"), ref: { bundle_file: path.join("bundles", set, id, f), sha256: sha256(buf) } };
   };
+  // Optional (mini test 8, version B): extra.json lists more screenshots,
+  // [{ file, label }], sent after the phone screenshot with their labels.
+  const extraPath = path.join(dir, "extra.json");
+  const extra = fs.existsSync(extraPath) ? readJson(extraPath).map((x) => ({ label: x.label, ...img(x.file) })) : [];
   return {
     id,
+    extra,
     desktop: img("desktop.jpg"),
     phone: img("phone.jpg"),
     text: fs.readFileSync(path.join(dir, "text.txt"), "utf8").trim(),
@@ -130,6 +135,10 @@ export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey =
     const pre = kind === "batch" ? `${labels[i]}: ` : "";
     parts.push({ text: `${pre}desktop screenshot (1440x900), top of the home page:` }, jpeg(b.desktop));
     parts.push({ text: `${pre}phone screenshot (390x844), top of the home page:` }, jpeg(b.phone));
+    for (const x of b.extra ?? []) {
+      parts.push({ text: `${pre}${x.label}:` }, jpeg(x));
+      refs.set(x.data, x.ref);
+    }
     parts.push({ text: siteBlock(b, kind === "batch" ? labels[i] : null) });
     refs.set(b.desktop.data, b.desktop.ref);
     refs.set(b.phone.data, b.phone.ref);
