@@ -4,6 +4,8 @@ import { Article } from "@/components/blog/Article";
 import { moreArticles, publishedPost, relatedPortfolios } from "@/lib/blog-server";
 import { coverOf, imageSrc, postUrl } from "@/lib/blog";
 import { SITE_URL } from "@/lib/site";
+import { blogPostingLd, postModified } from "@/lib/blog-seo";
+import { jsonLdHtml } from "@/lib/json-ld";
 
 // One published post. Rendered on first visit, then served from the cache
 // and rendered again at most every 5 minutes (ISR); nothing here depends on
@@ -25,7 +27,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     description,
     alternates: { canonical: `/blog/${post.slug}` },
     // The share image is ./opengraph-image.tsx.
-    openGraph: { type: "article", title: post.title, description, url: `/blog/${post.slug}`, publishedTime: post.publishAt ?? undefined, tags: post.tags },
+    openGraph: {
+      type: "article",
+      title: post.title,
+      description,
+      url: `/blog/${post.slug}`,
+      publishedTime: post.publishAt ?? undefined,
+      modifiedTime: postModified(post) ?? undefined,
+      tags: post.tags,
+    },
     twitter: { card: "summary_large_image", title: post.title, description },
   };
 }
@@ -36,25 +46,11 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   if (!post) notFound();
   const [related, more] = await Promise.all([relatedPortfolios(post), moreArticles(post)]);
   const cover = coverOf(post.images);
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    headline: post.title,
-    description: post.subtitle ?? undefined,
-    datePublished: post.publishAt,
-    dateModified: post.publishAt,
-    url: postUrl(post.slug),
-    mainEntityOfPage: postUrl(post.slug),
-    image: cover ? new URL(imageSrc(post.id, cover), SITE_URL).toString() : `${SITE_URL}/blog/${post.slug}/opengraph-image`,
-    keywords: post.tags.join(", "),
-    author: { "@type": "Organization", name: "PortfolioRank", url: SITE_URL },
-    publisher: { "@type": "Organization", name: "PortfolioRank", url: SITE_URL, logo: { "@type": "ImageObject", url: `${SITE_URL}/icon.png` } },
-    isBasedOn: post.facts?.dataLink,
-    citation: post.claims.map((c) => c.url),
-  };
+  // A BlogPosting and its breadcrumb trail (lib/blog-seo.ts).
+  const jsonLd = blogPostingLd(post, cover ? new URL(imageSrc(post.id, cover), SITE_URL).toString() : `${postUrl(post.slug)}/opengraph-image`);
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
       <Article post={post} related={related} more={more} signup />
     </>
   );
