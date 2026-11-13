@@ -6,6 +6,7 @@ import { tierOf, isPublicTier } from "@/lib/tiers.mjs";
 import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
 import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
+import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
 import { seen, seenId } from "@/lib/discovery/sites.mjs";
 import { legacyAddress, profilePath, requestedSlug, slugKey } from "@/lib/profile-url.mjs";
 import { cache } from "react";
@@ -121,7 +122,25 @@ export type Profile = {
   saved: { quick: Saved<QuickFacts>; share: Saved<ShareResult>; mobile: Saved<PsiResult>; desktop: Saved<PsiResult> };
   stars: number;
   saves: number;
+  /** The health check hides the site (down, dead, parked; lib/hidden.mjs): its profile isn't indexed. */
+  hidden: boolean;
+  /** The person's profiles their site links to (app/api/inspect, cached a week), when known. */
+  socials: { github: string | null; linkedin: string | null; x: string | null };
 };
+
+/** The page check's cache key (app/api/inspect/route.ts, lib/cache.ts). */
+const inspectKey = (url: string) => `inspect:${url}`;
+
+/** An https link on one of these hosts, or null: scraped links are never trusted as they are. */
+function socialLink(raw: unknown, hosts: RegExp): string | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && hosts.test(u.hostname) && u.pathname.length > 1 ? u.href : null;
+  } catch {
+    return null;
+  }
+}
 
 const listedBy = new Map((feed as Feed[]).map((p) => [p.url, p]));
 
@@ -175,10 +194,10 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   if (owner.removedAt) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves] = await Promise.all([
-    listed ? client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
+    listed ? client.execute({ sql: `SELECT ai_rubric, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]) : null,
     client.execute({ sql: "SELECT id, status, reason, result FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [siteKey] }).then((r) => r.rows[0]),
     listed ? null : seen(client, url),
-    client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url)] }).then((r) => r.rows),
+    client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url), inspectKey(url)] }).then((r) => r.rows),
     client.execute({ sql: "SELECT n FROM star_counts WHERE url = ?", args: [url] }).then((r) => Number(r.rows[0]?.n ?? 0)),
     client.execute({ sql: "SELECT COUNT(*) AS n FROM likes WHERE url = ?", args: [url] }).then((r) => Number(r.rows[0]?.n ?? 0)),
   ]);
@@ -196,6 +215,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   };
   const quick = read<QuickFacts>(quickKey(siteKey));
   const share = read<ShareResult>(shareKey(url));
+  const inspected = read<{ githubUrl?: unknown; linkedinUrl?: unknown; xUrl?: unknown }>(inspectKey(url));
 
   const jobResult = jobRow?.status === "done" && jobRow.result ? String(jobRow.result) : null;
   const report = owner.hideGrade ? null : reportCard(rubricRow?.ai_rubric ?? jobResult);
@@ -231,6 +251,12 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     saved: { quick, share, mobile: read<PsiResult>(psiKey("mobile", url)), desktop: read<PsiResult>(psiKey("desktop", url)) },
     stars,
     saves,
+    hidden: Number(rubricRow?.hidden ?? 0) === 1,
+    socials: {
+      github: socialLink(inspected?.githubUrl, /^(www\.)?github\.com$/i),
+      linkedin: socialLink(inspected?.linkedinUrl, /^([a-z]{2,3}\.|www\.)?linkedin\.com$/i),
+      x: socialLink(inspected?.xUrl, /^(www\.)?(x|twitter)\.com$/i),
+    },
   };
 }
 

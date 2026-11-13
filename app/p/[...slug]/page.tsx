@@ -14,6 +14,8 @@ import { eyebrow } from "@/components/ui/styles";
 import { routeProfile, type Profile } from "@/lib/profile";
 import { profileImagePath } from "@/lib/profile-url.mjs";
 import { SHARE_SIZE } from "@/lib/play/share-card";
+import { profileDescription, profilePageLd } from "@/lib/profile-seo";
+import { breadcrumbList, graph, jsonLdHtml } from "@/lib/json-ld";
 import { FixList } from "@/components/profile/FixList";
 import { RecheckButton } from "@/components/profile/RecheckButton";
 
@@ -47,8 +49,8 @@ function seoTitle(p: Profile) {
   return `${p.name}${role ? `, ${cap(role)}` : ""} Portfolio | PortfolioRank`;
 }
 
-/** Graded and a real portfolio: the only profiles search engines are asked to index. */
-const indexable = (p: Profile) => Boolean(p.report?.isPortfolio);
+/** Graded, a real portfolio and not hidden by the health check: the only profiles search engines are asked to index. */
+const indexable = (p: Profile) => Boolean(p.report?.isPortfolio) && !p.hidden;
 
 /** The share card (app/og/p/[...slug]/route.tsx), absolute. */
 const shareImage = (p: Profile) => ({ url: `${SITE_URL}${profileImagePath(p.url)}`, ...SHARE_SIZE, alt: `${p.name} on PortfolioRank` });
@@ -64,12 +66,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical }, openGraph: { images } };
   }
   const title = seoTitle(p);
-  const roles = p.report?.roles ?? [];
-  const kind = roles.length ? `${roles.join(", ")} portfolio` : "developer portfolio";
-  const description = `${p.name}'s ${kind} at ${p.domain}${p.tagline ? `: ${p.tagline.replace(/\.$/, "")}` : ""}.${p.tier && !p.standing.provisional ? ` Tier ${tierLabel(p.tier)} on PortfolioRank.` : " On PortfolioRank."}`;
+  // From the grade and the rank (lib/profile-seo.ts).
+  const description = profileDescription(p);
   return {
     title,
-    description: description.slice(0, 300),
+    description,
     alternates: { canonical },
     openGraph: { title, description, url: canonical, type: "profile", images },
     twitter: { card: "summary_large_image", title, description, images },
@@ -260,25 +261,22 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   if ("to" in r) permanentRedirect(r.to);
   const { p } = r;
   const shot = await shotFor(p);
+  // A ProfilePage about the person and its breadcrumb trail (lib/profile-seo.ts), for indexable profiles only.
+  const canonical = `${SITE_URL}${p.path}`;
   const jsonLd = indexable(p)
-    ? {
-        "@context": "https://schema.org",
-        "@type": "ProfilePage",
-        url: `${SITE_URL}${p.path}`,
-        name: seoTitle(p),
-        mainEntity: {
-          "@type": "Person",
-          name: p.name,
-          ...(p.report?.roles.length ? { jobTitle: p.report.roles[0] } : {}),
-          url: p.url,
-          sameAs: [p.url],
-        },
-      }
+    ? graph([
+        profilePageLd(p, { canonical, title: seoTitle(p), siteUrl: SITE_URL, siteName: "PortfolioRank" }),
+        breadcrumbList([
+          { name: "PortfolioRank", url: SITE_URL },
+          { name: "Browse", url: `${SITE_URL}/browse` },
+          { name: p.name, url: canonical },
+        ]),
+      ])
     : null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 pb-12 pt-6 sm:px-6">
-      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />}
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />}
       <header className="card overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
           <div className="min-w-0">
