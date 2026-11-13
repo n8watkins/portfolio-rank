@@ -11,6 +11,7 @@ export const ADMIN_PAGES = [
   { href: "/admin/blog", label: "Blog drafts" },
   { href: "/admin/polls", label: "Polls" },
   { href: "/admin/alerts", label: "Alerts" },
+  { href: "/admin/review", label: "Review" },
 ] as const;
 
 /**
