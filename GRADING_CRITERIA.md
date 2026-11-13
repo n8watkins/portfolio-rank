@@ -176,7 +176,11 @@ It never sets the tier.
 Play draws most face-offs from portfolios with fewer than 10 people's votes (`lib/play/draw.mjs`), so every starting rank gets checked by people.
 The portfolio page shows the points breakdown and the quickest points to gain ("+5 if you add a share image").
 The public page `/grading` explains all of this with today's counts.
-`refreshTiers` replays the votes and places every grade again hourly (`worker/tiers.ts`) and at each deploy (`scripts/refresh-tiers.mjs`); a new grade is placed with its site's current rating as it is written.
+Kept incrementally (owner decision 2026-11-13, `lib/tiers-db.mjs`): each rating lives in `tier_ratings`, and a vote (a person's, the AI judge's, an AI comparison) moves only its two portfolios, at once, in the vote's own transaction; Undo takes it back.
+Once a day (`worker/tiers.ts`, on the hourly trigger when a day has passed) the cutoffs are found: the rating at each tier's last place, from a histogram kept by triggers (`tier_hist`) plus one indexed read per cutoff.
+Then only the letters that changed are rewritten: the portfolios that got votes, and the ones whose rating lies between a cutoff's old and new value.
+A page derives a site's letter, "top N%" and place on read from its rating and the cached cutoffs.
+The full rebuild (`refreshTiers`: points, starting ranks, a replay of every face-off) runs at deploy on staging, by hand (`scripts/refresh-tiers.mjs`), and once when no tier data exists yet; it also brings membership (delisted, down, "not a portfolio") back in line.
 
 **Cost per grade** (offline estimate on 30 sampled sites, `npm run eval:rubric -- --sample 30`, at 3.5 Flash-Lite's paid rates of $0.30 in and $2.50 out per 1M tokens):
 

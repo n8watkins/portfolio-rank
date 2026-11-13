@@ -41,6 +41,7 @@ import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary 
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import { rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
+import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
   RESPONSE_SCHEMA,
   RUBRIC_VERSION,
@@ -691,6 +692,7 @@ async function runPairwise() {
 // the UNIQUE(rater_id, pair_key) index as the dup backstop. AI votes move
 // official ELO — that is the whole point of the bootstrap (GRADING §7).
 async function castVote(win, lose, model) {
+  await ensureTierSchema(db);
   const tx = await db.transaction("write");
   try {
     const rres = await tx.execute({
@@ -720,6 +722,8 @@ async function castVote(win, lose, model) {
         elo = excluded.elo, votes = excluded.votes, updated_at = excluded.updated_at`;
     await tx.execute({ sql: upsert, args: [win.url, updated.winner, w.votes + 1] });
     await tx.execute({ sql: upsert, args: [lose.url, updated.loser, l.votes + 1] });
+    // The tier rating of the two moves at once, an AI vote at its lower weight (lib/tiers-db.mjs).
+    await applyFaceoff(tx, { winner: win.url, loser: lose.url, rater: "ai" });
     await tx.commit();
     // keep in-memory pool fresh so later pair picks use updated numbers
     win.elo = updated.winner;

@@ -51,6 +51,9 @@ type PoolSite = {
 /** A graded portfolio in the leaderboard's ranked order: its place on the board, tier, ELO and face-offs. */
 type HomeSite = PoolSite & { rank: number; elo: number; faceoffs: number; top: number | null };
 
+/** How many of the leaderboard's first portfolios the home page reads (top 10, hero cards, portfolio of the day). */
+const HOME_RANKED = 300;
+
 /**
  * The graded, listed portfolios in the leaderboard's ranked order (by tier,
  * then ELO from face-offs: lib/leaderboard.ts rankedOrder), each with its
@@ -58,14 +61,15 @@ type HomeSite = PoolSite & { rank: number; elo: number; faceoffs: number; top: n
  * (axes, roles) is cached an hour (lib/grader/report.mjs gradedPool), the
  * order is one cached row.
  */
-async function rankedPool(): Promise<HomeSite[]> {
+async function rankedPool(): Promise<{ sites: HomeSite[]; all: PoolSite[] }> {
   await ensureSchema();
-  const [pool, order] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, rankedOrder()]);
+  const [pool, { sites: order }] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, rankedOrder(HOME_RANKED)]);
   const byPool = new Map(pool.map((p) => [p.url, p]));
-  return order
+  const sites = order
     .map((r, i) => ({ r, rank: i + 1, p: byPool.get(r.e.url) }))
     .filter((x): x is { r: (typeof order)[number]; rank: number; p: PoolSite } => x.p != null)
     .map(({ r, rank, p }) => ({ ...p, tier: r.p.tier, rank, elo: r.e.elo, faceoffs: r.e.faceoffs, top: r.p.provisional ? null : r.p.top }));
+  return { sites, all: pool };
 }
 
 /**
@@ -236,7 +240,7 @@ export type PortfolioOfTheDay = {
 };
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
-async function portfolioOfTheDay(pool: HomeSite[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
+async function portfolioOfTheDay(pool: HomeSite[], graded: number, skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
   // The A family or better: the top 30% by ELO (SSS to A-, lib/tiers.mjs); while few have enough
   // face-offs for a tier, the best AI grades (the pool is in grade order).
   const open = pool.filter((p) => strongCapture(p) && !skip.has(p.url));
@@ -273,7 +277,7 @@ async function portfolioOfTheDay(pool: HomeSite[], skip: Set<string>, now = new 
       hero: heroOf(base),
       tier: p.tier,
       rank: p.rank,
-      total: pool.length,
+      total: graded,
       top: p.top,
       elo: p.faceoffs > 0 ? p.elo : null,
       best: judgments.slice(0, 2).map((j) => ({ label: j.label, note: j.note })),
@@ -296,11 +300,11 @@ export type HomeData = Awaited<ReturnType<typeof homeData>>;
 
 export async function homeData() {
   await ensureSchema();
-  const pool = await rankedPool();
+  const { sites: pool, all } = await rankedPool();
   const hidden = await hiddenUrls();
   const total = FEED.filter((p) => !hidden.has(p.url)).length;
-  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total, pool), polls()]);
-  const potd = await portfolioOfTheDay(pool, new Set(show.map((s) => s.url)));
+  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total, all), polls()]);
+  const potd = await portfolioOfTheDay(pool, all.length, new Set(show.map((s) => s.url)));
   return {
     /** Listed portfolios anyone can see (the browse grid's count). */
     total,

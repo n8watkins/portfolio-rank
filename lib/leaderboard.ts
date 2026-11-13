@@ -7,8 +7,8 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
-import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
-import { MIN_FACEOFFS, rankLibrary, tierIndex } from "@/lib/tiers.mjs";
+import { ensureTierSchema, readTierMeta, standingOf, topRows } from "@/lib/tiers-db.mjs";
+import { MIN_FACEOFFS, eloOf as eloFor } from "@/lib/tiers.mjs";
 
 // What the /top page shows, read on the server: the ranked board (tiers by
 // ELO, lib/tiers.mjs: by tier, then ELO, from the last refresh's library),
@@ -90,18 +90,13 @@ export const domainOf = (url: string) => {
 const noTable = (e: unknown) => /no such (table|column)/i.test(String((e as Error)?.message ?? e));
 const marks = (n: number) => Array.from({ length: n }, () => "?").join(",");
 
-/**
- * The ELO from face-offs (lib/tiers.mjs) of each url that has face-offs, from
- * the last refresh's library (lib/tiers-store.mjs: one cached row).
- */
+/** The ELO from face-offs (lib/tiers.mjs) of each url that has face-offs: one read by key per url (lib/tiers-db.mjs). */
 export async function eloOf(urls: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (!urls.length) return out;
-  const state = await cachedLibraryState(db());
-  for (const url of urls) {
-    const e = entryIn(state, url);
-    if (e.faceoffs > 0) out.set(url, e.elo);
-  }
+  await ensureTierSchema(db());
+  const res = await db().execute({ sql: `SELECT url, mu, sigma, votes FROM tier_ratings WHERE url IN (${marks(urls.length)})`, args: urls });
+  for (const r of res.rows) if (Number(r.votes) > 0) out.set(String(r.url), eloFor({ mu: Number(r.mu), sigma: Number(r.sigma) }));
   return out;
 }
 
@@ -288,44 +283,68 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
 }
 
 /**
- * The ranked board: every listed library member by tier (lib/tiers.mjs, by
- * ELO), then by ELO, then by face-offs; portfolios equal on all of that
- * (nearly everyone before the first face-offs) show the better grade first,
- * which never changes a tier. From the last refresh's library: one cached row
- * plus the rows shown.
+ * The ranked board: every listed library member by ELO (and so by tier,
+ * lib/tiers.mjs: the letter comes from the rating against the daily cutoffs,
+ * on read). An index range read of the rows shown (lib/tiers-db.mjs topRows),
+ * never the whole library.
  */
 type LibEntry = { url: string; rating: number; faceoffs: number; key: number | null; first: number; elo: number; votes: number };
 type Placed = { tier: string; provisional: boolean; top: number | null; place: number | null };
 
-/** One portfolio in the ranked order: its library entry and its tier placement. */
+/** One portfolio in the ranked order: its rating entry and its tier placement. */
 export type RankedSite = { e: LibEntry; p: Placed };
 
 /**
- * Every listed, graded portfolio the site shows, in the ranked order the
- * leaderboard and the home page share: by tier, then ELO, then face-offs
- * (then, among exact ties, the better grade, the date first graded and the
- * address). From the last refresh's library: one cached row.
+ * The first \cputime         unlimited
+filesize        unlimited
+datasize        unlimited
+stacksize       8MB
+coredumpsize    0kB
+resident        unlimited
+maxproc         79963
+descriptors     1048576
+memorylocked    64MB
+addressspace    unlimited
+maxfilelocks    unlimited
+sigpending      79963
+msgqueue        819200
+nice            0
+rt_priority     0
+rt_time         unlimited listed, graded portfolios the site shows, in the ranked
+ * order the leaderboard and the home page share (best ELO first), with the
+ * library size. Reads \cputime         unlimited
+filesize        unlimited
+datasize        unlimited
+stacksize       8MB
+coredumpsize    0kB
+resident        unlimited
+maxproc         79963
+descriptors     1048576
+memorylocked    64MB
+addressspace    unlimited
+maxfilelocks    unlimited
+sigpending      79963
+msgqueue        819200
+nice            0
+rt_priority     0
+rt_time         unlimited rows plus a margin for hidden ones, and the daily meta.
  */
-export async function rankedOrder(): Promise<RankedSite[]> {
-  const [state, hidden] = await Promise.all([cachedLibraryState(db()) as Promise<{ order: LibEntry[]; others: LibEntry[] }>, hiddenUrls()]);
-  const ranks = rankLibrary(state.order) as Map<string, Placed>;
-  return state.order
-    .filter((e) => byUrl.has(e.url) && !hidden.has(e.url))
-    .map((e) => ({ e, p: ranks.get(e.url)! }))
-    .sort(
-      (a, b) =>
-        tierIndex(a.p.tier) - tierIndex(b.p.tier) ||
-        b.e.rating - a.e.rating ||
-        b.e.faceoffs - a.e.faceoffs ||
-        (b.e.key ?? -1) - (a.e.key ?? -1) ||
-        a.e.first - b.e.first ||
-        (a.e.url < b.e.url ? -1 : 1)
-    );
+export async function rankedOrder(limit = 100): Promise<{ sites: RankedSite[]; total: number }> {
+  const [rows, meta, hidden] = await Promise.all([topRows(db(), limit + 50), readTierMeta(db()), hiddenUrls()]);
+  const sites = rows
+    .filter((r) => byUrl.has(r.url) && !hidden.has(r.url))
+    .slice(0, limit)
+    .map((r) => {
+      const s = standingOf(r, meta);
+      const e: LibEntry = { url: r.url, rating: r.mu - 2 * r.sigma, faceoffs: r.faceoffs, key: r.gkey, first: r.first ?? Number.MAX_SAFE_INTEGER, elo: s.elo, votes: r.votes };
+      return { e, p: { tier: s.tier ?? "B", provisional: s.provisional, top: s.top, place: s.place } };
+    });
+  return { sites, total: (meta as { n?: number } | null)?.n ?? sites.length };
 }
 
 async function loadRanked(limit: number): Promise<Leaderboard> {
-  const [members, votes] = await Promise.all([
-    rankedOrder(),
+  const [{ sites: members, total }, votes] = await Promise.all([
+    rankedOrder(limit),
     db()
       // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
       .execute("SELECT n FROM vote_totals WHERE k = 'all'")
@@ -363,7 +382,7 @@ async function loadRanked(limit: number): Promise<Leaderboard> {
       why: why.get(e.url) ?? null,
     };
   });
-  return { kind: "rank", rows, total: members.length, totalVotes: votes, ranked: members.filter((m) => !m.p.provisional).length };
+  return { kind: "rank", rows, total, totalVotes: votes, ranked: total };
 }
 
 /** Face-offs a portfolio needs before its tier comes from its place (lib/tiers.mjs). */

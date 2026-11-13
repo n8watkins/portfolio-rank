@@ -9,8 +9,7 @@ import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { domainOf, reportPath } from "@/lib/home";
-import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
-import { placeNew } from "@/lib/tiers.mjs";
+import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 
 // The visitor's own portfolio page (/me): their latest grade, read through
 // the signed owner cookie (lib/grader/server.ts ownedJobs), so it is never
@@ -132,8 +131,9 @@ async function standingsOf(job: Job): Promise<Mine["standings"]> {
 
 async function listedOf(site: FeedRow): Promise<Listed> {
   const client = db();
-  const [library, fights] = await Promise.all([
-    cachedLibraryState(client),
+  const [row, meta, fights] = await Promise.all([
+    readSiteRow(client, site.url),
+    readTierMeta(client),
     client.execute({
       // votes_winner_idx and votes_loser_idx (lib/schema.mjs): a few rows, not the log.
       sql: `SELECT * FROM (
@@ -145,11 +145,9 @@ async function listedOf(site: FeedRow): Promise<Listed> {
     }),
   ]);
   let people: Listed["people"] = null;
-  const e = entryIn(library, site.url);
-  if (e.faceoffs > 0) {
-    const p = placeNew(library.order.filter((x: { url: string }) => x.url !== site.url), e);
-    people = { rank: p.place, of: p.ranked, elo: e.elo, faceoffs: Math.floor(e.faceoffs) };
-  }
+  // Its standing on read: its rating row and the daily cutoffs (lib/tiers-db.mjs).
+  const s = standingOf(row, meta);
+  if (row.votes > 0 || row.seeded === 1) people = { rank: s.place, of: s.of, elo: s.elo, faceoffs: row.votes };
   const others = fights.rows.map((x) => String(x.other));
   const shots = await shotBases(others);
   const names = new Map(FEED.map((p) => [p.url, p.name]));

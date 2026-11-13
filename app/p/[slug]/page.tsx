@@ -12,7 +12,7 @@ import { SITE_URL } from "@/lib/site";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { BELOW_TOP_TIERS, MIN_FACEOFFS, STARTING_TIER, familyOf, isPublicTier, tierLabel, tierOf } from "@/lib/tiers.mjs";
-import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
+import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 import { pointFixes, unpackCheck } from "@/lib/check-points.mjs";
 import { TierBadge } from "@/components/ui/badges";
 import { ROUTES } from "@/lib/nav";
@@ -193,11 +193,22 @@ export default async function PortfolioPage({
   if (owner.removedAt) notFound();
   const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
   // The ELO and tier from face-offs: stored with the grade by the hourly refresh, else (not graded) from its library row.
-  let standing = rankOf(rubricRow?.ai_rubric);
-  if (!standing) {
-    const e = entryIn(await cachedLibraryState(db()), url);
-    standing = { tier: null, elo: e.elo, faceoffs: e.faceoffs, votes: e.votes, top: null, of: null, provisional: true, seeded: false, check: null };
-  }
+  // The letter, ELO and place derived on read from its rating row and the daily cutoffs (lib/tiers-db.mjs):
+  // two reads by key, always as current as the last vote. The points breakdown comes with the stored grade.
+  const stored = rankOf(rubricRow?.ai_rubric);
+  const [row, meta] = await Promise.all([readSiteRow(db(), url), readTierMeta(db())]);
+  const live = standingOf(row, meta);
+  const standing: Standing = {
+    tier: stored ? (live.tier ?? stored.tier) : null,
+    elo: live.elo,
+    faceoffs: live.faceoffs,
+    votes: live.votes,
+    top: live.top,
+    of: live.of,
+    provisional: live.provisional,
+    seeded: live.seeded,
+    check: stored?.check ?? null,
+  };
   // A hidden grade hides the tier too; C and D never show.
   const shownTier = !owner.hideGrade && isPublicTier(standing.tier) ? standing.tier : null;
   const faceoffs = Math.floor(standing.faceoffs);

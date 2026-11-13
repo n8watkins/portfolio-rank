@@ -6,8 +6,8 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
-import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, FAMILIES, TIER_LADDER, distribution, familyOf, rankedCount } from "@/lib/tiers.mjs";
-import { cachedLibrary } from "@/lib/tiers-store.mjs";
+import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, FAMILIES, TIER_LADDER, familyOf, tierCounts } from "@/lib/tiers.mjs";
+import { readTierMeta } from "@/lib/tiers-db.mjs";
 import { db, ensureSchema } from "@/lib/db";
 import { CHECK_ITEMS, CHECK_POINTS } from "@/lib/check-points.mjs";
 
@@ -25,12 +25,13 @@ export const metadata: Metadata = {
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
 // The ladder, from lib/tiers.mjs (the owner's settings).
-/** Today's count in each tier, from the last refresh's library (lib/tiers-store.mjs); null when the database can't be read. */
+/** Today's count in each tier, from the daily run's library size (lib/tiers-db.mjs, one row); null when the database can't be read. */
 async function liveCounts(): Promise<{ counts: Record<string, number>; total: number; ranked: number } | null> {
   try {
     await ensureSchema();
-    const order = await cachedLibrary(db());
-    return order.length ? { counts: distribution(order), total: order.length, ranked: rankedCount(order) } : null;
+    const meta = (await readTierMeta(db())) as { n?: number } | null;
+    const n = meta?.n ?? 0;
+    return n ? { counts: tierCounts(n), total: n, ranked: n } : null;
   } catch {
     return null;
   }
