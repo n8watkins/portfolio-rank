@@ -1,0 +1,146 @@
+# Puts the staging site (https://staging.portfoliorank.n8builds.dev,
+# wrangler.jsonc env.staging) on main plus every open pull request labeled
+# "staging", merged in pull request order (DEPLOY.md "How a change ships").
+# It runs again whenever main moves, a pull request gets or loses the label,
+# or a labeled pull request gets new commits, so a merge to main never wipes
+# what is being tried on staging, and nobody merges branches into a shared
+# staging branch by hand.
+# A labeled pull request that does not merge cleanly onto the others is left
+# out, named in the run's summary and told in a comment; rebase it onto the
+# pull request it conflicts with (or onto main) to bring it back.
+# A stacked pull request (based on another branch) brings its base along:
+# label the top of the stack. Runs for a stacked pull request's own pushes
+# start only from main's copy of this file, so after pushing to one, run this
+# workflow by hand (gh workflow run staging.yml).
+name: Staging
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
+  # pull_request_target runs main's copy of this file with the repository's
+  # secrets. Only branches of this repository are merged (never a fork's), and
+  # only pull requests a maintainer labeled.
+  pull_request_target:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write # the comment on a pull request that was left out
+
+# The newest composition wins; an older one still building is cancelled.
+concurrency:
+  group: staging
+  cancel-in-progress: true
+
+jobs:
+  staging:
+    name: Staging
+    if: >-
+      github.repository == 'n8watkins/portfolio-rank' && (
+        github.event_name != 'pull_request_target'
+        || github.event.label.name == 'staging'
+        || contains(github.event.pull_request.labels.*.name, 'staging')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Staging's own database (a copy of production; DEPLOY.md "Staging"),
+      # never the production TURSO_* secrets.
+      TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
+      SHOTS_BASE_URL: /shots
+      NEXT_PUBLIC_SITE_ENV: staging
+      NEXT_PUBLIC_SENTRY_DSN: https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the staging secrets
+        id: setup
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$TURSO_DATABASE_URL" ] && [ -n "$TURSO_AUTH_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping staging until the CLOUDFLARE_API_TOKEN, STAGING_TURSO_DATABASE_URL and STAGING_TURSO_AUTH_TOKEN secrets exist (DEPLOY.md \"Staging\")."
+          fi
+
+      # main, never the pull request's head: the composition below merges the
+      # labeled branches onto it.
+      - uses: actions/checkout@v7
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge the labeled pull requests onto main
+        id: compose
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          git config user.name "staging-compose"
+          git config user.email "staging-compose@users.noreply.github.com"
+          gh pr list --repo "$GITHUB_REPOSITORY" --label staging --state open --limit 50 \
+            --json number,headRefName,isCrossRepository,title \
+            --jq 'sort_by(.number) | .[] | select(.isCrossRepository | not) | [.number, .headRefName, .title] | @tsv' > "$RUNNER_TEMP/prs.tsv"
+          {
+            echo "## Staging: main $(git rev-parse --short HEAD) plus"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          : > "$RUNNER_TEMP/left-out.tsv"
+          while IFS=$'\t' read -r number head title; do
+            [ -n "$number" ] || continue
+            git fetch --quiet origin "refs/heads/$head"
+            if git merge --no-ff --no-edit -m "staging: #$number $head" FETCH_HEAD > "$RUNNER_TEMP/merge.log" 2>&1; then
+              echo "- #$number $title ($head $(git rev-parse --short FETCH_HEAD))" >> "$GITHUB_STEP_SUMMARY"
+            else
+              files=$(git diff --name-only --diff-filter=U | head -10 | tr '\n' ' ')
+              git merge --abort
+              echo "- left out: #$number $title (conflicts in $files)" >> "$GITHUB_STEP_SUMMARY"
+              printf '%s\t%s\n' "$number" "$files" >> "$RUNNER_TEMP/left-out.tsv"
+            fi
+          done < "$RUNNER_TEMP/prs.tsv"
+          [ -s "$RUNNER_TEMP/prs.tsv" ] || echo "- no labeled pull requests: staging runs main" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tell the pull requests that were left out
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          while IFS=$'\t' read -r number files; do
+            [ -n "$number" ] || continue
+            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "Left out of staging at $(git rev-parse --short HEAD): it conflicts with main or a pull request merged before it (in $files). Rebase it onto the one it conflicts with, then run the Staging workflow ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)." || true
+          done < "$RUNNER_TEMP/left-out.tsv"
+
+      - uses: actions/setup-node@v7
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - if: steps.setup.outputs.ready == 'true'
+        run: npm ci
+
+      # The additive migration of everything on staging (lib/schema.mjs).
+      - name: Migrate the staging database
+        if: steps.setup.outputs.ready == 'true'
+        run: node scripts/migrate.mjs
+
+      - name: Build
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          NEXT_PUBLIC_SENTRY_RELEASE: ${{ github.sha }}-staging
+        run: npm run build:worker
+
+      # Never publish source maps (they'd expose the original source).
+      - name: Remove source maps from the published assets
+        if: steps.setup.outputs.ready == 'true'
+        run: find .open-next/assets -name '*.map' -delete
+
+      - name: Deploy to staging
+        if: steps.setup.outputs.ready == 'true'
+        run: npx opennextjs-cloudflare deploy --env staging
+
+      - name: Smoke check staging
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          STAGING_GATE_KEY: ${{ secrets.STAGING_GATE_KEY }}
+        run: node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging
