@@ -95,7 +95,11 @@ export const DEFAULT_PLAN = {
     content: { cap: 100, minutes: 30 },
     // One Gemini check per library image (pipeline/content/library-stage.mjs).
     library: { cap: 40, minutes: 25 },
-    regrade: { cap: 300, minutes: 60 },
+    // Re-grades are off by default until rubric v3 exists (Gemini prompt
+    // audit, docs/audits/gemini-prompting.md): the nightly budget goes to new
+    // sites, and the backlog is graded once, on v3. Turn them back on with
+    // GEMINI_BUDGET {"stages":{"regrade":{"cap":300}}}.
+    regrade: { cap: 0, minutes: 60 },
     experiment: { cap: 50, minutes: 15 },
   },
 };
