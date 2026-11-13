@@ -29,7 +29,9 @@ import {
   textHash,
   tileRows,
   versionOf,
+  VIEW_BUDGET_MS,
 } from "../pipeline/fullpage.mjs";
+import { captureOnce } from "../pipeline/capture-once.mjs";
 import { IMMUTABLE, deleteAllShots, imageKey, imagesBucket, legacyFramesOn, notStored, storeVersion } from "../pipeline/shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "../pipeline/shot-files.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb } from "../pipeline/roster.mjs";
@@ -59,7 +61,19 @@ const inViewPage = (color = "#0a0") => `<!doctype html><html><head><meta name="v
 <div style="height:1200px"></div><div id="block" style="height:600px;background:${color};opacity:0"></div><div style="height:1200px"></div>
 <script>new IntersectionObserver((es) => { for (const e of es) e.target.style.opacity = e.isIntersecting ? "1" : "0"; })
   .observe(document.getElementById("block"));</script></body></html>`;
-const shortPage = `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body><h1>Short page</h1></body></html>`;
+// html and body one screen tall; a red header 100 px tall, then a <main>
+// that scrolls (smoothly, with snapping) through 2,500 px: a green block at
+// 1,500 to 1,800 of its content, under the "Projects" heading.
+const innerPage = `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
+html, body { height: 100%; margin: 0; overflow: hidden; background: #fff; font-family: sans-serif; }
+header { height: 100px; background: #f00; }
+main { height: calc(100% - 100px); overflow-y: auto; scroll-behavior: smooth; scroll-snap-type: y mandatory; }
+section { scroll-snap-align: start; }
+</style></head><body><header></header><main>
+<section style="height:1400px"><h1 style="margin:0">Jane Doe</h1></section>
+<section style="height:1100px"><h2 style="margin:0;height:100px">Projects</h2><div style="height:300px;background:#0a0"></div></section>
+</main></body></html>`;
+const shortPage =`<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body><h1>Short page</h1></body></html>`;
 // 1x1 PNG.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
@@ -78,6 +92,7 @@ before(async () => {
     else if (req.url === "/reveal") html(revealPage);
     else if (req.url === "/in-view") html(inViewPage());
     else if (req.url === "/in-view-blue") html(inViewPage("#00a"));
+    else if (req.url === "/inner") html(innerPage);
     else html(shortPage);
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -165,6 +180,44 @@ test("content that loads when scrolled into view is there before the shot", asyn
   assert.equal(desktop.meta.cropped, false);
   assert.ok(desktop.meta.height >= 3700 && desktop.meta.height < 4000, `desktop ${desktop.meta.height}`);
   assert.ok(pages.desktop.isClosed(), "the pages close with their context");
+});
+
+test("a page that scrolls inside an element: that element is scrolled and stitched, smooth scroll and snapping set aside", async () => {
+  const { desktop } = await views("/inner");
+  assert.ok(desktop.ok, desktop.meta.error);
+  assert.equal(desktop.meta.scroller, "main");
+  assert.deepEqual([desktop.meta.width, desktop.meta.height, desktop.meta.cropped], [1440, 2600, false], "the header, then all 2,500 px of the content");
+  const px = await pixels(desktop.files.tall);
+  assert.ok(near(px.at(720, 50), [255, 0, 0]), "the header on top");
+  assert.ok(near(px.at(720, 100 + 1650), [0, 170, 0]), `the block 1,650 px into the content, got ${px.at(720, 1750)}`);
+  for (const y of [1000, 1900, 2550]) assert.ok(near(px.at(720, y), [255, 255, 255]), `no header repeated at ${y}, got ${px.at(720, y)}`);
+  const projects = desktop.meta.outline.find((h) => h.text === "Projects");
+  assert.deepEqual([projects.level, projects.y], [2, 1500], "the heading's row on the tall image");
+  assert.deepEqual([desktop.meta.outline[0].text, desktop.meta.outline[0].y], ["Jane Doe", 100]);
+});
+
+test("the time budget: no new tile once a view's time is up, and the image says so", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${base}/tall`);
+  const t = Date.now();
+  const v = await captureView(page, "desktop", { budgetMs: 1500 });
+  await ctx.close();
+  assert.ok(v.ok);
+  assert.equal(v.meta.timeCut, true);
+  assert.ok(v.meta.height >= 900 && v.meta.height < 4000, `cut short at ${v.meta.height}`);
+  assert.ok(Date.now() - t < 12000, "bounded");
+  assert.equal(VIEW_BUDGET_MS, 13000, "about 30 s a site for both views, encoding included");
+});
+
+test("captureOnce: one visit, both views, the first-screen crops the grade reads, the text", async () => {
+  const r = await captureOnce(browser, `${base}/inner`);
+  assert.ok(r.desktop.ok && r.phone.ok);
+  assert.match(r.text, /Jane Doe/);
+  const d = await sharp(r.desktop.files.crop).metadata();
+  const p = await sharp(r.phone.files.crop).metadata();
+  assert.deepEqual([d.format, d.width, d.height, p.width, p.height], ["jpeg", 1440, 900, 390, 844]);
+  assert.equal(r.phone.meta.scroller, "main");
 });
 
 test("a short page is one viewport tall; a view that fails is an error, never a throw", async () => {

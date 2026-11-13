@@ -63,36 +63,127 @@ const SETTLE_MS = 600;
 const TILE_SETTLE_MS = 700;
 const TILE_IMAGES_WAIT_MS = 1500;
 const SHOT_TIMEOUT_MS = 30000;
+// The time a view may take, scroll-through and tiles together (owner, 2026-11-13:
+// about 30 s a site for both views, encoding included; one page took 107 s
+// before this).
+// The scroll-through gets at most 40% of it. Once it is used up no new tile
+// starts and the image ends there (`timeCut`); the first screen is always taken.
+export const VIEW_BUDGET_MS = 13000;
 
 /** A version tag for a time: seconds in base 36 (lib/shots.ts uses the same for ?v=). */
 export const versionOf = (date) => Math.floor(date.getTime() / 1000).toString(36);
 
+// The scroll target. Most pages scroll the window. Some keep html and body
+// one screen tall and scroll an element inside instead (a full-height
+// <main> or wrapper with overflow: auto); the window then never moves and a
+// stitch of the window is one screen. When the window cannot scroll, the
+// target is the tallest scrollable element that covers at least half the
+// viewport both ways; it is marked data-pr-scroller and everything below
+// scrolls it. Its layout: `top` (where its visible box starts in the
+// viewport), `view` (its visible height), `below` (viewport rows under it)
+// and `height` (its content height); for the window, top 0, view the
+// viewport, below 0 and the document's height.
+const MARK_SCROLL_TARGET = () => {
+  for (const e of document.querySelectorAll("[data-pr-scroller]")) e.removeAttribute("data-pr-scroller");
+  // Smooth scrolling and scroll snapping would move the target somewhere
+  // other than asked; neither changes how the page looks.
+  const calm = (e) => {
+    e.style.setProperty("scroll-behavior", "auto", "important");
+    e.style.setProperty("scroll-snap-type", "none", "important");
+  };
+  calm(document.documentElement);
+  if (document.body) calm(document.body);
+  const vh = window.innerHeight;
+  const se = document.scrollingElement || document.documentElement;
+  const docHeight = Math.max(se.scrollHeight, document.body?.scrollHeight ?? 0, vh);
+  if (docHeight > vh + 2) return { element: null, top: 0, view: vh, below: 0, height: docHeight };
+  let best = null;
+  for (const e of document.querySelectorAll("body *")) {
+    if (!/(auto|scroll|overlay)/.test(getComputedStyle(e).overflowY)) continue;
+    if (e.clientHeight < vh * 0.5 || e.clientWidth < window.innerWidth * 0.5 || e.scrollHeight <= e.clientHeight + 50) continue;
+    const r = e.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= vh) continue;
+    if (!best || e.scrollHeight > best.scrollHeight) best = e;
+  }
+  if (!best) return { element: null, top: 0, view: vh, below: 0, height: docHeight };
+  best.setAttribute("data-pr-scroller", "1");
+  calm(best);
+  const top = Math.max(0, Math.round(best.getBoundingClientRect().top + best.clientTop));
+  const view = Math.min(best.clientHeight, vh - top);
+  return { element: best.tagName.toLowerCase(), top, view, below: Math.max(0, vh - top - view), height: best.scrollHeight };
+};
+
+// The page's headings (h1 to h3) with their position on the tall image:
+// { level, text, y }, at most OUTLINE_MAX, in page order. Measured with the
+// target at the top: for the window that is the document position; for an
+// element, the rows above its box plus the heading's place in its content.
+// Hidden headings (display none, zero size) are left out.
+const OUTLINE_MAX = 40;
+const OUTLINE = (max) => {
+  const el = document.querySelector("[data-pr-scroller]");
+  // The image's rows: for the window, the document's; for an element, the
+  // viewport rows above its box, then its content, then the rows below it.
+  const box = el ? { top: el.getBoundingClientRect().top + el.clientTop, bottom: el.getBoundingClientRect().top + el.clientTop + el.clientHeight } : null;
+  const out = [];
+  for (const h of document.querySelectorAll("h1, h2, h3")) {
+    const r = h.getBoundingClientRect();
+    const text = (h.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!text || r.height === 0 || r.width === 0) continue;
+    let y;
+    if (!el) y = r.top + window.scrollY;
+    else if (el.contains(h)) y = r.top + el.scrollTop;
+    else if (r.top >= box.bottom) y = r.top - box.bottom + box.top + el.scrollHeight;
+    else y = r.top;
+    out.push({ level: Number(h.tagName[1]), text, y: Math.max(0, Math.round(y)) });
+    if (out.length >= max) break;
+  }
+  return out;
+};
+
+/** Finds and marks the page's scroll target (MARK_SCROLL_TARGET). */
+export const scrollTargetOf = (page) => page.evaluate(MARK_SCROLL_TARGET);
+
+/** Scrolls the marked target (or the window) to `y`; returns where it got to. */
+const SCROLL_TO = (y) => {
+  const el = document.querySelector("[data-pr-scroller]");
+  if (el) {
+    el.scrollTo({ top: y, left: 0, behavior: "instant" });
+    return Math.round(el.scrollTop);
+  }
+  window.scrollTo({ top: y, left: 0, behavior: "instant" });
+  return Math.round(window.scrollY);
+};
+
 /**
- * Scrolls the page from top to bottom once (to the height cap at most) and
- * back to the top. Runs in the page; returns how far it got and whether it
- * stopped on the time budget.
+ * Scrolls the page's scroll target (scrollTargetOf; the window unless the
+ * page scrolls inside an element) from top to bottom once (to the height
+ * cap at most) and back to the top. Runs in the page; returns how far it
+ * got and whether it stopped on the time budget.
  */
 export async function scrollThrough(page, { maxHeight, pauseMs = SCROLL_PAUSE_MS, budgetMs = SCROLL_BUDGET_MS }) {
   const run = page.evaluate(
     async ({ maxHeight, pauseMs, budgetMs }) => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      const height = () => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0);
+      const el = document.querySelector("[data-pr-scroller]");
+      const height = () => (el ? el.scrollHeight : Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0));
+      const view = el ? el.clientHeight : window.innerHeight;
+      const to = (y) => (el ? el.scrollTo({ top: y, left: 0, behavior: "instant" }) : window.scrollTo({ top: y, left: 0, behavior: "instant" }));
       const start = performance.now();
-      const step = Math.max(200, Math.floor(window.innerHeight * 0.8));
+      const step = Math.max(200, Math.floor(view * 0.8));
       let y = 0;
       let outOfTime = false;
       for (;;) {
-        const bottom = Math.min(height(), maxHeight) - window.innerHeight;
+        const bottom = Math.min(height(), maxHeight) - view;
         if (y >= bottom) break;
         if (performance.now() - start > budgetMs) {
           outOfTime = true;
           break;
         }
         y = Math.min(y + step, bottom);
-        window.scrollTo({ top: y, left: 0, behavior: "instant" });
+        to(y);
         await sleep(pauseMs);
       }
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      to(0);
       return { reached: y, outOfTime };
     },
     { maxHeight, pauseMs, budgetMs }
@@ -113,7 +204,7 @@ async function imagesLoaded(page, maxHeight, timeoutMs = IMAGES_WAIT_MS) {
         Promise.race([
           Promise.all(
             [...document.images]
-              .filter((img) => !img.complete && img.getBoundingClientRect().top + window.scrollY < maxHeight)
+              .filter((img) => !img.complete && img.getBoundingClientRect().top + (document.querySelector("[data-pr-scroller]")?.scrollTop ?? window.scrollY) < maxHeight)
               .map(
                 (img) =>
                   new Promise((r) => {
@@ -128,10 +219,6 @@ async function imagesLoaded(page, maxHeight, timeoutMs = IMAGES_WAIT_MS) {
     )
     .catch(() => {});
 }
-
-/** The rendered page's height in CSS pixels. */
-export const pageHeightOf = (page) =>
-  page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0, window.innerHeight));
 
 /**
  * The height to capture: the page's own, at least one viewport (a page whose
@@ -182,46 +269,77 @@ const HIDE_FIXED = () => {
  * opacity, reveal animations that play back when scrolled away), so one
  * screenshot of the whole document leaves everything below the first
  * screen blank. Each tile shows the page the way a visitor scrolling there
- * sees it. If the page stops scrolling before the height (its content
- * scrolls inside its own box), the image ends where scrolling did. Fixed
- * bars are hidden after the first tile and the page is left scrolled to
- * the top.
+ * sees it.
+ *
+ * The page's scroll target is scrolled (scrollTargetOf): the window, or the
+ * element a page scrolls inside. The image is laid out as the viewport
+ * rows above the target's box (from the first tile), the target's whole
+ * content (each tile adds what came into its box), then the rows below its
+ * box (from the last tile). For the window that is simply one screenful
+ * after another. If the target stops scrolling before the height, the image
+ * ends where scrolling did (`scrollStopped`). Fixed bars are hidden after
+ * the first tile and the target is left scrolled to the top.
  */
-export async function stitchPage(page, view) {
+export async function stitchPage(page, view, { budgetMs = VIEW_BUDGET_MS } = {}) {
   const t = Date.now();
+  const left = () => Math.max(0, t + budgetMs - Date.now());
   const viewport = page.viewportSize() ?? { width: view.width, height: view.viewportHeight };
   const vh = viewport.height;
-  const scroll = await scrollThrough(page, { maxHeight: view.maxHeight });
-  await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
-  await imagesLoaded(page, view.maxHeight);
-  const pageHeight = await pageHeightOf(page);
-  const { height: wanted, cropped } = shotHeight(pageHeight, vh, view.maxHeight);
+  await scrollTargetOf(page);
+  const scroll = await scrollThrough(page, { maxHeight: view.maxHeight, budgetMs: Math.min(SCROLL_BUDGET_MS, Math.round(budgetMs * 0.4)) });
+  await page.waitForLoadState("networkidle", { timeout: Math.max(1, Math.min(3000, left())) }).catch(() => {});
+  await imagesLoaded(page, view.maxHeight, Math.min(IMAGES_WAIT_MS, left()));
+  // Measured again after the scroll: lazy content makes the target taller.
+  const target = await scrollTargetOf(page);
+  // Headings and their rows on the image, with the target at the top.
+  await page.evaluate(SCROLL_TO, 0).catch(() => {});
+  const outline = await page.evaluate(OUTLINE, OUTLINE_MAX).catch(() => []);
+  const pageHeight = target.top + target.height + target.below;
+  const { height: wantedTotal, cropped } = shotHeight(pageHeight, vh, view.maxHeight);
+  // The target's content rows the image has room for.
+  const wanted = Math.max(target.view, wantedTotal - target.top - target.below);
 
   const tiles = [];
   let top = null;
+  let last = null;
   let covered = 0;
-  for (let y = 0; y < wanted; y += vh) {
-    const actual = await page.evaluate((y) => {
-      window.scrollTo({ top: y, left: 0, behavior: "instant" });
-      return Math.round(window.scrollY);
-    }, y);
-    await page.waitForTimeout(y === 0 ? SETTLE_MS : TILE_SETTLE_MS);
-    await imagesLoaded(page, y + vh, TILE_IMAGES_WAIT_MS);
-    const part = tileRows({ y, actual, viewportHeight: vh, height: wanted });
+  let timeCut = false;
+  for (let y = 0; y < wanted; y += target.view) {
+    if (y > 0 && left() === 0) {
+      timeCut = true;
+      break;
+    }
+    const actual = await page.evaluate(SCROLL_TO, y);
+    await page.waitForTimeout(y === 0 ? SETTLE_MS : Math.min(TILE_SETTLE_MS, left()));
+    await imagesLoaded(page, y + vh, Math.min(TILE_IMAGES_WAIT_MS, left()));
+    const part = tileRows({ y, actual, viewportHeight: target.view, height: wanted });
     if (!part) break;
     // Finite CSS animations and transitions (most reveal effects) are shown
     // at their end state.
     const png = await page.screenshot({ type: "png", animations: "disabled", timeout: SHOT_TIMEOUT_MS });
-    if (y === 0) top = png;
-    const input = part.offset === 0 && part.rows === vh ? png : await sharp(png).extract({ left: 0, top: part.offset, width: viewport.width, height: part.rows }).toBuffer();
-    tiles.push({ input, top: y, left: 0 });
+    if (y === 0) {
+      top = png;
+      // The rows above the target and its first part.
+      const rows = target.top + part.rows;
+      tiles.push({ input: rows === vh ? png : await sharp(png).extract({ left: 0, top: 0, width: viewport.width, height: rows }).toBuffer(), top: 0, left: 0 });
+    } else {
+      const input = await sharp(png).extract({ left: 0, top: target.top + part.offset, width: viewport.width, height: part.rows }).toBuffer();
+      tiles.push({ input, top: target.top + y, left: 0 });
+    }
+    last = png;
     covered = y + part.rows;
     if (y === 0) await page.evaluate(HIDE_FIXED).catch(() => {});
   }
-  await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" })).catch(() => {});
+  await page.evaluate(SCROLL_TO, 0).catch(() => {});
   if (!covered || !top) throw new Error("no tile was taken");
+  // The rows below the target's box, from the last tile.
+  if (target.below > 0 && last) {
+    const input = await sharp(last).extract({ left: 0, top: vh - target.below, width: viewport.width, height: target.below }).toBuffer();
+    tiles.push({ input, top: target.top + covered, left: 0 });
+  }
+  const height = target.top + covered + target.below;
 
-  const raw = await sharp({ create: { width: viewport.width, height: covered, channels: 3, background: "#ffffff" } })
+  const raw = await sharp({ create: { width: viewport.width, height, channels: 3, background: "#ffffff" } })
     .composite(tiles)
     .removeAlpha()
     .raw()
@@ -229,13 +347,16 @@ export async function stitchPage(page, view) {
   return {
     raw,
     width: viewport.width,
-    height: covered,
+    height,
     pageHeight: Math.round(pageHeight),
     cropped,
     top,
     ms: Date.now() - t,
-    ...(covered < wanted ? { scrollStopped: true } : {}),
+    outline,
+    ...(target.element ? { scroller: target.element } : {}),
+    ...(covered < wanted && !timeCut ? { scrollStopped: true } : {}),
     ...(scroll.outOfTime ? { scrollCut: true } : {}),
+    ...(timeCut ? { timeCut: true } : {}),
   };
 }
 
@@ -293,11 +414,11 @@ export async function encodeView(stitched, view) {
  * row keeps: { width, height, pageHeight, cropped, bytes, thumbBytes, ms,
  * sig, ... }.
  */
-export async function captureView(page, name) {
+export async function captureView(page, name, { budgetMs } = {}) {
   const view = FRAMES[name];
   try {
     const t = Date.now();
-    const s = await stitchPage(page, view);
+    const s = await stitchPage(page, view, budgetMs ? { budgetMs } : {});
     const files = await encodeView(s, view);
     return {
       ok: true,
@@ -311,7 +432,10 @@ export async function captureView(page, name) {
         thumbBytes: files.thumb.length,
         ms: Date.now() - t,
         sig: files.sig,
+        outline: s.outline.filter((h) => h.y < s.height),
+        ...(s.scroller ? { scroller: s.scroller } : {}),
         ...(s.scrollStopped ? { scrollStopped: true } : {}),
+        ...(s.timeCut ? { timeCut: true } : {}),
         ...(s.scrollCut ? { scrollCut: true } : {}),
       },
     };

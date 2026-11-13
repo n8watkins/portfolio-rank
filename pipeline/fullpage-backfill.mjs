@@ -6,9 +6,8 @@
 // re-captured sites get their images from the capture itself.
 //
 // Per site, one visit the way the capture makes it: the same gate (a site
-// that went dead or parked is skipped), the page at 1440, its splash gate
-// and dialog passed (pipeline/splash.mjs), a still first screen, the tall
-// desktop image; the same at 390 for the phone. Only the four versioned
+// that went dead or parked is skipped), then pipeline/capture-once.mjs
+// (splash gate and dialog passed, a still first screen, both tall images). Only the four versioned
 // AVIF files are uploaded (pipeline/shot-store.mjs) and `fullPage` is
 // written to the row's meta. Nothing else about the row changes: not
 // hero.jpg, not captured_at, not the page fingerprint, so no re-grade
@@ -23,11 +22,10 @@
 // night never holds up the end-of-day grading that waits for these checks.
 import { chromium } from "playwright";
 import path from "path";
-import { httpGate, readRenderedPage, UA } from "./gate.mjs";
+import { httpGate } from "./gate.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb } from "./roster.mjs";
-import { normalizePageText } from "./rubric.mjs";
-import { passModal, passSplashGate } from "./splash.mjs";
-import { IMAGE_FILES, captureView, fullPageComplete, fullPageDue, nextFullPage, recordFullPage, settleFirstScreen } from "./fullpage.mjs";
+import { captureOnce } from "./capture-once.mjs";
+import { IMAGE_FILES, fullPageComplete, fullPageDue, nextFullPage, recordFullPage } from "./fullpage.mjs";
 import { imagesBucket, storeVersion } from "./shot-store.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -59,19 +57,6 @@ if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
 
 const failedView = (error) => ({ ok: false, meta: { error } });
 
-/** One view of the site: load, gate and dialog, a still first screen, then the tall image. */
-async function view(ctx, url, name, size) {
-  const page = await ctx.newPage();
-  await page.setViewportSize(size);
-  await page.goto(url, { waitUntil: "load", timeout: 30000 });
-  await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
-  await passSplashGate(page).catch(() => null);
-  await passModal(page).catch(() => null);
-  await settleFirstScreen(page);
-  const text = name === "desktop" ? await page.evaluate(readRenderedPage).then((r) => r.text).catch(() => "") : null;
-  return { result: await captureView(page, name), text };
-}
-
 async function backfillSite(browser, row) {
   let desktopView;
   let phoneView;
@@ -80,19 +65,11 @@ async function backfillSite(browser, row) {
   if (gate.status !== "live") {
     desktopView = phoneView = failedView(`gate: ${gate.status} (${gate.reason})`.slice(0, 200));
   } else {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ignoreHTTPSErrors: true });
-    try {
-      const d = await view(ctx, row.url, "desktop", { width: 1440, height: 900 });
-      desktopView = d.result;
-      pageText = normalizePageText(d.text ?? "");
-      phoneView = (await view(ctx, row.url, "phone", { width: 390, height: 844 })).result;
-    } catch (e) {
-      const error = String(e?.message ?? e).split("\n")[0].slice(0, 200);
-      desktopView ??= failedView(error);
-      phoneView ??= failedView(error);
-    } finally {
-      await ctx.close().catch(() => {});
-    }
+    // One visit, both views, the way the capture makes them (pipeline/capture-once.mjs).
+    const r = await captureOnce(browser, row.url);
+    desktopView = r.desktop;
+    phoneView = r.phone;
+    pageText = r.text;
   }
   const { fullPage, uploadImages } = nextFullPage(row.fullPage, { desktopView, phoneView, pageText, at: new Date() });
   if (s3 && uploadImages) {
