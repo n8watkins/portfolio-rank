@@ -3,7 +3,7 @@
 // recheck-543.mjs), run by the owner on their machine: every gradable site
 // in the same batches of 5 as Gemini 3.1 (the plan's seed and order), then
 // every gradable site one at a time. The prompts of PROMPT_VERSION
-// (portfolio-definition-v2: the locked two-sets prompts with the owner's
+// (portfolio-definition-v2.1: the locked two-sets prompts with the owner's
 // portfolio definition), the two-sets inputs and answer shapes, through the Claude API request of the
 // two-sets test (claudeBodyFor: raw fetch, default effort and thinking).
 //

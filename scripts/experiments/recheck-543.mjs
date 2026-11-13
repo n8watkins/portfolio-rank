@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Re-check of non-ranked sites, "recheck-543" (owner spec, 2026-11-13).
 // Every site not in tier membership is captured fresh and graded again with
-// prompt version "portfolio-definition-v2" (experiments/portfolio-definition-
-// v2: the locked grading-two-sets prompts with only the owner's portfolio
+// prompt version "portfolio-definition-v2.1" (experiments/portfolio-definition-
+// v2.1: the locked grading-two-sets prompts with only the owner's portfolio
 // definition in STEP 3 changed), so the answers still compare with the
 // two-set test. Nothing here
 // writes a grade, rating, tier or listing: the only production writes are
@@ -48,12 +48,12 @@ export const DIR = process.env.RECHECK_DIR ?? path.join(os.homedir(), "research"
 export const SET = "X";
 
 // Owner, 2026-11-13: grade with the new portfolio definition, the grading lane's prompt
-// version "portfolio-definition-v2" (experiments/grading-two-sets/prompts, logged in
+// version "portfolio-definition-v2.1" (experiments/portfolio-definition-v2.1, logged in
 // prompt-log.md), for Gemini 3.1 and Haiku alike. Neither runner sends a request until
 // that version is in the prompt log, and every review row records it.
-export const PROMPT_VERSION = "portfolio-definition-v2";
+export const PROMPT_VERSION = "portfolio-definition-v2.1";
 const PROMPT_LOG = path.join(import.meta.dirname, "..", "..", "experiments", "grading-two-sets", "prompt-log.md");
-/** The prompt files of PROMPT_VERSION (solo.txt, batch.txt, schema.json), as the grading lane committed them (da14252). */
+/** The prompt files of PROMPT_VERSION (solo.txt, batch.txt, schema.json), as the grading lane committed them (bee95fb; only the exclusions decide, a missing sign never makes it "not a portfolio"). */
 export const PROMPT_DIR = path.join(import.meta.dirname, "..", "..", "experiments", PROMPT_VERSION);
 /** Whether PROMPT_VERSION is on disk and logged in prompt-log.md. */
 export const promptReady = () =>
@@ -181,10 +181,10 @@ export const GEMINI31 = {
   max_tries: 5,
   broken_answer_retries: 1,
   day_cap: 480,
-  prompt_ids: { solo: "portfolio-definition-v2-solo", solo_freetext: "portfolio-definition-v2-solo-freetext", batch: "portfolio-definition-v2-batch" },
+  prompt_ids: { solo: "portfolio-definition-v2.1-solo", solo_freetext: "portfolio-definition-v2.1-solo-freetext", batch: "portfolio-definition-v2.1-batch" },
   amendments: [
     "2026-11-13: recheck-543 on gemini-3.1-flash-lite with the two-sets settings",
-    "2026-11-13 (owner): prompts portfolio-definition-v2 (experiments/portfolio-definition-v2, da14252): the locked prompts with only STEP 3, the portfolio definition, replaced",
+    "2026-11-13 (owner): prompts portfolio-definition-v2.1 (experiments/portfolio-definition-v2.1, bee95fb): the locked prompts with only STEP 3 replaced; is_portfolio is false only for the exclusions",
   ],
   job: JOB,
 };

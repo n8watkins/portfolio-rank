@@ -3,7 +3,7 @@
 // decision path. Pure; no browser, no database, no model.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUPS, groupOf, makePlan, shotKeyOf } from "../scripts/experiments/recheck-543.mjs";
+import { GROUPS, groupOf, makePlan, pilotPlan, shardCount, shotKeyOf } from "../scripts/experiments/recheck-543.mjs";
 import { changeFor, decide, queueRow } from "../scripts/experiments/recheck-543-analyze.mjs";
 
 test("groups: graded not-a-portfolio first, then delisted, broken and live", () => {
@@ -66,4 +66,22 @@ test("changes and queue rows: only what would change, with the capture note", ()
   assert.equal(row.agreed, 1);
   assert.equal(JSON.parse(row.signals).capture.action, 'clicked "Continue"');
   assert.equal(queueRow({ ...d, proposed: null }, {}), null);
+});
+
+test("v2.1: code never says 'not a portfolio' for a missing sign, a missing role included", () => {
+  // abhisheksharma.codes's kind: a name and a Projects button, no role anywhere.
+  const noRole = meta({ signals: { score: 2, name: true, projects: true }, page_text: "Abhishek Sharma. Projects. Contact. Selected work below." });
+  const d = decide(site("delisted_ungraded"), noRole, { dupIndex: new Map() });
+  assert.notEqual(d.path, "code_rule");
+  assert.equal(d.outcome, "pending", "it waits for the graders; nothing in code decides it");
+  // Even with no signs at all, only an exclusion rule says no.
+  const bare = decide(site("live_ungraded"), meta({ signals: { score: 0 }, page_text: "Hello there, welcome to my corner of the web where I share things." }), { dupIndex: new Map() });
+  assert.notEqual(bare.path, "code_rule");
+});
+
+test("pilot plans are whole batches of 5; capture machines follow the site count", () => {
+  const p = pilotPlan(["X1", "X2", "X3", "X4", "X5", "X6", "X7", "X8", "X9", "X10"]);
+  assert.deepEqual(p.requests.map((r) => r.ids.length), [5, 5]);
+  assert.throws(() => pilotPlan(["X1", "X2", "X3"]), /multiple of 5/);
+  assert.deepEqual([9, 10, 32, 199, 543].map(shardCount), [1, 1, 3, 19, 20]);
 });
