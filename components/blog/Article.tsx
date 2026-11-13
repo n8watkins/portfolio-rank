@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BarChart3, Bot, ExternalLink, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, ExternalLink, Trophy } from "lucide-react";
 import { Markdown, headingsOf } from "@/components/blog/Markdown";
 import { type TocItem, TocRail, TocToggle } from "@/components/blog/Toc";
 import { ShareLinks } from "@/components/blog/ShareLinks";
@@ -10,7 +10,7 @@ import { Card } from "@/components/blog/BlogIndex";
 import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
 import { postLinkFor } from "@/lib/portfolio-links";
-import { sitePath } from "@/lib/site";
+import { SITE, sitePath } from "@/lib/site";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
@@ -98,8 +98,13 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
         <h1 className="mt-3 text-[2rem] font-bold leading-[1.12] tracking-tight text-balance sm:text-5xl">{post.title}</h1>
         {post.subtitle && <p className="mt-4 text-lg leading-relaxed text-mute text-pretty sm:text-xl">{post.subtitle}</p>}
         <p className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-mute">
-          <span className="inline-flex items-center gap-1.5">
-            <Bot className="h-4 w-4" aria-hidden /> {post.aiLine}
+          {/* The byline (owner, 2026-11-13): the person who publishes the post, with the AI help said plainly. */}
+          <span>
+            By{" "}
+            <a href={SITE.n8builds} className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+              Nathan Watkins
+            </a>
+            , with AI assistance
           </span>
           <a href="/about-posts" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
             How posts are made
@@ -200,18 +205,13 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
           </ol>
         </Section>
 
-        <aside aria-label="How this post was made" className="card mt-10 p-5 text-sm leading-relaxed text-mute">
-          <p className="flex items-center gap-2 font-semibold text-ink">
-            <Bot className="h-4 w-4" aria-hidden /> How this post was made
-          </p>
-          <p className="mt-2">
-            Written with AI from PortfolioRank data, data as of {postDate(post.dataAsOf)}. Code computed every number and drew every chart; Gemini wrote the words around them,
-            code and a second Gemini pass checked them, and a person read it before it went out.{" "}
-            <a href="/about-posts" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
-              How posts are made
-            </a>
-          </p>
-        </aside>
+        {/* How the post was made, as one quiet line (owner, 2026-11-13: no big AI section). */}
+        <p className="mt-8 text-xs leading-relaxed text-mute">
+          Numbers from PortfolioRank data as of {postDate(post.dataAsOf)}. Drafted with AI, checked and published by Nathan.{" "}
+          <a href="/about-posts" className="underline decoration-edge-strong underline-offset-2 hover:text-ink hover:decoration-accent">
+            How posts are made
+          </a>
+        </p>
 
         {post.tags.length > 0 && (
           <ul className="mt-8 flex flex-wrap gap-2" aria-label="Tags">
