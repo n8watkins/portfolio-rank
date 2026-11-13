@@ -43,7 +43,7 @@ permissions:
   actions: read
 
 env:
-  RECHECK_DIR: ${{ github.workspace }}/../recheck
+  RECHECK_DIR: /home/runner/recheck
 
 jobs:
   select:

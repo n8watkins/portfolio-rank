@@ -65,8 +65,9 @@ const NOT_PORTFOLIO = "COALESCE(json_valid(p.ai_rubric) AND json_extract(p.ai_ru
 /** Which group a portfolios row belongs to (null: none of the five). */
 export function groupOf(r) {
   const graded = Boolean(r.graded);
-  if (r.delisted_at) return graded ? "delisted_graded" : "delisted_ungraded";
+  // Graded "not a portfolio" first, delisted or not (off_list still says when it left the list).
   if (graded && r.not_portfolio) return "not_portfolio";
+  if (r.delisted_at) return graded ? "delisted_graded" : "delisted_ungraded";
   if (!graded && r.hidden) return "broken";
   if (!graded) return "live_ungraded";
   return null;
@@ -258,7 +259,24 @@ async function main() {
     return 0;
   }
   if (step === "gemini") return gemini({ dryRun: flag("--dry-run") });
-  console.error("usage: recheck-543.mjs <select|capture [--shard k/n]|upload|plan|gemini [--dry-run]>");
+  if (step === "fetch") {
+    // The workflow's artifacts, with the local gh login (no secrets): the selection and bundles of a capture run, the answers of a gemini run.
+    const { execFileSync } = await import("child_process");
+    const gh = (...a) => execFileSync("gh", ["run", "download", ...a], { stdio: "inherit" });
+    const cap = opt("--capture-run");
+    const gem = opt("--gemini-run");
+    if (!cap && !gem) throw new Error("fetch needs --capture-run N and/or --gemini-run N");
+    if (cap) {
+      gh(cap, "-n", "recheck-selection", "-D", DIR);
+      gh(cap, "-p", "recheck-bundles-*", "-D", path.join(DIR, "dl"));
+      for (const d of fs.readdirSync(path.join(DIR, "dl"))) fs.cpSync(path.join(DIR, "dl", d), path.join(DIR, "bundles"), { recursive: true });
+      fs.rmSync(path.join(DIR, "dl"), { recursive: true, force: true });
+      console.log(`${capturedIds().length} gradable bundles in ${path.join(DIR, "bundles")}`);
+    }
+    if (gem) gh(gem, "-n", "recheck-gemini31", "-D", DIR);
+    return 0;
+  }
+  console.error("usage: recheck-543.mjs <select|capture [--shard k/n]|upload|plan|gemini [--dry-run]|fetch --capture-run N [--gemini-run N]>");
   return 1;
 }
 
