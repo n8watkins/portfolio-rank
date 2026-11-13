@@ -1,11 +1,10 @@
 // Profile pages at their readable address, end to end against the running
 // production build (scripts/test-e2e.sh): /p/<host><path> renders with that
-// one canonical and its share image at /og/p/<same>; every other form of the
-// address (the old encoded one, its decoded and Next.js-collapsed forms,
-// www, another case) is a permanent redirect there; an unknown site is a 404.
-// The Worker answers the old forms itself with a 301 before Next.js runs
-// (worker/profile-redirect.ts, tests/profile-url.test.mjs); here nothing is
-// in front, so the page's own redirect (308) is what's checked.
+// one canonical and its share image at /og/p/<same>; another case or "www."
+// finds the same profile and names that canonical; an unknown site is a 404.
+// The old and untidy forms of an address are 301s from the Worker before
+// Next.js runs (worker/profile-redirect.ts, tests/profile-url.test.mjs);
+// nothing is in front here, so they aren't checked end to end.
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import feed from "../data/feed.json" with { type: "json" };
@@ -43,20 +42,15 @@ test("a profile renders at its readable address, with that one canonical and its
   }
 });
 
-test("every other form of a profile's address redirects to the readable one for good", async () => {
+test("another case or www finds the same profile, and its canonical names the one address; no page answers with a redirect", async () => {
   const u = new URL(deep.url);
   const target = profilePath(deep.url);
-  const forms = [
-    `/p/${encodeURIComponent(deep.url)}`,
-    `/p/${u.protocol}/${u.host}${u.pathname}`,
-    `/p/${u.host.toUpperCase()}${u.pathname}`,
-    `/p/www.${u.host.replace(/^www\./, "")}${u.pathname}`,
-    `/p/${u.host}${u.pathname.toLowerCase()}`,
-  ];
-  for (const from of forms) {
+  for (const from of [`/p/${u.host.toUpperCase()}${u.pathname}`, `/p/www.${u.host.replace(/^www\./, "")}${u.pathname}`, `/p/${u.host}${u.pathname.toLowerCase()}`]) {
     const res = await get(from);
-    assert.ok([301, 308].includes(res.status), `${from}: ${res.status}`);
-    assert.equal(new URL(res.headers.get("location"), BASE).pathname, target, from);
+    assert.equal(res.status, 200, from);
+    assert.equal(res.headers.get("location"), null, from);
+    const canonical = (await res.text()).match(/<link rel="canonical" href="([^"]+)"/)?.[1];
+    assert.ok(canonical?.endsWith(target), `${from}: canonical ${canonical}`);
   }
 });
 
@@ -64,7 +58,8 @@ test("an unknown site is a 404, page and share image alike", async () => {
   assert.equal((await get("/p/no-such-portfolio.example")).status, 404);
   assert.equal((await get("/p/no-such-portfolio.example/deep/path")).status, 404);
   assert.equal((await get("/og/p/no-such-portfolio.example")).status, 404);
-  assert.equal((await get("/p/%E0%A4%A")).status, 404);
+  // The old encoded form without the Worker in front: not a slug, so not found.
+  assert.equal((await get(`/p/${encodeURIComponent(plain.url)}`)).status, 404);
 });
 
 test("the share image answers at /og/p/<address>", async () => {
