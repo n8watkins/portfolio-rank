@@ -558,8 +558,9 @@ Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without clai
 ## Budget model
 
 - **Gemini (free tier, shared):** the end-of-day run's accountant (above) for every job, people first.
-- **R2 (10 GB free):** ~570 MB of serve-frames (hero/mobile/full) + ~0.2 MB/day
-  backups → far under the cap, $0.
+- **R2 (10 GB free):** about 436 KB of screenshots a site: hero and phone tops (about 106 KB) and the two full-page WebPs (about 330 KB, at most about 750 KB; measured on 23 sites on 2026-11-13).
+  About 1 GB for 2,300 sites, plus ~0.2 MB/day of backups: under the cap, $0.
+  At about 15,000 sites the account's buckets would reach the 10 GB (`lib/admin/limits.mjs` PROJECTIONS).
 - **GitHub Actions:** unlimited (public repo).
 - **PSI/Lighthouse:** 25k runs/day - ample.
 - **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.

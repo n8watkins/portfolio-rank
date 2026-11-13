@@ -32,7 +32,7 @@ on:
       fullpage_backfill:
         description: "Most sites to give full-page screenshots that have none (pipeline/fullpage-backfill.mjs)"
         required: false
-        default: "200"
+        default: "100"
       rubric_regrade:
         description: "Also measure evidence for grades from an older rubric (the Worker's RUBRIC_REGRADE)"
         required: false
@@ -218,11 +218,13 @@ jobs:
       # Full-page frames (desktop and phone, for the report card's preview)
       # for sites captured before the capture took them, a capped number a
       # night (pipeline/fullpage-backfill.mjs); the capture above takes them
-      # for every site it captures. Changes no grade or capture date.
+      # for every site it captures. Changes no grade or capture date. About
+      # 18 seconds a site at concurrency 4, so 100 sites take about 30
+      # minutes; no new site starts after 40, whatever the cap.
       - name: Backfill full-page screenshots
         env:
-          FULLPAGE_BACKFILL: ${{ inputs.fullpage_backfill || '200' }}
-        run: node pipeline/fullpage-backfill.mjs --concurrency 4 --limit "$FULLPAGE_BACKFILL"
+          FULLPAGE_BACKFILL: ${{ inputs.fullpage_backfill || '100' }}
+        run: node pipeline/fullpage-backfill.mjs --concurrency 4 --limit "$FULLPAGE_BACKFILL" --minutes 40
       # Page text and facts for rows waiting for a grade that have none
       # (captured before rubric v2): the end-of-day grading on Cloudflare
       # reads only stored evidence. Then the project link checks that are

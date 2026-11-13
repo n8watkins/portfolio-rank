@@ -13,15 +13,17 @@
 // tried again a week later, three tries at most (fullPageDue).
 //
 // Usage:
-//   node pipeline/fullpage-backfill.mjs [--limit N] [--concurrency C] [--only substr] [--dry-run]
+//   node pipeline/fullpage-backfill.mjs [--limit N] [--minutes M] [--concurrency C] [--only substr] [--dry-run]
 //
 // --limit defaults to 0 (nothing): the workflow passes the nightly cap.
+// --minutes: no new site is started after M minutes (default 40), so a slow
+// night never holds up the end-of-day grading that waits for these checks.
 import { chromium } from "playwright";
 import fs from "fs";
 import path from "path";
 import { httpGate, UA } from "./gate.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb } from "./roster.mjs";
-import { FULL_PAGE_FILES, captureFullPages, fullPageComplete, fullPageDue, nextTries, recordFullPage } from "./fullpage.mjs";
+import { FULL_PAGE_FILES, captureFullPages, fullPageComplete, settleFirstScreen, fullPageDue, nextTries, recordFullPage } from "./fullpage.mjs";
 import { contentTypeOf } from "./shot-files.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -32,6 +34,7 @@ const flag = (name, fallback) => {
   return i >= 0 ? args[i + 1] : fallback;
 };
 const LIMIT = Math.max(0, Number(flag("limit", "0")) || 0);
+const DEADLINE = Date.now() + Math.max(1, Number(flag("minutes", "40")) || 40) * 60000;
 const CONCURRENCY = Math.max(1, Number(flag("concurrency", "3")) || 3);
 const ONLY = flag("only", "");
 const DRY = args.includes("--dry-run");
@@ -80,12 +83,14 @@ async function backfillSite(browser, row) {
       const page = await ctx.newPage();
       await page.goto(row.url, { waitUntil: "load", timeout: 30000 });
       await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
-      await page.waitForTimeout(1500);
+      // Preloaders and intro animations finish first, as in the capture.
+      await settleFirstScreen(page);
       // The phone page the way the capture takes mobile.jpg.
       const mpage = await ctx.newPage();
       await mpage.setViewportSize({ width: 390, height: 844 });
       await mpage.goto(row.url, { waitUntil: "load", timeout: 30000 });
-      await mpage.waitForTimeout(1500);
+      await mpage.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+      await settleFirstScreen(mpage);
       fs.mkdirSync(dir, { recursive: true });
       fullPage = await captureFullPages({ desktop: page, phone: mpage }, dir);
     } catch (e) {
@@ -113,24 +118,25 @@ const kb = (n) => (n ? `${Math.round(n / 1024)} KB` : "-");
 try {
   await Promise.all(
     Array.from({ length: Math.min(CONCURRENCY, due.length) }, async () => {
-      while (idx < due.length) {
-        const row = due[idx++];
+      while (idx < due.length && Date.now() < DEADLINE) {
+        const n = ++idx;
+        const row = due[n - 1];
         const t = Date.now();
         let fp;
         try {
           fp = await backfillSite(browser, row);
         } catch (e) {
           // R2 or the database: nothing recorded, the site stays due.
-          console.log(`[${idx}/${due.length}] ${row.url} not stored: ${String(e?.message ?? e).slice(0, 120)}`);
+          console.log(`[${n}/${due.length}] ${row.url} not stored: ${String(e?.message ?? e).slice(0, 120)}`);
           continue;
         }
         if (fullPageComplete(fp)) ok++;
         const part = (f) => (f?.error ? `error (${f.error.slice(0, 60)})` : `${f.width}x${f.height}${f.cropped ? " cropped" : ""} ${kb(f.bytes)}`);
-        console.log(`[${idx}/${due.length}] ${row.url} desktop ${part(fp.desktop)}, phone ${part(fp.phone)} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
+        console.log(`[${n}/${due.length}] ${row.url} desktop ${part(fp.desktop)}, phone ${part(fp.phone)} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
       }
     })
   );
 } finally {
   await browser.close();
 }
-console.log(`done: ${ok} of ${due.length} with both frames`);
+console.log(`done: ${ok} of ${idx} with both frames${idx < due.length ? `; ${due.length - idx} left for another night (time budget)` : ""}`);
