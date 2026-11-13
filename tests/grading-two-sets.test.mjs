@@ -12,6 +12,7 @@ import { makePlan, requestList } from "../scripts/experiments/grading-two-sets.m
 import { CHECKS, PARTS, SETTINGS, loadPrompts, run } from "../scripts/experiments/grading-two-sets-run.mjs";
 import { analyze } from "../scripts/experiments/grading-two-sets-analyze.mjs";
 import { linkKinds, makePasses, mulberry32, nameMatch } from "../scripts/experiments/grading-two-sets-lib.mjs";
+import { CLAUDE, runClaude, toJsonSchema } from "../scripts/experiments/grading-two-sets-claude.mjs";
 
 const prompts = loadPrompts();
 
@@ -216,6 +217,103 @@ test("the hard stop counts retries and holds across restarts", async () => {
   } finally {
     server.close();
   }
+});
+
+/** A Claude API stand-in for fetch. `script(n, body)` may return { status } for the n-th messages call. */
+function mockClaude(script = () => null, { input = 5000, output = 3000 } = {}) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url, headers: init.headers, body });
+    if (url.endsWith("/count_tokens")) return new Response(JSON.stringify({ input_tokens: input }), { status: 200 });
+    const n = calls.filter((c) => c.url.endsWith("/messages")).length;
+    const s = script(n, body);
+    if (s?.status) return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: s.status });
+    const content = [{ type: "thinking", thinking: "", signature: "x" }, { type: "text", text: JSON.stringify(answer(n)) }];
+    return new Response(JSON.stringify({ model: CLAUDE.model, content, stop_reason: "end_turn", usage: { input_tokens: input, output_tokens: output } }), { status: 200 });
+  };
+  return { calls, fetchImpl };
+}
+
+const claudeOpts = (f, fetchImpl, extra = {}) => ({
+  apiKey: "sk-test-secret",
+  fetchImpl,
+  sleep: async () => {},
+  out: path.join(f.root, "claude-sonnet-api"),
+  rawDir: path.join(f.root, "raw", "claude-sonnet-api"),
+  bundleRoot: path.join(f.root, "bundles"),
+  plan: f.plan,
+  prompts,
+  timelinePath: path.join(f.root, "timeline.json"),
+  log: quiet,
+  ...extra,
+});
+
+test("claude: the schema converts to closed JSON Schema without numeric limits", () => {
+  const s = toJsonSchema(prompts.schema.solo);
+  const text = JSON.stringify(s);
+  assert.ok(!/minimum|maximum|minItems|maxItems|propertyOrdering|"OBJECT"/.test(text));
+  assert.equal(s.type, "object");
+  assert.equal(s.additionalProperties, false);
+  assert.equal(s.properties.five_second.properties.name.additionalProperties, false);
+  assert.deepEqual(s.properties.writing.properties.level_line.enum, prompts.schema.levels.writing);
+});
+
+test("claude: Set A solo in order, 529 retried, raw log without images or key, cost total", async () => {
+  const f = fixture();
+  const { calls, fetchImpl } = mockClaude((n) => (n === 2 ? { status: 529 } : null), { input: 3000, output: 1500 });
+  const { exit, state } = await runClaude(claudeOpts(f, fetchImpl));
+  assert.equal(exit, "done");
+  const sent = calls.filter((c) => c.url.endsWith("/messages"));
+  assert.equal(sent.length, 21);
+  assert.equal(state.attempts.filter((a) => a.retry).length, 1);
+  const first = sent[0].body;
+  assert.equal(first.model, "claude-sonnet-5-5");
+  assert.equal(first.system, prompts.solo);
+  assert.equal(first.output_config.format.type, "json_schema");
+  assert.ok(!("thinking" in first) && !("effort" in first.output_config) && !("temperature" in first));
+  assert.deepEqual(first.messages[0].content.map((c) => c.type), ["text", "image", "text", "image", "text"]);
+  assert.match(first.messages[0].content[4].text, /^<site_data>/);
+  assert.equal(sent[0].headers["x-api-key"], "sk-test-secret");
+  // The answers follow the Set A solo order.
+  const order = sent.map((c) => c.body.messages[0].content[4].text.match(/"url": "https:\/\/(A\d\d)/)[1]);
+  assert.deepEqual([...new Set(order)], f.plan.sets.A.solo_order);
+  for (const id of f.plan.sets.A.solo_order) assert.ok(fs.existsSync(path.join(f.root, "claude-sonnet-api", "solo", `${id}.json`)));
+  const rawFiles = fs.readdirSync(path.join(f.root, "raw", "claude-sonnet-api"));
+  assert.equal(rawFiles.filter((x) => x.endsWith(".request.json")).length, 21);
+  const raw = rawFiles.map((x) => fs.readFileSync(path.join(f.root, "raw", "claude-sonnet-api", x), "utf8")).join("\n");
+  assert.ok(!raw.includes("sk-test-secret"));
+  assert.ok(!raw.includes(Buffer.from("desktop-A01").toString("base64")));
+  assert.match(raw, /bundles\/A\/A01\/desktop\.jpg/);
+  // 20 answered requests at 3,000 in and 1,500 out: 20 x $0.021 (the 529 is not billed).
+  assert.ok(Math.abs(state.cost_usd - 0.42) < 1e-9, `cost ${state.cost_usd}`);
+});
+
+test("claude: the $0.75 hard stop is checked before each request and holds across restarts", async () => {
+  const f = fixture();
+  const { calls, fetchImpl } = mockClaude(() => null, { input: 5000, output: 3000 });
+  const a = await runClaude(claudeOpts(f, fetchImpl));
+  assert.equal(a.exit, "stopped");
+  // $0.04 a request: 18 fit under $0.75 ($0.72), the 19th would pass it.
+  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 18);
+  assert.ok(a.state.cost_usd <= CLAUDE.hard_stop_usd);
+  assert.match(a.state.stopped.why, /hard stop/);
+  const b = await runClaude(claudeOpts(f, fetchImpl));
+  assert.equal(b.exit, "stopped");
+  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 18, "nothing sent after the stop");
+});
+
+test("claude: a 400 stops at once and a resumed run continues at the same site", async () => {
+  const f = fixture();
+  const bad = mockClaude((n) => (n === 3 ? { status: 400 } : null), { input: 3000, output: 1500 });
+  const a = await runClaude(claudeOpts(f, bad.fetchImpl));
+  assert.equal(a.exit, "stopped");
+  assert.equal(bad.calls.filter((c) => c.url.endsWith("/messages")).length, 3);
+  assert.match(a.state.stopped.why, /HTTP 400/);
+  const good = mockClaude(() => null, { input: 3000, output: 1500 });
+  const b = await runClaude(claudeOpts(f, good.fetchImpl));
+  assert.equal(b.exit, "done");
+  assert.equal(good.calls.filter((c) => c.url.endsWith("/messages")).length, 18);
 });
 
 test("first-screen helpers", () => {

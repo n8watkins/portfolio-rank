@@ -467,7 +467,8 @@ async function amend(note) {
   writeJson(path.join(EXP, "settings.json"), SETTINGS);
   const hash = (p) => sha256(fs.readFileSync(p));
   const files = Object.fromEntries(Object.keys(before.files).map((f) => [f, hash(path.join(REPO_ROOT, f))]));
-  const code = Object.fromEntries(Object.keys(before.code).map((f) => [f, hash(path.join(REPO_ROOT, f))]));
+  const codeFiles = [...new Set([...Object.keys(before.code), "scripts/experiments/grading-two-sets-claude.mjs", "tests/grading-two-sets.test.mjs"])].filter((f) => fs.existsSync(path.join(REPO_ROOT, f)));
+  const code = Object.fromEntries(codeFiles.map((f) => [f, hash(path.join(REPO_ROOT, f))]));
   const prev = { ...before.files, ...before.code, ...Object.assign({}, ...(before.amendments ?? []).map((a) => ({ ...a.files, ...a.code }))) };
   const changed = Object.entries({ ...files, ...code }).filter(([f, h]) => prev[f] !== h).map(([f]) => f);
   const plan = readJson(path.join(EXP, "groupings.json"));

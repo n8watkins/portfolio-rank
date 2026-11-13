@@ -212,6 +212,21 @@ export function analyze({ res = RES, exp = EXP } = {}) {
   for (const [name, m] of [["gemini", gemini], ["expert", expert]]) {
     out.models[name] = Object.fromEntries(["A", "B"].map((set) => [set, setReport(m, key, set, plan, sites)]));
   }
+  // Amendment: Claude Sonnet 5.5 through the API, Set A one at a time only,
+  // with Gemini's solo prompt. The same model as the expert, so its agreement
+  // with the key is partly the same model agreeing with itself under another prompt.
+  const claudeApi = loadAnswers(path.join(res, "claude-sonnet-api"));
+  if (claudeApi.answers.solo) {
+    const r = setReport(claudeApi, key, "A", plan, sites);
+    out.models["claude-sonnet-api"] = {
+      A: { set: "A", agreement_with_key: { solo: r.agreement_with_key.solo }, share_of_fives: { solo: r.share_of_fives.solo }, checklist_vs_key: r.checklist_vs_key, junk: { id: r.junk.id, flagged: { solo: r.junk.flagged.solo } }, is_portfolio_false: { solo: r.is_portfolio_false.solo }, vs_gemini_solo: compare(claudeApi.answers.solo, gemini.answers.solo ?? {}, sites.sets.A.map((s) => s.id)) },
+    };
+    const cs = path.join(res, "claude-sonnet-api", "state.json");
+    if (fs.existsSync(cs)) {
+      const st = readJson(cs);
+      out.requests_claude_api = { http_requests: st.http_requests, retries: (st.attempts ?? []).filter((a) => a.retry).length, non_200: (st.attempts ?? []).filter((a) => a.status !== 200), cost_usd: r2(st.cost_usd), stopped: st.stopped ?? null };
+    }
+  }
   out.verdicts_gemini = verdicts(out.models.gemini, rules);
   const statePath = path.join(res, "gemini", "state.json");
   out.requests = requestReport(fs.existsSync(statePath) ? readJson(statePath) : null);
@@ -220,7 +235,8 @@ export function analyze({ res = RES, exp = EXP } = {}) {
   for (const set of ["A", "B"]) {
     const g = out.models.gemini[set];
     const e = out.models.expert[set];
-    const row = (f) => ({ gemini: f(g), expert: f(e) });
+    const c = out.models["claude-sonnet-api"]?.[set];
+    const row = (f) => ({ gemini: f(g), expert: f(e), ...(c ? { "claude-sonnet-api": (() => { try { return f(c) ?? null; } catch { return null; } })() } : {}) });
     out.side_by_side[set] = Object.fromEntries(
       PARTS.map((p) => [
         p,

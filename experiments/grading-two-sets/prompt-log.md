@@ -89,6 +89,16 @@ The expert's instructions are unchanged: its output format never had an enum.
 Planned Gemini requests: 42 used before the amendment, 1 test (pass1/A-b1 again), 41 remaining and 10 controls, 94 in all, inside the hard stop of 120.
 The new hashes are in `lock.json`, under `amendments`.
 
+## Amendment, 2026-11-13: Claude Sonnet 5.5 through the API
+
+Owner-approved: Set A's 20 one-at-a-time requests also go to `claude-sonnet-5-5` through the Claude API (`scripts/experiments/grading-two-sets-claude.mjs`, run by the owner).
+It gets exactly `prompts/solo.txt` as the system prompt, the same user content in the same order (desktop screenshot, phone screenshot, the `<site_data>` block), and the solo schema as JSON Schema through `output_config.format`.
+The conversion drops what structured outputs do not take (`minimum`, `maximum`, item counts, property ordering) and closes every object; the level-line enums stay, so this is the locked solo schema, not the free-text one.
+Effort and thinking are left at the model's defaults (both omitted) and recorded as such; temperature is not sent (the model rejects non-default sampling settings).
+No refusal fallback is enabled, so every answer comes from Sonnet 5.5 itself; a refusal stops the run.
+A hard stop at $0.75, checked before each request with the exact input from `count_tokens`, keeps the cost bounded.
+Because the expert is also Sonnet, this column separates the prompt and setting from the model: same model, Gemini's prompt, structured output, a fresh request per site.
+
 ## What I expect to go wrong
 
 - **Scores still bunch at 3 and 4.** The anchor fights the 4s-and-5s pile-up, but Flash-Lite may overcorrect into all 3s, which passes the spread rule and fails agreement on the strong and weak sites.

@@ -64,7 +64,8 @@
   },
   {
    "phase": "gemini:pass1",
-   "start": "2026-11-13T18:34:09.235Z"
+   "start": "2026-11-13T18:34:09.235Z",
+   "end": "2026-11-13T18:41:52.329Z"
   },
   {
    "phase": "event: one HTTP 503 on solo/B12, retried after 30 s, answered",
@@ -81,7 +82,23 @@
    "approximate_start": true
   },
   {
-   "phase": "gemini:pass2"
+   "phase": "event: two HTTP 503s on pass1/B-b1, retried after 30 s and 60 s, answered",
+   "start": "2026-11-13T18:39:16Z"
+  },
+  {
+   "phase": "gemini:pass2",
+   "start": "2026-11-13T18:41:52.338Z"
+  },
+  {
+   "phase": "event: paused at pass2/A-b3 by the day cap: gemini-3.5-flash-lite had 430 requests this Pacific quota day (376 from exp-grading-v3, 54 from this run; free quota 500); 50 of 92 requests answered, 54 HTTP requests used",
+   "start": "2026-11-13T18:42:11Z"
+  },
+  {
+   "phase": "amendment: claude-sonnet-api, Set A's 20 solo requests to claude-sonnet-5-5 with Gemini's solo prompt (owner-approved; run by the owner); recorded in lock.json amendments",
+   "end": "2026-11-13T18:44:50Z"
+  },
+  {
+   "phase": "claude-sonnet-api:solo (Set A)"
   },
   {
    "phase": "gemini:pass3"
