@@ -80,6 +80,7 @@ test("the share image answers at /og/p/<address>", async () => {
 
 // Sites from the end of the list, which no other test renders first (pages are kept 5 minutes).
 const [graded, hidden, ungraded] = feed.filter((p) => !hasPath(p.url) && !new URL(p.url).search).slice(-3);
+const JUDGED_AT = "2026-11-01T10:00:00.000Z";
 const rubric = () =>
   JSON.stringify({
     tier: "A",
@@ -88,6 +89,7 @@ const rubric = () =>
     visual_design: { score: 5, note: "Clean." },
     writing: { score: 3, note: "Fine." },
     rank: { tier: "A", elo: 1650, faceoffs: 40, votes: 12, top: 8, of: 2106, provisional: false },
+    judged_at: JUDGED_AT,
   });
 async function seedGrade(url, { status = "live", health = null } = {}) {
   await db.execute({
@@ -135,4 +137,32 @@ test("a profile the health check hides, or one not graded yet, says noindex and 
     assert.equal(robotsOf(html), "noindex, follow", p.url);
     assert.equal(jsonLdOf(html), null, p.url);
   }
+});
+
+test("the sitemap is an index of pages, blog and profile files; profiles are listed by readable address with their lastmod, graded and shown only", async () => {
+  const index = await get("/sitemap.xml");
+  assert.equal(index.status, 200);
+  assert.match(index.headers.get("content-type"), /^application\/xml/);
+  const xml = await index.text();
+  assert.match(xml, /<sitemapindex xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+  const parts = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]).pathname);
+  assert.deepEqual(parts, ["/sitemap/pages.xml", "/sitemap/blog.xml", "/sitemap/profiles-1.xml"]);
+
+  const profiles = await (await get("/sitemap/profiles-1.xml")).text();
+  assert.match(profiles, /<urlset /);
+  assert.ok(!profiles.includes("%3A"), "no encoded addresses");
+  assert.ok(!/changefreq|priority/.test(profiles));
+  const entry = profiles.match(new RegExp(`<url><loc>[^<]*${profilePath(graded.url).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</loc>(<lastmod>[^<]+</lastmod>)?</url>`));
+  assert.ok(entry, "the graded profile is listed");
+  assert.equal(entry[1], `<lastmod>${JUDGED_AT}</lastmod>`);
+  // Ungraded profiles are left out. (Hidden ones too, tests/sitemap-profiles.test.mjs; the
+  // server keeps its hidden set 5 minutes, so it isn't checked against a site hidden just now.)
+  assert.ok(!profiles.includes(`${profilePath(ungraded.url)}</loc>`), ungraded.url);
+  // The index carries the newest lastmod of the profiles file.
+  assert.match(xml, /profiles-1\.xml<\/loc><lastmod>\d{4}-\d{2}-\d{2}T/);
+
+  const pages = await (await get("/sitemap/pages.xml")).text();
+  assert.match(pages, /\/grading<\/loc>/);
+  assert.equal((await get("/sitemap/blog.xml")).status, 200);
+  for (const path of ["/sitemap/profiles-2.xml", "/sitemap/nope.xml", "/sitemap/profiles-0.xml"]) assert.equal((await get(path)).status, 404, path);
 });
