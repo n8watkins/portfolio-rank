@@ -25,8 +25,11 @@ test("staging runs production's schedule, with its Gemini held far below product
 test("staging has its own address, Worker, ISR cache bucket and Workflow", () => {
   assert.equal(staging.vars.SITE_ENV, "staging");
   assert.equal(config.vars.SITE_ENV, "production");
-  assert.equal(staging.vars.AUTH_URL, "https://staging.portfoliorank.n8builds.dev");
-  assert.deepEqual(staging.routes, [{ pattern: "staging.portfoliorank.n8builds.dev", custom_domain: true }]);
+  assert.equal(staging.vars.SITE_URL, "https://staging.portfoliorank.dev");
+  assert.deepEqual(staging.routes, [
+    { pattern: "staging.portfoliorank.dev", custom_domain: true },
+    { pattern: "staging.portfoliorank.n8builds.dev", custom_domain: true },
+  ]);
   assert.deepEqual(staging.services, [{ binding: "WORKER_SELF_REFERENCE", service: `${config.name}-staging` }]);
   const bucket = (c, binding) => c.r2_buckets.find((b) => b.binding === binding).bucket_name;
   assert.notEqual(bucket(staging, "NEXT_INC_CACHE_R2_BUCKET"), bucket(config, "NEXT_INC_CACHE_R2_BUCKET"));
