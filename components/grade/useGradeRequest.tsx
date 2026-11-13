@@ -41,9 +41,20 @@ export function useGradeRequest() {
     setArmed(true);
   }, [armed]);
 
-  /** Waits up to a few seconds for the Turnstile token; the server decides without one. */
+  // Set when Cloudflare shows its checkbox: the token waits for the visitor's tick.
+  const interactive = useRef(false);
+  const [needsTick, setNeedsTick] = useState(false);
+
+  /**
+   * Waits a few seconds for the Turnstile token, or up to two minutes while
+   * Cloudflare's checkbox waits for a tick; the server decides without one.
+   */
   const waitForToken = async () => {
-    for (let k = 0; k < 30 && !token.current && !failed.current; k++) await new Promise((r) => setTimeout(r, 150));
+    const start = Date.now();
+    while (!token.current && !failed.current && Date.now() - start < (interactive.current ? 120_000 : 4_500)) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    setNeedsTick(false);
     return token.current;
   };
 
@@ -91,15 +102,31 @@ export function useGradeRequest() {
     [arm]
   );
 
+  // The widget, and while Cloudflare's checkbox waits, one line saying so
+  // (every form that uses this hook gets both from `turnstile`).
   const turnstile = armed ? (
-    <Turnstile
-      ref={widget}
-      action="grade"
-      onToken={(t) => (token.current = t)}
-      onExpire={() => (token.current = null)}
-      onError={() => (failed.current = true)}
-      className="empty:hidden"
-    />
+    <>
+      <Turnstile
+        ref={widget}
+        action="grade"
+        onToken={(t) => {
+          token.current = t;
+          setNeedsTick(false);
+        }}
+        onExpire={() => (token.current = null)}
+        onError={() => (failed.current = true)}
+        onInteractive={() => {
+          interactive.current = true;
+          setNeedsTick(true);
+        }}
+        className="empty:hidden mt-2"
+      />
+      {needsTick && (
+        <p role="status" className="mt-2 text-sm font-medium">
+          Cloudflare wants a quick check first: tick the box{busy ? " and your grade starts" : ""}.
+        </p>
+      )}
+    </>
   ) : null;
 
   return { arm, submit, busy, turnstile };
