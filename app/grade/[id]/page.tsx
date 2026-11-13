@@ -16,7 +16,7 @@ import { CELEBRATIONS, celebrationLevel } from "@/lib/grader/present.mjs";
 import { graderEnabled } from "@/lib/grader/server";
 import { faceOffPair, gradePage, type GradePage } from "@/lib/grade-page";
 import { ROUTES } from "@/lib/nav";
-import { SITE } from "@/lib/site";
+import { SITE, SITE_HOST } from "@/lib/site";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 
 // One grade: its progress while it runs, then the report (DECISIONS.md,
@@ -412,7 +412,7 @@ export default async function GradeReportPage({ params, searchParams }: Params &
       )}
 
       <p className="mt-6 hidden text-xs text-mute print:block">
-        Graded by Gemini{rep.model ? ` (${rep.model})` : ""} on {day(rep.gradedAt)}: an opinion about the page, not a verdict on the developer. portfoliorank.n8builds.dev
+        Graded by Gemini{rep.model ? ` (${rep.model})` : ""} on {day(rep.gradedAt)}: an opinion about the page, not a verdict on the developer. {SITE_HOST}
       </p>
 
       {ROUTES.play && (

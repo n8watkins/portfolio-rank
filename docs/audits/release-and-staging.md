@@ -110,30 +110,32 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 
 ## Owner decisions needed
 
-- **D1. Production no longer waits for staging.** Production deploys from main after CI, with its own migration and smoke check, while staging composes main plus labeled pull requests in its own workflow. The alternative is to keep production waiting for a staging deploy of main alone, which would put main back on staging after every merge. Recommended: accept. Status: needs owner.
-- **D2. Tiers behind a flag.** #132 and #137 change the public leaderboard with no flag of their own. Recommended: gate them behind `RANKING_V2` (already on in staging). Status: needs owner.
-- **D3. Email sign-in behind a flag.** #124 adds a visible sign-in option with no flag. Recommended: add `EMAIL_SIGNIN_ENABLED`, off in production. Status: needs owner.
-- **D4. A staging Gemini key.** Staging now runs production's schedule, and "Write a draft now" works there, but only with its own key from a separate Google project (`portfolio-rank/STAGING_GEMINI_API_KEY`), held to a tenth of production's day. Without it every Gemini job on staging skips. Status: needs owner (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then the `pass-env pipe` line in DEPLOY.md).
+- **D1. Production no longer waits for staging.** Production deploys from main after CI, with its own migration and smoke check, while staging composes main plus labeled pull requests in its own workflow. The alternative is to keep production waiting for a staging deploy of main alone, which would put main back on staging after every merge. Recommended: accept. Status: decided 2026-11-12, accepted; live with #144.
+- **D2. Tiers behind a flag.** #132 and #137 change the public leaderboard with no flag of their own. Recommended: gate them behind `RANKING_V2` (already on in staging). Status: decided 2026-11-12, behind `RANKING_V2`.
+- **D3. Email sign-in behind a flag.** #124 adds a visible sign-in option with no flag. Recommended: add `EMAIL_SIGNIN_ENABLED`, off in production. Status: decided 2026-11-12, its own flag, off in production.
+- **D4. A staging Gemini key.** Staging now runs production's schedule, and "Write a draft now" works there, but only with its own key from a separate Google project (`portfolio-rank/STAGING_GEMINI_API_KEY`), held to a tenth of production's day. Without it every Gemini job on staging skips. Status: decided 2026-11-12, a separate staging key; the owner creates `portfolio-rank/STAGING_GEMINI_API_KEY`, and until then Gemini stays off on staging.
 - **D5. Staging email allowlist.** Staging only emails the addresses in `STAGING_EMAIL_TO`, which is empty. Add your own address in `wrangler.jsonc` to receive staging's emails. Status: needs owner.
-- **D6. Experiment and docs pull requests.** Close #141 or keep it as a script; land #139 or move it to the private notes. Status: needs owner.
-- **D7. Weekly staging refresh.** The "Staging data" workflow replaces staging's data with production's newest backup every Monday, which also throws away anything made on staging that week. Recommended: weekly; monthly is the minimum for retention. Status: needs owner.
-- **D8. Require CI on main.** Add "Worker build" and "E2E" to the main ruleset (already approved in docs/DECISIONS.md, not yet done). Status: needs owner.
+- **D6. Experiment and docs pull requests.** Close #141 or keep it as a script; land #139 or move it to the private notes. Status: decided 2026-11-12, #141 does not land; docs pull requests (#139, #142, #147, #152) land only when the owner asks.
+- **D7. Weekly staging refresh.** The "Staging data" workflow replaces staging's data with production's newest backup every Monday, which also throws away anything made on staging that week. Recommended: weekly; monthly is the minimum for retention. Status: decided 2026-11-12, weekly.
+- **D8. Require CI on main.** Add "Worker build" and "E2E" to the main ruleset (already approved in docs/DECISIONS.md, not yet done). Status: done; the main ruleset already requires Worker build and E2E (checked 2026-11-12).
 
 ## Action items
 
 | # | Item | Status |
 | --- | --- | --- |
-| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | in progress (PR open) |
-| A2 | Schema migrates on a fingerprint of its statements, and the recorded version never goes down (#143) | in progress (PR open) |
-| A3 | Staging is main plus pull requests labeled `staging`, rebuilt on every change; production deploys alone (#144) | in progress (PR open) |
+| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | in progress (CI green, merging next) |
+| A2 | Schema migrates on a fingerprint of its statements, and the recorded version never goes down (#143) | done (merged 2026-11-12, deployed; fingerprint s1b8821ed recorded on staging and production) |
+| A3 | Staging is main plus pull requests labeled `staging`, rebuilt on every change; production deploys alone (#144) | done (merged 2026-11-12) |
 | A4 | The `staging` label exists | done |
 | A5 | Staging runs production's crons under low Gemini caps, "Write a draft now" works there with its own key, staging email is allowlisted (#145) | in progress (PR open) |
 | A6 | Weekly staging refresh from production's newest backup and six-hourly leaderboard rebuild (#145) | in progress (PR open) |
 | A7 | Shorten the titles of #125, #131, #137, #138 and #140 to 100 characters with the ` (#NNN)` suffix | needs owner (lane owners) |
 | A8 | Retarget stacked pull requests to main as their bases land, so CI runs on them | needs owner (lane owners) |
 | A9 | New tests go in per-feature files instead of `tests/content.test.mjs`, which seven branches edit | needs owner (lane owners) |
-| A10 | Label #133, #134, #140, #135 and #123 `staging` once #144 lands, then stop using `preview/staging-all` | needs owner |
-| A11 | Owner decisions D1 to D8 | needs owner |
+| A10 | Label #133, #134, #140, #135 and #123 `staging` once #144 lands, then stop using `preview/staging-all` | done (labeled 2026-11-12; nobody merges into `preview/staging-all` any more; the branch and its worktree are kept until the owner says to remove them) |
+| A12 | Staging's concurrency sits on the job, so a skipped run (an unlabeled pull request closing) no longer cancels a real deploy; this cancelled the first composed deploy after #144 | in progress (PR open) |
+| A13 | Make the site address one setting (`SITE_URL` for links, sitemap, canonical, Open Graph and the email sender) | queued |
+| A11 | Owner decisions D1 to D8 | done except D5 |
 
 ## Risks
 

@@ -135,6 +135,12 @@ A condition that holds sends one email a day, every day, until it clears; the st
 They go through Cloudflare Email Service and the shared email gate ("Grade my portfolio", Email) to `OWNER_EMAIL`, the owner's verified address, which is free and doesn't count against the monthly sends.
 Until `OWNER_EMAIL` is set the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent; a send the gate refuses or the provider fails stays unsent and is tried on the next run.
 
+A night that never runs can't check itself, so the hourly cron (`15 * * * *`) also runs a dead-man check ([pipeline/night-watch.mjs](pipeline/night-watch.mjs)) on the latest night that should have started.
+It raises `night-watch:missed` when that night has no `night_runs` row an hour after 20:30 Pacific (the cron didn't fire, the Workflow couldn't be created, or `GEMINI_API_KEY` is missing).
+It raises `night-watch:stuck` when the night still says `running` an hour after its hard stop and its Workflow instance is not paused; a run the owner paused on purpose is left alone.
+Both clear once a later night finishes.
+Creating tonight's Workflow treats only the duplicate-id error as "already ran"; any other error is logged as `night.cron.failed` and reaches Sentry.
+
 ### What stays on GitHub Actions, and why
 
 - Capture and the health check load sites in Playwright's Chromium, which a Worker can't run; they stay on Actions and the Workflow starts them with a `workflow_dispatch` (the Worker secret `GITHUB_DISPATCH_TOKEN`).
@@ -295,7 +301,7 @@ report ◄── GET /api/grade/<id> (progress, then the report) ── email: o
 1. The flag, the `Origin` header (the site's own) and a JSON body of at most 8 KB.
 2. The address ([lib/grader/url.mjs](lib/grader/url.mjs)): http or https (https when no scheme is given), ports 80 and 443 only, no user name or password, a public host name with a dot (never an IP literal, a local name or a private range, [lib/net-guard.mjs](lib/net-guard.mjs)), at most 500 characters; the query and fragment are dropped, so `?x=1` makes no new address for the caches, the caps or the cooldown.
 3. A rate limit on attempts, before any work: 20 an hour per visitor and 60 per network (`rate_limits`).
-4. Cloudflare Turnstile (action `grade`), refused on the deployed Workers when the `TURNSTILE_SECRET_KEY` secret is missing; the token's hostname must be the Worker's own (`AUTH_URL`); only local runs skip it ([lib/turnstile.ts](lib/turnstile.ts)).
+4. Cloudflare Turnstile (action `grade`), refused on the deployed Workers when the `TURNSTILE_SECRET_KEY` secret is missing; the token's hostname must be the Worker's own (`SITE_URL`); only local runs skip it ([lib/turnstile.ts](lib/turnstile.ts)).
 5. An own key, if sent, is checked with a free metadata call (`models.get` for `gemini-3.5-flash-lite`, no generate quota).
 6. The free checks ([lib/grader/quick.ts](lib/grader/quick.ts)): one plain fetch from the Worker through `safeFetch` (every redirect hop re-checked, 10-second timeout, 1.5 MB cap, and `global_fetch_strictly_public` refuses names that resolve to private addresses), then the facts code can check (`pipeline/facts.mjs`, project links checked through the same fetch) and a fingerprint of the HTML's structure.
    Cached per address for a day (failures for 10 minutes) in the `cache` table.
