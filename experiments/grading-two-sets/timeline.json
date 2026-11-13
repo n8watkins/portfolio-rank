@@ -139,11 +139,57 @@
   },
   {
    "phase": "claude-sonnet-api:pass1 (Set A)",
-   "start": "2026-11-13T19:05:56.160Z"
+   "start": "2026-11-13T19:05:56.160Z",
+   "end": "2026-11-13T19:26:58.829Z"
   },
   {
    "phase": "event: Claude API spend-limit stop (count_tokens HTTP 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.\"},\"reques) at a running total of $1.1563",
    "start": "2026-11-13T19:06:53.642Z"
+  },
+  {
+   "phase": "claude-sonnet-api:pass1 (Set B)",
+   "start": "2026-11-13T19:26:58.831Z",
+   "end": "2026-11-13T19:28:40.094Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo (Set A)",
+   "start": "2026-11-13T19:28:10.101Z",
+   "end": "2026-11-13T19:30:23.276Z"
+  },
+  {
+   "phase": "claude-sonnet-api:solo-repeat (Set A)",
+   "start": "2026-11-13T19:28:40.094Z",
+   "end": "2026-11-13T19:29:17.458Z"
+  },
+  {
+   "phase": "claude-sonnet-api:solo-repeat (Set B)",
+   "start": "2026-11-13T19:29:17.458Z",
+   "end": "2026-11-13T19:29:54.880Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo (Set B)",
+   "start": "2026-11-13T19:30:23.277Z",
+   "end": "2026-11-13T19:32:35.523Z"
+  },
+  {
+   "phase": "claude-haiku-api:pass1 (Set A)",
+   "start": "2026-11-13T19:32:35.524Z",
+   "end": "2026-11-13T19:34:44.745Z"
+  },
+  {
+   "phase": "claude-haiku-api:pass1 (Set B)",
+   "start": "2026-11-13T19:34:44.745Z",
+   "end": "2026-11-13T19:36:27.077Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo-repeat (Set A)",
+   "start": "2026-11-13T19:36:27.078Z",
+   "end": "2026-11-13T19:36:58.246Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo-repeat (Set B)",
+   "start": "2026-11-13T19:36:58.247Z",
+   "end": "2026-11-13T19:37:27.789Z"
   }
  ]
 }
