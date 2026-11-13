@@ -27,7 +27,7 @@ Last updated 2026-11-13 (evening).
 | # | What | When |
 |---|---|---|
 | 13 | Press "Send test alert" on the admin page and check the email arrives (not in spam) | When the button is live |
-| 14 | Approve the priority experiments (Claude is the answer key, so nothing to build) | When the grading experiment report lands |
+| 14 | Grading experiment done (report: https://claude.ai/artifact/UVo5LGTefzcjTQAjeCJML9, PR #185). Approve one more check round (about 32 Gemini requests) on the not-a-portfolio check and the too-many-5s fix, then switch report cards to rubric v3 with thinking "low" and grade in batches of 5 (about 400 to about 80 requests a day)? | Now |
 | 15 | Keep or retire the unmerged `feat/report-redesign` branch (no PR, last commit Nov 12) | Any time |
 | 16 | Add your portfolio (#140): a site someone added that isn't listed yet can't be claimed, re-checked or removed by its real owner. Suggested: let the real owner claim it by the usual GitHub/site check, then re-check or remove it | Before #140 goes live |
 | 17 | Add your portfolio (#140): people who add a site they don't own have no limit of their own, only the grader's overall caps. Suggested: 3 unclaimed adds a day per account | Before #140 goes live |
