@@ -12,7 +12,7 @@
 //      private prefix private/grades/<id>/, which the site's public /shots
 //      route never serves
 //   4. records the capture; a free-tier job is then graded through the
-//      people queue (lib/grader/queue.mjs: 3.5 Flash-Lite only, the budget
+//      people queue (lib/grader/free-grade.mjs: 3.5 Flash-Lite only, the budget
 //      accountant's people allowance, waiting for 3.5 rather than falling
 //      back); an own-key job waits for the visitor's browser
 //
@@ -35,7 +35,7 @@ import { capturePage } from "../pipeline/grade-capture.mjs";
 import { ensureGraderSchema } from "../lib/grader/schema.mjs";
 import { claimCaptures, readJob, shotKeyOf } from "../lib/grader/jobs.mjs";
 import { failCapture, recordCapture } from "../lib/grader/finish.mjs";
-import { peopleContext, queueFreeGrade } from "../lib/grader/queue.mjs";
+import { peopleContext, queueFreeGrade } from "../lib/grader/free-grade.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const args = process.argv.slice(2);

@@ -1,6 +1,6 @@
 import { createHmac } from "crypto";
 import { cookies } from "next/headers";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { cloudflareContext } from "@/lib/cloudflare-context";
 import { NextResponse } from "next/server";
 import { siteUrl } from "@/lib/site";
 import { clientIp, currentVoter, sameOrigin } from "@/lib/polls/server";
@@ -141,7 +141,7 @@ type Env = Partial<CloudflareEnv> & Record<string, unknown>;
  */
 export async function workerEnv(): Promise<Env> {
   try {
-    const { env } = await getCloudflareContext({ async: true });
+    const { env } = await cloudflareContext();
     return { ...(env as unknown as Env), ...(process.env as Record<string, unknown>) };
   } catch {
     return process.env as unknown as Env;

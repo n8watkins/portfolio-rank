@@ -200,11 +200,14 @@ A library of house-style illustrations ([pipeline/content/house-style.mjs](../pi
 - **Statuses:** `pending` (passed the check, waiting for the owner), `approved`, `rejected` (dropped by the owner), `rejected-auto` (failed the check, kept for the owner to see), `retired`.
   Only approved images are ever used.
   A queue item gets one image, ever; one whose model calls both errored has no row and comes up on a later night.
-- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) opens on "To review" (pending images, with Keep and Drop), with tabs for Approved (with Retire), Dropped, Failed check (keep one anyway if the check was wrong) and All, each with its count.
+- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) is a thumbnail grid under tabs that stay in view: To review (pending images, with Approve and Drop on each thumbnail), Approved (with Retire), Dropped, Failed check (approve one anyway if the check was wrong) and All, each with its count.
+  It opens on To review, or on Approved when nothing waits for review.
+  A thumbnail opens the image large with its alt text and tags (editable), its decision (A approves, D drops, the arrows step through the tab) and the drafts tied to it; the tab and the open image are in the address (`?view=`, `?image=`), and Back closes the large view.
+  Make now, Make your own, Up next and "How images are made" are compact panels beside the grid (below it on phones).
   Drop takes the image out at once and shows an Undo toast; Undo puts it back where it was (`restore`).
   Decisions are POSTs to `/api/admin/library` that must come from the site with a JSON body (CSRF), checked on the server.
   Nothing on the page, and nothing in the engine, deletes an image: rejecting or unpublishing a post leaves its images, their uses and their associations as they are.
-- **Associations:** each card lists the drafts and posts the image is tied to, with their status: "used in" (`image_library_uses`), "considered for" (up to 3 close tag matches a slot looked at and did not pick, `image_library_considered`) and "made for" (a post's fresh illustration).
+- **Associations:** the large view lists the drafts and posts the image is tied to, with their status: "used in" (`image_library_uses`), "considered for" (up to 3 close tag matches a slot looked at and did not pick, `image_library_considered`) and "made for" (a post's fresh illustration).
 - **Make now** (`POST /api/admin/library/generate`, production only): the owner picks 1, 2, 5 or 10, or "Make up to N" (all that is left of the day), or a single subject of their own ("Make your own": a subject of 8 to 300 characters after cleaning and an optional theme, with a preview of the final prompt with the house style).
   The page asks for one image a request, so it shows "Making 1 of 2... about 5 seconds each" with the day's and the hour's counts next to the button.
   Every answer says what happened in plain words: "Made N", "Today's 40 are used", "Today's neuron allowance is used", "Paused 8 pm to midnight Pacific", or, for the AI Gateway's own 429, "The AI Gateway allows N an hour: raise it in AI Gateway settings".
@@ -287,6 +290,21 @@ The owner's draft on demand, from `/admin/blog` (only the `ADMIN_GITHUB_ID` acco
 - **From the command line:** `wrangler workflows trigger portfolio-rank-draft '{"topic":"..."}'` queues and writes one draft under the same daily cap; only someone with the account's Cloudflare API token can run it.
 - **Images:** a slot's library match now also counts the post's own tags, so the writer prefers approved library images that fit the whole post.
 
+## Automation
+
+Owner request of 2026-11-12: the schedule is the owner's to change from `/admin/blog`, without a deploy ([lib/content/automation.mjs](../lib/content/automation.mjs), tables `content_settings` and `content_topics`).
+
+- **The panel** ("Automation" on `/admin/blog`): on or off; the drafting nights (Monday to Saturday; Sunday night picks the week's ideas); drafts a week; "Drafts for my review" (the default) or "Publish automatically", behind a warning; an optional topic queue; and "Next run" and "Last run" lines with the result.
+- **Read by the night:** the Content stage's `contentJob` reads the settings at every batch; a change applies from that night's run.
+- **The config is the ceiling:** `CONTENT_MODE` "off" turns everything off whatever is saved; "dry-run" allows drafts for review only; only "publish" lets the page choose publishing automatically.
+  `CONTENT_DRAFTS_PER_WEEK` (2, at most 4) is the most drafts a week the page may ask for, and one draft a night still holds, so drafts a week never exceed the nights chosen.
+  The API refuses a value above the ceiling; a saved value a later config lowered is clamped when read.
+- **Fail closed:** when the settings can't be read (a missing table, a row that isn't valid JSON), the night writes nothing and the panel says why.
+- **Before the owner saves:** the config's schedule applies (Monday and Wednesday, `CONTENT_DRAFTS_PER_WEEK` drafts, for review while `CONTENT_MODE` allows any).
+- **Publishing automatically** keeps every limit: 2 published posts in any 7 days, the 08:00 Pacific slot, and a clean quality scorecard; a draft the scorecard flags is kept for review with the reason (`checks.publishHeld`).
+- **The topic queue:** at most 20 topics of at most 200 characters; the next scheduled draft takes the first one as its angle (the same `focus` as Write a draft now), and the week's pick still chooses the data it is written from; a used topic is marked with its post, and a dropped draft marks it dropped.
+- **API:** `GET` and `POST /api/admin/content/automation` (`{ op: "save", settings }`, `{ op: "add-topic", topic }`, `{ op: "remove-topic", id }`), admin only, POSTs with this site's Origin and a JSON body.
+
 ## Quality tools
 
 - **Reject with notes, and "Rewrite with these notes":** on the review page, Reject keeps the owner's note on the draft; "Rewrite with these notes" rejects the draft with the notes and starts a new draft of the same kind and angle with the notes passed to the writer as `owner_notes` (same caps as Write a draft now; a rejected or dropped draft can be rewritten too).
@@ -368,7 +386,7 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Tables `posts` and `content_runs` (schema version 6), the switch, the publish cap in the same write, the admin read | [lib/content/schema.mjs](../lib/content/schema.mjs), [lib/content/store.mjs](../lib/content/store.mjs) |
 | Fact builders: what the AI grader rewards and penalizes, dark mode, motion and page weight, what people vote for and against, before and after a re-grade, and leaderboard movement (the "3.1 vs 3.5" builder was removed on 2026-11-11: dev meta) | [pipeline/content/facts.mjs](../pipeline/content/facts.mjs) |
 | Write a draft now, rewrites, the cost panel | [pipeline/content/manual.mjs](../pipeline/content/manual.mjs), [worker/draft.ts](../worker/draft.ts), [lib/content/jobs.mjs](../lib/content/jobs.mjs), [lib/content/costs.mjs](../lib/content/costs.mjs), [app/api/admin/content/draft/route.ts](../app/api/admin/content/draft/route.ts) |
-| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/blog/guidelines](../app/admin/blog/guidelines), [app/admin/blog/compare](../app/admin/blog/compare) |
+| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/(tools)/blog/guidelines](<../app/admin/(tools)/blog/guidelines>), [app/admin/(tools)/blog/compare](<../app/admin/(tools)/blog/compare>) |
 | Charts drawn from the facts (SVG) | [pipeline/content/charts.mjs](../pipeline/content/charts.mjs) |
 | The writer, placeholders and filling, the revision request | [pipeline/content/writer.mjs](../pipeline/content/writer.mjs) |
 | Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |
@@ -380,7 +398,7 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | The blog: `/blog`, `/blog/tag/[tag]`, `/blog/[slug]` with its share image, `/blog/rss.xml`, `/blog/media/<post id>/<slot>`, `/about-posts`, sitemap entries; the strict Markdown renderer | [app/blog](../app/blog), [components/blog](../components/blog), [lib/content/blog.mjs](../lib/content/blog.mjs), [app/about-posts/page.tsx](../app/about-posts/page.tsx) |
 | Review and publish: the queue, the review page, Publish, Reject and Unpublish | [app/admin/blog](../app/admin/blog), [app/api/admin/content/[id]/route.ts](../app/api/admin/content/[id]/route.ts) |
 | Fixture posts for local previews (two real dry-run drafts of 2026-11-10 with their images) | [scripts/seed-blog-fixtures.mjs](../scripts/seed-blog-fixtures.mjs), [tests/fixtures/blog](../tests/fixtures/blog) |
-| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/images/page.tsx](../app/admin/images/page.tsx), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
+| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/(tools)/images/page.tsx](<../app/admin/(tools)/images/page.tsx>), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
 
 How it runs, in short:
 

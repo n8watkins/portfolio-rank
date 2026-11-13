@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { AdminHeader } from "@/components/admin/AdminHeader";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { GUIDELINES_MAX, GUIDELINES_TOTAL, GUIDELINE_MAX, listGuidelines, noteSuggestions } from "@/lib/content/guidelines.mjs";
@@ -19,18 +18,11 @@ export default async function GuidelinesPage() {
   const client = db();
   const [guidelines, suggestions] = await Promise.all([listGuidelines(client), noteSuggestions(client)]);
   return (
-    <div className="mx-auto max-w-3xl px-4 pb-20 sm:px-6">
-      <div className="py-6">
-        <Link href="/admin/blog" className="inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Blog drafts
-        </Link>
-        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent">Admin</p>
-        <h1 className="mt-1.5 text-3xl font-bold tracking-tight">Editor&apos;s guidelines</h1>
-        <p className="mt-2 text-sm text-mute">
-          The writer follows every rule here on every draft, the nightly ones and Write a draft now. Keep each one short and specific: at most {GUIDELINES_MAX} rules, {GUIDELINE_MAX} characters each and {GUIDELINES_TOTAL.toLocaleString("en-US")} in all.
-        </p>
-      </div>
+    <>
+      <AdminHeader title="Editor's guidelines" back={{ href: "/admin/blog", label: "Blog drafts" }}>
+        The writer follows every rule here on every draft, the nightly ones and Write a draft now. Keep each one short and specific: at most {GUIDELINES_MAX} rules, {GUIDELINE_MAX} characters each and {GUIDELINES_TOTAL.toLocaleString("en-US")} in all.
+      </AdminHeader>
       <GuidelinesEditor initial={guidelines} suggestions={suggestions} max={GUIDELINE_MAX} />
-    </div>
+    </>
   );
 }

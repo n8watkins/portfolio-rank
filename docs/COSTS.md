@@ -163,7 +163,14 @@ Built:
 - Fix 6: `gemini_requests` keeps 90 Pacific days raw, then one `gemini_daily` row per day, model, job and outcome; `night_runs` keeps 180 days.
 - Fix 9: `comparisons` stay whole; only `reason` is cleared after 90 days.
 
-Not yet: fixes 3 (incremental recompute), 4 and 5 (write only changed `site_ratings` and `rank_history` rows), 7 and 8 (no analytics events or polls are stored yet), and 10 (the owner's monthly look).
+Built later (2026-11-13, [audits/free-tier-limits.md](audits/free-tier-limits.md)):
+
+- Fixes 4 and 5: the recompute upserts only `site_ratings` rows whose values (shown rank included) changed, and writes each week's `rank_history` once, after the week ends, only rows that differ.
+  Measured on staging at 2,270 sites, a recompute wrote 48,023 rows before and none with nothing new; Turso counts about one write per row, not one per index entry, so the per-site estimates above were low before the fix.
+- The hidden-site set reads a partial index of hidden sites, and `/top` reads each view's size with one index seek.
+- Fix 10 is now a page: `/admin/limits` shows every free limit against its cap, amber at 50%.
+
+Not yet: fix 3 (incremental recompute), 7 and 8 (no analytics events or polls are stored yet).
 
 Estimated reads a month, before and after:
 
@@ -197,7 +204,8 @@ Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("
 - Cloudflare: the account is on Workers Paid, the $5 a month add-on (not Pro or any zone plan), which includes 10M Worker requests a month.
   Staging's Worker served 677 requests that day against 4,754 for production, so its usage sits well inside that allowance.
 - Idle cost: staging has no Cron Triggers, no Gemini key and no dispatch token, so it spends nothing while nobody uses it.
-- R2: the ISR cache bucket is a few MB, inside the free 10 GB.
+- R2: each deploy leaves its build's ISR cache behind (about 10 MB a build), which had grown to 970 MB in staging and 383 MB in production by 2026-11-12.
+  Every deploy now removes all but the newest two builds (`scripts/prune-build-cache.mjs`), so each cache bucket stays near 20 to 30 MB, inside the free 10 GB.
 - Email: sends only go through the capped gate, to verified addresses.
 - Turso: the account is on the Starter plan with overages disabled, so it cannot bill.
   Staging's database is 2.4 MB; the whole account uses 11 MB of 5 GB and 1.7M of 500M rows read.

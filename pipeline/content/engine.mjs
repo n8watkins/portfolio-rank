@@ -23,6 +23,11 @@
 // The kill switch: CONTENT_MODE "off" (the default) stops the content jobs
 // at the next batch; "dry-run" keeps every draft private (status draft);
 // "publish" publishes, and only the owner sets it (owner decision 7).
+// Within that ceiling the owner's automation settings (lib/content/
+// automation.mjs, saved from /admin/blog) choose on or off, the drafting
+// days, drafts a week, review or publish, and a queue of topics; when they
+// can't be read, the night writes nothing (fail closed). Publishing also
+// needs a clean quality scorecard, else the post is kept for review.
 import crypto from "node:crypto";
 import { pollsContent } from "../polls.mjs";
 import { PRIMARY_MODEL } from "../gemini.mjs";
@@ -38,6 +43,8 @@ import { fillImages } from "./images.mjs";
 import { aiLimits } from "../../lib/content/neurons.mjs";
 import { pexelsCap } from "../../lib/content/pexels-searches.mjs";
 import { OutlineError, STAGED_REQUESTS, stagedWrite } from "./staged.mjs";
+import { draftsDueBy, nextTopic, readAutomation, markTopicUsed } from "../../lib/content/automation.mjs";
+import { scorecard } from "./scorecard.mjs";
 
 export const MAX_REVISIONS = 2;
 /** Requests one round of a draft needs: write, list claims, judge them, final review. */
@@ -73,32 +80,56 @@ export function draftsDue(weekday) {
 }
 
 /**
+ * The owner's automation settings for the night, within the config's
+ * ceiling (ctx.flags.contentMode, ctx.flags.contentDraftsPerWeek). Null when
+ * they can't be read: the caller writes nothing.
+ */
+export async function automationFor(ctx) {
+  try {
+    return await readAutomation(ctx.db, { CONTENT_MODE: ctx.flags?.contentMode ?? "off", CONTENT_DRAFTS_PER_WEEK: ctx.flags?.contentDraftsPerWeek });
+  } catch (e) {
+    ctx.log?.(`Content: the automation settings can't be read, so nothing is written tonight: ${msg(e)}`);
+    return null;
+  }
+}
+
+/**
  * What tonight's content job is, or null. `done` lists the steps already run
- * tonight. Returns { step: "pick" } or { step: "draft", kind } or null, and
- * why in `reason`.
+ * tonight. Returns { step: "pick" } or { step: "draft", kind, topic? } or
+ * null, and why in `reason`; `mode` is the store's mode for tonight's draft.
  */
 export async function contentJob(ctx, { done = [] } = {}) {
-  const mode = ctx.flags?.contentMode ?? "off";
-  if (mode === "off") return { job: null, reason: 'CONTENT_MODE is "off"' };
+  const ceiling = ctx.flags?.contentMode ?? "off";
+  if (ceiling === "off") return { job: null, reason: 'CONTENT_MODE is "off"' };
+  const auto = await automationFor(ctx);
+  if (!auto) return { job: null, reason: "the automation settings can't be read" };
+  const settings = auto.settings;
+  if (!settings.enabled) return { job: null, reason: "the automation is off (/admin/blog)" };
   const now = ctx.now();
   const weekday = pacificParts(now).weekday;
   const week = contentWeek(now);
   const pick = (await runsOfWeek(ctx.db, week, "pick")).filter((r) => r.status === "ok").at(-1);
   const drafts = await runsOfWeek(ctx.db, week, "draft");
   const ok = drafts.filter((r) => r.status === "ok").length;
-  const due = draftsDue(weekday);
+  const due = draftsDueBy(settings, weekday);
   const draftTonight = !done.includes("draft") && ok < due && !drafts.some((r) => r.night === nightOf(ctx, now) && r.status !== "deferred");
+  const mode = settings.engineMode;
   if (!pick) {
     if (done.includes("pick")) return { job: null, reason: "no ideas picked this week" };
-    if (weekday === PICK_NIGHT || draftTonight) return { job: { step: "pick" }, reason: "the week's pick" };
+    if (weekday === PICK_NIGHT || draftTonight) return { job: { step: "pick" }, mode, reason: "the week's pick" };
     return { job: null, reason: "no pick yet; waiting for Sunday" };
   }
   if (!draftTonight) return { job: null, reason: ok >= due ? `${ok} of ${due} draft(s) due this week done` : "a draft already ran tonight" };
   const tried = new Set(drafts.filter((r) => r.status !== "deferred").map((r) => r.kind));
   const order = [...(pick.detail.picks ?? []).map((p) => p.kind), ...(pick.detail.reserve ? [pick.detail.reserve.kind] : [])];
-  const kind = order.find((k) => !tried.has(k));
+  const fresh = order.find((k) => !tried.has(k)) ?? null;
+  // The owner's queued topic, if any, is the next draft's angle; the week's
+  // pick still chooses the data it is written from (a fresh idea first, else
+  // the week's best one again, from the new angle).
+  const topic = await nextTopic(ctx.db);
+  const kind = fresh ?? (topic && order.length ? order[0] : null);
   if (!kind) return { job: null, reason: "every idea picked this week was tried" };
-  return { job: { step: "draft", kind }, reason: `draft ${kind}` };
+  return { job: { step: "draft", kind, ...(topic ? { topic } : {}) }, mode, reason: topic ? `draft ${kind} on the queued topic "${topic.topic}"` : `draft ${kind}` };
 }
 
 const nightOf = (ctx, now) => ctx.night ?? pacificDay(now);
@@ -309,8 +340,12 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
   // Stage 8: store (published at the next 08:00 Pacific in publish mode, else private).
   const publishAt = nextMorning(now);
   const post = postOf({ id: postId, kind, sheet, draft, body: img.body, images: img.images, supported, checks, night, ctx, requests: g.used.n });
-  const stored = await storePost(db, post, { mode, publishAt, now });
-  await recordRun(db, { night, now, step, mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
+  // Publishing automatically also needs a clean scorecard; a flagged post waits for the owner.
+  // (ctx.flags.publishGate "none" turns the gate off; only tests that are about other caps use it.)
+  const held = mode === "publish" && ctx.flags?.publishGate !== "none" ? scorecard(post).flags : [];
+  if (held.length) post.checks = { ...post.checks, publishHeld: `kept for review: ${held.slice(0, 3).join("; ")}` };
+  const stored = await storePost(db, post, { mode: held.length ? "dry-run" : mode, publishAt, now });
+  await recordRun(db, { night, now, step, mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, ...(held.length ? { held: held.slice(0, 3) } : {}), publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
   log(`${stored.status}${stored.capped ? " (held back by the weekly cap)" : ""} after ${history.length} round(s), ${g.used.n} request(s), ${img.images.length} image(s)`);
   return { status: "ok", postId, stored: stored.status, requests: g.used.n, searches, aiImages: img.aiImages };
 }
@@ -364,7 +399,8 @@ export const contentStage = {
       if (polls.length) return polls.map((i) => ({ ...i, part: "polls" }));
       stage.pollsDone = true;
     }
-    const { job, reason } = await contentJob(ctx, { done: stage.contentDone ?? [] });
+    const { job, mode, reason } = await contentJob(ctx, { done: stage.contentDone ?? [] });
+    if (job) job.mode = mode;
     if (!job) {
       if (!stage.contentReason) {
         stage.contentReason = reason;
@@ -380,12 +416,17 @@ export const contentStage = {
   },
   run: async (ctx, gemini, item, stage, { left = 0 } = {}) => {
     if (item.part === "polls") return pollsContent.run(ctx, gemini, item, stage);
-    const c = { ...ctx, night: stage.night };
+    // Tonight's mode from the owner's settings (never above CONTENT_MODE).
+    const c = { ...ctx, night: stage.night, flags: { ...ctx.flags, contentMode: item.job.mode ?? "dry-run" } };
     if (item.job.step === "pick") {
       await runPick(c, gemini, { night: stage.night, budget: left });
       return "ok";
     }
-    const r = await runDraft(c, gemini, { kind: item.job.kind, night: stage.night, budget: left });
+    const topic = item.job.topic ?? null;
+    const r = await runDraft(c, gemini, { kind: item.job.kind, night: stage.night, budget: left, ...(topic ? { focus: topic.topic } : {}) });
+    if (topic && (r.status === "ok" || r.status === "dropped")) {
+      await markTopicUsed(ctx.db, topic.id, { night: stage.night, postId: r.postId ?? null, status: r.status === "ok" ? "used" : "dropped", now: new Date(ctx.now()) });
+    }
     return r.status === "ok" || r.status === "dropped" ? "ok" : "skipped";
   },
 };
