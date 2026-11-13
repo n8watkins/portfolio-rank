@@ -1,5 +1,5 @@
 import feed from "@/data/feed.json";
-import { db } from "@/lib/db";
+import { db, ensureSchema } from "@/lib/db";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
@@ -58,6 +58,7 @@ export async function gate(req: Request, action: string): Promise<Gate | Respons
   if (!body) return fail("bad_request", 400);
   const target = normalizeGradeUrl(body.url);
   if (!target.ok) return fail(target.error, 400, { message: target.message.replace(/graded/g, "checked") });
+  await ensureSchema();
   const who = await requester(req);
   const client = db();
   const now = Date.now();

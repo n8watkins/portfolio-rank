@@ -86,7 +86,16 @@ const nextConfig: NextConfig = {
   },
   // The face-off moved into Play; old links and bookmarks still land on it.
   async redirects() {
-    return [{ source: "/rank", destination: "/play", permanent: true }];
+    return [
+      { source: "/rank", destination: "/play", permanent: true },
+      // The free tools' pages became "Add your portfolio" (owner, 2026-11-12).
+      ...(launchSwitch("TOOLS_ENABLED") === "true"
+        ? [
+            { source: "/tools", destination: "/add", permanent: false },
+            { source: "/tools/:path*", destination: "/add", permanent: false },
+          ]
+        : []),
+    ];
   },
 };
 

@@ -21,7 +21,7 @@ const FALLBACK: Record<string, string> = {
  * is first used, is invisible unless Cloudflare wants an interaction, and a
  * token is good for one request.
  */
-export function useToolRequest() {
+export function useToolRequest(action = "tools") {
   const [armed, setArmed] = useState(false);
   const token = useRef<string | null>(null);
   const failed = useRef(false);
@@ -75,7 +75,7 @@ export function useToolRequest() {
   const turnstile = armed ? (
     <Turnstile
       ref={widget}
-      action="tools"
+      action={action}
       onToken={(t) => {
         token.current = t;
         setNeedsTick(false);
