@@ -73,7 +73,7 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 
 **Wave 0: the release machinery (this audit).**
 
-1. E2E ports (#142).
+1. E2E ports (#146).
 2. Schema fingerprint (#143).
 3. Staging composition and this document (#144).
 4. Staging fidelity (#145).
@@ -123,7 +123,7 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 
 | # | Item | Status |
 | --- | --- | --- |
-| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#142) | in progress (PR open) |
+| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | in progress (PR open) |
 | A2 | Schema migrates on a fingerprint of its statements, and the recorded version never goes down (#143) | in progress (PR open) |
 | A3 | Staging is main plus pull requests labeled `staging`, rebuilt on every change; production deploys alone (#144) | in progress (PR open) |
 | A4 | The `staging` label exists | done |
