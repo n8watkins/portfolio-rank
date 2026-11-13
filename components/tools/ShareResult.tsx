@@ -155,7 +155,7 @@ export function ShareResultView({ answer, fixHref }: { answer: ShareAnswer; fixH
             {Object.entries(s.tags ?? {}).map(([k, v]) => (
               <div key={k} className="contents">
                 <dt className="font-mono text-mute">{k}</dt>
-                <dd className={`break-words ${v ? "" : "text-mute/70"}`}>{v ?? "missing"}</dd>
+                <dd className={`break-words ${v ? "" : "text-mute"}`}>{v ?? "missing"}</dd>
               </div>
             ))}
           </dl>
