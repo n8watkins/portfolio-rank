@@ -67,7 +67,7 @@ const worker = {
     if (locked) return locked;
     const robots = stagingRobots(request, env);
     if (robots) return robots;
-    // Old profile addresses: one 301 to the readable one (./profile-redirect.ts).
+    // Old or untidy profile addresses: one 301 to the readable one (./profile-redirect.ts).
     const legacy = legacyProfileRedirect(request);
     if (legacy) return legacy;
     const probe = probeAnswer(request);

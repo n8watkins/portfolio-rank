@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArrowUpRight, Clock, Hourglass, Sparkles, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
@@ -22,8 +22,8 @@ import { RecheckButton } from "@/components/profile/RecheckButton";
 // A portfolio's profile, the product (owner, 2026-11-12): four parts, Rank,
 // Report card, Fix list and Share, for a listed portfolio or one added
 // through "Add your portfolio" (lib/profile.ts). Its address is
-// /p/<host><path> (lib/profile-url.mjs); any other form of it, the old
-// encoded one included, redirects there for good. Rendered on first visit and
+// /p/<host><path> (lib/profile-url.mjs), its canonical; old and untidy forms
+// of it are 301s from the Worker (worker/profile-redirect.ts). Rendered on first visit and
 // re-rendered at most every 5 minutes (ISR); a re-check revalidates it at
 // once. Nothing here depends on who is looking: the ♥ state and the owner's
 // "Re-check my site" load in the browser.
@@ -57,9 +57,8 @@ const shareImage = (p: Profile) => ({ url: `${SITE_URL}${profileImagePath(p.url)
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string[] }> }): Promise<Metadata> {
   const { slug } = await params;
-  const r = await routeProfile(slug.join("/"));
-  if (!r || "to" in r) return {};
-  const { p } = r;
+  const p = await routeProfile(slug.join("/"));
+  if (!p) return {};
   const canonical = `${SITE_URL}${p.path}`;
   const images = [shareImage(p)];
   if (!indexable(p)) {
@@ -256,10 +255,8 @@ function ShareCard({ p }: { p: Profile }) {
 
 export default async function PortfolioPage({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const r = await routeProfile(slug.join("/"));
-  if (!r) notFound();
-  if ("to" in r) permanentRedirect(r.to);
-  const { p } = r;
+  const p = await routeProfile(slug.join("/"));
+  if (!p) notFound();
   const shot = await shotFor(p);
   // A ProfilePage about the person and its breadcrumb trail (lib/profile-seo.ts), for indexable profiles only.
   const canonical = `${SITE_URL}${p.path}`;

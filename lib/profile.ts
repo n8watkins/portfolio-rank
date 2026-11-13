@@ -8,7 +8,7 @@ import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
 import { seen, seenId } from "@/lib/discovery/sites.mjs";
-import { legacyAddress, profilePath, requestedSlug, slugKey } from "@/lib/profile-url.mjs";
+import { profilePath, requestedSlug, slugKey } from "@/lib/profile-url.mjs";
 import { cache } from "react";
 import type { QuickFacts } from "@/lib/grader/quick";
 import type { PsiResult } from "@/lib/tools/psi";
@@ -261,19 +261,16 @@ export async function loadProfile(url: string): Promise<Profile | null> {
 }
 
 /**
- * What a request for /p/<path> gets (`path`: the route's segments joined with
- * "/", still percent-encoded): the profile; a permanent redirect to its one
- * address (an old encoded address, or www, a scheme, another case); or null
- * for a site PortfolioRank doesn't know. Once per request (a string, so
- * React's cache matches it), shared by the page and its metadata.
+ * The profile a request for /p/<path> shows (`path`: the route's segments
+ * joined with "/", still percent-encoded), looked up by site key, so another
+ * case or scheme finds it too (its canonical names the one address); null for
+ * a site PortfolioRank doesn't know. Old and untidy forms of the address are
+ * redirected before this, by the Worker (worker/profile-redirect.ts). Once
+ * per request (a string, so React's cache matches it), shared by the page
+ * and its metadata.
  */
-export const routeProfile = cache(async (path: string): Promise<{ to: string } | { p: Profile } | null> => {
-  const slug = requestedSlug(path);
-  const legacy = legacyAddress(slug);
-  if (legacy) return { to: profilePath(legacy) };
-  const key = slugKey(slug);
+export const routeProfile = cache(async (path: string): Promise<Profile | null> => {
+  const key = slugKey(requestedSlug(path));
   const url = key ? await profileUrlFor(key) : null;
-  const p = url ? await loadProfile(url) : null;
-  if (!p) return null;
-  return requestedSlug(p.path.slice("/p/".length)) === slug ? { p } : { to: p.path };
+  return url ? loadProfile(url) : null;
 });
