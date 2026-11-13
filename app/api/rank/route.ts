@@ -19,6 +19,7 @@ import { starBalance } from "@/lib/stats";
 import { sameOrigin } from "@/lib/polls/server";
 import { shotBases } from "@/lib/shots";
 import { siteDetails } from "@/lib/play/details";
+import { gradedPool } from "@/lib/grader/report.mjs";
 import type { Portfolio } from "@/app/page";
 
 type Rating = { elo: number; votes: number };
@@ -67,7 +68,13 @@ export async function GET(req: Request) {
   // the ones this browser already saw this session, so no portfolio comes
   // back; when nearly all are seen, the whole roster is open again.
   const hidden = await hiddenUrls();
-  const listed = (feed as Portfolio[]).filter((p) => !hidden.has(p.url));
+  // Only graded sites (owner, 2026-11-12): a pair never shows a site we
+  // haven't graded, and a view never causes a grade. The graded library is
+  // the one the tiers and Guess the percentile use (lib/grader/report.mjs
+  // gradedPool: a tier, still up, a portfolio), read from its hourly cache.
+  const graded = new Set((await gradedPool(db())).map((p: { url: string }) => p.url));
+  const listed = (feed as Portfolio[]).filter((p) => !hidden.has(p.url) && graded.has(p.url));
+  if (listed.length < 2) return NextResponse.json({ error: "no_pairs" }, { status: 503 });
   const seen = seenOf(req);
   const fresh = listed.filter((p) => !seen.has(FEED_INDEX.get(p.url)!));
   const pool = fresh.length >= 8 ? fresh : listed;
