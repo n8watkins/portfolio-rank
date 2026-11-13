@@ -39,7 +39,7 @@
     // address a day, with sign-in links kept a share of the day.
     { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank" } },
     // The blog newsletter is its own mailroom app, "portfoliorank-news" (40 a
-    // day, 500 a month, 3 per address a day), so a newsletter day can never
+    // day, 350 a month, 3 per address a day), so a newsletter day can never
     // use up sign-in links (lib/newsletter, AUTOMATION.md "Newsletter").
     { "binding": "MAILROOM_NEWS", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank-news" } }
   ],
