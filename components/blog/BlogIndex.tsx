@@ -1,3 +1,4 @@
+import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 import Link from "next/link";
 import { ArrowRight, Newspaper, Rss } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -146,6 +147,9 @@ export function BlogIndex({ posts, tags, current }: { posts: BlogListItem[]; tag
             )}
           </div>
         )}
+
+        {/* The newsletter sign-up; it shows only while the newsletter is live. */}
+        <NewsletterSignup form="blog" layout="wide" className="card mt-12 p-6 sm:p-8" />
       </div>
     </div>
   );

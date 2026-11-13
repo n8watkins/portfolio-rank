@@ -1,3 +1,4 @@
+import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 import { Coffee } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
@@ -49,6 +50,8 @@ const POLICIES = [
 export function SiteFooter() {
   return (
     <footer className="mt-20 border-t border-edge">
+      {/* The newsletter sign-up (not on the blog's own pages, which have theirs); it shows only while the newsletter is live. */}
+      <NewsletterSignup form="footer" layout="wide" className="wrap py-10" />
       <div className="wrap grid grid-cols-1 gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div className="max-w-xs">
           <Wordmark />
