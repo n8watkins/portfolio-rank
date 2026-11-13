@@ -48,7 +48,7 @@ test("a reporter that throws doesn't stop the next task", async () => {
 
 test("worker/index.ts runs every hourly task through runEach", () => {
   const src = readFileSync("worker/index.ts", "utf8");
-  const hourly = src.slice(src.indexOf("controller.cron === PEOPLE_QUEUE_CRON"), src.indexOf("controller.cron === MODEL_WATCH_CRON"));
+  const hourly = src.slice(src.indexOf("cron === PEOPLE_QUEUE_CRON"), src.indexOf("cron === MODEL_WATCH_CRON"));
   assert.match(hourly, /runEach\(/);
   for (const task of ["removalsTick", "purgeAfterHour", "emailAlertsTick", "nightWatchTick", "drainPeople", "libraryTick"]) {
     assert.match(hourly, new RegExp(`\\(\\) => \\{?\\s*(removed = \\(await )?${task}\\(`), `${task} runs inside its own task`);
