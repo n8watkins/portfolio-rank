@@ -99,6 +99,15 @@ No refusal fallback is enabled, so every answer comes from Sonnet 5.5 itself; a 
 A hard stop at $0.75, checked before each request with the exact input from `count_tokens`, keeps the cost bounded.
 Because the expert is also Sonnet, this column separates the prompt and setting from the model: same model, Gemini's prompt, structured output, a fresh request per site.
 
+## Amendment, 2026-11-13: the day cap
+
+The run paused at pass2/A-b3 because the model's requests this Pacific quota day reached the harness's day cap of 430 (376 from the first grading test, 54 from this run; the free quota is 500).
+Decision (coordinator): raise the day cap to 485 for this run.
+Reason: production has sent no Gemini request since 2026-11-12T23:18Z (the freeze holds), checked in `gemini_requests` at the time of the decision, so the only requests today are the two experiments, and 485 still leaves 15 of the 500.
+The run's own hard stop of 120 HTTP requests is unchanged.
+If the cap is reached again, the run pauses and resumes after the 08:00Z quota reset.
+Nothing about the requests themselves changes.
+
 ## What I expect to go wrong
 
 - **Scores still bunch at 3 and 4.** The anchor fights the 4s-and-5s pile-up, but Flash-Lite may overcorrect into all 3s, which passes the spread rule and fails agreement on the strong and weak sites.

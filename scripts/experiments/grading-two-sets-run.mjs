@@ -38,7 +38,10 @@ export const SETTINGS = {
   retry_delays_ms: [30000, 60000, 120000, 300000],
   max_tries: 5,
   broken_answer_retries: 1,
-  day_cap: 430,
+  // Raised from 430 to 485 on 2026-11-13 (amendment): production had sent no
+  // Gemini request since 2026-11-12T23:18Z (the freeze), checked at query time,
+  // so 485 still leaves 15 of the free 500 for this Pacific quota day.
+  day_cap: 485,
   prompt_ids: { solo: "grade-two-sets-solo", solo_freetext: "grade-two-sets-solo-freetext", batch: "grade-two-sets-batch" },
   // Amendment 2026-11-13: the batch schema (and the solo_freetext control
   // step) take level_line as free text; the enum version was refused with

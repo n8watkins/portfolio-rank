@@ -16,7 +16,7 @@
  ],
  "max_tries": 5,
  "broken_answer_retries": 1,
- "day_cap": 430,
+ "day_cap": 485,
  "prompt_ids": {
   "solo": "grade-two-sets-solo",
   "solo_freetext": "grade-two-sets-solo-freetext",

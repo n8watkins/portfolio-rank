@@ -101,6 +101,41 @@
     "scripts/experiments/grading-two-sets-claude.mjs": "5168875b3385ba285baf878a404308e8a56087eb1c0e73c622c5c213820160f5",
     "tests/grading-two-sets.test.mjs": "89c018c7bff5c370d5c7d7b407cf1082435fec226aff6231443301c6c2e1ecae"
    }
+  },
+  {
+   "at": "2026-11-13T18:46:13.673Z",
+   "note": "Day cap raised from 430 to 485 for this run (coordinator decision). Reason: production has sent no Gemini request since 2026-11-12T23:18Z (the freeze holds), checked in gemini_requests at query time, so 485 leaves 15 of the free 500 this Pacific quota day. The 120 HTTP-request hard stop is unchanged. If the cap is hit again the run pauses and resumes after the 08:00Z reset.",
+   "requests_gemini": 92,
+   "requests_expert": 82,
+   "changed": [
+    "experiments/grading-two-sets/settings.json",
+    "experiments/grading-two-sets/prompt-log.md",
+    "scripts/experiments/grading-two-sets-run.mjs"
+   ],
+   "files": {
+    "experiments/grading-two-sets/sites.json": "bf443947846a4ab16be41ea08c394edd7af05094970789fa63ca93e36f087f6b",
+    "experiments/grading-two-sets/groupings.json": "3e6d91a89ab8750acdb9c0758284f785af6671e450f5d32d0fe1b235b6c426e0",
+    "experiments/grading-two-sets/rubric.txt": "cd895a79ac6d91a586217f34f36d406020cd6b540a76562e5bdb065ad1995a28",
+    "experiments/grading-two-sets/expert-instructions.txt": "c07741cffdebe1ce6cac5f02ca90fa8149e064ba73d5f28dcf1294b1df9671ff",
+    "experiments/grading-two-sets/expert-batch-instructions.txt": "5b59f4e2f9d89ed50d2b0fbac612a21154d57bce5845300e1ff86320458c517b",
+    "experiments/grading-two-sets/expert-runs.md": "c38d269c6dfd2b9940958b3b648c3361740051afd43b183fb8fa7180e6d4569a",
+    "experiments/grading-two-sets/prompts/solo.txt": "d83e3b1dfb09c079cdb9cedebb22c43d7613b70e4eca13788ff2e4ecfa5f0d2b",
+    "experiments/grading-two-sets/prompts/batch.txt": "b7b9188159557b2e9b6ee62353c4b044f949798b371d05373c7473b6a32c0359",
+    "experiments/grading-two-sets/prompts/schema.json": "0a4bdb8dfd679de42120a96d0808889b97fcea99ad29e5856e634781681c17a8",
+    "experiments/grading-two-sets/settings.json": "e9b4641d650d28b3d2a320e06d42b5d5f157baf0f7a97315c5341406a1b1f4fa",
+    "experiments/grading-two-sets/pass-rules.json": "a4965ffcce8e8c283d30ced2f4e4551b50b4238d795270a7239213cd3b1ad364",
+    "experiments/grading-two-sets/prompt-log.md": "cfd6122796586b4037d759b07716f1713d28a732d1802cb226c5d83aea613477"
+   },
+   "code": {
+    "scripts/experiments/grading-two-sets.mjs": "20daa33cf5236da0440599aaafa765863d420d24c422be93e0b9dec813324a7c",
+    "scripts/experiments/grading-two-sets-lib.mjs": "b5e35843dcd90fc76fef7a86371329f31b9cdf98a6e045cb0ddb2269cc3e671a",
+    "scripts/experiments/grading-two-sets-run.mjs": "deb4ceeefa90c17c8f4d3af8f2029e5d46a0fdf02ea2d707e65e76822e640441",
+    "scripts/experiments/grading-two-sets-analyze.mjs": "cf57590d86724ff4923b9dbe8a651d3c8558158dab9a3d99ae135fb539e2871b",
+    "pipeline/excerpt.mjs": "d1df2350fb54d9931208dca4d7d33843f42d41ea443080ed0b5a38c64804473a",
+    "pipeline/redact.mjs": "7c32dd0889b24e0cef140959af42586b2951a83062a56dae7b0702e3b4791202",
+    "scripts/experiments/grading-two-sets-claude.mjs": "5168875b3385ba285baf878a404308e8a56087eb1c0e73c622c5c213820160f5",
+    "tests/grading-two-sets.test.mjs": "89c018c7bff5c370d5c7d7b407cf1082435fec226aff6231443301c6c2e1ecae"
+   }
   }
  ]
 }

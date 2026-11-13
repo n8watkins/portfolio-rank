@@ -98,7 +98,11 @@
    "end": "2026-11-13T18:44:50Z"
   },
   {
-   "phase": "claude-sonnet-api:solo (Set A)"
+   "phase": "amendment: day cap raised from 430 to 485 for this run (production frozen since 2026-11-12T23:18Z, checked at query time; 15 of 500 left); the 120 hard stop unchanged; resumed"
+  },
+  {
+   "phase": "claude-sonnet-api:solo (Set A)",
+   "start": "2026-11-13T18:45:50.734Z"
   },
   {
    "phase": "gemini:pass3"
