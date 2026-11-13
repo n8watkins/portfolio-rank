@@ -1,0 +1,5059 @@
+{
+ "sites": [
+  {
+   "slot": 1,
+   "at": 1.3,
+   "url": "https://dhruvjs.com",
+   "name": "Dhruv Parmar",
+   "shot_key": "4d8f2fe40c8bc057",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "S",
+    "roles": [
+     "full-stack developer",
+     "full-stack engineer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Stunning dark-mode architectural blueprint aesthetic with flawless typography."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear identity and full-stack engineering expertise."
+    },
+    "storytelling": {
+     "score": 5,
+     "note": "Detailed project breakdowns with quantifiable experience and tech stacks."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, highly professional, and perfectly targeted."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "Incredible theme execution makes this portfolio unforgettable."
+    },
+    "rubric_version": 2,
+    "quality_score": 5,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 100,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.dhruvjs.com/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 4,
+     "sections": 7,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 1794,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:58:23.811Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2699,
+     "output_tokens": 220,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:36:43.262Z"
+   },
+   "stored_quality": 5,
+   "stored_score": 100,
+   "checks_score": 100,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.dhruvjs.com/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 4,
+    "sections": 7,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 1794,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:58:23.811Z"
+   },
+   "stored_text_length": 3993
+  },
+  {
+   "slot": 2,
+   "at": 3.8,
+   "url": "https://deveshchandan.me",
+   "name": "Devesh Chandan",
+   "shot_key": "b3f1b9f7c4288a59",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "backend-focused engineer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Sleek, modern typography with a strong personal brand aesthetic."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear name, role, and core technical focus."
+    },
+    "storytelling": {
+     "score": 5,
+     "note": "Projects include clear context, stack details, and working links."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, highly professional, and easy to read."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Strong personal presentation and impressive array of shipped builds."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.9,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 100,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.deveshchandan.me/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 9,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 1368,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:53:53.360Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2609,
+     "output_tokens": 225,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:23:40.080Z"
+   },
+   "stored_quality": 4.9,
+   "stored_score": 98,
+   "checks_score": 100,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.deveshchandan.me/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 9,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 1368,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:53:53.360Z"
+   },
+   "stored_text_length": 3998
+  },
+  {
+   "slot": 3,
+   "at": 6.3,
+   "url": "https://zalt.me",
+   "name": "Mahmoud Zalt",
+   "shot_key": "3badf7b7f1e35272",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "S",
+    "roles": [
+     "ai architect",
+     "technical advisor"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Stunning dark-mode UI with polished typography and clear hierarchy."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role as an AI architect and technical advisor."
+    },
+    "storytelling": {
+     "score": 5,
+     "note": "Exceptional presentation of projects, services, experience, and books."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional, and compelling copy throughout."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "Extremely high-quality and comprehensive portfolio with great branding."
+    },
+    "rubric_version": 2,
+    "quality_score": 5,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://zalt.me/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 23,
+     "sections": 1,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 1142,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:04:35.958Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2594,
+     "output_tokens": 224,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:48:10.126Z"
+   },
+   "stored_quality": 5,
+   "stored_score": 97.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://zalt.me/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 23,
+    "sections": 1,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 1142,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:04:35.958Z"
+   },
+   "stored_text_length": 3998
+  },
+  {
+   "slot": 4,
+   "at": 8.8,
+   "url": "https://custard.top/en",
+   "name": "Custard",
+   "shot_key": "a4bc466e2f5b073a",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "S",
+    "roles": [
+     "data analyst",
+     "product developer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Exquisite editorial typography, restrained color palette, and spacious layout."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role as a data scientist and product developer."
+    },
+    "storytelling": {
+     "score": 5,
+     "note": "Rigorous case studies featuring methodology, reproducible code, and production context."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Exceptionally concise, professional, and articulate prose throughout."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "Distinctive academic-journal aesthetic and meticulous attention to detail."
+    },
+    "rubric_version": 2,
+    "quality_score": 5,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 75,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://custard.top/en",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 22,
+     "sections": 14,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 2621,
+     "project_links": {
+      "checked": 4,
+      "ok": 2,
+      "broken": 2,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:51:00.527Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2624,
+     "output_tokens": 225,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:16:02.032Z"
+   },
+   "stored_quality": 5,
+   "stored_score": 95,
+   "checks_score": 75,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://custard.top/en",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 22,
+    "sections": 14,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 2621,
+    "project_links": {
+     "checked": 4,
+     "ok": 2,
+     "broken": 2,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:51:00.527Z"
+   },
+   "stored_text_length": 3999
+  },
+  {
+   "slot": 5,
+   "at": 11.3,
+   "url": "https://antonmanaev.name",
+   "name": "Anton Manaev",
+   "shot_key": "deda0e3c1e271068",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "ai specialist",
+     "designer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Stunning dark-mode aesthetic with excellent typography and atmospheric background."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear value proposition and professional role definition."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects are well described with tech stacks and context."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Professional, crisp copy with strong positioning statements."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "High-impact futuristic UI design leaves a lasting impression."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.75,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 90,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://antonmanaev.name/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 1200,
+     "project_links": {
+      "checked": 1,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 1
+     },
+     "measured_at": "2026-11-12T04:37:38.411Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2825,
+     "output_tokens": 223,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:58:16.540Z"
+   },
+   "stored_quality": 4.75,
+   "stored_score": 93,
+   "checks_score": 90,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://antonmanaev.name/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 1200,
+    "project_links": {
+     "checked": 1,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 1
+    },
+    "measured_at": "2026-11-12T04:37:38.411Z"
+   },
+   "stored_text_length": 3999
+  },
+  {
+   "slot": 6,
+   "at": 13.8,
+   "url": "https://thony32.tech",
+   "name": "Anthony MAHEFASOA",
+   "shot_key": "aaf8fdfb8330130a",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "fullstack engineer",
+     "devops engineer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Stunning dark theme with polished interactive network and typography."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instant clarity on name, role, and core technical expertise."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Great project breakdown with context, tech stack, and links."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional copy with strong impact and zero errors."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "High impact visuals, audio feature, and award-winning projects stand out."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.75,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 90,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://www.thony32.tech/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 8,
+     "sections": 4,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 396,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:36:22.753Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2466,
+     "output_tokens": 228,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:17:04.545Z"
+   },
+   "stored_quality": 4.75,
+   "stored_score": 93,
+   "checks_score": 90,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://www.thony32.tech/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 8,
+    "sections": 4,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 396,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:36:22.753Z"
+   },
+   "stored_text_length": 2620
+  },
+  {
+   "slot": 7,
+   "at": 16.3,
+   "url": "https://jos.gg",
+   "name": "Barnav Mitra Jos",
+   "shot_key": "7519a7af6403d3d9",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "developer",
+     "devops engineer",
+     "software & devops engineer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Distinctive retro pixel-art aesthetic with excellent typography and layout."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role, identity, and domain expertise."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Strong testimonials and project highlights clearly establish capability."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Engaging, concise, and professional copy with great personality."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "Extremely memorable aesthetic and interactive personal touch."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.75,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://jos.gg/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 4,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 1686,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:54:20.533Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2688,
+     "output_tokens": 227,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:54:11.970Z"
+   },
+   "stored_quality": 4.75,
+   "stored_score": 92.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://jos.gg/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 4,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 1686,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:54:20.533Z"
+   },
+   "stored_text_length": 4001
+  },
+  {
+   "slot": 8,
+   "at": 18.8,
+   "url": "https://batrasamarth.com",
+   "name": "Samarth Batra",
+   "shot_key": "a6cfbd7447e5b6df",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "software developer",
+     "software engineer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Brilliant retro Windows desktop theme executed cleanly and creatively."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear who the developer is and what they do."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Detailed experience highlights with good technical context and metrics."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional bullet points with zero fluff or typos."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "The interactive Windows OS desktop gimmick is unforgettable."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.75,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 85,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://batrasamarth.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 392,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:58:57.172Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2341,
+     "output_tokens": 218,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:33:58.862Z"
+   },
+   "stored_quality": 4.75,
+   "stored_score": 92,
+   "checks_score": 85,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://batrasamarth.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 392,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:58:57.172Z"
+   },
+   "stored_text_length": 2818
+  },
+  {
+   "slot": 9,
+   "at": 21.3,
+   "url": "https://www.vishvajeetshukla.in",
+   "name": "Vishvajeet Shukla",
+   "shot_key": "2f6555da077c80a0",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "web developer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Stunning typographic hierarchy and modern glassmorphic layout."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role, location, and core value proposition."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Presents strong projects with tech stacks and descriptions."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional, and confident copy throughout."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable aesthetics and polished atmospheric background."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.65,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 90,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.vishvajeetshukla.in/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 19,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 2089,
+     "project_links": {
+      "checked": 6,
+      "ok": 6,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:52:43.137Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2585,
+     "output_tokens": 216,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:20:14.481Z"
+   },
+   "stored_quality": 4.65,
+   "stored_score": 91,
+   "checks_score": 90,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.vishvajeetshukla.in/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 19,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 2089,
+    "project_links": {
+     "checked": 6,
+     "ok": 6,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:52:43.137Z"
+   },
+   "stored_text_length": 3994
+  },
+  {
+   "slot": 10,
+   "at": 23.8,
+   "url": "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+   "name": "Rajwardhan Patil",
+   "shot_key": "49d1b48b4633dd36",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack dev"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Clean, modern design with excellent typography and color palette."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear that this is a full stack developer's portfolio."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects presented cleanly with features and tech stacks, but lacking direct links."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Professional, concise copy with clear descriptions."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Strong visual presentation leaves a memorable professional impression."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.65,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 87,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+     "own_domain": false,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 4,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 182,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T05:00:59.451Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2002,
+     "output_tokens": 215,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:43:57.319Z"
+   },
+   "stored_quality": 4.65,
+   "stored_score": 90.4,
+   "checks_score": 87,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+    "own_domain": false,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 4,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 182,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T05:00:59.451Z"
+   },
+   "stored_text_length": 1398
+  },
+  {
+   "slot": 11,
+   "at": 26.3,
+   "url": "https://maveeshah.github.io/projects.html",
+   "name": "Ameer Muavia Shah",
+   "shot_key": "aae2113ddea53448",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [],
+    "visual_design": {
+     "score": 5,
+     "note": "Exceptional typographic hierarchy and sophisticated color palette."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear what projects and business systems he builds."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Strong project context though lacking detailed deep dives."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Exceptionally clear, professional, and concise copywriting."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Distinctive typography and robust project showcase make it memorable."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.65,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 80,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://maveeshah.github.io/projects.html",
+     "own_domain": false,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 4,
+     "sections": 13,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 680,
+     "project_links": {
+      "checked": 3,
+      "ok": 3,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:49:23.346Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2597,
+     "output_tokens": 198,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T06:09:58.678Z"
+   },
+   "stored_quality": 4.65,
+   "stored_score": 89,
+   "checks_score": 80,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://maveeshah.github.io/projects.html",
+    "own_domain": false,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 4,
+    "sections": 13,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 680,
+    "project_links": {
+     "checked": 3,
+     "ok": 3,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:49:23.346Z"
+   },
+   "stored_text_length": 3998
+  },
+  {
+   "slot": 12,
+   "at": 28.8,
+   "url": "https://abhishek-kumar-t.vercel.app",
+   "name": "Abhishek Kumar T",
+   "shot_key": "30293d981b5233ed",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "student developer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Immersive terminal theme with polished styling and excellent typography."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Clear developer branding and immediate role identification."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects presented clearly with good details and working links."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Engaging terminal-inspired copy that is concise and professional."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "Unique terminal-inspired design leaves a strong lasting impression."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.6,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 80,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://abhishek-kumar-t.vercel.app/",
+     "own_domain": false,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 1,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 883,
+     "project_links": {
+      "checked": 6,
+      "ok": 6,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:53:11.713Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2618,
+     "output_tokens": 217,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:21:54.940Z"
+   },
+   "stored_quality": 4.6,
+   "stored_score": 88,
+   "checks_score": 80,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://abhishek-kumar-t.vercel.app/",
+    "own_domain": false,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 1,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 883,
+    "project_links": {
+     "checked": 6,
+     "ok": 6,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:53:11.713Z"
+   },
+   "stored_text_length": 3997
+  },
+  {
+   "slot": 13,
+   "at": 31.3,
+   "url": "https://www.pavangupta.in",
+   "name": "Pavan Gupta",
+   "shot_key": "5b6b970a792fb294",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "tech enthusiast"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Clean dark mode design with excellent typography and color."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Immediately clear who he is and what he does."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Solid project descriptions with live demos and code links."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Clear and professional copywriting with minor grammatical flaws."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Polished presentation leaves a strong positive impression."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.5,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 90,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.pavangupta.in/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 6,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 550,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T05:02:52.375Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2502,
+     "output_tokens": 213,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:19:12.153Z"
+   },
+   "stored_quality": 4.5,
+   "stored_score": 88,
+   "checks_score": 90,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.pavangupta.in/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 6,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 550,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T05:02:52.375Z"
+   },
+   "stored_text_length": 3890
+  },
+  {
+   "slot": 14,
+   "at": 33.8,
+   "url": "https://ashutoshdash.in",
+   "name": "Ashutosh Dash",
+   "shot_key": "a818ffc8c0b656e8",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "frontend developer",
+     "reactjs developer",
+     "full stack developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean Neo-brutalist aesthetic with thoughtful layout and typography."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role, tech stack, and professional identity."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Strong experience descriptions with metrics and clear project links."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional, and clear articulation of skills and background."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Interactive UI touches and polished details make it memorable."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.35,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 100,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://ashutoshdash.in/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 3,
+     "sections": 1,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 1158,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T05:03:25.859Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2739,
+     "output_tokens": 230,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:20:18.944Z"
+   },
+   "stored_quality": 4.35,
+   "stored_score": 87,
+   "checks_score": 100,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://ashutoshdash.in/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 3,
+    "sections": 1,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 1158,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T05:03:25.859Z"
+   },
+   "stored_text_length": 4000
+  },
+  {
+   "slot": 15,
+   "at": 36.3,
+   "url": "https://alilinares.com",
+   "name": "Ali Linares",
+   "shot_key": "b64d62c14d2fe5eb",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "software developer",
+     "web developer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Clean, structured, editorial layout with excellent typography."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role, experience level, and core expertise."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Strong experience details with metrics, though some links are broken."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional copy with a friendly touch."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Distinctive developer portfolio style with great attention to detail."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.65,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 65,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://alilinares.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 5,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 338,
+     "project_links": {
+      "checked": 2,
+      "ok": 1,
+      "broken": 1,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:50:37.718Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2319,
+     "output_tokens": 219,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:14:29.222Z"
+   },
+   "stored_quality": 4.65,
+   "stored_score": 86,
+   "checks_score": 65,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://alilinares.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 5,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 338,
+    "project_links": {
+     "checked": 2,
+     "ok": 1,
+     "broken": 1,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:50:37.718Z"
+   },
+   "stored_text_length": 2192
+  },
+  {
+   "slot": 16,
+   "at": 38.8,
+   "url": "https://sambhusbabu.com",
+   "name": "Sambhu Babu",
+   "shot_key": "e2502a976eeeb9cd",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "frappe & erpnext developer",
+     "react native specialist",
+     "erp consultant"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Sleek, professional dark theme with excellent typography and hierarchy."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role and specialization as a Frappe developer."
+    },
+    "storytelling": {
+     "score": 3,
+     "note": "Lists services well, but lacks detailed case studies of past projects."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Clear, concise copy focused directly on enterprise client needs."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Strong niche focus makes it memorable for ERPNext clients."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.4,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 87,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://sambhusbabu.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 9,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 617,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:00:41.132Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2470,
+     "output_tokens": 236,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:37:54.799Z"
+   },
+   "stored_quality": 4.4,
+   "stored_score": 85.4,
+   "checks_score": 87,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://sambhusbabu.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 9,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 617,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:00:41.132Z"
+   },
+   "stored_text_length": 4001
+  },
+  {
+   "slot": 17,
+   "at": 41.3,
+   "url": "https://abdulrehmanwaseem.me",
+   "name": "Abdul Rehman Waseem",
+   "shot_key": "f116e3e920c74595",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "ai agent engineer",
+     "senior fullstack developer",
+     "3d web specialist"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean grid layout with a polished developer dashboard aesthetic."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role, status, and professional focus upon landing."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects are well documented with strong client testimonials attached."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, confident, and professional copy highlighting real achievements."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Unique details like age and founding experience stand out."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.35,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://abdulrehmanwaseem.me/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 9,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 1492,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:37:46.790Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2691,
+     "output_tokens": 230,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:52:19.974Z"
+   },
+   "stored_quality": 4.35,
+   "stored_score": 84.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://abdulrehmanwaseem.me/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 9,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 1492,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:37:46.790Z"
+   },
+   "stored_text_length": 3996
+  },
+  {
+   "slot": 18,
+   "at": 43.8,
+   "url": "https://aggelosladas.com",
+   "name": "Aggelos Ladas",
+   "shot_key": "a7a083044675e15b",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "junior software engineer",
+     "backend developer",
+     "android developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, modern dark mode with a nice terminal aesthetic."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear name, role, and core technical stack."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects clearly describe technologies and include functional source links."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional, concise, and well-structured copy throughout."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Creative API explorer motif makes it stand out memorably."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 100,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://aggelosladas.com/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 1,
+     "sections": 1,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 310,
+     "project_links": {
+      "checked": 2,
+      "ok": 2,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:58:47.191Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2176,
+     "output_tokens": 226,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:33:05.907Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 84,
+   "checks_score": 100,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://aggelosladas.com/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 1,
+    "sections": 1,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 310,
+    "project_links": {
+     "checked": 2,
+     "ok": 2,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:58:47.191Z"
+   },
+   "stored_text_length": 2247
+  },
+  {
+   "slot": 19,
+   "at": 46.3,
+   "url": "https://www.osallak.tech",
+   "name": "Oussama Sallak",
+   "shot_key": "73fd0fab55ebb786",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full-stack & ai engineer",
+     "mlops specialist"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Sleek dark mode theme with clean typography."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Role and identity are immediately clear upon landing."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Detailed career journey with clear metrics and achievements."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional and concise summary of engineering experience."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Polished developer portfolio with strong technical positioning."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 100,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://www.osallak.tech/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 1058,
+     "project_links": {
+      "checked": 6,
+      "ok": 6,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:03:26.281Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2644,
+     "output_tokens": 214,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:44:02.300Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 84,
+   "checks_score": 100,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://www.osallak.tech/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 1058,
+    "project_links": {
+     "checked": 6,
+     "ok": 6,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:03:26.281Z"
+   },
+   "stored_text_length": 4000
+  },
+  {
+   "slot": 20,
+   "at": 48.8,
+   "url": "https://andresilva.tech",
+   "name": "Andre Nunes Da Silva",
+   "shot_key": "26db23333a17a667",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "student",
+     "software engineer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, minimal dark theme with good readability and spacing."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear who the developer is and what he builds."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects include clear descriptions, tech tags, and working links."
+    },
+    "writing": {
+     "score": 5,
+     "note": "Concise, professional bio and descriptions with zero typos."
+    },
+    "memorability": {
+     "score": 3,
+     "note": "Standard dark portfolio layout lacks a strong visual hook."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.25,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://andresilva.tech/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 4,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": false,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 242,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:56:54.484Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2047,
+     "output_tokens": 219,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:33:05.760Z"
+   },
+   "stored_quality": 4.25,
+   "stored_score": 82.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://andresilva.tech/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 4,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": false,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 242,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:56:54.484Z"
+   },
+   "stored_text_length": 1600
+  },
+  {
+   "slot": 21,
+   "at": 51.3,
+   "url": "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app",
+   "name": "Hussam Barqawi",
+   "shot_key": "76aa2afc700ff45b",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "ai engineer"
+    ],
+    "visual_design": {
+     "score": 5,
+     "note": "Stunning dark-mode design with exceptional typography and layout"
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instant clarity on identity and specialized AI engineering role"
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Presents strong production AI projects with technical details"
+    },
+    "writing": {
+     "score": 5,
+     "note": "Professional, concise, and compelling copy throughout"
+    },
+    "memorability": {
+     "score": 4,
+     "note": "High visual polish and focused AI niche stand out"
+    },
+    "rubric_version": 2,
+    "quality_score": 4.65,
+    "checks": {
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "project_links": false,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 45,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app/",
+     "own_domain": false,
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 7,
+     "sections": 5,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": false,
+      "name": true
+     },
+     "words": 923,
+     "project_links": {
+      "checked": 1,
+      "ok": 0,
+      "broken": 1,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:55:44.131Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2632,
+     "output_tokens": 216,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:25:15.612Z"
+   },
+   "stored_quality": 4.65,
+   "stored_score": 82,
+   "checks_score": 45,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app/",
+    "own_domain": false,
+    "resume": false,
+    "github": false,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 7,
+    "sections": 5,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": false,
+     "name": true
+    },
+    "words": 923,
+    "project_links": {
+     "checked": 1,
+     "ok": 0,
+     "broken": 1,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:55:44.131Z"
+   },
+   "stored_text_length": 3996
+  },
+  {
+   "slot": 22,
+   "at": 53.8,
+   "url": "https://abhijeetbhale.github.io/Portfolio",
+   "name": "Abhijeet Bhale",
+   "shot_key": "0cecd09620af72a0",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full stack developer",
+     "software engineer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Sleek dark mode theme with good typography and glowing accents."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role and identity upon landing."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Clear project descriptions with live demos and tech stacks."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional and concise summaries of experience and skills."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Strong visual presentation and comprehensive project portfolio."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": false,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://abhijeetbhale.github.io/Portfolio/",
+     "own_domain": false,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 3,
+     "sections": 1,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 917,
+     "project_links": {
+      "checked": 8,
+      "ok": 8,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:38:52.897Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2772,
+     "output_tokens": 214,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:52:40.705Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 81.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://abhijeetbhale.github.io/Portfolio/",
+    "own_domain": false,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 3,
+    "sections": 1,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 917,
+    "project_links": {
+     "checked": 8,
+     "ok": 8,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:38:52.897Z"
+   },
+   "stored_text_length": 3997
+  },
+  {
+   "slot": 23,
+   "at": 56.3,
+   "url": "https://www.masabqurban.com",
+   "name": "Masab Qurban",
+   "shot_key": "4aedc39cf54af424",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "software engineer",
+     "full stack architect"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Sleek dark mode theme with good hierarchy and neon accents."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role and expertise upon landing on the site."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Strong project summaries outlining business value and technical stack."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Clear, professional, and concise descriptions with good client testimonials."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable dark aesthetic and clear positioning as a full-stack engineer."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 87,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.masabqurban.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 8,
+     "sections": 1,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 517,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:04:28.594Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2364,
+     "output_tokens": 226,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:47:32.185Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 81.4,
+   "checks_score": 87,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.masabqurban.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 8,
+    "sections": 1,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 517,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:04:28.594Z"
+   },
+   "stored_text_length": 3198
+  },
+  {
+   "slot": 24,
+   "at": 58.8,
+   "url": "https://www.hafidziti.dev",
+   "name": "Hafid Ziti",
+   "shot_key": "9f1d4c30304a054e",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "front-end developer",
+     "react native developer",
+     "angular developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, pleasant sky illustration with good type hierarchy."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role and identity upon landing."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Detailed professional history with clear tech stacks used."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Clear, professional copy outlining senior frontend experience."
+    },
+    "memorability": {
+     "score": 3,
+     "note": "Solid layout, but relies on a common template theme."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.1,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.hafidziti.dev/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 727,
+     "project_links": {
+      "checked": 1,
+      "ok": 1,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:05:48.512Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2600,
+     "output_tokens": 221,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:51:54.507Z"
+   },
+   "stored_quality": 4.1,
+   "stored_score": 79.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.hafidziti.dev/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 727,
+    "project_links": {
+     "checked": 1,
+     "ok": 1,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:05:48.512Z"
+   },
+   "stored_text_length": 3997
+  },
+  {
+   "slot": 25,
+   "at": 61.3,
+   "url": "https://arkamahajan.in",
+   "name": "Arka Mahajan",
+   "shot_key": "bf94583bfff7d671",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "ai & iot engineer",
+     "full-stack developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Sleek dark mode with impressive 3D Raspberry Pi graphic."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear who they are and their core focus."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Detailed projects showcasing hardware, IoT, and machine learning skills."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional and concise descriptions with clear role titles."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable IoT and robotics focus with interactive 3D elements."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 75,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://www.arkamahajan.in/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 4,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 649,
+     "project_links": {
+      "checked": 5,
+      "ok": 0,
+      "broken": 5,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:41:44.154Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2773,
+     "output_tokens": 227,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T06:05:47.560Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 79,
+   "checks_score": 75,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://www.arkamahajan.in/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 4,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 649,
+    "project_links": {
+     "checked": 5,
+     "ok": 0,
+     "broken": 5,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:41:44.154Z"
+   },
+   "stored_text_length": 3998
+  },
+  {
+   "slot": 26,
+   "at": 63.8,
+   "url": "https://ashleighsimonelli.co.uk",
+   "name": "Aaryanna Simonelli",
+   "shot_key": "99bfff8d00e6eacb",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "senior staff software engineer",
+     "senior fullstack developer",
+     "senior javascript developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Creative retro terminal aesthetic with strong visual theme."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Clear technical identity wrapped in a fun Rick and Morty theme."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Solid experience timeline showing senior roles and concrete responsibilities."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Engaging tone with good clarity despite quirky thematic text."
+    },
+    "memorability": {
+     "score": 5,
+     "note": "Extremely memorable retro terminal interface and pop-culture theme."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.1,
+    "checks": {
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 78,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://ashleighsimonelli.co.uk/",
+     "own_domain": true,
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 4,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": false,
+      "name": true
+     },
+     "words": 940,
+     "project_links": {
+      "checked": 1,
+      "ok": 1,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:33:34.401Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 3315,
+     "output_tokens": 230,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T06:06:54.334Z"
+   },
+   "stored_quality": 4.1,
+   "stored_score": 77.6,
+   "checks_score": 78,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://ashleighsimonelli.co.uk/",
+    "own_domain": true,
+    "resume": false,
+    "github": false,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 4,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": false,
+     "name": true
+    },
+    "words": 940,
+    "project_links": {
+     "checked": 1,
+     "ok": 1,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:33:34.401Z"
+   },
+   "stored_text_length": 3998
+  },
+  {
+   "slot": 27,
+   "at": 66.3,
+   "url": "https://althruist.fyi",
+   "name": "Althruist",
+   "shot_key": "4df9de2fdd073fb9",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "game developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Playful and unique handwritten typography with strong thematic branding."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Immediately clear who the creator is and their role."
+    },
+    "storytelling": {
+     "score": 3,
+     "note": "Projects are featured but lack deep behind-the-scenes case studies."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Friendly, personal tone with clear communication of values."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable playful art style and strong distinct personal brand."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.95,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://althruist.fyi/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 1,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 345,
+     "project_links": {
+      "checked": 2,
+      "ok": 2,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:49:06.307Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2246,
+     "output_tokens": 214,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T06:01:34.761Z"
+   },
+   "stored_quality": 3.95,
+   "stored_score": 76.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://althruist.fyi/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 1,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 345,
+    "project_links": {
+     "checked": 2,
+     "ok": 2,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:49:06.307Z"
+   },
+   "stored_text_length": 2001
+  },
+  {
+   "slot": 28,
+   "at": 68.8,
+   "url": "https://farhansegujja.com",
+   "name": "Farhan Segujja",
+   "shot_key": "867c24f5d4a7cc0b",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "software developer",
+     "computer scientist",
+     "tech enthusiast"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, professional typography with a cohesive and distinctive geometric background pattern."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear name, role, and current professional focus upon landing."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Projects include clear context, roles, and outcomes with live links."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional, articulate, and concise copywriting without unnecessary fluff."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable personal branding backed by genuine project breadth and detail."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 61,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://farhansegujja.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 4,
+     "sections": 4,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 981,
+     "project_links": {
+      "checked": 7,
+      "ok": 5,
+      "broken": 2,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:57:59.896Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2554,
+     "output_tokens": 233,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:35:58.035Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 76.2,
+   "checks_score": 61,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://farhansegujja.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 4,
+    "sections": 4,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 981,
+    "project_links": {
+     "checked": 7,
+     "ok": 5,
+     "broken": 2,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:57:59.896Z"
+   },
+   "stored_text_length": 4001
+  },
+  {
+   "slot": 29,
+   "at": 71.3,
+   "url": "https://nikhilkumawat.netlify.app",
+   "name": "Nikhil Kumawat",
+   "shot_key": "847681ffe86c4a90",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "programmer",
+     "full stack web developer",
+     "full stack developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Sleek dark theme with engaging interactive particle canvas background."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear name, role, and core technical stack."
+    },
+    "storytelling": {
+     "score": 4,
+     "note": "Solid project cards with tech stacks and live links."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Clear, concise copy with a professional and personal tone."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable cyber-themed aesthetic and strong technical presentation."
+    },
+    "rubric_version": 2,
+    "quality_score": 4.2,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": false,
+     "fresh_footer": false,
+     "original": true
+    },
+    "checks_score": 55,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://nikhilkumawat.netlify.app/",
+     "own_domain": false,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2023,
+     "internal_pages": 0,
+     "sections": 5,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 580,
+     "project_links": {
+      "checked": 8,
+      "ok": 7,
+      "broken": 1,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T05:01:01.542Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2575,
+     "output_tokens": 228,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:44:09.202Z"
+   },
+   "stored_quality": 4.2,
+   "stored_score": 75,
+   "checks_score": 55,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://nikhilkumawat.netlify.app/",
+    "own_domain": false,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2023,
+    "internal_pages": 0,
+    "sections": 5,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 580,
+    "project_links": {
+     "checked": 8,
+     "ok": 7,
+     "broken": 1,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T05:01:01.542Z"
+   },
+   "stored_text_length": 3796
+  },
+  {
+   "slot": 30,
+   "at": 73.8,
+   "url": "https://vineetcodes.vercel.app",
+   "name": "Vineet Machchal",
+   "shot_key": "d3706c9b1474289a",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "developer",
+     "web developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, modern layout with a polished code-snippet card."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear role and identity upon landing."
+    },
+    "storytelling": {
+     "score": 3,
+     "note": "Shows projects with tech stacks but lacks deep outcomes."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Concise, professional, and engaging copy throughout."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Memorable interactive touches like the physics sandbox."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.95,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 73,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://vineetcodes.vercel.app/",
+     "own_domain": false,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 543,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:57:01.599Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2622,
+     "output_tokens": 213,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:33:20.896Z"
+   },
+   "stored_quality": 3.95,
+   "stored_score": 73.6,
+   "checks_score": 73,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://vineetcodes.vercel.app/",
+    "own_domain": false,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 543,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:57:01.599Z"
+   },
+   "stored_text_length": 3847
+  },
+  {
+   "slot": 31,
+   "at": 76.3,
+   "url": "https://ajyendu.vercel.app",
+   "name": "Ajyendu Chaudhary",
+   "shot_key": "509d4f221ad2b4a7",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "A",
+    "roles": [
+     "full-stack developer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, modern dark-themed hero with polished 3D keyboard graphic."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear name, role, and key technologies right away."
+    },
+    "storytelling": {
+     "score": 3,
+     "note": "Projects listed with basic titles but lacks deep case studies."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Concise, professional bullet points describing experience and skills."
+    },
+    "memorability": {
+     "score": 4,
+     "note": "Distinctive visual styling and solid metrics make it memorable."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.95,
+    "checks": {
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "project_links": null,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 60,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://ajyendu.vercel.app/",
+     "own_domain": false,
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 5,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 3,
+      "projects": true,
+      "about": false,
+      "contact": true,
+      "resume": false,
+      "github": false,
+      "name": true
+     },
+     "words": 236,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T05:00:13.197Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2122,
+     "output_tokens": 221,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:41:23.374Z"
+   },
+   "stored_quality": 3.95,
+   "stored_score": 71,
+   "checks_score": 60,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://ajyendu.vercel.app/",
+    "own_domain": false,
+    "resume": false,
+    "github": false,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 5,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 3,
+     "projects": true,
+     "about": false,
+     "contact": true,
+     "resume": false,
+     "github": false,
+     "name": true
+    },
+    "words": 236,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T05:00:13.197Z"
+   },
+   "stored_text_length": 1731
+  },
+  {
+   "slot": 32,
+   "at": 78.8,
+   "url": "https://mhuzaifa04.vercel.app",
+   "name": "Mohammad Huzaifa",
+   "shot_key": "155c6cc56d623375",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "B",
+    "roles": [
+     "ai data science engineer",
+     "ai full-stack engineer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean layout with nice typography and consistent accent colors."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Role and identity are immediately clear upon landing."
+    },
+    "storytelling": {
+     "score": 2,
+     "note": "Projects lack deep problem-solving details and case studies."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional and concise copy throughout the page."
+    },
+    "memorability": {
+     "score": 3,
+     "note": "Polished design but follows a standard developer portfolio template."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.6,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 87,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://mhuzaifa04.vercel.app/",
+     "own_domain": false,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 5,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 89,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:55:28.979Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 1863,
+     "output_tokens": 218,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:28:49.078Z"
+   },
+   "stored_quality": 3.6,
+   "stored_score": 69.4,
+   "checks_score": 87,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://mhuzaifa04.vercel.app/",
+    "own_domain": false,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 5,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 89,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:55:28.979Z"
+   },
+   "stored_text_length": 565
+  },
+  {
+   "slot": 33,
+   "at": 81.3,
+   "url": "https://www.mariokandut.com",
+   "name": "Mario Kandut",
+   "shot_key": "106733e8026aca80",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "B",
+    "roles": [
+     "software development",
+     "product development",
+     "consulting"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean, minimalist layout with good typography and spacing."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Instantly clear what services and tech stack are offered."
+    },
+    "storytelling": {
+     "score": 2,
+     "note": "Lists services and skills instead of detailing specific case studies."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Concise, professional, and easy to read."
+    },
+    "memorability": {
+     "score": 3,
+     "note": "Solid execution, but visually standard and lacks a distinct hook."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.4,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.mariokandut.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 9,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 286,
+     "project_links": {
+      "checked": 1,
+      "ok": 1,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:04:28.920Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2082,
+     "output_tokens": 224,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:47:40.594Z"
+   },
+   "stored_quality": 3.4,
+   "stored_score": 65.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.mariokandut.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 9,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 286,
+    "project_links": {
+     "checked": 1,
+     "ok": 1,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:04:28.920Z"
+   },
+   "stored_text_length": 1669
+  },
+  {
+   "slot": 34,
+   "at": 83.8,
+   "url": "https://www.adityakr.com",
+   "name": "Aditya Kumar",
+   "shot_key": "c0611bbf96f07f09",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "B",
+    "roles": [
+     "web developer",
+     "software engineer",
+     "frontend-oriented web developer"
+    ],
+    "visual_design": {
+     "score": 3,
+     "note": "Clean dark theme layout with good typography and spacing."
+    },
+    "five_second_test": {
+     "score": 5,
+     "note": "Instantly clear name and role as a web developer."
+    },
+    "storytelling": {
+     "score": 3,
+     "note": "Projects have descriptive text but one project link is broken."
+    },
+    "writing": {
+     "score": 4,
+     "note": "Professional and concise copywriting with clear descriptions."
+    },
+    "memorability": {
+     "score": 3,
+     "note": "Standard portfolio layout, nicely executed but lacks unique flair."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.55,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 65,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://www.adityakr.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2025,
+     "internal_pages": 0,
+     "sections": 3,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 450,
+     "project_links": {
+      "checked": 2,
+      "ok": 1,
+      "broken": 1,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-11T04:42:41.569Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2364,
+     "output_tokens": 224,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-11T05:11:36.552Z"
+   },
+   "stored_quality": 3.55,
+   "stored_score": 64,
+   "checks_score": 65,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://www.adityakr.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2025,
+    "internal_pages": 0,
+    "sections": 3,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 450,
+    "project_links": {
+     "checked": 2,
+     "ok": 1,
+     "broken": 1,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-11T04:42:41.569Z"
+   },
+   "stored_text_length": 3021
+  },
+  {
+   "slot": 35,
+   "at": 86.3,
+   "url": "https://www.pawaret.dev",
+   "name": "Pawaret Meungkaew",
+   "shot_key": "1282d7658a2b846a",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "B",
+    "roles": [
+     "web developer",
+     "backend developer",
+     "blockchain engineer"
+    ],
+    "visual_design": {
+     "score": 4,
+     "note": "Clean dark theme layout with good typography and spacing."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Immediately clear who they are and location."
+    },
+    "storytelling": {
+     "score": 2,
+     "note": "Lists work history and skills without project case studies."
+    },
+    "writing": {
+     "score": 3,
+     "note": "Concise text with minor grammatical issues."
+    },
+    "memorability": {
+     "score": 3,
+     "note": "Standard portfolio layout lacks distinguishing features."
+    },
+    "rubric_version": 2,
+    "quality_score": 3.25,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 72,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.pawaret.dev/",
+     "own_domain": true,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 1186,
+     "project_links": {
+      "checked": 8,
+      "ok": 6,
+      "broken": 2,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:03:06.602Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2610,
+     "output_tokens": 213,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:43:17.600Z"
+   },
+   "stored_quality": 3.25,
+   "stored_score": 59.4,
+   "checks_score": 72,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.pawaret.dev/",
+    "own_domain": true,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 1186,
+    "project_links": {
+     "checked": 8,
+     "ok": 6,
+     "broken": 2,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:03:06.602Z"
+   },
+   "stored_text_length": 3996
+  },
+  {
+   "slot": 36,
+   "at": 88.8,
+   "url": "https://lorenkamau.com",
+   "name": "Loren Kamau",
+   "shot_key": "ffbcbba114bd5f51",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "B",
+    "roles": [
+     "backend developer"
+    ],
+    "visual_design": {
+     "score": 3,
+     "note": "Clean dark theme but heavily text-heavy and uninspired layout."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Clear name and role immediately visible at the top."
+    },
+    "storytelling": {
+     "score": 2,
+     "note": "Projects lack problem statements, role details, and concrete outcomes."
+    },
+    "writing": {
+     "score": 3,
+     "note": "Professional tone but relies heavily on generic buzzwords."
+    },
+    "memorability": {
+     "score": 2,
+     "note": "Standard dark mode resume layout leaves little lasting impression."
+    },
+    "rubric_version": 2,
+    "quality_score": 2.85,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": true,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 89,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://lorenkamau.com/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 1,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 4,
+      "projects": true,
+      "about": false,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 304,
+     "project_links": {
+      "checked": 3,
+      "ok": 3,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:58:16.437Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2136,
+     "output_tokens": 213,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:31:50.101Z"
+   },
+   "stored_quality": 2.85,
+   "stored_score": 54.8,
+   "checks_score": 89,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://lorenkamau.com/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 1,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 4,
+     "projects": true,
+     "about": false,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 304,
+    "project_links": {
+     "checked": 3,
+     "ok": 3,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:58:16.437Z"
+   },
+   "stored_text_length": 2109
+  },
+  {
+   "slot": 37,
+   "at": 91.3,
+   "url": "https://www.lexnguyen.dev",
+   "name": "Qui Nguyen",
+   "shot_key": "68dee69b15a01811",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "B",
+    "roles": [
+     "software engineer",
+     "frontend developer"
+    ],
+    "visual_design": {
+     "score": 2,
+     "note": "Plain resume layout resembling a basic text document."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Clear name and role immediately visible at the top."
+    },
+    "storytelling": {
+     "score": 3,
+     "note": "Detailed experience bullet points but lacks narrative flow."
+    },
+    "writing": {
+     "score": 3,
+     "note": "Functional technical descriptions with slight phrasing awkwardness."
+    },
+    "memorability": {
+     "score": 2,
+     "note": "Looks entirely like an unthemed resume without unique branding."
+    },
+    "rubric_version": 2,
+    "quality_score": 2.8,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 61,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.lexnguyen.dev/",
+     "own_domain": true,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 5,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": true,
+      "name": true
+     },
+     "words": 699,
+     "project_links": {
+      "checked": 4,
+      "ok": 3,
+      "broken": 1,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:02:44.999Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2583,
+     "output_tokens": 213,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:42:32.848Z"
+   },
+   "stored_quality": 2.8,
+   "stored_score": 48.2,
+   "checks_score": 61,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.lexnguyen.dev/",
+    "own_domain": true,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 5,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": true,
+     "name": true
+    },
+    "words": 699,
+    "project_links": {
+     "checked": 4,
+     "ok": 3,
+     "broken": 1,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:02:44.999Z"
+   },
+   "stored_text_length": 3998
+  },
+  {
+   "slot": 38,
+   "at": 93.8,
+   "url": "https://asfakur-portfolio-nextjs.vercel.app",
+   "name": "Asfakur Nariz",
+   "shot_key": "c896ef9925c1bad6",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "C",
+    "roles": [
+     "graphics designer",
+     "junior front-end developer",
+     "web developer"
+    ],
+    "visual_design": {
+     "score": 3,
+     "note": "Dark mode template with standard layout and legible typography."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Clear title and role visible right at the top."
+    },
+    "storytelling": {
+     "score": 2,
+     "note": "Projects have descriptions but broken links hinder credibility."
+    },
+    "writing": {
+     "score": 2,
+     "note": "Contains placeholder lorem ipsum text in service sections."
+    },
+    "memorability": {
+     "score": 2,
+     "note": "Generic dark developer portfolio template lacks distinct personal branding."
+    },
+    "rubric_version": 2,
+    "quality_score": 2.7,
+    "checks": {
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "project_links": false,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 55,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://asfakur-portfolio-nextjs.vercel.app/",
+     "own_domain": false,
+     "resume": false,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 984,
+     "project_links": {
+      "checked": 3,
+      "ok": 1,
+      "broken": 2,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T04:42:57.922Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 2696,
+     "output_tokens": 221,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T06:06:40.316Z"
+   },
+   "stored_quality": 2.7,
+   "stored_score": 45,
+   "checks_score": 55,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://asfakur-portfolio-nextjs.vercel.app/",
+    "own_domain": false,
+    "resume": false,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 984,
+    "project_links": {
+     "checked": 3,
+     "ok": 1,
+     "broken": 2,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T04:42:57.922Z"
+   },
+   "stored_text_length": 3995
+  },
+  {
+   "slot": 39,
+   "at": 96.3,
+   "url": "https://sameer27.netlify.app",
+   "name": "Sameer",
+   "shot_key": "c296c55441ddf70b",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "C",
+    "roles": [
+     "frontend developer"
+    ],
+    "visual_design": {
+     "score": 2,
+     "note": "Garish red background with distracting animated node network."
+    },
+    "five_second_test": {
+     "score": 4,
+     "note": "Instantly clear name and frontend developer role."
+    },
+    "storytelling": {
+     "score": 1,
+     "note": "Lacks any project details or case studies."
+    },
+    "writing": {
+     "score": 2,
+     "note": "Extremely sparse text content with basic boilerplate sentences."
+    },
+    "memorability": {
+     "score": 2,
+     "note": "Generic template appearance with aggressive red coloring."
+    },
+    "rubric_version": 2,
+    "quality_score": 2.15,
+    "checks": {
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "project_links": null,
+     "own_domain": false,
+     "fresh_footer": true,
+     "original": true
+    },
+    "checks_score": 87,
+    "facts": {
+     "v": 1,
+     "source": "rendered",
+     "final_url": "https://sameer27.netlify.app/",
+     "own_domain": false,
+     "resume": true,
+     "github": true,
+     "contact": true,
+     "footer_year": 2026,
+     "internal_pages": 4,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": true,
+     "signals": {
+      "score": 6,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": true,
+      "github": true,
+      "name": true
+     },
+     "words": 34,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:00:32.273Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 1794,
+     "output_tokens": 205,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:37:24.746Z"
+   },
+   "stored_quality": 2.15,
+   "stored_score": 40.4,
+   "checks_score": 87,
+   "facts": {
+    "v": 1,
+    "source": "rendered",
+    "final_url": "https://sameer27.netlify.app/",
+    "own_domain": false,
+    "resume": true,
+    "github": true,
+    "contact": true,
+    "footer_year": 2026,
+    "internal_pages": 4,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": true,
+    "signals": {
+     "score": 6,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": true,
+     "github": true,
+     "name": true
+    },
+    "words": 34,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:00:32.273Z"
+   },
+   "stored_text_length": 230
+  },
+  {
+   "slot": 40,
+   "at": 98.8,
+   "url": "https://toukoum.fr",
+   "name": "Raphaël Giraud",
+   "shot_key": "22c0affff42c423b",
+   "stored": {
+    "is_portfolio": true,
+    "tier": "D",
+    "roles": [
+     "ai engineer"
+    ],
+    "visual_design": {
+     "score": 2,
+     "note": "Generic AI generated template look."
+    },
+    "five_second_test": {
+     "score": 2,
+     "note": "Unclear real identity with placeholder name Aaaaby."
+    },
+    "storytelling": {
+     "score": 1,
+     "note": "No projects or case studies provided."
+    },
+    "writing": {
+     "score": 1,
+     "note": "Contains placeholder names and almost no text."
+    },
+    "memorability": {
+     "score": 1,
+     "note": "Looks like an uncustomized AI portfolio generator demo."
+    },
+    "rubric_version": 2,
+    "quality_score": 1.5,
+    "checks": {
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "project_links": null,
+     "own_domain": true,
+     "fresh_footer": null,
+     "original": true
+    },
+    "checks_score": 69,
+    "facts": {
+     "v": 1,
+     "source": "http",
+     "final_url": "https://www.toukoum.fr/",
+     "own_domain": true,
+     "resume": false,
+     "github": false,
+     "contact": true,
+     "footer_year": null,
+     "internal_pages": 0,
+     "sections": 0,
+     "template": null,
+     "builder": null,
+     "motion": false,
+     "signals": {
+      "score": 3,
+      "projects": true,
+      "about": true,
+      "contact": true,
+      "resume": false,
+      "github": false,
+      "name": false
+     },
+     "words": 23,
+     "project_links": {
+      "checked": 0,
+      "ok": 0,
+      "broken": 0,
+      "blocked": 0
+     },
+     "measured_at": "2026-11-12T05:02:23.905Z"
+    },
+    "model": "gemini-3.5-flash-lite",
+    "usage": {
+     "input_tokens": 1752,
+     "output_tokens": 201,
+     "thoughts_tokens": null
+    },
+    "grading_source": "r2",
+    "judged_at": "2026-11-12T05:41:39.805Z"
+   },
+   "stored_quality": 1.5,
+   "stored_score": 23.8,
+   "checks_score": 69,
+   "facts": {
+    "v": 1,
+    "source": "http",
+    "final_url": "https://www.toukoum.fr/",
+    "own_domain": true,
+    "resume": false,
+    "github": false,
+    "contact": true,
+    "footer_year": null,
+    "internal_pages": 0,
+    "sections": 0,
+    "template": null,
+    "builder": null,
+    "motion": false,
+    "signals": {
+     "score": 3,
+     "projects": true,
+     "about": true,
+     "contact": true,
+     "resume": false,
+     "github": false,
+     "name": false
+    },
+    "words": 23,
+    "project_links": {
+     "checked": 0,
+     "ok": 0,
+     "broken": 0,
+     "blocked": 0
+    },
+    "measured_at": "2026-11-12T05:02:23.905Z"
+   },
+   "stored_text_length": 137
+  }
+ ],
+ "failures": [
+  {
+   "slot": 8,
+   "url": "https://hanan-bhatti.site",
+   "why": "page.goto: net::ERR_CONNECTION_CLOSED at https://hanan-bhatti.site/\nCall log:\n\u001b[2m  - navigating to \"https://hanan-bhatti.site/\", waiting until \"load\"\u001b[22m\n"
+  }
+ ],
+ "rules": {
+  "A": "v3 passes when its mean Spearman with the answer key (over its 2 runs) is higher than v2's, and its run-1 vs run-2 Spearman is no more than 0.05 below v2's.",
+  "B": "Batches of 5 pass when (1) the mean per-site distance between a batch grade and a solo grade (quality, 1-5) is no more than solo-vs-solo distance + 0.05, and (2) the batch runs' mean Spearman with the key is no more than max(0.03, the gap between the two solo runs' Spearman) below the solo runs' mean.",
+  "C": "Richer evidence passes when its mean Spearman with the key is higher than v3 solo's by more than the gap between v3 solo's two runs (so the gain is larger than run-to-run noise), and its Kendall tau is higher too."
+ },
+ "b5": [
+  [
+   [
+    "https://althruist.fyi",
+    "https://www.osallak.tech",
+    "https://ajyendu.vercel.app",
+    "https://mhuzaifa04.vercel.app",
+    "https://toukoum.fr"
+   ],
+   [
+    "https://arkamahajan.in",
+    "https://www.adityakr.com",
+    "https://abhishek-kumar-t.vercel.app",
+    "https://custard.top/en",
+    "https://sameer27.netlify.app"
+   ],
+   [
+    "https://www.hafidziti.dev",
+    "https://vineetcodes.vercel.app",
+    "https://lorenkamau.com",
+    "https://ashutoshdash.in",
+    "https://antonmanaev.name"
+   ],
+   [
+    "https://ashleighsimonelli.co.uk",
+    "https://dhruvjs.com",
+    "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+    "https://www.masabqurban.com",
+    "https://maveeshah.github.io/projects.html"
+   ],
+   [
+    "https://alilinares.com",
+    "https://jos.gg",
+    "https://sambhusbabu.com",
+    "https://batrasamarth.com",
+    "https://abhijeetbhale.github.io/Portfolio"
+   ],
+   [
+    "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app",
+    "https://www.pavangupta.in",
+    "https://andresilva.tech",
+    "https://www.lexnguyen.dev",
+    "https://www.mariokandut.com"
+   ],
+   [
+    "https://asfakur-portfolio-nextjs.vercel.app",
+    "https://www.vishvajeetshukla.in",
+    "https://thony32.tech",
+    "https://www.pawaret.dev",
+    "https://abdulrehmanwaseem.me"
+   ],
+   [
+    "https://farhansegujja.com",
+    "https://zalt.me",
+    "https://aggelosladas.com",
+    "https://deveshchandan.me",
+    "https://nikhilkumawat.netlify.app"
+   ]
+  ],
+  [
+   [
+    "https://sambhusbabu.com",
+    "https://abhishek-kumar-t.vercel.app",
+    "https://www.pawaret.dev",
+    "https://www.pavangupta.in",
+    "https://arkamahajan.in"
+   ],
+   [
+    "https://www.masabqurban.com",
+    "https://custard.top/en",
+    "https://batrasamarth.com",
+    "https://andresilva.tech",
+    "https://deveshchandan.me"
+   ],
+   [
+    "https://www.lexnguyen.dev",
+    "https://toukoum.fr",
+    "https://ashutoshdash.in",
+    "https://thony32.tech",
+    "https://www.osallak.tech"
+   ],
+   [
+    "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+    "https://ajyendu.vercel.app",
+    "https://farhansegujja.com",
+    "https://vineetcodes.vercel.app",
+    "https://jos.gg"
+   ],
+   [
+    "https://sameer27.netlify.app",
+    "https://abhijeetbhale.github.io/Portfolio",
+    "https://asfakur-portfolio-nextjs.vercel.app",
+    "https://alilinares.com",
+    "https://aggelosladas.com"
+   ],
+   [
+    "https://www.vishvajeetshukla.in",
+    "https://mhuzaifa04.vercel.app",
+    "https://www.hafidziti.dev",
+    "https://dhruvjs.com",
+    "https://abdulrehmanwaseem.me"
+   ],
+   [
+    "https://antonmanaev.name",
+    "https://nikhilkumawat.netlify.app",
+    "https://www.adityakr.com",
+    "https://zalt.me",
+    "https://lorenkamau.com"
+   ],
+   [
+    "https://www.mariokandut.com",
+    "https://althruist.fyi",
+    "https://ashleighsimonelli.co.uk",
+    "https://maveeshah.github.io/projects.html",
+    "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app"
+   ]
+  ]
+ ]
+}

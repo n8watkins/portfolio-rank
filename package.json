@@ -16,6 +16,8 @@
     "check:cf-types": "wrangler types --env-interface CloudflareEnv --strict-vars=false --include-runtime=false --check cloudflare-env.d.ts",
     "test:e2e": "scripts/test-e2e.sh",
     "eval:rubric": "node scripts/eval-rubric.mjs",
+    "exp:batch-grading": "node scripts/experiments/batch-grading.mjs",
+    "exp:grading-v3": "node scripts/experiments/grading-v3.mjs",
     "docs:rubric": "node scripts/rubric-docs.mjs",
     "lint": "eslint ."
   },
