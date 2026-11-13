@@ -30,7 +30,7 @@ jobs:
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
       # The site whose API it calls (repository variable; unset,
-      # scripts/prewarm-metrics.mjs uses https://portfoliorank.n8builds.dev).
+      # scripts/prewarm-metrics.mjs uses https://portfoliorank.dev).
       PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
     steps:
       - uses: actions/checkout@v7

@@ -28,8 +28,11 @@ test("staging's only Cron Trigger is the newsletter's, so nothing there calls Ge
 test("staging has its own address, Worker, ISR cache bucket and Workflow", () => {
   assert.equal(staging.vars.SITE_ENV, "staging");
   assert.equal(config.vars.SITE_ENV, "production");
-  assert.equal(staging.vars.AUTH_URL, "https://staging.portfoliorank.n8builds.dev");
-  assert.deepEqual(staging.routes, [{ pattern: "staging.portfoliorank.n8builds.dev", custom_domain: true }]);
+  assert.equal(staging.vars.SITE_URL, "https://staging.portfoliorank.dev");
+  assert.deepEqual(staging.routes, [
+    { pattern: "staging.portfoliorank.dev", custom_domain: true },
+    { pattern: "staging.portfoliorank.n8builds.dev", custom_domain: true },
+  ]);
   // Its own Worker calls itself; the mailroom (sign-in links, the newsletter) is shared with production, under PortfolioRank's apps.
   assert.deepEqual(staging.services, [
     { binding: "WORKER_SELF_REFERENCE", service: `${config.name}-staging` },

@@ -12,7 +12,7 @@ export const NEWSLETTER_CRON = "*/10 * * * *";
 
 export type NewsletterEnv = {
   NEWSLETTER_ENABLED?: string;
-  AUTH_URL: string;
+  SITE_URL?: string;
   AUTH_SECRET?: string;
   EMAIL_CAPS?: string;
   MAILROOM_NEWS?: unknown;
@@ -32,7 +32,7 @@ export async function newsletterTick(env: NewsletterEnv, scheduledTime: number) 
       secret,
       log: (line: string) => log("newsletter.gate", { line }),
     });
-    const r = await tick({ db, gate, base: env.AUTH_URL.replace(/\/$/, ""), secret, now: scheduledTime, log });
+    const r = await tick({ db, gate, base: String(env.SITE_URL ?? "").replace(/\/$/, ""), secret, now: scheduledTime, log });
     if (r.queued || r.sent || r.failed || r.stopped) log("newsletter.tick", r);
     return r;
   } catch (e) {

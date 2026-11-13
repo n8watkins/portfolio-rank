@@ -10,7 +10,7 @@ import { SITE_URL } from "@/lib/site";
 export const newsletterEnabled = () => /^true$/i.test(String(process.env.NEWSLETTER_ENABLED ?? ""));
 
 /** This site's address, for links in emails. */
-export const siteBase = () => (process.env.AUTH_URL || SITE_URL).replace(/\/$/, "");
+export const siteBase = () => (process.env.SITE_URL || SITE_URL).replace(/\/$/, "");
 
 export const nlSecret = () => String(process.env.AUTH_SECRET ?? "");
 

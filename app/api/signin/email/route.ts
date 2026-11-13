@@ -95,7 +95,7 @@ export async function POST(req: Request) {
   if (overAddr) return fail("rate_limited", 429, { retryAfterSec: overAddr.retryAfterSec }, { "retry-after": String(overAddr.retryAfterSec) });
 
   const token = await issueToken(db(), { email, callback: safeCallback(body.callbackUrl) });
-  const base = (process.env.AUTH_URL || SITE_URL).replace(/\/$/, "");
+  const base = (process.env.SITE_URL || SITE_URL).replace(/\/$/, "");
   const mail = signInEmail(`${base}/signin/email?t=${token}`);
   const gate = await emailGate(db(), { via: "mailroom" });
   const sent = await gate.send({ kind: "signin", to: email, ...mail, key: `signin-${token.slice(0, 16)}` });

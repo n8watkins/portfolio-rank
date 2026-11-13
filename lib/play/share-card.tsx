@@ -8,6 +8,7 @@ import { playCards } from "@/lib/play/card";
 import { readGradeShot } from "@/lib/grader/server";
 import { TierChip } from "@/lib/og-tier";
 import { tierLabel } from "@/lib/tiers.mjs";
+import { SITE_HOST } from "@/lib/site";
 
 // A listed portfolio's share card: its name, its public grade and "top N%"
 // (top tiers only, as on the page) beside its own screenshot. It is the
@@ -80,7 +81,7 @@ export async function listedShareCard(url: string): Promise<Response> {
     ],
     logo: dataUrl(mark, "image/svg+xml"),
     n8Icon: dataUrl(n8, "image/png"),
-    host: "portfoliorank.n8builds.dev",
+    host: SITE_HOST,
     name,
     nameSize: name.length > 22 ? 46 : name.length > 14 ? 58 : 72,
     nameTracking: -1.6,

@@ -44,7 +44,7 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
   const facts = rep.facts ?? [];
   const joinHref = `${SITE.submit}&url=${encodeURIComponent(job.url)}`;
   const claimHref = page.games && page.listed ? `/claim?url=${encodeURIComponent(page.listed.url)}` : null;
-  const reportUrl = `${(process.env.AUTH_URL || SITE_URL).replace(/^https?:\/\//, "").replace(/\/$/, "")}/grade/${job.id}`;
+  const reportUrl = `${(process.env.SITE_URL || SITE_URL).replace(/^https?:\/\//, "").replace(/\/$/, "")}/grade/${job.id}`;
   // The job id is [A-Za-z0-9_-] only (lib/grader/jobs.mjs JOB_ID): safe in a CSS string.
   const pageCss = `@page{margin:12mm 13mm 14mm;@bottom-left{content:"${reportUrl}";font:500 7.5pt Inter,system-ui,sans-serif;color:#6b6b75}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:500 7.5pt Inter,system-ui,sans-serif;color:#6b6b75}}`;
 

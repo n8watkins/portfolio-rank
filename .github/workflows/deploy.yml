@@ -1,5 +1,5 @@
 # Builds PortfolioRank with OpenNext and ships every push to main to
-# production (https://portfoliorank.n8builds.dev), then smoke checks it
+# production (https://portfoliorank.dev), then smoke checks it
 # (scripts/smoke.mjs). Staging is its own workflow (staging.yml): main plus
 # the pull requests labeled "staging", so a merge here never replaces what is
 # being tried there (DEPLOY.md "How a change ships").
@@ -94,4 +94,4 @@ jobs:
 
       - name: Smoke check production
         if: env.CLOUDFLARE_API_TOKEN != ''
-        run: node scripts/smoke.mjs https://portfoliorank.n8builds.dev
+        run: node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev

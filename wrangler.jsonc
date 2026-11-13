@@ -10,9 +10,16 @@
   // the server's own fetches (GitHub, PageSpeed, inspected sites) on the public
   // internet.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // Served only at its custom domain; deploys keep the domain attached.
+  // Served only at its custom domains; deploys keep them attached. The site is
+  // portfoliorank.dev (SITE_URL below); www and the old address
+  // portfoliorank.n8builds.dev stay attached only to redirect to it
+  // (worker/canonical-host.ts).
   "workers_dev": false,
-  "routes": [{ "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }],
+  "routes": [
+    { "pattern": "portfoliorank.dev", "custom_domain": true },
+    { "pattern": "www.portfoliorank.dev", "custom_domain": true },
+    { "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }
+  ],
   "preview_urls": false,
   "assets": {
     "directory": ".open-next/assets",
@@ -61,8 +68,10 @@
     // bucket's r2.dev address is rate-limited, uncached and for the pipeline
     // only (its SHOTS_BASE_URL repository secret).
     "SHOTS_BASE_URL": "/shots",
-    // Auth.js builds its callback URL (/api/auth/callback/github) from this.
-    "AUTH_URL": "https://portfoliorank.n8builds.dev",
+    // The site's address (lib/site.ts): canonical URLs, the sitemap, email
+    // links, the origin and Turnstile checks, and Auth.js's callback URL
+    // (/api/auth/callback/github, auth.ts). Other hosts redirect here.
+    "SITE_URL": "https://portfoliorank.dev",
     // Server errors go to Sentry (worker/sentry.ts). A DSN is public by design:
     // it only lets a sender add events to this one project.
     "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
@@ -191,7 +200,12 @@
   "env": {
     "staging": {
       "workers_dev": false,
-      "routes": [{ "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }],
+      // The old staging address stays attached only to redirect to SITE_URL
+      // (worker/canonical-host.ts).
+      "routes": [
+        { "pattern": "staging.portfoliorank.dev", "custom_domain": true },
+        { "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }
+      ],
       "preview_urls": false,
       "r2_buckets": [
         { "binding": "SHOTS", "bucket_name": "portfolio-rank" },
@@ -217,8 +231,8 @@
         "TAVILY_MONTHLY_CREDITS": "200",
         "SHOTS_BASE_URL": "/shots",
         // The staging GitHub OAuth app's callback is
-        // https://staging.portfoliorank.n8builds.dev/api/auth/callback/github.
-        "AUTH_URL": "https://staging.portfoliorank.n8builds.dev",
+        // https://staging.portfoliorank.dev/api/auth/callback/github.
+        "SITE_URL": "https://staging.portfoliorank.dev",
         "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
         // Staging runs the launch features ahead of production (the launch
         // walkthrough, 2026-11-11). It has no crons, so RANKING_V2 only

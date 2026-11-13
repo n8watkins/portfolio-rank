@@ -19,6 +19,8 @@ import { BLOG_TAG, appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswe
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import assetsFingerprint from "../.open-next/assets-fingerprint.json";
+import { canonicalRedirect } from "./canonical-host";
+import { OLD_SITE_HOSTS } from "../lib/site";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
@@ -96,13 +98,17 @@ async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], sch
 }
 const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerprint ?? "dev");
 
-// Screenshots and favicons skip the Next.js app (./assets.ts); scanner probes get
+// Requests on the old address or www go to the same path on SITE_URL first
+// (./canonical-host.ts). Screenshots and favicons skip the Next.js app
+// (./assets.ts); scanner probes get
 // a plain 404 and the public pages go through the edge cache (./edge-cache.ts);
 // the rest is the app. On staging, robots.txt disallows everything and every
 // response says noindex (./staging.ts).
 const worker = {
   ...app,
   async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
+    const moved = canonicalRedirect(request, env.SITE_URL, OLD_SITE_HOSTS);
+    if (moved) return moved;
     const health = healthCheck(request);
     if (health) return health;
     // The staging lock: off unless SITE_ENV is "staging" (./staging-gate.ts).
@@ -112,7 +118,7 @@ const worker = {
     if (robots) return robots;
     const probe = probeAnswer(request);
     if (probe) return probe;
-    if (mayUseEdgeCache(request, new URL(env.AUTH_URL).hostname)) {
+    if (mayUseEdgeCache(request, new URL(env.SITE_URL).hostname)) {
       return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(edgeRequest(request, ASSETS));
     }
     return markStaging((await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx)), env);
