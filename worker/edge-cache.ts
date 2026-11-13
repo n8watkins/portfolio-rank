@@ -58,14 +58,19 @@ const CACHEABLE: Record<string, number> = {
   "/sitemap.xml": SLOW_TTL_SECONDS,
   "/robots.txt": SLOW_TTL_SECONDS,
   "/opengraph-image": STATIC_TTL_SECONDS,
+  "/twitter-image": STATIC_TTL_SECONDS,
 };
 
 /** Path patterns -> seconds: the leaderboard's views. */
 const CACHEABLE_PATTERNS: [RegExp, number][] = [[/^\/top\/[^/]+$/, PAGE_TTL_SECONDS]];
 
-/** A profile (/p/<encoded address>) and the blog's pages (not its media, which caches itself). */
-const PROFILE = /^\/p\/([^/]+)$/;
-const BLOG = /^\/blog(?:\/rss\.xml|\/tag\/[^/]+|\/(?!media$|tag$)[^/]+)?$/;
+/**
+ * A profile (/p/<encoded address>) and the blog's pages (not its media, which caches
+ * itself), each with its generated share images: rendering one of those takes 3.6 to
+ * 4.7 s of CPU, so it is made once per change and then served from the edge.
+ */
+const PROFILE = /^\/p\/([^/]+)(?:\/(?:opengraph|twitter)-image)?$/;
+const BLOG = /^\/blog(?:\/rss\.xml|\/tag\/[^/]+|\/(?!media$|tag$)[^/]+(?:\/(?:opengraph|twitter)-image)?)?$/;
 
 /** The tags every profile and every blog page carry, for the bulk purges. */
 export const PROFILES_TAG = "profiles";
