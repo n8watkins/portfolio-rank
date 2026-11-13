@@ -125,6 +125,9 @@ test("a graded profile: a ProfilePage about the person with their socials, a bre
 
 test("a profile the health check hides, or one not graded yet, says noindex and has no structured data", async () => {
   await seedGrade(hidden.url, { status: "dead" });
+  // Other tests seed grades for listed sites; this one has none.
+  await db.execute({ sql: "UPDATE portfolios SET ai_rubric = NULL WHERE url = ?", args: [ungraded.url] });
+  await db.execute({ sql: "DELETE FROM grade_jobs WHERE url = ?", args: [ungraded.url] });
   for (const p of [hidden, ungraded]) {
     const html = await (await get(profilePath(p.url))).text();
     assert.equal(robotsOf(html), "noindex, follow", p.url);
