@@ -1,219 +1,163 @@
 import { notFound } from "next/navigation";
-import { Inbox, Users } from "lucide-react";
+import { ExternalLink, Eye, Inbox } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
-import { NewsletterTestButton } from "@/components/admin/NewsletterTestButton";
 import { pacificTime } from "@/components/admin/postStatus";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { btnSecondary } from "@/components/ui/styles";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
-import { emailCaps, emailToday } from "@/lib/email/gate.mjs";
-import { ownerEmail } from "@/lib/newsletter/admin";
-import { NEWSLETTER_BATCH } from "@/lib/newsletter/send.mjs";
-import { newsletterEnabled } from "@/lib/newsletter/server";
-import { listSubscribers, newsletterCounts, recentIssues } from "@/lib/newsletter/store.mjs";
-import { maskEmail } from "@/lib/signin/store.mjs";
+import { broadcastMode } from "@/lib/newsletter/send.mjs";
+import { kit, kitFormId, newsletterEnabled, subscriberCount } from "@/lib/newsletter/server";
+import { recentIssues } from "@/lib/newsletter/store.mjs";
+import { IS_STAGING } from "@/lib/site";
 
-// The blog newsletter for the owner (AUTOMATION.md "Newsletter"): how many
-// people are subscribed, confirmed or not, who they are with the date and
-// the page they signed up on, the recent sends with how far each got, today's
-// caps, and "Send test to me". Only the admin sees it; anyone else gets a 404.
+// The blog newsletter for the owner (AUTOMATION.md "Newsletter"). Kit keeps
+// the list and sends the emails, so this page shows Kit's confirmed
+// subscriber count (asked fresh on each visit), whether Kit is connected,
+// each post's broadcast (scheduled, or a draft ready in Kit), and a preview
+// of the email. Only the admin sees it; anyone else gets a 404.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Newsletter - PortfolioRank admin", robots: { index: false, follow: false } };
 
-const SUB_TONE: Record<string, string> = {
-  confirmed: "bg-up/10 text-up ring-up/30",
-  pending: "bg-accent-soft text-accent ring-accent/30",
-  unsubscribed: "bg-raised text-mute ring-edge",
+const KIT_BROADCASTS_URL = "https://app.kit.com/campaigns";
+
+const TONE = {
+  wait: "bg-accent-soft text-accent ring-accent/30",
+  good: "bg-up/10 text-up ring-up/30",
+  bad: "bg-down/10 text-down ring-down/30",
+  mute: "bg-raised text-mute ring-edge",
 };
-const ISSUE_TONE: Record<string, string> = {
-  sending: "bg-accent-soft text-accent ring-accent/30",
-  sent: "bg-up/10 text-up ring-up/30",
-  stopped: "bg-down/10 text-down ring-down/30",
-  skipped: "bg-raised text-mute ring-edge",
+const ISSUE: Record<string, { label: string; tone: string }> = {
+  queued: { label: "Waiting for Kit", tone: TONE.wait },
+  creating: { label: "Sending to Kit", tone: TONE.wait },
+  scheduled: { label: "Scheduled in Kit", tone: TONE.good },
+  draft: { label: "Draft ready in Kit", tone: TONE.wait },
+  stopped: { label: "Stopped", tone: TONE.bad },
+  skipped: { label: "Not sent", tone: TONE.mute },
+  // Issues from before Kit (staging only).
+  sending: { label: "Before Kit", tone: TONE.mute },
+  sent: { label: "Before Kit", tone: TONE.mute },
 };
-const ISSUE_LABEL: Record<string, string> = { sending: "Sending", sent: "Sent", stopped: "Stopped", skipped: "Not sent" };
 
 function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
   return <span className={`inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold ring-1 ring-inset ${tone}`}>{children}</span>;
 }
 
-function Stat({ label, value, hint }: { label: string; value: number; hint: string }) {
+function Check({ ok, label, hint }: { ok: boolean; label: string; hint: string }) {
   return (
-    <div className="rounded-lg border border-edge bg-raised px-4 py-3">
-      <dt className="text-xs font-semibold text-mute">{label}</dt>
-      <dd className="mt-0.5 text-2xl font-bold tabular-nums">{value.toLocaleString("en-US")}</dd>
-      <dd className="text-xs text-mute">{hint}</dd>
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-mute">{label}</dt>
+      <dd className={`text-right font-semibold ${ok ? "text-up" : "text-down"}`}>{ok ? "Set" : hint}</dd>
     </div>
   );
 }
 
-type Issue = { id: string; title: string; slug: string | null; status: string; reason: string | null; createdAt: string; finishedAt: string | null; sent: number; failed: number; waiting: number };
-type Subscriber = { id: string; email: string; status: string; source: string | null; createdAt: string };
-type Today = { rows: { kind: string; status: string; n: number }[] };
-
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
+type Issue = { id: string; title: string; slug: string | null; status: string; reason: string | null; createdAt: string; finishedAt: string | null; broadcastId: string | null; sendAt: string | null };
 
 export default async function AdminNewsletterPage() {
   const who = await requireAdmin();
   if ("error" in who) notFound();
   await ensureSchema();
-  const client = db();
-  const [counts, subscribers, issues, today, owner] = (await Promise.all([
-    newsletterCounts(client),
-    listSubscribers(client, { limit: 500 }),
-    recentIssues(client, { limit: 10 }),
-    emailToday(client),
-    ownerEmail(),
-  ])) as [{ confirmed: number; pending: number; unsubscribed: number }, Subscriber[], Issue[], Today, string | null];
-  const caps = emailCaps(process.env.EMAIL_CAPS || undefined);
-  const used = (kind: string) => today.rows.filter((r) => r.kind === kind).reduce((s, r) => s + r.n, 0);
+  const [count, issues] = (await Promise.all([subscriberCount({ fresh: true }), recentIssues(db(), { limit: 10 })])) as [Awaited<ReturnType<typeof subscriberCount>>, Issue[]];
   const on = newsletterEnabled();
-  const total = counts.confirmed + counts.pending + counts.unsubscribed;
+  const connected = Boolean(kit());
+  const form = Boolean(await kitFormId());
+  const mode = IS_STAGING ? "draft" : broadcastMode(process.env.KIT_BROADCAST_MODE);
 
   return (
     <>
       <AdminHeader title="Newsletter" back={{ href: "/admin/blog", label: "Blog drafts" }}>
         {on ? (
           <>
-            <span className="font-semibold text-up">On.</span> Each published post goes to confirmed subscribers in batches of {NEWSLETTER_BATCH} every 10 minutes, within the caps below.
+            <span className="font-semibold text-up">On.</span> Kit keeps the list and sends the emails. Each published post becomes a Kit broadcast{" "}
+            {mode === "send" ? "scheduled 10 minutes ahead, to every confirmed subscriber." : "saved as a draft; you get a note and send it from Kit."}
           </>
         ) : (
           <>
-            <span className="font-semibold text-ink">Off</span> (NEWSLETTER_ENABLED): no sign-up forms, nothing is sent. Unsubscribe links still work.
+            <span className="font-semibold text-ink">Off</span> (NEWSLETTER_ENABLED): no sign-up forms and no broadcasts.
           </>
         )}
       </AdminHeader>
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">
         <div className="grid min-w-0 gap-10">
-          <section aria-labelledby="nl-counts">
-            <h2 id="nl-counts" className="sr-only">
-              Subscribers by status
+          <section aria-labelledby="nl-count">
+            <h2 id="nl-count" className="sr-only">
+              Subscribers
             </h2>
-            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-newsletter-counts>
-              <Stat label="Confirmed" value={counts.confirmed} hint="get every new post" />
-              <Stat label="Pending" value={counts.pending} hint="haven't confirmed; deleted after 7 days" />
-              <Stat label="Unsubscribed" value={counts.unsubscribed} hint="deleted 30 days after leaving" />
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2" data-newsletter-count>
+              <div className="rounded-lg border border-edge bg-raised px-4 py-3">
+                <dt className="text-xs font-semibold text-mute">Confirmed subscribers</dt>
+                <dd className="mt-0.5 text-2xl font-bold tabular-nums">{count.count == null ? "-" : count.count.toLocaleString("en-US")}</dd>
+                <dd className="text-xs text-mute">{count.count == null ? (count.error === "no_kit_key" ? "Kit isn't connected (KIT_API_KEY)" : "Kit didn't answer; try again in a moment") : "from Kit, just now"}</dd>
+              </div>
+              <div className="rounded-lg border border-edge bg-raised px-4 py-3">
+                <dt className="text-xs font-semibold text-mute">New posts</dt>
+                <dd className="mt-0.5 text-2xl font-bold">{mode === "send" ? "Sent" : "Drafts"}</dd>
+                <dd className="text-xs text-mute">{IS_STAGING ? "staging only ever makes drafts" : "KIT_BROADCAST_MODE"}</dd>
+              </div>
             </dl>
           </section>
 
           <section aria-labelledby="nl-sends">
             <h2 id="nl-sends" className="text-lg font-bold tracking-tight">
-              Recent sends <span className="text-mute tabular-nums">{issues.length}</span>
+              Recent posts <span className="text-mute tabular-nums">{issues.length}</span>
             </h2>
             {issues.length === 0 ? (
               <EmptyState icon={Inbox} title="Nothing sent yet" className="mt-4">
-                Publishing a post queues its email here; the next 10-minute tick starts sending.
+                Publishing a post queues its email here; the next 10-minute tick hands it to Kit.
               </EmptyState>
             ) : (
               <ul className="mt-4 grid gap-2">
                 {issues.map((i) => {
-                  // A post that went out while nobody was confirmed reached no one; say so instead of "Sent".
-                  const nobody = i.status === "sent" && i.sent + i.failed === 0;
+                  const s = ISSUE[i.status] ?? { label: i.status, tone: TONE.mute };
                   return (
-                  <li key={i.id} className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-3 sm:p-4">
-                    <Pill tone={nobody ? ISSUE_TONE.skipped : (ISSUE_TONE[i.status] ?? ISSUE_TONE.skipped)}>{nobody ? "No subscribers yet" : (ISSUE_LABEL[i.status] ?? i.status)}</Pill>
-                    <span className="min-w-0 flex-1 basis-56">
-                      {i.slug ? (
-                        <a href={`/blog/${i.slug}`} className="block font-semibold leading-snug hover:underline">
-                          {i.title}
-                        </a>
-                      ) : (
-                        <span className="block font-semibold leading-snug">{i.title}</span>
-                      )}
-                      <span className="mt-0.5 block text-sm text-mute">
-                        Queued {pacificTime(i.createdAt)}
-                        {i.finishedAt && i.status !== "skipped" ? ` · finished ${pacificTime(i.finishedAt)}` : ""}
-                        {i.reason ? ` · ${i.reason}` : ""}
+                    <li key={i.id} className="card flex flex-wrap items-center gap-x-4 gap-y-2 p-3 sm:p-4">
+                      <Pill tone={s.tone}>{s.label}</Pill>
+                      <span className="min-w-0 flex-1 basis-56">
+                        {i.slug ? (
+                          <a href={`/blog/${i.slug}`} className="block font-semibold leading-snug hover:underline">
+                            {i.title}
+                          </a>
+                        ) : (
+                          <span className="block font-semibold leading-snug">{i.title}</span>
+                        )}
+                        <span className="mt-0.5 block text-sm text-mute">
+                          Queued {pacificTime(i.createdAt)}
+                          {i.status === "scheduled" && i.sendAt ? ` · Kit sends it ${pacificTime(i.sendAt)}` : ""}
+                          {i.reason ? ` · ${i.reason}` : ""}
+                        </span>
                       </span>
-                    </span>
-                    <span className="text-sm tabular-nums text-mute">
-                      <span className="font-semibold text-ink">{i.sent}</span> sent
-                      {i.failed > 0 && <>, {i.failed} failed</>}
-                      {i.status === "sending" && <>, {i.waiting} to go</>}
-                    </span>
-                  </li>
+                    </li>
                   );
                 })}
               </ul>
             )}
           </section>
-
-          <section aria-labelledby="nl-list">
-            <h2 id="nl-list" className="text-lg font-bold tracking-tight">
-              Subscribers <span className="text-mute tabular-nums">{total}</span>
-            </h2>
-            {subscribers.length === 0 ? (
-              <EmptyState icon={Users} title="No sign-ups yet" className="mt-4">
-                The form is on every post, on /blog and in the site footer.
-              </EmptyState>
-            ) : (
-              <div className="card mt-4 overflow-hidden">
-                <div className="hidden grid-cols-[minmax(0,1.6fr)_7.5rem_7rem_minmax(0,1.2fr)] gap-4 border-b border-edge bg-raised px-4 py-2 text-xs font-semibold text-mute md:grid">
-                  <span>Email</span>
-                  <span>Status</span>
-                  <span>Signed up</span>
-                  <span>Source</span>
-                </div>
-                <ul className="divide-y divide-edge" data-newsletter-list>
-                  {subscribers.map((s) => (
-                    <li key={s.id} className="grid gap-1 px-4 py-3 text-sm md:grid-cols-[minmax(0,1.6fr)_7.5rem_7rem_minmax(0,1.2fr)] md:items-center md:gap-4">
-                      <span className="flex min-w-0 items-center justify-between gap-3">
-                        <span className="truncate font-medium" title={s.email}>
-                          {s.email}
-                        </span>
-                        <span className="md:hidden">
-                          <Pill tone={SUB_TONE[s.status] ?? SUB_TONE.unsubscribed}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill>
-                        </span>
-                      </span>
-                      <span className="hidden md:block">
-                        <Pill tone={SUB_TONE[s.status] ?? SUB_TONE.unsubscribed}>{s.status[0].toUpperCase() + s.status.slice(1)}</Pill>
-                      </span>
-                      <span className="tabular-nums text-mute">
-                        <span className="md:hidden">Signed up </span>
-                        {day(s.createdAt)}
-                      </span>
-                      <span className="truncate text-mute" title={s.source ?? ""}>
-                        <span className="md:hidden">From </span>
-                        {s.source ?? "unknown"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
         </div>
 
-        <aside aria-label="Test and caps" className="grid min-w-0 gap-4">
-          <section aria-labelledby="nl-test" className="card p-5">
-            <h2 id="nl-test" className="font-bold tracking-tight">
-              Test email
-            </h2>
-            <p className="mt-1 mb-4 text-sm text-mute">See the email subscribers get, in your own inbox.</p>
-            <NewsletterTestButton disabled={!owner} to={owner ? maskEmail(owner) : null} />
-          </section>
-          <section aria-labelledby="nl-caps" className="card p-5">
-            <h2 id="nl-caps" className="font-bold tracking-tight">
-              Today&apos;s caps
+        <aside aria-label="Kit" className="grid min-w-0 gap-4">
+          <section aria-labelledby="nl-kit" className="card p-5">
+            <h2 id="nl-kit" className="font-bold tracking-tight">
+              Kit
             </h2>
             <dl className="mt-3 grid gap-2 text-sm">
-              <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-mute">Post emails</dt>
-                <dd className="font-semibold tabular-nums">
-                  {used("newsletter")} of {(caps.kinds as Record<string, number>).newsletter ?? 0}
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-mute">Confirm emails</dt>
-                <dd className="font-semibold tabular-nums">
-                  {used("newsletter-confirm")} of {(caps.kinds as Record<string, number>)["newsletter-confirm"] ?? 0}
-                </dd>
-              </div>
+              <Check ok={connected} label="API key" hint="Missing (KIT_API_KEY)" />
+              <Check ok={form} label="Sign-up form" hint="None (make one form, or set KIT_FORM_ID)" />
             </dl>
-            <p className="mt-3 text-xs leading-relaxed text-mute">
-              Pacific day. Mailroom adds its own: 40 a day and 150 a month for the newsletter, and the account&apos;s 2,500 a month, so email never bills. At a cap the rest waits for the next day.
-            </p>
+            <p className="mt-3 text-xs leading-relaxed text-mute">Kit sends the confirm email (double opt-in on the form), the posts and the unsubscribe link, and handles bounces. We keep no addresses.</p>
+            <a href={KIT_BROADCASTS_URL} target="_blank" rel="noreferrer" className={`${btnSecondary} mt-4 w-full sm:w-auto`}>
+              <ExternalLink className="h-4 w-4 text-accent" aria-hidden /> Open Kit broadcasts
+            </a>
+          </section>
+          <section aria-labelledby="nl-preview" className="card p-5">
+            <h2 id="nl-preview" className="font-bold tracking-tight">
+              Preview
+            </h2>
+            <p className="mt-1 mb-4 text-sm text-mute">The email of the latest post, as Kit gets it. Send yourself a test from the draft in Kit.</p>
+            <a href="/api/admin/newsletter/preview" target="_blank" className={`${btnSecondary} w-full sm:w-auto`}>
+              <Eye className="h-4 w-4 text-accent" aria-hidden /> Preview the email
+            </a>
           </section>
         </aside>
       </div>

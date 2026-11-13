@@ -111,11 +111,12 @@ To stay listed but never be named in posts, see [removal.md](removal.md).
 
 ## If you subscribe to the newsletter (when it launches)
 
-- I store your email address, when you signed up and when you confirmed.
-- You only get emails after you click the confirmation link.
+- Kit (kit.com), the newsletter service, stores your email address, when you signed up and when you confirmed.
+  PortfolioRank itself keeps no copy.
+- You only get emails after you click the confirmation link in Kit's email.
 - Every email has a one-click unsubscribe.
-  An address that isn't confirmed within 7 days is deleted.
-- After you unsubscribe, I keep the address only on a do-not-email list, so it's never emailed again.
+- After you unsubscribe, Kit keeps the address only as unsubscribed, so it's never emailed again.
+- Kit counts opens and clicks of the newsletter emails.
 - Terms: [newsletter.md](newsletter.md).
 
 ## Google Gemini and the free tier
@@ -146,7 +147,8 @@ If PortfolioRank moves to a paid Gemini plan, this section will be updated.
 | GitHub | Sign-in, and the scheduled jobs that update the site |
 | Google | Gemini (grades, writing) and PageSpeed Insights (speed scores) |
 | Sentry | Error reports |
-| Cloudflare Email Service | Sending the newsletter and queued reports |
+| Cloudflare Email Service | Sending queued reports and sign-in links |
+| Kit (kit.com) | Keeping the newsletter list and sending the newsletter |
 
 None of them get your data to sell, and neither do I.
 
@@ -166,8 +168,8 @@ None of them get your data to sell, and neither do I.
 | Nightly database backups | 30 days |
 | Grade requests, and the email address for a queued report | 30 days after the report is sent |
 | Grade reports | [owner: how long a report stays, or until you delete it] |
-| Newsletter sign-up that's never confirmed | 7 days |
-| Newsletter address | Until you unsubscribe; after that, only on the do-not-email list |
+| Newsletter sign-up that's never confirmed | Kept by Kit as unconfirmed; never emailed again |
+| Newsletter address | At Kit, until you unsubscribe; after that, only on Kit's do-not-email list |
 
 ## Your choices
 

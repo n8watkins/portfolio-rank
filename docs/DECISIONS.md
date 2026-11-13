@@ -474,10 +474,12 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 ## Newsletter and email
 
 - **A newsletter: one email per post** (owner, 2026-11-12, replacing "a weekly newsletter" of 2026-11-10). Status: building (staging), `NEWSLETTER_ENABLED` off in production.
-  Sign-up beside every post, on `/blog` and in the footer, confirm by email (double opt-in), one-click unsubscribe, and one email per published post (at most two a week) instead of a weekly digest with the top 5 and the biggest climber; the owner sees every subscriber, where they signed up and every send on `/admin/blog/newsletter` (AUTOMATION.md "Newsletter").
-  It sends through the shared mailroom as its own app (`portfoliorank-news`, 150 a month), so it can't use up sign-in links; caps fail closed and never bill.
-  Cloudflare Email Service is for transactional email only (its FAQ: no marketing email); this is an editorial, double opt-in list that sells nothing, the same as the n8builds.dev blog's, and pausing its mailroom app stops it without touching the other apps. If the list outgrows a few hundred emails a month or Cloudflare objects, it moves to a newsletter service.
+  Sign-up beside every post, on `/blog` and in the footer, confirm by email (double opt-in), one-click unsubscribe, and one email per published post (at most two a week) instead of a weekly digest with the top 5 and the biggest climber; the owner sees the subscriber count and every send on `/admin/blog/newsletter` (AUTOMATION.md "Newsletter").
   Why: a way to bring readers back that doesn't depend on search or social.
+- **The newsletter runs on Kit** (owner, 2026-11-12, replacing sending it through the shared mailroom). Status: building (staging).
+  Kit's free plan (10,000 subscribers, unlimited broadcasts, API access) keeps the list, sends the confirm email (double opt-in on its form), each post's broadcast and the unsubscribe link, and handles bounces; our database keeps no address, only which posts became a broadcast.
+  Our sign-up route keeps Turnstile and the rate limits and adds the address to Kit; each new post becomes a Kit broadcast scheduled 10 minutes ahead, or a draft with a note to the owner if Kit refuses to schedule.
+  Why: Cloudflare Email Service is for transactional email, the mailroom's slice covered only about 18 subscribers, and bulk sends would put the reputation that sign-in and grade emails share at risk.
 - **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (#81, `lib/email/gate.mjs`; the games' report links use it too).
   Newsletter, queued grade reports, the games' report links and owner updates all pass one module that counts every send and stops at a daily cap.
   The caps (agent): 100 emails a day in all, 80 grade reports, 40 report links, 20 owner alerts and 3 to any one address; a refused or failed send counts too, and the log keeps a keyed hash, never the address (`EMAIL_CAPS` changes them).

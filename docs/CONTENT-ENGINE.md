@@ -334,8 +334,8 @@ Owner request of 2026-11-12: the schedule is the owner's to change from `/admin/
 The content engine never sends email itself.
 
 - Publishing a post sets `newsletter_pending` on it.
-- The newsletter's ten-minute cron (AUTOMATION.md "Newsletter") turns each live post with it set into one email to confirmed subscribers and clears it, sending in paced batches through the shared email gate and the newsletter's mailroom app; unpublishing clears it too.
-- Email goes through Cloudflare Email Service (owner, 2026-11-10, after the content plan was written); the gate is the only code that knows that, so a later change of provider doesn't touch the content engine.
+- The newsletter's ten-minute cron (AUTOMATION.md "Newsletter") turns each live post with it set into one Kit broadcast to confirmed subscribers and clears it; unpublishing clears it too.
+- The newsletter goes through Kit (owner, 2026-11-12); only lib/newsletter knows that, so the content engine never changed when the provider did.
 - A post that went live more than 3 days before the newsletter saw it is not emailed, so switching the newsletter on never mails a backlog.
 
 The owner's request of 2026-11-12 (one email per post) replaces the weekly digest with the top 5 and the biggest climber, and with it the decision of 2026-11-10 to send that digest in a week with no post.

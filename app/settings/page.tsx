@@ -255,9 +255,9 @@ export default function SettingsPage() {
           <div className="p-4 sm:p-5" id="newsletter">
             <p className="font-semibold">The blog newsletter</p>
             <p className="mt-0.5 text-mute">
-              If you sign up for new posts by email, we keep only your address, whether you confirmed or unsubscribed, when, and the page you signed up on. It is used for
-              the newsletter alone, never shared or sold, and the emails have no tracking pixels or tracked links. An address that isn&apos;t confirmed is deleted after 7
-              days. Every email has an Unsubscribe link that works in one click; we stop at once and delete the address 30 days after you leave. The emails go out through Cloudflare Email Service.
+              If you sign up for new posts by email, your address goes to Kit (kit.com), the service that keeps the list and sends the emails; this site keeps no copy. Kit
+              sends one confirm email, and nothing else comes until you confirm. The address is used for the newsletter alone, never shared or sold. Every email has an
+              Unsubscribe link that works in one click. Kit counts opens and clicks of the emails.
             </p>
           </div>
           <Row id="forget" inline title="Forget my preferences" desc="Clears the choices saved in this browser. Your votes and sign-in stay.">

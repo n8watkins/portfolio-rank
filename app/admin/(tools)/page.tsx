@@ -85,7 +85,7 @@ export default async function AdminIndex() {
       href: "/admin/blog/newsletter",
       label: "Newsletter",
       icon: <Mail aria-hidden />,
-      note: `${n(o.newsletter.confirmed)} ${o.newsletter.confirmed === 1 ? "subscriber" : "subscribers"}`,
+      note: o.newsletter.confirmed == null ? (o.newsletter.connected ? "Kit didn't answer" : "Kit not connected") : `${n(o.newsletter.confirmed)} ${o.newsletter.confirmed === 1 ? "subscriber" : "subscribers"}`,
     });
   }
 
