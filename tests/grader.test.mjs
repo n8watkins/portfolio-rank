@@ -385,7 +385,10 @@ test("email transport: the send_email binding from EMAIL_FROM; the test outbox i
   assert.deepEqual(sent[0].from, { email: "portfoliorank@n8builds.dev", name: "PortfolioRank" });
   assert.equal(emailTransport({ SEND_EMAIL: { send() {} } }), null, "no sender address, no transport");
   assert.equal(emailTransport({}), null);
-  assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "production" }, { db: {} }), /test runs only/);
+  for (const SITE_ENV of ["production", "staging", undefined, "Production", "prod"]) {
+    assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV }, { db: {} }), /test runs only/, String(SITE_ENV));
+  }
+  assert.equal(emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "test" }, { db: {} }).name, "outbox");
   for (const bad of ["a@b", "a b@example.com", "a@example.com\nBcc: x@example.com", "<a@example.com>", "a@example.com, b@example.com"]) assert.equal(validEmail(bad), null, bad);
   assert.equal(validEmail(" jane.doe+pr@example.co.uk "), "jane.doe+pr@example.co.uk");
 });
