@@ -40,6 +40,7 @@ import { RUBRIC_VERSION } from "../pipeline/rubric.mjs";
 import { guardedForReview } from "../pipeline/portfolio-guard.mjs";
 import { buildDupIndex, junkCheck } from "../pipeline/junk-rules.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
+import { withOwnerVerdict } from "../lib/reviews/store.mjs";
 import { quotaDay } from "../pipeline/quota-day.mjs";
 
 export const JOB = "regrade-not-portfolio";
@@ -233,7 +234,7 @@ async function main() {
     }
     try {
       const now = new Date();
-      const grade = await rankForWrite(db, await gradeFromEvidence(gemini, { row, image, now }), { url: c.url, now: now.getTime() });
+      const grade = await rankForWrite(db, await withOwnerVerdict(db, c.url, await gradeFromEvidence(gemini, { row, image, now })), { url: c.url, now: now.getTime() });
       await db.batch(replaceGradeStatements(c.url, row.ai_rubric, grade, now), "write");
       // Same text on another domain: a person decides which is the original.
       if (rule.review) await db.execute({ sql: "UPDATE portfolios SET needs_review = 1 WHERE url = ?", args: [c.url] });

@@ -250,3 +250,42 @@ test("text in the invite is escaped and long lines fold", () => {
   assert.match(ics, /\r\n x/);
   assert.match(ics.replace(/\r\n /g, ""), /DESCRIPTION:x{200}\\nnext\r\n/);
 });
+
+/** `n` pending rows in the owner's review queue (lib/reviews/store.mjs). */
+async function pendingReviews(db, n) {
+  for (let i = 0; i < n; i++) {
+    await db.execute({
+      sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, verdicts, created_at) VALUES ('recheck-543', ?, 'not_portfolio', 'listed', 'relist', 1, '{}', '2026-11-14T00:00:00Z')`,
+      args: [`https://review-${i}.dev`],
+    });
+  }
+}
+
+test("the Monday email carries the review queue: alone when no goal fires, never when nothing is pending", async () => {
+  const quiet = await freshDb();
+  const none = owner();
+  const r0 = await checkGoals(ctx(quiet, none, mockKit(5)), { now: MONDAY });
+  assert.deepEqual([r0.reviews.pending, r0.reviews.emailed, none.sent.length], [0, null, 0]);
+
+  const db = await freshDb();
+  await pendingReviews(db, 3);
+  const dry = await checkGoals(ctx(db, owner(), mockKit(5)), { now: MONDAY, dryRun: true });
+  assert.equal(dry.reviews.wouldEmail, true);
+  const o = owner();
+  const r = await checkGoals(ctx(db, o, mockKit(5)), { now: MONDAY });
+  assert.deepEqual([r.reviews.pending, r.reviews.emailed], [3, "digest"]);
+  assert.equal(o.sent.length, 1);
+  assert.equal(o.sent[0].subject, "PortfolioRank: 3 sites to review");
+  assert.match(o.sent[0].text, /3 proposed status changes wait for you\. Nothing changes until you confirm\.\nhttps:\/\/portfoliorank\.dev\/admin\/review/);
+});
+
+test("a goal email that goes out the same Monday carries the review lines instead of a second email", async () => {
+  const db = await freshDb();
+  await pendingReviews(db, 1);
+  const o = owner();
+  const r = await checkGoals(ctx(db, o, mockKit(101)), { now: MONDAY });
+  assert.equal(byId(r, "newsletter-100-subscribers").fired, true);
+  assert.equal(r.reviews.emailed, "goal");
+  assert.equal(o.sent.length, 1);
+  assert.match(o.sent[0].text, /Review queue: 1 proposed status change waits for you\./);
+});
