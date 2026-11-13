@@ -127,6 +127,22 @@ Haiku's mini7 batch 2 had already run with the five-site wording; it answered th
 
 What I expect: far fewer "not a portfolio" answers on thin but real pages (one-screen menus, blog-first homes), and the junk check now rests on the named exclusions, so a template demo persona other than the examples may still pass.
 
+## Owner amendment, 2026-11-13: prompt version "portfolio-definition-v2.1"
+
+The owner's decision: only the exclusions decide whether a page is a portfolio.
+Reason: in mini7, under v2, abhisheksharma.codes shows a name, a Projects button and GitHub but no role.
+The v2 wording both required a role ("It is a portfolio if it shows ... (2) what they do") and said false "ONLY" for the exclusions.
+The code-only check followed the first half and said no; Haiku followed the second ("No role is stated, but no exclusion applies") and said yes.
+v2.1 removes the conflict: is_portfolio is true unless an exclusion applies, the three signs feed the checklist, scores and tips only, and a missing role is never a no.
+Files: `experiments/portfolio-definition-v2.1/solo.txt` and `batch.txt`, which are the v2 files with only the STEP 3 paragraph replaced; `schema.json` is a byte copy of v2's (and of the locked one).
+Prompt ids for the request log: `portfolio-definition-v2.1-solo` and `portfolio-definition-v2.1-batch`.
+v2 stays in place for the runs already made on it (mini7).
+The code-only check in `scripts/experiments/mini7.mjs` now follows v2.1: it says no only for an exclusion code can see (an error or blank page, a parked page, a demo or placeholder name, a link-in-bio host, a code repository host), and reports the three signs without letting them decide; a company or studio site needs judgment, so code never says no for that.
+On mini7's seven bundles it now agrees with both models on all seven (the only no is the Streamlit error page); no model was run again.
+The new STEP 3 paragraph, word for word:
+
+> is_portfolio is true unless one of these exclusions applies: a parked or for-sale domain; an unedited placeholder (demo names like 'Aaaaby' or 'John Doe', or someone else's content); a page that is not about a person (a company or studio site, a bare code repository, a link-in-bio page like Linktree); a broken, blank or error page. The three signs of a portfolio, (1) who they are, a name or clear personal identity (stylized or spaced-out letters count), (2) what they do (developer, engineer, designer, and so on), and (3) a way to their work (a Projects button or link, a GitHub link, project links or a resume), feed the checklist, the scores and the tips only. A missing sign, a missing role included, is never a reason to say false: a weak portfolio is still a portfolio, with low scores and tips. Give the reason first, then the answer.
+
 ## Amendment, 2026-11-13: the day cap
 
 The run paused at pass2/A-b3 because the model's requests this Pacific quota day reached the harness's day cap of 430 (376 from the first grading test, 54 from this run; the free quota is 500).
