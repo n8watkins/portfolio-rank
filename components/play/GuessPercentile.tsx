@@ -535,7 +535,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
             </div>
             {/* Shown while guessing: what our tools measured, nothing that gives the answer away. */}
             {!wideGuess && (
-              <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown && prefs.sections.length > 0} metrics={prefs.metrics} sections={prefs.sections} />
+              <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown} metrics={prefs.metrics} sections={prefs.sections} />
             )}
           </figure>
 
@@ -638,7 +638,7 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
             {/* From lg up, "About this portfolio" fills the column under the guess. */}
             {wideGuess && (
               <div className="card overflow-hidden [&>div]:border-t-0">
-                <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown && prefs.sections.length > 0} metrics={prefs.metrics} sections={prefs.sections} />
+                <DetailsPanel key={`details-${r.index}`} id="guess-details" url={r.url} record={false} profile={shown} metrics={prefs.metrics} sections={prefs.sections} />
               </div>
             )}
           </div>

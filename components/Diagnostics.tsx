@@ -539,6 +539,9 @@ function psiStateOf(url: string, d: SiteDetails | undefined, strategy: Strategy)
 }
 
 
+/** Both strategies came back with a failure (not a run still going). */
+const bothFailed = (a: PsiState, b: PsiState) => [a, b].every((x) => x.phase === "done" && x.data != null && !x.data.ok);
+
 /** One strategy's Lighthouse scores: a placeholder, "Measuring…", the four scores, or the reason with Retry. */
 function PsiRow({ label, state, metrics, short = false }: { label: string; state: PsiState; metrics: string[]; short?: boolean }) {
   const { phase, data } = state;
@@ -629,47 +632,48 @@ export function PlaySummary({ url }: { url: string }) {
   const passed = lines?.filter((l) => l.pass).length ?? 0;
   const misses = lines?.filter((l) => !l.pass).map((l) => l.label.replace(/ \(.*\)$/, "")) ?? [];
   const showBuilt = !inspect || Boolean(s?.framework || s?.host);
+  const label = "text-[11px] font-semibold tracking-wider whitespace-nowrap text-mute uppercase";
 
+  // One row that wraps only when the card is narrow (a phone's Details): the
+  // two sites stay the focus, so the strip stays short.
   return (
-    <div className="@container border-t border-edge bg-bg/40 px-3 py-3 sm:px-4">
-      <div className={`grid gap-3 @lg:items-center @lg:gap-5 ${showBuilt ? "@lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.2fr)]" : "@lg:grid-cols-[auto_minmax(0,1fr)]"}`}>
-        <div className="flex items-center gap-4" role="group" aria-label="Lighthouse performance">
-          <ScoreRing label="Mobile" state={mobile} />
-          <ScoreRing label="Desktop" state={desktop} />
-        </div>
-        {/* Built with: only when the polish fetch found a framework or host (unknowns stay hidden). */}
-        {showBuilt && (
-          <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
-            <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Built with</p>
-            {!inspect ? (
-              <Placeholder className="mt-1 h-5 w-32" />
-            ) : (
-              <p className="details-in mt-1 flex flex-wrap gap-1.5">
-                {[s?.framework, s?.host].filter(Boolean).map((v) => (
-                  <span key={v} className="rounded-md border border-edge bg-card px-2 py-0.5 text-xs font-medium">
-                    {v}
-                  </span>
-                ))}
-              </p>
-            )}
-          </div>
-        )}
-        <div className="min-w-0 @lg:border-l @lg:border-edge @lg:pl-5">
-          <p className="text-[11px] font-semibold tracking-wider text-mute uppercase">Polish</p>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-edge bg-bg/40 px-3 py-2 sm:px-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="Lighthouse performance">
+        <ScoreRing label="Mobile" state={mobile} />
+        <ScoreRing label="Desktop" state={desktop} />
+      </div>
+      {/* Built with: only when the polish fetch found a framework or host (unknowns stay hidden). */}
+      {showBuilt && (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <p className={label}>Built with</p>
           {!inspect ? (
-            <Placeholder className="mt-1 h-5 w-40" />
-          ) : !lines ? (
-            <p className="details-in mt-1 text-xs text-mute">Couldn&apos;t reach the site</p>
+            <Placeholder className="h-5 w-24" />
           ) : (
-            <p className="details-in mt-1 text-xs" title={misses.length ? `Missing: ${misses.join(", ")}` : "Every polish check passes"}>
-              <strong className={`tabular-nums ${misses.length === 0 ? "text-up" : ""}`}>
-                {passed}/{lines.length}
-              </strong>{" "}
-              checks
-              {misses.length > 0 && <span className="line-clamp-1 text-mute">Missing: {misses.join(", ").toLowerCase()}</span>}
+            <p className="details-in flex flex-wrap gap-1">
+              {[s?.framework, s?.host].filter(Boolean).map((v) => (
+                <span key={v} className="rounded-md border border-edge bg-card px-1.5 py-0.5 text-xs font-medium">
+                  {v}
+                </span>
+              ))}
             </p>
           )}
         </div>
+      )}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <p className={label}>Polish</p>
+        {!inspect ? (
+          <Placeholder className="h-5 w-16" />
+        ) : !lines ? (
+          <p className="details-in text-xs text-mute">Couldn&apos;t reach the site</p>
+        ) : (
+          <p className="details-in text-xs" title={misses.length ? `Missing: ${misses.join(", ")}` : "Every polish check passes"}>
+            <strong className={`tabular-nums ${misses.length === 0 ? "text-up" : ""}`}>
+              {passed}/{lines.length}
+            </strong>{" "}
+            checks
+            {misses.length > 0 && <span className="sr-only">. Missing: {misses.join(", ").toLowerCase()}</span>}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -749,7 +753,25 @@ export function PlayDiagnostics({
         </section>
       )}
 
-      {lighthouse && (
+      {lighthouse && bothFailed(mobile, desktop) ? (
+        // Lighthouse failed on both: one quiet line, not a block per strategy.
+        <p className="details-in flex flex-wrap items-baseline gap-x-2 text-xs text-mute">
+          <span className="text-[11px] font-semibold tracking-wider uppercase">Lighthouse</span>
+          <span>{psiProblem(mobile.data?.error).text}</span>
+          {psiProblem(mobile.data?.error).retry && (
+            <button
+              type="button"
+              onClick={() => {
+                mobile.retry();
+                desktop.retry();
+              }}
+              className="font-semibold text-accent underline-offset-4 hover:underline"
+            >
+              Retry
+            </button>
+          )}
+        </p>
+      ) : lighthouse && (
         <section className="grid gap-2">
           <PlayLabel>{metrics.length === 1 ? `Lighthouse ${(PSI_LABELS[metrics[0]] ?? "").toLowerCase()}` : "Lighthouse"}</PlayLabel>
           {/* One score: mobile and desktop side by side on one row (Simple). */}

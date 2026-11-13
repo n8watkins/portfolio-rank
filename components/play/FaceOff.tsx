@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUpRight, Check, ExternalLink, Flame, MousePointerClick, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Check, ChevronDown, ExternalLink, Flame, RotateCcw, Share2, Target, Trophy, Undo2, Users, X } from "lucide-react";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
@@ -147,7 +147,7 @@ function warm(e: Entry) {
   if (e.shot) {
     const img = new Image();
     img.decoding = "async";
-    img.src = frameOf(e.shot, "hero.jpg");
+    img.src = frameOf(e.shot, window.matchMedia("(max-width: 767px)").matches ? "mobile.jpg" : "hero.jpg");
   }
   seedDetails({ [e.url]: e.details });
 }
@@ -175,7 +175,14 @@ const LEAN = {
   even: "A dead heat for the crowd.",
 } as const;
 
-function Frame({ e }: { e: Entry }) {
+/**
+ * A portfolio's screenshot, from its top, never cropped through the middle
+ * of its headline: the whole desktop frame (16:10) where the card has room
+ * for it, and with `phone` the site's own phone frame on a phone, where the
+ * two cards sit side by side and each is narrow. `contain` fits the whole
+ * frame into a box of another shape (the spotlight).
+ */
+function Frame({ e, phone = false, contain = false }: { e: Entry; phone?: boolean; contain?: boolean }) {
   const [failed, setFailed] = useState(false);
   const domain = domainOf(e.url);
   if (!e.shot || failed)
@@ -184,13 +191,28 @@ function Frame({ e }: { e: Entry }) {
         {domain}
       </span>
     );
-  // The desktop frame at every width: on a phone the two cards stack, each a
-  // landscape screenshot across the full width.
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={frameOf(e.shot, "hero.jpg")} alt={`Screenshot of ${domain}`} fetchPriority="high" onError={() => setFailed(true)} className="h-full w-full bg-raised object-cover object-top" />
+    <picture className="block h-full w-full">
+      {phone && <source media="(max-width: 767px)" srcSet={frameOf(e.shot, "mobile.jpg")} />}
+      <img
+        src={frameOf(e.shot, "hero.jpg")}
+        alt={`Screenshot of ${domain}`}
+        fetchPriority="high"
+        onError={() => setFailed(true)}
+        className={`h-full w-full bg-raised ${contain ? "object-contain" : "object-cover object-top"}`}
+      />
+    </picture>
   );
 }
+
+/**
+ * From md up the pair is only as wide as the screen is tall allows: each
+ * screenshot is 16:10, and everything above and below it (the site's header,
+ * the mode switch, the question, a guest's one-line intro, each card's name
+ * line, Simple's strip and Pick) takes about 31rem, so on a 1366x768 laptop
+ * both sites and both Picks show without scrolling. Never narrower than 40rem.
+ */
+const PAIR_WIDTH = "md:mx-auto md:max-w-[max(40rem,calc((100svh-31rem)*3.2+1rem))]";
 
 /** Under this many face-offs on either side, the crowd's lean is too thin to quote as a share. */
 const FEW_VOTES = 5;
@@ -550,19 +572,24 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
             </span>
           </span>
         </span>
-        <ViewControls prefs={prefs} choose={choose} toggle={toggle} />
+        {/* On a phone the details sit behind each card's Details instead. */}
+        <div className="max-md:hidden">
+          <ViewControls prefs={prefs} choose={choose} toggle={toggle} />
+        </div>
       </div>
 
       {intro && guest && (
-        <div className="mb-3 flex items-start gap-3 rounded-xl border border-edge bg-raised p-3 text-sm">
+        // One line: the two sites stay the focus.
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-edge bg-raised py-1 pr-1 pl-3 text-sm">
           <p className="min-w-0 flex-1">
-            <strong>Pick the portfolio you&apos;d rather hire from.</strong> Vote as long as you like. Your votes count on the People board once you{" "}
+            <strong>Pick the portfolio you&apos;d rather hire from.</strong> <span className="max-sm:hidden">Vote as long as you like; your votes count on the People board once you </span>
+            <span className="sm:hidden">Votes count once you </span>
             <button type="button" onClick={signIn} className="font-semibold text-accent underline underline-offset-2">
               sign in
             </button>
-            , whenever suits you.
+            .
           </p>
-          <button type="button" onClick={dismissIntro} aria-label="Dismiss" className="-m-2 grid h-10 w-10 shrink-0 place-items-center rounded-lg text-mute hover:text-ink">
+          <button type="button" onClick={dismissIntro} aria-label="Dismiss" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-mute hover:text-ink">
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
@@ -635,8 +662,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                 style={{ viewTransitionName: `faceoff-card-${focus}` } as React.CSSProperties}
               >
                 <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                <div className="h-[clamp(160px,30vh,340px)] w-full overflow-hidden">
-                  <Frame e={e} />
+                {/* The whole desktop frame, as tall as the screen allows: never cut through its headline. */}
+                <div className="aspect-[16/10] max-h-[min(55svh,34rem)] w-full overflow-hidden bg-raised">
+                  <Frame e={e} contain />
                 </div>
                 {/* The result in its own band, never over the site's own headline. */}
                 <ResultBand pct={shares[focus]} mine={mine} early={early} k={`${pair.token}-${focus}`} />
@@ -716,53 +744,56 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
           })()}
         </div>
       ) : pair && shares ? (
-        // The screenshots are the hero: side by side from md up, stacked on a
-        // phone, short enough that both cards, their details and Pick fit on
-        // a 1440x900 or 1920x1080 screen.
-        <div className="grid grid-cols-1 items-stretch gap-3 sm:gap-5 md:grid-cols-2">
+        // The two sites are the hero, always side by side: on a phone each is
+        // its own phone frame, from md up the whole desktop frame (16:10).
+        // From md up the pair is only as wide as the screen's height allows,
+        // so both screenshots and both Picks fit without scrolling on a
+        // 1366x768 laptop and up (PAIR_WIDTH).
+        <div className={`grid grid-cols-2 items-stretch gap-2 sm:gap-4 ${PAIR_WIDTH}`}>
           {(["a", "b"] as const).map((side) => {
             const e = pair[side];
             return (
               <article
                 key={`${pair.token}-${side}`}
                 aria-label={e.name}
-                className="card deal-in relative flex min-w-0 flex-col overflow-hidden transition-shadow has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
+                className="card deal-in @container relative flex min-w-0 flex-col overflow-hidden transition-shadow has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
                 // The card's view-transition name lets it ease to its new size when the view changes or the spotlight opens.
                 style={{ "--d": `${side === "a" ? 0 : 90}ms`, viewTransitionName: `faceoff-card-${side}` } as React.CSSProperties}
               >
-                <NameLine name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
-                {/* The screenshot across the card, then Simple's strip or the chosen details under it. */}
-                <div className="flex-1">
-                  <button
-                    type="button"
-                    onClick={() => vote(side)}
-                    disabled={busy}
-                    tabIndex={-1}
-                    aria-hidden
-                    className="pick group relative block aspect-[16/9] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-auto md:h-[clamp(150px,25vh,290px)]"
-                  >
-                    <Frame e={e} />
-                    <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-                    {/* Always visible, so it's clear the screenshot picks (no hover needed, touch too). */}
-                    <span className="pointer-events-none absolute bottom-2.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white shadow-lg backdrop-blur transition group-hover:bg-fill group-hover:text-on-fill">
-                      <MousePointerClick className="h-3.5 w-3.5" aria-hidden />
-                      <span className="pointer-coarse:hidden">Click to pick</span>
-                      <span className="hidden pointer-coarse:inline">Tap to pick</span>
-                    </span>
-                  </button>
+                <NameLine compact name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
+                {/* The screenshot picks too; nothing is drawn over the site itself. */}
+                <button
+                  type="button"
+                  onClick={() => vote(side)}
+                  disabled={busy}
+                  tabIndex={-1}
+                  aria-hidden
+                  className="pick group relative block aspect-[9/13] w-full cursor-pointer overflow-hidden text-left outline-none disabled:cursor-default md:aspect-[16/10]"
+                >
+                  <Frame e={e} phone />
+                  <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+                </button>
+                {/* What was measured, under the screenshot: Simple's strip or the chosen parts (from md up; on a phone behind Details). */}
+                <div className="flex-1 max-md:hidden">
                   {simple ? <PlaySummary url={e.url} /> : <DetailsPanel id={`details-${side}`} url={e.url} record={false} profile={false} metrics={prefs.metrics} sections={prefs.sections} />}
                 </div>
+                <details className="group/d flex-1 border-t border-edge md:hidden">
+                  <summary className="flex min-h-10 cursor-pointer list-none items-center justify-center gap-1 text-xs font-semibold text-mute [&::-webkit-details-marker]:hidden">
+                    Details <ChevronDown className="h-3.5 w-3.5 transition group-open/d:rotate-180" aria-hidden />
+                  </summary>
+                  <PlaySummary url={e.url} />
+                </details>
                 {/* The pick, centered under its card. */}
-                <div className="flex items-center justify-center border-t border-edge p-2">
+                <div className="flex items-center justify-center border-t border-edge p-1.5 sm:p-2">
                   <button
                     type="button"
                     onClick={() => vote(side)}
                     disabled={busy}
                     aria-label={`Pick ${e.name}`}
                     aria-keyshortcuts={side === "a" ? "ArrowLeft" : "ArrowRight"}
-                    className={`${btnPrimary} pick min-w-48`}
+                    className={`${btnPrimary} pick w-full min-w-0 px-2 max-md:gap-1.5 max-md:text-sm md:w-auto md:min-w-48 md:px-5`}
                   >
-                    <Check className="h-4 w-4" aria-hidden /> Pick {e.name.split(" ")[0]}
+                    <Check className="h-4 w-4 shrink-0" aria-hidden /> <span className="truncate">Pick {e.name.split(" ")[0]}</span>
                   </button>
                 </div>
               </article>
@@ -771,18 +802,15 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
         </div>
       ) : (
         // Skeleton in the cards' own shape, so nothing jumps when the pair arrives.
-        <div className="grid grid-cols-1 gap-3 sm:gap-5 md:grid-cols-2" aria-busy="true">
+        <div className={`grid grid-cols-2 gap-2 sm:gap-4 ${PAIR_WIDTH}`} aria-busy="true">
           {[0, 1].map((k) => (
             <div key={k} aria-hidden className="card overflow-hidden">
-              <div className="flex h-[3.75rem] items-center border-b border-edge px-3 sm:px-4">
+              <div className="flex h-[3.25rem] items-center border-b border-edge px-3 sm:px-4">
                 <div className="h-4 w-2/5 rounded bg-raised motion-safe:animate-pulse" />
               </div>
-              <div className="aspect-[16/9] w-full bg-raised motion-safe:animate-pulse md:aspect-[16/10]" />
-              <div className="grid gap-2 border-t border-edge p-3 sm:p-4">
-                <div className="h-4 w-1/3 rounded bg-raised motion-safe:animate-pulse" />
-                <div className="h-10 rounded-lg bg-raised motion-safe:animate-pulse" />
-              </div>
-              <div className="h-[4.1rem] border-t border-edge sm:h-[4.35rem]" />
+              <div className="aspect-[9/13] w-full bg-raised motion-safe:animate-pulse md:aspect-[16/10]" />
+              <div className="h-10 border-t border-edge md:h-16" />
+              <div className="h-14 border-t border-edge" />
             </div>
           ))}
         </div>
@@ -802,16 +830,16 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       {/* Right under the cards, centered where the eye already is; on a phone it stays above the tab bar. */}
       {!finished && (pair || loadError) && (
         <div
-          className={`${pick !== null && focus ? "md:hidden" : ""} max-md:sticky max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 mt-3 flex min-h-14 flex-col items-center justify-center gap-1 text-center max-md:-mx-1 max-md:rounded-2xl max-md:border max-md:border-edge max-md:bg-card/92 max-md:p-2 max-md:shadow-[var(--card-hi),var(--card-drop)] max-md:backdrop-blur`}
+          className={`${pick !== null && focus ? "md:hidden" : ""} max-md:sticky max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 mt-3 flex min-h-12 flex-col items-center justify-center gap-1 text-center max-md:-mx-1 max-md:min-h-12 max-md:rounded-2xl max-md:border max-md:border-edge max-md:bg-card/92 max-md:p-1.5 max-md:shadow-[var(--card-hi),var(--card-drop)] max-md:backdrop-blur`}
         >
           {pick === null ? (
-            <>
+            <div className="flex flex-wrap items-center justify-center gap-x-3">
               <p className="text-sm text-mute">
                 {note ? (
                   <span className="font-medium text-accent">{note}</span>
                 ) : (
                   <>
-                    <span className="md:hidden">Tap the one you&apos;d hire from.</span>
+                    <span className="md:hidden">Tap the one you&apos;d hire from</span>
                     <span className="max-md:hidden">
                       Click the one you&apos;d hire from, or press <kbd className={kbd}>←</kbd> <kbd className={kbd}>→</kbd>
                     </span>
@@ -827,7 +855,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
               >
                 Can&apos;t decide, skip
               </button>
-            </>
+            </div>
           ) : (
             <>
               <p className="pop-in text-sm" aria-hidden>

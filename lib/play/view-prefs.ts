@@ -32,13 +32,13 @@ const KEY = "pr-play-view";
 function read(): ViewPrefs {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    if (!v || typeof v !== "object") return DETAILED;
+    if (!v || typeof v !== "object") return SIMPLE;
     const metrics = (Array.isArray(v.metrics) ? v.metrics : []).filter((m: unknown) => METRICS.some((x) => x.id === m));
     const sections = (Array.isArray(v.sections) ? v.sections : []).filter((s: unknown) => SECTIONS.some((x) => x.id === s));
     const mode = v.mode === "simple" || v.mode === "detailed" || v.mode === "custom" ? v.mode : "custom";
     return { mode, metrics, sections };
   } catch {
-    return DETAILED;
+    return SIMPLE;
   }
 }
 
@@ -62,9 +62,9 @@ export function animated(update: () => void) {
   doc.startViewTransition(() => flushSync(update));
 }
 
-/** The viewer's Play view, the detailed one until they choose. */
+/** The viewer's Play view: Simple (the two sites first, details folded away) until they choose. */
 export function useViewPrefs() {
-  const [prefs, setPrefs] = useState<ViewPrefs>(DETAILED);
+  const [prefs, setPrefs] = useState<ViewPrefs>(SIMPLE);
   useEffect(() => {
     // Read once after hydration (localStorage is not on the server).
     // eslint-disable-next-line react-hooks/set-state-in-effect
