@@ -3,7 +3,7 @@
 // few retries for rate limits and busy servers. A request that still fails
 // throws, so the source stops and its watermark stays where it was.
 
-export const USER_AGENT = "PortfolioRankBot/1.0 (+https://portfoliorank.n8builds.dev)";
+export const USER_AGENT = "PortfolioRankBot/1.0 (+https://portfoliorank.dev)";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
