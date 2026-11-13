@@ -19,8 +19,9 @@ const C = "https://e2e-review-flagged.dev";
 let cookie;
 let db;
 const grade = (isPortfolio) => JSON.stringify({ tier: "B", is_portfolio: isPortfolio, model: "gemini-3.1-flash-lite", visual_design: { score: 3 }, project_presentation: { score: 3 }, writing: { score: 3 } });
-const verdicts = (a, b) =>
+const verdicts = (a, b, prompt) =>
   JSON.stringify({
+    ...(prompt ? { prompt } : {}),
     gemini31: { batch: { is_portfolio: a, reason: "Gemini's reason.", scores: { visual_design: 3, project_presentation: 2, writing: 3 } }, solo: null },
     haiku: { batch: { is_portfolio: b, reason: "Haiku's reason.", scores: { visual_design: 3, project_presentation: 3, writing: 3 } }, solo: null },
   });
@@ -53,7 +54,7 @@ before(async () => {
             VALUES ('e2e', ?, 'not_portfolio', 'listed', ?, ?, 'A plain sentence why.', 0, ?, '{"score":4,"names":["name","projects","about","contact"],"capture":{"action":"pressed Escape on a dialog","blocked":null,"failed":null}}', '2026-11-14T00:00:00Z')`,
       args: [url, proposed, agreed, v],
     });
-  await add(A, "relist", 1, verdicts(true, true));
+  await add(A, "relist", 1, verdicts(true, true, "portfolio-definition-v2.1"));
   await add(B, "remove", 1, verdicts(false, false));
   await add(C, "relist", 0, verdicts(true, false));
 });
@@ -73,6 +74,13 @@ test("review page: agreed rows ticked, disagreements flagged; Confirm applies; t
     await p.goto(`${BASE}/admin/review`);
     await p.locator("[data-review-row]").first().waitFor();
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, "no sideways scroll on a phone");
+    // On a phone the viewer fills the screen and its buttons stay on screen.
+    await p.locator('[data-review-thumb="desktop"]').first().click();
+    const box = await p.locator("[data-review-viewer]").boundingBox();
+    assert.deepEqual([box.x, box.y, box.width, box.height], [0, 0, 390, 844], "full screen");
+    const reject = await p.locator("[data-review-viewer-reject]").boundingBox();
+    assert.ok(reject && reject.y + reject.height <= 844, "Reject is on screen");
+    await p.keyboard.press("Escape");
     await phone.close();
 
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { cookie } });
@@ -87,6 +95,8 @@ test("review page: agreed rows ticked, disagreements flagged; Confirm applies; t
     assert.equal(await row(C).getByRole("checkbox").isChecked(), false);
     await row(C).getByText("Graders disagree").waitFor();
     assert.equal(await row(A).locator("[data-review-action]").textContent(), "Before the screenshot: pressed Escape on a dialog");
+    assert.equal(await row(A).locator("[data-review-prompt]").textContent(), "Graded with prompt portfolio-definition-v2.1");
+    assert.equal(await row(C).locator("[data-review-prompt]").count(), 0, "no prompt recorded: no line");
     assert.equal(await isPortfolio(A), false, "nothing applied before a decision");
 
     // One row, on its own.
@@ -104,6 +114,38 @@ test("review page: agreed rows ticked, disagreements flagged; Confirm applies; t
     assert.equal(await status(B), "confirmed");
     assert.equal(await isPortfolio(B), false);
     assert.equal(await status(C), "pending", "the disagreement waits");
+
+    // The large viewer: a thumbnail opens it on that view; tabs follow the arrow keys; Esc closes it and
+    // focus goes back to the thumbnail; its own Confirm acts on the row.
+    const thumb = row(C).locator('[data-review-thumb="phone"]');
+    await thumb.click();
+    const viewer = page.locator("[data-review-viewer]");
+    await viewer.waitFor();
+    assert.equal(await viewer.getAttribute("aria-modal"), "true");
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("role") + ":" + document.activeElement?.textContent), "tab:Phone", "focus moves to the selected tab");
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await viewer.getByRole("tab", { name: "Desktop" }).getAttribute("aria-selected"), "true");
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), "Desktop");
+    await page.keyboard.press("End");
+    assert.equal(await viewer.getByRole("tab", { name: "Phone" }).getAttribute("aria-selected"), "true");
+    // Tab reaches every control and never leaves the viewer.
+    const seen = new Set();
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press("Tab");
+      seen.add(await page.evaluate(() => (document.activeElement?.closest("[data-review-viewer]") ? document.activeElement.getAttribute("aria-label") || document.activeElement.textContent?.trim() || document.activeElement.getAttribute("role") : "OUTSIDE")));
+    }
+    assert.ok(!seen.has("OUTSIDE"), `focus stays in the viewer: ${[...seen].join(", ")}`);
+    for (const label of ["Close the screenshot", "Confirm", "Reject"]) assert.ok([...seen].some((s) => s?.includes(label)), `${label} is reachable by Tab: ${[...seen].join(", ")}`);
+    await page.keyboard.press("Escape");
+    await viewer.waitFor({ state: "detached" });
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-review-thumb")), "phone", "focus returns to the thumbnail");
+
+    await row(C).locator('[data-review-thumb="desktop"]').click();
+    await viewer.locator("[data-review-viewer-confirm]").click();
+    await viewer.getByRole("status").filter({ hasText: "Confirmed" }).waitFor();
+    assert.equal(await status(C), "confirmed");
+    await viewer.locator("[data-review-viewer-close]").click();
+    await viewer.waitFor({ state: "detached" });
 
     // Decided rows are listed below, folded.
     await page.locator("[data-review-decided] summary").click();

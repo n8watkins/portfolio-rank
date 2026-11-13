@@ -8,13 +8,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
+import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 
 // The owner's review queue (app/admin/(tools)/review/page.tsx): one card per
 // proposed status change, with a tick box. Rows where the graders agree come
 // ticked; a disagreement is flagged and starts unticked. "Confirm all where
 // everyone agrees" (or "Confirm N ticked" once the ticks change) applies the
 // ticked rows after a second click; each row also has Confirm and Reject.
-// Decisions go to POST /api/admin/review.
+// Either thumbnail opens the large viewer (./ShotViewer.tsx) with the whole
+// capture and the same Confirm and Reject. Decisions go to POST
+// /api/admin/review.
 
 type Verdict = { is_portfolio: boolean; reason?: string; scores?: { visual_design?: number; project_presentation?: number; writing?: number } } | null;
 type Grader = { batch?: Verdict; solo?: Verdict };
@@ -30,7 +33,8 @@ export type Review = {
   reason: string | null;
   offList: boolean;
   shotKey: string | null;
-  verdicts: { gemini31?: Grader; haiku?: Grader };
+  /** prompt: the grading prompt's version (absent on rows written before it was recorded). */
+  verdicts: { gemini31?: Grader; haiku?: Grader; prompt?: string };
   signals: { score?: number; names?: string[]; junk_rule?: string | null; capture?: { action?: string | null; blocked?: string | null; failed?: string | null } } | null;
   status: string;
   decidedAt: string | null;
@@ -58,6 +62,9 @@ const CHUNK = 200;
 // The static tag in a colour (its own text colour replaces the tag's muted one, which would win otherwise).
 const tagDown = `${tag.replace("text-mute", "")} text-down ring-down/40`;
 const tagUp = `${tag.replace("text-mute", "")} text-up`;
+// A thumbnail that opens the large viewer.
+const thumb =
+  "block cursor-zoom-in overflow-hidden rounded-lg ring-1 ring-edge transition hover:ring-edge-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const ERRORS: Record<string, string> = {
   signin_required: "Your session ended. Sign in again.",
@@ -137,6 +144,11 @@ function Verdicts({ r }: { r: Review }) {
           ))}
         </tbody>
       </table>
+      {r.verdicts.prompt && (
+        <p className="mt-1 text-xs text-mute" data-review-prompt>
+          Graded with prompt <span className="font-mono text-ink">{r.verdicts.prompt}</span>
+        </p>
+      )}
       {reasons.length > 0 && (
         <details className="group/why mt-1">
           <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-sm font-semibold text-mute hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -182,6 +194,7 @@ function Row({
   busy,
   error,
   onDecide,
+  onView,
 }: {
   r: Review;
   shotsBase: string | null;
@@ -190,6 +203,7 @@ function Row({
   busy: boolean;
   error: string | null;
   onDecide: (action: "confirm" | "reject") => void;
+  onView: (frame: ViewerFrame, from: HTMLElement) => void;
 }) {
   const domain = domainOf(r.url);
   const base = shotsBase && r.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${r.shotKey}` : null;
@@ -234,12 +248,26 @@ function Row({
           <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
             <figure className="min-w-0">
               <div className="relative flex items-end gap-2.5">
-                <a href={base ? frameOf(base, "hero.jpg") : r.url} target="_blank" rel="noopener noreferrer" className="block min-w-0 flex-1 overflow-hidden rounded-lg ring-1 ring-edge">
-                  <ScreenshotFrame src={base ? frameOf(base, "hero.jpg") : null} alt={`${domain} on a desktop`} domain={domain} />
-                </a>
-                <a href={base ? frameOf(base, "mobile.jpg") : r.url} target="_blank" rel="noopener noreferrer" className="block w-[22%] max-w-[5.25rem] shrink-0 overflow-hidden rounded-lg ring-1 ring-edge">
-                  <ScreenshotFrame src={base ? frameOf(base, "mobile.jpg") : null} alt={`${domain} on a phone`} domain={domain} kind="mobile" />
-                </a>
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-label={`View the whole desktop screenshot of ${domain}`}
+                  onClick={(e) => onView("desktop", e.currentTarget)}
+                  className={`${thumb} min-w-0 flex-1`}
+                  data-review-thumb="desktop"
+                >
+                  <ScreenshotFrame src={base ? frameOf(base, "hero.jpg") : null} alt="" domain={domain} />
+                </button>
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-label={`View the whole phone screenshot of ${domain}`}
+                  onClick={(e) => onView("phone", e.currentTarget)}
+                  className={`${thumb} w-[22%] max-w-[5.25rem] shrink-0`}
+                  data-review-thumb="phone"
+                >
+                  <ScreenshotFrame src={base ? frameOf(base, "mobile.jpg") : null} alt="" domain={domain} kind="mobile" />
+                </button>
                 {blocked && (
                   <p className="pointer-events-none absolute inset-x-2 top-2 rounded-md bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-down shadow-[var(--card-drop)] ring-1 ring-down/40" data-review-blocked>
                     Capture blocked: {blocked}
@@ -326,6 +354,9 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const [errors, setErrors] = useState<Record<number, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const [done, setDone] = useState<Record<number, "confirm" | "reject">>({});
+  // The large viewer: the row (kept as it was, so a decided row stays on screen until closed), the view and its thumbnail.
+  const [viewing, setViewing] = useState<{ review: Review; frame: ViewerFrame; from: HTMLElement } | null>(null);
 
   const live = pending.filter((r) => ticked.has(r.id));
   const onlyAgreed = live.length === agreedIds.length && live.every((r) => r.agreed);
@@ -336,7 +367,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
     setBusy((b) => new Set([...b, ...ids]));
     setNotice(null);
     const failed: Record<number, string> = {};
-    let ok = 0;
+    const okIds: number[] = [];
     try {
       for (let i = 0; i < ids.length; i += CHUNK) {
         const part = ids.slice(i, i + CHUNK);
@@ -347,7 +378,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
           continue;
         }
         for (const r of body.results ?? []) {
-          if (r.ok) ok++;
+          if (r.ok) okIds.push(r.id);
           else failed[r.id] = ERRORS[r.error ?? ""] ?? `It didn't apply: ${r.error}`;
         }
       }
@@ -361,10 +392,30 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
     });
     setTicked((t) => new Set([...t].filter((id) => !ids.includes(id) || failed[id])));
     setBusy((b) => new Set([...b].filter((id) => !ids.includes(id))));
+    setDone((d) => ({ ...d, ...Object.fromEntries(okIds.map((id) => [id, action])) }));
     setAsking(false);
-    if (ids.length > 1) setNotice(`${ok.toLocaleString("en-US")} ${action === "confirm" ? "confirmed" : "rejected"}${Object.keys(failed).length ? `, ${Object.keys(failed).length} failed (marked below)` : ""}.`);
+    if (ids.length > 1) setNotice(`${okIds.length.toLocaleString("en-US")} ${action === "confirm" ? "confirmed" : "rejected"}${Object.keys(failed).length ? `, ${Object.keys(failed).length} failed (marked below)` : ""}.`);
     router.refresh();
   }
+
+  // Kept open over the empty state too, so deciding the last row in the viewer shows its done state.
+  const viewer = viewing && (
+    <ShotViewer
+      key={`${viewing.review.id}-${viewing.frame}`}
+      domain={domainOf(viewing.review.url)}
+      url={viewing.review.url}
+      base={shotsBase && viewing.review.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${viewing.review.shotKey}` : null}
+      frame={viewing.frame}
+      proposed={viewing.review.proposed}
+      busy={busy.has(viewing.review.id)}
+      error={errors[viewing.review.id] ?? null}
+      done={done[viewing.review.id] ?? null}
+      onDecide={(action) => decide([viewing.review.id], action)}
+      onClose={() => setViewing(null)}
+      returnFocus={viewing.from}
+      prompt={viewing.review.verdicts.prompt ?? null}
+    />
+  );
 
   if (pending.length === 0)
     return (
@@ -373,6 +424,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
           When a re-check proposes status changes, they wait here for you.
         </EmptyState>
         <Decided rows={decided} />
+        {viewer}
       </>
     );
 
@@ -446,10 +498,12 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
             busy={busy.has(r.id)}
             error={errors[r.id] ?? null}
             onDecide={(action) => decide([r.id], action)}
+            onView={(frame, from) => setViewing({ review: r, frame, from })}
           />
         ))}
       </ul>
       <Decided rows={decided} />
+      {viewer}
     </>
   );
 }
