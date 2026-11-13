@@ -38,6 +38,7 @@ There is also one route that still lets a visitor start our Gemini key, and the 
 ## Medium and low status (2026-11-13)
 
 Each item was checked against `main` (592ae06) first; every fix is its own PR based on `main`, waiting for the release lane.
+All of them were green in CI on 2026-11-13. #176 (subpixel tolerance in the 44px target checks) fixes a flake one of those runs hit.
 
 | Finding | PR | Status |
 | --- | --- | --- |
