@@ -20,6 +20,35 @@ Those sites show a section only while it is in view (scroll-linked opacity, reve
 The capture takes one viewport screenshot per screenful from the top, after a short wait for that screen's reveals and images, and joins them.
 Fixed bars under half a viewport tall are hidden after the first tile, so a sticky header shows once.
 
+### Pages that scroll inside an element
+
+Some pages keep `html` and `body` one screen tall and scroll a full-height element (a `<main>` or wrapper with `overflow: auto`).
+The window never moves, so a stitch of the window was one screen: 4 of 120 random listed sites (about 3%), for example d2yap.github.io (a `<main>` of 3,600 px).
+When the window cannot scroll, the capture now scrolls the tallest scrollable element that covers at least half the viewport both ways.
+The image is the rows above that element, its whole content, then the rows below it.
+Smooth scrolling and scroll snapping are switched off during the capture, so the element lands where it is asked to; `meta.scroller` records which element it was.
+d2yap.github.io went from 1440 x 900 to 1440 x 3,600, dinq.me/keith from 900 to 1,479, my-portfolio-ba1h.vercel.app from 900 to 1,644.
+Not every one-screen image is this bug: shashikantportfolio.web.app is a tabbed app whose buttons switch sections, and agney.dev's desktop page fits in 900 px.
+
+### Time
+
+Each view has 13 seconds for the scroll-through and the tiles, encoding included; the scroll-through gets at most 40% of it.
+When the time is up no new tile starts, the image ends there and `meta.timeCut` says so.
+pavithran26.net took 107 s for one site before; it now takes about 30 s for both views.
+
+### Headings
+
+Each view records `meta.outline`: the h1 to h3 headings (at most 40) with their row on the tall image, so a section such as Projects can be found and cut.
+
+### First screens cut from the tall image
+
+On the 23 sample sites, today's separate first-screen capture and the crop from the tall image were compared pixel by pixel (both views, 46 pairs):
+
+- 30 pairs differ in under 1% of pixels, 8 in 1 to 5%, 8 in more than 5%.
+- The larger differences are timing, not the crop: an intro caught mid-way by today's capture (multikitty.onrender.com's phone view shows a terminal still typing; ashishmadan.netlify.app has no name or buttons yet), a web font that had loaded in one and not the other (adityapunmiya.com), and a hero whose entrance animation sits at a different point (adityapoojary.dev).
+- No case was worse in the crop.
+  Sticky headers show in both, at the top.
+
 ### A grade fix that comes with it
 
 The grade's hero is now the top of the page after the scroll-through, when intro animations have finished.
@@ -39,6 +68,15 @@ AVIF through sharp (libvips, already in the tree), tuned on lossless stitched pa
 | AVIF q40, effort 2, 4:2:0 | 105 KB | 719 ms | 34.6 dB | 79 KB | 31.7 dB |
 
 The chosen setting matches JPEG q75 at about a quarter of its bytes; text side by side at full size is indistinguishable.
+Checked by eye on two text-heavy pages at native size, against WebP q75 (whole tall image sizes):
+
+| Site | AVIF q35 | AVIF q40 | AVIF q50 | WebP q75 |
+|---|---|---|---|---|
+| ashishmadan.netlify.app | 70 KB | 82 KB | 108 KB | 169 KB |
+| nandan.engineer | 87 KB | 105 KB | 180 KB | 229 KB |
+
+At q40 body text, bold runs and link underlines read as cleanly as WebP q75; q35 starts to soften thin strokes.
+AVIF smooths a faint paper texture behind the text that WebP keeps as noise.
 Effort 4 cost five times the encode time for 2% fewer bytes.
 Thumbnails use quality 50, since their text is scaled down.
 
@@ -48,7 +86,8 @@ The gap is iOS 16.3 and older, roughly 1 to 2% of visits, which would see no ima
 A WebP copy of each file would add about 40% storage for that share.
 The preview is an extra on the report card, so the UI should hide it when the image fails to load.
 
-The grade's image stays JPEG: Gemini reads PNG, JPEG, WebP, HEIC and HEIF, not AVIF (docs/ASSUMPTIONS.md).
+The grade's images stay JPEG: Gemini reads PNG, JPEG, WebP, HEIC and HEIF (docs/ASSUMPTIONS.md), and the Claude API JPEG, PNG, GIF and WebP; neither reads AVIF.
+`pipeline/capture-once.mjs` gives one visit's tall images, their JPEG first screens and the page text without storing anything, for experiments and the backfill.
 
 ## Height caps
 
