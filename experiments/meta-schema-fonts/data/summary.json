@@ -1,0 +1,436 @@
+{
+ "sample": 100,
+ "fetchedOk": 99,
+ "renderedOk": 100,
+ "meta": {
+  "static": {
+   "noTitle": {
+    "n": 0,
+    "of": 99,
+    "pct": 0
+   },
+   "genericTitle": {
+    "n": 1,
+    "of": 99,
+    "pct": 1
+   },
+   "noDescription": {
+    "n": 16,
+    "of": 99,
+    "pct": 16
+   },
+   "genericDescription": {
+    "n": 4,
+    "of": 99,
+    "pct": 4
+   },
+   "noCanonical": {
+    "n": 55,
+    "of": 99,
+    "pct": 56
+   },
+   "canonicalWrongHost": {
+    "n": 2,
+    "of": 99,
+    "pct": 2
+   },
+   "noOgTitle": {
+    "n": 33,
+    "of": 99,
+    "pct": 33
+   },
+   "noOgDescription": {
+    "n": 33,
+    "of": 99,
+    "pct": 33
+   },
+   "noOgImage": {
+    "n": 43,
+    "of": 99,
+    "pct": 43
+   },
+   "ogImageBroken": {
+    "n": 7,
+    "of": 99,
+    "pct": 7
+   },
+   "ogImageRelative": {
+    "n": 2,
+    "of": 99,
+    "pct": 2
+   },
+   "ogUrlWrongHost": {
+    "n": 4,
+    "of": 99,
+    "pct": 4
+   },
+   "noTwitterCard": {
+    "n": 39,
+    "of": 99,
+    "pct": 39
+   },
+   "fullCard": {
+    "n": 44,
+    "of": 99,
+    "pct": 44
+   }
+  },
+  "rendered": {
+   "noTitle": {
+    "n": 0,
+    "of": 100,
+    "pct": 0
+   },
+   "noDescription": {
+    "n": 16,
+    "of": 100,
+    "pct": 16
+   },
+   "noCanonical": {
+    "n": 55,
+    "of": 100,
+    "pct": 55
+   },
+   "noOgImage": {
+    "n": 42,
+    "of": 100,
+    "pct": 42
+   },
+   "noTwitterCard": {
+    "n": 39,
+    "of": 100,
+    "pct": 39
+   }
+  },
+  "onlyAfterJs": {
+   "description": 0,
+   "ogImage": 1,
+   "title": 0
+  }
+ },
+ "schema": {
+  "static": {
+   "verdicts": {
+    "none": 60,
+    "plausible": 39
+   },
+   "hasAny": {
+    "n": 39,
+    "of": 99,
+    "pct": 39
+   },
+   "parseErrors": {
+    "n": 0,
+    "of": 99,
+    "pct": 0
+   },
+   "types": {
+    "ProfilePage": 13,
+    "Person": 39,
+    "Organization": 22,
+    "Place": 9,
+    "PostalAddress": 18,
+    "Occupation": 7,
+    "WebSite": 22,
+    "ProfessionalService": 4,
+    "ContactPoint": 5,
+    "CollegeOrUniversity": 9,
+    "SiteNavigationElement": 2,
+    "WebPage": 5,
+    "EducationalOrganization": 6,
+    "SoftwareSourceCode": 3,
+    "Author": 1,
+    "Country": 3,
+    "Demand": 1,
+    "ControlAction": 1,
+    "ItemList": 4,
+    "FAQPage": 4,
+    "Question": 4,
+    "Answer": 4,
+    "Service": 3,
+    "City": 2,
+    "VideoObject": 1,
+    "SearchAction": 3,
+    "EntryPoint": 3,
+    "GeoCoordinates": 1,
+    "OpeningHoursSpecification": 1,
+    "ImageObject": 3,
+    "ListItem": 3,
+    "TechArticle": 1,
+    "DigitalDocument": 1,
+    "CreativeWork": 2,
+    "Blog": 1,
+    "EducationalOccupationalCredential": 5,
+    "SoftwareApplication": 3,
+    "Article": 1,
+    "WebApplication": 1,
+    "BreadcrumbList": 1,
+    "ContactPage": 1
+   }
+  },
+  "rendered": {
+   "verdicts": {
+    "none": 58,
+    "plausible": 41,
+    "suspect": 1
+   },
+   "hasAny": {
+    "n": 42,
+    "of": 100,
+    "pct": 42
+   },
+   "types": {
+    "ProfilePage": 13,
+    "Person": 41,
+    "Organization": 24,
+    "Place": 9,
+    "PostalAddress": 18,
+    "Occupation": 7,
+    "WebSite": 22,
+    "ProfessionalService": 4,
+    "ContactPoint": 5,
+    "CollegeOrUniversity": 9,
+    "SiteNavigationElement": 2,
+    "WebPage": 6,
+    "EducationalOrganization": 6,
+    "SoftwareSourceCode": 3,
+    "Author": 1,
+    "Country": 3,
+    "Demand": 1,
+    "ControlAction": 1,
+    "ItemList": 4,
+    "FAQPage": 4,
+    "Question": 4,
+    "Answer": 4,
+    "Service": 3,
+    "City": 3,
+    "VideoObject": 1,
+    "SearchAction": 3,
+    "EntryPoint": 3,
+    "GeoCoordinates": 1,
+    "OpeningHoursSpecification": 1,
+    "ImageObject": 4,
+    "ListItem": 3,
+    "TechArticle": 1,
+    "DigitalDocument": 1,
+    "CreativeWork": 2,
+    "Blog": 1,
+    "EducationalOccupationalCredential": 5,
+    "SoftwareApplication": 3,
+    "Article": 1,
+    "WebApplication": 1,
+    "BreadcrumbList": 1,
+    "ContactPage": 1
+   }
+  }
+ },
+ "fonts": {
+  "meaningfulFamilies": {
+   "1": 45,
+   "2": 36,
+   "3": 16,
+   "4": 2,
+   "5": 1
+  },
+  "moreThan3AllText": {
+   "n": 3,
+   "of": 100,
+   "pct": 3
+  },
+  "moreThan3Body": {
+   "n": 0,
+   "of": 100,
+   "pct": 0
+  },
+  "moreThan2Body": {
+   "n": 5,
+   "of": 100,
+   "pct": 5
+  },
+  "decorativeBody": {
+   "n": 0,
+   "of": 100,
+   "pct": 0
+  },
+  "inappropriate": {
+   "n": 0,
+   "of": 100,
+   "pct": 0
+  },
+  "systemOnly": {
+   "n": 22,
+   "of": 100,
+   "pct": 22
+  },
+  "topFamilies": [
+   [
+    "system sans",
+    25
+   ],
+   [
+    "Inter",
+    18
+   ],
+   [
+    "system mono",
+    15
+   ],
+   [
+    "Poppins",
+    8
+   ],
+   [
+    "Geist",
+    8
+   ],
+   [
+    "JetBrains Mono",
+    8
+   ],
+   [
+    "Geist Mono",
+    4
+   ],
+   [
+    "GeistSans",
+    4
+   ],
+   [
+    "Space Grotesk",
+    4
+   ],
+   [
+    "Bricolage Grotesque",
+    3
+   ],
+   [
+    "Instrument Serif",
+    3
+   ],
+   [
+    "Lato",
+    3
+   ],
+   [
+    "Raleway",
+    3
+   ],
+   [
+    "Playfair Display",
+    3
+   ],
+   [
+    "Fira Code",
+    3
+   ]
+  ]
+ },
+ "crawl": {
+  "noRobots": {
+   "n": 45,
+   "of": 100,
+   "pct": 45
+  },
+  "robotsHtmlFallback": {
+   "n": 6,
+   "of": 100,
+   "pct": 6
+  },
+  "robotsBlocksAll": {
+   "n": 0,
+   "of": 100,
+   "pct": 0
+  },
+  "noSitemap": {
+   "n": 52,
+   "of": 100,
+   "pct": 52
+  },
+  "sitemapListedInRobots": {
+   "n": 44,
+   "of": 100,
+   "pct": 44
+  }
+ },
+ "analytics": {
+  "any": {
+   "n": 47,
+   "of": 100,
+   "pct": 47
+  },
+  "none": {
+   "n": 53,
+   "of": 100,
+   "pct": 53
+  },
+  "byTool": [
+   [
+    "Google Analytics",
+    22
+   ],
+   [
+    "Cloudflare Web Analytics",
+    18
+   ],
+   [
+    "Vercel Analytics",
+    13
+   ],
+   [
+    "Google Tag Manager",
+    7
+   ],
+   [
+    "Vercel Speed Insights",
+    6
+   ],
+   [
+    "PostHog",
+    3
+   ],
+   [
+    "Umami",
+    3
+   ],
+   [
+    "Sentry",
+    2
+   ],
+   [
+    "Plausible",
+    1
+   ],
+   [
+    "GoatCounter",
+    1
+   ]
+  ]
+ },
+ "basics": {
+  "noFavicon": {
+   "n": 7,
+   "of": 99,
+   "pct": 7
+  },
+  "noLang": {
+   "n": 4,
+   "of": 99,
+   "pct": 4
+  },
+  "noViewport": {
+   "n": 0,
+   "of": 99,
+   "pct": 0
+  },
+  "notHttps": {
+   "n": 2,
+   "of": 99,
+   "pct": 2
+  },
+  "mixedContent": {
+   "n": 1,
+   "of": 99,
+   "pct": 1
+  }
+ }
+}

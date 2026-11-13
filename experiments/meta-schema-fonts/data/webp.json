@@ -1,0 +1,1608 @@
+{
+ "summary": {
+  "all": {
+   "shots": 40,
+   "jpegTotal": 2182551,
+   "chromiumJpegTotal": 2213710,
+   "webpMatchedTotal": 862686,
+   "totalSaving": 0.605,
+   "medianSaving": 0.6025,
+   "medianMatchedQuality": 35,
+   "ssimOnlyTotalSaving": 0.657,
+   "ssimOnlyMedianQuality": 22.5,
+   "webp75TotalSaving": 0.438,
+   "webp80TotalSaving": 0.345,
+   "webp80BeatsJpegOnBoth": 39
+  },
+  "hero": {
+   "shots": 20,
+   "jpegTotal": 1486885,
+   "chromiumJpegTotal": 1507887,
+   "webpMatchedTotal": 572198,
+   "totalSaving": 0.615,
+   "medianSaving": 0.6145,
+   "medianMatchedQuality": 37.5,
+   "ssimOnlyTotalSaving": 0.658,
+   "ssimOnlyMedianQuality": 26.5,
+   "webp75TotalSaving": 0.46,
+   "webp80TotalSaving": 0.368,
+   "webp80BeatsJpegOnBoth": 19
+  },
+  "mobile": {
+   "shots": 20,
+   "jpegTotal": 695666,
+   "chromiumJpegTotal": 705823,
+   "webpMatchedTotal": 290488,
+   "totalSaving": 0.582,
+   "medianSaving": 0.591,
+   "medianMatchedQuality": 33.5,
+   "ssimOnlyTotalSaving": 0.654,
+   "ssimOnlyMedianQuality": 18.5,
+   "webp75TotalSaving": 0.393,
+   "webp80TotalSaving": 0.298,
+   "webp80BeatsJpegOnBoth": 20
+  }
+ },
+ "rows": [
+  {
+   "shot": "0dbb98e849be-hero",
+   "view": "hero",
+   "jpegBytes": 33442,
+   "jpeg": {
+    "ssim": 0.920211,
+    "psnr": 25.193654
+   },
+   "sharpJpegBytes": 22994,
+   "sharpJpeg": {
+    "ssim": 0.996349,
+    "psnr": 52.905322
+   },
+   "matchedWebp": {
+    "q": 84,
+    "bytes": 7004,
+    "ssim": 0.996439,
+    "psnr": 53.944603
+   },
+   "ssimOnlyWebp": {
+    "q": 84,
+    "bytes": 7004,
+    "ssim": 0.996439,
+    "psnr": 53.944603
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 5226,
+    "ssim": 0.99395,
+    "psnr": 51.618308
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 6034,
+    "ssim": 0.995299,
+    "psnr": 52.748962
+   },
+   "savingMatched": 0.695
+  },
+  {
+   "shot": "0dbb98e849be-mobile",
+   "view": "mobile",
+   "jpegBytes": 31906,
+   "jpeg": {
+    "ssim": 0.978847,
+    "psnr": 28.560234
+   },
+   "sharpJpegBytes": 31357,
+   "sharpJpeg": {
+    "ssim": 0.983842,
+    "psnr": 39.291822
+   },
+   "matchedWebp": {
+    "q": 32,
+    "bytes": 11790,
+    "ssim": 0.990122,
+    "psnr": 39.454057
+   },
+   "ssimOnlyWebp": {
+    "q": 15,
+    "bytes": 9512,
+    "ssim": 0.9839,
+    "psnr": 36.562358
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 16610,
+    "ssim": 0.994313,
+    "psnr": 44.283837
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 18790,
+    "ssim": 0.995134,
+    "psnr": 45.981001
+   },
+   "savingMatched": 0.624
+  },
+  {
+   "shot": "1d85fc7f130d-hero",
+   "view": "hero",
+   "jpegBytes": 82505,
+   "jpeg": {
+    "ssim": 0.983272,
+    "psnr": 40.722568
+   },
+   "sharpJpegBytes": 82013,
+   "sharpJpeg": {
+    "ssim": 0.983272,
+    "psnr": 40.722568
+   },
+   "matchedWebp": {
+    "q": 38,
+    "bytes": 36906,
+    "ssim": 0.985666,
+    "psnr": 40.865219
+   },
+   "ssimOnlyWebp": {
+    "q": 32,
+    "bytes": 33902,
+    "ssim": 0.984092,
+    "psnr": 40.074263
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 52534,
+    "ssim": 0.99135,
+    "psnr": 44.452444
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 59936,
+    "ssim": 0.993359,
+    "psnr": 46.051908
+   },
+   "savingMatched": 0.55
+  },
+  {
+   "shot": "1d85fc7f130d-mobile",
+   "view": "mobile",
+   "jpegBytes": 30544,
+   "jpeg": {
+    "ssim": 0.978533,
+    "psnr": 40.89859
+   },
+   "sharpJpegBytes": 30052,
+   "sharpJpeg": {
+    "ssim": 0.978533,
+    "psnr": 40.89859
+   },
+   "matchedWebp": {
+    "q": 76,
+    "bytes": 16998,
+    "ssim": 0.979521,
+    "psnr": 42.18631
+   },
+   "ssimOnlyWebp": {
+    "q": 76,
+    "bytes": 16998,
+    "ssim": 0.979521,
+    "psnr": 42.18631
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 16218,
+    "ssim": 0.978376,
+    "psnr": 41.897061
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 20038,
+    "ssim": 0.982656,
+    "psnr": 43.142293
+   },
+   "savingMatched": 0.434
+  },
+  {
+   "shot": "1f5c3d6763e6-hero",
+   "view": "hero",
+   "jpegBytes": 60216,
+   "jpeg": {
+    "ssim": 0.987702,
+    "psnr": 41.572459
+   },
+   "sharpJpegBytes": 59608,
+   "sharpJpeg": {
+    "ssim": 0.987897,
+    "psnr": 41.787558
+   },
+   "matchedWebp": {
+    "q": 41,
+    "bytes": 26810,
+    "ssim": 0.987897,
+    "psnr": 42.021046
+   },
+   "ssimOnlyWebp": {
+    "q": 41,
+    "bytes": 26810,
+    "ssim": 0.987897,
+    "psnr": 42.021046
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 37720,
+    "ssim": 0.992019,
+    "psnr": 45.02329
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 43322,
+    "ssim": 0.993888,
+    "psnr": 46.659222
+   },
+   "savingMatched": 0.55
+  },
+  {
+   "shot": "1f5c3d6763e6-mobile",
+   "view": "mobile",
+   "jpegBytes": 37291,
+   "jpeg": {
+    "ssim": 0.971647,
+    "psnr": 37.600946
+   },
+   "sharpJpegBytes": 36799,
+   "sharpJpeg": {
+    "ssim": 0.971647,
+    "psnr": 37.600946
+   },
+   "matchedWebp": {
+    "q": 35,
+    "bytes": 15266,
+    "ssim": 0.974213,
+    "psnr": 37.652545
+   },
+   "ssimOnlyWebp": {
+    "q": 32,
+    "bytes": 14356,
+    "ssim": 0.97174,
+    "psnr": 37.129781
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 23032,
+    "ssim": 0.987118,
+    "psnr": 41.643299
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 26852,
+    "ssim": 0.989933,
+    "psnr": 43.103784
+   },
+   "savingMatched": 0.585
+  },
+  {
+   "shot": "1fef5ea23ebe-hero",
+   "view": "hero",
+   "jpegBytes": 92316,
+   "jpeg": {
+    "ssim": 0.986625,
+    "psnr": 36.383309
+   },
+   "sharpJpegBytes": 90510,
+   "sharpJpeg": {
+    "ssim": 0.991268,
+    "psnr": 41.722759
+   },
+   "matchedWebp": {
+    "q": 45,
+    "bytes": 37184,
+    "ssim": 0.991769,
+    "psnr": 42.480282
+   },
+   "ssimOnlyWebp": {
+    "q": 45,
+    "bytes": 37184,
+    "ssim": 0.991769,
+    "psnr": 42.480282
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 47968,
+    "ssim": 0.994265,
+    "psnr": 44.968544
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 55206,
+    "ssim": 0.996564,
+    "psnr": 47.055002
+   },
+   "savingMatched": 0.589
+  },
+  {
+   "shot": "1fef5ea23ebe-mobile",
+   "view": "mobile",
+   "jpegBytes": 40379,
+   "jpeg": {
+    "ssim": 0.98322,
+    "psnr": 39.057846
+   },
+   "sharpJpegBytes": 39906,
+   "sharpJpeg": {
+    "ssim": 0.983207,
+    "psnr": 39.060541
+   },
+   "matchedWebp": {
+    "q": 41,
+    "bytes": 17364,
+    "ssim": 0.983526,
+    "psnr": 39.63044
+   },
+   "ssimOnlyWebp": {
+    "q": 41,
+    "bytes": 17364,
+    "ssim": 0.983526,
+    "psnr": 39.63044
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 23230,
+    "ssim": 0.98907,
+    "psnr": 42.735887
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 26516,
+    "ssim": 0.993301,
+    "psnr": 44.568204
+   },
+   "savingMatched": 0.565
+  },
+  {
+   "shot": "2b5d9d7eedc4-hero",
+   "view": "hero",
+   "jpegBytes": 71840,
+   "jpeg": {
+    "ssim": 0.9915,
+    "psnr": 43.125671
+   },
+   "sharpJpegBytes": 71348,
+   "sharpJpeg": {
+    "ssim": 0.9915,
+    "psnr": 43.125671
+   },
+   "matchedWebp": {
+    "q": 59,
+    "bytes": 33766,
+    "ssim": 0.991522,
+    "psnr": 43.669039
+   },
+   "ssimOnlyWebp": {
+    "q": 59,
+    "bytes": 33766,
+    "ssim": 0.991522,
+    "psnr": 43.669039
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 39666,
+    "ssim": 0.993561,
+    "psnr": 45.067139
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 46782,
+    "ssim": 0.995063,
+    "psnr": 46.463018
+   },
+   "savingMatched": 0.527
+  },
+  {
+   "shot": "2b5d9d7eedc4-mobile",
+   "view": "mobile",
+   "jpegBytes": 11905,
+   "jpeg": {
+    "ssim": 0.98463,
+    "psnr": 44.432378
+   },
+   "sharpJpegBytes": 11417,
+   "sharpJpeg": {
+    "ssim": 0.984697,
+    "psnr": 44.53476
+   },
+   "matchedWebp": {
+    "q": 39,
+    "bytes": 4970,
+    "ssim": 0.996013,
+    "psnr": 44.627144
+   },
+   "ssimOnlyWebp": {
+    "q": 1,
+    "bytes": 2564,
+    "ssim": 0.987956,
+    "psnr": 37.162356
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 6466,
+    "ssim": 0.998022,
+    "psnr": 48.499688
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 7370,
+    "ssim": 0.998571,
+    "psnr": 50.358463
+   },
+   "savingMatched": 0.565
+  },
+  {
+   "shot": "3e12c2f88f88-hero",
+   "view": "hero",
+   "jpegBytes": 86404,
+   "jpeg": {
+    "ssim": 0.982045,
+    "psnr": 40.30758
+   },
+   "sharpJpegBytes": 85912,
+   "sharpJpeg": {
+    "ssim": 0.982045,
+    "psnr": 40.30758
+   },
+   "matchedWebp": {
+    "q": 35,
+    "bytes": 37220,
+    "ssim": 0.986871,
+    "psnr": 40.32295
+   },
+   "ssimOnlyWebp": {
+    "q": 22,
+    "bytes": 31338,
+    "ssim": 0.982057,
+    "psnr": 38.406365
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 54188,
+    "ssim": 0.993828,
+    "psnr": 44.75618
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 62400,
+    "ssim": 0.995756,
+    "psnr": 46.646959
+   },
+   "savingMatched": 0.567
+  },
+  {
+   "shot": "3e12c2f88f88-mobile",
+   "view": "mobile",
+   "jpegBytes": 28374,
+   "jpeg": {
+    "ssim": 0.979464,
+    "psnr": 39.42135
+   },
+   "sharpJpegBytes": 27882,
+   "sharpJpeg": {
+    "ssim": 0.979464,
+    "psnr": 39.42135
+   },
+   "matchedWebp": {
+    "q": 37,
+    "bytes": 12206,
+    "ssim": 0.983909,
+    "psnr": 39.559913
+   },
+   "ssimOnlyWebp": {
+    "q": 28,
+    "bytes": 10584,
+    "ssim": 0.979678,
+    "psnr": 38.258369
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 17674,
+    "ssim": 0.992024,
+    "psnr": 43.448861
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 20436,
+    "ssim": 0.99413,
+    "psnr": 45.115168
+   },
+   "savingMatched": 0.562
+  },
+  {
+   "shot": "6192e24878dc-hero",
+   "view": "hero",
+   "jpegBytes": 102234,
+   "jpeg": {
+    "ssim": 0.987594,
+    "psnr": 40.571011
+   },
+   "sharpJpegBytes": 101742,
+   "sharpJpeg": {
+    "ssim": 0.987594,
+    "psnr": 40.571011
+   },
+   "matchedWebp": {
+    "q": 43,
+    "bytes": 46664,
+    "ssim": 0.987793,
+    "psnr": 40.93293
+   },
+   "ssimOnlyWebp": {
+    "q": 43,
+    "bytes": 46664,
+    "ssim": 0.987793,
+    "psnr": 40.93293
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 61570,
+    "ssim": 0.992123,
+    "psnr": 44.204135
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 71454,
+    "ssim": 0.994043,
+    "psnr": 45.944768
+   },
+   "savingMatched": 0.541
+  },
+  {
+   "shot": "6192e24878dc-mobile",
+   "view": "mobile",
+   "jpegBytes": 51304,
+   "jpeg": {
+    "ssim": 0.974637,
+    "psnr": 36.521165
+   },
+   "sharpJpegBytes": 50812,
+   "sharpJpeg": {
+    "ssim": 0.974637,
+    "psnr": 36.521165
+   },
+   "matchedWebp": {
+    "q": 32,
+    "bytes": 23240,
+    "ssim": 0.984503,
+    "psnr": 36.723432
+   },
+   "ssimOnlyWebp": {
+    "q": 16,
+    "bytes": 18024,
+    "ssim": 0.975147,
+    "psnr": 33.8572
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 33456,
+    "ssim": 0.993141,
+    "psnr": 41.924164
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 37858,
+    "ssim": 0.994994,
+    "psnr": 43.879899
+   },
+   "savingMatched": 0.543
+  },
+  {
+   "shot": "6e63504a750f-hero",
+   "view": "hero",
+   "jpegBytes": 73960,
+   "jpeg": {
+    "ssim": 0.978342,
+    "psnr": 37.324967
+   },
+   "sharpJpegBytes": 73471,
+   "sharpJpeg": {
+    "ssim": 0.983329,
+    "psnr": 40.661106
+   },
+   "matchedWebp": {
+    "q": 31,
+    "bytes": 24736,
+    "ssim": 0.986398,
+    "psnr": 40.684496
+   },
+   "ssimOnlyWebp": {
+    "q": 22,
+    "bytes": 21718,
+    "ssim": 0.983362,
+    "psnr": 39.405376
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 38676,
+    "ssim": 0.992607,
+    "psnr": 45.416612
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 44906,
+    "ssim": 0.993826,
+    "psnr": 46.904501
+   },
+   "savingMatched": 0.663
+  },
+  {
+   "shot": "6e63504a750f-mobile",
+   "view": "mobile",
+   "jpegBytes": 30720,
+   "jpeg": {
+    "ssim": 0.966059,
+    "psnr": 36.978469
+   },
+   "sharpJpegBytes": 30300,
+   "sharpJpeg": {
+    "ssim": 0.9688,
+    "psnr": 37.603474
+   },
+   "matchedWebp": {
+    "q": 29,
+    "bytes": 10932,
+    "ssim": 0.973177,
+    "psnr": 37.605763
+   },
+   "ssimOnlyWebp": {
+    "q": 24,
+    "bytes": 10138,
+    "ssim": 0.969713,
+    "psnr": 36.924879
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 17890,
+    "ssim": 0.988575,
+    "psnr": 42.756199
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 20502,
+    "ssim": 0.991025,
+    "psnr": 44.322597
+   },
+   "savingMatched": 0.639
+  },
+  {
+   "shot": "7b0cfd44178d-hero",
+   "view": "hero",
+   "jpegBytes": 98853,
+   "jpeg": {
+    "ssim": 0.983625,
+    "psnr": 40.133666
+   },
+   "sharpJpegBytes": 98371,
+   "sharpJpeg": {
+    "ssim": 0.984702,
+    "psnr": 40.24105
+   },
+   "matchedWebp": {
+    "q": 32,
+    "bytes": 35250,
+    "ssim": 0.986744,
+    "psnr": 40.342021
+   },
+   "ssimOnlyWebp": {
+    "q": 26,
+    "bytes": 32826,
+    "ssim": 0.985372,
+    "psnr": 39.447083
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 51096,
+    "ssim": 0.991589,
+    "psnr": 44.718651
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 57776,
+    "ssim": 0.99336,
+    "psnr": 46.141175
+   },
+   "savingMatched": 0.642
+  },
+  {
+   "shot": "7b0cfd44178d-mobile",
+   "view": "mobile",
+   "jpegBytes": 46991,
+   "jpeg": {
+    "ssim": 0.973777,
+    "psnr": 36.94776
+   },
+   "sharpJpegBytes": 46478,
+   "sharpJpeg": {
+    "ssim": 0.973809,
+    "psnr": 36.949401
+   },
+   "matchedWebp": {
+    "q": 27,
+    "bytes": 18712,
+    "ssim": 0.981953,
+    "psnr": 37.211675
+   },
+   "ssimOnlyWebp": {
+    "q": 13,
+    "bytes": 15194,
+    "ssim": 0.974426,
+    "psnr": 34.391424
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 27738,
+    "ssim": 0.991203,
+    "psnr": 42.689764
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 30836,
+    "ssim": 0.992438,
+    "psnr": 44.31517
+   },
+   "savingMatched": 0.597
+  },
+  {
+   "shot": "7cd8dfe50a22-hero",
+   "view": "hero",
+   "jpegBytes": 74233,
+   "jpeg": {
+    "ssim": 0.980523,
+    "psnr": 42.933467
+   },
+   "sharpJpegBytes": 73829,
+   "sharpJpeg": {
+    "ssim": 0.980693,
+    "psnr": 43.225654
+   },
+   "matchedWebp": {
+    "q": 39,
+    "bytes": 27092,
+    "ssim": 0.996138,
+    "psnr": 43.455864
+   },
+   "ssimOnlyWebp": {
+    "q": 1,
+    "bytes": 13948,
+    "ssim": 0.982724,
+    "psnr": 35.238736
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 34796,
+    "ssim": 0.99787,
+    "psnr": 47.378134
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 38704,
+    "ssim": 0.998248,
+    "psnr": 49.09186
+   },
+   "savingMatched": 0.633
+  },
+  {
+   "shot": "7cd8dfe50a22-mobile",
+   "view": "mobile",
+   "jpegBytes": 37277,
+   "jpeg": {
+    "ssim": 0.954042,
+    "psnr": 39.40129
+   },
+   "sharpJpegBytes": 36738,
+   "sharpJpeg": {
+    "ssim": 0.954249,
+    "psnr": 39.439964
+   },
+   "matchedWebp": {
+    "q": 35,
+    "bytes": 14678,
+    "ssim": 0.991003,
+    "psnr": 39.570401
+   },
+   "ssimOnlyWebp": {
+    "q": 1,
+    "bytes": 7076,
+    "ssim": 0.964772,
+    "psnr": 32.014525
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 19856,
+    "ssim": 0.994797,
+    "psnr": 43.795659
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 22176,
+    "ssim": 0.997219,
+    "psnr": 46.053836
+   },
+   "savingMatched": 0.6
+  },
+  {
+   "shot": "8273192ac465-hero",
+   "view": "hero",
+   "jpegBytes": 56560,
+   "jpeg": {
+    "ssim": 0.983003,
+    "psnr": 43.00564
+   },
+   "sharpJpegBytes": 56068,
+   "sharpJpeg": {
+    "ssim": 0.983003,
+    "psnr": 43.00564
+   },
+   "matchedWebp": {
+    "q": 34,
+    "bytes": 16520,
+    "ssim": 0.984361,
+    "psnr": 43.137642
+   },
+   "ssimOnlyWebp": {
+    "q": 27,
+    "bytes": 15138,
+    "ssim": 0.983056,
+    "psnr": 42.205961
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 23342,
+    "ssim": 0.988375,
+    "psnr": 46.378198
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 26938,
+    "ssim": 0.989409,
+    "psnr": 47.454602
+   },
+   "savingMatched": 0.705
+  },
+  {
+   "shot": "8273192ac465-mobile",
+   "view": "mobile",
+   "jpegBytes": 24821,
+   "jpeg": {
+    "ssim": 0.975112,
+    "psnr": 39.602816
+   },
+   "sharpJpegBytes": 24329,
+   "sharpJpeg": {
+    "ssim": 0.975112,
+    "psnr": 39.602816
+   },
+   "matchedWebp": {
+    "q": 31,
+    "bytes": 8788,
+    "ssim": 0.979831,
+    "psnr": 39.657349
+   },
+   "ssimOnlyWebp": {
+    "q": 19,
+    "bytes": 7570,
+    "ssim": 0.975422,
+    "psnr": 37.864426
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 13174,
+    "ssim": 0.987088,
+    "psnr": 44.24446
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 15102,
+    "ssim": 0.989079,
+    "psnr": 45.733395
+   },
+   "savingMatched": 0.639
+  },
+  {
+   "shot": "8b480bcde16a-hero",
+   "view": "hero",
+   "jpegBytes": 66173,
+   "jpeg": {
+    "ssim": 0.983789,
+    "psnr": 42.932453
+   },
+   "sharpJpegBytes": 65681,
+   "sharpJpeg": {
+    "ssim": 0.983789,
+    "psnr": 42.932453
+   },
+   "matchedWebp": {
+    "q": 33,
+    "bytes": 17000,
+    "ssim": 0.987223,
+    "psnr": 42.957683
+   },
+   "ssimOnlyWebp": {
+    "q": 14,
+    "bytes": 13230,
+    "ssim": 0.983804,
+    "psnr": 40.079569
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 23914,
+    "ssim": 0.988962,
+    "psnr": 46.622273
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 26920,
+    "ssim": 0.989313,
+    "psnr": 47.551911
+   },
+   "savingMatched": 0.741
+  },
+  {
+   "shot": "8b480bcde16a-mobile",
+   "view": "mobile",
+   "jpegBytes": 36072,
+   "jpeg": {
+    "ssim": 0.975794,
+    "psnr": 38.420889
+   },
+   "sharpJpegBytes": 35580,
+   "sharpJpeg": {
+    "ssim": 0.975794,
+    "psnr": 38.420889
+   },
+   "matchedWebp": {
+    "q": 31,
+    "bytes": 13552,
+    "ssim": 0.984262,
+    "psnr": 38.475766
+   },
+   "ssimOnlyWebp": {
+    "q": 15,
+    "bytes": 10712,
+    "ssim": 0.976587,
+    "psnr": 35.744957
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 19438,
+    "ssim": 0.989164,
+    "psnr": 43.435489
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 21746,
+    "ssim": 0.98996,
+    "psnr": 44.836515
+   },
+   "savingMatched": 0.619
+  },
+  {
+   "shot": "8eaf0f45a677-hero",
+   "view": "hero",
+   "jpegBytes": 103557,
+   "jpeg": {
+    "ssim": 0.977394,
+    "psnr": 38.791692
+   },
+   "sharpJpegBytes": 103065,
+   "sharpJpeg": {
+    "ssim": 0.977394,
+    "psnr": 38.791692
+   },
+   "matchedWebp": {
+    "q": 31,
+    "bytes": 43000,
+    "ssim": 0.983478,
+    "psnr": 38.80975
+   },
+   "ssimOnlyWebp": {
+    "q": 18,
+    "bytes": 36004,
+    "ssim": 0.977548,
+    "psnr": 36.707406
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 64974,
+    "ssim": 0.992489,
+    "psnr": 43.7019
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 74936,
+    "ssim": 0.994912,
+    "psnr": 45.558126
+   },
+   "savingMatched": 0.583
+  },
+  {
+   "shot": "8eaf0f45a677-mobile",
+   "view": "mobile",
+   "jpegBytes": 40492,
+   "jpeg": {
+    "ssim": 0.960422,
+    "psnr": 36.845062
+   },
+   "sharpJpegBytes": 40000,
+   "sharpJpeg": {
+    "ssim": 0.960422,
+    "psnr": 36.845062
+   },
+   "matchedWebp": {
+    "q": 32,
+    "bytes": 17082,
+    "ssim": 0.971563,
+    "psnr": 37.000238
+   },
+   "ssimOnlyWebp": {
+    "q": 17,
+    "bytes": 13650,
+    "ssim": 0.960532,
+    "psnr": 34.694688
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 26132,
+    "ssim": 0.986192,
+    "psnr": 41.815316
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 29890,
+    "ssim": 0.990392,
+    "psnr": 43.588226
+   },
+   "savingMatched": 0.573
+  },
+  {
+   "shot": "ab47143230b3-hero",
+   "view": "hero",
+   "jpegBytes": 24892,
+   "jpeg": {
+    "ssim": 0.997302,
+    "psnr": 44.690879
+   },
+   "sharpJpegBytes": 24302,
+   "sharpJpeg": {
+    "ssim": 0.997757,
+    "psnr": 47.772092
+   },
+   "matchedWebp": {
+    "q": 37,
+    "bytes": 8374,
+    "ssim": 0.998763,
+    "psnr": 47.791894
+   },
+   "ssimOnlyWebp": {
+    "q": 21,
+    "bytes": 7592,
+    "ssim": 0.998013,
+    "psnr": 44.999292
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 10638,
+    "ssim": 0.999224,
+    "psnr": 51.119274
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 11818,
+    "ssim": 0.999403,
+    "psnr": 52.341383
+   },
+   "savingMatched": 0.655
+  },
+  {
+   "shot": "ab47143230b3-mobile",
+   "view": "mobile",
+   "jpegBytes": 9398,
+   "jpeg": {
+    "ssim": 0.992179,
+    "psnr": 34.131276
+   },
+   "sharpJpegBytes": 8742,
+   "sharpJpeg": {
+    "ssim": 0.997659,
+    "psnr": 45.959068
+   },
+   "matchedWebp": {
+    "q": 36,
+    "bytes": 3290,
+    "ssim": 0.997737,
+    "psnr": 45.988841
+   },
+   "ssimOnlyWebp": {
+    "q": 35,
+    "bytes": 3254,
+    "ssim": 0.997663,
+    "psnr": 45.839949
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 4346,
+    "ssim": 0.998611,
+    "psnr": 49.74778
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 4872,
+    "ssim": 0.99899,
+    "psnr": 51.092958
+   },
+   "savingMatched": 0.624
+  },
+  {
+   "shot": "b40d5d92fa0b-hero",
+   "view": "hero",
+   "jpegBytes": 60139,
+   "jpeg": {
+    "ssim": 0.990036,
+    "psnr": 42.361127
+   },
+   "sharpJpegBytes": 59647,
+   "sharpJpeg": {
+    "ssim": 0.990036,
+    "psnr": 42.361127
+   },
+   "matchedWebp": {
+    "q": 34,
+    "bytes": 22614,
+    "ssim": 0.990678,
+    "psnr": 42.435837
+   },
+   "ssimOnlyWebp": {
+    "q": 31,
+    "bytes": 21882,
+    "ssim": 0.990208,
+    "psnr": 42.062999
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 32672,
+    "ssim": 0.995867,
+    "psnr": 47.060322
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 36832,
+    "ssim": 0.997024,
+    "psnr": 48.679721
+   },
+   "savingMatched": 0.621
+  },
+  {
+   "shot": "b40d5d92fa0b-mobile",
+   "view": "mobile",
+   "jpegBytes": 34354,
+   "jpeg": {
+    "ssim": 0.970629,
+    "psnr": 37.800337
+   },
+   "sharpJpegBytes": 33862,
+   "sharpJpeg": {
+    "ssim": 0.970629,
+    "psnr": 37.800337
+   },
+   "matchedWebp": {
+    "q": 29,
+    "bytes": 13106,
+    "ssim": 0.977334,
+    "psnr": 37.809686
+   },
+   "ssimOnlyWebp": {
+    "q": 18,
+    "bytes": 11198,
+    "ssim": 0.970998,
+    "psnr": 36.202078
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 20448,
+    "ssim": 0.991121,
+    "psnr": 43.219676
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 23174,
+    "ssim": 0.993521,
+    "psnr": 44.786671
+   },
+   "savingMatched": 0.613
+  },
+  {
+   "shot": "ba29029ce26b-hero",
+   "view": "hero",
+   "jpegBytes": 126383,
+   "jpeg": {
+    "ssim": 0.965629,
+    "psnr": 37.365432
+   },
+   "sharpJpegBytes": 125938,
+   "sharpJpeg": {
+    "ssim": 0.966135,
+    "psnr": 37.59095
+   },
+   "matchedWebp": {
+    "q": 30,
+    "bytes": 50936,
+    "ssim": 0.976728,
+    "psnr": 37.640847
+   },
+   "ssimOnlyWebp": {
+    "q": 12,
+    "bytes": 39234,
+    "ssim": 0.966278,
+    "psnr": 34.740676
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 79312,
+    "ssim": 0.989414,
+    "psnr": 42.902215
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 91580,
+    "ssim": 0.992138,
+    "psnr": 44.66337
+   },
+   "savingMatched": 0.596
+  },
+  {
+   "shot": "ba29029ce26b-mobile",
+   "view": "mobile",
+   "jpegBytes": 69518,
+   "jpeg": {
+    "ssim": 0.926723,
+    "psnr": 34.009615
+   },
+   "sharpJpegBytes": 69026,
+   "sharpJpeg": {
+    "ssim": 0.926723,
+    "psnr": 34.009615
+   },
+   "matchedWebp": {
+    "q": 27,
+    "bytes": 32546,
+    "ssim": 0.947464,
+    "psnr": 34.172253
+   },
+   "ssimOnlyWebp": {
+    "q": 12,
+    "bytes": 25338,
+    "ssim": 0.926898,
+    "psnr": 31.570797
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 50960,
+    "ssim": 0.978057,
+    "psnr": 39.702641
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 58112,
+    "ssim": 0.98381,
+    "psnr": 41.493166
+   },
+   "savingMatched": 0.528
+  },
+  {
+   "shot": "c9420845db8a-hero",
+   "view": "hero",
+   "jpegBytes": 71720,
+   "jpeg": {
+    "ssim": 0.983427,
+    "psnr": 38.957357
+   },
+   "sharpJpegBytes": 71392,
+   "sharpJpeg": {
+    "ssim": 0.984245,
+    "psnr": 40.967459
+   },
+   "matchedWebp": {
+    "q": 31,
+    "bytes": 26634,
+    "ssim": 0.988171,
+    "psnr": 41.054057
+   },
+   "ssimOnlyWebp": {
+    "q": 16,
+    "bytes": 21422,
+    "ssim": 0.984309,
+    "psnr": 38.647599
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 37932,
+    "ssim": 0.991823,
+    "psnr": 45.931124
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 42180,
+    "ssim": 0.992307,
+    "psnr": 47.254884
+   },
+   "savingMatched": 0.627
+  },
+  {
+   "shot": "c9420845db8a-mobile",
+   "view": "mobile",
+   "jpegBytes": 36450,
+   "jpeg": {
+    "ssim": 0.975753,
+    "psnr": 37.565141
+   },
+   "sharpJpegBytes": 35950,
+   "sharpJpeg": {
+    "ssim": 0.975787,
+    "psnr": 37.581023
+   },
+   "matchedWebp": {
+    "q": 27,
+    "bytes": 14196,
+    "ssim": 0.9838,
+    "psnr": 37.597619
+   },
+   "ssimOnlyWebp": {
+    "q": 12,
+    "bytes": 11024,
+    "ssim": 0.976505,
+    "psnr": 34.792001
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 21038,
+    "ssim": 0.991593,
+    "psnr": 43.53542
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 23626,
+    "ssim": 0.992502,
+    "psnr": 45.29107
+   },
+   "savingMatched": 0.605
+  },
+  {
+   "shot": "d7c6ac96d36d-hero",
+   "view": "hero",
+   "jpegBytes": 35644,
+   "jpeg": {
+    "ssim": 0.998424,
+    "psnr": 46.46024
+   },
+   "sharpJpegBytes": 35134,
+   "sharpJpeg": {
+    "ssim": 0.998427,
+    "psnr": 46.460792
+   },
+   "matchedWebp": {
+    "q": 39,
+    "bytes": 13762,
+    "ssim": 0.998946,
+    "psnr": 46.478562
+   },
+   "ssimOnlyWebp": {
+    "q": 31,
+    "bytes": 12596,
+    "ssim": 0.998516,
+    "psnr": 45.14503
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 17380,
+    "ssim": 0.999553,
+    "psnr": 50.691123
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 19292,
+    "ssim": 0.999703,
+    "psnr": 52.785646
+   },
+   "savingMatched": 0.608
+  },
+  {
+   "shot": "d7c6ac96d36d-mobile",
+   "view": "mobile",
+   "jpegBytes": 26327,
+   "jpeg": {
+    "ssim": 0.993461,
+    "psnr": 40.708192
+   },
+   "sharpJpegBytes": 25820,
+   "sharpJpeg": {
+    "ssim": 0.993493,
+    "psnr": 40.745985
+   },
+   "matchedWebp": {
+    "q": 37,
+    "bytes": 11042,
+    "ssim": 0.995655,
+    "psnr": 40.89422
+   },
+   "ssimOnlyWebp": {
+    "q": 25,
+    "bytes": 9438,
+    "ssim": 0.993552,
+    "psnr": 38.874653
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 14754,
+    "ssim": 0.998264,
+    "psnr": 45.341749
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 16424,
+    "ssim": 0.998808,
+    "psnr": 47.274586
+   },
+   "savingMatched": 0.572
+  },
+  {
+   "shot": "dc44b4103d4f-hero",
+   "view": "hero",
+   "jpegBytes": 55603,
+   "jpeg": {
+    "ssim": 0.991648,
+    "psnr": 43.536447
+   },
+   "sharpJpegBytes": 55139,
+   "sharpJpeg": {
+    "ssim": 0.991649,
+    "psnr": 43.538419
+   },
+   "matchedWebp": {
+    "q": 39,
+    "bytes": 21728,
+    "ssim": 0.994392,
+    "psnr": 43.643845
+   },
+   "ssimOnlyWebp": {
+    "q": 22,
+    "bytes": 17618,
+    "ssim": 0.991887,
+    "psnr": 40.625105
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 28958,
+    "ssim": 0.996632,
+    "psnr": 47.064291
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 33484,
+    "ssim": 0.997717,
+    "psnr": 48.66206
+   },
+   "savingMatched": 0.606
+  },
+  {
+   "shot": "dc44b4103d4f-mobile",
+   "view": "mobile",
+   "jpegBytes": 27918,
+   "jpeg": {
+    "ssim": 0.978914,
+    "psnr": 36.7967
+   },
+   "sharpJpegBytes": 27326,
+   "sharpJpeg": {
+    "ssim": 0.981367,
+    "psnr": 39.827222
+   },
+   "matchedWebp": {
+    "q": 37,
+    "bytes": 11614,
+    "ssim": 0.986699,
+    "psnr": 39.830762
+   },
+   "ssimOnlyWebp": {
+    "q": 23,
+    "bytes": 9440,
+    "ssim": 0.982002,
+    "psnr": 37.628826
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 16278,
+    "ssim": 0.9929,
+    "psnr": 43.894898
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 18862,
+    "ssim": 0.994847,
+    "psnr": 45.659128
+   },
+   "savingMatched": 0.575
+  },
+  {
+   "shot": "e28104d6982f-hero",
+   "view": "hero",
+   "jpegBytes": 131213,
+   "jpeg": {
+    "ssim": 0.926256,
+    "psnr": 38.328635
+   },
+   "sharpJpegBytes": 130721,
+   "sharpJpeg": {
+    "ssim": 0.926256,
+    "psnr": 38.328635
+   },
+   "matchedWebp": {
+    "q": 57,
+    "bytes": 38998,
+    "ssim": 0.926353,
+    "psnr": 39.258187
+   },
+   "ssimOnlyWebp": {
+    "q": 57,
+    "bytes": 38998,
+    "ssim": 0.926353,
+    "psnr": 39.258187
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 60792,
+    "ssim": 0.934188,
+    "psnr": 40.147834
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 89878,
+    "ssim": 0.942561,
+    "psnr": 40.997695
+   },
+   "savingMatched": 0.702
+  },
+  {
+   "shot": "e28104d6982f-mobile",
+   "view": "mobile",
+   "jpegBytes": 53782,
+   "jpeg": {
+    "ssim": 0.919421,
+    "psnr": 36.162942
+   },
+   "sharpJpegBytes": 53290,
+   "sharpJpeg": {
+    "ssim": 0.919421,
+    "psnr": 36.162942
+   },
+   "matchedWebp": {
+    "q": 36,
+    "bytes": 19116,
+    "ssim": 0.923651,
+    "psnr": 36.221897
+   },
+   "ssimOnlyWebp": {
+    "q": 29,
+    "bytes": 17100,
+    "ssim": 0.919843,
+    "psnr": 35.410866
+   },
+   "webp75": {
+    "q": 75,
+    "bytes": 33768,
+    "ssim": 0.942224,
+    "psnr": 39.102438
+   },
+   "webp80": {
+    "q": 80,
+    "bytes": 45440,
+    "ssim": 0.953243,
+    "psnr": 40.293426
+   },
+   "savingMatched": 0.641
+  }
+ ]
+}
