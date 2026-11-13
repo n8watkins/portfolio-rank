@@ -393,6 +393,8 @@ While `GRADER_ENABLED` is not `"true"` it returns before reading anything.
 ## Email sign-in
 
 Owner request of 2026-11-12: besides GitHub, anyone can sign in with an emailed one-time link; email accounts' votes count fully (owner decision: deal with fake accounts only if it actually happens).
+It has its own launch switch (decision D3): `EMAIL_SIGNIN_ENABLED` in wrangler.jsonc, `"false"` in production and `"true"` on staging, inlined at build time as `NEXT_PUBLIC_EMAIL_SIGNIN_ENABLED` ([lib/signin/flag.ts](lib/signin/flag.ts)).
+While it is off the sign-in dialog and Settings offer GitHub only, `/signin/email` and `POST /api/signin/email` answer 404, and the `email-link` provider is not registered, so nothing is sent.
 
 - **The request** (`POST /api/signin/email { email, turnstileToken?, callbackUrl? }`, [app/api/signin/email/route.ts](app/api/signin/email/route.ts)): this site's Origin, a plausible address, 10 attempts an hour and 30 a day per network (the IPv4 address or IPv6 /64), Turnstile (action `signin-email`, refused on the deployed Workers without the secret), then 3 links an hour and 6 a day per address; networks and addresses are kept only as keyed hashes in `rate_limits`.
   The answer is the same `{ sent: true }` for any address that gets that far, new or known; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited` with `retry-after`, 503 `email_unavailable`.
