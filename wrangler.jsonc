@@ -150,7 +150,9 @@
   // CachedPages entrypoint, so the public pages, sitemap, robots.txt and share image
   // cost no CPU time once cached, for visitors without PortfolioRank's own cookies.
   // The default entrypoint runs on every request and sends only those to CachedPages.
-  "cache": { "enabled": false },
+  // cross_version_cache: a deploy keeps the cached pages; the key carries a fingerprint
+  // of the static files instead, so new CSS or JavaScript still starts fresh.
+  "cache": { "enabled": false, "cross_version_cache": true },
   "exports": {
     "default": { "type": "worker", "cache": { "enabled": false } },
     "CachedPages": { "type": "worker", "cache": { "enabled": true } }
@@ -220,7 +222,7 @@
       // all call Gemini.
       "triggers": { "crons": [] },
       // The same edge cache as production (worker/edge-cache.ts).
-      "cache": { "enabled": false },
+      "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {
         "default": { "type": "worker", "cache": { "enabled": false } },
         "CachedPages": { "type": "worker", "cache": { "enabled": true } }

@@ -21,6 +21,7 @@
 // The instance id is "night-<Pacific date>", so a night runs at most once;
 // night_runs makes sure of it too. Nothing here calls Gemini outside the
 // batches, and every step is safe to run again.
+import { PROFILES_TAG } from "./edge-cache";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { db as database } from "../lib/db";
 import { budgetPlan, isNightStart, nightTimeline, pacificParts } from "../pipeline/budget.mjs";
@@ -227,6 +228,12 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         stages: summary.stages.map((x: { key: string; label: string; result: string }) => ({ key: x.key, label: x.label, result: x.result })),
         parked: summary.parked,
       };
+    });
+    // The night moved ranks and grades: every profile refreshes at its next visit
+    // (worker/edge-cache.ts keeps them a day). One purge for all of them.
+    await step.do("refresh cached profiles", ONCE_MORE, async () => {
+      const cached = (this.ctx as unknown as { exports?: { CachedPages?: { purgeTags(tags: string[]): Promise<boolean> } } }).exports?.CachedPages;
+      return cached ? await cached.purgeTags([PROFILES_TAG]).catch(() => false) : false;
     });
     await step.do("owner alerts", ONCE_MORE, async () => {
       const ctx = engine(this.env, runId);
