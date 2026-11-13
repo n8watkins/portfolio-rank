@@ -297,8 +297,9 @@
   "id": 43,
   "blind_id": "B033",
   "url": "https://red1-for-hek.vercel.app",
-  "label": "REAL",
-  "reason": "Personal portfolio (desktop shot mid-loader; phone shows photo and role)"
+  "label": "JUNK",
+  "reason": "Amended after the rule-hit audit: listed under another name (Aaabaad Al Aziz) but shows Redoyanul Haque's portfolio, a copy of redoyanulhaque.me. Blind label was REAL from the screenshot alone.",
+  "blind_label": "REAL"
  },
  {
   "id": 44,

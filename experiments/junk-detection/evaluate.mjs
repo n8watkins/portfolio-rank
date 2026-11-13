@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildDupIndex, classify } from "./rules.mjs";
+import { buildDupIndex, classify, recommend, urlNotPortfolio } from "./rules.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const all = JSON.parse(readFileSync(join(here, "local/all.json"), "utf8"));
@@ -51,7 +51,42 @@ const aiCheck = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"].map((m) => {
   return { model: m, n: g.length, wrong: g.filter((r) => r.label === "REAL").length, unsure: g.filter((r) => r.label === "UNSURE").length };
 });
 
+// Precision over every row in the DB that a rule flags (hit-labels.json, labelled from
+// screenshots after the rules ran). This is the number that matters for gating.
+const hitLabels = JSON.parse(readFileSync(join(here, "hit-labels.json"), "utf8"));
+const dbPrecision = [
+  ...["a", "b", "c", "d", "e"].map((k) => [`(${k})`, (h) => h.rules.includes(k)]),
+  ["(e) with the (f) guard", (h) => h.rules.includes("e") && !h.strong],
+  ["combined", (h) => /[abcd]/.test(h.rules) || (h.rules.includes("e") && !h.strong)],
+].map(([name, pred]) => {
+  const hits = hitLabels.filter(pred);
+  const junk = hits.filter((h) => h.label === "JUNK").length;
+  const real = hits.filter((h) => h.label === "REAL").length;
+  const unsure = hits.filter((h) => h.label === "UNSURE").length;
+  return { name, hits: hits.length, junk, real, unsure, precision: pct(junk, junk + real), falsePositives: hits.filter((h) => h.label === "REAL").map((h) => h.url) };
+});
+
+// Extra URL-only rule suggested by the sample's misses (tuned on this sample, so optimistic):
+// the listed URL is a code host repo, a link-in-bio service, or an admin/login path.
+const urlRule = (r) => urlNotPortfolio(r.url);
+const withUrl = [score("(u) URL is a repo, link hub or admin page", urlRule), score("combined plus (u)", (r) => r.junk || urlRule(r))];
+const urlDbHits = all.filter((r) => urlRule(r)).map((r) => r.url);
+
+// The recommended narrowed set, on the sample and over the whole DB.
+const rec = new Map(all.map((r) => [r.url, recommend(r, idx)]));
+const recSample = score("recommended (strict a, c, d plus u)", (r) => rec.get(r.url).junk);
+const hitLabel = new Map(hitLabels.map((h) => [h.url, h.label]));
+const sampleLabel = new Map(rows.map((r) => [r.url, r.label]));
+const recDb = all
+  .filter((r) => rec.get(r.url).junk || rec.get(r.url).review)
+  .map((r) => ({ url: r.url, action: rec.get(r.url).junk ? "junk" : "review", label: hitLabel.get(r.url) ?? sampleLabel.get(r.url) ?? "not labelled" }));
+
 const out = {
+  recSample,
+  recDb,
+  dbPrecision,
+  withUrl,
+  urlDbHits,
   counts: {
     sample: rows.length,
     labels: Object.fromEntries(["REAL", "JUNK", "UNSURE"].map((k) => [k, rows.filter((r) => r.label === k).length])),
@@ -81,6 +116,26 @@ const md = [
   "## Only rows with stored page text or facts",
   "",
   table(textOnly),
+  "",
+  "## Precision over every flagged row in the whole DB",
+  "",
+  "| Rule | Rows flagged | Junk | Real | Unsure | Precision |",
+  "|---|---|---|---|---|---|",
+  ...dbPrecision.map((p) => `| ${p.name} | ${p.hits} | ${p.junk} | ${p.real} | ${p.unsure} | ${p.precision} |`),
+  "",
+  "## Extra URL rule (tuned on this sample)",
+  "",
+  table(withUrl),
+  "",
+  `Rows in the whole DB the URL rule flags (${urlDbHits.length}): ${urlDbHits.join(", ")}`,
+  "",
+  "## Recommended narrowed set",
+  "",
+  table([recSample]),
+  "",
+  `Rows in the whole DB it acts on (${recDb.length}):`,
+  "",
+  ...recDb.map((r) => `- ${r.action}: ${r.url} (label: ${r.label})`),
   "",
   "## False positives (real sites called junk)",
   "",

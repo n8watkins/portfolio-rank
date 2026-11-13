@@ -84,6 +84,42 @@ function dupHit(row, idx) {
 
 const heading = (row) => `${row.name ?? ""}\n${String(row.page_text ?? "").slice(0, 300)}`;
 
+/**
+ * (u) Extra rule, not in the brief: the listed URL is a code-host repo or profile,
+ * a link-in-bio service, or an admin/login path. Added after the sample showed these misses.
+ */
+export function urlNotPortfolio(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false; // malformed URLs are a data problem, not a junk signal
+  }
+  const h = u.hostname.toLowerCase().replace(/^www\./, "");
+  if (/^(github\.com|gitlab\.com|linktr\.ee|bio\.link|beacons\.ai)$/.test(h)) return true;
+  return /\/(admin|login|wp-admin)(\/|$)/i.test(u.pathname);
+}
+
+// The narrowed rules this experiment recommends (see README): only the exact strings
+// that never hit a real site in the whole-DB audit.
+const TEMPLATE_STRICT = [/build your ai portfolio/i, /hey,? i'?m aaaa+by/i];
+const PLACEHOLDER_STRICT = [/\baaaa+by\b/i, /\bjohn doe\b/i, /\bjane doe\b/i];
+const PARKED_STRICT = [/\bhas expired and is parked\b/i, /\bdomain (name )?(is|may be) for sale\b/i, /\bbuy this domain\b/i, /\bmake an offer on this domain\b/i];
+
+/**
+ * Recommended gate. `junk` is safe to act on without AI; `review` (same text on
+ * another domain) needs a person or the AI to pick which copy is the original.
+ */
+export function recommend(row, dupIndex) {
+  const text = String(row.page_text ?? "");
+  const junk =
+    TEMPLATE_STRICT.some((re) => re.test(text)) ||
+    PLACEHOLDER_STRICT.some((re) => re.test(heading(row))) ||
+    PARKED_STRICT.some((re) => re.test(text)) ||
+    urlNotPortfolio(row.url);
+  return { junk, review: !junk && dupHit(row, dupIndex) };
+}
+
 /** Runs every rule on one row. Returns { a, b, c, d, e, strong, junk, evaluable }. */
 export function classify(row, dupIndex) {
   const text = String(row.page_text ?? "");

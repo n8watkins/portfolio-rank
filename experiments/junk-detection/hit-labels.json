@@ -1,0 +1,317 @@
+[
+ {
+  "url": "https://aaabadcode.com",
+  "rules": "ac",
+  "strong": true,
+  "label": "JUNK",
+  "reason": "Unedited Fastfolio \"AI portfolio\" template: \"Hey, I'm Aaaaby\", Toukoum demo"
+ },
+ {
+  "url": "https://www.abhisheksah.dev",
+  "rules": "a",
+  "strong": false,
+  "label": "JUNK",
+  "reason": "Domain hijacked by a gambling spam site (slot gacor)"
+ },
+ {
+  "url": "https://adittya.site",
+  "rules": "d",
+  "strong": false,
+  "label": "JUNK",
+  "reason": "Parked: GoDaddy expired-domain page"
+ },
+ {
+  "url": "https://ross.aleksei.digital/98?ref=emmabostian",
+  "rules": "e",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Windows 95 desktop style portfolio with CV, projects, contact icons"
+ },
+ {
+  "url": "https://alisaleem252.com",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Ali Saleem's WordPress developer portfolio (ThemeForest marker in HTML only)"
+ },
+ {
+  "url": "https://amit-sah.com.np",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio behind a \"play\" intro, photo and roles visible"
+ },
+ {
+  "url": "https://thecodehead.com",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Desktop capture hit an app error; phone capture shows the portfolio"
+ },
+ {
+  "url": "https://www.bobmatyas.com",
+  "rules": "e",
+  "strong": false,
+  "label": "UNSURE",
+  "reason": "Capture shows only a bot check, nothing of the site"
+ },
+ {
+  "url": "https://chaitanya-sai-meka.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Gated intro (\"Enter? tap to continue\"); gated intros count as real"
+ },
+ {
+  "url": "https://www.chrisryczke.com",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Mainframe-terminal style portfolio with about, skills, projects"
+ },
+ {
+  "url": "https://www.dilipmaurya.in",
+  "rules": "de",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Freelance web developer portfolio; \"coming soon\" text is a countdown widget on a full site"
+ },
+ {
+  "url": "https://www.jeremyerikleong.com",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Personal portfolio with about, experience, projects"
+ },
+ {
+  "url": "https://portfolio-john2.netlify.app",
+  "rules": "c",
+  "strong": false,
+  "label": "JUNK",
+  "reason": "Unedited template: \"My Name Is John Doe\" with stock photo"
+ },
+ {
+  "url": "https://ychof.com",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with about and outputs"
+ },
+ {
+  "url": "https://www.michaellalavedra.com",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio dashboard with about, projects, contact"
+ },
+ {
+  "url": "https://williamson922.github.io",
+  "rules": "c",
+  "strong": true,
+  "label": "UNSURE",
+  "reason": "Real name and resume button, but the bio is lorem ipsum filler"
+ },
+ {
+  "url": "https://toukoum.fr",
+  "rules": "ac",
+  "strong": false,
+  "label": "JUNK",
+  "reason": "Template author's own demo of the Aaaaby AI portfolio template"
+ },
+ {
+  "url": "https://www.redoyanulhaque.me",
+  "rules": "b",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Redoyanul Haque's own portfolio (the original that a demo copy duplicates)"
+ },
+ {
+  "url": "https://sayantan-basu.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with about, links, resume"
+ },
+ {
+  "url": "https://sayyedrabeeh.github.io/portfoliyo/",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, works, biography (template marker only)"
+ },
+ {
+  "url": "https://thesoham2203.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with work, about, resume (phone shot is loader)"
+ },
+ {
+  "url": "https://ssoad.github.io",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with skills, experience, open source"
+ },
+ {
+  "url": "https://thomas-david-portfolio.netlify.app",
+  "rules": "c",
+  "strong": true,
+  "label": "UNSURE",
+  "reason": "Name set but \"Freelance Web Developer\" section is lorem ipsum; may be an unedited template"
+ },
+ {
+  "url": "https://ujjwalsoni-portfolio.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with photo and resume (phone shot is intro)"
+ },
+ {
+  "url": "https://vaibhav5860.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with work and resume (phone shot is loader)"
+ },
+ {
+  "url": "https://portfolio-2-0-murex-three.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Game Boy style portfolio behind a press-start intro"
+ },
+ {
+  "url": "https://vauth.github.io/hueco",
+  "rules": "e",
+  "strong": false,
+  "label": "UNSURE",
+  "reason": "Terminal-style page on a project subpath; shots show only a prompt"
+ },
+ {
+  "url": "http://vedant-athavale.byethost31.com/portfolio.html?i=1",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio (stored text was a 502, screenshot shows the site)"
+ },
+ {
+  "url": "https://yeshwanth-kr.github.io",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with work, info, services"
+ },
+ {
+  "url": "http://valentinpotie.github.io/portfolio",
+  "rules": "a",
+  "strong": false,
+  "label": "JUNK",
+  "reason": "Fastfolio builder landing page (\"Build your AI portfolio\"), not a portfolio"
+ },
+ {
+  "url": "https://liukonen.dev",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Personal portfolio of a technical lead"
+ },
+ {
+  "url": "https://hangga.web.id",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Personal portfolio of a security researcher"
+ },
+ {
+  "url": "https://prs2rnn.github.io",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with about and what I do"
+ },
+ {
+  "url": "https://g-dea.com",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Device-style personal portfolio with profile, projects, notes"
+ },
+ {
+  "url": "https://yashwanth-patam-portfolio.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with resume, GitHub, projects"
+ },
+ {
+  "url": "https://web.stimmie.dev",
+  "rules": "c",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Freelance developer portfolio (\"your name\" was \"repo in your name\")"
+ },
+ {
+  "url": "https://yourtarikur.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio of a robotics student"
+ },
+ {
+  "url": "https://www.pradipchaudhary.com.np",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Personal portfolio with projects and resume"
+ },
+ {
+  "url": "https://www.donnaszeto.com",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Game-style personal portfolio behind a start button, resume link"
+ },
+ {
+  "url": "https://www.abhisheksharma.codes",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Personal portfolio with projects, about, contact"
+ },
+ {
+  "url": "https://ganesh-vscode.netlify.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "VS Code style personal portfolio with projects"
+ },
+ {
+  "url": "https://red1-for-hek-demo.vercel.app",
+  "rules": "b",
+  "strong": true,
+  "label": "JUNK",
+  "reason": "Demo copy of redoyanulhaque.me on another domain (same text)"
+ },
+ {
+  "url": "https://ali-wordpress-developer.com",
+  "rules": "a",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Ali Saleem's WordPress developer portfolio (second domain, different site)"
+ },
+ {
+  "url": "https://www.ayushdoesdev.in",
+  "rules": "d",
+  "strong": true,
+  "label": "REAL",
+  "reason": "Personal portfolio of a lead engineer (\"parked\" appears in body copy)"
+ },
+ {
+  "url": "https://sarfarosh.vercel.app",
+  "rules": "e",
+  "strong": false,
+  "label": "REAL",
+  "reason": "Windows lock-screen style portfolio intro (gated)"
+ }
+]
