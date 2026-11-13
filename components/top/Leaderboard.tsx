@@ -2,6 +2,7 @@ import { Bot, Check, Merge, Sparkles, Split, Swords, Trophy, Users, X } from "lu
 import { BoardCard } from "@/components/top/BoardCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Movement, RankBadge, TierBadge } from "@/components/ui/badges";
+import { isPublicTier } from "@/lib/tiers.mjs";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
@@ -102,6 +103,12 @@ export function Leaderboard({ board }: { board: Board }) {
                 <Split className="h-3.5 w-3.5" aria-hidden /> AI and people strongly disagree
               </li>
             )}
+            <li>
+              Tier from the review, ELO from votes:{" "}
+              <a href="/grading#tiers" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                how grading works
+              </a>
+            </li>
           </ul>
 
           <BoardCard
@@ -129,16 +136,19 @@ function Head({ kind, hasMoves }: { kind: BoardKind; hasMoves: boolean }) {
       <span className="w-10 text-right">#</span>
       <span className="flex-1">Portfolio</span>
       {hasMoves && <span className="w-12 text-right">Week</span>}
-      {kind === "ai" && <span className="w-12 text-center">Tier</span>}
+      <span className="w-12 text-center">Tier</span>
       {kind !== "elo" && <span className="w-28 text-right">{kind === "ai" ? "Percentile" : "Likely rank"}</span>}
       {kind === "elo" && <span className="w-16 text-right">Votes</span>}
+      {kind !== "elo" && <span className="w-14 text-right">ELO</span>}
       <span className="w-16 text-right">{scoreLabel(kind)}</span>
     </div>
   );
 }
 
 function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boolean }) {
-  const sub = kind === "ai" ? (r.topPct != null ? `top ${r.topPct}%` : null) : kind === "elo" ? `${r.votes} ${r.votes === 1 ? "vote" : "votes"}` : r.likely ? `likely ${r.likely.replace(/-#/, "-")}` : null;
+  const base = kind === "ai" ? (r.topPct != null ? `top ${r.topPct}%` : null) : kind === "elo" ? `${r.votes} ${r.votes === 1 ? "vote" : "votes"}` : r.likely ? `likely ${r.likely.replace(/-#/, "-")}` : null;
+  // On a phone the ELO column is folded into the line under the score.
+  const sub = kind !== "elo" && r.elo != null ? [base, `ELO ${r.elo}`].filter(Boolean).join(" · ") : base;
   return (
     <li className="border-b border-edge last:border-b-0">
       <a href={`/p/${encodeURIComponent(r.url)}`} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
@@ -168,11 +178,18 @@ function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boole
           {r.why && <WhyChips why={r.why} />}
         </span>
         {hasMoves && <span className="hidden w-12 justify-end md:flex">{r.move != null && <Movement move={r.move} className="nudge-up" />}</span>}
-        {kind === "ai" && <span className="hidden w-12 justify-center md:flex">{r.tier && <TierBadge tier={r.tier} />}</span>}
+        {/* The tier by rank (public tiers only) on every board, beside people's ELO. */}
+        <span className="hidden w-12 justify-center md:flex">{isPublicTier(r.tier) && <TierBadge tier={r.tier!} />}</span>
         {kind !== "elo" && (
           <span className="hidden w-28 text-right text-sm tabular-nums text-mute md:block">{kind === "ai" ? (r.topPct != null ? `Top ${r.topPct}%` : "") : r.likely}</span>
         )}
         {kind === "elo" && <span className="hidden w-16 text-right text-sm tabular-nums text-mute md:block">{r.votes}</span>}
+        {kind !== "elo" && (
+          <span className="hidden w-14 text-right text-sm tabular-nums text-mute md:block">
+            <span className="sr-only">ELO </span>
+            {r.elo ?? "-"}
+          </span>
+        )}
         <span className="w-[4.75rem] shrink-0 text-right md:w-16">
           <span className="block text-sm font-bold tabular-nums">
             <span className="sr-only">{scoreLabel(kind)} </span>

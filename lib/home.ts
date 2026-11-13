@@ -6,8 +6,10 @@ import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
+import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { readBoard, VIEWS, type View } from "@/lib/ranking/board";
+import { eloOf } from "@/lib/leaderboard";
 import { readPolls } from "@/lib/polls/store.mjs";
 import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
 
@@ -39,15 +41,17 @@ type PoolSite = {
   url: string;
   name: string;
   mu: number;
-  tier: string;
+  /** The rank key and tier by rank in the library (lib/tiers.mjs). */
+  key: number | null;
+  tier: string | null;
   quality: number | null;
   axes: Record<string, number | null>;
   roles: string[];
 };
 
 /**
- * The graded, listed portfolios best first (by the AI grade's level), with
- * each one's rank by AI grade. The pool itself is cached an hour
+ * The graded, listed portfolios best first (by score, the order the tiers
+ * come from: lib/tiers.mjs), with each one's rank by AI grade. The pool itself is cached an hour
  * (lib/grader/report.mjs gradedPool).
  */
 async function rankedPool(): Promise<(PoolSite & { aiRank: number })[]> {
@@ -55,7 +59,7 @@ async function rankedPool(): Promise<(PoolSite & { aiRank: number })[]> {
   const [pool, hidden] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, hiddenUrls()]);
   return pool
     .filter((p) => byUrl.has(p.url) && !hidden.has(p.url))
-    .sort((a, b) => b.mu - a.mu || (b.quality ?? 0) - (a.quality ?? 0) || a.url.localeCompare(b.url))
+    .sort((a, b) => (b.key ?? -1) - (a.key ?? -1) || b.mu - a.mu || a.url.localeCompare(b.url))
     .map((p, i) => ({ ...p, aiRank: i + 1 }));
 }
 
@@ -74,7 +78,7 @@ export type ShowItem = {
   name: string;
   domain: string;
   hero: string;
-  tier: string;
+  tier: string | null;
   rank: number;
   href: string;
 };
@@ -104,8 +108,10 @@ export type BoardItem = {
   rank: number;
   tied: boolean;
   hero: string | null;
-  /** What the score column shows: ELO, or the tier on the new boards. */
-  score: string;
+  /** The public tier by rank (lib/tiers.mjs), or "" for none. */
+  tier: string;
+  /** People's ELO from face-off votes; null without a rating. */
+  elo: number | null;
   href: string;
 };
 
@@ -123,9 +129,14 @@ const VIEW_LABEL: Record<View, string> = { merged: "Merged", ai: "AI", people: "
  */
 async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
   await ensureSchema();
-  const item = (url: string, rank: number, score: string, tied = false): BoardItem => {
+  const item = (url: string, rank: number, tier: string, tied = false): BoardItem => {
     const p = byUrl.get(url);
-    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, score, href: reportPath(url) };
+    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, tier, elo: null, href: reportPath(url) };
+  };
+  // People's ELO beside the tier on every board (owner, 2026-11-12).
+  const withElo = async (rows: BoardItem[]) => {
+    const elos = await eloOf([...new Set(rows.map((r) => r.url))]);
+    for (const r of rows) r.elo = elos.get(r.url) ?? null;
   };
   if (/^true$/i.test(String(process.env.RANKING_V2 ?? ""))) {
     const boards = await Promise.all(VIEWS.map((v) => readBoard(v, { limit: 10 })));
@@ -133,31 +144,34 @@ async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> 
       const views = boards.map((b) => ({
         key: b.view,
         label: VIEW_LABEL[b.view],
-        rows: b.rows.map((r) => item(r.url, r.rank, r.tier ?? "", r.tiedWithNext)),
+        // Public tiers only (lib/tiers.mjs): the People board's top 10 can hold a lower tier.
+        rows: b.rows.map((r) => item(r.url, r.rank, isPublicTier(r.tier) ? r.tier! : "", r.tiedWithNext)),
       }));
-      const shots = await shotBases([...new Set(views.flatMap((v) => v.rows.map((r) => r.url)))]);
+      const [shots] = await Promise.all([shotBases([...new Set(views.flatMap((v) => v.rows.map((r) => r.url)))]), withElo(views.flatMap((v) => v.rows))]);
       for (const v of views) for (const r of v.rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
       // People first is the order the leaderboard reads in; Merged leads.
       return { kind: "views", views: (["merged", "ai", "people"] as View[]).map((k) => views.find((v) => v.key === k)!) };
     }
   }
-  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, p.tier));
-  const shots = await shotBases(rows.map((r) => r.url));
+  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, isPublicTier(p.tier) ? p.tier! : ""));
+  const [shots] = await Promise.all([shotBases(rows.map((r) => r.url)), withElo(rows)]);
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
   return { kind: "ai", rows };
 }
 
+/** `tier` is the tier by rank (lib/tiers.mjs); shown publicly only from B up. */
 export type GradedItem = { url: string; name: string; domain: string; tier: string; at: string; hero: string | null; href: string };
 
 /** The portfolios Gemini graded most recently. Cached an hour: it reads the whole list. */
 async function recentlyGraded(count = 6): Promise<GradedItem[]> {
   const hidden = await hiddenUrls();
-  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades", { ttlMs: HOUR }, async () => {
+  // v2: the tier by rank (lib/tiers.mjs), not Gemini's letter.
+  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades-v2", { ttlMs: HOUR }, async () => {
     const res = await db().execute(
-      `SELECT url, json_extract(ai_rubric, '$.tier') AS tier, json_extract(ai_rubric, '$.judged_at') AS at
+      `SELECT url, json_extract(ai_rubric, '$.rank.tier') AS tier, json_extract(ai_rubric, '$.judged_at') AS at
        FROM portfolios
        WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)
-         AND json_extract(ai_rubric, '$.tier') IS NOT NULL AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
+         AND json_extract(ai_rubric, '$.rank.tier') IS NOT NULL AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
          AND COALESCE(json_extract(ai_rubric, '$.is_portfolio'), 1) != 0
        ORDER BY at DESC LIMIT 30`
     );
@@ -193,7 +207,8 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
       return { n: Number(r.rows[0]?.n ?? 0) };
     }),
   ]);
-  const sGrades = pool.filter((p) => p.tier === "S").length;
+  // The S family: the top 1% (SSS to S-, lib/tiers.mjs).
+  const sGrades = pool.filter((p) => atLeast(p.tier, "S")).length;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
@@ -207,10 +222,10 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     // A quiet week would read as a dead site: then a number that is never 0.
     week.n > 0
       ? { key: "votesWeek", label: "Votes this week", value: n(week.n), tone: 3 }
-      : { key: "sGrades", label: "Portfolios graded S", value: n(sGrades), tone: 3 },
+      : { key: "sGrades", label: "Graded S or higher", value: n(sGrades), tone: 3 },
     counts.votes > 0 ? { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 } : null,
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
-    site.averageTier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
+    // No "Average tier": tiers by rank (lib/tiers.mjs) make it B by design.
     site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
     site.changedThisMonth > 0 ? { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 } : null,
     gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
@@ -224,7 +239,7 @@ export type PortfolioOfTheDay = {
   line: string;
   domain: string;
   hero: string;
-  tier: string;
+  tier: string | null;
   rank: number;
   total: number;
   best: { label: string; note: string }[];
@@ -234,7 +249,8 @@ export type PortfolioOfTheDay = {
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
 async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && (p.tier === "S" || p.tier === "A")).slice(0, 100);
+  // The A family or better: the top 15% (SSS to A-, lib/tiers.mjs).
+  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && atLeast(p.tier, "A")).slice(0, 100);
   if (candidates.length === 0) return null;
   const day = Math.floor(now.getTime() / 86_400_000);
   // Walk from today's pick to the first one with a capture.

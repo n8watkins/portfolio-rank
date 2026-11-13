@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cached, type CacheMeta } from "@/lib/cache";
+import { cached, peekCached, type CacheMeta } from "@/lib/cache";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 
 // Adapted from site-forge's checkup route. Works keyless at low volume;
@@ -9,6 +9,8 @@ export type PsiResult = CacheMeta & {
   error?: string;
   scores?: Record<string, number | null>; // 0-100
   metrics?: { id: string; label: string; value: string }[];
+  /** Page weight and request count from the same run (newer results only). */
+  weight?: { bytes: number | null; requests: number | null };
 };
 
 const METRIC_AUDITS = [
@@ -21,18 +23,18 @@ const METRIC_AUDITS = [
 type PsiResponse = {
   lighthouseResult?: {
     categories?: Record<string, { score?: number | null } | undefined>;
-    audits?: Record<string, { title?: string; displayValue?: string } | undefined>;
+    audits?: Record<string, { title?: string; displayValue?: string; numericValue?: number; details?: { items?: unknown[] } } | undefined>;
   };
 };
 
-async function runPsi(target: string): Promise<PsiResult> {
+async function runPsi(target: string, strategy: Strategy): Promise<PsiResult> {
   // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
   const psiUrl = new URL(
     process.env.PSI_API_BASE ??
       "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
   );
   psiUrl.searchParams.set("url", target);
-  psiUrl.searchParams.set("strategy", "mobile");
+  psiUrl.searchParams.set("strategy", strategy);
   if (process.env.PSI_API_KEY) {
     psiUrl.searchParams.set("key", process.env.PSI_API_KEY);
   }
@@ -73,11 +75,28 @@ async function runPsi(target: string): Promise<PsiResult> {
       : [];
   });
 
-  return { ok: true, scores, metrics };
+  // From audits the same run already returns (no extra request).
+  const bytes = lhr.audits?.["total-byte-weight"]?.numericValue;
+  const requests = lhr.audits?.["network-requests"]?.details?.items?.length;
+  const weight = { bytes: typeof bytes === "number" ? Math.round(bytes) : null, requests: typeof requests === "number" ? requests : null };
+
+  return { ok: true, scores, metrics, weight };
 }
 
+const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
+
+/**
+ * PageSpeed strategies: mobile (the default, cached as psi:<url>, as before)
+ * and desktop (the games show both; cached as psi-desktop:<url>, with the
+ * same TTLs and lease).
+ */
+type Strategy = "mobile" | "desktop";
+const NAMESPACE: Record<Strategy, string> = { mobile: "psi", desktop: "psi-desktop" };
+
 export async function GET(req: Request) {
-  const url = new URL(req.url).searchParams.get("url");
+  const params = new URL(req.url).searchParams;
+  const url = params.get("url");
+  const strategy: Strategy = params.get("strategy") === "desktop" ? "desktop" : "mobile";
   // Only audit sites on the roster - keeps strangers from burning the PSI
   // quota or pointing our server at arbitrary URLs.
   if (!url || !isKnownPortfolio(url)) {
@@ -88,6 +107,12 @@ export async function GET(req: Request) {
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
+  // ?cached=1: only a result already stored, never a PageSpeed run
+  // ("not_measured" otherwise); Play reads it first and measures on a miss.
+  if (params.get("cached") === "1") {
+    const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS);
+    return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
+  }
   // A result stays fresh for 30 days; a failure (quota, timeout, a site that
   // won't load) for an hour, so a broken site can't burn the quota by being
   // asked again and again, and a good result is never replaced by a failure.
@@ -95,15 +120,15 @@ export async function GET(req: Request) {
   // other callers hear "in_progress" and retry. A stale result is served at
   // once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
-    "psi",
+    NAMESPACE[strategy],
     url,
     {
-      ttlMs: 30 * 24 * 3600 * 1000,
+      ttlMs: PSI_TTL_MS,
       isFailure: (d) => !d.ok,
       failureTtlMs: 3600 * 1000,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
     },
-    () => runPsi(url)
+    () => runPsi(url, strategy)
   );
   return NextResponse.json(data);
 }
