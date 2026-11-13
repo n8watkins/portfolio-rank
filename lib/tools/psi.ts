@@ -23,6 +23,8 @@ export type PsiResult = CacheMeta & {
   fixes?: PsiFix[];
   /** The address Lighthouse ended on after redirects. */
   finalUrl?: string;
+  /** Page weight and request count from the same run. */
+  weight?: { bytes: number | null; requests: number | null };
 };
 
 export const CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
@@ -42,6 +44,7 @@ type Audit = {
   displayValue?: string;
   numericValue?: number;
   metricSavings?: Record<string, number>;
+  details?: { items?: unknown[] };
 };
 
 // The slice of the PageSpeed Insights v5 response this reads.
@@ -93,7 +96,11 @@ export function readPsi(data: PsiResponse, strategy: Strategy): PsiResult {
     const a = lhr.audits?.[id];
     return a?.displayValue ? [{ id, label, value: a.displayValue.replace(/ /g, " "), score: typeof a.score === "number" ? a.score : null }] : [];
   });
-  return { ok: true, strategy, scores, metrics, fixes: pickFixes(lhr), ...(lhr.finalDisplayedUrl ? { finalUrl: lhr.finalDisplayedUrl } : {}) };
+  // From audits the same run already returns (no extra request).
+  const bytes = lhr.audits?.["total-byte-weight"]?.numericValue;
+  const requests = lhr.audits?.["network-requests"]?.details?.items?.length;
+  const weight = { bytes: typeof bytes === "number" ? Math.round(bytes) : null, requests: typeof requests === "number" ? requests : null };
+  return { ok: true, strategy, scores, metrics, fixes: pickFixes(lhr), weight, ...(lhr.finalDisplayedUrl ? { finalUrl: lhr.finalDisplayedUrl } : {}) };
 }
 
 /** One PageSpeed run. Never throws: a quota, timeout or site error is { ok: false, error }. */
