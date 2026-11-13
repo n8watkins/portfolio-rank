@@ -14,32 +14,38 @@ import {
   ELO_START,
   MIN_FACEOFFS,
   PUBLIC_TIERS,
+  SETTLED_FACEOFFS,
   STARTING_TIER,
+  S_MIN_WINS,
+  S_TOP_PCT,
   TIERS,
   TIER_LADDER,
   atLeast,
   distribution,
   entryOf,
   eloOf,
+  failsMustHaves,
   familyOf,
   isPublicTier,
   isRanked,
+  isSettled,
   modifierOf,
   orderLibrary,
   placeNew,
   rankLibrary,
+  sTierFor,
   tierAt,
+  tierCounts,
+  tierForRating,
   tierLabel,
   tierOf,
   tierOfValue,
-  tierSettled,
   tierValue,
 } from "../lib/tiers.mjs";
 import { rateFaceoffs } from "../lib/tiers-rating.mjs";
 import { CHECKS_WHEN_UNKNOWN, gradeKey, gradeScore, standing } from "../lib/grade-score.mjs";
 import { placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { readSiteRow, readTierMeta } from "../lib/tiers-db.mjs";
-import { compareWithPool, printView } from "../lib/grader/report.mjs";
 import { drawCandidates } from "../lib/play/draw.mjs";
 import { CHECK_POINTS, checkPoints, checkShares, libraryMedians, pointFixes, unpackCheck } from "../lib/check-points.mjs";
 import { compareSeed, seedRating } from "../lib/tiers.mjs";
@@ -91,12 +97,14 @@ test("starting ranks: by points (then the Gemini score), evenly from the best to
   const b = { url: "b", points: 80, key: 20, first: 2 };
   const c = { url: "c", points: 90, key: 0, first: 3 };
   assert.deepEqual([a, b, c].sort(compareSeed).map((x) => x.url), ["c", "b", "a"]);
-  // A seeded portfolio is ranked at once, with no votes at all.
+  // A seeded portfolio has its letter at once, with no votes at all: A to C by place, never S (not earned) or D (reserved).
   const order = orderLibrary(Array.from({ length: 200 }, (_, i) => ({ url: `s${i}`, ...seedRating(i + 1, 200), seeded: true })));
   const ranks = rankLibrary(order);
-  assert.equal(ranks.get("s0").tier, "SSS");
-  assert.equal(ranks.get("s199").tier, "D");
+  assert.equal(ranks.get("s0").tier, "A+");
+  assert.equal(ranks.get("s199").tier, "C-");
   assert.equal(ranks.get("s0").votes, 0);
+  assert.equal(ranks.get("s0").settled, false, "no face-offs yet: not settled, still lettered");
+  assert.equal(ranks.get("s0").provisional, false);
   assert.ok(ranks.get("s0").elo > ELO_START && ranks.get("s199").elo < ELO_START);
   // Real votes move a seed: the last one beating the best a few times climbs.
   const seeds = new Map([["low", seedRating(200, 200)], ["high", seedRating(1, 200)]]);
@@ -136,12 +144,16 @@ const faceoff = (winner, loser, extra = {}) => ({
   ...extra,
 });
 
-test("the ladder: owner's cut-offs in order (A is the top 30%), B public, C and D private", () => {
+test("the ladder: S earned, A the top 30%, B to 70%, C the rest, D reserved; B public, C and D private", () => {
   assert.deepEqual(TIERS, ["SSS", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D"]);
   assert.deepEqual(
-    TIER_LADDER.map((t) => t.count ?? t.top),
-    [3, 1, 1, 1, 10.667, 20.333, 30, 43.333, 56.667, 70, 75, 80, 85, 100]
+    TIER_LADDER.map((t) => t.top ?? (t.band ? "earned" : "reserved")),
+    ["earned", "earned", "earned", "earned", 10, 20, 30, 43.333, 56.667, 70, 80, 90, 100, "reserved"]
   );
+  assert.equal(S_MIN_WINS, 3);
+  assert.equal(S_TOP_PCT, 1);
+  assert.equal(SETTLED_FACEOFFS, 10);
+  assert.equal(failsMustHaves({ name: false, role: false, cta: false }), false, "the D hook is there, unused");
   assert.deepEqual(PUBLIC_TIERS, ["SSS", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-"]);
   assert.equal(isPublicTier("B-"), true);
   assert.equal(isPublicTier("C+"), false);
@@ -207,6 +219,10 @@ test("without a starting rank, a portfolio starts at ELO 1200 and stays B until 
   // AI face-offs count a quarter: 39 of them are not yet 10, 40 are.
   assert.equal(isRanked(entryOf({ url: "z", faceoffs: 39 * 0.25 })), false);
   assert.equal(isRanked(entryOf({ url: "z", faceoffs: 40 * 0.25 })), true);
+  // A graded site has a starting rank, so it is ranked from day one; 10 face-offs only make it settled.
+  assert.equal(isRanked(entryOf({ url: "g", seeded: true })), true);
+  assert.equal(isSettled(9.75), false);
+  assert.equal(isSettled(10), true);
 });
 
 test("the order is cautious: a short perfect record doesn't jump past a long strong one", () => {
@@ -223,28 +239,89 @@ test("the order is cautious: a short perfect record doesn't jump past a long str
 /** A library of `n` ranked portfolios with distinct ratings, best first: urls s00000 (best) on. */
 const lib = (n, faceoffs = 12) => orderLibrary(Array.from({ length: n }, (_, i) => ({ url: `https://s${String(i).padStart(5, "0")}.dev`, mu: 40 - i * 0.01, sigma: 6, faceoffs })));
 
-test("bands by place among the ranked: SSS the top 3, S+/S/S- the rest of the top 1%, A to 30%, D the bottom 15%", () => {
+test("letters by place among the ranked: A the top 30%, B to 70%, C the rest, no S and no D at the start", () => {
   const order = lib(1000);
   const ranks = rankLibrary(order);
   const at = (i) => ranks.get(`https://s${String(i).padStart(5, "0")}.dev`).tier;
-  assert.deepEqual([0, 1, 2].map(at), ["SSS", "SSS", "SSS"]);
-  assert.deepEqual([3, 5, 6, 7, 8, 9].map(at), ["S+", "S+", "S", "S", "S-", "S-"]);
-  assert.equal(at(10), "A+");
+  assert.deepEqual([0, 99].map(at), ["A+", "A+"]);
+  assert.equal(at(100), "A");
   assert.equal(at(299), "A-");
   assert.equal(at(300), "B+");
   assert.equal(at(699), "B-");
   assert.equal(at(700), "C+");
-  assert.equal(at(849), "C-");
-  assert.equal(at(850), "D");
+  assert.equal(at(999), "C-");
   const dist = distribution(order);
-  assert.equal(dist.A + dist["A+"] + dist["A-"], 290);
-  assert.equal(dist.D, 150);
+  assert.equal(dist.A + dist["A+"] + dist["A-"], 300);
+  assert.equal(dist["B+"] + dist.B + dist["B-"], 400);
+  assert.equal(dist["C+"] + dist.C + dist["C-"], 300);
+  assert.equal(dist.SSS + dist["S+"] + dist.S + dist["S-"], 0, "S is earned, never given at the start");
+  assert.equal(dist.D, 0, "D is reserved");
   assert.equal(ranks.get("https://s00000.dev").top, 1);
-  // Provisional members are B and don't take a place among the ranked.
-  const mixed = orderLibrary([...order, ...Array.from({ length: 500 }, (_, i) => ({ url: `https://new${i}.dev`, faceoffs: i % 10 }))]);
-  const d2 = distribution(mixed);
-  assert.equal(d2.B, dist.B + 500);
-  assert.equal(rankLibrary(mixed).get("https://s00000.dev").tier, "SSS");
+  assert.deepEqual(dist, tierCounts(1000), "the cutoffs' counts are the same ladder");
+  // A site outside the library's ranking (not graded, under 10 face-offs) is B with no place.
+  const mixed = orderLibrary([...order, ...Array.from({ length: 50 }, (_, i) => ({ url: `https://new${i}.dev`, faceoffs: i % 10 }))]);
+  assert.equal(distribution(mixed).B, dist.B + 50);
+  assert.equal(rankLibrary(mixed).get("https://new3.dev").provisional, true);
+});
+
+/** The library of `lib(n)`, with face-off wins for some: { index: wins }. */
+const withWins = (n, wins) => orderLibrary(lib(n).map((e, i) => ({ ...e, wins: wins[i] ?? 0 })));
+const name = (i) => `https://s${String(i).padStart(5, "0")}.dev`;
+
+test("S is earned: 3 face-off wins and a place in the top 1%; SSS the first 3 of those", () => {
+  // 1000 ranked: the top 1% is the first 10 places. Seven of them have 3 wins, place 0 has 2.9, place 10 has 50.
+  const order = withWins(1000, { 0: 2.9, 1: 3, 2: 3, 4: 3, 5: 3, 6: 4, 8: 3, 9: 3.25, 10: 50 });
+  const ranks = rankLibrary(order);
+  const at = (i) => ranks.get(name(i)).tier;
+  assert.deepEqual([1, 2, 4].map(at), ["SSS", "SSS", "SSS"]);
+  assert.deepEqual([5, 6, 8, 9].map(at), ["S+", "S+", "S", "S-"]);
+  assert.equal(at(0), "A+", "first place with 2.9 wins has not earned S");
+  assert.equal(at(3), "A+", "no wins: the share tier");
+  assert.equal(at(10), "A+", "50 wins outside the top 1%: no S");
+  // An AI win counts a quarter: 11 AI wins are 2.75, 12 are 3.
+  assert.equal(rankLibrary(withWins(1000, { 0: 11 * 0.25 })).get(name(0)).tier, "A+");
+  assert.equal(rankLibrary(withWins(1000, { 0: 12 * 0.25 })).get(name(0)).tier, "SSS");
+  // Under 100 ranked there is no S band at all.
+  assert.equal(rankLibrary(withWins(99, { 0: 10 })).get(name(0)).tier, "A+");
+  assert.equal(rankLibrary(withWins(100, { 0: 10 })).get(name(0)).tier, "SSS");
+});
+
+test("S can be lost: falling out of the top 1% takes it away, and the daily S band says the same", () => {
+  const before = withWins(1000, { 0: 5, 1: 5, 2: 5, 3: 5 });
+  assert.equal(rankLibrary(before).get(name(3)).tier, "S+");
+  // Place 3 loses face-offs and drops to place 20: its letter is its share tier again.
+  const dropped = orderLibrary(before.map((e, i) => (i === 3 ? entryOf({ ...e, mu: 40 - 20.5 * 0.01 }) : e)));
+  const after = rankLibrary(dropped);
+  assert.equal(after.get(name(3)).tier, "A+");
+  assert.equal(after.get(name(3)).place, 21);
+  assert.deepEqual([0, 1, 2].map((i) => after.get(name(i)).tier), ["SSS", "SSS", "SSS"]);
+  // From cutoffs (what the daily run stores): the top 1% cut and the last of each S tier.
+  const ranked = [...rankLibrary(before).values()];
+  const e = (i) => before[i];
+  const sBand = { cut: { min: e(9).rating, first: e(9).first, url: e(9).url }, tiers: [{ tier: "SSS", min: e(2).rating, first: e(2).first, url: e(2).url }, { tier: "S+", min: e(3).rating, first: e(3).first, url: e(3).url }] };
+  assert.equal(sTierFor(e(0).rating, 5, e(0).first, e(0).url, sBand), "SSS");
+  assert.equal(sTierFor(e(3).rating, 5, e(3).first, e(3).url, sBand), "S+");
+  assert.equal(sTierFor(e(3).rating, 2, e(3).first, e(3).url, sBand), null, "not enough wins");
+  assert.equal(sTierFor(e(20).rating, 5, e(20).first, e(20).url, sBand), null, "outside the top 1%");
+  assert.equal(ranked.length, 1000);
+});
+
+test("equal ratings break by who was added first, then the address", () => {
+  const tied = orderLibrary(Array.from({ length: 10 }, (_, i) => ({ url: `t${i}`, mu: 30, sigma: 6, faceoffs: 10, first: 1000 - i })));
+  assert.deepEqual(tied.map((e) => e.url), ["t9", "t8", "t7", "t6", "t5", "t4", "t3", "t2", "t1", "t0"]);
+  const ranks = rankLibrary(tied);
+  assert.equal(ranks.get("t9").place, 1);
+  assert.equal(ranks.get("t0").place, 10);
+  assert.equal(ranks.get("t9").tier, "A+");
+  assert.equal(ranks.get("t0").tier, "C-");
+  // Against a cutoff held by a site with the same rating: added earlier reaches it, later does not.
+  const cut = [{ tier: "A-", min: 5, first: 100, url: "m" }, { tier: "B", min: null }];
+  assert.equal(tierForRating(5, cut, 99, "z"), "A-");
+  assert.equal(tierForRating(5, cut, 100, "a"), "A-");
+  assert.equal(tierForRating(5, cut, 100, "m"), "A-");
+  assert.equal(tierForRating(5, cut, 100, "n"), "B");
+  assert.equal(tierForRating(5, cut, 101, "a"), "B");
+  assert.equal(tierForRating(5.01, cut, 999, "z"), "A-");
 });
 
 test("small libraries hand out only the tiers they have room for", () => {
@@ -252,12 +329,10 @@ test("small libraries hand out only the tiers they have room for", () => {
   const twenty = distribution(lib(20));
   assert.equal(twenty.SSS + twenty["S+"] + twenty.S + twenty["S-"], 0, "the S band needs 100 ranked");
   assert.equal(twenty["A+"], 2);
-  assert.equal(twenty.D, 3);
-  assert.equal(rankLibrary(lib(100)).get("https://s00000.dev").tier, "SSS");
+  assert.equal(twenty["C-"], 2);
+  assert.equal(twenty.D, 0);
+  assert.equal(rankLibrary(lib(100)).get("https://s00000.dev").tier, "A+", "no wins, no S");
   assert.equal(tierAt(1, 1), "B");
-  // Equal ratings share a place and a tier.
-  const tied = orderLibrary(Array.from({ length: 10 }, (_, i) => ({ url: `t${i}`, mu: 30, sigma: 6, faceoffs: 10 })));
-  assert.deepEqual(new Set([...rankLibrary(tied).values()].map((p) => p.tier)), new Set(["B"]));
 });
 
 test("the report card: the grade's score and its standing, apart from the tier", () => {
@@ -277,32 +352,16 @@ test("tierOf reads the stored rank, never Gemini's letter", () => {
   assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S+" } })), null);
 });
 
-test("a visitor's report without a library: a starting rank from its own points (a listed site keeps its own ELO), and the grade's top N% by score", () => {
-  const pool = Array.from({ length: 200 }, (_, i) => ({ url: `https://s${i}.example/`, name: `s${i}`, mu: 25, key: gradeKey(grade(1 + (i % 5), i % 100)), tier: null, axes: {}, roles: [] }));
-  const best = compareWithPool(grade(5, 100, "S"), pool);
-  assert.equal(best.rank.tier, "B");
-  assert.equal(best.rank.provisional, false);
-  assert.equal(best.rank.seeded, true);
-  assert.ok(best.rank.points > 0);
-  assert.equal(best.percentile.total, 201);
-  assert.equal(best.percentile.topPct, 1);
+test("a visitor's grade gets a starting rank from its own points; a listed site keeps its own rank", () => {
+  const visitor = placeGrade(grade(5, 100, "S"), { meta: null, row: null });
+  assert.equal(visitor.seeded, true);
+  assert.equal(visitor.provisional, false);
+  assert.ok(visitor.points > 0);
   // A listed site keeps the tier its own rating earns against the daily cutoffs.
   const meta = { n: 200, cutoffs: [{ tier: "SSS", min: 20 }, { tier: "A", min: 10 }, { tier: "D", min: null }], hist: [], perPoint: 4 };
   const row = { url: "https://s00000.dev", mu: 40, sigma: 5, faceoffs: 12, votes: 12, member: 1, seeded: 1, points: 80, gkey: null, first: null, tier: null, fresh: false };
-  const library = { meta, row };
-  const listed = compareWithPool(grade(2, 40, "D"), pool, { library });
-  assert.equal(listed.rank.tier, "SSS");
-  assert.equal(listed.rank.provisional, false);
-  assert.equal(placeGrade(grade(5, 100, "S", { is_portfolio: false }), library), null);
-});
-
-test("the printable report shows public tiers only, and the note below them", () => {
-  const ss = printView(JSON.stringify(grade(5, 100, "S", { rank: { tier: "A-", elo: 1500, top: 25 } })));
-  assert.equal(ss.tier, "A-");
-  assert.equal(ss.showTier, true);
-  const c = printView(JSON.stringify(grade(2, 40, "A", { rank: { tier: "C+", elo: 1000, top: 72 } })));
-  assert.equal(c.showTier, false);
-  assert.equal(printView(JSON.stringify(grade(5, 100, "S"))).showTier, false);
+  assert.equal(placeGrade(grade(2, 40, "D"), { meta, row }).tier, "SSS");
+  assert.equal(placeGrade(grade(5, 100, "S", { is_portfolio: false }), { meta, row }), null);
 });
 
 test("Play draws mostly from portfolios that still need face-offs", () => {
@@ -390,8 +449,14 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   assert.equal(first.cleared, 1);
   assert.equal(first.jobs, 1);
   assert.equal(Object.values(first.distribution).reduce((a, b) => a + b, 0), 120);
-  assert.equal(first.distribution.SSS, 1, "120 ranked: the top 1% is one place");
-  assert.ok(first.distribution.D >= 15, "letters appear at once, the bottom 15% too");
+  // 120 ranked: the top 1% is one place. Site 0 went 12-0 in people's votes, so it holds it and earned S.
+  assert.equal(first.distribution.SSS, 1);
+  assert.equal(first.distribution["S+"] + first.distribution.S + first.distribution["S-"], 0);
+  const family = (f) => Object.entries(first.distribution).filter(([t]) => t[0] === f && (f !== "S" || t !== "SSS")).reduce((a, [, n]) => a + n, 0);
+  assert.equal(family("A") + 1, 36, "A is the top 30% (the S holder counts in it)");
+  assert.equal(family("B"), 48);
+  assert.equal(family("C"), 36, "letters appear at once, C the bottom 30%");
+  assert.equal(first.distribution.D, 0, "D is reserved");
   const read = async (u) => JSON.parse(String((await client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [u] })).rows[0].ai_rubric));
   // Points: measured items for site 5 and 6, the library median for everything nobody measured.
   const best = await read(url(5));
@@ -448,13 +513,12 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   assert.equal(joined.seeded, 1);
 });
 
-test("a tier letter is shown only once face-offs earn it: a starting rank never sits beside the grade", () => {
-  assert.equal(tierSettled(null), false);
-  assert.equal(tierSettled({ tier: "B", provisional: true, faceoffs: 40 }), false);
-  // A starting rank from automated checks: not provisional, but no face-offs yet.
-  assert.equal(tierSettled({ tier: "B", provisional: false, seeded: true, faceoffs: 0 }), false);
-  assert.equal(tierSettled({ tier: "A", provisional: false, faceoffs: MIN_FACEOFFS - 0.25 }), false);
-  assert.equal(tierSettled({ tier: "A", provisional: false, faceoffs: MIN_FACEOFFS }), true);
-  // Older reports carry no count: no letter.
-  assert.equal(tierSettled({ tier: "A", provisional: false }), false);
+test("settling: face-offs short, and what people, one-on-one and batches of 5 would take", async () => {
+  const { settlingPlan, daysAt } = await import("../lib/tiers-settling.mjs");
+  // Four members: one settled, one with 2.5, two with none: 7.5 + 10 + 10 short.
+  const p = settlingPlan([12, 2.5, 0, 0]);
+  assert.deepEqual(p, { members: 4, settled: 1, missing: 27.5, pairs: 6, people: 14, oneOnOne: 55, batches: 6 });
+  assert.equal(daysAt(p.people, 5), 3);
+  assert.equal(daysAt(0, 5), 0);
+  assert.equal(settlingPlan([10, 10]).people, 0);
 });

@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ExternalLink, Minus, Swords, X } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, Minus, X } from "lucide-react";
 import { Celebration } from "@/components/grade/Celebration";
 import { OwnerPanel } from "@/components/grade/OwnerPanel";
 import { ReportToolbar } from "@/components/grade/ReportToolbar";
@@ -9,7 +9,7 @@ import type { GradePage } from "@/lib/grade-page";
 import { ROUTES } from "@/lib/nav";
 import { SITE, SITE_URL } from "@/lib/site";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
-import { MIN_FACEOFFS, isPublicTier, tierSettled } from "@/lib/tiers.mjs";
+import { SETTLED_FACEOFFS, isPublicTier, isSettled } from "@/lib/tiers.mjs";
 
 // The grade report (owner direction, 2026-11-12: "a report, not a sales
 // page"): a small header (name, address, tier, Top N%, a thumbnail), then
@@ -21,9 +21,9 @@ import { MIN_FACEOFFS, isPublicTier, tierSettled } from "@/lib/tiers.mjs";
 //
 // The tier and the grade are two different measures: the grade's "top N%"
 // is where Gemini's grade stands among the graded portfolios, the tier is
-// the place people's face-off votes give it. A tier letter shows only once
-// it is earned (MIN_FACEOFFS face-offs, lib/tiers.mjs tierSettled), so a
-// starting rank never sits beside the grade as a letter that contradicts it.
+// the place people's face-off votes give it. The letter shows from day one
+// (lib/tiers.mjs, #210); until SETTLED_FACEOFFS face-offs it is marked as
+// still settling.
 
 type Celebrate = Parameters<typeof Celebration>[0]["level"];
 
@@ -228,26 +228,21 @@ type Rep = NonNullable<GradePage["job"]["report"]>;
 
 /**
  * The result: the grade's standing ("top N%" among graded portfolios) and
- * the tier. The tier's letter shows only once face-offs have earned it; until
- * then the badge says the tier is still to come, in words that can't clash
- * with the grade. On a phone it is a row under the name, so nothing wraps
- * into a narrow column.
+ * the tier. The tier's letter shows from day one; until SETTLED_FACEOFFS
+ * face-offs the line under it says it is still settling. On a phone it is a
+ * row under the name, so nothing wraps into a narrow column.
  */
 function Standing({ rep }: { rep: Rep }) {
   const pct = rep.percentile;
-  const settled = Boolean(rep.tier) && tierSettled(rep);
-  const so = typeof rep.faceoffs === "number" ? Math.min(Math.floor(rep.faceoffs), MIN_FACEOFFS) : null;
+  const settled = Boolean(rep.tier) && isSettled(rep.faceoffs ?? 0);
+  const so = typeof rep.faceoffs === "number" ? Math.min(Math.floor(rep.faceoffs), SETTLED_FACEOFFS) : null;
   return (
     <div className="flex items-center gap-3 rounded-xl border border-edge bg-card p-3 sm:flex-col sm:items-end sm:gap-1 sm:border-0 sm:bg-transparent sm:p-0 sm:text-right print:flex-col print:items-end print:border-0 print:p-0 print:text-right">
       <span id="report-tier" className="shrink-0">
-        {settled ? (
+        {rep.tier ? (
           <a href="/grading#tiers" aria-label={`Tier ${rep.tier}: how tiers work`} className="block rounded-2xl focus-visible:outline-offset-4">
             <TierBadge tier={rep.tier!} size="lg" />
           </a>
-        ) : rep.tier ? (
-          <span className="grid h-16 w-16 place-items-center rounded-2xl bg-raised text-mute ring-1 ring-inset ring-edge" role="img" aria-label="Tier still to come: set by face-off votes">
-            <Swords className="h-6 w-6" aria-hidden />
-          </span>
         ) : (
           <span className="grid h-16 w-16 place-items-center rounded-2xl bg-raised text-lg font-bold text-mute ring-1 ring-inset ring-edge" role="img" aria-label="No tier">
             AI
@@ -272,7 +267,7 @@ function Standing({ rep }: { rep: Rep }) {
               <span className="text-mute">Tier from {Math.floor(rep.faceoffs ?? 0).toLocaleString("en-US")} face-offs</span>
             ) : (
               <>
-                <span className="font-semibold">Tier after {MIN_FACEOFFS} face-offs</span>
+                <span className="font-semibold">Settles after {SETTLED_FACEOFFS} face-offs</span>
                 {so != null && <span className="text-mute"> · {so} so far</span>}
               </>
             )}

@@ -411,7 +411,7 @@ test("report emails: sent once the report is ready, through the gate, with a one
 
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test", now: T0 }), { sent: 0, refused: 0, gaveUp: 0 }, "nothing while it waits for Gemini");
   // The email names the tier by rank the report carries (lib/tiers.mjs), never Gemini's letter (S here),
-  // and only once face-offs earned it (lib/tiers.mjs tierSettled; a starting rank goes unnamed: see below).
+  // from day one (#210; a starting rank is named too: see below).
   await setJob(db, id, { status: "done", result: grade({ tier: "S" }), report: { rank: { tier: "A", score: 70, top: 15, provisional: false, faceoffs: 12 } }, done_at: new Date(T0).toISOString() }, { now: T0 });
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test/", now: T0, eloTiers: true }), { sent: 2, refused: 0, gaveUp: 0 });
   assert.equal(box.sent.length, 2);
@@ -428,7 +428,7 @@ test("report emails: sent once the report is ready, through the gate, with a one
   assert.match(reportEmail({ url: "https://jane.dev/", link: "https://x", status: "failed" }).subject, /couldn't grade jane\.dev/);
 });
 
-test("report emails: a starting rank (too few face-offs) names no tier, so it can't contradict the grade", async () => {
+test("report emails: a starting rank names its tier by rank from day one, never Gemini's letter", async () => {
   const db = await tempDb();
   const box = outbox();
   const gate = createEmailGate({ db, transport: box.transport, secret: SECRET });
@@ -436,7 +436,8 @@ test("report emails: a starting rank (too few face-offs) names no tier, so it ca
   await requestEmail(db, { jobId: id, email: "joe@example.com", secret: SECRET });
   await setJob(db, id, { status: "done", result: grade({ tier: "A" }), report: { rank: { tier: "B", provisional: false, seeded: true, faceoffs: 0 } }, done_at: new Date(T0).toISOString() }, { now: T0 });
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test", now: T0, eloTiers: true }), { sent: 1, refused: 0, gaveUp: 0 });
-  assert.doesNotMatch(box.sent[0].text, /tier/i);
+  assert.match(box.sent[0].text, /tier B\b/);
+  assert.doesNotMatch(box.sent[0].text, /tier A\b/);
 });
 
 test("report emails: a cap holds them for the next tick; after 3 days the address is given up and erased", async () => {

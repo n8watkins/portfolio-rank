@@ -5,7 +5,7 @@ import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
 import { displayName } from "@/lib/grader/present.mjs";
 import { graderEnabled, readGradeShot } from "@/lib/grader/server";
 import { listedSite } from "@/lib/me";
-import { isPublicTier, tierSettled } from "@/lib/tiers.mjs";
+import { isPublicTier } from "@/lib/tiers.mjs";
 
 /** The public tiers (SSS to B-) are the top 70% (lib/tiers.mjs): a "top N%" past that stays off the card. */
 const PUBLIC_TOP_PCT = 70;
@@ -42,15 +42,14 @@ async function report(id: string) {
   const name = displayName({ listedName: listedSite(String(job.site_key))?.name, title: quick?.title, domain: domainOf(url) });
   const shot = job.shot_key ? await readGradeShot(String(job.shot_key), "hero.jpg").catch(() => null) : null;
   // The tier by rank (lib/tiers.mjs) and "Top N%" show on the card only for the public tiers (SSS to B):
-  // the card travels with the link, so no one's shared card says C or D. A tier
-  // not yet earned in face-offs (lib/tiers.mjs tierSettled) shows no letter, so
-  // a starting rank never contradicts the grade's "top N%"; the result then
-  // shows when it is in the public tiers' range (the top 70%).
+  // the card travels with the link, so no one's shared card says C or D. Letters
+  // show from day one (lib/tiers.mjs, #210); without one, the result shows when
+  // it is in the public tiers' range (the top 70%).
   const rank = job.report?.rank ?? null;
   const tier = rank?.tier;
   const pct = (job.report?.percentile ?? null) as { topPct: number; total: number } | null;
   const result = pct ? { topPct: pct.topPct, total: pct.total - 1 } : null;
-  if (!tierSettled(rank)) return { name, url: shownUrl(url), shot, tier: null, result: result && result.topPct <= PUBLIC_TOP_PCT ? result : null };
+  if (!tier) return { name, url: shownUrl(url), shot, tier: null, result: result && result.topPct <= PUBLIC_TOP_PCT ? result : null };
   if (!isPublicTier(tier)) return { name, url: shownUrl(url), shot, tier: null, result: null };
   return { name, url: shownUrl(url), shot, tier: String(tier), result };
 }
