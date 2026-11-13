@@ -9,7 +9,7 @@ The older dated sections further down are history; read them only for detail.
 ### What this is and where it lives
 
 PortfolioRank turns the emmabostian/developer-portfolios README into a browsable, ranked site: screenshots, objective checks, AI grades and head-to-head ELO votes.
-Live at https://portfoliorank.n8builds.dev on the Cloudflare Worker `portfolio-rank` (moved off Vercel 2026-11); see DEPLOY.md.
+Live at https://portfoliorank.dev (before 2026-11 at portfoliorank.n8builds.dev, which now redirects) on the Cloudflare Worker `portfolio-rank` (moved off Vercel 2026-11); see DEPLOY.md.
 Architecture and the scheduled jobs are in `AUTOMATION.md`; deploy notes in `DEPLOY.md`; grading spec in `GRADING_CRITERIA.md`; roadmap in `PLAN.md`.
 The step-by-step October plan (key, failure handling, submissions, Playwright) is `docs/FOLLOW_UP_2026-10.md`.
 
