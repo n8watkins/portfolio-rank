@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdmin, requireAdminPost } from "@/lib/admin";
 import { workerEnv } from "@/lib/grader/server";
-import { cleanNotes, cleanTopic, createJob, finishJob, getJob, recentJobs } from "@/lib/content/jobs.mjs";
+import { cleanNotes, cleanTopic, createJob, draftNowPolicy, finishJob, getJob, recentJobs } from "@/lib/content/jobs.mjs";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { BUILDERS } from "@/pipeline/content/facts.mjs";
 import { newJobId } from "@/pipeline/content/manual.mjs";
@@ -13,11 +13,13 @@ import { newJobId } from "@/pipeline/content/manual.mjs";
 //   POST /api/admin/content/draft { rewriteOf, notes }         "Rewrite with these notes"
 //     -> 202 { job }; 400 (bad_request, or the cleaning message),
 //        401, 403, 404 not_found (the draft to rewrite), 409
-//        production_only, 429 daily_cap (5 a Pacific day), 503 no_workflow
+//        production_only | no_gemini, 429 daily_cap (5 a Pacific day; staging
+//        1 by default), 503 no_workflow
 //   GET  /api/admin/content/draft?id=<job>  -> { job }          the live status
 //   GET  /api/admin/content/draft           -> { jobs, costs }  today's jobs and the cost panel
-// The draft runs in the DraftWorkflow (worker/draft.ts); production only,
-// where the Gemini key and the counters live. POSTs must come from this
+// The draft runs in the DraftWorkflow (worker/draft.ts) in production, and on
+// staging once staging has its own Gemini key, under a lower daily cap
+// (lib/content/jobs.mjs draftNowPolicy). POSTs must come from this
 // site with a JSON body (CSRF).
 export const dynamic = "force-dynamic";
 
@@ -62,7 +64,8 @@ export async function POST(req: Request) {
     notes = n.notes;
   }
   const env = (await workerEnv()) as Record<string, unknown>;
-  if (String(env.SITE_ENV ?? "") !== "production") return fail("production_only", 409);
+  const policy = draftNowPolicy(env);
+  if ("error" in policy) return fail(policy.error, 409);
   const draft = env.DRAFT as DraftBinding | undefined;
   if (!draft) return fail("no_workflow", 503);
   await ensureSchema();
@@ -72,8 +75,8 @@ export async function POST(req: Request) {
     if (!src.rows.length) return fail("not_found", 404);
   }
   const id = newJobId();
-  const made = await createJob(client, { id, kind, topic: topic.topic, rewriteOf, notes, by: `admin:${who.login}` });
-  if ("error" in made) return fail("daily_cap", 429, { used: made.used });
+  const made = await createJob(client, { id, kind, topic: topic.topic, rewriteOf, notes, by: `admin:${who.login}`, cap: policy.cap });
+  if ("error" in made) return fail("daily_cap", 429, { used: made.used, cap: policy.cap });
   try {
     await draft.create({ id: `draft-${id}`, params: { jobId: id } });
   } catch (e) {

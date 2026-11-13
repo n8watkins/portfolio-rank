@@ -19,7 +19,7 @@ Staging does the same from `staging.portfoliorank.n8builds.dev` to https://stagi
   Without `GITHUB_DISPATCH_TOKEN` the nightly checks are not started from Cloudflare (one log line says so) and their GitHub schedule runs as the fallback.
   `SHOTS_BASE_URL` and `SITE_URL` (the site's one address setting) are plain variables in `wrangler.jsonc`.
   `SITE_URL` gives canonical URLs, share links, the sitemap, robots.txt, RSS, email links, the origin and Turnstile checks and Auth.js's callback URL (`auth.ts` copies it to `AUTH_URL`); pages built ahead of time use the same address from `lib/site.ts`, and `tests/site-url.test.mjs` keeps the two equal.
-  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_ID` (the admin's numeric GitHub id), `MIN_GITHUB_ACCOUNT_AGE_DAYS`, `GRADER_ENABLED`, `GAMES_V2` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_ID` (the admin's numeric GitHub id), `MIN_GITHUB_ACCOUNT_AGE_DAYS`, `GRADER_ENABLED`, `GAMES_V2`, `EMAIL_FROM` and the content engine's ceiling (`CONTENT_MODE`, `CONTENT_DRAFTS_PER_WEEK`; the owner schedules within it on `/admin/blog`): change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
 - **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
   Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
   Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
@@ -82,7 +82,7 @@ Two workflows, so production and staging never overwrite each other:
    It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
    It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev`.
    The run's summary lists exactly what is on staging.
-   A labeled pull request that does not merge cleanly onto main and the ones before it is left out, named in the summary and told in a comment; rebase it onto the one it conflicts with to bring it back.
+   When a labeled pull request does not merge cleanly onto main and the ones before it, nothing is deployed: staging keeps what it had, the run fails, and the pull request is named in the summary and told in a comment; merge main into it (or rebase it onto the one it conflicts with) and run the workflow again.
    A stacked pull request brings its base along, so label the top of a stack; pushes to a stacked pull request start no run by themselves (GitHub runs only main's copy of the workflow for them), so run it by hand after pushing.
 
 To try a pull request on staging: `gh pr edit <number> --add-label staging`; to take it off: `--remove-label staging`.
@@ -101,12 +101,14 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
 - **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
   It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
-- **No Gemini:** no Cron Triggers, and no `GEMINI_API_KEY` or `GITHUB_DISPATCH_TOKEN` secret, so staging never spends the production quota or starts production's GitHub jobs.
-  Its Workflow is `portfolio-rank-night-staging`; nothing starts it, and a run started by hand skips without the key.
-  Never add those two secrets to staging.
+- **Scheduled jobs, low caps:** staging runs production's scheduled jobs (the end-of-day run, the people queue, the model watch and the grader's tick), the hourly ones every six hours and the grader's tick every 30 minutes to keep its CPU time low (`worker/crons.ts`).
+  It never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs; without a key every Gemini job skips and says so in the log.
+  To exercise them, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
+  "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).
+  Email from staging reaches only the addresses in `STAGING_EMAIL_TO` (empty: none), since its database holds real people's addresses (`lib/email/gate.mjs`).
 - **Launch features on:** `GRADER_ENABLED`, `GAMES_V2` and `RANKING_V2` are `"true"` in `env.staging` (production keeps all three `"false"`), so the launch can be walked through on staging first.
   The build reads all three for the Worker it builds (`next.config.ts` `launchSwitch`; the staging job sets `NEXT_PUBLIC_SITE_ENV=staging`), because the pages prerendered at build time (home, `/top` and its views, the sitemap) depend on them.
-  Without crons, `RANKING_V2` only switches the leaderboard views; fill them with `scripts/recompute-ratings.mjs` run with the `portfolio-rank/STAGING_TURSO_*` pair.
+  The "Staging data" workflow (`.github/workflows/staging-data.yml`) rebuilds staging's leaderboards and tiers every six hours with `scripts/recompute-ratings.mjs`, with no Gemini.
   Without the dispatch token a grade asked for on staging stops after the free checks ("unavailable").
   To finish one by hand, set its job back to `capturing` in the staging database and run `scripts/grade-jobs.mjs` locally with the staging Turso pair and the Gemini key; it keeps the screenshots on disk without `R2_*`, so upload `hero.jpg` and `mobile.jpg` to `private/grades/<id>/` in the `portfolio-rank` bucket.
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
@@ -123,7 +125,9 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.
 - **Sentry:** events from staging carry the environment `staging`.
 - **Keeping the copy fresh:** the copy holds real votes and rater ids, and the nightly retention jobs do not run on staging.
-  Replace it at least every 30 days, like a backup: the owner deletes the `portfolio-rank-staging` database in Turso, then steps 2, 3 and 5 below run again.
+  The "Staging data" workflow replaces it every Monday with production's newest nightly backup (`scripts/refresh-staging-db.mjs`: it reads the private backups bucket, never production, refuses any database whose address is production's or does not name staging, empties staging, restores and checks every table's count), then redeploys staging and rebuilds the leaderboards.
+  Run it by hand any time: `gh workflow run staging-data.yml -f job=refresh`.
+  Anything made on staging (grades, drafts, votes) is gone after a refresh.
 
 ### Setting staging up (once)
 
