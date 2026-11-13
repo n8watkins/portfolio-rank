@@ -43,3 +43,14 @@ test("test alert: without OWNER_EMAIL it names what is missing and sends nothing
   assert.equal(body.error, "no_sender");
   assert.ok(body.missing.includes("OWNER_EMAIL"), JSON.stringify(body));
 });
+
+test("alerts page: the admin sees the email setup and the Send test alert button; anyone else gets a 404", async () => {
+  const page = (cookie) => fetch(`${BASE}/admin/alerts`, { headers: cookie ? { cookie } : {} });
+  assert.equal((await page()).status, 404);
+  assert.equal((await page(await sessionCookie({ id: ADMIN_ID + 1, login: "someone" }))).status, 404);
+  const r = await page(await sessionCookie({ id: ADMIN_ID, login: "e2e-admin" }));
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /Send test alert/);
+  assert.match(html, /not set \(OWNER_EMAIL\)/);
+});
