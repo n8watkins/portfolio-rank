@@ -123,7 +123,7 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 
 | # | Item | Status |
 | --- | --- | --- |
-| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | in progress (CI green, merging next) |
+| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | in progress (green after a flaky 44px check was fixed on it; waiting to merge) |
 | A2 | Schema migrates on a fingerprint of its statements, and the recorded version never goes down (#143) | done (merged 2026-11-12, deployed; fingerprint s1b8821ed recorded on staging and production) |
 | A3 | Staging is main plus pull requests labeled `staging`, rebuilt on every change; production deploys alone (#144) | done (merged 2026-11-12) |
 | A4 | The `staging` label exists | done |
@@ -132,10 +132,21 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 | A7 | Shorten the titles of #125, #131, #137, #138 and #140 to 100 characters with the ` (#NNN)` suffix | needs owner (lane owners) |
 | A8 | Retarget stacked pull requests to main as their bases land, so CI runs on them | needs owner (lane owners) |
 | A9 | New tests go in per-feature files instead of `tests/content.test.mjs`, which seven branches edit | needs owner (lane owners) |
-| A10 | Label #133, #134, #140, #135 and #123 `staging` once #144 lands, then stop using `preview/staging-all` | done (labeled 2026-11-12; nobody merges into `preview/staging-all` any more; the branch and its worktree are kept until the owner says to remove them) |
-| A12 | Staging's concurrency sits on the job, so a skipped run (an unlabeled pull request closing) no longer cancels a real deploy; this cancelled the first composed deploy after #144 | in progress (PR open) |
-| A13 | Make the site address one setting (`SITE_URL` for links, sitemap, canonical, Open Graph and the email sender) | queued |
+| A10 | Label #133, #134, #140, #135 and #123 `staging` once #144 lands, then stop using `preview/staging-all` | changed: the per-PR labels do not compose yet (the two stacks conflict with each other), so staging runs main plus the integration pull request #158 (`preview/staging-all`, never merged), kept current with main until the stacks land |
+| A12 | Staging's concurrency sits on the job, so a skipped run (an unlabeled pull request closing) no longer cancels a real deploy; this cancelled the first composed deploy after #144 | done (#154, merged 2026-11-12) |
+| A13 | Make the site address one setting (`SITE_URL` for links, sitemap, canonical, Open Graph and the email sender) | queued (the domain lane's #163 moves the site to portfoliorank.dev and makes the address one setting) |
+| A14 | A labeled pull request that conflicts keeps staging as it was instead of being dropped (#162) | in progress (PR open) |
+| A15 | Main merged into every stack branch and conflicts resolved (rank-tiers, tiers-elo, add-portfolio, admin-controls, admin-layout, admin-overview, blog-owner-feedback, email-signin, newsletter, worker-cpu) | done 2026-11-12 |
 | A11 | Owner decisions D1 to D8 | done except D5 |
+
+## Progress log
+
+- 2026-11-12: merged #143 (schema fingerprint), #144 (staging composition), #154 (staging concurrency), #153 (night dead-man alert) and #157 (edge cache for days); each production deploy and smoke check passed.
+- 2026-11-12: staging restored to all in-flight work through #158, including the latest #140 (add portfolio) and #149 (discovery, its screen and hand-off off).
+- 2026-11-12: merging #155 (privacy pages, owner-approved) was refused by the agent's permission check ("merge without review"); the owner has to merge it or allow agent merges. Queue after it: #159, #160, #161, #156, #146, #145, #162, then #163 (held for the owner's Turnstile and zone setup).
+- 2026-11-13: #163 (portfoliorank.dev, `SITE_URL`) landed; main merged into #158 with `SITE_URL` kept, and the in-flight code that still read `AUTH_URL` or the old host moved to `SITE_URL` on the integration branch (the lane branches still need it when they merge main).
+- 2026-11-13: #164 (newsletter on Kit, stacked on #133) merged into #158; staging at https://staging.portfoliorank.dev passes the smoke check.
+- Merging to main is paused until the owner says "merge the queue".
 
 ## Risks
 

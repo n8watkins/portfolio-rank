@@ -1,0 +1,49 @@
+name: Free limits snapshot
+
+# Measures the account-wide free allowances (Turso rows read, written and
+# storage; R2 storage and operations; Workers requests and CPU time) and
+# stores them for /admin/limits (scripts/limits-snapshot.mjs,
+# lib/admin/limits.mjs), in production and in staging. A source whose
+# credentials are missing or refused is skipped and logged; the page then
+# shows that row as not measured, or the last measurement with its date.
+#   TURSO_PLATFORM_TOKEN  a Turso platform API token (not a database token)
+#   TURSO_ORG             the Turso organization slug (a repository variable)
+#   CLOUDFLARE_API_TOKEN  needs Account Analytics Read and R2 read for these numbers
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "30 13 * * *" # daily 13:30 UTC, early morning Pacific
+
+concurrency:
+  group: limits
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURSO_PLATFORM_TOKEN: ${{ secrets.TURSO_PLATFORM_TOKEN }}
+      TURSO_ORG: ${{ vars.TURSO_ORG }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Production
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: node scripts/limits-snapshot.mjs
+      - name: Staging
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
+        run: node scripts/limits-snapshot.mjs
