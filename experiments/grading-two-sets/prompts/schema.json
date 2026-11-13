@@ -1,0 +1,637 @@
+{
+ "solo": {
+  "type": "OBJECT",
+  "properties": {
+   "five_second": {
+    "type": "OBJECT",
+    "properties": {
+     "name": {
+      "type": "OBJECT",
+      "properties": {
+       "seen": {
+        "type": "STRING",
+        "description": "what you saw, quoted, or \"nothing\""
+       },
+       "desktop": {
+        "type": "BOOLEAN"
+       },
+       "phone": {
+        "type": "BOOLEAN"
+       }
+      },
+      "required": [
+       "seen",
+       "desktop",
+       "phone"
+      ],
+      "propertyOrdering": [
+       "seen",
+       "desktop",
+       "phone"
+      ]
+     },
+     "clear_role": {
+      "type": "OBJECT",
+      "properties": {
+       "seen": {
+        "type": "STRING",
+        "description": "what you saw, quoted, or \"nothing\""
+       },
+       "desktop": {
+        "type": "BOOLEAN"
+       },
+       "phone": {
+        "type": "BOOLEAN"
+       }
+      },
+      "required": [
+       "seen",
+       "desktop",
+       "phone"
+      ],
+      "propertyOrdering": [
+       "seen",
+       "desktop",
+       "phone"
+      ]
+     },
+     "way_forward": {
+      "type": "OBJECT",
+      "properties": {
+       "seen": {
+        "type": "STRING",
+        "description": "what you saw, quoted, or \"nothing\""
+       },
+       "desktop": {
+        "type": "BOOLEAN"
+       },
+       "phone": {
+        "type": "BOOLEAN"
+       }
+      },
+      "required": [
+       "seen",
+       "desktop",
+       "phone"
+      ],
+      "propertyOrdering": [
+       "seen",
+       "desktop",
+       "phone"
+      ]
+     },
+     "notable": {
+      "type": "OBJECT",
+      "properties": {
+       "seen": {
+        "type": "STRING",
+        "description": "what you saw, quoted, or \"nothing\""
+       },
+       "desktop": {
+        "type": "BOOLEAN"
+       },
+       "phone": {
+        "type": "BOOLEAN"
+       }
+      },
+      "required": [
+       "seen",
+       "desktop",
+       "phone"
+      ],
+      "propertyOrdering": [
+       "seen",
+       "desktop",
+       "phone"
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "clear_role",
+     "way_forward",
+     "notable"
+    ],
+    "propertyOrdering": [
+     "name",
+     "clear_role",
+     "way_forward",
+     "notable"
+    ]
+   },
+   "visual_design": {
+    "type": "OBJECT",
+    "properties": {
+     "evidence": {
+      "type": "STRING",
+      "description": "what you saw, written before the level"
+     },
+     "level_line": {
+      "type": "STRING",
+      "enum": [
+       "Distinctive and polished: clear hierarchy, deliberate type and color, consistent spacing; holds up on the phone too.",
+       "Clean and consistent with good hierarchy; a few generic choices or small rough edges, or a weaker phone view.",
+       "Competent but generic: a template look or default styling, or uneven spacing.",
+       "Dated or cluttered, clashing colors, cramped, or clearly broken on the phone.",
+       "Broken, unstyled or hard to read."
+      ],
+      "description": "the level line that fits best"
+     },
+     "score": {
+      "type": "INTEGER",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "the number of that level"
+     }
+    },
+    "required": [
+     "evidence",
+     "level_line",
+     "score"
+    ],
+    "propertyOrdering": [
+     "evidence",
+     "level_line",
+     "score"
+    ]
+   },
+   "project_presentation": {
+    "type": "OBJECT",
+    "properties": {
+     "evidence": {
+      "type": "STRING",
+      "description": "what you saw, written before the level"
+     },
+     "level_line": {
+      "type": "STRING",
+      "enum": [
+       "Several real projects, each with the problem, the person's part, an outcome and working links; at least one reads like a case study.",
+       "Real projects with clear short descriptions and links; some say what they solved, few give outcomes.",
+       "Projects listed with titles, tech tags and links, but little about the problem or the person's part.",
+       "A few tutorial-style projects, bare tech lists, or projects only named.",
+       "No projects shown."
+      ],
+      "description": "the level line that fits best"
+     },
+     "score": {
+      "type": "INTEGER",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "the number of that level"
+     }
+    },
+    "required": [
+     "evidence",
+     "level_line",
+     "score"
+    ],
+    "propertyOrdering": [
+     "evidence",
+     "level_line",
+     "score"
+    ]
+   },
+   "writing": {
+    "type": "OBJECT",
+    "properties": {
+     "evidence": {
+      "type": "STRING",
+      "description": "what you saw, written before the level"
+     },
+     "level_line": {
+      "type": "STRING",
+      "enum": [
+       "Specific, concise, with a voice of its own; no errors.",
+       "Clear and correct, mostly specific.",
+       "Generic or buzzword-heavy (\"passionate\", \"pixel-perfect\"), or wordy; few errors.",
+       "Thin, vague or repetitive, or several errors.",
+       "Almost no text, or placeholder or broken text."
+      ],
+      "description": "the level line that fits best"
+     },
+     "score": {
+      "type": "INTEGER",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "the number of that level"
+     }
+    },
+    "required": [
+     "evidence",
+     "level_line",
+     "score"
+    ],
+    "propertyOrdering": [
+     "evidence",
+     "level_line",
+     "score"
+    ]
+   },
+   "is_portfolio": {
+    "type": "OBJECT",
+    "properties": {
+     "reason": {
+      "type": "STRING"
+     },
+     "answer": {
+      "type": "BOOLEAN"
+     }
+    },
+    "required": [
+     "reason",
+     "answer"
+    ],
+    "propertyOrdering": [
+     "reason",
+     "answer"
+    ]
+   },
+   "tips": {
+    "type": "OBJECT",
+    "properties": {
+     "visual_design": {
+      "type": "STRING",
+      "description": "one change that raises this part one level; empty when 5"
+     },
+     "project_presentation": {
+      "type": "STRING",
+      "description": "one change that raises this part one level; empty when 5"
+     },
+     "writing": {
+      "type": "STRING",
+      "description": "one change that raises this part one level; empty when 5"
+     }
+    },
+    "required": [
+     "visual_design",
+     "project_presentation",
+     "writing"
+    ],
+    "propertyOrdering": [
+     "visual_design",
+     "project_presentation",
+     "writing"
+    ]
+   }
+  },
+  "required": [
+   "five_second",
+   "visual_design",
+   "project_presentation",
+   "writing",
+   "is_portfolio",
+   "tips"
+  ],
+  "propertyOrdering": [
+   "five_second",
+   "visual_design",
+   "project_presentation",
+   "writing",
+   "is_portfolio",
+   "tips"
+  ]
+ },
+ "batch": {
+  "type": "OBJECT",
+  "properties": {
+   "sites": {
+    "type": "ARRAY",
+    "items": {
+     "type": "OBJECT",
+     "properties": {
+      "id": {
+       "type": "STRING",
+       "enum": [
+        "site_1",
+        "site_2",
+        "site_3",
+        "site_4",
+        "site_5"
+       ]
+      },
+      "five_second": {
+       "type": "OBJECT",
+       "properties": {
+        "name": {
+         "type": "OBJECT",
+         "properties": {
+          "seen": {
+           "type": "STRING",
+           "description": "what you saw, quoted, or \"nothing\""
+          },
+          "desktop": {
+           "type": "BOOLEAN"
+          },
+          "phone": {
+           "type": "BOOLEAN"
+          }
+         },
+         "required": [
+          "seen",
+          "desktop",
+          "phone"
+         ],
+         "propertyOrdering": [
+          "seen",
+          "desktop",
+          "phone"
+         ]
+        },
+        "clear_role": {
+         "type": "OBJECT",
+         "properties": {
+          "seen": {
+           "type": "STRING",
+           "description": "what you saw, quoted, or \"nothing\""
+          },
+          "desktop": {
+           "type": "BOOLEAN"
+          },
+          "phone": {
+           "type": "BOOLEAN"
+          }
+         },
+         "required": [
+          "seen",
+          "desktop",
+          "phone"
+         ],
+         "propertyOrdering": [
+          "seen",
+          "desktop",
+          "phone"
+         ]
+        },
+        "way_forward": {
+         "type": "OBJECT",
+         "properties": {
+          "seen": {
+           "type": "STRING",
+           "description": "what you saw, quoted, or \"nothing\""
+          },
+          "desktop": {
+           "type": "BOOLEAN"
+          },
+          "phone": {
+           "type": "BOOLEAN"
+          }
+         },
+         "required": [
+          "seen",
+          "desktop",
+          "phone"
+         ],
+         "propertyOrdering": [
+          "seen",
+          "desktop",
+          "phone"
+         ]
+        },
+        "notable": {
+         "type": "OBJECT",
+         "properties": {
+          "seen": {
+           "type": "STRING",
+           "description": "what you saw, quoted, or \"nothing\""
+          },
+          "desktop": {
+           "type": "BOOLEAN"
+          },
+          "phone": {
+           "type": "BOOLEAN"
+          }
+         },
+         "required": [
+          "seen",
+          "desktop",
+          "phone"
+         ],
+         "propertyOrdering": [
+          "seen",
+          "desktop",
+          "phone"
+         ]
+        }
+       },
+       "required": [
+        "name",
+        "clear_role",
+        "way_forward",
+        "notable"
+       ],
+       "propertyOrdering": [
+        "name",
+        "clear_role",
+        "way_forward",
+        "notable"
+       ]
+      },
+      "visual_design": {
+       "type": "OBJECT",
+       "properties": {
+        "evidence": {
+         "type": "STRING",
+         "description": "what you saw, written before the level"
+        },
+        "level_line": {
+         "type": "STRING",
+         "enum": [
+          "Distinctive and polished: clear hierarchy, deliberate type and color, consistent spacing; holds up on the phone too.",
+          "Clean and consistent with good hierarchy; a few generic choices or small rough edges, or a weaker phone view.",
+          "Competent but generic: a template look or default styling, or uneven spacing.",
+          "Dated or cluttered, clashing colors, cramped, or clearly broken on the phone.",
+          "Broken, unstyled or hard to read."
+         ],
+         "description": "the level line that fits best"
+        },
+        "score": {
+         "type": "INTEGER",
+         "minimum": 1,
+         "maximum": 5,
+         "description": "the number of that level"
+        }
+       },
+       "required": [
+        "evidence",
+        "level_line",
+        "score"
+       ],
+       "propertyOrdering": [
+        "evidence",
+        "level_line",
+        "score"
+       ]
+      },
+      "project_presentation": {
+       "type": "OBJECT",
+       "properties": {
+        "evidence": {
+         "type": "STRING",
+         "description": "what you saw, written before the level"
+        },
+        "level_line": {
+         "type": "STRING",
+         "enum": [
+          "Several real projects, each with the problem, the person's part, an outcome and working links; at least one reads like a case study.",
+          "Real projects with clear short descriptions and links; some say what they solved, few give outcomes.",
+          "Projects listed with titles, tech tags and links, but little about the problem or the person's part.",
+          "A few tutorial-style projects, bare tech lists, or projects only named.",
+          "No projects shown."
+         ],
+         "description": "the level line that fits best"
+        },
+        "score": {
+         "type": "INTEGER",
+         "minimum": 1,
+         "maximum": 5,
+         "description": "the number of that level"
+        }
+       },
+       "required": [
+        "evidence",
+        "level_line",
+        "score"
+       ],
+       "propertyOrdering": [
+        "evidence",
+        "level_line",
+        "score"
+       ]
+      },
+      "writing": {
+       "type": "OBJECT",
+       "properties": {
+        "evidence": {
+         "type": "STRING",
+         "description": "what you saw, written before the level"
+        },
+        "level_line": {
+         "type": "STRING",
+         "enum": [
+          "Specific, concise, with a voice of its own; no errors.",
+          "Clear and correct, mostly specific.",
+          "Generic or buzzword-heavy (\"passionate\", \"pixel-perfect\"), or wordy; few errors.",
+          "Thin, vague or repetitive, or several errors.",
+          "Almost no text, or placeholder or broken text."
+         ],
+         "description": "the level line that fits best"
+        },
+        "score": {
+         "type": "INTEGER",
+         "minimum": 1,
+         "maximum": 5,
+         "description": "the number of that level"
+        }
+       },
+       "required": [
+        "evidence",
+        "level_line",
+        "score"
+       ],
+       "propertyOrdering": [
+        "evidence",
+        "level_line",
+        "score"
+       ]
+      },
+      "is_portfolio": {
+       "type": "OBJECT",
+       "properties": {
+        "reason": {
+         "type": "STRING"
+        },
+        "answer": {
+         "type": "BOOLEAN"
+        }
+       },
+       "required": [
+        "reason",
+        "answer"
+       ],
+       "propertyOrdering": [
+        "reason",
+        "answer"
+       ]
+      },
+      "tips": {
+       "type": "OBJECT",
+       "properties": {
+        "visual_design": {
+         "type": "STRING",
+         "description": "one change that raises this part one level; empty when 5"
+        },
+        "project_presentation": {
+         "type": "STRING",
+         "description": "one change that raises this part one level; empty when 5"
+        },
+        "writing": {
+         "type": "STRING",
+         "description": "one change that raises this part one level; empty when 5"
+        }
+       },
+       "required": [
+        "visual_design",
+        "project_presentation",
+        "writing"
+       ],
+       "propertyOrdering": [
+        "visual_design",
+        "project_presentation",
+        "writing"
+       ]
+      }
+     },
+     "required": [
+      "id",
+      "five_second",
+      "visual_design",
+      "project_presentation",
+      "writing",
+      "is_portfolio",
+      "tips"
+     ],
+     "propertyOrdering": [
+      "id",
+      "five_second",
+      "visual_design",
+      "project_presentation",
+      "writing",
+      "is_portfolio",
+      "tips"
+     ]
+    },
+    "minItems": 5,
+    "maxItems": 5
+   }
+  },
+  "required": [
+   "sites"
+  ],
+  "propertyOrdering": [
+   "sites"
+  ]
+ },
+ "levels": {
+  "visual_design": [
+   "Distinctive and polished: clear hierarchy, deliberate type and color, consistent spacing; holds up on the phone too.",
+   "Clean and consistent with good hierarchy; a few generic choices or small rough edges, or a weaker phone view.",
+   "Competent but generic: a template look or default styling, or uneven spacing.",
+   "Dated or cluttered, clashing colors, cramped, or clearly broken on the phone.",
+   "Broken, unstyled or hard to read."
+  ],
+  "project_presentation": [
+   "Several real projects, each with the problem, the person's part, an outcome and working links; at least one reads like a case study.",
+   "Real projects with clear short descriptions and links; some say what they solved, few give outcomes.",
+   "Projects listed with titles, tech tags and links, but little about the problem or the person's part.",
+   "A few tutorial-style projects, bare tech lists, or projects only named.",
+   "No projects shown."
+  ],
+  "writing": [
+   "Specific, concise, with a voice of its own; no errors.",
+   "Clear and correct, mostly specific.",
+   "Generic or buzzword-heavy (\"passionate\", \"pixel-perfect\"), or wordy; few errors.",
+   "Thin, vague or repetitive, or several errors.",
+   "Almost no text, or placeholder or broken text."
+  ]
+ }
+}

@@ -1,0 +1,33 @@
+The rubric: what each score means
+Expert and Gemini both get exactly this: the five-second checklist plus three 1-to-5 scores.
+
+Five-second test: a checklist, not a 1-to-5 score
+Four yes/no questions about what's visible at the top of the page, without scrolling, on desktop and phone.
+1. Your name is visible. (Who checks: code, from the page title and top heading; the grader confirms.) Required.
+2. A clear role ("backend engineer", not "creative developer"). (Who checks: the grader, because "vague" needs judgment.) Required.
+3. A way forward: a link to your work, resume or contact. (Who checks: code, from the links in the first screen.) Required.
+4. Something notable: a specific focus, a result, a known employer or a standout project. (Who checks: the grader.) Not required; it's the bonus.
+Fail if any of 1 to 3 is missing. All four is a pass with distinction.
+
+Visual design, on desktop and phone
+5: Distinctive and polished: clear hierarchy, deliberate type and color, consistent spacing; holds up on the phone too.
+4: Clean and consistent with good hierarchy; a few generic choices or small rough edges, or a weaker phone view.
+3: Competent but generic: a template look or default styling, or uneven spacing.
+2: Dated or cluttered, clashing colors, cramped, or clearly broken on the phone.
+1: Broken, unstyled or hard to read.
+
+Project presentation
+5: Several real projects, each with the problem, the person's part, an outcome and working links; at least one reads like a case study.
+4: Real projects with clear short descriptions and links; some say what they solved, few give outcomes.
+3: Projects listed with titles, tech tags and links, but little about the problem or the person's part.
+2: A few tutorial-style projects, bare tech lists, or projects only named.
+1: No projects shown.
+
+Writing
+5: Specific, concise, with a voice of its own; no errors.
+4: Clear and correct, mostly specific.
+3: Generic or buzzword-heavy ("passionate", "pixel-perfect"), or wordy; few errors.
+2: Thin, vague or repetitive, or several errors.
+1: Almost no text, or placeholder or broken text.
+
+Also, for every site: is this a real portfolio? (no for parked domains, unedited templates, and plain blogs or link pages with no work), plus one tip per part that would raise it one level.
