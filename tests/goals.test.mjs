@@ -239,7 +239,7 @@ test("the invite goes through the owner-alert path: the email gate counts it, an
   const sends = (await db.execute("SELECT kind, status FROM email_sends")).rows.map((x) => [x.kind, x.status]);
   assert.deepEqual(sends, [["owner-alert", "sent"]]);
   // The test outbox lists the attachment after the text.
-  const outbox = emailTransport({ EMAIL_TRANSPORT: "outbox" }, { db });
+  const outbox = emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "test" }, { db });
   await createEmailGate({ db, transport: outbox, secret: "test" }).send({ kind: "owner-alert", to: "o2@example.com", subject: "s", text: "t", attachments: [{ filename: "x.ics", type: "text/calendar", disposition: "attachment", content: "BEGIN:VCALENDAR" }] });
   assert.match(String((await db.execute("SELECT text FROM email_outbox")).rows[0].text), /--- attachment x\.ics \(text\/calendar\) ---\nBEGIN:VCALENDAR/);
 });
