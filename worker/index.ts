@@ -31,6 +31,7 @@ import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { freshnessTick } from "./freshness";
 import { tiersTick } from "./tiers";
+import { nightWatchTick } from "./night-watch";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -118,7 +119,8 @@ const worker = {
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
-  // applies owners' held removals (./owner-removals.ts),
+  // applies owners' held removals (./owner-removals.ts), checks that last
+  // night's run started and finished (./night-watch.ts),
   // finishes people's grade requests that waited for Gemini 3.5, places every
   // tier by rank again (./tiers.ts), makes the image library's hourly batch
   // (./library.ts) and checks a 168th of the list's change fingerprints
@@ -136,6 +138,8 @@ const worker = {
       await purgeAfterHour(ctx, removals.applied, controller.scheduledTime);
       // An alert at 80% of any email cap (./email-alerts.ts).
       await emailAlertsTick(env as NightEnv, controller.scheduledTime);
+      // An alert when last night's run never started or died (./night-watch.ts).
+      await nightWatchTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
       // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts).
       await freshnessTick(controller.scheduledTime);

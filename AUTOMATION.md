@@ -178,6 +178,12 @@ A condition that holds sends one email a day, every day, until it clears; the st
 They go through Cloudflare Email Service and the shared email gate ("Grade my portfolio", Email) to `OWNER_EMAIL`, the owner's verified address, which is free and doesn't count against the monthly sends.
 Until `OWNER_EMAIL` is set the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent; a send the gate refuses or the provider fails stays unsent and is tried on the next run.
 
+A night that never runs can't check itself, so the hourly cron (`15 * * * *`) also runs a dead-man check ([pipeline/night-watch.mjs](pipeline/night-watch.mjs)) on the latest night that should have started.
+It raises `night-watch:missed` when that night has no `night_runs` row an hour after 20:30 Pacific (the cron didn't fire, the Workflow couldn't be created, or `GEMINI_API_KEY` is missing).
+It raises `night-watch:stuck` when the night still says `running` an hour after its hard stop and its Workflow instance is not paused; a run the owner paused on purpose is left alone.
+Both clear once a later night finishes.
+Creating tonight's Workflow treats only the duplicate-id error as "already ran"; any other error is logged as `night.cron.failed` and reaches Sentry.
+
 ### What stays on GitHub Actions, and why
 
 - Capture and the health check load sites in Playwright's Chromium, which a Worker can't run; they stay on Actions and the Workflow starts them with a `workflow_dispatch` (the Worker secret `GITHUB_DISPATCH_TOKEN`).
