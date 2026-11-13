@@ -23,7 +23,7 @@ import { ACTIVE, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { AXES, TIER } from "../grade-pairs.mjs";
-import { atLeast, orderLibrary, placeNew, rankKey, rankLibrary, tierOf, tierValue } from "../../lib/tiers.mjs";
+import { atLeast, tierOf, tierValue } from "../../lib/tiers.mjs";
 
 export const SITE_URL = "https://portfoliorank.n8builds.dev";
 /** The smallest group a share or average is computed over. */
@@ -148,24 +148,10 @@ async function gradedRows(db) {
     .filter((r) => !removed.has(String(r.url)))
     .map((r) => ({ url: String(r.url), name: r.name == null ? null : String(r.name), shotKey: r.shot_key == null ? null : String(r.shot_key), rubric: parse(r.ai_rubric), meta: parse(r.meta) }))
     .filter((r) => r.rubric && TIER[r.rubric.tier] && r.rubric.is_portfolio !== false)
-    .map((r, _i, all) => ({ ...r, tier: tierOf(r.rubric) ?? placedTier(all, r.rubric, true, r.url) }));
+    .map((r) => ({ ...r, tier: tierOf(r.rubric) }));
 }
 
-/**
- * The tier by rank (lib/tiers.mjs) a grade gets among `rows`: what the site
- * shows (stored as grade.rank) when there is one, else placed here. `member`
- * says the grade is one of the rows.
- */
-function placedTier(rows, grade, member, url = "") {
-  rows.order ??= orderLibrary(rows.map((r) => ({ url: r.url, key: rankKey(r.rubric) })));
-  if (member) {
-    rows.ranks ??= rankLibrary(rows.order);
-    return rows.ranks.get(url)?.tier ?? null;
-  }
-  return placeNew(rows.order, { url, key: rankKey(grade) })?.tier ?? null;
-}
-
-/** Graded A or higher: the top 15% by rank (lib/tiers.mjs). */
+/** Tier A or higher: the top 30% by ELO among portfolios with enough face-offs (lib/tiers.mjs). */
 const top = (r) => atLeast(r.tier, "A");
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const median = (xs) => {
@@ -197,7 +183,7 @@ export async function topGrades(db, { now }) {
   const b = sheet(kind, {
     now,
     headline: "What the AI grader rewards, and what it marks down",
-    angle: "Compare the AI judge's scores on each axis for portfolios graded A or higher (the top 15%) with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
+    angle: "Compare the AI judge's scores on each axis for portfolios at tier A or higher (the top 30% by votes) with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
     dataLink: `${SITE_URL}/top`,
     query: "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
   });
@@ -368,7 +354,7 @@ export async function votePatterns(db, { now }) {
     query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
   });
   b.fact("People's votes between two graded portfolios", votes.length, fmt.int(votes.length));
-  // Tiers by rank (lib/tiers.mjs), as the site shows them.
+  // Tiers by ELO (lib/tiers.mjs), as the site shows them.
   const decided = votes.filter((v) => v.w.tier && v.l.tier && v.w.tier !== v.l.tier);
   if (decided.length >= MIN_GROUP) {
     const agree = decided.filter((v) => tierValue(v.w.tier) > tierValue(v.l.tier)).length;
@@ -435,25 +421,24 @@ export async function regradeChanges(db, { now }) {
     if (!before?.tier || !TIER[before.tier] || before.is_portfolio === false) continue;
     if (String(h.model ?? "") !== String(now2.rubric.model ?? "") || (before.rubric_version ?? null) !== (now2.rubric.rubric_version ?? null)) continue;
     seen.add(url);
-    // Both tiers by rank in today's library (lib/tiers.mjs): the earlier grade placed as if it were graded now.
-    const was = placedTier(rows, before, false, url);
-    if (!was || !now2.tier) continue;
-    pairs.push({ row: now2, before: { ...before, tier: was }, after: { ...now2.rubric, tier: now2.tier } });
+    // The grade's own letters (Gemini's S to D): the tier by ELO comes from face-offs, not from the grade.
+    if (!TIER[now2.rubric.tier]) continue;
+    pairs.push({ row: now2, before, after: now2.rubric });
   }
   if (pairs.length < MIN_GROUP) return notReady(kind, `${pairs.length} portfolios re-graded after a change by the same judge; ${MIN_GROUP} needed`);
   const b = sheet(kind, {
     now,
     headline: "Before and after: what changed when portfolios got a better grade",
-    angle: "Portfolios whose page changed and were graded again by the same judge with the same rubric: how many moved up a tier, which parts of the grade improved most, and what the improvers did. A reader learns which changes pay off.",
+    angle: "Portfolios whose page changed and were graded again by the same judge with the same rubric: how many moved up a grade letter, which parts of the grade improved most, and what the improvers did. A reader learns which changes pay off.",
     dataLink: `${SITE_URL}/top`,
     query: "rubric_history: each re-graded portfolio's previous grade by the same model and rubric version, against its grade now",
   });
   b.fact("Portfolios re-graded after their page changed", pairs.length, fmt.int(pairs.length));
   const up = pairs.filter((p) => tierValue(p.after.tier) > tierValue(p.before.tier));
   const down = pairs.filter((p) => tierValue(p.after.tier) < tierValue(p.before.tier)).length;
-  const upId = b.fact("Share that moved up at least one tier", up.length / pairs.length, fmt.pct(up.length / pairs.length));
-  b.fact("Share that moved down at least one tier", down / pairs.length, fmt.pct(down / pairs.length), { tone: "negative" });
-  b.notable([upId], `{{${upId}}} of re-graded portfolios moved up a tier after a change.`);
+  const upId = b.fact("Share whose grade moved up at least one letter", up.length / pairs.length, fmt.pct(up.length / pairs.length));
+  b.fact("Share whose grade moved down at least one letter", down / pairs.length, fmt.pct(down / pairs.length), { tone: "negative" });
+  b.notable([upId], `{{${upId}}} of re-graded portfolios moved up a grade letter after a change.`);
   const cats = [];
   const ids = [];
   const gains = [];
@@ -471,7 +456,7 @@ export async function regradeChanges(db, { now }) {
     b.chart({ title: "Average change per part of the grade after a re-grade (1 to 5 scale)", unit: "", max: 2, categories: cats, series: [{ name: "Average change", facts: ids }], alt: "Bar chart of how much each part of the AI grade changed, on average, when a portfolio was re-graded after a change." });
   }
   for (const p of up.filter((x) => x.row.name).sort((x, y) => tierValue(y.after.tier) - tierValue(x.after.tier) || x.row.url.localeCompare(y.row.url)).slice(0, 3)) {
-    b.name(p.row, `moved up from ${p.before.tier} to ${p.after.tier} after a redesign`);
+    b.name(p.row, `grade moved up from ${p.before.tier} to ${p.after.tier} after a redesign`);
     const id = b.fact(`${p.row.name} (${domainOf(p.row.url)}) moved up to tier`, p.after.tier, p.after.tier, { tone: "positive", about: p.row.url });
     b.example("a redesign that paid off", id, p.row);
   }

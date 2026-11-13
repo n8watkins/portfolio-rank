@@ -9,7 +9,8 @@ import { BELOW_TOP_TIERS, familyOf, isPublicTier, modifierOf, tierLabel } from "
 export const TIER_STYLE: Record<string, string> = {
   SSS: "text-[#2a1d06]",
   S: "bg-fill text-on-fill",
-  A: "bg-accent-soft text-accent ring-1 ring-inset ring-accent/25",
+  // The top 30% (owner, 2026-11-12: many more people should be proud to share an A): a strong gold ring and a soft glow.
+  A: "bg-accent-soft text-accent ring-2 ring-inset ring-accent/80 shadow-[0_4px_14px_-6px_var(--color-accent)]",
   B: "bg-raised text-ink ring-1 ring-inset ring-edge-strong",
   C: "bg-raised text-ink ring-1 ring-inset ring-edge",
   D: "bg-raised text-mute ring-1 ring-inset ring-edge",

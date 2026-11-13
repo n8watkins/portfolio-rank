@@ -73,7 +73,7 @@ const projectCount = (g: Record<string, unknown> | null): number | null => {
 
 function cardOf(row: Row, pool: { url: string; mu: number; key: number | null }[]): PlayCard {
   const g = row.hidden ? null : row.grade;
-  // Graded: Gemini answered. The tier shown is the one by rank in the library, never Gemini's letter.
+  // Graded: Gemini answered. The tier shown is the one by ELO from face-offs, never Gemini's letter.
   const graded = typeof g?.tier === "string" && g.tier !== "";
   const ranked = tierOf(g);
   const tier = isPublicTier(ranked) ? ranked : null;

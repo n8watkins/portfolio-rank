@@ -19,7 +19,7 @@ import { createLinkToken, openLinkToken, ownerCookieValue, readOwnerCookie } fro
 import { emailState, reportEmail, requestEmail, sendDueEmails } from "../lib/grader/notify.mjs";
 import { DEFAULT_EMAIL_CAPS, addressHash, capReason, createEmailGate, emailCapConditions, emailCaps, emailTransport, isEmailCapAlert, validEmail } from "../lib/email/gate.mjs";
 import { buildReport, compareWithPool, gradedPool, strengthsAndFixes } from "../lib/grader/report.mjs";
-import { rankKey } from "../lib/tiers.mjs";
+import { gradeKey } from "../lib/grade-score.mjs";
 import { completeJob, recordCapture } from "../lib/grader/finish.mjs";
 import { checkOwnKey, gradeOnOwnKey, validOwnKey } from "../lib/grader/own-key.mjs";
 import { queueFreeGrade } from "../lib/grader/queue.mjs";
@@ -438,7 +438,7 @@ test("report emails: a cap holds them for the next tick; after 3 days the addres
 // ---------------------------------------------------------------------------
 // The report
 // ---------------------------------------------------------------------------
-// `tier` is the pool's tier by rank; `key` its rank key (lib/tiers.mjs), around `near` (the graded site's own key).
+// `tier` is the pool's tier by ELO; `key` its grade key (lib/grade-score.mjs), around `near` (the graded site's own key).
 const poolSite = (i, tier, axes = {}, near = 60000) => ({
   url: `https://site${i}.dev/`,
   name: `Site ${i}`,
@@ -458,7 +458,7 @@ test("report: strengths, fixes, percentile, similar portfolios and who does it b
   // Weighted by how much each costs: two weak AI axes outrank a missing resume link.
   assert.deepEqual(fixes.map((f) => f.criterion), ["storytelling", "writing", "resume"]);
   assert.equal(fixes[2].title, "Link your resume");
-  const near = rankKey(g);
+  const near = gradeKey(g);
   const pool = [
     ...Array.from({ length: 10 }, (_, i) => poolSite(i, "A", i < 2 ? { storytelling: 5 } : {}, near)),
     ...Array.from({ length: 10 }, (_, i) => poolSite(10 + i, "B", {}, near)),
@@ -467,10 +467,11 @@ test("report: strengths, fixes, percentile, similar portfolios and who does it b
   ];
   const r = compareWithPool(g, pool, { isSelf: (u) => siteKeyOf(u) === "jane.dev" });
   assert.equal(r.percentile.total, 40, "39 others plus this one");
-  // Ten A sites above it by score: 11th of 40, the top 27%, tier B+ by rank (15% to 33%).
+  // Ten A sites above it by score: the grade is 11th of 40, the top 27%. The tier comes from face-offs: B to start.
   assert.equal(r.percentile.rank, 11);
   assert.equal(r.percentile.topPct, 27);
-  assert.equal(r.rank.tier, "B+");
+  assert.equal(r.rank.tier, "B");
+  assert.equal(r.rank.provisional, true);
   assert.equal(r.similar.length, 4);
   assert.ok(r.similar.every((s) => s.tier === "B"));
   assert.ok(!JSON.stringify(r).includes("jane.dev"), "the site is never its own neighbour");

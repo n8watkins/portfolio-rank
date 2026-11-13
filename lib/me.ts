@@ -1,7 +1,6 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, shotBases } from "@/lib/shots";
-import { hiddenUrls } from "@/lib/roster";
 import { ownedJobs } from "@/lib/grader/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
@@ -10,6 +9,8 @@ import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { domainOf, reportPath } from "@/lib/home";
+import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
+import { placeNew } from "@/lib/tiers.mjs";
 
 // The visitor's own portfolio page (/me): their latest grade, read through
 // the signed owner cookie (lib/grader/server.ts ownedJobs), so it is never
@@ -51,8 +52,11 @@ export type Job = {
   email: { requested: boolean; sent: boolean };
   checks: { ok: boolean; message?: string } | null;
   report: null | {
-    /** The tier by rank in the library (lib/tiers.mjs); null when not ranked ("not a portfolio"). */
+    /** The tier by ELO from face-offs (lib/tiers.mjs); null when not ranked ("not a portfolio"). */
     tier: string | null;
+    /** Too few face-offs yet: the tier is the starting B. */
+    provisional: boolean;
+    faceoffs: number | null;
     isPortfolio: boolean | number | null;
     roles: string[];
     facts: Line[];
@@ -74,8 +78,8 @@ export type Listed = {
   url: string;
   name: string;
   path: string;
-  /** Rank on the people's board (ELO), when it has votes. */
-  people: { rank: number; elo: number; votes: number } | null;
+  /** Its ELO from face-offs (lib/tiers.mjs) and, once it has enough face-offs, its place among the ranked portfolios; null without face-offs. */
+  people: { rank: number | null; of: number | null; elo: number; faceoffs: number } | null;
   fights: { won: boolean; other: { url: string; name: string; domain: string; hero: string | null }; at: string }[];
 };
 
@@ -126,8 +130,8 @@ async function standingsOf(job: Job): Promise<Mine["standings"]> {
 
 async function listedOf(site: FeedRow): Promise<Listed> {
   const client = db();
-  const [rating, fights] = await Promise.all([
-    client.execute({ sql: "SELECT elo, votes FROM ratings WHERE url = ?", args: [site.url] }),
+  const [library, fights] = await Promise.all([
+    cachedLibraryState(client),
     client.execute({
       // votes_winner_idx and votes_loser_idx (lib/schema.mjs): a few rows, not the log.
       sql: `SELECT * FROM (
@@ -139,13 +143,10 @@ async function listedOf(site: FeedRow): Promise<Listed> {
     }),
   ]);
   let people: Listed["people"] = null;
-  const r = rating.rows[0];
-  if (r && Number(r.votes) > 0) {
-    const hidden = await hiddenUrls();
-    const above = await client.execute({ sql: "SELECT url FROM ratings WHERE votes >= 1 AND elo > ?", args: [Number(r.elo)] });
-    const listed = new Set(FEED.map((p) => p.url));
-    const rank = above.rows.filter((x) => listed.has(String(x.url)) && !hidden.has(String(x.url))).length + 1;
-    people = { rank, elo: Number(r.elo), votes: Number(r.votes) };
+  const e = entryIn(library, site.url);
+  if (e.faceoffs > 0) {
+    const p = placeNew(library.order.filter((x: { url: string }) => x.url !== site.url), e);
+    people = { rank: p.place, of: p.ranked, elo: e.elo, faceoffs: Math.floor(e.faceoffs) };
   }
   const others = fights.rows.map((x) => String(x.other));
   const shots = await shotBases(others);

@@ -190,9 +190,9 @@ test("fact builders: before and after, same-judge re-grades only; improvers name
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.equal(s.facts.find((f) => f.label === "Portfolios re-graded after their page changed").display, "23");
-  assert.equal(s.facts.find((f) => f.label === "Share that moved up at least one tier").display, "96%");
-  assert.equal(s.facts.find((f) => f.label === "Share that moved down at least one tier").about, null);
-  assert.ok(s.names.length > 0 && s.names.every((n) => /moved up from B to (S|A)/.test(n.reason)));
+  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved up at least one letter").display, "96%");
+  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved down at least one letter").about, null);
+  assert.ok(s.names.length > 0 && s.names.every((n) => /grade moved up from B to (S|A)/.test(n.reason)));
   assert.ok(!s.names.some((n) => n.url.includes("low-") || n.url === "https://top-25.dev"));
   assert.equal(s.charts.length, 1);
 });

@@ -20,12 +20,12 @@ import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 // the wording from lib/grader/present.mjs. Reports are unlisted: the id is
 // the only key, and nothing here names the visitor.
 
-type PoolSite = { url: string; name: string; mu: number; key: number | null; tier: string | null };
+type PoolSite = { url: string; name: string; mu: number; key: number | null; tier: string | null; top: number | null; place: number | null; of: number | null };
 export type PageJob = Job & { mine: boolean; checks: (Job["checks"] & { title?: string }) | null };
 
 export type BrokenLink = { url: string; kind: "broken" | "blocked"; status: number | null; reason: string; text: string | null; section: string | null };
 
-/** `tier` is the site's current tier by rank (lib/tiers.mjs); shown only when it is a public one. */
+/** `tier` is the site's current tier by ELO (lib/tiers.mjs); shown only when it is a public one. `rank` and `topPct` are its place by ELO, once it has enough face-offs. */
 export type ShownSite = { url: string; name: string; domain: string; tier: string | null; path: string; hero: string | null; rank: number | null; topPct: number | null };
 
 export type GradePage = {
@@ -148,7 +148,8 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   return {
     ...base,
     report: {
-      verdict: verdictOf(rep.tier),
+      // The report card's line follows the grade itself (Gemini's letter), not the tier by ELO.
+      verdict: verdictOf(String((raw.result as { tier?: unknown } | null)?.tier ?? "")),
       groups: hiringGroups(rep.facts),
       fixes: fixEffects(raw.result, rep.fixes, pool, { isSelf }),
       better,
@@ -163,8 +164,10 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
     await ensureSchema();
     const pool = (await gradedPool(db())) as PoolSite[];
     const hidden = await gradeHiddenUrls();
-    // The A family or better: the top 15% (SSS to A-, lib/tiers.mjs).
-    const pick = pool.filter((p) => !hidden.has(p.url) && atLeast(p.tier, "A"));
+    // The A family or better (the top 30% by ELO, lib/tiers.mjs); while few have enough face-offs, the best grades.
+    const shown = pool.filter((p) => !hidden.has(p.url));
+    const strong = shown.filter((p) => atLeast(p.tier, "A"));
+    const pick = strong.length >= 12 ? strong : [...shown].sort((a, b) => b.mu - a.mu).slice(0, 40);
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pick[i], pick[j]] = [pick[j], pick[i]];
