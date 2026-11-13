@@ -25,6 +25,7 @@ import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
+import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { NEWSLETTER_CRON, newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
@@ -137,7 +138,7 @@ const worker = {
   // tier by rank again (./tiers.ts), makes the image library's hourly batch
   // (./library.ts) and checks a 168th of the list's change fingerprints
   // (./freshness.ts); the weekly
-  // one is model watch (./model-watch.ts); the five-minute one is the
+  // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off;
   // the ten-minute one is the newsletter's (./newsletter.ts), which does
   // nothing while NEWSLETTER_ENABLED is off. Every cron is matched by name
@@ -160,7 +161,12 @@ const worker = {
       // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }
-    else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+    else if (controller.cron === MODEL_WATCH_CRON) {
+      // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).
+      // First, since it never throws, so a model-watch failure can't skip it.
+      await goalsTick(env as NightEnv, controller.scheduledTime);
+      await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+    }
     else if (controller.cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
     else if (controller.cron === NEWSLETTER_CRON) await newsletterTick(env as unknown as NewsletterEnv, controller.scheduledTime);
     else await startTonight(controller.scheduledTime, env as NightEnv);

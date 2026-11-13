@@ -216,8 +216,8 @@
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
       "services": [
         { "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" },
-        // The same mailroom app as production: staging's sign-in links count against PortfolioRank's share.
-        { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank" } }
+        // Staging's own small mailroom app (n8watkins/mailroom), so testing here never spends production's sign-in links.
+        { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank-staging" } }
       ],
       "send_email": [{ "name": "SEND_EMAIL" }],
       "ai": { "binding": "AI" },
