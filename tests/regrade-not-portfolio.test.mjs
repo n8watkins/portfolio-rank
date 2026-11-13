@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
-import { CAP, DAY_LIMIT, JOB, candidates, cappedFetch, groupOf, outcomeOf, usage } from "../scripts/regrade-not-portfolio.mjs";
+import { CAP, DAY_LIMIT, JOB, candidates, cappedFetch, groupOf, outcomeOf, report, usage } from "../scripts/regrade-not-portfolio.mjs";
+import { buildDupIndex, junkCheck } from "../pipeline/junk-rules.mjs";
 
 const dir = mkdtempSync(path.join(tmpdir(), "pr-regrade-np-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -55,6 +56,50 @@ test("which sites: listed and shown with a stored 'not a portfolio', in two grou
     await db.execute({ sql: "INSERT INTO gemini_requests (at, job, model) VALUES (?, ?, 'm')", args: [at, job] });
   }
   assert.deepEqual(await usage(db, now), { job: 2, day: 2 });
+});
+
+test("the narrow code rules: exact template, placeholder, parked and address rules are junk; a copy is review; sparse pages are not judged", () => {
+  const dup = buildDupIndex([{ url: "https://original.dev", page_text: "word ".repeat(10) + "Jane builds fast accessible web apps for small teams and loves typography and maps" }]);
+  const cases = [
+    [{ url: "https://a.dev", name: "A", page_text: "Build your AI portfolio in minutes" }, true, "template"],
+    [{ url: "https://b.dev", name: "Aaaaby", page_text: "Hey there" }, true, "placeholder name"],
+    [{ url: "https://c.dev", name: "C", page_text: "This domain is for sale. Make an offer on this domain." }, true, "parked or for sale"],
+    [{ url: "https://github.com/someone", name: "S", page_text: "" }, true, "not a portfolio address"],
+    [{ url: "https://linktr.ee/someone", name: "S", page_text: "" }, true, "not a portfolio address"],
+    // Not junk: a sparse or gated real portfolio, lorem ipsum, a "coming soon" page.
+    [{ url: "https://d.dev", name: "Dana", page_text: "Dana. Designer." }, false, null],
+    [{ url: "https://e.dev", name: "E", page_text: "Lorem ipsum dolor sit amet" }, false, null],
+    [{ url: "https://f.dev", name: "F", page_text: "Coming soon" }, false, null],
+  ];
+  for (const [row, junk, rule] of cases) {
+    const r = junkCheck(row, dup);
+    assert.equal(r.junk, junk, row.url);
+    assert.equal(r.rule, rule, row.url);
+  }
+  const copy = junkCheck({ url: "https://copy.dev", name: "X", page_text: "word ".repeat(10) + "Jane builds fast accessible web apps for small teams and loves typography and maps" }, dup);
+  assert.deepEqual([copy.junk, copy.review, copy.rule], [false, true, "same text on another domain"]);
+  assert.equal(junkCheck({ url: "https://original.dev", name: "J", page_text: "word ".repeat(10) + "Jane builds fast accessible web apps for small teams and loves typography and maps" }, dup).review, false, "its own text");
+});
+
+test("the report counts each path: code rule, Gemini's three outcomes, copies and failed captures", async () => {
+  const db = createClient({ url: `file:${path.join(dir, "report.sqlite")}` });
+  await migrate(db);
+  const rows = [
+    ["https://r1.dev", { outcome: "junk_rule", rule: "template" }],
+    ["https://r2.dev", { outcome: "portfolio", copy: true }],
+    ["https://r3.dev", { outcome: "needs_review" }],
+    ["https://r4.dev", { outcome: "not_portfolio" }],
+    ["https://r5.dev", { captured: false }],
+  ];
+  for (const [url, s] of rows) {
+    await db.execute({ sql: "INSERT INTO portfolios (url, name, status, ai_rubric) VALUES (?, 'x', 'live', ?)", args: [url, JSON.stringify({ is_portfolio: false })] });
+    await db.execute({ sql: "INSERT INTO cache (k, v, at) VALUES (?, ?, 0)", args: [`regrade-np:${url}`, JSON.stringify(s)] });
+  }
+  const r = await report(db, { print: false });
+  assert.deepEqual(
+    Object.fromEntries(["junk_rule", "portfolio", "needs_review", "not_portfolio", "pending", "copies", "failedCaptures"].map((k) => [k, r[k].length])),
+    { junk_rule: 1, portfolio: 1, needs_review: 1, not_portfolio: 1, pending: 1, copies: 1, failedCaptures: 1 }
+  );
 });
 
 test("a new grade's outcome: portfolio, still not a portfolio, or needs review", () => {
