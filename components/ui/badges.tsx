@@ -1,80 +1,24 @@
 import type React from "react";
 import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
 import { medalFor } from "@/lib/ranking/places.mjs";
-import { BELOW_TOP_TIERS, familyOf, isPublicTier, modifierOf, tierLabel } from "@/lib/tiers.mjs";
 
 // Small marks shared by the leaderboard, reports, cards and Play.
 
-/** The tile of each letter family (lib/tiers.mjs familyOf); SSS and S+ add a frame (TIER_FRAME). */
 export const TIER_STYLE: Record<string, string> = {
-  SSS: "text-[#2a1d06]",
   S: "bg-fill text-on-fill",
-  // The top 30% (owner, 2026-11-12: many more people should be proud to share an A): a strong gold ring and a soft glow.
-  A: "bg-accent-soft text-accent ring-2 ring-inset ring-accent/80 shadow-[0_4px_14px_-6px_var(--color-accent)]",
+  A: "bg-accent-soft text-accent ring-1 ring-inset ring-accent/25",
   B: "bg-raised text-ink ring-1 ring-inset ring-edge-strong",
   C: "bg-raised text-ink ring-1 ring-inset ring-edge",
   D: "bg-raised text-mute ring-1 ring-inset ring-edge",
 };
 
-/** S+ gets a gold ring around the amber tile; SSS a metallic gold tile (the gold medal's) with the ring and a soft glow. */
-const TIER_FRAME: Record<string, React.CSSProperties> = {
-  SSS: {
-    background: "linear-gradient(145deg, #fde68a, #e9b949 55%, #b7861c)",
-    boxShadow: "0 0 0 2px var(--color-card), 0 0 0 3.5px #e9b949, 0 6px 16px -6px rgba(233, 185, 73, 0.75)",
-  },
-  "S+": { boxShadow: "0 0 0 2px var(--color-card), 0 0 0 3.5px var(--color-fill)" },
-};
-
-const SIZE = {
-  md: { box: "h-8 w-8 rounded-lg", letter: "text-sm", sss: "text-[11px] tracking-tighter" },
-  lg: { box: "h-16 w-16 rounded-2xl", letter: "text-3xl", sss: "text-xl tracking-tight" },
-} as const;
-
-const MOD_NAME: Record<string, string> = { "+": "plus", "-": "minus" };
-
-/**
- * A grade tier (SSS, S+ ... D, by rank: lib/tiers.mjs) as a square badge: the
- * letter with a typeset plus or minus right beside it, in the same face and
- * weight, a little smaller and centred on the letter ("S−", "A+"). The minus
- * is a real minus sign, as wide as the plus.
- */
+/** A grade tier (S to D) as a square badge. */
 export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "lg" }) {
-  const z = SIZE[size];
-  const family = familyOf(tier) ?? "C";
-  const mod = modifierOf(tier);
-  const look = tier === "SSS" ? TIER_STYLE.SSS : (TIER_STYLE[family] ?? TIER_STYLE.C);
+  const s = size === "lg" ? "h-16 w-16 rounded-2xl text-3xl" : "h-8 w-8 rounded-lg text-sm";
   return (
-    <span
-      role="img"
-      aria-label={`Tier ${tier === "SSS" ? "SSS" : family}${mod ? ` ${MOD_NAME[mod]}` : ""}`}
-      title={`Tier ${tierLabel(tier)}`}
-      className={`grid shrink-0 place-items-center font-bold leading-none ${z.box} ${look}`}
-      style={TIER_FRAME[tier]}
-    >
-      {tier === "SSS" ? (
-        <span aria-hidden className={z.sss}>
-          SSS
-        </span>
-      ) : (
-        <span aria-hidden className={`inline-flex items-center ${z.letter}`}>
-          {family}
-          {mod && <span className="-translate-y-[0.06em] pl-[0.03em] text-[0.8em]">{mod === "+" ? "+" : "\u2212"}</span>}
-        </span>
-      )}
+    <span role="img" aria-label={`Tier ${tier}`} className={`grid shrink-0 place-items-center font-bold ${s} ${TIER_STYLE[tier] ?? TIER_STYLE.C}`}>
+      <span aria-hidden>{tier}</span>
     </span>
-  );
-}
-
-/**
- * Another portfolio's tier where the public can see it: the letter for the
- * top tiers (SSS to B-, lib/tiers.mjs PUBLIC_TIERS), else a blank square the
- * same size that says "Graded, below the top tiers" to screen readers, so
- * no one gets a public C or D.
- */
-export function PublicTierBadge({ tier }: { tier: string | null | undefined }) {
-  if (tier && isPublicTier(tier)) return <TierBadge tier={tier} />;
-  return (
-    <span role="img" aria-label={tier ? BELOW_TOP_TIERS : "Not graded yet"} title={tier ? BELOW_TOP_TIERS : undefined} className="h-8 w-8 shrink-0 rounded-lg ring-1 ring-inset ring-edge" />
   );
 }
 
@@ -128,4 +72,75 @@ export function Movement({ move, period = "this week", className = "" }: { move:
       <span aria-hidden>{Math.abs(move)}</span>
     </span>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Tiers by ELO (lib/tiers.mjs, RANKING_V2 only): the full ladder SSS, S+ ... D,
+// with a typeset plus or minus. TierBadge above stays exactly as it is for
+// Gemini's letters while RANKING_V2 is off.
+// ---------------------------------------------------------------------------
+
+/** The tile of each letter family; SSS and S+ add a frame (ELO_TIER_FRAME). A, the top 30%, gets a strong gold ring. */
+const ELO_TIER_STYLE: Record<string, string> = {
+  SSS: "text-[#2a1d06]",
+  S: "bg-fill text-on-fill",
+  A: "bg-accent-soft text-accent ring-2 ring-inset ring-accent/80 shadow-[0_4px_14px_-6px_var(--color-accent)]",
+  B: "bg-raised text-ink ring-1 ring-inset ring-edge-strong",
+  C: "bg-raised text-ink ring-1 ring-inset ring-edge",
+  D: "bg-raised text-mute ring-1 ring-inset ring-edge",
+};
+
+const ELO_TIER_FRAME: Record<string, React.CSSProperties> = {
+  SSS: {
+    background: "linear-gradient(145deg, #fde68a, #e9b949 55%, #b7861c)",
+    boxShadow: "0 0 0 2px var(--color-card), 0 0 0 3.5px #e9b949, 0 6px 16px -6px rgba(233, 185, 73, 0.75)",
+  },
+  "S+": { boxShadow: "0 0 0 2px var(--color-card), 0 0 0 3.5px var(--color-fill)" },
+};
+
+const ELO_SIZE = {
+  md: { box: "h-8 w-8 rounded-lg", letter: "text-sm", sss: "text-[11px] tracking-tighter" },
+  lg: { box: "h-16 w-16 rounded-2xl", letter: "text-3xl", sss: "text-xl tracking-tight" },
+} as const;
+
+const MOD_NAME: Record<string, string> = { "+": "plus", "-": "minus" };
+
+/** A tier by ELO (SSS, S+ ... D) as a square badge: the letter with a typeset plus or minus beside it (a real minus sign). */
+export function EloTierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "lg" }) {
+  const z = ELO_SIZE[size];
+  const family = tier === "SSS" ? "S" : tier[0];
+  const mod = tier !== "SSS" && tier.length === 2 ? tier[1] : "";
+  const look = tier === "SSS" ? ELO_TIER_STYLE.SSS : (ELO_TIER_STYLE[family] ?? ELO_TIER_STYLE.C);
+  return (
+    <span
+      role="img"
+      aria-label={`Tier ${tier === "SSS" ? "SSS" : family}${mod ? ` ${MOD_NAME[mod]}` : ""}`}
+      title={`Tier ${tier.replace(/-$/, "−")}`}
+      className={`grid shrink-0 place-items-center font-bold leading-none ${z.box} ${look}`}
+      style={ELO_TIER_FRAME[tier]}
+    >
+      {tier === "SSS" ? (
+        <span aria-hidden className={z.sss}>
+          SSS
+        </span>
+      ) : (
+        <span aria-hidden className={`inline-flex items-center ${z.letter}`}>
+          {family}
+          {mod && <span className="-translate-y-[0.06em] pl-[0.03em] text-[0.8em]">{mod === "+" ? "+" : "−"}</span>}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * A report's letter: Gemini's grade drawn exactly as TierBadge while
+ * RANKING_V2 is off; with tiers by ELO (`elo`), the tier by ELO
+ * (EloTierBadge), or a blank square that says "No tier" when there is none.
+ */
+export function LetterBadge({ tier, elo = false, size = "md" }: { tier: string | null | undefined; elo?: boolean; size?: "md" | "lg" }) {
+  if (!elo) return <TierBadge tier={tier ?? ""} size={size} />;
+  if (tier) return <EloTierBadge tier={tier} size={size} />;
+  const s = size === "lg" ? "h-16 w-16 rounded-2xl" : "h-8 w-8 rounded-lg";
+  return <span role="img" aria-label="No tier" className={`shrink-0 ring-1 ring-inset ring-edge ${s}`} />;
 }

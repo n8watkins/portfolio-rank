@@ -16,7 +16,8 @@ import { budgetPlan } from "../pipeline/budget.mjs";
 import { PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { claimCaptures, readJob } from "../lib/grader/jobs.mjs";
 import { recordCapture } from "../lib/grader/finish.mjs";
-import { queueFreeGrade } from "../lib/grader/queue.mjs";
+import { queueFreeGrade } from "../lib/grader/free-grade.mjs";
+import { listen } from "./helpers/listen.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -79,7 +80,7 @@ before(async () => {
       res.writeHead(404).end();
     });
   });
-  await new Promise((r) => mock.listen(MOCK_PORT, "127.0.0.1", r));
+  await listen(mock, MOCK_PORT);
   for (let i = 0; i < 60; i++) {
     try {
       if ((await fetch(`${BASE}/api/leaderboard`)).status < 500) break;
@@ -195,9 +196,7 @@ test("a grade: free checks at once, one capture dispatched with no inputs, then 
   assert.equal(g.body.status, "done");
   assert.equal(g.body.mine, false, "anyone with the link can read it; only the owner owns it");
   const rep = g.body.report;
-  // The tier is the rank in the library (lib/tiers.mjs), never Gemini's letter; this database's library may be empty.
-  const stored = JSON.parse(String((await db.execute({ sql: "SELECT report FROM grade_jobs WHERE id = ?", args: [reportId] })).rows[0].report));
-  assert.equal(rep.tier, stored.rank?.tier ?? null);
+  assert.equal(rep.tier, "A");
   assert.equal(rep.model, PRIMARY_MODEL);
   assert.equal(rep.ownKey, false);
   assert.deepEqual(rep.roles, ["frontend developer"]);
@@ -337,13 +336,13 @@ test("own key: checked for free, never stored or logged, used once to finish the
   // Switching an own-key grade to the free tier.
   const s = await grade(v, "own2-e2e.dev", { geminiKey: GOOD_KEY });
   await runCaptureJob();
+  const generated = seen.generate;
   const free = await call(v, "POST", `/api/grade/${s.body.id}/finish`, { freeTier: true });
   assert.equal(free.status, 202);
-  for (let i = 0; i < 20; i++) {
-    if ((await call(v, "GET", `/api/grade/${s.body.id}`)).body.status === "queued") break;
-    await sleep(200);
-  }
-  assert.equal((await call(v, "GET", `/api/grade/${s.body.id}`)).body.status, "queued", "no Gemini key on this server: it waits in the people queue");
+  // The request only enqueues, never on our Gemini key; the hourly drain grades it.
+  assert.equal(free.body.status, "queued");
+  assert.equal((await call(v, "GET", `/api/grade/${s.body.id}`)).body.status, "queued", "it waits in the people queue");
+  assert.equal(seen.generate, generated, "no Gemini request from the visitor's request");
 });
 
 test("only the owner deletes a report, screenshots included", { skip: !enabled }, async () => {

@@ -60,26 +60,19 @@ const host = (u) => {
 };
 const decode = (s) =>
   String(s ?? "")
-    .replace(/&#x([0-9a-f]{1,6});/gi, (_, h) => String.fromCodePoint(Number.parseInt(h, 16)))
-    .replace(/&#(\d{1,7});/g, (_, d) => String.fromCodePoint(Number(d)))
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&");
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x2F;/gi, "/")
+    .replace(/&#47;/g, "/")
+    .replace(/&quot;/gi, '"');
 
 /** Every <a href> on the page, absolute, with its text. */
 export function extractLinks(html, baseUrl) {
   const out = [];
-  const src = String(html ?? "");
-  // Headings in order, so each link knows the section it sits in ("where on the page").
-  const heads = [...src.matchAll(/<h([1-4])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map((h) => ({ at: h.index, text: shorten(decode(h[2].replace(/<[^>]+>/g, " ")), 60) })).filter((h) => h.text);
-  for (const m of src.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+  for (const m of String(html ?? "").matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
     const href = m[1].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
     const raw = decode(href?.[1] ?? href?.[2] ?? href?.[3] ?? "").trim();
     if (!raw) continue;
-    const text = decode(m[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, 80);
+    const text = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
     const aria = m[1].match(/\baria-label\s*=\s*["']([^"']*)["']/i)?.[1] ?? "";
     let abs;
     try {
@@ -87,8 +80,7 @@ export function extractLinks(html, baseUrl) {
     } catch {
       continue;
     }
-    const section = heads.filter((h) => h.at < m.index).at(-1)?.text ?? null;
-    out.push({ raw, href: abs, text: `${text} ${aria}`.trim(), section });
+    out.push({ raw, href: abs, text: `${text} ${aria}`.trim() });
   }
   return out;
 }
@@ -216,51 +208,13 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
   };
 }
 
-/** Whitespace collapsed, cut at a word boundary to at most `max` characters, with an ellipsis when cut. */
-function shorten(text, max) {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
-  if (t.length <= max) return t;
-  const cut = t.slice(0, max - 1);
-  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), Math.floor(max / 2))).trim()}…`;
-}
-
-/** At most this many failed links are kept with their details. */
-export const LINK_FAILURES_MAX = 10;
-
-/** Where each candidate link sits on the page: href -> { text, section }, from extractLinks. */
-export function linkContext(links) {
-  const out = {};
-  for (const l of links) {
-    let key;
-    try {
-      const u = new URL(l.href);
-      u.hash = "";
-      key = u.href;
-    } catch {
-      continue;
-    }
-    if (!out[key]) out[key] = { text: shorten(decode(String(l.text ?? "")), 60) || null, section: l.section ?? null };
-  }
-  return out;
-}
-
-/** A failed check in words: "404 Not Found", "timed out after 8 s", "didn't connect". */
-function failureReason(status, error, timeoutMs) {
-  if (error) return /timeout|abort/i.test(String(error?.name ?? error?.message ?? error)) ? `timed out after ${Math.round(timeoutMs / 1000)} s` : "didn't connect (no such site, or it refused the connection)";
-  const names = { 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 410: "Gone", 429: "Too Many Requests", 500: "Server Error", 502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout", 999: "refused by the site" };
-  return `${status}${names[status] ? ` ${names[status]}` : ""}`;
-}
-
 /**
  * Check links: HEAD, then GET when HEAD is refused. A link "loads" on 2xx/3xx;
  * 401/403/429/999 is a bot wall (blocked, not broken); 404, 410, 5xx, DNS
- * failures and timeouts are broken. Returns { checked, ok, broken, blocked,
- * failures }, where failures lists up to LINK_FAILURES_MAX broken and blocked
- * links: { url, kind, status, reason, text, section } (text and section from
- * `context`, linkContext's map).
+ * failures and timeouts are broken. Returns { checked, ok, broken, blocked }.
  */
-export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, context = {} } = {}) {
-  const res = { checked: 0, ok: 0, broken: 0, blocked: 0, failures: [] };
+export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent } = {}) {
+  const res = { checked: 0, ok: 0, broken: 0, blocked: 0 };
   const headers = { Accept: "text/html,*/*;q=0.8", ...(userAgent ? { "User-Agent": userAgent } : {}) };
   async function one(url) {
     let h;
@@ -283,35 +237,31 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     try {
       status = await req("HEAD");
       if ([400, 403, 404, 405, 429, 501].includes(status)) status = await req("GET");
-    } catch (e) {
-      return { verdict: "broken", url, status: null, reason: failureReason(null, e ?? "error", timeoutMs) };
+    } catch {
+      return "broken";
     }
-    if (status >= 200 && status < 400) return { verdict: "ok" };
-    if ([401, 403, 429, 999].includes(status)) return { verdict: "blocked", url, status, reason: failureReason(status, null, timeoutMs) };
-    return { verdict: "broken", url, status, reason: failureReason(status, null, timeoutMs) };
+    if (status >= 200 && status < 400) return "ok";
+    if ([401, 403, 429, 999].includes(status)) return "blocked";
+    return "broken";
   }
   const queue = [...urls];
   await Promise.all(
     Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
       while (queue.length) {
-        const r = await one(queue.shift());
-        if (!r) continue;
+        const verdict = await one(queue.shift());
+        if (!verdict) continue;
         res.checked++;
-        res[r.verdict]++;
-        if (r.verdict !== "ok") res.failures.push({ url: r.url, kind: r.verdict, status: r.status, reason: r.reason, text: context[r.url]?.text ?? null, section: context[r.url]?.section ?? null });
+        res[verdict]++;
       }
     })
   );
-  // Broken first, then blocked, each in page order as far as the checks finished.
-  res.failures = [...res.failures.filter((f) => f.kind === "broken"), ...res.failures.filter((f) => f.kind === "blocked")].slice(0, LINK_FAILURES_MAX);
   return res;
 }
 
 /** measureFacts plus the project-link check. */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
   const facts = measureFacts(input);
-  const links = extractLinks(input.html, facts.final_url);
-  const urls = projectLinkCandidates(links, facts.final_url);
-  facts.project_links = await checkLinks(urls, { fetchImpl, userAgent, timeoutMs, context: linkContext(links) });
+  const urls = projectLinkCandidates(extractLinks(input.html, facts.final_url), facts.final_url);
+  facts.project_links = await checkLinks(urls, { fetchImpl, userAgent, timeoutMs });
   return facts;
 }

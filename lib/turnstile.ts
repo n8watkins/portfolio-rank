@@ -9,7 +9,7 @@ import { randomUUID } from "crypto";
 // Fails closed on the deployed Workers (production and staging, NODE_ENV
 // "production" with SITE_ENV other than "test"): no secret, or one of
 // Cloudflare's test secrets, refuses every request, and the hostname Siteverify
-// reports must be the Worker's own (AUTH_URL). Only local runs (`next dev`,
+// reports must be the Worker's own (SITE_URL). Only local runs (`next dev`,
 // the end-to-end suite with SITE_ENV=test) may go without the secret, and
 // they may use Cloudflare's test keys.
 // https://developers.cloudflare.com/turnstile/troubleshooting/testing/
@@ -31,14 +31,14 @@ export function isTestSecret(secret: string): boolean {
 /** Siteverify answers a test secret with this hostname, whatever the page was. */
 const TEST_HOSTNAME = "example.com";
 
-/** Hostnames a token may come from: this Worker's own (AUTH_URL), plus localhost when not deployed. */
+/** Hostnames a token may come from: this Worker's own (SITE_URL), plus localhost when not deployed. */
 export function allowedHostnames(env: Env = process.env): string[] {
   const hosts = new Set<string>();
-  if (env.AUTH_URL) {
+  if (env.SITE_URL) {
     try {
-      hosts.add(new URL(env.AUTH_URL).hostname);
+      hosts.add(new URL(env.SITE_URL).hostname);
     } catch {
-      // A malformed AUTH_URL allows no host, which fails closed.
+      // A malformed SITE_URL allows no host, which fails closed.
     }
   }
   if (!isDeployed(env)) {

@@ -7,7 +7,7 @@ import { Regrade } from "@/components/me/Regrade";
 import { Thumb } from "@/components/home/Thumb";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
-import { PublicTierBadge, TierBadge } from "@/components/ui/badges";
+import { LetterBadge } from "@/components/ui/badges";
 import { tierLabel } from "@/lib/tiers.mjs";
 import { btnPrimary, btnSecondary, sectionTitle } from "@/components/ui/styles";
 import { BADGES } from "@/lib/games/badges.mjs";
@@ -141,12 +141,15 @@ function Report({ mine }: { mine: Mine }) {
             <span className="sr-only">(opens in a new tab)</span>
           </a>
           <div className="mt-5 flex items-center gap-4">
-            {rep.tier && <TierBadge tier={rep.tier} size="lg" />}
+            <LetterBadge tier={rep.tier} elo={rep.eloTiers} size="lg" />
             <div className="min-w-0">
-              <p className="text-lg font-bold">{rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded"}</p>
+              <p className="text-lg font-bold">
+                {rep.eloTiers ? (rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded") : <>Tier {rep.tier}</>}
+                {pct ? `, about top ${pct.topPct}%` : ""}
+              </p>
               {pct && (
                 <p className="text-sm text-mute">
-                  Your grade: top {pct.topPct}% of {(pct.total - 1).toLocaleString("en-US")} graded portfolios. The tier comes from face-offs.
+                  Would rank around #{pct.rank.toLocaleString("en-US")} of {pct.total.toLocaleString("en-US")} on the AI grade alone.
                 </p>
               )}
             </div>
@@ -155,15 +158,9 @@ function Report({ mine }: { mine: Mine }) {
             <p className="mt-4 flex items-center gap-2 text-sm">
               <Trophy className="h-4 w-4 text-accent" aria-hidden />
               <span>
-                {listed.people.rank != null ? (
-                  <>
-                    <strong className="tabular-nums">#{listed.people.rank.toLocaleString("en-US")}</strong> of {listed.people.of?.toLocaleString("en-US")} ranked{" "}
-                  </>
-                ) : (
-                  <>Not ranked yet </>
-                )}
+                <strong className="tabular-nums">#{listed.people.rank.toLocaleString("en-US")}</strong> on the people&apos;s board{" "}
                 <span className="text-mute tabular-nums">
-                  · ELO {listed.people.elo} · {listed.people.faceoffs.toLocaleString("en-US")} {listed.people.faceoffs === 1 ? "face-off" : "face-offs"}
+                  · ELO {listed.people.elo} · {listed.people.votes.toLocaleString("en-US")} {listed.people.votes === 1 ? "vote" : "votes"}
                 </span>
               </span>
             </p>
@@ -330,7 +327,7 @@ function Report({ mine }: { mine: Mine }) {
                         {"why" in s ? ` · 5/5 for ${String(s.why).toLowerCase()}` : ""}
                       </span>
                     </span>
-                    <PublicTierBadge tier={s.tier} />
+                    <LetterBadge tier={s.tier} elo={rep.eloTiers} />
                   </a>
                 </li>
               ))}

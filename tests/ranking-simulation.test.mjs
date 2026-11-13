@@ -34,15 +34,15 @@ test("simulation: comparisons improve on the seeds, and the boards track the hid
 test("simulation: seeding by tier puts every S above every D", () => {
   const sim = simulate({ ...opts, days: 0 });
   const board = recompute({ ...sim, aiWeight: 0.5, history: false }).boards.merged;
-  const worstS = Math.max(...board.filter((r) => r.seedTier === "S").map((r) => r.rank));
-  const bestD = Math.min(...board.filter((r) => r.seedTier === "D").map((r) => r.rank));
-  assert.ok(board.some((r) => r.seedTier === "S") && board.some((r) => r.seedTier === "D"));
+  const worstS = Math.max(...board.filter((r) => r.tier === "S").map((r) => r.rank));
+  const bestD = Math.min(...board.filter((r) => r.tier === "D").map((r) => r.rank));
+  assert.ok(board.some((r) => r.tier === "S") && board.some((r) => r.tier === "D"));
   assert.ok(worstS < bestD, `worst S ${worstS}, best D ${bestD}`);
 });
 
 test("simulation: a D site that becomes S quality climbs to the top 10% within 15 comparisons after its page changes", () => {
   const board = recompute({ ...simulate({ ...opts, days: 0 }), aiWeight: 0.5, history: false }).boards.ai;
-  const d = board.filter((r) => r.seedTier === "D");
+  const d = board.filter((r) => r.tier === "D");
   const url = d[Math.floor(d.length / 2)].url;
   const improve = { url, day: 7, truth: 2.4 };
   const withReset = simulate({ ...opts, improve });

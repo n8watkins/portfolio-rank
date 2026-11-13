@@ -134,12 +134,12 @@ const accuracy = {
 
 // Sanity 1: with no comparisons, every S site ranks above every D site.
 const seedBoard = seedOnly.boards.ai;
-const worstS = Math.max(...seedBoard.filter((r) => r.seedTier === "S").map((r) => r.rank));
-const bestD = Math.min(...seedBoard.filter((r) => r.seedTier === "D").map((r) => r.rank));
+const worstS = Math.max(...seedBoard.filter((r) => r.tier === "S").map((r) => r.rank));
+const bestD = Math.min(...seedBoard.filter((r) => r.tier === "D").map((r) => r.rank));
 const tierOrder = { worstS, bestD, ok: worstS < bestD };
 
 // Sanity 2: a D site whose page changes on day 14 and is now S quality.
-const listedD = seedBoard.filter((r) => r.seedTier === "D");
+const listedD = seedBoard.filter((r) => r.tier === "D");
 const target = listedD[Math.floor(listedD.length / 2)].url;
 const climb = (reset) => {
   const run = simulate({ sites, prior: realVotes, days, seed, start: startDay, improve: { url: target, day: 14, truth: 2.4 }, reset });

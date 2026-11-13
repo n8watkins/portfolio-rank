@@ -7,7 +7,6 @@ import { readAnonId, signAnonId } from "@/lib/matchup";
 import { ANON_COOKIE } from "@/lib/rater";
 import { heroOf, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
-import { profilePath } from "@/lib/profile-url.mjs";
 
 // Request-side helpers for the polls API (app/api/polls): who is voting,
 // the Origin check, Turnstile, and the public shape of a poll.
@@ -69,7 +68,7 @@ export async function publicPolls(polls: StoredPoll[]): Promise<PublicPoll[]> {
       const shot = shots.get(url) ?? null;
       return {
         ...o,
-        site: { url, name: names.get(url) ?? domainOf(url), domain: domainOf(url), path: profilePath(url), shot, hero: shot ? heroOf(shot) : null },
+        site: { url, name: names.get(url) ?? domainOf(url), domain: domainOf(url), path: `/p/${encodeURIComponent(url)}`, shot, hero: shot ? heroOf(shot) : null },
       };
     }),
   }));
@@ -116,9 +115,9 @@ export function sameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
   if (!origin) return false;
   const allowed = new Set([new URL(SITE_URL).origin, new URL(req.url).origin]);
-  if (process.env.AUTH_URL) {
+  if (process.env.SITE_URL) {
     try {
-      allowed.add(new URL(process.env.AUTH_URL).origin);
+      allowed.add(new URL(process.env.SITE_URL).origin);
     } catch {
       /* not a URL */
     }

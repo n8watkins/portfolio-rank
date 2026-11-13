@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureTierSchema, undoFaceoff } from "@/lib/tiers-db.mjs";
 import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import {
@@ -16,6 +17,7 @@ import {
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   await ensureSchema();
+  await ensureTierSchema(db());
   const rater = await getRater();
 
   const tx = await db().transaction("write");
@@ -46,6 +48,8 @@ export async function POST(req: Request) {
         sql: "UPDATE ratings SET elo = elo + ?, votes = MAX(votes - 1, 0), updated_at = datetime('now') WHERE url = ?",
         args: [delta, String(v.loser)],
       });
+      // And the tier rating of the two portfolios (lib/tiers-db.mjs), in the same transaction.
+      await undoFaceoff(tx, { voteId: Number(v.id), winner: String(v.winner), loser: String(v.loser) });
     }
     await tx.commit();
   } catch (e) {

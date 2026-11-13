@@ -1,17 +1,22 @@
 import { Leaderboard } from "@/components/top/Leaderboard";
-import { loadLeaderboard } from "@/lib/leaderboard";
+import { loadLeaderboard, rankingViewsEnabled } from "@/lib/leaderboard";
+import { RankedBoard } from "@/components/tiers/RankedBoard";
+import { loadRankedBoard } from "@/lib/tiers-board";
 
 // Rendered at most once every 5 minutes (ISR) instead of on every visit: the
-// tiers are placed again hourly, and every render costs database reads
-// (Turso bills every row scanned; docs/COSTS.md section C).
+// board changes once a night (ranking views) or slowly (ELO), and every
+// render costs database reads (Turso bills every row scanned; docs/COSTS.md
+// section C).
 export const revalidate = 300;
 
 export const metadata = {
   title: "Leaderboard - PortfolioRank",
-  description: "The best developer portfolios, ranked by ELO from face-off votes.",
+  description: "The best developer portfolios, ranked by people's face-off votes and an AI grade.",
 };
 
-/** The ranked board: tiers by ELO from face-offs (lib/tiers.mjs). */
+/** The Merged view when the ranking views are on (RANKING_V2), else today's ELO board. */
 export default async function TopPage() {
-  return <Leaderboard board={await loadLeaderboard("rank")} views={false} />;
+  // Tiers by ELO (RANKING_V2): one ranked board, the letter from the votes (lib/tiers-board.ts).
+  if (rankingViewsEnabled()) return <RankedBoard board={await loadRankedBoard()} />;
+  return <Leaderboard board={await loadLeaderboard(rankingViewsEnabled() ? "merged" : "elo")} />;
 }

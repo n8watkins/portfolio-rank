@@ -29,11 +29,7 @@ test("leaderboard API: rejects an unknown view, serves each view best first with
   // The listed sites, as the roster sync writes them; the recompute numbers
   // the shown sites after writing a board.
   for (const url of [a, b, c]) {
-    // Graded: only graded portfolios are shown on the boards.
-    await db.execute({
-      sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?) ON CONFLICT(url) DO UPDATE SET status = 'live', health = NULL, delisted_at = NULL, ai_rubric = excluded.ai_rubric",
-      args: [url, JSON.stringify({ tier: "B", is_portfolio: true })],
-    });
+    await db.execute({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live') ON CONFLICT(url) DO UPDATE SET status = 'live', health = NULL, delisted_at = NULL", args: [url] });
   }
   await assignShownRanks(db);
   const res = await fetch(`${BASE}/api/leaderboard?view=people&limit=2`);

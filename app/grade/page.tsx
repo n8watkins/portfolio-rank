@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 
 const WHAT = [
-  { Icon: Trophy, title: "Your grade and rank", body: `A tier from SSS to D, set by your place among ${PORTFOLIO_COUNT_LABEL} developer portfolios.` },
+  { Icon: Trophy, title: "Your grade and rank", body: `A tier from S to D, and where you'd land among ${PORTFOLIO_COUNT_LABEL} developer portfolios.` },
   { Icon: ListChecks, title: "What a hiring manager sees", body: "Contact, resume, GitHub, working links and your own domain, checked by code." },
   { Icon: Sparkles, title: "The three things to fix first", body: "With what each one should change, and portfolios that do it better." },
 ];

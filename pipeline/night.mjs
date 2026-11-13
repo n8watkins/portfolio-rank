@@ -54,6 +54,7 @@
 // plan.parkAfterNights nights in a row is parked (night_item_failures) and
 // listed in the summary instead of retried. A spent quota stops the run as
 // planned waiting, never as a failure.
+import { NIGHT_TABLES } from "../lib/pipeline-schema.mjs";
 import { STAGES, backgroundAllowance, nightTimeline, pacificParts, previousDay, usageToday } from "./budget.mjs";
 import {
   createGemini,
@@ -65,8 +66,10 @@ import {
   PRIMARY_MODEL,
 } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
+import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
 import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import { rankForWrite } from "../lib/tiers-store.mjs";
 import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
@@ -76,33 +79,11 @@ import { recompute } from "../lib/ranking/views.mjs";
 import { ensurePollsSchema, schedulePolls } from "./polls.mjs";
 import { contentStage } from "./content/engine.mjs";
 import { libraryStage } from "./content/library-stage.mjs";
-import { rankForWrite } from "../lib/tiers-store.mjs";
 
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
 export async function ensureNightSchema(db) {
-  await db.batch(
-    [
-      `CREATE TABLE IF NOT EXISTS night_runs (
-        night TEXT PRIMARY KEY,
-        started_at TEXT NOT NULL,
-        finished_at TEXT,
-        status TEXT NOT NULL,
-        run_id TEXT,
-        summary TEXT
-      )`,
-      `CREATE TABLE IF NOT EXISTS night_item_failures (
-        job TEXT NOT NULL,
-        item TEXT NOT NULL,
-        nights INTEGER NOT NULL,
-        last_night TEXT NOT NULL,
-        reason TEXT,
-        parked_at TEXT,
-        PRIMARY KEY (job, item)
-      )`,
-    ],
-    "write"
-  );
+  await db.batch(NIGHT_TABLES, "write");
 }
 
 const iso = (ms) => new Date(ms).toISOString();
@@ -247,7 +228,7 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   }
   if (!image) return "skipped";
   const now = new Date(ctx.now());
-  // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
+  // The new grade carries its tier rank (lib/tiers-store.mjs; a background write, shown only with RANKING_V2).
   const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { url, now: ctx.now() });
   await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
   return "ok";
@@ -373,7 +354,9 @@ async function rebuildBoards(ctx, stage) {
   const config = ctx.flags.ranking;
   const input = await loadInput(ctx.db);
   const result = recompute({ ...input, aiWeight: config.aiWeight, batchedCounts: config.batchedCounts });
-  await writeResults(ctx.db, { ...result, digest: inputDigest(input), config, now: new Date(ctx.now()) });
+  const out = await writeResults(ctx.db, { ...result, digest: inputDigest(input), config, now: new Date(ctx.now()) });
+  // Only changed rows are written (docs/COSTS.md section C); the counts show what a night costs in Turso writes.
+  ctx.log(`boards: ${out.ratings.written} row(s) written, ${out.ratings.deleted} deleted, ${out.ratings.unchanged} unchanged; history ${out.history.written} written`);
   stage.boards = "rebuilt";
 }
 
@@ -516,9 +499,10 @@ async function stopRun(ctx, s, reason, status) {
 }
 
 /**
- * One batch of the current stage. Returns { state, pauseMs } where pauseMs
- * asks the caller to wait (people are using Gemini right now) before the
- * next batch. Never throws: an unexpected error ends the run as failed.
+ * One batch of the current stage. Returns { state, pauseMs, pauseReason? }
+ * where pauseMs asks the caller to wait before the next batch: people are
+ * using Gemini right now, or (pauseReason "busy") Google's AI was busy on a
+ * post and the stage tries it again after the wait. Never throws: an unexpected error ends the run as failed.
  */
 export async function runBatch(ctx, state) {
   const s = structuredClone(state);
@@ -578,9 +562,13 @@ export async function runBatch(ctx, state) {
 
     const requestLog = createRequestLog({ db, job: stage.job, runId: ctx.runId ?? null });
     const limiter = createLimiter({ rpm: ctx.rpm, lastAt: s.lastRequestAt == null ? null : Date.parse(s.lastRequestAt), now: ctx.now, sleep: ctx.sleep });
+    // A post (the content stage's draft or pick, never the polls) may wait longer and move to
+    // 3.1 Flash-Lite while 3.5 is busy (pipeline/content/busy.mjs); everything else stays on 3.5 alone.
+    const posts = h.busyRetry && items.every((i) => i.part === "content");
     const gemini = createGemini({
       apiKey: ctx.apiKey,
       models: [PRIMARY_MODEL],
+      ...(posts ? CONTENT_GEMINI : {}),
       limiter,
       onRequest: (r) => requestLog.record(r),
       onDailyQuota: "stop",
@@ -592,7 +580,9 @@ export async function runBatch(ctx, state) {
     });
     const spent = () => Object.values(gemini.requests).reduce((x, y) => x + y, 0);
     let stop = null;
+    let busyPauseMs = 0;
     for (const item of items) {
+      let later = false;
       if (spent() >= budget) break;
       // The deadlines count from when the request would go out, after the pace.
       if (limiter.nextAt >= Date.parse(stage.deadlineAt) || limiter.nextAt >= Date.parse(s.timeline.hardStop)) {
@@ -623,6 +613,18 @@ export async function runBatch(ctx, state) {
           stop = [`tonight's retry budget (${plan.retryBudget} retries) is used up; the rest waits for tomorrow`, "stopped"];
           break;
         }
+        // Google busy on a post: pause the stage and try the same item again later tonight, up to
+        // BUSY_WAIT_MINUTES (15, 20, 30), while the hard stop allows; the pause doesn't eat the stage's time cap.
+        const waits = stage.busyWaits ?? 0;
+        const pauseMs = (BUSY_WAIT_MINUTES[waits] ?? 0) * 60000;
+        if (h.busyRetry && isBusy(e) && pauseMs && ctx.now() + pauseMs + 10 * 60000 < Date.parse(s.timeline.hardStop)) {
+          stage.busyWaits = waits + 1;
+          stage.deadlineAt = iso(Math.min(Date.parse(stage.deadlineAt) + pauseMs, Date.parse(s.timeline.hardStop)));
+          busyPauseMs = pauseMs;
+          later = true;
+          ctx.log(`${stage.label}: Google's AI is busy (${msg(e)}); retrying at ${retryClock(ctx.now() + pauseMs)} (wait ${waits + 1} of ${BUSY_WAIT_MINUTES.length})`);
+          break;
+        }
         stage.failed++;
         stage.consecutive++;
         stage.tried.push(item.id);
@@ -635,7 +637,7 @@ export async function runBatch(ctx, state) {
         }
         if (stage.consecutive >= plan.breaker) break;
       } finally {
-        h.advance?.(stage, item);
+        if (!later) h.advance?.(stage, item);
       }
     }
     stage.requests += spent();
@@ -647,7 +649,7 @@ export async function runBatch(ctx, state) {
       if (ctx.now() + limiter.gap >= Date.parse(s.timeline.hardStop)) {
         await stopRun(ctx, s, `hard stop ${plan.stopBeforeResetMinutes} minutes before the quota resets (${pacificTime(s.timeline.hardStop)} Pacific); the rest waits for tomorrow`, "stopped");
       } else await closeStage(ctx, s, "time cap reached");
-    }
+    } else if (busyPauseMs) return { state: s, pauseMs: busyPauseMs, pauseReason: "busy" };
     return { state: s };
   } catch (e) {
     ctx.log(`night ${s.night}: unexpected error: ${msg(e)}`);

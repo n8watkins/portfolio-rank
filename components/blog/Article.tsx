@@ -7,7 +7,7 @@ import { btnSecondary, eyebrow } from "@/components/ui/styles";
 import { tagSlug } from "@/lib/content/blog.mjs";
 import { type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
-import { profilePath } from "@/lib/profile-url.mjs";
+import { sitePath } from "@/lib/site";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
@@ -19,7 +19,7 @@ export type Related = { name: string; url: string; domain: string; reason?: stri
 function Figure({ postId, image, cover = false }: { postId: string; image: PostImage; cover?: boolean }) {
   const credit = creditOf(image);
   const chart = image.kind === "chart";
-  const href = image.kind === "screenshot" && credit.href ? profilePath(credit.href) : credit.href;
+  const href = image.kind === "screenshot" && credit.href ? `/p/${encodeURIComponent(credit.href)}` : credit.href;
   return (
     <figure className={cover ? "" : "my-9"}>
       <div className={`overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
@@ -98,7 +98,7 @@ export function Article({ post, related, banner }: { post: BlogPost; related: Re
           <a href="/about-posts" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
             How posts are made
           </a>
-          <a href={dataLink.replace(/^https:\/\/portfoliorank\.n8builds\.dev/, "") || "/"} className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+          <a href={sitePath(dataLink) || "/"} className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
             The data
           </a>
         </p>
@@ -125,7 +125,7 @@ export function Article({ post, related, banner }: { post: BlogPost; related: Re
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {related.map((r) => (
                 <li key={r.url}>
-                  <a href={profilePath(r.url)} className="card card-hover flex items-center gap-3 p-3">
+                  <a href={`/p/${encodeURIComponent(r.url)}`} className="card card-hover flex items-center gap-3 p-3">
                     <span className="h-12 w-20 shrink-0 overflow-hidden rounded-md border border-edge bg-raised">
                       {r.shot && (
                         // eslint-disable-next-line @next/next/no-img-element -- a small screenshot thumbnail
@@ -170,7 +170,7 @@ export function Article({ post, related, banner }: { post: BlogPost; related: Re
               <BarChart3 className="mt-1.5 h-4 w-5 shrink-0 text-accent" aria-hidden />
               <span className="min-w-0">
                 Every number: PortfolioRank&apos;s own data, as of {postDate(post.dataAsOf)}.{" "}
-                <a href={dataLink.replace(/^https:\/\/portfoliorank\.n8builds\.dev/, "") || "/"} className="font-medium underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                <a href={sitePath(dataLink) || "/"} className="font-medium underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
                   See the data
                 </a>
               </span>

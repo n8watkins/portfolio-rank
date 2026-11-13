@@ -3,6 +3,7 @@ import { readPublicFile } from "@/lib/publicFile";
 import { publishedPost } from "@/lib/blog-server";
 import { coverOf } from "@/lib/blog";
 import { readMedia } from "@/lib/blog-media";
+import { SITE_HOST } from "@/lib/site";
 
 // A post's share card: the site's card with the post's title and dek, and
 // its cover on the right when the cover is a photo, an illustration or a
@@ -44,7 +45,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     ],
     logo: dataUrl(mark, "image/svg+xml"),
     n8Icon: dataUrl(n8, "image/png"),
-    host: "portfoliorank.n8builds.dev/blog",
+    host: `${SITE_HOST}/blog`,
     name: <div style={{ display: "flex" }}>{title}</div>,
     nameSize: title.length > 60 ? 40 : title.length > 36 ? 46 : 56,
     nameTracking: -1,

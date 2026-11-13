@@ -8,11 +8,10 @@ import { Odometer } from "@/components/ui/Odometer";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Movement, RankBadge, TierBadge } from "@/components/ui/badges";
-import { TIERS } from "@/lib/tiers.mjs";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { Showcase } from "@/components/home/Showcase";
 import { KitSignup, KitIconButtons } from "./parts";
-import { profilePath } from "@/lib/profile-url.mjs";
+import { SITE_URL } from "@/lib/site";
 
 // Flat stand-in frames for the deck, so the browser tests need no captures.
 const frame = (hue: number) =>
@@ -24,7 +23,7 @@ const DECK = ["Ada", "Grace", "Linus", "Margaret"].map((name, i) => ({
   hero: frame(30 + i * 70),
   tier: "A",
   rank: i + 1,
-  href: profilePath(`https://${name.toLowerCase()}.example/`),
+  href: `/p/${encodeURIComponent(`https://${name.toLowerCase()}.example/`)}`,
 }));
 
 // The shared building blocks on one page, for screenshots and the browser
@@ -73,7 +72,7 @@ export default async function UiKit({ searchParams }: { searchParams: Promise<{ 
             Disabled
           </button>
           <KitIconButtons />
-          <CopyButton text="https://portfoliorank.n8builds.dev" label="Copy link" />
+          <CopyButton text={SITE_URL} label="Copy link" />
         </div>
       </section>
 
@@ -88,14 +87,10 @@ export default async function UiKit({ searchParams }: { searchParams: Promise<{ 
           <span className={tag}>tag</span>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {TIERS.map((t) => (
+          {["S", "A", "B", "C", "D"].map((t) => (
             <TierBadge key={t} tier={t} />
           ))}
-          <TierBadge tier="SSS" size="lg" />
-          <TierBadge tier="S+" size="lg" />
-          <TierBadge tier="S" size="lg" />
-          <TierBadge tier="A-" size="lg" />
-          <TierBadge tier="B+" size="lg" />
+          <TierBadge tier="A" size="lg" />
           <RankBadge rank={1} />
           <RankBadge rank={2} />
           <RankBadge rank={3} />

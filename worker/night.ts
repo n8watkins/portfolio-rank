@@ -21,6 +21,7 @@
 // The instance id is "night-<Pacific date>", so a night runs at most once;
 // night_runs makes sure of it too. Nothing here calls Gemini outside the
 // batches, and every step is safe to run again.
+import { PROFILES_TAG } from "./edge-cache";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { db as database } from "../lib/db";
 import { budgetPlan, isNightStart, nightTimeline, pacificParts } from "../pipeline/budget.mjs";
@@ -31,14 +32,14 @@ import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { withGateway } from "../lib/ai-gateway.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
-import { emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
+import { dispatchTokenConditions, emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
 import { isRemovalAlert } from "../lib/games/claims.mjs";
 import { isEmailCapAlert } from "../lib/email/gate.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
-import { writerMode } from "../pipeline/content/staged.mjs";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
+import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
@@ -113,7 +114,8 @@ export function engine(env: NightEnv, runId: string) {
     },
     flags: {
       contentMode: contentMode(env.CONTENT_MODE),
-      writerMode: writerMode(env.WRITER_MODE),
+      // The most drafts a week the owner's automation settings may ask for (lib/content/automation.mjs).
+      contentDraftsPerWeek: env.CONTENT_DRAFTS_PER_WEEK,
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
       ranking: rankingConfig({
@@ -208,9 +210,9 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
     // 2. The AI stages.
     state = (await step.do("plan the AI work", ONCE_MORE, () => planNight(engine(this.env, runId), state))) as NightState;
     for (let i = 0; i < MAX_BATCHES && !state.done; i++) {
-      const r = (await step.do(`batch ${i}`, ONCE_MORE, () => runBatch(engine(this.env, runId), state))) as { state: NightState; pauseMs?: number };
+      const r = (await step.do(`batch ${i}`, ONCE_MORE, () => runBatch(engine(this.env, runId), state))) as { state: NightState; pauseMs?: number; pauseReason?: string };
       state = r.state;
-      if (r.pauseMs) await step.sleep(`people are grading, pause ${i}`, r.pauseMs);
+      if (r.pauseMs) await step.sleep(r.pauseReason === "busy" ? `Google's AI is busy, pause ${i}` : `people are grading, pause ${i}`, r.pauseMs);
     }
 
     // 3. The summary, then the owner alerts (one email per condition per
@@ -228,21 +230,30 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         parked: summary.parked,
       };
     });
+    // The night moved ranks and grades: every profile refreshes at its next visit
+    // (worker/edge-cache.ts keeps them a day). One purge for all of them.
+    await step.do("refresh cached profiles", ONCE_MORE, async () => {
+      const cached = (this.ctx as unknown as { exports?: { CachedPages?: { purgeTags(tags: string[]): Promise<boolean> } } }).exports?.CachedPages;
+      return cached ? await cached.purgeTags([PROFILES_TAG]).catch(() => false) : false;
+    });
     await step.do("owner alerts", ONCE_MORE, async () => {
       const ctx = engine(this.env, runId);
       const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
       const startedAt = Date.parse(String(state.startedAt));
       const conditions = [
         ...nightConditions(night, ctx.plan),
+        // A missing or expiring GITHUB_DISPATCH_TOKEN (GitHub says when it expires on the dispatch's answer).
+        ...dispatchTokenConditions((state.checks as { nightly?: { skipped?: string; tokenExpires?: string | null } } | undefined)?.nightly, { now: new Date(startedAt) }),
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
       ];
-      // The weekly model watch, the hourly removals and the hourly email caps
-      // own their alerts (./model-watch.ts, ./owner-removals.ts,
-      // ./email-alerts.ts); the night never clears them.
+      // The weekly model watch, the hourly removals, the hourly email caps
+      // and the hourly dead-man check own their alerts (./model-watch.ts,
+      // ./owner-removals.ts, ./email-alerts.ts, ./night-watch.ts); the night
+      // never clears them.
       const r = await reconcileAlerts(ctx.db, {
         conditions,
-        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key),
+        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key),
         email: ctx.email,
         to: this.env.OWNER_EMAIL ?? null,
         log: ctx.log,
@@ -297,8 +308,16 @@ export async function startTonight(scheduledTime: number, env: NightEnv) {
     log("night.cron.start", { id, scheduledTime: new Date(scheduledTime).toISOString() });
     return { started: true, night: t.night, id };
   } catch (e) {
-    // An instance with tonight's id exists: tonight already ran or is running.
-    log("night.cron.exists", { id, error: String((e as Error)?.message ?? e).slice(0, 200) });
-    return { started: false, night: t.night, id };
+    const error = String((e as Error)?.message ?? e).slice(0, 200);
+    if (isDuplicateInstance(e)) {
+      // An instance with tonight's id exists: tonight already ran or is running.
+      log("night.cron.exists", { id, error });
+      return { started: false, night: t.night, id };
+    }
+    // Anything else (a Workflows outage, a bad binding) is a real failure:
+    // thrown so Sentry records it; the hourly dead-man check
+    // (./night-watch.ts) emails the owner if the night never starts.
+    log("night.cron.failed", { id, error });
+    throw e;
   }
 }

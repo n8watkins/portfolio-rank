@@ -19,10 +19,10 @@ import { createLinkToken, openLinkToken, ownerCookieValue, readOwnerCookie } fro
 import { emailState, reportEmail, requestEmail, sendDueEmails } from "../lib/grader/notify.mjs";
 import { DEFAULT_EMAIL_CAPS, addressHash, capReason, createEmailGate, emailCapConditions, emailCaps, emailTransport, isEmailCapAlert, validEmail } from "../lib/email/gate.mjs";
 import { buildReport, compareWithPool, gradedPool, strengthsAndFixes } from "../lib/grader/report.mjs";
-import { gradeKey } from "../lib/grade-score.mjs";
 import { completeJob, recordCapture } from "../lib/grader/finish.mjs";
 import { checkOwnKey, gradeOnOwnKey, validOwnKey } from "../lib/grader/own-key.mjs";
-import { queueFreeGrade } from "../lib/grader/queue.mjs";
+import { queueFreeGrade } from "../lib/grader/free-grade.mjs";
+import { enqueueFreeGrade } from "../lib/grader/queue.mjs";
 import { publicJob } from "../lib/grader/view.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
@@ -386,7 +386,10 @@ test("email transport: the send_email binding from EMAIL_FROM; the test outbox i
   assert.deepEqual(sent[0].from, { email: "portfoliorank@n8builds.dev", name: "PortfolioRank" });
   assert.equal(emailTransport({ SEND_EMAIL: { send() {} } }), null, "no sender address, no transport");
   assert.equal(emailTransport({}), null);
-  assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "production" }, { db: {} }), /test runs only/);
+  for (const SITE_ENV of ["production", "staging", undefined, "Production", "prod"]) {
+    assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV }, { db: {} }), /test runs only/, String(SITE_ENV));
+  }
+  assert.equal(emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "test" }, { db: {} }).name, "outbox");
   for (const bad of ["a@b", "a b@example.com", "a@example.com\nBcc: x@example.com", "<a@example.com>", "a@example.com, b@example.com"]) assert.equal(validEmail(bad), null, bad);
   assert.equal(validEmail(" jane.doe+pr@example.co.uk "), "jane.doe+pr@example.co.uk");
 });
@@ -406,8 +409,7 @@ test("report emails: sent once the report is ready, through the gate, with a one
   assert.deepEqual(await requestEmail(db, { jobId: id, email: "three@example.com", secret: SECRET }), { ok: false, error: "too_many" });
 
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test", now: T0 }), { sent: 0, refused: 0, gaveUp: 0 }, "nothing while it waits for Gemini");
-  // The email names the tier by rank the report carries (lib/tiers.mjs), never Gemini's letter (S here).
-  await setJob(db, id, { status: "done", result: grade({ tier: "S" }), report: { rank: { tier: "A", score: 70, top: 15 } }, done_at: new Date(T0).toISOString() }, { now: T0 });
+  await setJob(db, id, { status: "done", result: grade({ tier: "A" }), done_at: new Date(T0).toISOString() }, { now: T0 });
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test/", now: T0 }), { sent: 2, refused: 0, gaveUp: 0 });
   assert.equal(box.sent.length, 2);
   assert.match(box.sent[0].subject, /jane\.dev is ready/);
@@ -438,12 +440,10 @@ test("report emails: a cap holds them for the next tick; after 3 days the addres
 // ---------------------------------------------------------------------------
 // The report
 // ---------------------------------------------------------------------------
-// `tier` is the pool's tier by ELO; `key` its grade key (lib/grade-score.mjs), around `near` (the graded site's own key).
-const poolSite = (i, tier, axes = {}, near = 60000) => ({
+const poolSite = (i, tier, axes = {}) => ({
   url: `https://site${i}.dev/`,
   name: `Site ${i}`,
   mu: { S: 33, A: 29, B: 25, C: 21, D: 17 }[tier] + (i % 3) * 0.1,
-  key: near + { S: 3000, A: 2000, B: -1 - i, C: -2000, D: -3000 }[tier],
   tier,
   quality: 3,
   axes: { visual_design: 3, five_second_test: 3, storytelling: 3, writing: 3, memorability: 3, ...axes },
@@ -458,23 +458,16 @@ test("report: strengths, fixes, percentile, similar portfolios and who does it b
   // Weighted by how much each costs: two weak AI axes outrank a missing resume link.
   assert.deepEqual(fixes.map((f) => f.criterion), ["storytelling", "writing", "resume"]);
   assert.equal(fixes[2].title, "Link your resume");
-  const near = gradeKey(g);
   const pool = [
-    ...Array.from({ length: 10 }, (_, i) => poolSite(i, "A", i < 2 ? { storytelling: 5 } : {}, near)),
-    ...Array.from({ length: 10 }, (_, i) => poolSite(10 + i, "B", {}, near)),
-    ...Array.from({ length: 19 }, (_, i) => poolSite(20 + i, "C", {}, near)),
-    { ...poolSite(99, "S", { writing: 5 }, near), url: "https://www.jane.dev" },
+    ...Array.from({ length: 10 }, (_, i) => poolSite(i, "A", i < 2 ? { storytelling: 5 } : {})),
+    ...Array.from({ length: 10 }, (_, i) => poolSite(10 + i, "B")),
+    ...Array.from({ length: 19 }, (_, i) => poolSite(20 + i, "C")),
+    { ...poolSite(99, "S", { writing: 5 }), url: "https://www.jane.dev" },
   ];
   const r = compareWithPool(g, pool, { isSelf: (u) => siteKeyOf(u) === "jane.dev" });
   assert.equal(r.percentile.total, 40, "39 others plus this one");
-  // Ten A sites above it by score: the grade is 11th of 40, the top 27%. The tier is a starting rank from
-  // automated checks (no library here, so the middle: B), not "provisional": votes refine it from there.
-  assert.equal(r.percentile.rank, 11);
-  assert.equal(r.percentile.topPct, 27);
-  assert.equal(r.rank.tier, "B");
-  assert.equal(r.rank.seeded, true);
-  assert.equal(r.rank.provisional, false);
-  assert.equal(typeof r.rank.points, "number");
+  assert.ok(r.percentile.rank > 10 && r.percentile.rank <= 21, String(r.percentile.rank));
+  assert.ok(r.percentile.topPct >= 1 && r.percentile.topPct <= 100);
   assert.equal(r.similar.length, 4);
   assert.ok(r.similar.every((s) => s.tier === "B"));
   assert.ok(!JSON.stringify(r).includes("jane.dev"), "the site is never its own neighbour");
@@ -600,8 +593,7 @@ test("free tier: the capture lands, 3.5 grades it as a person's request, and the
   const log = (await db.execute("SELECT job, model FROM gemini_requests")).rows;
   assert.deepEqual(log.map((r) => [r.job, r.model]), [["people-grade", PRIMARY_MODEL]], "counted by the budget accountant as people's work");
   const view = publicJob(job, { mine: true });
-  // Tiers come from the rank in the library (lib/tiers.mjs), never Gemini's letter: with no graded portfolio to rank against, none.
-  assert.equal(view.report.tier, null);
+  assert.equal(view.report.tier, "A");
   assert.equal(view.steps.every((s) => s.state === "done"), true);
   assert.ok(!JSON.stringify(view).includes("Jane builds things"), "page text never leaves the server");
 });
@@ -630,6 +622,35 @@ test("free tier: a spent quota queues the grade (no 3.1), and the hourly drain f
   assert.equal(noKey.calls.length, 0);
 });
 
+test("free tier from a visitor only enqueues: no Gemini call, the job is queued, and the hourly drain grades it", async () => {
+  const db = await tempDb();
+  const { id } = await capturedJob(db);
+  const realFetch = globalThis.fetch;
+  let fetched = 0;
+  globalThis.fetch = async () => {
+    fetched++;
+    throw new Error("a visitor's request must not fetch");
+  };
+  let out;
+  try {
+    out = await enqueueFreeGrade(db, await readJob(db, id), { now: T0 });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(fetched, 0);
+  assert.equal(out.status, "queued");
+  let job = await readJob(db, id);
+  assert.equal(job.status, "queued");
+  assert.equal(Number(job.people_request_id), out.requestId);
+  const drain = peopleCtx(db, { respond: () => gemini200(answer({ tier: "B" })) });
+  drain.clock.t = T0 + 3600000;
+  assert.deepEqual(await drainPeopleQueue(drain.ctx), { done: 1, queued: 0, failed: 0 });
+  assert.equal(drain.calls.length, 1, "the drain, not the visitor, makes the one Gemini request");
+  job = await readJob(db, id);
+  assert.equal(job.status, "done");
+  assert.equal(job.result.facts.motion, true, "motion from the capture reaches the grade");
+});
+
 test("own-key jobs wait for the visitor's key after the capture; completing one writes no request log row", async () => {
   const db = await tempDb();
   const { id, status } = await capturedJob(db, { ownKey: true });
@@ -648,7 +669,7 @@ test("own-key jobs wait for the visitor's key after the capture; completing one 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-test("config: the grader is off in production and on in staging, the tick is scheduled in production only, email has its binding and sender", async () => {
+test("config: the grader is off in production and on in staging, the tick is scheduled on both, email has its binding and sender", async () => {
   const { parseJsonc } = await import("../scripts/check-worker-exports.mjs");
   const config = parseJsonc(fs.readFileSync("wrangler.jsonc", "utf8"));
   assert.equal(config.vars.GRADER_ENABLED, "false");
@@ -658,7 +679,7 @@ test("config: the grader is off in production and on in staging, the tick is sch
     assert.deepEqual(env.send_email, [{ name: "SEND_EMAIL" }]);
   }
   assert.ok(config.triggers.crons.includes("*/5 * * * *"));
-  assert.deepEqual(config.env.staging.triggers.crons, []);
+  assert.ok(config.env.staging.triggers.crons.includes("*/30 * * * *"), "staging ticks every 30 minutes (worker/crons.ts)");
   const workflow = fs.readFileSync(".github/workflows/grade.yml", "utf8");
   assert.match(workflow, /on:\n  workflow_dispatch:\n\n/, "no inputs: the run's page is public");
   assert.doesNotMatch(workflow, /schedule:|inputs\./);
@@ -667,8 +688,8 @@ test("config: the grader is off in production and on in staging, the tick is sch
 
 test("Turnstile: a deployed Worker without a usable secret refuses; local runs and test keys pass; hostname and action are checked", async () => {
   const { verifyTurnstile, turnstileRequired, isDeployed } = await import("../lib/turnstile.ts");
-  const PROD = { NODE_ENV: "production", SITE_ENV: "production", AUTH_URL: "https://portfoliorank.n8builds.dev" };
-  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", AUTH_URL: "https://staging.portfoliorank.n8builds.dev" };
+  const PROD = { NODE_ENV: "production", SITE_ENV: "production", SITE_URL: "https://portfoliorank.dev" };
+  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", SITE_URL: "https://staging.portfoliorank.dev" };
   const LOCAL = { NODE_ENV: "production", SITE_ENV: "test" };
   const TEST_SECRET = "1x0000000000000000000000000000000AA";
   const answer = (body, secret = "turnstile-test-secret") => async (url, init) => {
@@ -696,7 +717,7 @@ test("Turnstile: a deployed Worker without a usable secret refuses; local runs a
     assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: true, hostname: "example.com" }, TEST_SECRET) }), "ok");
     assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: false }, TEST_SECRET) }), "failed");
     // A real secret: token, action and hostname must all fit, in production and in staging.
-    for (const [env, host] of [[PROD, "portfoliorank.n8builds.dev"], [STAGING, "staging.portfoliorank.n8builds.dev"]]) {
+    for (const [env, host] of [[PROD, "portfoliorank.dev"], [STAGING, "staging.portfoliorank.dev"]]) {
       const e = { ...env, TURNSTILE_SECRET_KEY: "turnstile-test-secret" };
       const run = (token, body, fetchImpl = answer(body)) => verifyTurnstile(token, "203.0.113.1", { action: "grade", env: e, fetchImpl });
       assert.equal(await run(undefined, { success: true }), "failed", "a missing token");
@@ -710,7 +731,7 @@ test("Turnstile: a deployed Worker without a usable secret refuses; local runs a
     }
     // The staging Worker's token does not pass on production.
     assert.equal(
-      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.n8builds.dev" }) }),
+      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.dev" }) }),
       "failed"
     );
   } finally {

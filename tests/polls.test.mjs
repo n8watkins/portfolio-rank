@@ -163,8 +163,7 @@ async function nightDb({ top = 4, low = 3 } = {}) {
     for (let k = 0; k < n; k++, i++) {
       await db.execute({
         sql: `INSERT INTO portfolios (url, name, status, shot_key, captured_at, ai_rubric, facts) VALUES (?, ?, 'live', ?, '2026-11-01 00:00:00', ?, ?)`,
-        // Gemini's letter and the tier by rank (lib/tiers.mjs), which is what polls filter on.
-        args: [urls[i], feed[i].name, `k${i}`, JSON.stringify({ tier, is_portfolio: true, rank: { tier } }), facts({ signals: { resume: k % 2 === 0, github: true, about: true } })],
+        args: [urls[i], feed[i].name, `k${i}`, JSON.stringify({ tier, is_portfolio: true }), facts({ signals: { resume: k % 2 === 0, github: true, about: true } })],
       });
     }
   }

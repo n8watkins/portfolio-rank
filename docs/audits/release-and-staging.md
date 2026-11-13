@@ -110,30 +110,46 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 
 ## Owner decisions needed
 
-- **D1. Production no longer waits for staging.** Production deploys from main after CI, with its own migration and smoke check, while staging composes main plus labeled pull requests in its own workflow. The alternative is to keep production waiting for a staging deploy of main alone, which would put main back on staging after every merge. Recommended: accept. Status: needs owner.
-- **D2. Tiers behind a flag.** #132 and #137 change the public leaderboard with no flag of their own. Recommended: gate them behind `RANKING_V2` (already on in staging). Status: needs owner.
-- **D3. Email sign-in behind a flag.** #124 adds a visible sign-in option with no flag. Recommended: add `EMAIL_SIGNIN_ENABLED`, off in production. Status: needs owner.
-- **D4. A staging Gemini key.** Staging now runs production's schedule, and "Write a draft now" works there, but only with its own key from a separate Google project (`portfolio-rank/STAGING_GEMINI_API_KEY`), held to a tenth of production's day. Without it every Gemini job on staging skips. Status: needs owner (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then the `pass-env pipe` line in DEPLOY.md).
+- **D1. Production no longer waits for staging.** Production deploys from main after CI, with its own migration and smoke check, while staging composes main plus labeled pull requests in its own workflow. The alternative is to keep production waiting for a staging deploy of main alone, which would put main back on staging after every merge. Recommended: accept. Status: decided 2026-11-12, accepted; live with #144.
+- **D2. Tiers behind a flag.** #132 and #137 change the public leaderboard with no flag of their own. Recommended: gate them behind `RANKING_V2` (already on in staging). Status: decided 2026-11-12, behind `RANKING_V2`.
+- **D3. Email sign-in behind a flag.** #124 adds a visible sign-in option with no flag. Recommended: add `EMAIL_SIGNIN_ENABLED`, off in production. Status: decided 2026-11-12, its own flag, off in production.
+- **D4. A staging Gemini key.** Staging now runs production's schedule, and "Write a draft now" works there, but only with its own key from a separate Google project (`portfolio-rank/STAGING_GEMINI_API_KEY`), held to a tenth of production's day. Without it every Gemini job on staging skips. Status: decided 2026-11-12, a separate staging key; the owner creates `portfolio-rank/STAGING_GEMINI_API_KEY`, and until then Gemini stays off on staging.
 - **D5. Staging email allowlist.** Staging only emails the addresses in `STAGING_EMAIL_TO`, which is empty. Add your own address in `wrangler.jsonc` to receive staging's emails. Status: needs owner.
-- **D6. Experiment and docs pull requests.** Close #141 or keep it as a script; land #139 or move it to the private notes. Status: needs owner.
-- **D7. Weekly staging refresh.** The "Staging data" workflow replaces staging's data with production's newest backup every Monday, which also throws away anything made on staging that week. Recommended: weekly; monthly is the minimum for retention. Status: needs owner.
-- **D8. Require CI on main.** Add "Worker build" and "E2E" to the main ruleset (already approved in docs/DECISIONS.md, not yet done). Status: needs owner.
+- **D6. Experiment and docs pull requests.** Close #141 or keep it as a script; land #139 or move it to the private notes. Status: decided 2026-11-12, #141 does not land; docs pull requests (#139, #142, #147, #152) land only when the owner asks.
+- **D7. Weekly staging refresh.** The "Staging data" workflow replaces staging's data with production's newest backup every Monday, which also throws away anything made on staging that week. Recommended: weekly; monthly is the minimum for retention. Status: decided 2026-11-12, weekly.
+- **D8. Require CI on main.** Add "Worker build" and "E2E" to the main ruleset (already approved in docs/DECISIONS.md, not yet done). Status: done; the main ruleset already requires Worker build and E2E (checked 2026-11-12).
 
 ## Action items
 
 | # | Item | Status |
 | --- | --- | --- |
-| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | in progress (PR open) |
-| A2 | Schema migrates on a fingerprint of its statements, and the recorded version never goes down (#143) | in progress (PR open) |
-| A3 | Staging is main plus pull requests labeled `staging`, rebuilt on every change; production deploys alone (#144) | in progress (PR open) |
+| A1 | E2E runs take free ports and their own server log, and stop if their server did not start (#146) | done (#146, merged 2026-11-13; #178 makes a taken stand-in port fail fast, #186 keeps test runs off remote Cloudflare and leaves no workerd) |
+| A2 | Schema migrates on a fingerprint of its statements, and the recorded version never goes down (#143) | done (merged 2026-11-12, deployed; fingerprint s1b8821ed recorded on staging and production) |
+| A3 | Staging is main plus pull requests labeled `staging`, rebuilt on every change; production deploys alone (#144) | done (merged 2026-11-12) |
 | A4 | The `staging` label exists | done |
-| A5 | Staging runs production's crons under low Gemini caps, "Write a draft now" works there with its own key, staging email is allowlisted (#145) | in progress (PR open) |
-| A6 | Weekly staging refresh from production's newest backup and six-hourly leaderboard rebuild (#145) | in progress (PR open) |
-| A7 | Shorten the titles of #125, #131, #137, #138 and #140 to 100 characters with the ` (#NNN)` suffix | needs owner (lane owners) |
-| A8 | Retarget stacked pull requests to main as their bases land, so CI runs on them | needs owner (lane owners) |
+| A5 | Staging runs production's crons under low Gemini caps, "Write a draft now" works there with its own key, staging email is allowlisted (#145) | done (#145, merged 2026-11-13; staging's hourly jobs run every six hours and the grader's tick every 30 minutes to keep its CPU low) |
+| A6 | Weekly staging refresh from production's newest backup and six-hourly leaderboard rebuild (#145) | done (#145; the first refresh runs on Monday) |
+| A7 | Shorten the titles of #125, #131, #137, #138 and #140 to 100 characters with the ` (#NNN)` suffix | done (the five titles were shortened or the pull requests landed under shorter titles) |
+| A8 | Retarget stacked pull requests to main as their bases land, so CI runs on them | done for the admin stack (landed as one squash, #134, with #125, #127 and #129 closed as landed there) |
 | A9 | New tests go in per-feature files instead of `tests/content.test.mjs`, which seven branches edit | needs owner (lane owners) |
-| A10 | Label #133, #134, #140, #135 and #123 `staging` once #144 lands, then stop using `preview/staging-all` | needs owner |
-| A11 | Owner decisions D1 to D8 | needs owner |
+| A10 | Label #133, #134, #140, #135 and #123 `staging` once #144 lands, then stop using `preview/staging-all` | changed: the per-PR labels do not compose yet (the two stacks conflict with each other), so staging runs main plus the integration pull request #158 (`preview/staging-all`, never merged), kept current with main until the stacks land |
+| A12 | Staging's concurrency sits on the job, so a skipped run (an unlabeled pull request closing) no longer cancels a real deploy; this cancelled the first composed deploy after #144 | done (#154, merged 2026-11-12) |
+| A13 | Make the site address one setting (`SITE_URL` for links, sitemap, canonical, Open Graph and the email sender) | done (#163, merged 2026-11-13) |
+| A14 | A labeled pull request that conflicts keeps staging as it was instead of being dropped (#162) | done (#162, merged 2026-11-13; it has since kept staging intact through several conflicting merges) |
+| A15 | Main merged into every stack branch and conflicts resolved (rank-tiers, tiers-elo, add-portfolio, admin-controls, admin-layout, admin-overview, blog-owner-feedback, email-signin, newsletter, worker-cpu) | done 2026-11-12 |
+| A16 | Build caches pruned after each deploy (#172) | done (first runs removed 100 builds, 478.7 MB in production and 125 builds, 1,098.5 MB on staging) |
+| A11 | Owner decisions D1 to D8 | done except D5 |
+
+## Progress log
+
+- 2026-11-12: merged #143 (schema fingerprint), #144 (staging composition), #154 (staging concurrency), #153 (night dead-man alert) and #157 (edge cache for days); each production deploy and smoke check passed.
+- 2026-11-12: staging restored to all in-flight work through #158, including the latest #140 (add portfolio) and #149 (discovery, its screen and hand-off off).
+- 2026-11-12: merging #155 (privacy pages, owner-approved) was refused by the agent's permission check ("merge without review"); the owner has to merge it or allow agent merges. Queue after it: #159, #160, #161, #156, #146, #145, #162, then #163 (held for the owner's Turnstile and zone setup).
+- 2026-11-13: #163 (portfoliorank.dev, `SITE_URL`) landed; main merged into #158 with `SITE_URL` kept, and the in-flight code that still read `AUTH_URL` or the old host moved to `SITE_URL` on the integration branch (the lane branches still need it when they merge main).
+- 2026-11-13: #164 (newsletter on Kit, stacked on #133) merged into #158; staging at https://staging.portfoliorank.dev passes the smoke check.
+- 2026-11-13: the owner approved landing everything with new features off ("get it all set up, have it disabled"). Landed since, each with a production deploy and smoke check: #155, #159, #160, #161, #134 (with #125, #127 and #129), #151, #176, #156, #146, #145, #162, #179, #181, #180, #172, #148, #150, #178, #186 and #167.
+- 2026-11-13: held from production because they change what visitors see with every flag off: #137 (tiers, which also carries #132, #123's compact face-off and the report redesign) and #131 (the blog layout). The tiers lane is making a tiers-only pull request gated on `RANKING_V2`, and the blog lane an engine-and-admin pull request with no public change; the layout and the face-off stay on staging for the owner's walkthrough.
+- 2026-11-13: in progress, in order: #168, #169, #170, #173, #174, #165, #166, #171, #175 and #177, then #182, #183 and #184 after #140, and the tiers-only and blog-engine pull requests when they exist.
 
 ## Risks
 

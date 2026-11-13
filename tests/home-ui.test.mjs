@@ -12,6 +12,7 @@ import { chromium } from "playwright";
 import { createClient } from "@libsql/client";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
+import { listen } from "./helpers/listen.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -40,7 +41,7 @@ before(async () => {
       res.writeHead(404).end();
     });
   });
-  await new Promise((r) => mock.listen(MOCK_PORT, "127.0.0.1", r));
+  await listen(mock, MOCK_PORT);
   for (let i = 0; i < 60; i++) {
     try {
       if ((await fetch(BASE + "/api/rank")).ok) break;
@@ -81,7 +82,8 @@ test("the hero deck: one link in front, 44px controls, dots and a counter, pause
 
   for (const name of ["Previous portfolio", "Pause the showcase", "Next portfolio"]) {
     const box = await deck.getByRole("button", { name }).boundingBox();
-    assert.ok(box.width >= 44 && box.height >= 44, `${name}: ${JSON.stringify(box)}`);
+    // Rounded: layout can put a 44px box at 43.9998px (subpixel positions).
+    assert.ok(Math.round(box.width) >= 44 && Math.round(box.height) >= 44, `${name}: ${JSON.stringify(box)}`);
   }
 
   // "See report" shows on hover of the front card.
@@ -209,8 +211,7 @@ test("a grade from home: its progress page, and /me follows it to the report", {
     judged_at: new Date().toISOString(),
     model: "gemini-e2e",
   };
-  // The tier by rank the report carries (lib/tiers.mjs; an empty pool ranks nothing, so it is given here).
-  const report = { ...buildReport(grade, [], {}), rank: { tier: "B", score: 60, top: 50 } };
+  const report = buildReport(grade, [], {});
   const now = new Date().toISOString();
   await db.execute({
     sql: "UPDATE grade_jobs SET status = 'done', reason = NULL, result = ?, report = ?, done_at = ?, captured_at = ? WHERE id = ?",

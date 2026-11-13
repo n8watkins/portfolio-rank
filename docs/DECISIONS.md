@@ -107,25 +107,6 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: building (#81).
   Every grade (the nightly ones and "grade my portfolio") also returns up to three roles the page claims, cleaned by code; they are labels, never scored, so the rubric version stays 2.
   Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
-- **Starting ranks from automated checks** (owner, 2026-11-12, later still). Status: building.
-  Every graded portfolio gets up to 100 points from saved data (Lighthouse, the share card, project links, resume, GitHub, contact, own domain, phone fit, footer year, minus 15 for a known template; `lib/check-points.mjs` `CHECK_POINTS`), and its starting rating comes from its place by points, with high uncertainty, so letters appear at once and real votes refine them.
-  No vote is invented; a missing measurement gets the library median, never a zero.
-  This replaces "everyone starts at B until 10 face-offs" for graded portfolios.
-- **Tiers by ELO from face-offs, the grade as the report card** (owner, 2026-11-12, later the same day). Status: building, replaces the score-based tiers below.
-  The rank is the ELO: everyone starts at the same rating (tier B, ELO 1200) and stays B until 10 face-offs; then SSS is the top 3, S+, S and S- the rest of the top 1%, A+ to A- 1% to 30% (A is the top 30%, so many more people can be proud to share it, and it gets visual emphasis), B+ to B- 30% to 70%, C+ to C- 70% to 85%, D the bottom 15%, among the portfolios with 10 face-offs.
-  People's votes count fully and AI head-to-head comparisons at 0.25 of a vote (proposed, not yet confirmed by the owner; `AI_VOTE_WEIGHT`).
-  The rating is OpenSkill replayed from every face-off with no grade seed, ranked by a cautious value (mean minus two uncertainties) shown on an ELO scale, rather than plain ELO: OpenSkill takes the AI weight and the uncertainty natively, and the cautious value keeps a new site with a few lucky wins from jumping to the top.
-  The Gemini grade becomes the report card (scores and notes as "how to improve", the report's own top N%, the "not a portfolio" filter) and no longer sets the letter.
-  Play draws mostly from portfolios with fewer than 10 face-offs.
-- **Tiers by rank in the library, not Gemini's letter** (owner, 2026-11-12). Status: replaced the same day by tiers by ELO (above).
-  Gemini's own letter was too generous (live: S 4%, A 37%, B 27%, C 25%, D 6%).
-  The tier a portfolio shows is now its place among the graded library: SSS the top 3 portfolios, then S+, S and S- splitting the rest of the top 1% in thirds by place, then A+, A and A- splitting 1% to 15% in thirds, B+, B and B- splitting 15% to 70%, C+, C and C- splitting 70% to 85%, and D the bottom 15% (owner, 2026-11-12, revised three times the same day; `lib/tiers.mjs` `TIER_LADDER`, the one place to tune them).
-  The place comes from a score recomputed from the stored grade, no new AI request: the five AI scores (weighted as the rubric weights them) count 80%, the code checks 20%; ties are broken by Lighthouse performance (mobile, then desktop), polish checks passed, Gemini's letter, people's ELO (after 5 face-offs) and the date first graded, never the address; the S band is exact by place, and below it portfolios equal on everything but the date share a tier.
-  A small library only hands out a tier it has room for (the S band needs 100 graded portfolios, and fills every S tier from 600).
-  Gemini's letter stays in the grade and still seeds the leaderboard's ratings; ELO is unchanged.
-  Only SSS to B- show publicly; C and D read "Graded, below the top tiers". Boards and filters group by letter family; the badge shows the plus or minus. The public `/grading` page explains it with today's counts.
-  Tiers are placed again hourly and at each deploy (`lib/tiers-store.mjs`), and a new grade is placed as it is written; "Grade my portfolio" ranks a report against the library and says how many portfolios it was graded against.
-  Why: a letter that means a place in the library stays meaningful as the library grows, and the owner sets how rare each tier is.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
 
@@ -313,6 +294,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   6. The weekly newsletter still sends in a week with no post, with the top 5 and the biggest climber.
   7. The owner switches `CONTENT_MODE` from `dry-run` to `publish` by hand; it never switches itself.
   8. `gemini-3.5-flash-lite` for every content request; trends are counted by code; reading portfolio text with 3.1 can come later as a labelled experiment.
+     Changed by the owner on 2026-11-12: a content request falls back to the free `gemini-3.1-flash-lite` when 3.5 is busy, and a draft Google can't answer waits 15 to 30 minutes and tries again instead of failing ([CONTENT-ENGINE.md](CONTENT-ENGINE.md#write-a-draft-now)); grades and votes stay on 3.5 alone.
 - **Tavily is capped at 200 credits a month** (owner, 2026-11-10). Status: built.
   PortfolioRank and Wren share one free Tavily account (1,000 credits a month, 100 requests a minute across both keys); PortfolioRank gets 200 (`TAVILY_MONTHLY_CREDITS`), Wren 750, and 50 stay spare.
   A counter in the database (`tavily_credits`, schema version 8) is reserved before each search and released if Tavily errors; at the cap outside claims are cut, as when the key is missing, and `GET /api/admin/quota` shows the month's use.
@@ -410,7 +392,12 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Only Google's own sources; "what's trending" outside them is not read.
   Why: when Google retires 3.5 Flash-Lite, every grade and comparison method needs warning and a re-run plan.
 
-- **Post length is 250 to 400 words, with real paragraphs** (owner, 2026-11-10: option A). Status: built.
+- **Posts read like a person wrote them, 700 to 1,000 words, with at least three linked examples** (owner, 2026-11-12, after grading the first two staging posts C+ to B-). Status: building (#131).
+  Code checks ("substance", pipeline/content/quality.mjs): no spreadsheet phrasing ("a share of", "the average <axis> score of <group> is", "a tie across N axes"), no tier letters (the top group is "the top-graded portfolios" or "the top 23%" until the rank-based tiers land), no size of the data in words ("thousands"), every TL;DR placeholder also in the body, no subhead without content, no two sentences in a row with the same first word, and at least three named sites from the sheet linked when it names three.
+  The outline check plans every TL;DR point and three named sites into the sections; the writer sees each named site's address and what it does well (top grades: its full-mark axes; page craft: new positive examples, S sites that fit a phone, load with no console errors and weigh no more than the others' median); the final review also checks that subheads match their sections and that figures don't seem to contradict each other.
+  Charts say "the top-graded portfolios" with the group's share in the legend.
+  Why: the drafts read robotic, misstated ties and the data's size, promised sections they didn't deliver and linked one site.
+- **Post length is 250 to 400 words, with real paragraphs** (owner, 2026-11-10: option A). Status: superseded by 500 to 800 (2026-11-11), then 700 to 1,000 (2026-11-12).
   The template, the length check (10% slack either side) and the revision prompt say 250 to 400 words, down from 400 to 600.
   Paragraphs are 2 to 4 sentences with an opening hook and a closing takeaway; a draft where most paragraphs are one sentence fails.
   The TL;DR is exactly three bullets, each with a fact placeholder.
@@ -422,7 +409,13 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   A "Try this" step links to a named positive example (an S site strong on that axis) where the naming rule allows.
   Why: each of these was a way the first draft read well and was subtly wrong.
 
-- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90).
+- **Code plans the post, Gemini writes the prose** (owner, 2026-11-13, after the blog engine audit, [audits/blog-engine.md](audits/blog-engine.md); replaces the staged writer). Status: building on #131, tested with a mocked Gemini only (no Gemini spending until the owner approves the experiment).
+  Code builds finished clauses from the fact sheet (pairs worded together, ties never one winner), the sections that fit the post's length, the hook, the TL;DR points, the callout, the Try this examples and the image slots ([pipeline/content/plan.mjs](../pipeline/content/plan.mjs)).
+  Gemini writes plain-text blocks (up to three sections a request); code assembles them, repairs what is safe (paragraph sizes, sentences with stray numbers, missing links or facts, the hero marker) and runs the checks; one fix call rewrites only the failing blocks; one review checks topic, tone, names and voice and lists outside claims, which alone go to Tavily (the owner's gate 2, kept).
+  A post costs 2 requests (standard), 3 (a long post) and up to 2 more for a fix and a claims judgement, against 8 to 12 before; length profiles are short 500 to 750, standard 700 to 1,000, medium 1,200 to 1,600 and long 1,800 to 2,200 words, a soft gate below 85% of the minimum.
+  Posts no longer generate a fresh Workers AI picture (the library job does, for approval); the hero takes a library image only on 2 or more shared tags, else one Pexels search.
+  Why: 0 of 16 staging drafts passed under the staged writer, length failed 17 of 21 check rounds, and whole-post revisions traded one failure for another.
+- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90). Status: superseded on 2026-11-13 by "Code plans the post, Gemini writes the prose"; `staged.mjs` and `WRITER_MODE` are deleted.
   `staged` writes a post as an outline (hook, title, TL;DR, three sections with their facts; structure-checked and retried once before any section is written), two section requests and a finish request, then runs the same code checks: 4 write requests (5 after an outline retry) against 1 for `single`.
   Why: better reading quality for about 1 to 4 more Gemini requests per post.
   `single` stays available by setting `WRITER_MODE` to "single"; unset or unknown values now mean "staged".
