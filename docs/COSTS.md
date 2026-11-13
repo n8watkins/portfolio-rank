@@ -197,7 +197,8 @@ Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("
 - Cloudflare: the account is on Workers Paid, the $5 a month add-on (not Pro or any zone plan), which includes 10M Worker requests a month.
   Staging's Worker served 677 requests that day against 4,754 for production, so its usage sits well inside that allowance.
 - Idle cost: staging has no Cron Triggers, no Gemini key and no dispatch token, so it spends nothing while nobody uses it.
-- R2: the ISR cache bucket is a few MB, inside the free 10 GB.
+- R2: each deploy leaves its build's ISR cache behind (about 10 MB a build), which had grown to 970 MB in staging and 383 MB in production by 2026-11-12.
+  Every deploy now removes all but the newest two builds (`scripts/prune-build-cache.mjs`), so each cache bucket stays near 20 to 30 MB, inside the free 10 GB.
 - Email: sends only go through the capped gate, to verified addresses.
 - Turso: the account is on the Starter plan with overages disabled, so it cannot bill.
   Staging's database is 2.4 MB; the whole account uses 11 MB of 5 GB and 1.7M of 500M rows read.

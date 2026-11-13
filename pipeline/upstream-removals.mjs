@@ -39,7 +39,8 @@ import { readJson } from "./exclusions.mjs";
 
 export const DEFAULT_CAP = 25;
 const ENTRY = /^-\s+\[([^\]]+)\]\(([^)]+)\)/;
-const SITE = "https://portfoliorank.n8builds.dev";
+// The production address (lib/site.ts PRODUCTION_SITE_URL).
+const SITE = "https://portfoliorank.dev";
 
 // Reasons a link checker (status codes, DNS, TLS, parking redirects) sees
 // for itself; the list's Saturday checker removes those on its own.

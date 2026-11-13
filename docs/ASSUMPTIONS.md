@@ -307,6 +307,8 @@ Turso Free keeps only 1 day of point-in-time restore (section C), so this snapsh
 What the snapshot holds (format 2, `scripts/lib/snapshot.mjs`, since #72): every row and column of every table except `cache` (PageSpeed and inspect results, refetched on demand) and `matchups` (minutes of draw state), plus the schema as SQLite stored it (tables, indexes, triggers).
 That includes `comparisons`, `likes`, `lists` and `list_items`, all of `portfolios` (`page_text`, `facts`, `meta`), `rubric_history`, `gemini_requests` and `gemini_daily`, the ranking tables, `night_runs`, `night_item_failures`, `people_requests`, `owner_alerts`, the vote counters and `schema_meta`; a table added later is included automatically.
 Before #72 it held only `votes`, `ratings` and eight columns of `portfolios`; such a format 1 snapshot still restores.
+Each snapshot expires 35 days after it is written: the bucket's lifecycle rule `expire-backups-35d` on the `backups/` prefix, which is what the privacy page (`/privacy`) promises, so a deletion is complete within 35 days.
+Check it with `npx wrangler r2 bucket lifecycle list portfolio-rank-backups`.
 
 Procedure (the owner runs it; it needs Turso and R2 credentials and touches only a scratch database):
 
