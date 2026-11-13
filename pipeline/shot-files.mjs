@@ -1,27 +1,20 @@
-// The files a roster capture stores in R2 under <shot_key>/, in one place:
-// pipeline/capture.mjs uploads them, pipeline/fullpage-backfill.mjs uploads
-// the full-page pair, pipeline/purge-delisted.mjs deletes them all, and the
-// Worker serves them (worker/shots.ts SHOT_FILES lists the same names).
+// The old, unversioned frames a roster capture stores in R2 under
+// <shot_key>/: pipeline/capture.mjs cuts them from the tall images and
+// uploads them while LEGACY_FRAMES is on (pipeline/shot-store.mjs), and
+// the Worker serves them (worker/shots.ts).
 //
-//   hero.jpg           1440 x 900, JPEG 75: the top of the page (the AI grade's image)
-//   mobile.jpg          390 x 844, JPEG 75
-//   full-desktop.webp  the whole page at 1440 wide, WebP 75, at most 6,000 px tall
-//   full-phone.webp    the whole page at 390 wide, WebP 75, at most 8,000 px tall
+//   hero.jpg     1440 x 900, JPEG 75: the top of the page (the AI grade's image)
+//   mobile.jpg    390 x 844, JPEG 75
 //
-// The old full.jpg is not stored any more; the purge still deletes it for
-// rows captured before it stopped.
+// The tall images and thumbnails are versioned, under <shot_key>/<v>/
+// (pipeline/fullpage.mjs IMAGE_FILES). The purge of a delisted site deletes
+// everything under <shot_key>/ (pipeline/shot-store.mjs deleteAllShots).
 
-export const FULL_DESKTOP = "full-desktop.webp";
-export const FULL_PHONE = "full-phone.webp";
-
-/** What the capture uploads. */
-export const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg", FULL_DESKTOP, FULL_PHONE]);
-
-/** What the purge of a delisted site deletes. */
-export const PURGE_FILES = [...SERVE_FILES, "full.jpg"];
+export const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg"]);
 
 /** The Content-Type a stored file is uploaded with. */
 export function contentTypeOf(file) {
+  if (file.endsWith(".avif")) return "image/avif";
   if (file.endsWith(".webp")) return "image/webp";
   if (file.endsWith(".jpg")) return "image/jpeg";
   return "image/png";

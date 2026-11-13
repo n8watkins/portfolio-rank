@@ -8,7 +8,7 @@ name: Sync upstream + ingest
 #      and let it auto-merge once the required checks pass,
 #   3. screenshot whatever is new, re-capture the sites whose screenshots are
 #      due (--refresh: the page changed, someone asked, or 90 days old; see
-#      AUTOMATION.md "When checks re-run"), add full-page screenshots to a
+#      AUTOMATION.md "When checks re-run"), add tall page images to a
 #      capped number of older captures (pipeline/fullpage-backfill.mjs),
 #      measure page text and facts for
 #      rows waiting for a grade, check again the project links that are due
@@ -30,7 +30,7 @@ on:
         required: false
         default: "150"
       fullpage_backfill:
-        description: "Most sites to give full-page screenshots that have none (pipeline/fullpage-backfill.mjs)"
+        description: "Most sites to give tall page images that have none (pipeline/fullpage-backfill.mjs)"
         required: false
         default: "100"
       rubric_regrade:
@@ -116,6 +116,10 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      # The public images bucket (pipeline/shot-store.mjs); empty until the owner creates it.
+      R2_IMAGES_BUCKET: ${{ secrets.R2_IMAGES_BUCKET }}
+      # "false" stops uploading hero.jpg and mobile.jpg once nothing reads them (docs/audits/fullpage-images.md).
+      CAPTURE_LEGACY_FRAMES: ${{ vars.CAPTURE_LEGACY_FRAMES || 'true' }}
       SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }} # lets rubric grade backlog from R2
     steps:
       - uses: actions/checkout@v7
@@ -215,13 +219,14 @@ jobs:
         env:
           REFRESH: ${{ inputs.refresh || '150' }}
         run: node pipeline/capture.mjs --concurrency 4 --refresh "$REFRESH"
-      # Full-page frames (desktop and phone, for the report card's preview)
-      # for sites captured before the capture took them, a capped number a
-      # night (pipeline/fullpage-backfill.mjs); the capture above takes them
-      # for every site it captures. Changes no grade or capture date. About
-      # 18 seconds a site at concurrency 4, so 100 sites take about 30
-      # minutes; no new site starts after 40, whatever the cap.
-      - name: Backfill full-page screenshots
+      # Tall desktop and phone images with thumbnails (AVIF, for the report
+      # card's preview) for sites captured before the capture made them, a
+      # capped number a night (pipeline/fullpage-backfill.mjs); the capture
+      # above makes them for every site it captures. Changes no grade,
+      # hero.jpg or capture date. Does nothing until the images bucket
+      # exists (R2_IMAGES_BUCKET). About 20 seconds a site at concurrency 4,
+      # so 100 sites take about 33 minutes; no new site starts after 40.
+      - name: Backfill tall page images
         env:
           FULLPAGE_BACKFILL: ${{ inputs.fullpage_backfill || '100' }}
         run: node pipeline/fullpage-backfill.mjs --concurrency 4 --limit "$FULLPAGE_BACKFILL" --minutes 40

@@ -16,13 +16,16 @@ export const heroOf = (base: string) => frameOf(base, "hero.jpg");
 export const mobileOf = (base: string) => frameOf(base, "mobile.jpg");
 
 /**
- * A site's full-page frames, desktop and phone, for the report card's "see
- * the whole page" preview: null while FULLPAGE_PREVIEW_ENABLED is off (no
- * database read, so nothing links to them), without SHOTS_BASE_URL, or when
- * the site has no complete pair yet (pipeline/fullpage-backfill.mjs).
+ * A site's tall images and thumbnails, desktop and phone, for the report
+ * card's "see the whole page" preview (lib/shot-url.ts fullPageFrames).
+ * They come from the public images bucket's own domain, IMAGES_BASE_URL
+ * (pipeline/shot-store.mjs), never through the Worker. Null while
+ * FULLPAGE_PREVIEW_ENABLED is off (no database read, so nothing links to
+ * them), without IMAGES_BASE_URL, or when the site has no stored version
+ * yet (pipeline/fullpage-backfill.mjs).
  */
 export async function fullPagePreview(url: string, env = process.env): Promise<FullPagePreview | null> {
-  const base = env.SHOTS_BASE_URL;
+  const base = String(env.IMAGES_BASE_URL ?? "").replace(/\/+$/, "");
   if (!fullPagePreviewEnabled(env) || !base) return null;
   await ensureSchema();
   const row = (

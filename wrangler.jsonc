@@ -105,6 +105,10 @@
     // the capture stores the full-page frames and /shots serves them either
     // way, but no page links to them until this is "true".
     "FULLPAGE_PREVIEW_ENABLED": "false",
+    // The public images bucket's own domain (pipeline/shot-store.mjs), where
+    // the tall images and thumbnails are served straight from R2. Empty
+    // until the owner connects it (docs/audits/fullpage-images.md "Delivery").
+    "IMAGES_BASE_URL": "",
     // The blog newsletter on Kit (AUTOMATION.md "Newsletter"): the deploy-level
     // switch for the sign-up forms, their API and the newsletter's tick (on the
     // five-minute cron, no trigger of its own). Off in production: no form, no
@@ -257,6 +261,7 @@
         "FRESHNESS_ENABLED": "true",
         // Off on staging too until the report card's preview UI ships.
         "FULLPAGE_PREVIEW_ENABLED": "false",
+        "IMAGES_BASE_URL": "",
         // The newsletter runs on staging first, against the owner's one Kit
         // account: sign-ups land on the real list (Kit's double opt-in), and new
         // posts only ever become drafts marked [staging] (worker/newsletter.ts).

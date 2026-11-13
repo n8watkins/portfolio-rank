@@ -15,7 +15,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
   roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
         ▼
   capture.mjs (new + --refresh)  ──►  screenshots ──► Cloudflare R2   + diagnostics, page text, facts ──► Turso
-  fullpage-backfill.mjs (capped)  ──►  full-page screenshots for older captures ──► R2 (+ portfolios.meta.fullPage)
+  fullpage-backfill.mjs (capped)  ──►  tall images for older captures ──► R2 (+ portfolios.meta.fullPage)
   evidence.mjs, detect-changes.mjs  ──►  old rows' text and facts, page changes (rating_resets)
         ▼   (all of the above: the free checks on Actions, started by Cloudflare at 20:30 Pacific)
   end-of-day Workflow (Cloudflare)  ──►  new and changed sites graded (rubric v2) ──► Turso (portfolios.ai_rubric)
@@ -559,9 +559,9 @@ Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without clai
 ## Budget model
 
 - **Gemini (free tier, shared):** the end-of-day run's accountant (above) for every job, people first.
-- **R2 (10 GB free):** about 436 KB of screenshots a site: hero and phone tops (about 106 KB) and the two full-page WebPs (about 330 KB, at most about 750 KB; measured on 23 sites on 2026-11-13).
-  About 1 GB for 2,300 sites, plus ~0.2 MB/day of backups: under the cap, $0.
-  At about 15,000 sites the account's buckets would reach the 10 GB (`lib/admin/limits.mjs` PROJECTIONS).
+- **R2 (10 GB free):** 143 KB of images a site (tall desktop and phone AVIF with thumbnails), plus 117 KB while hero.jpg and mobile.jpg are still uploaded (measured on 23 sites on 2026-11-13; [docs/audits/fullpage-images.md](docs/audits/fullpage-images.md)).
+  About 0.6 GB for 2,300 sites, plus ~0.2 MB/day of backups: under the cap, $0.
+  Lean, 10,000 sites take 1.4 GB and 50,000 take 7.2 GB (`lib/admin/limits.mjs` PROJECTIONS).
 - **GitHub Actions:** unlimited (public repo).
 - **PSI/Lighthouse:** 25k runs/day - ample.
 - **Cloudflare:** Workers Paid; the Workflow uses one step per batch (about 30 to 60 a night) and a few minutes of CPU a month.
@@ -651,7 +651,7 @@ serve images.
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
 - `node scripts/model-watch.mjs [--dry-run]` - the weekly model watch by hand (needs `GEMINI_API_KEY` for the model list; no generate calls)
-- `node pipeline/fullpage-backfill.mjs [--limit N] [--concurrency C] [--only s] [--dry-run]` - full-page screenshots (`full-desktop.webp`, `full-phone.webp`) for up to N listed sites captured before the capture took them; changes no grade or capture date (the nightly free checks run it with a cap)
+- `node pipeline/fullpage-backfill.mjs [--limit N] [--minutes M] [--concurrency C] [--only s] [--dry-run]` - tall desktop and phone images with thumbnails (AVIF, `<shot_key>/<v>/`) for up to N listed sites captured before the capture made them; changes no grade, hero.jpg or capture date (the nightly free checks run it with a cap)
 - `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: changed or asked for, then 90 days old (finds redesigns)
 - `node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them; `--links N` also measures again up to N sites whose project link checks are due
 - `node scripts/detect-changes.mjs` - record page fingerprint changes (`rating_resets`)

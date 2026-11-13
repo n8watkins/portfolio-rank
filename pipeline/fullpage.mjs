@@ -1,39 +1,54 @@
-// Full-page screenshots, desktop and phone, for the report card's "see the
-// whole page" preview (shown only with FULLPAGE_PREVIEW_ENABLED,
-// lib/fullpage-flag.ts). Taken by the capture (pipeline/capture.mjs) after
-// its own frames, and for sites captured before this existed by
-// pipeline/fullpage-backfill.mjs.
+// The capture's page images (owner-approved design, 2026-11-13): one visit
+// per site, and from it one tall desktop image (1440 wide) and one tall
+// phone image (390 wide), plus a small thumbnail of each one's top.
 //
-//   full-desktop.webp  1440 wide, at most 6,000 px tall
-//   full-phone.webp     390 wide, at most 8,000 px tall
+//   <shot_key>/<v>/desktop.avif        1440 wide, at most 4,000 px tall
+//   <shot_key>/<v>/phone.avif           390 wide, at most 6,000 px tall
+//   <shot_key>/<v>/desktop-thumb.avif   480 wide: the top 1440 x 900, scaled
+//   <shot_key>/<v>/phone-thumb.avif     240 wide: the top 390 x 844, scaled
 //
-// Lazy content: the page is scrolled through once, top to bottom, in steps
-// (images with loading="lazy" and infinite lists load), within a time
-// budget. Then the frame is stitched from one viewport screenshot per
-// screenful (captureFullPage says why), each after a short wait for that
-// screen's reveal effects and images. A page taller than the cap is cut at
-// the cap and `cropped` says so. Playwright gives PNG; sharp (libvips)
-// stitches the tiles and encodes WebP quality 75, which was 44% smaller
-// than JPEG 75 at equal or better quality (PR #201).
+// <v> is the version (the capture's time in base 36), so every object is
+// immutable and can be cached for a year anywhere; a new version replaces
+// the old one, which is then deleted (pipeline/shot-store.mjs).
 //
-// Nothing here is retried: a shot that fails or times out is recorded as an
-// error in the site's meta, and pipeline/fullpage-backfill.mjs tries again a
-// bounded number of times, a week apart.
-import fs from "fs";
-import path from "path";
+// The top of each tall image (1440 x 900 and 390 x 844) is also cut out as
+// a JPEG at capture time: the grade's image (pipeline/rubric.mjs reads
+// captures/<key>/hero.jpg) and, while the pages still use them, the old
+// hero.jpg and mobile.jpg (pipeline/shot-store.mjs LEGACY_FRAMES). Gemini
+// does not read AVIF, so the grade's image stays a JPEG.
+//
+// How a tall image is made: the page is scrolled through once, top to
+// bottom (lazy images and infinite lists load, within a time budget), then
+// it is stitched from one viewport screenshot per screenful from the top
+// (stitchPage says why). sharp (libvips) joins the tiles and encodes AVIF.
+// Nothing here is retried: a frame that fails is recorded as an error.
+import { createHash } from "crypto";
 import sharp from "sharp";
-import { FULL_DESKTOP, FULL_PHONE } from "./shot-files.mjs";
-import { pngDiff } from "./png-diff.mjs";
 
-export const WEBP_QUALITY = 75;
-
-/** The two frames: viewport width, file name and height cap. */
-export const FULL_PAGE_FRAMES = {
-  desktop: { file: FULL_DESKTOP, width: 1440, maxHeight: 6000 },
-  phone: { file: FULL_PHONE, width: 390, maxHeight: 8000 },
+/** The two views: viewport, height cap and thumbnail width. */
+export const FRAMES = {
+  desktop: { width: 1440, viewportHeight: 900, maxHeight: 4000, thumbWidth: 480 },
+  phone: { width: 390, viewportHeight: 844, maxHeight: 6000, thumbWidth: 240 },
 };
 
-export const FULL_PAGE_FILES = Object.values(FULL_PAGE_FRAMES).map((f) => f.file);
+/** The stored files of one version, by view. */
+export const IMAGE_FILES = {
+  desktop: { tall: "desktop.avif", thumb: "desktop-thumb.avif" },
+  phone: { tall: "phone.avif", thumb: "phone-thumb.avif" },
+};
+export const ALL_IMAGE_FILES = Object.values(IMAGE_FILES).flatMap((f) => [f.tall, f.thumb]);
+
+// AVIF settings, tuned on lossless stitched pages of six sample sites
+// (docs/audits/fullpage-images.md "Format"): quality 40 at effort 3 with
+// 4:2:0 chroma matches today's JPEG 75 (35.6 against 35.8 dB desktop,
+// 32.8 against 32.8 phone, text indistinguishable) at about a quarter of
+// its bytes, and encodes in about 1.5 s a tall desktop image; sharp's
+// default effort 4 took 7.6 s for 2% fewer bytes. Thumbnails, whose text
+// is scaled down, get quality 50.
+export const AVIF_TALL = { quality: 40, effort: 3, chromaSubsampling: "4:2:0" };
+export const AVIF_THUMB = { quality: 50, effort: 3, chromaSubsampling: "4:2:0" };
+/** The grade's image and the old frames: JPEG quality 75, as before. */
+export const JPEG_QUALITY = 75;
 
 // The scroll-through: steps of 80% of the viewport, a short pause on each so
 // lazy images start loading, and a hard budget so an endless page (infinite
@@ -48,6 +63,9 @@ const SETTLE_MS = 600;
 const TILE_SETTLE_MS = 700;
 const TILE_IMAGES_WAIT_MS = 1500;
 const SHOT_TIMEOUT_MS = 30000;
+
+/** A version tag for a time: seconds in base 36 (lib/shots.ts uses the same for ?v=). */
+export const versionOf = (date) => Math.floor(date.getTime() / 1000).toString(36);
 
 /**
  * Scrolls the page from top to bottom once (to the height cap at most) and
@@ -86,7 +104,7 @@ export async function scrollThrough(page, { maxHeight, pauseMs = SCROLL_PAUSE_MS
 
 /**
  * Waits (bounded) for the images the scroll started to finish loading: the
- * unfinished ones above the height cap (a lazy image below it never starts).
+ * unfinished ones above `maxHeight` (a lazy image below it never starts).
  */
 async function imagesLoaded(page, maxHeight, timeoutMs = IMAGES_WAIT_MS) {
   await page
@@ -111,25 +129,6 @@ async function imagesLoaded(page, maxHeight, timeoutMs = IMAGES_WAIT_MS) {
     .catch(() => {});
 }
 
-/**
- * Waits for a freshly loaded page's first screen to hold still (preloaders,
- * typing and intro animations), the way the capture waits for its hero:
- * two quiet polls in a row, at most `polls` polls. An animated background
- * that never holds still just uses up the polls. The backfill needs this;
- * the capture's pages have settled already. Returns whether it settled.
- */
-export async function settleFirstScreen(page, { intervalMs = 1500, polls = 8 } = {}) {
-  let prev = await page.screenshot({ type: "png" });
-  let quiet = 0;
-  for (let i = 0; i < polls && quiet < 2; i++) {
-    await page.waitForTimeout(intervalMs);
-    const cur = await page.screenshot({ type: "png" });
-    quiet = pngDiff(prev, cur) < 0.01 ? quiet + 1 : 0;
-    prev = cur;
-  }
-  return quiet >= 2;
-}
-
 /** The rendered page's height in CSS pixels. */
 export const pageHeightOf = (page) =>
   page.evaluate(() => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0, window.innerHeight));
@@ -142,12 +141,6 @@ export const pageHeightOf = (page) =>
 export function shotHeight(pageHeight, viewportHeight, maxHeight) {
   const h = Math.max(Math.ceil(Number(pageHeight) || 0), viewportHeight);
   return { height: Math.min(h, maxHeight), cropped: h > maxHeight };
-}
-
-/** PNG to WebP at WEBP_QUALITY. Returns the bytes and their size. */
-export async function toWebp(png) {
-  const { data, info } = await sharp(png).webp({ quality: WEBP_QUALITY }).toBuffer({ resolveWithObject: true });
-  return { data, width: info.width, height: info.height, bytes: info.size };
 }
 
 /**
@@ -178,9 +171,11 @@ const HIDE_FIXED = () => {
 };
 
 /**
- * One full-page frame of an open, loaded page whose viewport is already the
- * frame's width. Writes <dir>/<file> and returns what goes in the meta:
- * { width, height, pageHeight, cropped, bytes, ms }.
+ * The tall image of an open, loaded, settled page whose viewport is the
+ * view's size. Returns { raw, width, height, pageHeight, cropped, top,
+ * scrollStopped?, scrollCut?, ms }: `raw` is the stitched image as raw RGB,
+ * `top` the first screenful as PNG (the same pixels as a viewport
+ * screenshot at the top).
  *
  * Stitched from viewport screenshots, one per screenful from the top: many
  * portfolios show a section only while it is in view (scroll-linked
@@ -188,19 +183,22 @@ const HIDE_FIXED = () => {
  * screenshot of the whole document leaves everything below the first
  * screen blank. Each tile shows the page the way a visitor scrolling there
  * sees it. If the page stops scrolling before the height (its content
- * scrolls inside its own box), the image ends where scrolling did.
+ * scrolls inside its own box), the image ends where scrolling did. Fixed
+ * bars are hidden after the first tile and the page is left scrolled to
+ * the top.
  */
-export async function captureFullPage(page, dir, frame) {
+export async function stitchPage(page, view) {
   const t = Date.now();
-  const viewport = page.viewportSize() ?? { width: frame.width, height: 900 };
+  const viewport = page.viewportSize() ?? { width: view.width, height: view.viewportHeight };
   const vh = viewport.height;
-  const scroll = await scrollThrough(page, { maxHeight: frame.maxHeight });
+  const scroll = await scrollThrough(page, { maxHeight: view.maxHeight });
   await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
-  await imagesLoaded(page, frame.maxHeight);
+  await imagesLoaded(page, view.maxHeight);
   const pageHeight = await pageHeightOf(page);
-  const { height: wanted, cropped } = shotHeight(pageHeight, vh, frame.maxHeight);
+  const { height: wanted, cropped } = shotHeight(pageHeight, vh, view.maxHeight);
 
   const tiles = [];
+  let top = null;
   let covered = 0;
   for (let y = 0; y < wanted; y += vh) {
     const actual = await page.evaluate((y) => {
@@ -214,59 +212,177 @@ export async function captureFullPage(page, dir, frame) {
     // Finite CSS animations and transitions (most reveal effects) are shown
     // at their end state.
     const png = await page.screenshot({ type: "png", animations: "disabled", timeout: SHOT_TIMEOUT_MS });
+    if (y === 0) top = png;
     const input = part.offset === 0 && part.rows === vh ? png : await sharp(png).extract({ left: 0, top: part.offset, width: viewport.width, height: part.rows }).toBuffer();
     tiles.push({ input, top: y, left: 0 });
     covered = y + part.rows;
     if (y === 0) await page.evaluate(HIDE_FIXED).catch(() => {});
   }
   await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" })).catch(() => {});
-  if (!covered) throw new Error("no tile was taken");
+  if (!covered || !top) throw new Error("no tile was taken");
 
-  const { data, info } = await sharp({ create: { width: viewport.width, height: covered, channels: 3, background: "#ffffff" } })
+  const raw = await sharp({ create: { width: viewport.width, height: covered, channels: 3, background: "#ffffff" } })
     .composite(tiles)
-    .webp({ quality: WEBP_QUALITY })
-    .toBuffer({ resolveWithObject: true });
-  fs.writeFileSync(path.join(dir, frame.file), data);
+    .removeAlpha()
+    .raw()
+    .toBuffer();
   return {
-    width: info.width,
-    height: info.height,
+    raw,
+    width: viewport.width,
+    height: covered,
     pageHeight: Math.round(pageHeight),
     cropped,
-    bytes: info.size,
+    top,
     ms: Date.now() - t,
     ...(covered < wanted ? { scrollStopped: true } : {}),
     ...(scroll.outOfTime ? { scrollCut: true } : {}),
   };
 }
 
-/**
- * Both frames, from a desktop page (1440 viewport) and a phone page (390
- * viewport), one after the other. Never throws: a frame that fails is
- * { error } and the other is still taken. Old files in `dir` are removed
- * first, so a failed frame never uploads a stale one. Returns the meta's
- * `fullPage`: { at, desktop, phone }.
- */
-export async function captureFullPages({ desktop, phone }, dir, { now = () => new Date() } = {}) {
-  for (const f of FULL_PAGE_FILES) fs.rmSync(path.join(dir, f), { force: true });
-  const out = { at: now().toISOString() };
-  for (const [name, page] of [["desktop", desktop], ["phone", phone]]) {
-    try {
-      out[name] = await captureFullPage(page, dir, FULL_PAGE_FRAMES[name]);
-    } catch (e) {
-      out[name] = { error: String(e?.message ?? e).split("\n")[0].slice(0, 200) };
-    }
-  }
-  return out;
+const fromRaw = (s) => sharp(s.raw, { raw: { width: s.width, height: s.height, channels: 3 } });
+
+// Visual signature: the image scaled to SIG_COLS columns and one row per
+// SIG_ROW_PX pixels, grey, 16 levels a cell. Two captures look the same
+// when the sizes match and at most SIG_MAX_CHANGED of the cells moved by
+// more than one level (a carousel, a clock or a cursor blink stay under).
+const SIG_COLS = 16;
+const SIG_ROW_PX = 90;
+export const SIG_MAX_CHANGED = 0.01;
+
+/** The stitched image's visual signature: { w, h, cells } (cells: base64, 4 bits each). */
+export async function visualSignature(stitched) {
+  const rows = Math.max(1, Math.round(stitched.height / SIG_ROW_PX));
+  const grey = await fromRaw(stitched).resize(SIG_COLS, rows, { fit: "fill" }).greyscale().raw().toBuffer();
+  const packed = Buffer.alloc(Math.ceil(grey.length / 2));
+  for (let i = 0; i < grey.length; i++) packed[i >> 1] |= (grey[i] >> 4) << (i % 2 ? 0 : 4);
+  return { w: stitched.width, h: stitched.height, cells: packed.toString("base64") };
 }
 
-/** Whether a stored `fullPage` has both frames. */
-export const fullPageComplete = (fp) => Boolean(fp && fp.desktop?.bytes > 0 && fp.phone?.bytes > 0);
+/** Whether two signatures look the same (see visualSignature). */
+export function sameLook(a, b) {
+  if (!a || !b || a.w !== b.w || a.h !== b.h || a.cells.length !== b.cells.length) return false;
+  const x = Buffer.from(a.cells, "base64");
+  const y = Buffer.from(b.cells, "base64");
+  let changed = 0;
+  const n = x.length * 2;
+  for (let i = 0; i < n; i++) {
+    const p = i % 2 ? x[i >> 1] & 15 : x[i >> 1] >> 4;
+    const q = i % 2 ? y[i >> 1] & 15 : y[i >> 1] >> 4;
+    if (Math.abs(p - q) > 1) changed++;
+  }
+  return changed <= n * SIG_MAX_CHANGED;
+}
+
+/**
+ * Encodes one stitched view: { tall, thumb } (AVIF), `crop` (the top
+ * screenful as JPEG, for the grade and the old frames) and its signature.
+ */
+export async function encodeView(stitched, view) {
+  const [tall, thumb, crop, sig] = await Promise.all([
+    fromRaw(stitched).avif(AVIF_TALL).toBuffer(),
+    sharp(stitched.top).resize({ width: view.thumbWidth }).avif(AVIF_THUMB).toBuffer(),
+    sharp(stitched.top).jpeg({ quality: JPEG_QUALITY, mozjpeg: false }).toBuffer(),
+    visualSignature(stitched),
+  ]);
+  return { tall, thumb, crop, sig };
+}
+
+/**
+ * One view, from stitch to encoded files, never throwing: { ok: true,
+ * meta, files } or { ok: false, meta: { error } }. `meta` is what the
+ * row keeps: { width, height, pageHeight, cropped, bytes, thumbBytes, ms,
+ * sig, ... }.
+ */
+export async function captureView(page, name) {
+  const view = FRAMES[name];
+  try {
+    const t = Date.now();
+    const s = await stitchPage(page, view);
+    const files = await encodeView(s, view);
+    return {
+      ok: true,
+      files,
+      meta: {
+        width: s.width,
+        height: s.height,
+        pageHeight: s.pageHeight,
+        cropped: s.cropped,
+        bytes: files.tall.length,
+        thumbBytes: files.thumb.length,
+        ms: Date.now() - t,
+        sig: files.sig,
+        ...(s.scrollStopped ? { scrollStopped: true } : {}),
+        ...(s.scrollCut ? { scrollCut: true } : {}),
+      },
+    };
+  } catch (e) {
+    return { ok: false, meta: { error: String(e?.message ?? e).split("\n")[0].slice(0, 200) } };
+  }
+}
+
+/** A short hash of the page text, so a text change is never taken for "looks the same". */
+export const textHash = (text) => createHash("sha1").update(String(text ?? "")).digest("hex").slice(0, 16);
+
+/**
+ * Whether a new capture looks like the stored one: both views' signatures
+ * match and the page text is the same. Then nothing is uploaded and the
+ * stored version (and every cached copy of it) stays.
+ */
+export function unchanged(prev, next) {
+  return Boolean(
+    prev?.v && prev.textHash && prev.textHash === next.textHash && sameLook(prev.desktop?.sig, next.desktop?.sig) && sameLook(prev.phone?.sig, next.phone?.sig)
+  );
+}
+
+/**
+ * What a capture stores, from the stored `fullPage` (or null) and the two
+ * views (captureView): { fullPage, uploadImages, uploadLegacy }.
+ *   both views taken, looks the same: the stored version stays (only
+ *     `checkedAt` moves), nothing is uploaded.
+ *   both views taken, changed or new: a new version `v` (the capture time).
+ *   a view failed: the stored version, if any, stays with `lastError`;
+ *     without one, the errors are recorded (the backfill tries again).
+ * The old frames (hero.jpg, mobile.jpg) go up unless nothing changed.
+ */
+export function nextFullPage(prev, { desktopView, phoneView, pageText, at }) {
+  const iso = at.toISOString();
+  const th = textHash(pageText);
+  if (desktopView.ok && phoneView.ok) {
+    const next = { v: versionOf(at), at: iso, textHash: th, desktop: desktopView.meta, phone: phoneView.meta };
+    if (unchanged(prev, next)) return { fullPage: { ...prev, checkedAt: iso }, uploadImages: false, uploadLegacy: false };
+    return { fullPage: next, uploadImages: true, uploadLegacy: true };
+  }
+  const errors = { at: iso, desktop: desktopView.meta, phone: phoneView.meta };
+  if (prev?.v) return { fullPage: { ...prev, lastError: errors }, uploadImages: false, uploadLegacy: true };
+  return { fullPage: { ...errors, tries: nextTries(prev) }, uploadImages: false, uploadLegacy: true };
+}
+
+/** Whether a stored `fullPage` has both tall images. */
+export const fullPageComplete = (fp) => Boolean(fp && fp.v && fp.desktop?.bytes > 0 && fp.phone?.bytes > 0);
+
+/**
+ * Waits for a freshly loaded page's first screen to hold still (preloaders,
+ * typing and intro animations), the way the capture waits for its hero:
+ * two quiet polls in a row, at most `polls` polls. Returns whether it settled.
+ */
+export async function settleFirstScreen(page, { intervalMs = 1500, polls = 8, diff } = {}) {
+  const pngDiff = diff ?? (await import("./png-diff.mjs")).pngDiff;
+  let prev = await page.screenshot({ type: "png" });
+  let quiet = 0;
+  for (let i = 0; i < polls && quiet < 2; i++) {
+    await page.waitForTimeout(intervalMs);
+    const cur = await page.screenshot({ type: "png" });
+    quiet = pngDiff(prev, cur) < 0.01 ? quiet + 1 : 0;
+    prev = cur;
+  }
+  return quiet >= 2;
+}
 
 // ---------------------------------------------------------------------------
 // Backfill bookkeeping (pipeline/fullpage-backfill.mjs)
 // ---------------------------------------------------------------------------
 
-/** A site whose frames failed is tried again this many times in all... */
+/** A site whose images failed is tried again this many times in all... */
 export const FULL_PAGE_MAX_TRIES = 3;
 /** ...at least this far apart. */
 export const FULL_PAGE_RETRY_DAYS = 7;
@@ -275,9 +391,9 @@ export const FULL_PAGE_RETRY_DAYS = 7;
 const FP = (p) => `CASE WHEN json_valid(${p}.meta) THEN json_extract(${p}.meta, '$.fullPage') END`;
 
 /**
- * Listed, live, captured sites without both full-page frames, at most
- * `limit`: never tried first (newest capture first), then failed ones whose
- * last try is FULL_PAGE_RETRY_DAYS old, until FULL_PAGE_MAX_TRIES. A try the
+ * Listed, live, captured sites without both tall images, at most `limit`:
+ * never tried first (newest capture first), then failed ones whose last
+ * try is FULL_PAGE_RETRY_DAYS old, until FULL_PAGE_MAX_TRIES. A try the
  * capture made counts as one. `active` is pipeline/roster.mjs ACTIVE.
  */
 export async function fullPageDue(db, { limit, active, now = Date.now() }) {
@@ -287,7 +403,7 @@ export async function fullPageDue(db, { limit, active, now = Date.now() }) {
     sql: `SELECT p.url, p.name, p.shot_key, ${fp} AS full_page FROM portfolios p
           WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${active("p")}
             AND (${fp} IS NULL OR (
-              NOT (COALESCE(json_extract(${fp}, '$.desktop.bytes'), 0) > 0 AND COALESCE(json_extract(${fp}, '$.phone.bytes'), 0) > 0)
+              NOT (json_extract(${fp}, '$.v') IS NOT NULL AND COALESCE(json_extract(${fp}, '$.desktop.bytes'), 0) > 0 AND COALESCE(json_extract(${fp}, '$.phone.bytes'), 0) > 0)
               AND COALESCE(json_extract(${fp}, '$.tries'), 1) < ?
               AND COALESCE(json_extract(${fp}, '$.at'), '') < ?))
           ORDER BY (${fp} IS NOT NULL), p.captured_at DESC, p.url
@@ -307,8 +423,8 @@ export const nextTries = (prev) => (prev ? Number(prev.tries ?? 1) : 0) + 1;
 
 /**
  * Stores a backfill's result in the row's meta (`fullPage`), leaving every
- * other field, captured_at (the hero's version) and the page fingerprint as
- * they were. Only while the row still has the same shot_key.
+ * other field, captured_at (the old frames' version) and the page
+ * fingerprint as they were. Only while the row still has the same shot_key.
  */
 export async function recordFullPage(db, { url, shotKey, fullPage }) {
   const r = await db.execute({

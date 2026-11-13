@@ -29,8 +29,8 @@ const s3 = new S3Client({
 
 /**
  * Only a capture's old full-page frame: 16 hex characters, then /full.jpg.
- * The current full-page frames (full-desktop.webp, full-phone.webp,
- * pipeline/shot-files.mjs) never match.
+ * The current tall images (<16 hex>/<version>/*.avif, pipeline/fullpage.mjs)
+ * never match.
  */
 const isFullFrame = (key) => /^[0-9a-f]{16}\/full\.jpg$/.test(key);
 
