@@ -21,9 +21,16 @@ const pages = {
     <script>addEventListener("keydown",(e)=>{if(e.key==="Escape")${close}})</script></body>`,
   // A fixed overlay with no dialog role, closed by its Close button.
   "/overlay": `<body>${PAGE}<div id=m style="position:fixed;inset:0;background:#000;color:#fff;z-index:9">Our new look is here<button onclick="${close}">Close</button></div></body>`,
+  // shubhadeepsec.github.io's kind: a "CLICK TO ENTER" overlay over a page that already has text, so
+  // the splash check (nearly empty screens only) never fires; the overlay's own button is clicked.
+  "/enter": `<body>${PAGE}<div id=m style="position:fixed;inset:0;background:#0b0b10;color:#fff;display:grid;place-items:center;z-index:9"><div role=button tabindex=0 style="cursor:pointer;padding:20px" onclick="${close}"><div>LOADING 100%</div><div>CLICK TO ENTER</div></div></div></body>`,
   // A cookie bar: too small to count.
   "/cookies": `<body>${PAGE}<div role=dialog style="position:fixed;left:0;right:0;bottom:0;height:80px;background:#eee">We use cookies <button>Accept</button></div></body>`,
   "/plain": `<body>${PAGE}</body>`,
+  // shubhamgupta.dev's kind: the whole site drawn in a full-screen fixed container, with more
+  // text elsewhere in the DOM, off screen. It is the page, not an overlay.
+  "/canvas-site": `<body style="margin:0"><div style="position:fixed;inset:0;background:#f4f4f4;overflow:auto">${PAGE}<button>Get in touch</button></div>
+    <div style="position:absolute;top:3000px">${"Hidden footer text for search engines. ".repeat(10)}</div></body>`,
 };
 let server;
 let browser;
@@ -72,8 +79,15 @@ test("a full-screen fixed overlay without a dialog role counts, and its Close bu
   await page.close();
 });
 
-test("a cookie bar and an ordinary page are left alone", async () => {
-  for (const p of ["/cookies", "/plain"]) {
+test("a CLICK TO ENTER overlay over a page with text: its button is clicked, not Escape", async () => {
+  const page = await open("/enter");
+  const r = await passModal(page, { waitMs: 300 });
+  assert.deepEqual([r.kind, r.button, r.how, r.passed], ["overlay", "CLICK TO ENTER", ["button"], true]);
+  await page.close();
+});
+
+test("a cookie bar, an ordinary page and a site drawn in a full-screen fixed container are left alone", async () => {
+  for (const p of ["/cookies", "/plain", "/canvas-site"]) {
     const page = await open(p);
     assert.equal(await passModal(page), null, p);
     await page.close();
