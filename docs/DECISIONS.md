@@ -101,6 +101,12 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   One screenshot, the facts and up to 4,000 characters of page text in one request, thinking at `minimal`, a strict JSON schema, short notes, and a `rubric_version` on every grade.
   The rubric is defined once in `pipeline/rubric.mjs` and the table in GRADING_CRITERIA.md is generated from it.
   Why: the old grade sent three images (one only to spot animation, one shrunk past reading) and no text; v2 halves the cost and gives writing and storytelling real evidence.
+- **Grade what a visitor sees by default: pass splash gates and opening dialogs** (owner, 2026-11-13). Status: building (splash gates built in #208; dialogs in this PR).
+  Before the screenshots, the capture clicks through a splash gate ("CLICK TO CONTINUE", a loader at 100%), then closes a dialog that sits on top of the page after load (role=dialog, aria-modal or an open dialog covering at least 20% of the screen, or a fixed overlay covering more than half of it): its primary button (Continue, Enter, Start, Get started, else Close), or Escape when it has none, then checks once more.
+  It never picks the richest option a dialog offers: the default view is what a visitor gets.
+  Only the screens after the click are stored (R2, bundles) and graded; the screen before it is never written, and `meta.action` records the click in one line (for example `clicked "Continue with ChatGPT"`) for the review page.
+  A page still blocked after the click is never graded; where a review queue exists (the recheck-543 re-check), its blocked screenshot is kept there, marked "capture blocked".
+  Why: a "Choose a Theme" dialog over a full page (about.ashutoshcodes.in) hid the portfolio from the screenshots while the gate check, which only looks at nearly empty screens, never fired.
 - **Page text is untrusted data** (agent, 2026-11-10). Status: built (#57).
   It travels in a `<site_data>` block the instructions mark as data, never instructions.
   Why: once grades are public, sites will try to talk to the judge.
