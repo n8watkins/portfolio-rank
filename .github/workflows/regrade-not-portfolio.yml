@@ -14,17 +14,20 @@ name: Re-check non-ranked sites (recheck-543)
 #   gemini           the plan on gemini-3.1-flash-lite: a hard stop at 230
 #                    HTTP requests and never past 480 on the model's quota
 #                    day. Resumable: pass the last gemini run as resume_run.
+#   queue-dry-run,   the review rows committed in experiments/recheck-543/
+#   queue            queue.json into status_reviews (INSERT OR IGNORE), for the
+#                    owner to confirm on /admin/review; nothing else changes.
 # The Haiku pass runs on the owner's machine from the same bundles
 # (scripts/experiments/recheck-543-haiku.mjs).
 on:
   workflow_dispatch:
     inputs:
       step:
-        description: "capture, gemini-dry-run or gemini"
+        description: "capture, gemini-dry-run, gemini, queue-dry-run or queue"
         required: true
         default: "gemini-dry-run"
         type: choice
-        options: ["capture", "gemini-dry-run", "gemini"]
+        options: ["capture", "gemini-dry-run", "gemini", "queue-dry-run", "queue"]
       capture_run:
         description: "gemini steps: the run id of the capture"
         required: false
@@ -104,7 +107,7 @@ jobs:
           retention-days: 30
 
   gemini:
-    if: inputs.step != 'capture'
+    if: startsWith(inputs.step, 'gemini')
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     env:
@@ -157,3 +160,19 @@ jobs:
             ${{ env.RECHECK_DIR }}/timeline.json
           if-no-files-found: ignore
           retention-days: 30
+
+  queue:
+    if: startsWith(inputs.step, 'queue')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/experiments/recheck-543.mjs queue ${{ inputs.step == 'queue-dry-run' && '--dry-run' || '' }}

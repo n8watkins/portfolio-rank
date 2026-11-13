@@ -259,6 +259,26 @@ async function main() {
     return 0;
   }
   if (step === "gemini") return gemini({ dryRun: flag("--dry-run") });
+  if (step === "queue") {
+    // The review rows (experiments/recheck-543/queue.json, written by recheck-543-analyze.mjs and
+    // committed for the record) into status_reviews. Never updates a row the owner has decided:
+    // INSERT OR IGNORE on (batch, url). Changes nothing else; /admin/review applies on Confirm.
+    const rows = readJson(path.join(import.meta.dirname, "..", "..", "experiments", "recheck-543", "queue.json"));
+    const { pipelineDb } = await import("../../pipeline/roster.mjs");
+    const db = pipelineDb(path.join(import.meta.dirname, "..", ".."));
+    const has = (await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'status_reviews'")).rows.length;
+    if (!has) throw new Error("status_reviews does not exist yet: the review queue PR must be deployed first");
+    const cols = ["batch", "url", "grp", "current", "proposed", "agreed", "reason", "off_list", "shot_key", "verdicts", "signals", "status", "created_at"];
+    console.log(`${rows.length} rows${flag("--dry-run") ? " (dry run: nothing written)" : ""}`);
+    if (flag("--dry-run")) return 0;
+    let added = 0;
+    for (const r of rows) {
+      const res = await db.execute({ sql: `INSERT OR IGNORE INTO status_reviews (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, args: cols.map((c) => r[c] ?? null) });
+      added += res.rowsAffected;
+    }
+    console.log(`${added} rows added, ${rows.length - added} already there`);
+    return 0;
+  }
   if (step === "fetch") {
     // The workflow's artifacts, with the local gh login (no secrets): the selection and bundles of a capture run, the answers of a gemini run.
     const { execFileSync } = await import("child_process");
