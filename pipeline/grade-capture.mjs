@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { UA, parkingPhrase, readRenderedPage } from "./gate.mjs";
-import { passSplashGate } from "./splash.mjs";
+import { passModal, passSplashGate } from "./splash.mjs";
 import { measurePage } from "./facts.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import { pngDiff } from "./png-diff.mjs";
@@ -83,6 +83,8 @@ export async function capturePage(browser, url, { dir, linkFetch, settlePolls = 
     await page.waitForTimeout(1000);
     // A splash gate is clicked through first, at most twice (./splash.mjs), as in the list's capture.
     const splash = await passSplashGate(page).catch(() => null);
+    // Then a dialog on top of the page, closed as a visitor would (./splash.mjs passModal).
+    const modal = await passModal(page).catch(() => null);
 
     const rendered = await page.evaluate(readRenderedPage);
     if (rendered.text.trim().length < 30 && !rendered.media) return { ok: false, reason: "The page renders blank." };
@@ -142,6 +144,7 @@ export async function capturePage(browser, url, { dir, linkFetch, settlePolls = 
       await mobilePage.goto(url, { waitUntil: "load", timeout: NAV_TIMEOUT_MS });
       await mobilePage.waitForTimeout(1500);
       await passSplashGate(mobilePage).catch(() => null);
+      await passModal(mobilePage).catch(() => null);
       overflow390 = await mobilePage.evaluate(() => document.documentElement.scrollWidth > 395);
       fs.writeFileSync(mobile, await mobilePage.screenshot({ type: "jpeg", quality: 75 }));
     } catch {
@@ -159,6 +162,7 @@ export async function capturePage(browser, url, { dir, linkFetch, settlePolls = 
       domHash: createHash("sha1").update(sig.tags).digest("hex"),
       classHash: createHash("sha1").update(sig.classes).digest("hex"),
       ...(splash ? { splash } : {}),
+      ...(modal ? { modal } : {}),
     };
     return { ok: true, finalUrl, pageText, facts, meta, files: { hero, ...(fs.existsSync(mobile) ? { mobile } : {}) } };
   } finally {

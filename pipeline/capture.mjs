@@ -33,7 +33,7 @@ import path from "path";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
-import { passSplashGate } from "./splash.mjs";
+import { passModal, passSplashGate } from "./splash.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -191,6 +191,10 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // 100%) is clicked through first, at most twice (./splash.mjs), so the
     // capture and the grade see the portfolio, not the gate.
     const splash = await passSplashGate(page).catch(() => null);
+    // A dialog on top of the page ("Choose a Theme", a welcome modal) is
+    // closed the way a visitor would (./splash.mjs passModal), so the
+    // capture shows the site's default view.
+    const modal = await passModal(page).catch(() => null);
 
     // Blank-page gate: needs visible text within the rendered page.
     // Blank-page gate: visible text, or visual content (canvas apps such as
@@ -278,6 +282,7 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     await mpage.waitForTimeout(1500);
     // The phone view starts at the gate too.
     const mobileSplash = await passSplashGate(mpage).catch(() => null);
+    const mobileModal = await passModal(mpage).catch(() => null);
     const overflow390 = await mpage.evaluate(
       () => document.documentElement.scrollWidth > 395
     );
@@ -302,6 +307,8 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       classHash,
       // The splash gate passed on the way in (./splash.mjs), when there was one.
       ...(splash ? { splash: { ...splash, mobile: mobileSplash ? mobileSplash.passed : null } } : {}),
+      // The dialog closed on the way in (./splash.mjs passModal), when there was one.
+      ...(modal || mobileModal ? { modal: { ...(modal ?? {}), mobile: mobileModal ? mobileModal.passed : null } } : {}),
     };
 
     await uploadDir(key, dir);
