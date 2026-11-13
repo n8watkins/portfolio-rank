@@ -25,6 +25,7 @@ import { OLD_SITE_HOSTS } from "../lib/site";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
+import { tiersTick } from "./tiers";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
@@ -81,6 +82,12 @@ type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): P
  * owner's removal took effect, and the blog when a post's scheduled time came in the
  * last hour. Best effort: a failure only means the page refreshes when its day is up.
  */
+/** CachedPages.purgeTags for scheduled work, when this Worker exposes it (./edge-cache.ts). */
+function purgeTagsOf(ctx: { exports?: unknown }) {
+  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
+  return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
+}
+
 async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   if (!cached) return;
@@ -148,6 +155,9 @@ const worker = {
       // An alert when last night's run never started or died (./night-watch.ts).
       await nightWatchTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
+      // Tiers by ELO (./tiers.ts): the daily cutoffs when due (a background write). Profiles show the letter only with
+      // RANKING_V2, so only then do the ones whose letter changed leave the edge cache.
+      await tiersTick(controller.scheduledTime, { purgeTags: /^true$/i.test(String(env.RANKING_V2 ?? "")) ? purgeTagsOf(ctx) : undefined });
       // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }

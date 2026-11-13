@@ -7,7 +7,8 @@ import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
-import { readBoard, VIEWS, type View } from "@/lib/ranking/board";
+import { rankedSites } from "@/lib/tiers-board";
+import { isPublicTier } from "@/lib/tiers.mjs";
 import { readPolls } from "@/lib/polls/store.mjs";
 import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
 
@@ -110,16 +111,15 @@ export type BoardItem = {
 };
 
 export type TopTen =
-  | { kind: "views"; views: { key: View; label: string; rows: BoardItem[] }[] }
-  | { kind: "ai"; rows: BoardItem[] };
-
-const VIEW_LABEL: Record<View, string> = { merged: "Merged", ai: "AI", people: "People" };
+  | { kind: "ai"; rows: BoardItem[] }
+  /** Tiers by ELO (RANKING_V2): the ranked board's first 10 (lib/tiers-board.ts), the score a tier by ELO. */
+  | { kind: "ranked"; rows: BoardItem[] };
 
 /**
- * The top 10. With RANKING_V2 on and the boards computed: Merged, AI and
- * People (lib/ranking/board.ts). Until then the order of the AI grade (the
- * people's ELO board is too thin to rank on yet: most sites share one
- * vote), with the tier in the score column.
+ * The top 10. With RANKING_V2 on: the ranked board's first 10, tiers by ELO
+ * (lib/tiers-board.ts), the same rows /top shows first. Until then the order
+ * of the AI grade (the people's ELO board is too thin to rank on yet: most
+ * sites share one vote), with the tier in the score column.
  */
 async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
   await ensureSchema();
@@ -128,18 +128,12 @@ async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> 
     return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, score, href: reportPath(url) };
   };
   if (/^true$/i.test(String(process.env.RANKING_V2 ?? ""))) {
-    const boards = await Promise.all(VIEWS.map((v) => readBoard(v, { limit: 10 })));
-    if (boards.every((b) => b.rows.length > 0)) {
-      const views = boards.map((b) => ({
-        key: b.view,
-        label: VIEW_LABEL[b.view],
-        rows: b.rows.map((r) => item(r.url, r.rank, r.tier ?? "", r.tiedWithNext)),
-      }));
-      const shots = await shotBases([...new Set(views.flatMap((v) => v.rows.map((r) => r.url)))]);
-      for (const v of views) for (const r of v.rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-      // People first is the order the leaderboard reads in; Merged leads.
-      return { kind: "views", views: (["merged", "ai", "people"] as View[]).map((k) => views.find((v) => v.key === k)!) };
-    }
+    // Tiers by ELO: the ranked board's first 10, the same rows /top shows first (public letters only).
+    const { sites } = await rankedSites(10);
+    const rows = sites.map((s) => item(s.url, s.rank, isPublicTier(s.tier) ? s.tier : ""));
+    const shots = await shotBases(rows.map((r) => r.url));
+    for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
+    return { kind: "ranked", rows };
   }
   const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, p.tier));
   const shots = await shotBases(rows.map((r) => r.url));

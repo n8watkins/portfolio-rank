@@ -67,6 +67,7 @@ import {
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import { rankForWrite } from "../lib/tiers-store.mjs";
 import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
@@ -246,7 +247,8 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   }
   if (!image) return "skipped";
   const now = new Date(ctx.now());
-  const rubric = await gradeFromEvidence(gemini, { row, image, now });
+  // The new grade carries its tier rank (lib/tiers-store.mjs; a background write, shown only with RANKING_V2).
+  const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { url, now: ctx.now() });
   await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
   return "ok";
 }
