@@ -163,7 +163,14 @@ Built:
 - Fix 6: `gemini_requests` keeps 90 Pacific days raw, then one `gemini_daily` row per day, model, job and outcome; `night_runs` keeps 180 days.
 - Fix 9: `comparisons` stay whole; only `reason` is cleared after 90 days.
 
-Not yet: fixes 3 (incremental recompute), 4 and 5 (write only changed `site_ratings` and `rank_history` rows), 7 and 8 (no analytics events or polls are stored yet), and 10 (the owner's monthly look).
+Built later (2026-11-13, [audits/free-tier-limits.md](audits/free-tier-limits.md)):
+
+- Fixes 4 and 5: the recompute upserts only `site_ratings` rows whose values (shown rank included) changed, and writes each week's `rank_history` once, after the week ends, only rows that differ.
+  Measured on staging at 2,270 sites, a recompute wrote 48,023 rows before and none with nothing new; Turso counts about one write per row, not one per index entry, so the per-site estimates above were low before the fix.
+- The hidden-site set reads a partial index of hidden sites, and `/top` reads each view's size with one index seek.
+- Fix 10 is now a page: `/admin/limits` shows every free limit against its cap, amber at 50%.
+
+Not yet: fix 3 (incremental recompute), 7 and 8 (no analytics events or polls are stored yet).
 
 Estimated reads a month, before and after:
 
