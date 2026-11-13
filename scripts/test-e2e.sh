@@ -96,4 +96,6 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 echo "e2e: app on port $PORT, stand-ins on $E2E_PSI_PORT, $E2E_GRADER_MOCK_PORT and $E2E_GAMES_GH_PORT; server log $E2E_SERVER_LOG"
-node --test --test-concurrency=1 "tests/*.test.mjs"
+# A test or hook that never settles (a stand-in port taken by another run,
+# say) fails after five minutes instead of stalling the whole run.
+node --test --test-concurrency=1 --test-timeout=300000 "tests/*.test.mjs"

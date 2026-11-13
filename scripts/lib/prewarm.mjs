@@ -6,6 +6,37 @@
 
 export const KINDS = ["inspect", "psi"];
 
+// Sites a daily run measures at most: one PageSpeed call each, far inside
+// PageSpeed's 25,000 a day, and about 3 hours at ~25 s a site, inside the
+// job's 330 minutes. With results fresh for 30 days this covers about
+// 12,000 graded sites, and clears a backlog of never-measured ones in days.
+export const PREWARM_LIMIT = 400;
+// Same TTL as app/api/psi/route.ts: a PSI result younger than this is fresh.
+export const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
+
+/**
+ * The sites to prewarm: listed (active(p)), live, graded without an error
+ * and not marked "not a portfolio", whatever Gemini's letter, and without a
+ * fresh PSI result; never measured first, then the oldest.
+ * @param {{ execute: Function }} db
+ * @param {{ active: (p: string) => string, limit?: number, now?: number }} options
+ */
+export async function prewarmQueue(db, { active, limit = PREWARM_LIMIT, now = Date.now() }) {
+  const res = await db.execute({
+    sql: `SELECT p.url FROM portfolios p
+          LEFT JOIN cache c ON c.k = 'psi:' || p.url
+          WHERE p.status = 'live' AND ${active("p")}
+            AND json_valid(p.ai_rubric)
+            AND json_extract(p.ai_rubric, '$.error') IS NULL
+            AND COALESCE(json_extract(p.ai_rubric, '$.is_portfolio'), 1) != 0
+            AND (c.at IS NULL OR c.at < ?)
+          ORDER BY COALESCE(c.at, 0), p.url
+          LIMIT ?`,
+    args: [now - PSI_TTL_MS, limit],
+  });
+  return res.rows.map((r) => String(r.url));
+}
+
 /** Group an error into something a person can act on. */
 export function classify(error) {
   const e = String(error ?? "").toLowerCase();
