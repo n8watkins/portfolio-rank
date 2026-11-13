@@ -224,6 +224,11 @@
         "GRADER_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
+        // Staging's own, lower email caps (lib/email/gate.mjs): it sends from the
+        // same address and account as production, so a day of testing here can
+        // never use up production's day. Kinds left out keep their defaults,
+        // capped by the day's total.
+        "EMAIL_CAPS": "{\"day\":20,\"perRecipient\":3,\"kinds\":{\"grade-report\":12,\"report-link\":8,\"owner-alert\":5},\"reserve\":{\"grade-report\":5,\"owner-alert\":3}}",
         "CONTENT_MODE": "off",
         "CONTENT_DRAFTS_PER_WEEK": "2",
         // How the content engine writes a post: "staged" (outline, sections, finish;

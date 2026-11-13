@@ -3,6 +3,8 @@ import { SITE_URL } from "@/lib/site";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { hiddenUrls } from "@/lib/roster";
+import { db, ensureSchema } from "@/lib/db";
+import { gradedUrls, sitemapProfiles } from "@/lib/sitemap-profiles.mjs";
 import { graderEnabled } from "@/lib/grader/server";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
@@ -37,13 +39,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...tagsOf(posts).map((t: { slug: string }) => ({ url: `${BASE}/blog/tag/${t.slug}`, changeFrequency: "weekly" as const, priority: 0.3 })),
     { url: `${BASE}/about-posts`, changeFrequency: "monthly", priority: 0.3 },
   ];
-  const hidden = await hiddenUrls().catch(() => new Set<string>());
-  const detail: MetadataRoute.Sitemap = (feed as Portfolio[])
-    .filter((p) => !hidden.has(p.url))
-    .map((p) => ({
-      url: `${BASE}/p/${encodeURIComponent(p.url)}`,
-      changeFrequency: "weekly",
-      priority: 0.5,
-    }));
+  // Profiles: only graded real portfolios the site shows (lib/sitemap-profiles.mjs).
+  // A database error throws, so the daily rebuild keeps yesterday's sitemap
+  // instead of publishing one that lists every ungraded site.
+  await ensureSchema();
+  const hidden = await hiddenUrls();
+  const graded = await gradedUrls(db());
+  const detail: MetadataRoute.Sitemap = sitemapProfiles(feed as Portfolio[], hidden, graded).map((url) => ({
+    url: `${BASE}/p/${encodeURIComponent(url)}`,
+    changeFrequency: "weekly",
+    priority: 0.5,
+  }));
   return [...staticPages, ...blog, ...detail];
 }
