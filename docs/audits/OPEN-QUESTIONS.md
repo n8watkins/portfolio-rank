@@ -15,9 +15,11 @@ Last updated 2026-11-13 (evening).
 | 8 | AI votes count at 1/4 of a person's vote, only at tier edges | Yes | 2026-11-12 |
 | 9 | Starting rank = 60% report card + 40% check points, after experiment 4 confirms | Yes | 2026-11-12 |
 | 10 | The "synced" skill notice in your Claude settings (~/.claude/skills/synced): did you add it? | Check it | 2026-11-12 |
-| 15 | Domain move, before PR #163 merges: in the Cloudflare dashboard for portfoliorank.dev, (a) Always Use HTTPS on, (b) custom rules "Block scanner probes" and "Challenge nameless clients", (c) rate-limit rule "Slow down floods" letting verified bots pass, (d) add portfoliorank.dev and staging.portfoliorank.dev to the Turnstile widget. Or re-connect Cloudflare with write access via /mcp. Exact steps in the domain lane's report | Do (d) at least; (a) to (c) in 5 minutes | 2026-11-13 |
+| 15 | Domain moved 2026-11-13; still open: (b) custom rules "Block scanner probes" and "Challenge nameless clients", (c) rate-limit rule "Slow down floods" letting verified bots pass; (a) HTTPS and (d) Turnstile are done. Or re-connect Cloudflare with write access via /mcp. Exact steps in the domain lane's report | Do (d) at least; (a) to (c) in 5 minutes | 2026-11-13 |
 | 16 | Kit setup: sender hello@portfoliorank.dev (after Email Routing), sending-domain DNS records, API key via `! pass-env set portfolio-rank/KIT_API_KEY` | Yes | 2026-11-13 |
 | 17 | Replace the "move to Kit at 40" goal with "Newsletter: 100 subscribers" | Yes | 2026-11-13 |
+| 18 | Sign in once on https://portfoliorank.dev and on staging to confirm GitHub sign-in works on the new domain | Yes | 2026-11-13 |
+| 19 | n8builds newsletter on its own free Kit account (hello@n8builds.dev forwarding, `! pass-env set n8builds/KIT_API_KEY`), site side handed to the n8builds session | Yes | 2026-11-13 |
 | 11 | Create a separate Gemini key for staging: `! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY` | Yes, when experiments resume | 2026-11-13 |
 | 12 | First automatic goals: "Newsletter: move to Kit" at 40 subscribers, "Library: 5,000 graded portfolios" | Yes | 2026-11-13 |
 
