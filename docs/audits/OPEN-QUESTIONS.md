@@ -15,9 +15,7 @@ Last updated 2026-11-13 (evening).
 | 8 | AI votes count at 1/4 of a person's vote, only at tier edges | Yes | 2026-11-12 |
 | 9 | Starting rank = 60% report card + 40% check points, after experiment 4 confirms | Yes | 2026-11-12 |
 | 10 | The "synced" skill notice in your Claude settings (~/.claude/skills/synced): did you add it? | Check it | 2026-11-12 |
-| 15 | Domain moved 2026-11-13; still open: (b) custom rules "Block scanner probes" and "Challenge nameless clients", (c) rate-limit rule "Slow down floods" letting verified bots pass; (a) HTTPS and (d) Turnstile are done. Or re-connect Cloudflare with write access via /mcp. Exact steps in the domain lane's report | Do (d) at least; (a) to (c) in 5 minutes | 2026-11-13 |
 | 16 | PortfolioRank Kit: sender hello@portfoliorank.dev (confirm the link), a mailing address (PO box ok), Verified Sending Domain portfoliorank.dev (CNAMEs, DNS only), one inline double opt-in form. API key done | Yes | 2026-11-13 |
-| 18 | Sign in once on https://portfoliorank.dev and on staging to confirm GitHub sign-in works on the new domain | Yes | 2026-11-13 |
 | 19 | n8builds Kit (second free account, login contact@n8builds.dev, sender "Nate from n8builds" <updates@n8builds.dev>): bio, `! pass-env set n8builds/KIT_API_KEY`, sending-domain records pasted to the ops session | Yes | 2026-11-13 |
 | 20 | Newsletter mailing address (legally required in every email footer, shown publicly): avoid the home address; PO box (about $20 to $80 per 6 months) or virtual mailbox, decided before the first send for both Kit accounts | Decide before the first newsletter goes out | 2026-11-13 |
 | 11 | Create a separate Gemini key for staging: `! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY` | Yes, when experiments resume | 2026-11-13 |
@@ -34,6 +32,8 @@ Last updated 2026-11-13 (evening).
 
 | Question | Answer | Date |
 |---|---|---|
+| Security rules on portfoliorank.dev | Applied by the ops session after the owner reconnected Cloudflare: scanner block, nameless-client challenge, flood limit letting verified bots pass; checked live | 2026-11-13 |
+| GitHub sign-in on the new domain | Works (owner confirmed) | 2026-11-13 |
 | Privacy operator name | "n8builds", with a link to x.com/n8watkins | 2026-11-13 |
 | Delete backups older than 35 days | Yes, only if the bucket holds nothing but backups (verified first) | 2026-11-13 |
 | Move staging to staging.portfoliorank.dev | Yes, owner updated sign-in for both | 2026-11-13 |
