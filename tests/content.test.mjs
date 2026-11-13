@@ -22,7 +22,7 @@ import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
-import { CTA, SYSTEM_INSTRUCTION, assembleBody, buildWriteRequest, fill } from "../pipeline/content/writer.mjs";
+import { CTA, SYSTEM_INSTRUCTION, assembleBody, buildWriteRequest, fill, normalizeDraft } from "../pipeline/content/writer.mjs";
 import { devMetaHits, editorialChecks, findPayoff, readingGrade, repeatedPhrases, scorecard, syllables } from "../pipeline/content/scorecard.mjs";
 import { DEFAULT_WRITER_MODE, STAGED_REQUESTS, checkOutline, writerMode } from "../pipeline/content/staged.mjs";
 import { renderPreview } from "../pipeline/content/preview.mjs";
@@ -113,14 +113,15 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "graded SSS, one of the top 3" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason.startsWith("has the AI judge's highest grade") && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
-  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are graded A or higher").display, "50%");
+  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);
   const pc = await pageCraft(db, { now: MONDAY });
   assert.equal(pc.ready, true);
   assertNoBadNames(pc);
-  assert.equal(pc.names.length, 0);
+  // Named only as positive examples: graded S, fits a phone, no console errors, light.
+  assert.ok(pc.names.every((n) => /highest grade, fits a phone screen/.test(n.reason)));
   assert.equal(pc.facts.find((f) => f.label === "Median page weight of other portfolios, first load").display, "4.0 MB");
 });
 
@@ -241,27 +242,29 @@ export const ph = (sheet, label) => {
 function goodDraft(sheet, over = {}) {
   const named = sheet.names[0];
   const shot = sheet.screenshots[0];
-  const lowTop = ph(sheet, "Average motion score (1 to 5) of portfolios graded A or higher");
+  const lowTop = ph(sheet, "Average motion score (1 to 5) of the top-graded portfolios");
   const lowRest = ph(sheet, "Average motion score (1 to 5) of all other graded portfolios");
-  const share = ph(sheet, "Share of all graded portfolios that are graded A or higher");
+  const share = ph(sheet, "Share of all graded portfolios that are top-graded");
   const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where portfolios graded A or higher lead the rest by the most (tied)");
+  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
   const nLead = ph(sheet, "Number of axes sharing the biggest lead");
   const total = ph(sheet, "Portfolios graded by the AI judge");
   const example = sheet.examples[0];
+  const [n1, n2, n3] = sheet.names;
+  void nLead;
   return {
     title: "Even the best portfolios are weak on motion",
-    alt_title_a: "Developer portfolio grades: what top-tier sites share",
+    alt_title_a: "Developer portfolio grades: what the top-graded sites share",
     alt_title_b: "The one axis where nobody scores well",
     subtitle: "We compared the AI judge's scores of top portfolios with everyone else.",
     tags: ["portfolios", "data"],
-    share_line: `${share} of graded portfolios reach A or higher. Here is what they do differently.`,
+    share_line: `${share} of graded portfolios are top-graded. Here is what they do differently.`,
     newsletter_blurb: "What the top portfolios share, from our grades.",
-    tldr: [`Motion is the lowest-scoring axis for every group: ${lowTop} for portfolios graded A or higher, ${lowRest} for the rest.`, `${share} of all graded portfolios reach A or higher.`, `${nLead} axes tie for the biggest lead, at ${gap}.`],
+    tldr: [`Motion is the lowest-scoring axis for every group: ${lowTop} for the top-graded portfolios, ${lowRest} for the rest.`, `Only ${share} of all graded portfolios are top-graded.`, `${lead} tie for the biggest lead, at ${gap}.`],
     body: [
       `Motion is the lowest-scoring axis for every group we graded.`,
-      `Portfolios graded A or higher average ${lowTop} on it, against ${lowRest} for the rest.`,
-      `We graded ${total} portfolios with the same rubric.`,
+      `The top-graded portfolios average ${lowTop} on it, against ${lowRest} for the rest.`,
+      `We graded ${total} portfolios with the same rubric, and only ${share} of them are top-graded.`,
       "If you change one thing on your portfolio this week, add a little purposeful motion to the first screen.",
       "",
       "### Top portfolios lead on most axes",
@@ -269,31 +272,46 @@ function goodDraft(sheet, over = {}) {
       "",
       para(4, 3),
       "",
-      para(3, 1),
+      "Every axis tells the same story in a different way.",
+      "Reviewers notice a page that knows what it wants to say.",
+      "Each choice on it points at one idea about the developer.",
+      "",
+      "Motion is the exception, and an interesting one for anyone building a portfolio this month.",
+      "Most sites either skip it entirely or add so much that it gets in the way of reading.",
+      "A single subtle transition on the first screen is usually enough to feel considered.",
+      "Anything beyond that should earn its place by explaining something a static page cannot.",
       "",
       "[[image:inline-1]]",
       "",
       `> **${gap} ahead on ${lead}**`,
-      "> Several axes tie for the widest lead between portfolios graded A or higher and the rest.",
+      "> Several axes tie for the widest lead between the top-graded portfolios and the rest.",
       "",
       "### The first screen carries the most weight",
       para(3, 2),
       "",
-      para(2, 4),
-      `${named.name} is one of the portfolios graded SSS.`,
+      `[${n1.name}](${n1.url}) is a good place to start, because its first screen says who the developer is in one line.`,
+      `Another strong case is [${n2.name}](${n2.url}), which keeps its projects short and specific.`,
+      `Finally, [${n3.name}](${n3.url}) shows how a clear contact link removes a step for a reviewer.`,
       "",
       para(4, 0),
       "",
-      para(3, 5),
+      "A good opening does not need a big budget or a new framework.",
+      "What it needs is a sentence about the work and a way to see it.",
       "",
       "[[image:inline-2]]",
       "",
       "### Clear stories beat long lists",
       para(3, 4),
       "",
-      para(4, 2),
+      "Lists of tools read like a shopping receipt to most reviewers.",
+      "Stories about one problem and its result are what they remember.",
+      "Picking three projects and telling each well beats showing twelve.",
       "",
       para(3, 3),
+      "",
+      "Writing about a project is easier with a simple frame to follow.",
+      "Start with the problem, then the decision you made, then the result someone saw.",
+      "Close with a link to the live thing so the claim can be checked.",
       "",
       "### Try this",
       `1. Study how [${example.name}](${example.url}) handles ${example.axis}.`,
@@ -325,7 +343,7 @@ test("code checks: a good draft passes; its word count is in the template's rang
   const r = codeChecks(d, sheet, { roster });
   assert.deepEqual(r.failures, []);
   const words = wordCount(fill(assembleBody(d), sheet.facts));
-  assert.ok(words >= 500 && words <= 800, `${words} words`);
+  assert.ok(words >= 665 && words <= 1050, `${words} words`);
   assert.ok(assembleBody(d).endsWith(CTA));
 });
 
@@ -614,7 +632,7 @@ test("owner direction: no dev-meta story kinds; every kind is about portfolios a
   const sys = SYSTEM_INSTRUCTION;
   assert.match(sys, /No dev meta/);
   assert.match(sys, /Payoff/);
-  assert.match(sys, /550 to 700 words/);
+  assert.match(sys, /700 to 1,000 words/);
 });
 
 // ---------------------------------------------------------------------------
@@ -1005,14 +1023,41 @@ test("end-of-day run: in dry-run the Content stage picks and drafts on a Monday 
 const checkOf = (draft, sheet, roster, name) => codeChecks(draft, sheet, { roster }).checks.find((c) => c.name === name);
 const LONG = (n) => Array.from({ length: n }, (_, i) => FILLER[i % FILLER.length]).join("\n");
 
-test("quality: length is about 500 to 800 words (owner, 2026-11-11), with 5% slack", async () => {
+test("quality: substance (owner, 2026-11-12): robotic phrasing, TL;DR the body skips, empty subheads, repeated openings and too few linked examples fail", async () => {
+  const { sheet, roster } = await sheetAndRoster();
+  const d = goodDraft(sheet);
+  assert.equal(checkOf(d, sheet, roster, "substance").ok, true);
+  const fails = (over, re) => {
+    const c = checkOf(goodDraft(sheet, over), sheet, roster, "substance");
+    assert.equal(c.ok, false, JSON.stringify(over).slice(0, 80));
+    assert.match(c.problems.join("; "), re);
+  };
+  for (const phrase of ["A share of {{f2}} use dark mode.", "The average the five-second test score of the group is {{f4}}.", "They lead, representing a tie across {{f18}} axes.", "Only S and A portfolios do this.", "We looked at thousands of sites."]) {
+    fails({ body: d.body.replace("Start with the first screen today.", `Start with the first screen today.\n${phrase}`) }, /never|drop|rewrite|size of the data|tie/);
+  }
+  fails({ tldr: [d.tldr[0], d.tldr[1], `${d.tldr[2]} {{f3}}`] }, /never mentions/);
+  fails({ body: d.body.replace("### Clear stories beat long lists", "### An empty section\n\n### Clear stories beat long lists") }, /has nothing under it/);
+  fails({ body: d.body.replace("Another strong case is", "Finally, the next strong case is") }, /start with "finally"/);
+  fails({ body: d.body.replace(/\[(Top Person [23])\]\([^)]+\)/g, "$1") }, /1 named example site\(s\) linked; link at least 3/);
+});
+
+test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences on our own facts or named sites are not outside claims", async () => {
+  assert.equal(normalizeDraft({ body: "Opener one.\nOpener two.\n\n[[image:hero]]\n\n### A\nText." }).body, "Opener one.\nOpener two.\n\n\n### A\nText.");
+  const listed = ["Consider Top Person 1, who earns {{f30}} on visual design.", "Projects by Top Person 2 are clear.", "Recruiters spend six seconds on a portfolio."];
+  const text = listed.join("\n");
+  const r = await checkClaims(text, { tavilyKey: null, budget: { gemini: 5, tavily: 5 }, generate: async () => ({ claims: listed }), names: ["Top Person 1", "Top Person 2"] });
+  assert.deepEqual(r.cut.map((c) => c.sentence), ["Recruiters spend six seconds on a portfolio."]);
+  assert.equal(r.listedNotFound, undefined);
+});
+
+test("quality: length is 700 to 1,000 words (owner, 2026-11-12), with 5% slack", async () => {
   const { sheet, roster } = await sheetAndRoster();
   const body = goodDraft(sheet).body;
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true);
   const tooShort = checkOf(goodDraft(sheet, { body: body.split("\n").slice(0, 24).join("\n") }), sheet, roster, "template");
-  assert.ok(tooShort.problems.some((p) => /words; 500 to 800 wanted: add/.test(p)), tooShort.problems.join("; "));
+  assert.ok(tooShort.problems.some((p) => /words; 700 to 1000 wanted: add/.test(p)), tooShort.problems.join("; "));
   const tooLong = checkOf(goodDraft(sheet, { body: body.replace("### Try this", `${LONG(30)}\n\n### Try this`) }), sheet, roster, "template");
-  assert.ok(tooLong.problems.some((p) => /words; 500 to 800 wanted: cut/.test(p)), tooLong.problems.join("; "));
+  assert.ok(tooLong.problems.some((p) => /words; 700 to 1000 wanted: cut/.test(p)), tooLong.problems.join("; "));
 });
 
 test("editorial rules: dev meta and infrastructure claims fail a draft; so does a missing early takeaway", async () => {
@@ -1091,7 +1136,7 @@ test("quality: ties are computed as facts and a superlative a tie contradicts is
   const { sheet, roster } = await sheetAndRoster();
   const nLead = sheet.facts.find((f) => f.label === "Number of axes sharing the biggest lead");
   assert.equal(nLead.value, 5, "five axes share the lead; motion is the exception");
-  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where portfolios graded A or higher lead the rest by the most"));
+  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where the top-graded portfolios lead the rest by the most"));
   assert.match(lead.display, /^visual design, .* and memorability$|storytelling/);
   assert.equal(sheet.superlatives.find((x) => x.term === "biggest lead").tied, true);
   const leadPh = `{{${lead.id}}}`;
@@ -1113,7 +1158,7 @@ test("quality: a notable fact is flagged and the draft must lead with it", async
   assert.match(sheet.notable[0].why, /motion is the lowest-scoring axis for every group/);
   const d = goodDraft(sheet);
   assert.equal(checkOf(d, sheet, roster, "hook").ok, true);
-  const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^Motion is[^\n]*\nPortfolios graded A or higher[^\n]*\n/, "") });
+  const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^Motion is[^\n]*\nThe top-graded[^\n]*\n/, "") });
   assert.equal(checkOf(noHook, sheet, roster, "hook").ok, false);
   const writerView = JSON.parse(buildWriteRequest(sheet).parts[0].text.split("<fact_sheet>\n")[1].split("\n</fact_sheet>")[0]);
   assert.ok(writerView.notable_facts.length >= 1 && writerView.ties.length >= 1 && writerView.example_sites.length >= 1);
@@ -1138,18 +1183,18 @@ test("quality: Try this points to a named positive example with a link", async (
 
 test("quality: the callout restates exactly one numeric fact with its full scope", async () => {
   const { sheet, roster } = await sheetAndRoster();
-  const share = ph(sheet, "Share of all graded portfolios that are graded A or higher");
+  const share = ph(sheet, "Share of all graded portfolios that are top-graded");
   const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where portfolios graded A or higher lead the rest by the most (tied)");
+  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
   const body = goodDraft(sheet).body;
   const withCallout = (l1, l2) => body.replace(/^> \*\*.*\n> .*$/m, `> **${l1}**\n> ${l2}`);
   const run = (l1, l2) => checkOf(goodDraft(sheet, { body: withCallout(l1, l2) }), sheet, roster, "callout");
   assert.equal(run(`${gap} ahead on ${lead}`, "Several axes tie for that lead.").ok, true, "one number and a label fact");
   assert.equal(run(`${share} of all graded portfolios`, "That is who reaches the top two tiers.").ok, true);
   // The earlier draft's mistake: a share of all graded portfolios called a share of top portfolios.
-  const wrongScope = run(`${share} of top portfolios`, "They reach A or higher.");
+  const wrongScope = run(`${share} of top portfolios`, "They reach S or A.");
   assert.match(wrongScope.problems.join(";"), /wrong scope/);
-  assert.match(run(`${share}`, "They reach A or higher.").problems.join(";"), /leaves out the scope/);
+  assert.match(run(`${share}`, "They reach S or A.").problems.join(";"), /leaves out the scope/);
   assert.match(run(`${share} of all graded portfolios`, `Against ${gap} on one axis.`).problems.join(";"), /exactly one numeric fact, it has 2/);
   assert.match(run("Top portfolios lead", "On most axes.").problems.join(";"), /it has 0/);
 });
@@ -1170,7 +1215,7 @@ test("preview: tight type, 60% centred images with captions, the data in a colla
   assert.match(html, /prefers-color-scheme:dark/);
   assert.equal((html.match(/<figcaption>/g) ?? []).length, 3, "every image has a caption");
   assert.ok(html.indexOf("Show the data") > html.indexOf("</ol>"), "the data comes after the post");
-  assert.match(html, /<p>Motion is the lowest-scoring axis[^<]*Portfolios graded A or higher average/, "a paragraph's sentences share one <p>");
+  assert.match(html, /<p>Motion is the lowest-scoring axis[^<]*top-graded portfolios average/, "a paragraph's sentences share one <p>");
   assert.match(html, /Failed check: none/);
 });
 
@@ -1188,7 +1233,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
   const good = {
     hook_fact_ids: sheet.notable[0].factIds,
     title: "Even the best portfolios are weak on motion",
-    alt_title_a: "What top-tier sites share",
+    alt_title_a: "What the top-graded sites share",
     alt_title_b: "The axis nobody aces",
     subtitle: "Top portfolios against the rest.",
     tags: ["portfolios", "data"],
@@ -1196,9 +1241,18 @@ function stagedGemini(sheet, { outline, finish } = {}) {
     newsletter_blurb: "Motion is weak everywhere.",
     tldr: goodDraft(sheet).tldr,
     sections: [
-      { subhead: "Top portfolios lead on most axes", intent: "the gap", fact_ids: [f("The biggest lead, in points on a 1 to 5 scale")] },
-      { subhead: "The first screen carries the most weight", intent: "first screen", fact_ids: [f("Portfolios graded SSS, the top tier (the top 3)")] },
-      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge")] },
+      {
+        subhead: "Top portfolios lead on most axes",
+        intent: "the gap",
+        fact_ids: [f("The biggest lead, in points on a 1 to 5 scale"), f("The axes where the top-graded portfolios lead the rest by the most (tied)"), f("Average visual design score (1 to 5) of the top-graded portfolios")],
+      },
+      {
+        subhead: "The first screen carries the most weight",
+        intent: "first screen",
+        // Three named sites, each through one of its positive facts (the outline check asks for three).
+        fact_ids: [f("Portfolios with the judge's highest grade, a small part of the top-graded group"), ...sheet.names.slice(0, 3).map((n) => sheet.facts.find((x) => x.tone === "positive" && x.about === n.url).id)],
+      },
+      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge"), f("Share of all graded portfolios that are top-graded"), f("Average writing score (1 to 5) of the top-graded portfolios")] },
     ],
     callout_fact_id: f("The biggest lead, in points on a 1 to 5 scale"),
     actions: ["a", "b", "c"],
@@ -1217,7 +1271,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
       const n = calls.filter((c) => c.kind === kind).length;
       const result =
         kind === "outline" ? (typeof outline === "function" ? outline(n, good) : outline ?? good)
-        : kind === "sections" ? sectionsOut(n === 1 ? 2 : 1)
+        : kind === "sections" ? sectionsOut(1)
         : kind === "write" ? finish ?? goodDraft(sheet)
         : kind === "claims" ? { claims: [] }
         : REVIEW_OK;
@@ -1226,20 +1280,20 @@ function stagedGemini(sheet, { outline, finish } = {}) {
   };
 }
 
-test("staged writer: outline, two section requests, finish; then the same code checks (4 write requests)", async () => {
+test("staged writer: outline, one request per section, finish; then the same code checks (5 write requests)", async () => {
   const { db, sheet } = await sheetAndRoster();
   const g = stagedGemini(sheet);
   const { ctx } = contentCtx(db);
   ctx.flags.writerMode = "staged";
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
-  assert.deepEqual(g.calls.map((c) => c.kind), ["outline", "sections", "sections", "write", "claims", "review"]);
+  assert.deepEqual(g.calls.map((c) => c.kind), ["outline", "sections", "sections", "sections", "write", "claims", "review"]);
   assert.equal(r.requests, STAGED_REQUESTS + 2);
-  // A section sees only its own facts, never another section's.
-  const first = g.calls[1].text;
-  assert.ok(first.includes("Portfolios graded SSS, the top tier (the top 3)") && !first.includes("graded by the AI judge\""), "section 1 and 2 facts only");
-  const second = g.calls[2].text;
-  assert.ok(second.includes("Portfolios graded by the AI judge") && !second.includes("Portfolios graded SSS, the top tier (the top 3)"));
+  // Each section sees only its own facts, never another section's.
+  const [s1, s2, s3] = g.calls.filter((c) => c.kind === "sections").map((c) => c.text);
+  assert.ok(s1.includes("The biggest lead, in points on a 1 to 5 scale") && !s1.includes("Portfolios graded by the AI judge\""));
+  assert.ok(s2.includes("Portfolios with the judge's highest grade, a small part of the top-graded group") && !s2.includes("The biggest lead, in points"));
+  assert.ok(s3.includes("Portfolios graded by the AI judge") && !s3.includes("Portfolios with the judge's highest grade"));
   const [post] = await listPosts(db, { status: "draft" });
   assert.equal(post.checks.passed, true);
 });
