@@ -94,7 +94,7 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 | 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
 | 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
 | 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
-| 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics | 300 | 60 min |
+| 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics; off by default (cap 0) until rubric v3, turned on with `GEMINI_BUDGET` `{"stages":{"regrade":{"cap":300}}}` ([docs/audits/gemini-prompting.md](docs/audits/gemini-prompting.md)) | 0 | 60 min |
 | 7 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
 "AI ranking comparisons" are Gemini comparing sites.
@@ -188,6 +188,7 @@ A poll is `{ id, kind, question, detail, opensAt, closesAt, status, total, optio
 The automatic blog's back end ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md), [pipeline/content/engine.mjs](pipeline/content/engine.mjs)), built and off.
 
 - **The switch:** the Worker variable `CONTENT_MODE`: "off" (the default in both environments; the stage does no post work), "dry-run" (drafts stay private, status `draft`) or "publish" (posts go live at the next 08:00 Pacific); only the owner sets "publish".
+  It is the ceiling for the owner's Automation panel on `/admin/blog` (on or off, nights, drafts a week up to `CONTENT_DRAFTS_PER_WEEK`, review or publish, a topic queue), saved in the database and read by every night; unreadable settings mean no drafts ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#automation)).
 - **Schedule:** Sunday night picks the week's 2 ideas and a reserve (one request, or none when there is only one idea); Monday and Wednesday nights each draft one post for Tuesday and Thursday; a dropped or deferred draft is made up on a later night of the week.
 - **A draft:** facts from code, then the write request, the claim listing, the claim judgement (only with Tavily results) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
 - **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 50 a week, 1 fresh illustration, 2 Pexels searches and 3 Gemini image checks a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes; the owner's "Write a draft now" adds at most 5 drafts a Pacific day under the same per-post caps.
@@ -447,7 +448,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`judge-vote.yml`** | manual only | Fallback: the ELO-era AI votes, or (repository variable `RANKING_V2`) the ranking v2 comparisons and recompute, within the accountant's share | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
-| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for listed S/A/B sites without a fresh PSI result (never measured first, then oldest), by hitting the prod API | TURSO |
+| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for every listed graded portfolio (whatever Gemini's letter; not "not a portfolio") without a fresh PSI result (never measured first, then oldest), up to 400 a day, by hitting the prod API | TURSO |
 | **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 

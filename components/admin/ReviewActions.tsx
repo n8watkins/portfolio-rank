@@ -18,8 +18,9 @@ const ERRORS: Record<string, string> = {
   not_found: "This post no longer exists.",
   signin_required: "Your session ended. Sign in again.",
   forbidden: "Only the admin can review posts.",
-  daily_cap: "Today's 5 drafts are used. The rewrite can start tomorrow; your notes are kept on the draft.",
+  daily_cap: "Today's drafts are all used. The rewrite can start tomorrow; your notes are kept on the draft.",
   production_only: "Drafts are written only on the live site.",
+  no_gemini: "Staging has no Gemini key of its own yet, so it can't write drafts (DEPLOY.md, Staging).",
   no_workflow: "The draft writer isn't set up on this site.",
   workflow_failed: "The rewrite didn't start. Try again in a minute.",
 };

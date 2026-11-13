@@ -16,6 +16,12 @@ declare module "next-auth" {
     login?: string;
     /** When the GitHub account was created (ISO 8601), for MIN_GITHUB_ACCOUNT_AGE_DAYS. */
     accountCreatedAt?: string;
+    /**
+     * This is the admin's account (ADMIN_GITHUB_ID), so the menus show an
+     * "Admin" link. Display only: every admin page and API checks again on
+     * the server (lib/admin.ts requireAdmin).
+     */
+    isAdmin?: boolean;
   }
 }
 
@@ -66,6 +72,8 @@ const config: NextAuthConfig = {
       session.raterId = token.raterId as string | undefined;
       session.login = token.login as string | undefined;
       session.accountCreatedAt = token.accountCreatedAt as string | undefined;
+      const admin = (process.env.ADMIN_GITHUB_ID ?? "").trim();
+      session.isAdmin = /^\d{1,12}$/.test(admin) && token.raterId === `gh:${admin}`;
       return session;
     },
   },
