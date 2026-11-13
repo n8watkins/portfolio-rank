@@ -89,6 +89,38 @@ export function siteBlock(b, label = null) {
 
 const jpeg = (img) => ({ inline_data: { mime_type: "image/jpeg", data: img.data } });
 
+const NUMBER = { 2: "two", 3: "three", 4: "four", 5: "five" };
+
+/**
+ * The batch prompt and schema for a batch of n sites. The locked texts are
+ * written for 5 (and stay byte-identical for 5); for 2 to 4 sites the four
+ * sentences that name the count, and the schema's item count and site labels,
+ * follow n (amendment 2026-11-13, after a batch of 2 got 5 answers).
+ */
+export function batchFor(prompts, n) {
+  if (n === 5) return { text: prompts.batch, schema: prompts.schema.batch };
+  if (!NUMBER[n]) throw new Error(`batches of ${n} sites are not supported (2 to 5)`);
+  const w = NUMBER[n];
+  const W = w[0].toUpperCase() + w.slice(1);
+  const swaps = [
+    ["Five different portfolio websites, labelled site_1 to site_5.", `${W} different portfolio websites, labelled site_1 to site_${n}.`],
+    ["FIVE SITES, GRADED ONE BY ONE", `${w.toUpperCase()} SITES, GRADED ONE BY ONE`],
+    ["The other four sites are not a reference point", n === 2 ? "The other site is not a reference point" : `The other ${NUMBER[n - 1]} sites are not a reference point`],
+    ["Several sites, or all five, may get the same scores.", n === 2 ? "Both sites may get the same scores." : `Several sites, or all ${w}, may get the same scores.`],
+    ["in order from site_1 to site_5, each with its id.", `in order from site_1 to site_${n}, each with its id.`],
+  ];
+  let text = prompts.batch;
+  for (const [from, to] of swaps) {
+    if (text.split(from).length !== 2) throw new Error(`batch prompt: expected one "${from}"`);
+    text = text.replace(from, to);
+  }
+  const schema = JSON.parse(JSON.stringify(prompts.schema.batch));
+  schema.properties.sites.minItems = n;
+  schema.properties.sites.maxItems = n;
+  schema.properties.sites.items.properties.id.enum = batchLabels(n);
+  return { text, schema };
+}
+
 /** Request parts, schema and options for one request, plus the image references for the raw log. */
 export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey = kind, settings = SETTINGS) {
   const parts = [];
@@ -102,13 +134,14 @@ export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey =
     refs.set(b.desktop.data, b.desktop.ref);
     refs.set(b.phone.data, b.phone.ref);
   });
+  const sized = kind === "batch" ? batchFor(prompts, bundles.length) : null;
   return {
     parts,
     refs,
-    schema: prompts.schema[schemaKey],
+    schema: sized && schemaKey === "batch" ? sized.schema : prompts.schema[schemaKey],
     options: {
       prompt: settings.prompt_ids[schemaKey],
-      systemInstruction: prompts[kind],
+      systemInstruction: sized ? sized.text : prompts[kind],
       thinkingLevel: settings.thinkingLevel,
       temperature: settings.temperature,
       maxOutputTokens: settings.maxOutputTokens[kind],

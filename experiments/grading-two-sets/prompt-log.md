@@ -118,6 +118,13 @@ The new section:
 
 > A portfolio is a page that introduces a person and points to their work. It is a portfolio if it shows (1) who they are, a name or clear personal identity (stylized or spaced-out letters count), (2) what they do (developer, engineer, designer, and so on), and (3) a way to their work: a Projects button or link, a GitHub link, project links or a resume. A weak portfolio is still a portfolio: no projects shown on the page, a blog-first homepage, or projects only behind a link are low scores and tips, not a reason to say false. is_portfolio is false ONLY for: parked or for-sale domains; unedited placeholders (demo names like 'Aaaaby', 'John Doe', or someone else's content); pages that are not about a person (a company or studio site, a bare code repository, a link-in-bio page like Linktree); broken, blank or error pages.
 
+**Amendment, the same day: batches of fewer than 5.**
+The batch prompt and schema are written for exactly 5 sites ("Five different portfolio websites, labelled site_1 to site_5", 5 items in the schema).
+On mini7's 2-site batch, Gemini 3.1 answered 5 sites twice (both answers rejected, the run paused).
+For a batch of 2 to 4 sites, the four sentences that name the count now follow n ("Two different portfolio websites, labelled site_1 to site_2", "The other site is not a reference point", "Both sites may get the same scores", "in order from site_1 to site_2"), and the schema's item count and site labels follow n (`batchFor` in `grading-two-sets-run.mjs`).
+A batch of 5 is byte-identical to before, in both prompt versions.
+Haiku's mini7 batch 2 had already run with the five-site wording; it answered the 2 sites correctly, and that answer is kept as evidence if the batch is re-sent.
+
 What I expect: far fewer "not a portfolio" answers on thin but real pages (one-screen menus, blog-first homes), and the junk check now rests on the named exclusions, so a template demo persona other than the examples may still pass.
 
 ## Amendment, 2026-11-13: the day cap

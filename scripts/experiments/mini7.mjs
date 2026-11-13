@@ -149,6 +149,24 @@ async function haiku() {
   process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
 }
 
+/**
+ * Haiku's batch 2 again with the 2-site batch wording (amendment
+ * 2026-11-13): the first batch-2 answer, sent with the five-site wording
+ * before the fix, is kept as evidence in claude-haiku-api/evidence/.
+ */
+async function haikuBatch2() {
+  const out = path.join(ROOT, "claude-haiku-api");
+  const first = path.join(out, "mini7", "batch2.json");
+  if (fs.existsSync(first)) {
+    fs.mkdirSync(path.join(out, "evidence"), { recursive: true });
+    fs.renameSync(first, path.join(out, "evidence", "batch2-five-site-wording.json"));
+  }
+  const settings = { ...HAIKU, folder: "claude-haiku-api", hard_stop_usd: 0.1, job: JOB, prompt_version: "portfolio-definition-v2" };
+  const reqs = requests().filter((r) => r.key === "mini7/batch2");
+  const { exit } = await runClaude({ settings, requestList: reqs, prompts: loadPrompts(PROMPTS_DIR), out, rawDir: path.join(ROOT, "raw", "claude-haiku-api"), bundleRoot: path.join(ROOT, "bundles"), timelinePath: path.join(ROOT, "timeline.json") });
+  process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
+}
+
 // ---------------------------------------------------------------- code only
 const ROLE = /\b(developer|engineer|engineering|designer|programmer|coder|architect|scientist|analyst|full[\s-]?stack|front[\s-]?end|back[\s-]?end|devops|software|web\s?dev|student|researcher|freelancer|consultant|hacker|maker|creative technologist)\b/i;
 const fold = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -195,9 +213,9 @@ function code() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const step = process.argv[2];
-  const steps = { select, capture, gemini, haiku, code };
+  const steps = { select, capture, gemini, haiku, "haiku-batch2": haikuBatch2, code };
   if (!steps[step]) {
-    console.error("usage: mini7.mjs <select|capture|gemini|haiku|code>");
+    console.error("usage: mini7.mjs <select|capture|gemini|haiku|haiku-batch2|code>");
     process.exit(1);
   }
   try {

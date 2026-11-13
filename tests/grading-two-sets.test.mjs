@@ -378,6 +378,26 @@ test("claude: a 400 stops at once and a resumed run continues at the same site",
   assert.equal(good.calls.filter((c) => c.url.endsWith("/messages")).length, 56);
 });
 
+test("batch prompts follow the batch size; a batch of 5 is unchanged", async () => {
+  const { batchFor } = await import("../scripts/experiments/grading-two-sets-run.mjs");
+  const five = batchFor(prompts, 5);
+  assert.equal(five.text, prompts.batch);
+  assert.equal(five.schema, prompts.schema.batch);
+  const v2 = loadPrompts(path.join(import.meta.dirname, "..", "experiments", "portfolio-definition-v2"));
+  for (const p of [prompts, v2]) {
+    const two = batchFor(p, 2);
+    assert.match(two.text, /^Two different portfolio websites, labelled site_1 to site_2\./m);
+    assert.match(two.text, /The other site is not a reference point/);
+    assert.match(two.text, /Both sites may get the same scores\./);
+    assert.ok(!/site_5|all five|FIVE SITES/.test(two.text));
+    assert.equal(two.schema.properties.sites.maxItems, 2);
+    assert.deepEqual(two.schema.properties.sites.items.properties.id.enum, ["site_1", "site_2"]);
+    assert.equal(p.schema.batch.properties.sites.maxItems, 5, "the locked schema is not changed");
+    const three = batchFor(p, 3);
+    assert.match(three.text, /The other two sites are not a reference point/);
+  }
+});
+
 test("first-screen helpers", () => {
   assert.deepEqual(linkKinds({ href: "/resume.pdf", text: "Resume" }), ["resume"]);
   assert.deepEqual(linkKinds({ href: "mailto:a@b.co", text: "" }), ["contact"]);
