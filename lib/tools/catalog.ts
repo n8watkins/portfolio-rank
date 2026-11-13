@@ -7,6 +7,8 @@ export type Tool = {
   id: ToolId;
   href: string;
   name: string;
+  /** In "Open the ..." links. */
+  short: string;
   /** One line for the hub's card. */
   blurb: string;
   live: boolean;
@@ -17,6 +19,7 @@ export const TOOLS: Tool[] = [
     id: "speed",
     href: "/tools/speed",
     name: "Speed and Lighthouse check",
+    short: "speed check",
     blurb: "Lighthouse scores for phones and desktops, Core Web Vitals in plain words, and the fixes that matter most.",
     live: true,
   },
@@ -24,15 +27,17 @@ export const TOOLS: Tool[] = [
     id: "share",
     href: "/tools/share-preview",
     name: "Share preview checker",
+    short: "share preview checker",
     blurb: "See the card a recruiter sees when your link is pasted into LinkedIn, Slack or X, and how to fix it.",
-    live: false,
+    live: true,
   },
   {
     id: "checklist",
     href: "/tools/portfolio-checklist",
     name: "Portfolio checklist",
+    short: "checklist",
     blurb: "Resume, GitHub, contact, working project links, your own domain, HTTPS and more, checked in seconds.",
-    live: false,
+    live: true,
   },
 ];
 
