@@ -72,7 +72,6 @@ const nextConfig: NextConfig = {
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
   env: { NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED"), NEXT_PUBLIC_TOOLS_ENABLED: launchSwitch("TOOLS_ENABLED") },
-  // The free tools' pages became "Add your portfolio" (owner, 2026-11-12).
   async headers() {
     // Grade reports are unlisted (shareable by link only) and claims are
     // personal: never indexed, whatever a page's own metadata says.
