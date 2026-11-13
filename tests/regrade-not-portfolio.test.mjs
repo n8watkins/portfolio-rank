@@ -58,10 +58,14 @@ test("which sites: listed and shown with a stored 'not a portfolio', in two grou
   assert.deepEqual(await usage(db, now), { job: 2, day: 2 });
 });
 
-test("the narrow code rules: exact template, placeholder, parked and address rules are junk; a copy is review; sparse pages are not judged", () => {
+test("the narrow code rules: exact placeholder, promo-without-work, parked and address rules are junk; a copy is review; sparse pages are not judged", () => {
   const dup = buildDupIndex([{ url: "https://original.dev", page_text: "word ".repeat(10) + "Jane builds fast accessible web apps for small teams and loves typography and maps" }]);
   const cases = [
-    [{ url: "https://a.dev", name: "A", page_text: "Build your AI portfolio in minutes" }, true, "template"],
+    [{ url: "https://a.dev", name: "A", page_text: "Build your AI portfolio in minutes", has_work: false }, true, "template promo text, no work shown"],
+    // Templates are fine: promo text next to the person's own work, or with the work unknown, is not junk.
+    [{ url: "https://a2.dev", name: "A", page_text: "Build your AI portfolio in minutes. My projects: Ledger", has_work: true }, false, null],
+    [{ url: "https://a3.dev", name: "A", page_text: "Get this portfolio as a template" }, false, null],
+    [{ url: "https://a4.dev", name: "A", page_text: "Hi, I'm Your Name, a developer" }, true, "placeholder name"],
     [{ url: "https://b.dev", name: "Aaaaby", page_text: "Hey there" }, true, "placeholder name"],
     [{ url: "https://c.dev", name: "C", page_text: "This domain is for sale. Make an offer on this domain." }, true, "parked or for sale"],
     [{ url: "https://github.com/someone", name: "S", page_text: "" }, true, "not a portfolio address"],
@@ -85,7 +89,7 @@ test("the report counts each path: code rule, Gemini's three outcomes, copies an
   const db = createClient({ url: `file:${path.join(dir, "report.sqlite")}` });
   await migrate(db);
   const rows = [
-    ["https://r1.dev", { outcome: "junk_rule", rule: "template" }],
+    ["https://r1.dev", { outcome: "junk_rule", rule: "placeholder name" }],
     ["https://r2.dev", { outcome: "portfolio", copy: true }],
     ["https://r3.dev", { outcome: "needs_review" }],
     ["https://r4.dev", { outcome: "not_portfolio" }],

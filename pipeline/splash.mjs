@@ -140,3 +140,100 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
   if (clicks === 0) return null;
   return { passed: !found.gate, clicks, phrase: first.phrase, how, words: { before: first.words, after: wordsOf(text) } };
 }
+
+// Mode pickers (owner, 2026-11-13, recheck-543): a first screen that offers
+// a choice of how to see the site ("dark / light", "developer / designer",
+// "terminal / GUI") before showing it. The capture picks the first sensible
+// option: a plain, graphical one when offered ("GUI", "classic", "light"),
+// never a terminal or a game when anything else is on offer, else the first.
+// Only a short screen with 2 to MODE_MAX_OPTIONS short options, at least two
+// of them mode words, counts; an ordinary page with a few links never does.
+export const MODE_MAX_WORDS = 60;
+export const MODE_MAX_OPTIONS = 5;
+export const MODE_WAIT_MS = 5000;
+const MODE_WORD = /\b(dark|light|terminal|gui|cli|shell|command[- ]line|graphical|developer|designer|recruiter|engineer|hiring manager|visitor|simple|classic|normal|basic|minimal|interactive|professional|casual|fun|boring|3d|2d|lite|game|standard|regular|fancy|plain|text mode|os mode)\b/i;
+const MODE_PREFER = /\b(gui|graphical|classic|normal|simple|basic|professional|recruiter|hiring manager|light|standard|regular|plain|boring|2d|lite)\b/i;
+const MODE_AVOID = /\b(terminal|cli|shell|command[- ]line|game|3d|text mode)\b/i;
+
+/**
+ * Whether a first screen is a mode picker, from its visible text and its
+ * visible short clickable options (in page order): { picker: false } or
+ * { picker: true, pick } with the index of the option to click.
+ * @param {string} text
+ * @param {string[]} options
+ */
+export function detectModePicker(text, options) {
+  const words = wordsOf(text);
+  const opts = (options ?? []).map((o) => String(o ?? "").replace(/\s+/g, " ").trim());
+  if (words === 0 || words > MODE_MAX_WORDS) return { picker: false, words };
+  if (opts.length < 2 || opts.length > MODE_MAX_OPTIONS) return { picker: false, words };
+  const modal = opts.filter((o) => MODE_WORD.test(o)).length;
+  if (modal < 2) return { picker: false, words };
+  let pick = opts.findIndex((o) => MODE_PREFER.test(o) && !MODE_AVOID.test(o));
+  if (pick < 0) pick = opts.findIndex((o) => !MODE_AVOID.test(o));
+  if (pick < 0) pick = 0;
+  return { picker: true, pick, options: opts, words };
+}
+
+/** In the browser: the visible short clickable options (1 to 4 words), in page order, marked data-pr-mode=<index>. */
+function markModeOptions() {
+  for (const el of document.querySelectorAll("[data-pr-mode]")) el.removeAttribute("data-pr-mode");
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+  const shown = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) return false;
+    const s = getComputedStyle(el);
+    return s.visibility !== "hidden" && s.display !== "none" && Number(s.opacity) >= 0.05;
+  };
+  const els = [...document.querySelectorAll("button, a[href], [role=button], [role=radio], [onclick], label")].filter(shown);
+  // Nested matches (a span inside a button) count once: keep the outermost.
+  const top = els.filter((el) => !els.some((o) => o !== el && o.contains(el)));
+  const out = [];
+  for (const el of top) {
+    const t = (el.innerText || el.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+    const n = t ? t.split(" ").length : 0;
+    if (n < 1 || n > 4) continue;
+    el.setAttribute("data-pr-mode", String(out.length));
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Passes a mode picker on a loaded Playwright page, if there is one: clicks
+ * the chosen option and waits up to waitMs for the site. Returns null when
+ * the first screen isn't a picker, else { passed, picked, options, left?, words }.
+ * @param {import("playwright").Page} page
+ */
+export async function passModePicker(page, { waitMs = MODE_WAIT_MS } = {}) {
+  const text = await page.evaluate(visibleText).catch(() => "");
+  const options = await page.evaluate(markModeOptions).catch(() => []);
+  const found = detectModePicker(text, options);
+  if (!found.picker) return null;
+  const start = page.url();
+  const box = await page.locator(`[data-pr-mode="${found.pick}"]`).first().boundingBox().catch(() => null);
+  if (!box) return { passed: false, picked: options[found.pick], options, words: { before: found.words, after: found.words } };
+  await page.mouse.click(Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)).catch(() => {});
+  let after = text;
+  for (const until = Date.now() + waitMs; ; ) {
+    await page.waitForTimeout(250);
+    after = await page.evaluate(visibleText).catch(() => after);
+    if (after !== text || Date.now() >= until) break;
+  }
+  await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+  after = await page.evaluate(visibleText).catch(() => after);
+  const host = (u) => {
+    try {
+      return new URL(u).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  };
+  if (host(page.url()) !== host(start)) {
+    await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
+    return { passed: false, picked: options[found.pick], options, left: true, words: { before: found.words, after: found.words } };
+  }
+  const still = detectModePicker(after, await page.evaluate(markModeOptions).catch(() => [])).picker && after === text;
+  return { passed: !still, picked: options[found.pick], options, words: { before: found.words, after: wordsOf(after) } };
+}

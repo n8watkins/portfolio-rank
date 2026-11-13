@@ -4,19 +4,27 @@
 // the whole-database audit; no word-count rule and no facts.template, which
 // both caught real, sparse or gated portfolios.
 //
-//   junk    an unedited template ("Build your AI portfolio", "Hey, I'm Aaaaby"),
-//           a placeholder name in the heading (Aaaaby, John Doe, Jane Doe),
-//           an exact parked or for-sale phrase, or a listed address that is a
-//           code host, a link-in-bio page or an admin or login path
+//   junk    an unedited placeholder: a demo persona or placeholder name in
+//           the heading (Aaaaby, John Doe, Jane Doe, Your Name), or template
+//           promo text ("Build your AI portfolio") standing in for content on
+//           a page that shows none of the person's own work; an exact parked
+//           or for-sale phrase; or a listed address that is a code host, a
+//           link-in-bio page or an admin or login path
+//
+// Templates are fine (owner, 2026-11-13): using or copying a template is
+// never junk and never a penalty, and a real portfolio that offers itself as
+// a template ("Get this portfolio as a template") is a portfolio. Only the
+// unedited placeholder content counts.
 //   review  the same page text (20 words or more) on another domain: a copy,
 //           or the original; a person or the AI decides which
 //
-// Rows are { url, name, page_text } from the portfolios table, the page text
-// from a fresh capture.
+// Rows are { url, name, page_text, has_work? } from the portfolios table, the
+// page text from a fresh capture. has_work (the page shows projects or
+// project links) must be false for promo text to count; unknown is never junk.
 import { createHash } from "node:crypto";
 
-const TEMPLATE = [/build your ai portfolio/i, /hey,? i'?m aaaa+by/i];
-const PLACEHOLDER = [/\baaaa+by\b/i, /\bjohn doe\b/i, /\bjane doe\b/i];
+const PLACEHOLDER = [/\baaaa+by\b/i, /\bjohn doe\b/i, /\bjane doe\b/i, /\byour name\b/i];
+const PROMO = [/build your ai portfolio/i];
 const PARKED = [/\bhas expired and is parked\b/i, /\bdomain (name )?(is|may be) for sale\b/i, /\bbuy this domain\b/i, /\bmake an offer on this domain\b/i];
 const MIN_DUP_WORDS = 20;
 
@@ -73,10 +81,10 @@ export function buildDupIndex(rows) {
 export function junkCheck(row, dupIndex = new Map()) {
   const text = String(row.page_text ?? "");
   const heading = `${row.name ?? ""}\n${text.slice(0, 300)}`;
-  const rule = TEMPLATE.some((re) => re.test(text))
-    ? "template"
-    : PLACEHOLDER.some((re) => re.test(heading))
-      ? "placeholder name"
+  const rule = PLACEHOLDER.some((re) => re.test(heading))
+    ? "placeholder name"
+    : row.has_work === false && PROMO.some((re) => re.test(text))
+      ? "template promo text, no work shown"
       : PARKED.some((re) => re.test(text))
         ? "parked or for sale"
         : urlNotPortfolio(row.url)

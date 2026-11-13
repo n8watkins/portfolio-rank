@@ -1,43 +1,87 @@
-name: Re-check not-a-portfolio grades
+name: Re-check non-ranked sites (recheck-543)
 
-# The one-off re-check of every listed portfolio graded "not a portfolio"
-# (scripts/regrade-not-portfolio.mjs): a fresh capture with the splash
-# click-through, then the current production grade with the strong-signals
-# guard. Started by hand only, with the same secrets as the nightly checks
-# (sync-upstream.yml): the production database, Gemini and R2 for the
-# screenshots. Gemini is capped inside the script (160 requests for the job,
-# retries included, and under 480 for the Pacific day). Resumable: run it
-# again to finish what a stopped run left.
+# The owner's re-check of every site not in tier membership
+# (scripts/experiments/recheck-543.mjs), replacing the earlier 130-site
+# re-check. The file keeps its old name so it can be started from the
+# experiment branch (gh workflow run regrade-not-portfolio.yml --ref
+# exp/recheck-543); a manual workflow runs from the branch it's started on.
+#
+#   capture          read-only selection, then a fresh capture in 10 shards
+#                    (no AI, no database writes); bundles are kept as
+#                    workflow artifacts, the screenshots go to R2 under
+#                    their own keys for the review page.
+#   gemini-dry-run   the request plan and today's gemini-3.1-flash-lite count.
+#   gemini           the plan on gemini-3.1-flash-lite: a hard stop at 230
+#                    HTTP requests and never past 480 on the model's quota
+#                    day. Resumable: pass the last gemini run as resume_run.
+# The Haiku pass runs on the owner's machine from the same bundles
+# (scripts/experiments/recheck-543-haiku.mjs).
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "run (capture and grade), dry-run (list and budget), or report"
+      step:
+        description: "capture, gemini-dry-run or gemini"
         required: true
-        default: "dry-run"
+        default: "gemini-dry-run"
         type: choice
-        options: ["dry-run", "run", "report"]
+        options: ["capture", "gemini-dry-run", "gemini"]
+      capture_run:
+        description: "gemini steps: the run id of the capture"
+        required: false
+        default: ""
+      resume_run:
+        description: "gemini: the run id of the last gemini run, to resume it"
+        required: false
+        default: ""
 
 concurrency:
-  group: regrade-not-portfolio
+  group: recheck-543-${{ inputs.step }}
   cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  RECHECK_DIR: ${{ github.workspace }}/../recheck
 
 jobs:
-  regrade:
+  select:
+    if: inputs.step == 'capture'
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 15
     env:
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      GEMINI_API_KEY: ${{ inputs.mode == 'run' && secrets.GEMINI_API_KEY || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/experiments/recheck-543.mjs select
+      - uses: actions/upload-artifact@v6
+        with:
+          name: recheck-selection
+          path: |
+            ${{ env.RECHECK_DIR }}/selection.json
+            ${{ env.RECHECK_DIR }}/dups.json
+          retention-days: 30
+
+  capture:
+    needs: select
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    env:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
-      SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,11 +90,70 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-        if: inputs.mode == 'run'
-      - name: Re-check
+      - uses: actions/download-artifact@v6
+        with:
+          name: recheck-selection
+          path: ${{ env.RECHECK_DIR }}
+      - run: node scripts/experiments/recheck-543.mjs capture --shard ${{ matrix.shard }}/10
+      - run: node scripts/experiments/recheck-543.mjs upload
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: recheck-bundles-${{ matrix.shard }}
+          path: ${{ env.RECHECK_DIR }}/bundles/
+          retention-days: 30
+
+  gemini:
+    if: inputs.step != 'capture'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      GEMINI_API_KEY: ${{ inputs.step == 'gemini' && secrets.GEMINI_API_KEY || '' }}
+    steps:
+      - if: inputs.capture_run == ''
+        run: echo "capture_run is required" && exit 1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v6
+        with:
+          name: recheck-selection
+          path: ${{ env.RECHECK_DIR }}
+          run-id: ${{ inputs.capture_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: recheck-bundles-*
+          merge-multiple: true
+          path: ${{ env.RECHECK_DIR }}/bundles
+          run-id: ${{ inputs.capture_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v6
+        if: inputs.resume_run != ''
+        with:
+          name: recheck-gemini31
+          path: ${{ env.RECHECK_DIR }}
+          run-id: ${{ inputs.resume_run }}
+          github-token: ${{ github.token }}
+      - name: Gemini 3.1
         run: |
-          case "${{ inputs.mode }}" in
-            run) node scripts/regrade-not-portfolio.mjs ;;
-            report) node scripts/regrade-not-portfolio.mjs --report ;;
-            *) node scripts/regrade-not-portfolio.mjs --dry-run ;;
-          esac
+          if [ "${{ inputs.step }}" = "gemini" ]; then
+            node scripts/experiments/recheck-543.mjs gemini
+          else
+            node scripts/experiments/recheck-543.mjs gemini --dry-run
+          fi
+      - uses: actions/upload-artifact@v6
+        if: always() && inputs.step == 'gemini'
+        with:
+          name: recheck-gemini31
+          path: |
+            ${{ env.RECHECK_DIR }}/gemini31/
+            ${{ env.RECHECK_DIR }}/raw/
+            ${{ env.RECHECK_DIR }}/timeline.json
+          if-no-files-found: ignore
+          retention-days: 30
