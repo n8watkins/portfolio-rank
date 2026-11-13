@@ -4,6 +4,8 @@ import { JOB_ID, deleteJob, readJob } from "@/lib/grader/jobs.mjs";
 import { retryStalled } from "@/lib/grader/dispatch.mjs";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
+import { withEloLetters } from "@/lib/tiers-letters.mjs";
+import { tiersShown } from "@/lib/tiers-view";
 import { PRIVATE, deleteGradeShots, disabled, fail, graderEnabled, ownedJobs, sameOrigin, testSeam, workerEnv } from "@/lib/grader/server";
 
 // One grade: progress while it runs, then the report.
@@ -38,7 +40,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     job = (await readJob(client, id)) ?? job;
   }
   const [owned, emails] = await Promise.all([ownedJobs(), emailState(client, id)]);
-  return NextResponse.json(publicJob(job, { mine: owned.includes(id), emails }), { headers: PRIVATE });
+  const plain = publicJob(job, { mine: owned.includes(id), emails });
+  // The letter is the tier by ELO while RANKING_V2 is on (lib/tiers-letters.mjs), as the report page shows it.
+  const answer = tiersShown() ? await withEloLetters(db(), plain, job) : plain;
+  return NextResponse.json(answer, { headers: PRIVATE });
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {

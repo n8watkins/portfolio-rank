@@ -132,3 +132,15 @@ export function EloTierBadge({ tier, size = "md" }: { tier: string; size?: "md" 
     </span>
   );
 }
+
+/**
+ * A report's letter: Gemini's grade drawn exactly as TierBadge while
+ * RANKING_V2 is off; with tiers by ELO (`elo`), the tier by ELO
+ * (EloTierBadge), or a blank square that says "No tier" when there is none.
+ */
+export function LetterBadge({ tier, elo = false, size = "md" }: { tier: string | null | undefined; elo?: boolean; size?: "md" | "lg" }) {
+  if (!elo) return <TierBadge tier={tier ?? ""} size={size} />;
+  if (tier) return <EloTierBadge tier={tier} size={size} />;
+  const s = size === "lg" ? "h-16 w-16 rounded-2xl" : "h-8 w-8 rounded-lg";
+  return <span role="img" aria-label="No tier" className={`shrink-0 ring-1 ring-inset ring-edge ${s}`} />;
+}
