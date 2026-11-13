@@ -189,7 +189,8 @@ async function disagreements(urls: string[]): Promise<Map<string, { ai: number; 
           sql: `SELECT view, url, shown_rank, confidence FROM site_ratings WHERE view IN ('ai', 'people') AND shown_rank IS NOT NULL AND url IN (${marks(urls.length)})`,
           args: urls,
         },
-        "SELECT view, MAX(shown_rank) AS n FROM site_ratings WHERE view IN ('ai', 'people') GROUP BY view",
+        // One MAX per view, each a single index seek: a GROUP BY would read every row of both views on each render.
+        "SELECT 'ai' AS view, MAX(shown_rank) AS n FROM site_ratings WHERE view = 'ai' UNION ALL SELECT 'people', MAX(shown_rank) FROM site_ratings WHERE view = 'people'",
       ],
       "read"
     );

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
+import { listen } from "./helpers/listen.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 // Shares the server's SQLite file: wait for its locks instead of SQLITE_BUSY.
@@ -33,7 +34,7 @@ const psi = createServer(async (_req, res) => {
 });
 
 before(async () => {
-  await new Promise((r) => psi.listen(PSI_PORT, "127.0.0.1", r));
+  await listen(psi, PSI_PORT);
   for (let i = 0; i < 60; i++) {
     try { if ((await fetch(BASE + "/api/rank")).ok) return; } catch {}
     await sleep(1000);

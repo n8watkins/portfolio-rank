@@ -95,3 +95,11 @@ jobs:
       - name: Smoke check production
         if: env.CLOUDFLARE_API_TOKEN != ''
         run: node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev
+
+      # Each build keeps its ISR cache in its own folder of the R2 cache bucket,
+      # and only the live build's is read; this removes all but the newest two
+      # (scripts/prune-build-cache.mjs). A failure here never fails the deploy.
+      - name: Remove old builds' ISR cache
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        run: node scripts/prune-build-cache.mjs

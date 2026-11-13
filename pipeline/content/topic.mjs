@@ -80,6 +80,7 @@ export function buildPickRequest(ideas, { lastKinds = [] }) {
     parts: [{ text }],
     schema: PICK_SCHEMA,
     options: {
+      prompt: "content-pick-v1",
       systemInstruction: `You pick stories for PortfolioRank, a site that ranks developer portfolios. Allowed topics: ${TOPICS.join("; ")}. Anything else is "other". A tone is negative when the story is about failure, shame or a named person or company doing badly.`,
       thinkingLevel: "minimal",
       maxOutputTokens: 1024,
@@ -151,7 +152,7 @@ export function buildReviewRequest(sheet, filledPost) {
   return {
     parts: [{ text }],
     schema: REVIEW_SCHEMA,
-    options: { systemInstruction: "You are a strict editor for PortfolioRank's blog.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0 },
+    options: { prompt: "content-review-v1", systemInstruction: "You are a strict editor for PortfolioRank's blog.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0 },
   };
 }
 

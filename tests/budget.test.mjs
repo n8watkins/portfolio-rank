@@ -119,6 +119,32 @@ test("dailyTotals counts the Pacific quota day, not the UTC day", async () => {
 // ---------------------------------------------------------------------------
 // Allowances
 // ---------------------------------------------------------------------------
+test("503s, 429s and unreachable requests count against the quota like answered ones (Google counts failed requests)", async () => {
+  const db = tempDb();
+  const now = new Date("2026-11-11T05:00:00Z");
+  await logRequests(db, [
+    { job: "grade-new", at: "2026-11-11T04:00:00.000Z", n: 10, status: 200 },
+    { job: "grade-new", at: "2026-11-11T04:01:00.000Z", n: 4, status: 503 },
+    { job: "grade-new", at: "2026-11-11T04:02:00.000Z", n: 1, status: 429 },
+    { job: "grade-new", at: "2026-11-11T04:03:00.000Z", n: 2, status: 0 },
+  ]);
+  const usage = await usageToday(db, { now });
+  assert.equal(usage.byModel[PRIMARY_MODEL], 17);
+  assert.equal(usage.byJob["grade-new"][PRIMARY_MODEL], 17);
+  const plan = budgetPlan(JSON.stringify({ reserve: 0, stages: { grade_new: { cap: 20 } } }));
+  const a = backgroundAllowance("grade_new", usage, { plan, quota: { [PRIMARY_MODEL]: 30 } });
+  assert.equal(a.allowed, 3, "the stage's cap of 20 has 3 left: the 7 failed requests were spent");
+  assert.equal(a.remaining, 13);
+  // The client logs a row for every attempt, so a 503 and its retry are two requests.
+  const db2 = tempDb();
+  await ensureGeminiLog(db2);
+  const log = createRequestLog({ db: db2, job: "grade-new", runId: "t" });
+  const answers = [new Response("{}", { status: 503 }), new Response(JSON.stringify({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "{}" }] } }] }), { status: 200 })];
+  const gemini = createGemini({ apiKey: "test-key-not-real", rpm: 60000, retryDelaysMs: [1], sleep: async () => {}, log: () => {}, fetchImpl: async () => answers.shift(), onRequest: (r) => log.record(r), now: () => now.getTime() });
+  await gemini.generate([{ text: "x" }], { type: "OBJECT" });
+  assert.equal((await usageToday(db2, { now })).byModel[PRIMARY_MODEL], 2);
+});
+
 test("a background stage gets min(its cap, quota left minus the reserve)", async () => {
   const db = tempDb();
   const now = new Date("2026-11-11T05:00:00Z"); // 21:00 Pacific
