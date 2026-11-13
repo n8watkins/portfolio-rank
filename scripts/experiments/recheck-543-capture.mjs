@@ -3,6 +3,8 @@
 // first-screen facts, in the bundle format the locked prompts were tested
 // with), plus what the spec adds:
 // - the splash click-through of #208 (pipeline/splash.mjs passSplashGate);
+// - a dialog on top of the page closed as a visitor would (passModal:
+//   its primary button or Escape), so the default view is graded;
 // - a mode-picker click (passModePicker): "Terminal / GUI", "Dark / Light";
 // - up to 15 s for slow content (CONTENT_WAIT_MS) before the screenshots;
 // - one retry when a load fails or stays blank;
@@ -17,7 +19,7 @@ import { UA, readRenderedPage } from "../../pipeline/gate.mjs";
 import { pngDiff } from "../../pipeline/png-diff.mjs";
 import { redactContacts } from "../../pipeline/redact.mjs";
 import { portfolioSignals } from "../../pipeline/signals.mjs";
-import { detectGate, passModePicker, passSplashGate } from "../../pipeline/splash.mjs";
+import { detectGate, passModal, passModePicker, passSplashGate } from "../../pipeline/splash.mjs";
 import { clean, factsFor, shot } from "./grading-two-sets.mjs";
 import { assertNotOurs, readFirstScreen, readJson, writeJson } from "./grading-two-sets-lib.mjs";
 
@@ -57,11 +59,13 @@ async function settle(page) {
   }
 }
 
-/** The gate and the mode picker, in that order (a gate can lead to a picker). */
+/** The gate, a dialog on top, then a mode picker, in that order (a gate can lead to a dialog or a picker). */
 async function passFirstScreens(page) {
-  const gate = await passSplashGate(page).catch((e) => ({ error: String(e?.message ?? e).slice(0, 120) }));
-  const mode = await passModePicker(page).catch((e) => ({ error: String(e?.message ?? e).slice(0, 120) }));
-  return { gate, mode };
+  const err = (e) => ({ error: String(e?.message ?? e).slice(0, 120) });
+  const gate = await passSplashGate(page).catch(err);
+  const modal = await passModal(page).catch(err);
+  const mode = await passModePicker(page).catch(err);
+  return { gate, modal, mode };
 }
 
 /** One attempt: desktop, then phone. Throws when the desktop page fails to load or stays blank. */
@@ -133,6 +137,7 @@ export function blockedWhy(out) {
   const n = words(out.outline?.text);
   if (out.still_gate) return "still a gate or loader after the click-through";
   if (out.still_picker) return "still a mode picker after the click";
+  if (out.desktop_first?.modal?.passed === false) return "still a dialog on top after the click";
   if (n < BLOCK_MAX_WORDS && !out.outbound_links) return `${n} words and no outbound links`;
   return null;
 }
@@ -168,6 +173,7 @@ export async function captureSite(browser, site, dir) {
   fs.writeFileSync(path.join(dir, "text.txt"), `${redactContacts(clean(ex.text, 6000)).trim()}\n`);
   writeJson(path.join(dir, "facts.json"), factsFor(site, out, ex));
   const gateOf = (f) => (f?.gate ? { passed: f.gate.passed ?? null, phrase: f.gate.phrase ?? null, clicks: f.gate.clicks ?? 0, left: f.gate.left ?? false, error: f.gate.error } : null);
+  const modalOf = (f) => (f?.modal ? { passed: f.modal.passed ?? null, kind: f.modal.kind ?? null, button: f.modal.button ?? null, how: f.modal.how ?? [], left: f.modal.left ?? false, error: f.modal.error } : null);
   const modeOf = (f) => (f?.mode ? { passed: f.mode.passed ?? null, picked: f.mode.picked ?? null, options: f.mode.options ?? [], left: f.mode.left ?? false, error: f.mode.error } : null);
   meta.blocked = blockedWhy(out);
   Object.assign(meta, {
@@ -175,6 +181,7 @@ export async function captureSite(browser, site, dir) {
     words: words(out.outline?.text),
     outbound_links: out.outbound_links,
     gate: { desktop: gateOf(out.desktop_first), phone: gateOf(out.phone_first) },
+    modal: { desktop: modalOf(out.desktop_first), phone: modalOf(out.phone_first) },
     mode_pick: { desktop: modeOf(out.desktop_first), phone: modeOf(out.phone_first) },
     content_wait_ms: { desktop: out.desktop_wait.ms, phone: out.phone_wait.ms },
     text_chars: ex.text.length,
@@ -197,7 +204,7 @@ export async function captureAll({ dir: DIR, set: SET, shard = null, only = null
   if (only) sites = sites.filter((s) => only.split(",").includes(s.id) || only.split(",").includes(s.url));
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
-  const counts = { ok: 0, failed: 0, blocked: 0, skipped: 0, retried: 0, gate: 0, mode: 0 };
+  const counts = { ok: 0, failed: 0, blocked: 0, skipped: 0, retried: 0, gate: 0, modal: 0, mode: 0 };
   try {
     for (const [i, s] of sites.entries()) {
       const dir = path.join(DIR, "bundles", SET, s.id);
@@ -212,8 +219,9 @@ export async function captureAll({ dir: DIR, set: SET, shard = null, only = null
       else counts.ok++;
       if (meta.retried) counts.retried++;
       if (meta.gate?.desktop || meta.gate?.phone) counts.gate++;
+      if (meta.modal?.desktop || meta.modal?.phone) counts.modal++;
       if (meta.mode_pick?.desktop || meta.mode_pick?.phone) counts.mode++;
-      const notes = [meta.retried && "retried", (meta.gate?.desktop || meta.gate?.phone) && "gate", (meta.mode_pick?.desktop || meta.mode_pick?.phone) && `mode ${meta.mode_pick?.desktop?.picked ?? meta.mode_pick?.phone?.picked}`].filter(Boolean);
+      const notes = [meta.retried && "retried", (meta.gate?.desktop || meta.gate?.phone) && "gate", (meta.modal?.desktop || meta.modal?.phone) && `dialog ${meta.modal?.desktop?.button ?? meta.modal?.phone?.button ?? "escape"}`, (meta.mode_pick?.desktop || meta.mode_pick?.phone) && `mode ${meta.mode_pick?.desktop?.picked ?? meta.mode_pick?.phone?.picked}`].filter(Boolean);
       console.log(`[${i + 1}/${sites.length}] ${s.id} ${s.url}: ${meta.failed ? `FAILED (${meta.failed})` : meta.blocked ? `BLOCKED (${meta.blocked})` : `ok, signals ${meta.signals.score}`}${notes.length ? ` [${notes.join(", ")}]` : ""} ${Math.round((Date.now() - t0) / 1000)} s`);
     }
   } finally {
