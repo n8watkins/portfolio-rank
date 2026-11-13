@@ -35,6 +35,27 @@ There is also one route that still lets a visitor start our Gemini key, and the 
 | Workers CPU | Measured: account at 14.6M of 30M ms on 2026-11-13, on pace for 35.8M. portfolio-rank #156 (anonymous session answered by the Worker), n8builds-web #201 (Sentry relay before Next). Page caching is the edge-caching lane's. |
 | Owner goals (added 2026-11-13) | #161: weekly check, one email with an .ics invite per goal, `GET /api/admin/goals`. |
 
+## Medium and low status (2026-11-13)
+
+Each item was checked against `main` (592ae06) first; every fix is its own PR based on `main`, waiting for the release lane.
+
+| Finding | PR | Status |
+| --- | --- | --- |
+| M1 Backups kept forever | - | Done (P0 above): R2 rule `expire-backups-35d`. |
+| M2 Tables outside the schema | #165 | Open. Pipeline and ranking tables move into `lib/pipeline-schema.mjs` and `lib/ranking/schema.mjs`, which `lib/schema.mjs` includes; the next deploy's migration adds `night_runs`, `owner_alerts`, `gemini_daily` and the rest to staging. A test fails when any module creates a table the schema lacks. |
+| M3 Schema version per branch | - | Already fixed on `main` by #143: migration follows a schema fingerprint and the version write is `MAX(v, excluded.v)`, so no CI version check is needed. |
+| M4 "Private" profile copy | #140 (3ad8822) | Committed on #140's branch: the profile and the form say "unlisted and out of search engines", not private. Ownership proof: re-check (`/api/recheck`) and claims, hiding and removal (`/api/owner/*`) need a verified claim, but claims only accept listed portfolios (`isKnownPortfolio`), so an added, not yet listed site has no ownership proof and no removal path until it joins the list. Unclaimed adds use the grader's own caps, with no separate cap. Both stay for #140. |
+| M5 Sessions can't be revoked | #175 | Open. "Sign out everywhere" in Settings, account deletion signs out every device, and the admin's session ends 12 hours after sign-in (`session_revocations`, checked on read, memoized a minute). |
+| M6 One hourly error skips the rest | #166 | Open. Each hourly task runs on its own (`pipeline/hourly.mjs`); a failure goes to Sentry tagged with the task. |
+| M7 CSP allows inline scripts | #173 | Open, partial by design. A nonce would end ISR and the edge cache, so `'unsafe-inline'` stays for script elements; `script-src-attr 'none'` and `object-src 'none'` are added and the report's print button no longer uses `onclick`. |
+| M8 Ungraded sites in the sitemap | #169 | Open. The sitemap always lists only graded real portfolios; a database error keeps yesterday's sitemap. #140 keeps this filter when it rebases. |
+| L1 Quiet local-file fallback | #167 | Open. On Workers a missing `TURSO_DATABASE_URL` throws a clear error. After deploy: resolve PORTFOLIORANK-2 and add a Sentry alert rule for new issues (owner). |
+| L2 Test seams deny-list | #168 | Open. Seams and the email outbox are an allow-list (`lib/test-mode.mjs`): `SITE_ENV=test`, or `next dev` for the seams. |
+| L3 Token expiry without an alert | #170 | Open. The night reads GitHub's token-expiry header and raises `dispatch-token:expiring` from 14 days out, and `dispatch-token:missing` when the token isn't set. A night that dies is already caught by #153. |
+| L4 Staging uses production's email caps | #171 | Open, partial. Staging gets its own lower `EMAIL_CAPS` (20 a day). The shared mailroom apps are only on #124, #133 and #164; a staging mailroom app needs n8watkins/mailroom and its deploy (owner). |
+| L5 Faint text and layout shift | #174, #140 (f3130a5) | Open. Profile checks and social links no longer move the page (mobile CLS 0.63 to 0 in a throttled test). `text-mute/70` fixed on #140; #136 still has it in `PortfolioCheck.tsx` and `ShareResult.tsx`. |
+| L6 Page weight | - | Nothing needed now. |
+
 ## High
 
 ### H1. Production owner alerts are never emailed (observability)
