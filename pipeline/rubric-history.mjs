@@ -11,6 +11,7 @@
 
 import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { ACTIVE } from "./roster.mjs";
+import { guardedForReview } from "./portfolio-guard.mjs";
 
 export async function ensureRubricHistory(db) {
   await applyTables(db, RUBRIC_HISTORY_TABLES);
@@ -51,6 +52,8 @@ export function replaceGradeStatements(url, oldJson, newRubric, now = new Date()
     });
   }
   stmts.push({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?", args: [JSON.stringify(newRubric), url] });
+  // Kept as a portfolio against the AI's verdict (./portfolio-guard.mjs): a person looks at it.
+  if (guardedForReview(newRubric)) stmts.push({ sql: "UPDATE portfolios SET needs_review = 1 WHERE url = ?", args: [url] });
   return stmts;
 }
 

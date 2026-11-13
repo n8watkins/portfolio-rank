@@ -15,6 +15,7 @@
 // the lowest-priority re-grade queue (pipeline/rubric-history.mjs).
 import { redactContacts } from "./redact.mjs";
 import { SITE_DATA_MARKER } from "./site-data.mjs";
+import { guardVerdict } from "./portfolio-guard.mjs";
 
 export const RUBRIC_VERSION = 2;
 /** The grade prompt's id and version in gemini_requests.prompt. */
@@ -419,7 +420,8 @@ export function parseRubricResponse(raw) {
 export function gradeRecord({ parsed, model, usage = null, facts = null, source, now = new Date() }) {
   const checks = codeChecks(facts, now);
   return {
-    ...parsed,
+    // A "not a portfolio" verdict against strong code signals is kept as a portfolio, for review (./portfolio-guard.mjs).
+    ...guardVerdict(parsed, facts?.signals),
     rubric_version: RUBRIC_VERSION,
     quality_score: qualityScore(parsed),
     checks,
