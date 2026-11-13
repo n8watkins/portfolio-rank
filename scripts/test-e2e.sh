@@ -57,4 +57,6 @@ export E2E_SERVER_LOG="${TMPDIR:-/tmp}/portfolio-rank-e2e.log"
 node node_modules/next/dist/bin/next start -p "$PORT" > "$E2E_SERVER_LOG" 2>&1 &
 server=$!
 trap 'kill $server 2>/dev/null || true; rm -f "$DB"*; rm -rf "$GRADER_TEST_SHOTS_DIR"' EXIT
-node --test --test-concurrency=1 "tests/*.test.mjs"
+# A test or hook that never settles (a stand-in port taken by another run,
+# say) fails after five minutes instead of stalling the whole run.
+node --test --test-concurrency=1 --test-timeout=300000 "tests/*.test.mjs"
