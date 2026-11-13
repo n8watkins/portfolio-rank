@@ -1,10 +1,10 @@
 # Privacy
 
-> **DRAFT, not legal advice.** Not linked from the site yet. See [README.md](README.md).
+> Live at `/privacy` (`app/privacy/page.tsx`); keep the two in step. Not legal advice. See [README.md](README.md).
 
-Last updated: [owner: date it goes live].
+Last updated: November 12, 2026.
 
-PortfolioRank is a side project run by me, [owner: legal name, or business name if there is one].
+PortfolioRank is a side project run by n8builds.
 This page says what the site stores about you, why, who else sees it, and how long it's kept.
 Short version: I store as little as I can, I never sell anything, and you can ask me to delete what's yours.
 
@@ -19,7 +19,7 @@ Questions: nate@n8builds.dev.
   They carry the error and the page's path, nothing else: no account, no cookies, no request headers, no query string.
 - **Hosting logs.** The site runs on Cloudflare, which sees your IP address and browser details to serve the page, as any host does.
   I don't store your IP address in PortfolioRank's database.
-  Where the site limits how often a network can do something (poll votes, and later grade requests), it stores only a one-way hash of the address, never the address itself, and deletes it within 30 days.
+  Where the site limits how often a network can do something, it stores only a one-way hash of the address, never the address itself, and deletes those counters within a day.
 
 ## Cookies and browser storage
 
@@ -34,7 +34,7 @@ Cookies:
 - **Print pass**: a one-hour pass to print a portfolio's report.
 - **Face-off intro seen**: so the how-to-play card doesn't show again.
 
-Saved only in your browser (local storage), never sent to the site: your theme (only if you pick Light or Dark), the auto-open setting, whether the face-off shows scores, and which reports already celebrated.
+Saved only in your browser, never sent to the site: your theme (only if you pick Light or Dark), the auto-open setting, whether the face-off shows scores, and which reports already celebrated.
 A few notes last only while the tab is open, such as whether the sign-in reminder was shown, and, if you grade with your own Gemini key, that key until the grade is done.
 
 The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.
@@ -42,13 +42,12 @@ The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.
 ## If you vote without signing in
 
 You get a few practice votes before signing in.
-To make that work, the site sets one cookie holding a random id, signed so it can't be forged.
+The site sets one cookie holding a random id, signed so it can't be forged.
 Your practice votes and the pairs you were shown are stored against that id, with the time.
 If you sign in afterwards, those votes can move to your account.
 
 ## If you sign in with GitHub
 
-Sign-in uses your GitHub account.
 GitHub tells PortfolioRank your GitHub id number, username, display name, email, avatar and the date your GitHub account was created.
 
 - Your **session** lives in a signed, encrypted cookie in your browser, not in my database.
@@ -57,9 +56,9 @@ GitHub tells PortfolioRank your GitHub id number, username, display name, email,
 - I don't store your GitHub email or display name in the database.
 - The account creation date is used only to tell whether a vote counts when a minimum account age is set.
 
-**Votes and ratings are kept** for as long as the site runs, because the leaderboard is recomputed from the full vote log.
-That goes for practice votes made without signing in too: they're tied only to the random id in your cookie.
-When the comparison log is published (when the open ranking method launches), it will show which kind of voter cast each vote (a person or the AI), never who.
+**Votes are kept** for as long as the site runs, because the leaderboard is computed from the full vote log.
+That goes for practice votes too: they're tied only to the random id in your cookie.
+If the comparison log is ever published, it will show which kind of voter cast each vote (a person or the AI), never who.
 
 ## If your portfolio is listed
 
@@ -75,78 +74,69 @@ For each listed site I store:
 
 If your site leaves the list, its screenshots and stored page data are deleted 30 days later.
 Its past votes stay in the vote log but are no longer shown.
-To remove it yourself, use "Remove my portfolio" on the Settings page (see "Your choices").
-To stay listed but never be named in posts, see [removal.md](removal.md).
+To take it off yourself, see "Your choices"; to stay listed but never be named in posts, see [removal.md](removal.md).
+
+## If you claim your portfolio
+
+- Claiming needs a GitHub sign-in.
+  I store your GitHub id number and username with the portfolio's address, how the claim was verified, and a note if you write one.
+- To verify, the site fetches your portfolio's public home page (to find a link to your GitHub profile or the verification code) and your public GitHub profile (for your current username).
+- Every claim and owner action (removing the site, hiding its grade, asking for a re-grade) goes into an audit log with your GitHub id number and the time, so a removal can always be traced to whoever asked for it.
+- If you remove your portfolio, it disappears from the site 24 hours later (you can cancel until then, and I'm told about it, so a removal by someone who isn't the owner can be stopped).
+  Its address then goes on the public removals list in the site's repository, marked "owner request", without your name; the removed-portfolios page only counts these.
+- If you ask for a report link by email, your address is used to send that one email and is not stored; only a one-way hash of it counts how many emails it got that day.
 
 ## If you vote in a poll
 
 - Each vote is stored with your account id (or the random id from your practice-vote cookie) and a signed browser id, so each person votes once.
-- No API ever shows who voted for what; results are totals.
+- No page or API ever shows who voted for what; results are totals.
 - Individual poll votes are deleted 30 days after the poll closes; the totals stay.
 
-## If you play the games (when they launch)
+## If you play the games
 
 - Your quiz answers are stored with your account id, or the random id from your practice-vote cookie, with the time and the percentiles they were scored against.
 - Badges you earn are stored the same way, with what they need: how many times you shared a result, and which portfolios you opened (at most 50).
 - "Your eye" (how often you agree with the crowd and the AI) is worked out from your own votes and answers; nobody else sees it.
 - If you sign in afterwards, your quizzes and badges move to your account.
-- Challenge links share the five portfolios of a quiz, never your answers.
+  Challenge links share the five portfolios of a quiz, never your answers.
 
-## If you claim your portfolio (when claims launch)
+## If you check or grade a site
 
-- Claiming needs a GitHub sign-in.
-  I store your GitHub id number and username with the portfolio's address, how the claim was verified, and a note if you write one.
-- To verify, the site fetches your portfolio's public home page (to find a link to your GitHub profile or the verification code) and your public GitHub profile (for your current username).
-- Every claim, review and owner action (removing the site, hiding its grade, asking for a re-grade) goes into an audit log with your GitHub id number and the time, so a removal can always be traced to whoever asked for it.
-- If you remove your portfolio, it disappears from the site 24 hours later (you can cancel until then, and I'm told about it, so a removal by someone who isn't the owner can be stopped) and its address goes on the public removals list in the site's repository, marked "owner request", without your name; the removed-portfolios page only counts these.
-- If you ask for a report link by email, your address is used to send that one email and is not stored; only a one-way hash of it counts how many emails it got that day (at most 3).
+Checking and grading a site are opening soon; this is how they work.
 
-## If you grade your portfolio (when "grade my portfolio" launches)
+**Checking a site adds it to PortfolioRank; you can ask for removal at any time.**
+A site that is already listed gets its results refreshed.
+Any other site waits, privately, to be graded: it's shown on PortfolioRank only once it's graded, and never if it turns out not to be a portfolio.
 
 - I store the address you submit, its screenshots, page text, measured facts and the report.
-- The report is private by default and shareable by link; you can delete it. [owner: confirm reports are unlisted and deletable]
-- To stop abuse, I count requests per account and per network; network addresses are stored only as a one-way hash, kept for at most 30 days.
-- If the day's capacity is used up and you ask for an email, I store your email address only to send that report, and delete it 30 days after it's sent, along with the grade request.
-- A graded site is never added to the leaderboard unless you ask.
-
-## If you subscribe to the newsletter (when it launches)
-
-- I store your email address, when you signed up and when you confirmed.
-- You only get emails after you click the confirmation link.
-- Every email has a one-click unsubscribe.
-  An address that isn't confirmed within 7 days is deleted.
-- After you unsubscribe, I keep the address only on a do-not-email list, so it's never emailed again.
-- Terms: [newsletter.md](newsletter.md).
+- To stop abuse, I count requests per browser and per network.
+  Both are stored only as one-way hashes, with the request.
+- If you ask for the report by email, your address is used only to send it: it's erased as soon as the email goes out, or after 30 days if it never does.
+  Report links in those emails stop working after 7 days.
+- A grade request, its hashes, its report and its screenshots are deleted 180 days after the request.
 
 ## Google Gemini and the free tier
 
-Public by design.
 PortfolioRank only works with portfolios their owners published for the public to see.
-Before any page text reaches the AI, we remove email addresses and phone numbers.
-Names, public photos and the portfolio's own content stay, because that's what a portfolio is for.
-Nothing is blocked by region.
+It uses Google's Gemini API to grade them and to help write blog posts from the site's data.
 
-PortfolioRank uses Google's Gemini API to grade portfolios and, later, to write blog posts from the site's data.
-What goes to Gemini: screenshots and page text of portfolio sites (with email addresses and phone numbers swapped for placeholders), the measured facts, and aggregate numbers from the site.
-What never goes to Gemini: anything about voters, accounts or newsletter subscribers.
+- What goes to Gemini: screenshots and page text of portfolio sites, with email addresses and phone numbers swapped for placeholders first, the measured facts, and aggregate numbers from the site.
+- What never goes to Gemini: anything about voters, accounts or the people who check a site.
 
-PortfolioRank currently uses Gemini's **free tier**, for everyone, everywhere.
+PortfolioRank uses Gemini's **free tier**.
 Under Google's terms for unpaid services, Google may use what is sent to improve its products, and human reviewers may read it.
-So don't put private details into anything you send for grading.
-Because only public web pages and aggregate data are sent, I'm comfortable with that, but you should know.
-When "grade my portfolio" launches, you'll be able to use your own Gemini API key instead of mine.
-If PortfolioRank moves to a paid Gemini plan, this section will be updated.
+Only public web pages and aggregate data are sent, so I'm comfortable with that, but you should know.
+If you grade with your own Gemini key, the request goes to Google under your key's terms instead.
 
 ## Who else handles data
 
 | Service | What for |
 | --- | --- |
-| Cloudflare | Hosting, screenshot storage (R2) and page-view counts |
+| Cloudflare | Hosting, the bot check, screenshot and backup storage (R2), page-view counts and sending email |
 | Turso | The database (votes, likes, lists, grades) |
 | GitHub | Sign-in, and the scheduled jobs that update the site |
 | Google | Gemini (grades, writing) and PageSpeed Insights (speed scores) |
 | Sentry | Error reports |
-| Cloudflare Email Service | Sending the newsletter and queued reports |
 
 None of them get your data to sell, and neither do I.
 
@@ -154,39 +144,50 @@ None of them get your data to sell, and neither do I.
 
 | Data | Kept |
 | --- | --- |
-| Votes and ratings, including practice votes | As long as the site runs (the leaderboard is computed from them) |
+| Votes, including practice votes | As long as the site runs (the leaderboard is computed from them), or until you delete your account |
 | Individual poll votes | 30 days after the poll closes; the totals stay |
-| Likes and lists | Until you delete them, or ask me to delete your account's data |
-| Quiz answers and badges | Until you ask me to delete your account's data [owner: confirm, or set a limit] |
-| Claims and the claims audit log | As long as the site runs [owner: confirm] |
-| One-time report links (a hash, never the email address) | Until they expire (a day), deleted that night |
+| Likes and lists | Until you delete them, or your account |
+| Quiz answers and badges | Until you delete your account |
+| Claims and the claims audit log | As long as the site runs; deleting your account removes your name from it |
 | Listed site data | While listed, then deleted 30 days after it leaves the list |
-| Hashed network addresses (rate limits) | At most 30 days |
+| Hashed network counters (rate limits) | At most a day |
+| Grade requests, reports and their screenshots | 180 days after the request |
+| An email address for a report | Until the email is sent, or 30 days if it never is |
 | Gemini request log (which job asked, when, tokens used; no visitor data) | 90 days, then only daily totals |
-| Nightly database backups | 30 days |
-| Grade requests, and the email address for a queued report | 30 days after the report is sent |
-| Grade reports | [owner: how long a report stays, or until you delete it] |
-| Newsletter sign-up that's never confirmed | 7 days |
-| Newsletter address | Until you unsubscribe; after that, only on the do-not-email list |
+| Nightly database backups | 35 days |
+
+The nightly backup is a copy of the database in private storage.
+Anything deleted from the database can stay in a backup until that backup expires, so every deletion on this page is complete within 35 days.
+(The bucket's lifecycle rule `expire-backups-35d` enforces this; see docs/ASSUMPTIONS.md section G.)
 
 ## Your choices
 
-All of these are self-serve, on the site's Settings page, and take effect at once.
+These are self-serve on the Settings page and take effect at once.
 
 - **Download my data**: signed in, one click gives you a JSON file of everything stored against your account: votes, likes, lists, badges, quiz plays, poll votes, claims, the portfolio actions you took and the grades you asked for while signed in.
 - **Delete my account**: signed in, type your GitHub username to confirm.
-  Your votes, likes, lists, badges, quiz plays, poll votes, claims and the grades you asked for while signed in (with their reports and any email waiting to be sent) are deleted together in one step, and you are signed out (your session lives only in your browser's cookie, so signing out ends it).
-  Your votes leave the vote log, and the leaderboard drops them at its next recompute.
-  Kept, because they name no one: anonymous counts (how many quizzes were played, how many votes each poll option got) and a portfolio's own state, so a removal or a hidden grade you made stays in force, with your account struck from the record of who made it.
-- **Remove my portfolio**: prove the site is yours (a link from the site to your GitHub profile, or a code you put on the page), then hide its grade; removing it from PortfolioRank asks for the code (or a review) and takes effect a day later.
+  Your votes, likes, lists, badges, quiz plays, poll votes, claims and the grades you asked for while signed in are deleted together in one step, and you are signed out.
+  The leaderboard drops your votes at its next recompute.
+  Kept, because they name no one: anonymous counts, and a portfolio's own state, so a removal or a hidden grade you made stays in force with your account struck from the record of who made it.
+- **Remove my portfolio**: on the claim page, prove the site is yours with a code you put on the page (or a claim I've reviewed), then hide its grade or remove it.
+  A removal takes effect a day later and can be cancelled until then.
+  For a site that isn't listed yet, including one still waiting to be graded, email me (see [removal.md](removal.md)).
 - **Forget my preferences**: clears what's saved in your browser.
-- Block cookies in your browser; you can still browse, but not vote or sign in.
+- Block cookies in your browser: you can still browse, but not vote or sign in.
+
+Anything else, including a request about data that isn't tied to an account: email nate@n8builds.dev.
+I answer data requests within 30 days.
 
 PortfolioRank is not meant for anyone under 16.
 
 ## Changes
 
-When this page changes, the date at the top changes too.
-Big changes get a note on the site [owner: and in the newsletter].
-
+When this page changes, the date at the top changes too, and big changes get a note on the site.
 Governing law: California, United States.
+
+## Not on the page yet
+
+Add these sections when the features launch in production:
+
+- **Newsletter** (`NEWSLETTER_ENABLED`): what's stored (address, signed-up and confirmed times), confirmation, one-click unsubscribe, unconfirmed addresses deleted after 7 days, the do-not-email list after unsubscribing; terms in [newsletter.md](newsletter.md).
+- **Email sign-in**: what the one-time link stores and for how long.

@@ -269,6 +269,7 @@ test("email sign-up: input and button are separate, side by side when wide, stac
       assert.equal(nested, false, `button sits in a bordered wrapper at ${width}px`);
       const i = await input.boundingBox();
       const b = await button.boundingBox();
+      // Rounded: layout can put a 44px box at 43.9998px (subpixel positions).
       assert.ok(Math.round(i.height) >= 44 && Math.round(b.height) >= 44, `44px targets at ${width}px: ${JSON.stringify({ i, b })}`);
       const formWidth = (await form.boundingBox()).width;
       if (formWidth >= 384) {

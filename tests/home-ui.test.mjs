@@ -81,6 +81,7 @@ test("the hero deck: one link in front, 44px controls, dots and a counter, pause
 
   for (const name of ["Previous portfolio", "Pause the showcase", "Next portfolio"]) {
     const box = await deck.getByRole("button", { name }).boundingBox();
+    // Rounded: layout can put a 44px box at 43.9998px (subpixel positions).
     assert.ok(Math.round(box.width) >= 44 && Math.round(box.height) >= 44, `${name}: ${JSON.stringify(box)}`);
   }
 
