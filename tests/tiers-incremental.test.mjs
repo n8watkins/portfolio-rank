@@ -162,3 +162,33 @@ test("the daily run reads a few rows, rewrites only changed letters, and never s
     assert.doesNotMatch(plan, /SCAN tier_ratings(?! USING)/, `${sql} -> ${plan}`);
   }
 });
+
+test("a site delisted, marked down or graded 'not a portfolio' leaves the cutoffs at once, and comes back when it recovers", async () => {
+  const client = await db();
+  await library(client, 100);
+  const members = async () => Number((await client.execute("SELECT COALESCE(SUM(n), 0) AS n FROM tier_hist")).rows[0].n);
+  const memberOf = async (u) => Number((await client.execute({ sql: "SELECT member FROM tier_ratings WHERE url = ?", args: [u] })).rows[0].member);
+  assert.equal(await members(), 100);
+  await client.execute({ sql: "UPDATE portfolios SET delisted_at = '2026-11-13' WHERE url = ?", args: [url(1)] });
+  await client.execute({ sql: "UPDATE portfolios SET health = 'down' WHERE url = ?", args: [url(2)] });
+  await client.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.is_portfolio', json('false')) WHERE url = ?", args: [url(3)] });
+  assert.equal(await members(), 97);
+  assert.deepEqual([await memberOf(url(1)), await memberOf(url(2)), await memberOf(url(3))], [0, 0, 0]);
+  await histMatches(client);
+  // The cutoffs no longer count them.
+  assert.equal((await computeCutoffs(client)).n, 97);
+  // Back: listed again, up again, a portfolio again.
+  await client.execute({ sql: "UPDATE portfolios SET delisted_at = NULL WHERE url = ?", args: [url(1)] });
+  await client.execute({ sql: "UPDATE portfolios SET health = 'live' WHERE url = ?", args: [url(2)] });
+  await client.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.is_portfolio', json('true')) WHERE url = ?", args: [url(3)] });
+  assert.equal(await members(), 100);
+  await histMatches(client);
+  // A grade written in place (the daily letter) changes nothing; a removed portfolio leaves.
+  await client.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.rank.tier', 'A') WHERE url = ?", args: [url(4)] });
+  assert.equal(await members(), 100);
+  await client.execute({ sql: "DELETE FROM portfolios WHERE url = ?", args: [url(5)] });
+  assert.equal(await members(), 99);
+  // The daily run rewrites the moved sites' letters (they were marked).
+  const d = await dailyTiers(client);
+  assert.equal(d.voted, 4);
+});
