@@ -20,8 +20,8 @@ const share = (dist, n) => TIERS.map((t) => `${t} ${dist[t]} (${n ? ((100 * dist
 
 if (process.argv.includes("--read-only")) {
   const order = libraryOrder(await loadGrades(db));
-  console.log(`tiers (read-only): library ${order.length}, ${rankedCount(order)} with enough face-offs; ${share(distribution(order), order.length)}`);
+  console.log(`tiers (read-only): library ${order.length}, ${rankedCount(order)} ranked (a starting rank or 10 face-offs); ${share(distribution(order), order.length)}`);
 } else {
   const r = await refreshTiers(db);
-  console.log(`tiers: library ${r.library}, ${r.ranked} with enough face-offs, ${r.updated} rank(s) written, ${r.cleared} cleared, ${r.jobs} report(s) placed; ${share(r.distribution, r.library)}`);
+  console.log(`tiers: library ${r.library}, ${r.ranked} ranked (a starting rank or 10 face-offs), ${r.updated} rank(s) written, ${r.cleared} cleared, ${r.jobs} report(s) placed; ${share(r.distribution, r.library)}`);
 }
