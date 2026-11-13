@@ -12,6 +12,7 @@ import { TIERS } from "@/lib/tiers.mjs";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { Showcase } from "@/components/home/Showcase";
 import { KitSignup, KitIconButtons } from "./parts";
+import { SITE_URL } from "@/lib/site";
 
 // Flat stand-in frames for the deck, so the browser tests need no captures.
 const frame = (hue: number) =>
@@ -72,7 +73,7 @@ export default async function UiKit({ searchParams }: { searchParams: Promise<{ 
             Disabled
           </button>
           <KitIconButtons />
-          <CopyButton text="https://portfoliorank.n8builds.dev" label="Copy link" />
+          <CopyButton text={SITE_URL} label="Copy link" />
         </div>
       </section>
 

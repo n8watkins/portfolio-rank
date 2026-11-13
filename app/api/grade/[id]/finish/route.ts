@@ -4,10 +4,9 @@ import { rateLimit } from "@/lib/polls/store.mjs";
 import { JOB_ID, readJob, setJob } from "@/lib/grader/jobs.mjs";
 import { completeJob } from "@/lib/grader/finish.mjs";
 import { gradeOnOwnKey, validOwnKey } from "@/lib/grader/own-key.mjs";
-import { peopleContext, queueFreeGrade } from "@/lib/grader/queue.mjs";
+import { enqueueFreeGrade } from "@/lib/grader/queue.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
-import { runInBackground } from "@/lib/background";
-import { PRIVATE, disabled, fail, graderEnabled, ownedJobs, readGradeShot, readJsonBody, requester, sameOrigin, testSeam, workerEnv } from "@/lib/grader/server";
+import { PRIVATE, disabled, fail, graderEnabled, ownedJobs, readGradeShot, readJsonBody, requester, sameOrigin, testSeam } from "@/lib/grader/server";
 
 // Finishing a grade that runs on the visitor's own Gemini key, once its
 // capture has landed (status "awaiting_key").
@@ -17,7 +16,9 @@ import { PRIVATE, disabled, fail, graderEnabled, ownedJobs, readGradeShot, readJ
 //   used for this request only: never stored, never logged, never in a URL
 //   or header we receive.
 // POST /api/grade/<id>/finish { freeTier: true } -> 202 the job, handed to
-//   the free tier instead (the people queue; emailed if it has to wait).
+//   the free tier instead: it only joins the people queue ("queued"), and
+//   the Worker's hourly drain grades it on our key and emails the link.
+//   This request never calls Gemini on our key (tests/gemini-reach.test.mjs).
 //   400 bad_request | own_key_invalid | own_key_rejected | own_key_quota |
 //   grade_failed, 403 bad_origin, 404 not_found, 409 not_waiting_for_key,
 //   429 rate_limited, 503 gemini_busy | no_screenshot
@@ -52,18 +53,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   };
 
   if (body.freeTier === true) {
-    const env = await workerEnv();
     const moved = await setJob(client, id, { status: "grading", own_key: false, reason: null }, { when: ["awaiting_key"] });
     if (!moved) return fail("not_waiting_for_key", 409);
-    const ctx = peopleContext({
-      db: client,
-      env: env as Record<string, string | undefined>,
-      image,
-      log: (line: string) => console.log(JSON.stringify({ event: "grade.free", line: line.slice(0, 200) })),
-    });
-    const fresh = (await readJob(client, id))!;
-    runInBackground(queueFreeGrade(ctx, fresh));
-    return NextResponse.json(publicJob(fresh, { mine }), { status: 202, headers: PRIVATE });
+    await enqueueFreeGrade(client, (await readJob(client, id))!);
+    const queued = (await readJob(client, id))!;
+    return NextResponse.json(publicJob(queued, { mine }), { status: 202, headers: PRIVATE });
   }
 
   const key = typeof body.geminiKey === "string" ? body.geminiKey.trim() : "";

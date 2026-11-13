@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { healthCheck } from "../worker/health.ts";
 
-const BASE = "https://portfoliorank.n8builds.dev";
+const BASE = "https://portfoliorank.dev";
 
 test("GET /healthz answers an uncached plain-text ok", async () => {
   const response = healthCheck(new Request(`${BASE}/healthz`));

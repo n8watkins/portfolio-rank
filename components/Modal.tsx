@@ -44,6 +44,7 @@ export function Modal({
   description,
   children,
   className = "",
+  size = "sm",
 }: {
   open: boolean;
   onClose: () => void;
@@ -51,8 +52,10 @@ export function Modal({
   title: React.ReactNode;
   description?: React.ReactNode;
   children?: React.ReactNode;
-  /** Extra classes for the panel, e.g. a different max width or text alignment. */
+  /** Extra classes for the panel, e.g. text alignment. */
   className?: string;
+  /** "sm" for a short question or form; "xl" for a detail view (an image with its editor), which scrolls inside on short screens. */
+  size?: "sm" | "xl";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -102,9 +105,9 @@ export function Modal({
         if (e.target === e.currentTarget && pressedOnBackdrop.current) onCloseRef.current();
       }}
       onKeyDown={(e) => e.stopPropagation()}
-      className="modal m-auto w-[calc(100%-2rem)] max-w-sm overflow-visible bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      className={`modal m-auto w-[calc(100%-2rem)] ${size === "xl" ? "max-w-6xl" : "max-w-sm"} overflow-visible bg-transparent p-0 text-ink backdrop:bg-black/60 backdrop:backdrop-blur-sm`}
     >
-      <div className={`relative rounded-2xl border border-edge bg-card p-6 shadow-2xl ${className}`}>
+      <div className={`relative rounded-2xl border border-edge bg-card p-6 shadow-2xl ${size === "xl" ? "max-h-[calc(100dvh-2rem)] overflow-y-auto" : ""} ${className}`}>
         {/* Clear of the close button; a centred title keeps both sides even. */}
         <h2
           id={titleId}
