@@ -160,6 +160,45 @@ async function captureOne(browser, site, dir) {
   }
 }
 
+/** Redo only the outline and the projects screenshot (after a change to the projects finder). */
+async function reoutline({ OUT }) {
+  const plan = JSON.parse(fs.readFileSync(path.join(OUT, "plan.json"), "utf8"));
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch();
+  const queue = [...plan.sites];
+  const worker = async () => {
+    for (let s = queue.shift(); s; s = queue.shift()) {
+      const dir = path.join(OUT, "sites", s.shot_key);
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA, ignoreHTTPSErrors: true });
+      try {
+        const page = await ctx.newPage();
+        await page.goto(s.url, { waitUntil: "load", timeout: 30000 });
+        await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+        await page.waitForTimeout(4000);
+        const height = await page.evaluate(() => document.documentElement.scrollHeight);
+        for (let y = 0; y < Math.min(height, 20000); y += 700) {
+          await page.evaluate((v) => window.scrollTo(0, v), y);
+          await page.waitForTimeout(120);
+        }
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(800);
+        const outline = await page.evaluate(readPageOutline, OUTLINE_ARGS);
+        await page.evaluate((v) => window.scrollTo(0, v), outline.projects?.top ?? 900);
+        await page.waitForTimeout(1500);
+        fs.writeFileSync(path.join(dir, "projects.jpg"), await page.screenshot({ type: "jpeg", quality: 75 }));
+        fs.writeFileSync(path.join(dir, "outline.json"), `${JSON.stringify({ ...outline, final_url: page.url() }, null, 1)}\n`);
+        console.log(`slot ${s.slot}: ${s.url} (${outline.text.length} chars, projects ${outline.projects ? JSON.stringify(outline.projects.heading) : "not found"})`);
+      } catch (e) {
+        console.log(`slot ${s.slot}: ${s.url} kept the first outline: ${String(e?.message ?? e).slice(0, 120)}`);
+      } finally {
+        await ctx.close().catch(() => {});
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  await browser.close();
+}
+
 async function capture({ OUT }) {
   const cand = JSON.parse(fs.readFileSync(path.join(OUT, "candidates.json"), "utf8"));
   const planPath = path.join(OUT, "plan.json");
@@ -593,6 +632,7 @@ async function main() {
     SHOTS: flag("shots", "https://portfoliorank.n8builds.dev/shots").replace(/\/+$/, ""),
   };
   if (step === "capture") return capture(o);
+  if (step === "reoutline") return reoutline(o);
   if (step === "sheets") return sheets(o);
   if (step === "analyze") return console.log(JSON.stringify(analyze(OUT).verdicts, null, 1));
   const { pipelineDb, ACTIVE } = await import("../../pipeline/roster.mjs");

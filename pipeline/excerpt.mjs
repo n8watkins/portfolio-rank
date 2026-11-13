@@ -17,8 +17,12 @@ export const PROJECTS_MAX = 2000;
 
 // A heading or anchor that names the projects. "Work" alone counts, but not
 // work experience, how I work or work with me.
-export const PROJECTS_RX = /\b(projects?|selected work|recent work|featured work|my work|work|portfolio|case stud(?:y|ies)|things i(?:'|’)?ve (?:built|made)|what i(?:'|’)?ve built|showcase|creations|builds)\b/i;
-export const NOT_PROJECTS_RX = /experience|how i work|work with me|let'?s work|working (?:at|with|on)|work history|hire|contact/i;
+// "Portfolio" counts only as the whole heading ("My portfolio"), since
+// "Developer portfolio" is usually the site's own title.
+export const PROJECTS_RX = /\b(projects?|works?|case stud(?:y|ies)|things i(?:'|’)?ve (?:built|made)|what i(?:'|’)?ve built|showcase|creations|builds)\b|^\W*(?:my )?portfolio\W*$/i;
+export const NOT_PROJECTS_RX = /experience|how i work|work with me|let'?s work|working|work history|hire|contact|open to|manager|officer|intern\b|lead\b|owner/i;
+/** A heading short enough to be a section title, not a sentence. */
+export const HEADING_MAX_WORDS = 6;
 
 /**
  * Runs in the page (page.evaluate). The rendered text plus the projects
@@ -26,7 +30,7 @@ export const NOT_PROJECTS_RX = /experience|how i work|work with me|let'?s work|w
  * screenshot), found by a heading or an element id that names the projects.
  * Self-contained: the patterns are passed in as sources.
  */
-export function readPageOutline({ projects, notProjects }) {
+export function readPageOutline({ projects, notProjects, maxWords }) {
   const RX = new RegExp(projects, "i");
   const NOT = new RegExp(notProjects, "i");
   const text = document.body?.innerText ?? "";
@@ -55,7 +59,16 @@ export function readPageOutline({ projects, notProjects }) {
   };
   let heading = null;
   let box = null;
-  const h = headings.find((x) => x.level > 1 && x.text.length <= 60 && RX.test(x.text) && !NOT.test(x.text));
+  const title = (t) => {
+    const words = t.trim().split(/\s+/).length;
+    return t.length <= 48 && words <= maxWords && (!/[.!?]$/.test(t.trim()) || words <= 3);
+  };
+  const fits = (x) => x.level > 1 && title(x.text) && RX.test(x.text) && !NOT.test(x.text);
+  // A heading that ends in "projects" or "work" ("Featured projects",
+  // "Selected work.") wins over one that only mentions them, such as a
+  // project's own title or a job title.
+  const ends = /^\W*(?:[\w&'’]+\s+){0,2}(?:projects?|works?)\W*$/i;
+  const h = headings.find((x) => fits(x) && ends.test(x.text)) ?? headings.find(fits);
   if (h) {
     heading = h.text;
     box = containerOf(h.el);
@@ -74,7 +87,7 @@ export function readPageOutline({ projects, notProjects }) {
 }
 
 /** The patterns for readPageOutline, as sources (page.evaluate cannot take a RegExp). */
-export const OUTLINE_ARGS = { projects: PROJECTS_RX.source, notProjects: NOT_PROJECTS_RX.source };
+export const OUTLINE_ARGS = { projects: PROJECTS_RX.source, notProjects: NOT_PROJECTS_RX.source, maxWords: HEADING_MAX_WORDS };
 
 const cut = (t, max) => normalizePageText(t, max);
 
@@ -88,7 +101,7 @@ export function projectsFromText(text) {
   let at = 0;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i].trim();
-    if (at > 300 && l.length > 0 && l.length <= 40 && PROJECTS_RX.test(l) && !NOT_PROJECTS_RX.test(l)) {
+    if (at > 300 && l.length > 0 && l.length <= 40 && l.split(/\s+/).length <= HEADING_MAX_WORDS && PROJECTS_RX.test(l) && !NOT_PROJECTS_RX.test(l)) {
       return lines.slice(i).join("\n");
     }
     at += lines[i].length + 1;
