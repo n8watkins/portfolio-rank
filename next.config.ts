@@ -9,7 +9,7 @@ import { parseJsonc } from "./scripts/check-worker-exports.mjs";
 // when the build environment sets it (the test runs), else wrangler.jsonc's
 // value for the Worker being built (staging or production). Flipping one in
 // wrangler.jsonc ships with a deploy, which rebuilds.
-function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "NEWSLETTER_ENABLED" | "TOOLS_ENABLED"): "true" | "false" {
+function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED" | "EMAIL_SIGNIN_ENABLED" | "NEWSLETTER_ENABLED" | "FRESHNESS_ENABLED"): "true" | "false" {
   if (process.env[name] !== undefined) return /^true$/i.test(String(process.env[name])) ? "true" : "false";
   try {
     const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
@@ -24,9 +24,7 @@ function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "NEWS
 // reaches the build's prerender, and the Worker sets the same values at run
 // time. "Grade my portfolio" is also read in the browser (lib/nav.ts
 // ROUTES.grade), so it is inlined as NEXT_PUBLIC_GRADER_ENABLED below, and
-// the newsletter's sign-up forms (components/newsletter) as
-// NEXT_PUBLIC_NEWSLETTER_ENABLED (its API and cron read NEWSLETTER_ENABLED),
-// and so are the free tools (ROUTES.tools, NEXT_PUBLIC_TOOLS_ENABLED).
+// so are the free tools (ROUTES.tools, NEXT_PUBLIC_TOOLS_ENABLED).
 for (const name of ["GAMES_V2", "RANKING_V2", "TOOLS_ENABLED"] as const) process.env[name] = launchSwitch(name);
 
 // Defense-in-depth response headers applied to every route: HSTS (the site is
@@ -83,7 +81,16 @@ const nextConfig: NextConfig = {
   // Browser source maps only for the deploy that uploads them to Sentry; the
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
-  env: { NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED"), NEXT_PUBLIC_NEWSLETTER_ENABLED: launchSwitch("NEWSLETTER_ENABLED"), NEXT_PUBLIC_TOOLS_ENABLED: launchSwitch("TOOLS_ENABLED") },
+  env: {
+    NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED"),
+    NEXT_PUBLIC_TOOLS_ENABLED: launchSwitch("TOOLS_ENABLED"),
+    // Email sign-in (lib/signin/flag.ts): the option in the sign-in dialog and its routes.
+    NEXT_PUBLIC_EMAIL_SIGNIN_ENABLED: launchSwitch("EMAIL_SIGNIN_ENABLED"),
+    // "When checks re-run" (lib/freshness-flag.ts): the profile's "site unchanged since" lines.
+    NEXT_PUBLIC_FRESHNESS_ENABLED: launchSwitch("FRESHNESS_ENABLED"),
+    // The newsletter's sign-up forms (components/newsletter/useNewsletterOn.ts) ask for its status only when on.
+    NEXT_PUBLIC_NEWSLETTER_ENABLED: launchSwitch("NEWSLETTER_ENABLED"),
+  },
   async headers() {
     // Grade reports are unlisted (shareable by link only) and claims are
     // personal: never indexed, whatever a page's own metadata says.

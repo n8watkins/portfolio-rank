@@ -413,7 +413,7 @@ test("report emails: sent once the report is ready, through the gate, with a one
   // The email names the tier by rank the report carries (lib/tiers.mjs), never Gemini's letter (S here),
   // and only once face-offs earned it (lib/tiers.mjs tierSettled; a starting rank goes unnamed: see below).
   await setJob(db, id, { status: "done", result: grade({ tier: "S" }), report: { rank: { tier: "A", score: 70, top: 15, provisional: false, faceoffs: 12 } }, done_at: new Date(T0).toISOString() }, { now: T0 });
-  assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test/", now: T0 }), { sent: 2, refused: 0, gaveUp: 0 });
+  assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test/", now: T0, eloTiers: true }), { sent: 2, refused: 0, gaveUp: 0 });
   assert.equal(box.sent.length, 2);
   assert.match(box.sent[0].subject, /jane\.dev is ready/);
   assert.match(box.sent[0].text, /tier A/);
@@ -435,7 +435,7 @@ test("report emails: a starting rank (too few face-offs) names no tier, so it ca
   const id = await createJob(db, { url: "https://joe.dev/", siteKey: "joe.dev", status: "queued", now: T0 });
   await requestEmail(db, { jobId: id, email: "joe@example.com", secret: SECRET });
   await setJob(db, id, { status: "done", result: grade({ tier: "A" }), report: { rank: { tier: "B", provisional: false, seeded: true, faceoffs: 0 } }, done_at: new Date(T0).toISOString() }, { now: T0 });
-  assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test", now: T0 }), { sent: 1, refused: 0, gaveUp: 0 });
+  assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test", now: T0, eloTiers: true }), { sent: 1, refused: 0, gaveUp: 0 });
   assert.doesNotMatch(box.sent[0].text, /tier/i);
 });
 

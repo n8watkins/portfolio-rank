@@ -51,6 +51,22 @@ export TOOLS_ENABLED=true
 # A low speed cap, so tests/tools-api.test.mjs can reach it (it can only lower the defaults).
 export TOOLS_CAPS='{"speed":{"network":3}}'
 export E2E_GRADER_MOCK_PORT="${E2E_GRADER_MOCK_PORT:-$FREE_GRADER}"
+# The free tools (tests/tools-api.test.mjs), with PageSpeed from the stand-in above.
+export TOOLS_ENABLED=true
+# "When checks re-run" (lib/freshness-flag.ts), off in production: its profile lines and the hourly fingerprints.
+export FRESHNESS_ENABLED=true
+# Email sign-in (tests/signin-email.test.mjs), off in production (lib/signin/flag.ts).
+export EMAIL_SIGNIN_ENABLED=true
+# The blog newsletter (tests/newsletter-e2e.test.mjs): on, with a local
+# stand-in for Kit's API served by that test (KIT_TEST_API, a test stand-in,
+# lib/test-mode.mjs) and a fake key. The stand-in has one form, so
+# KIT_FORM_ID stays unset and the form is found by asking Kit.
+export NEWSLETTER_ENABLED=true
+export E2E_KIT_PORT="${E2E_KIT_PORT:-$FREE_KIT}"
+export KIT_TEST_API="http://127.0.0.1:$E2E_KIT_PORT/v4" KIT_API_KEY="e2e-kit-key"
+unset KIT_FORM_ID KIT_BROADCAST_MODE
+# A low speed cap, so tests/tools-api.test.mjs can reach it (it can only lower the defaults).
+export TOOLS_CAPS='{"speed":{"network":3}}'
 export GRADER_TEST_SITE="http://127.0.0.1:$E2E_GRADER_MOCK_PORT"
 export GRADER_TEST_GITHUB_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/github"
 export GRADER_TEST_GEMINI_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/gemini"

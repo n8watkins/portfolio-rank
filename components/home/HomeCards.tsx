@@ -1,5 +1,5 @@
-import { Activity, ArrowRight, BookOpen, Code, Crown, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
-import { PublicTierBadge, RankBadge, TierBadge } from "@/components/ui/badges";
+import { Activity, ArrowRight, BookOpen, Bot, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
+import { EloTierBadge, RankBadge, TierBadge } from "@/components/ui/badges";
 import { sectionTitle } from "@/components/ui/styles";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { LiveStats } from "@/components/home/LiveStats";
@@ -7,6 +7,7 @@ import { PollBar } from "@/components/home/PollBar";
 import { Thumb } from "@/components/home/Thumb";
 import { ROUTES } from "@/lib/nav";
 import type { BoardItem, GradedItem, LiveStat, PortfolioOfTheDay as Potd, ShowItem, TopTen as TopTenData } from "@/lib/home";
+import { domainOf, topPct } from "@/lib/home";
 import { voteCount } from "@/lib/polls/format";
 import type { PublicPoll } from "@/lib/polls/server";
 
@@ -22,62 +23,62 @@ function ago(iso: string, now: number) {
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-function BoardRow({ r }: { r: BoardItem }) {
+/** `elo`: the score is a tier by ELO (RANKING_V2), drawn with its plus or minus (EloTierBadge). */
+function BoardRow({ r, tier, elo = false }: { r: BoardItem; tier: boolean; elo?: boolean }) {
   return (
     <li>
       <a href={r.href} className="group flex items-center gap-3.5 rounded-xl px-2 py-3 transition hover:bg-raised">
         <span className="flex w-9 shrink-0 justify-end">
           <RankBadge rank={r.rank} tied={r.tied} />
         </span>
-        <Thumb src={r.hero} domain={r.line} className="aspect-[16/10] w-[4.5rem] rounded-md transition group-hover:border-edge-strong max-sm:hidden" />
+        <Thumb src={r.hero} domain={domainOf(r.url)} className="aspect-[16/10] w-[4.5rem] rounded-md transition group-hover:border-edge-strong max-sm:hidden" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.line}</span>
         </span>
-        {/* The tier (public ones only) and people's ELO side by side. */}
-        <span className="flex w-8 shrink-0 justify-center">{r.tier && <TierBadge tier={r.tier} />}</span>
-        <span className="w-11 shrink-0 text-right text-sm font-semibold tabular-nums">
-          <span className="sr-only">ELO </span>
-          {r.elo ?? "-"}
-        </span>
+        <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? elo ? <EloTierBadge tier={r.score} /> : <TierBadge tier={r.score} /> : r.score}</span>
       </a>
     </li>
   );
 }
 
-function Board({ rows }: { rows: BoardItem[] }) {
+function Board({ rows, scoreLabel, elo = false }: { rows: BoardItem[]; scoreLabel: string; elo?: boolean }) {
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex items-center gap-3.5 px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-mute" aria-hidden>
         <span className="w-9 text-right">#</span>
         <span className="w-[4.5rem] max-sm:hidden" />
         <span className="flex-1">Portfolio</span>
-        <span className="w-8 text-center">Tier</span>
-        <span className="w-11 text-right">ELO</span>
+        <span className="w-12 text-right">{scoreLabel}</span>
       </div>
       <ol className="flex flex-1 flex-col justify-between">
         {rows.map((r) => (
-          <BoardRow key={r.url} r={r} />
+          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} elo={elo} />
         ))}
       </ol>
     </div>
   );
 }
 
-/** Top 10: the first rows of the leaderboard's ranked board (tiers by ELO, graded only). */
+/** Top 10: Merged, AI and People with ranking v2; the people's board until then. */
 export function TopTen({ top, className = "" }: { top: TopTenData; className?: string }) {
-  const empty = top.rows.length === 0;
+  const empty = top.kind === "ai" && top.rows.length === 0;
   return (
     <section aria-labelledby="top10" className={`card flex flex-col p-4 sm:p-6 ${className}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 id="top10" className={sectionTitle}>
           Top 10
         </h3>
-        <p className="flex items-center gap-1.5 text-xs text-mute">
-          <Crown className="h-3.5 w-3.5" aria-hidden /> By tier and ELO
-        </p>
+        {top.kind === "ai" && (
+          <p className="flex items-center gap-1.5 text-xs text-mute">
+            <Bot className="h-3.5 w-3.5" aria-hidden /> By AI grade
+          </p>
+        )}
+        {top.kind === "ranked" && <p className="text-xs text-mute">By tier and ELO</p>}
       </div>
-      {empty ? (
+      {top.kind === "ranked" ? (
+        <Board rows={top.rows} scoreLabel="Tier" elo />
+      ) : empty ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-edge-strong px-6 py-12 text-center">
           <span className="icon-tile h-11 w-11">
             <Swords className="h-5 w-5" aria-hidden />
@@ -91,7 +92,7 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           )}
         </div>
       ) : (
-        <Board rows={top.rows} />
+        <Board rows={top.rows} scoreLabel="Tier" />
       )}
     </section>
   );
@@ -122,7 +123,7 @@ export function RecentlyGraded({ items, now, className = "" }: { items: GradedIt
                   </span>
                 </span>
               </span>
-              <PublicTierBadge tier={r.tier} />
+              <TierBadge tier={r.tier} />
             </a>
           </li>
         ))}
@@ -262,14 +263,12 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
         </h2>
         <p className="mt-0.5 text-sm text-mute">{p.line}</p>
         <div className="mt-4 flex items-center gap-3">
-          {p.tier && <TierBadge tier={p.tier} size="lg" />}
+          <TierBadge tier={p.tier} size="lg" />
           <p className="text-sm">
             <span className="block font-semibold">
-              {p.top != null ? `Top ${p.top}% · ` : ""}#{p.rank} on the leaderboard
+              Top {topPct(p.rank, p.total)}% · #{p.rank} by AI grade
             </span>
-            <span className="block text-mute">
-              {p.elo != null ? `ELO ${p.elo} · ` : ""}of {p.total.toLocaleString("en-US")} graded portfolios
-            </span>
+            <span className="block text-mute">of {p.total.toLocaleString("en-US")} graded portfolios</span>
           </p>
         </div>
         {p.best.length > 0 && (

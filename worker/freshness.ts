@@ -10,6 +10,7 @@ import { db as database, ensureSchema } from "../lib/db";
 import { readCapped, safeFetch } from "../lib/safefetch";
 import { FINGERPRINT_MAX_BYTES, checkFingerprints, pageFingerprint, perTick } from "../lib/freshness.mjs";
 import { ACTIVE } from "../pipeline/roster.mjs";
+export { freshnessEnabled } from "../lib/freshness-flag";
 
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 

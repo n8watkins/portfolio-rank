@@ -1,9 +1,9 @@
+import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 import Link from "next/link";
 import { ArrowRight, Newspaper, Rss } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { chip, tag as tagClass } from "@/components/ui/Chip";
 import { btnSecondary } from "@/components/ui/styles";
-import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 import { type BlogListItem, coverOf, imageSrc, postDate } from "@/lib/blog";
 
 // /blog and /blog/tag/[tag]: the newest post large, the rest in a grid, and
@@ -150,6 +150,7 @@ export function BlogIndex({ posts, tags, current }: { posts: BlogListItem[]; tag
           </div>
         )}
 
+        {/* The newsletter sign-up; it shows only while the newsletter is live. */}
         <NewsletterSignup form="blog" layout="wide" className="card mt-12 p-6 sm:p-8" />
       </div>
     </div>

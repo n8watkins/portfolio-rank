@@ -25,19 +25,19 @@ import { OLD_SITE_HOSTS } from "../lib/site";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
+import { tiersTick } from "./tiers";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
-import { NEWSLETTER_CRON, newsletterTick, type NewsletterEnv } from "./newsletter";
+import { newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
-import { freshnessTick } from "./freshness";
-import { tiersTick } from "./tiers";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
 import { jobCron } from "./crons";
+import { freshnessEnabled, freshnessTick } from "./freshness";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -141,15 +141,10 @@ const worker = {
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
   // applies owners' held removals (./owner-removals.ts), checks that last
   // night's run started and finished (./night-watch.ts),
-  // finishes people's grade requests that waited for Gemini 3.5, places every
-  // tier by rank again (./tiers.ts), makes the image library's hourly batch
-  // (./library.ts) and checks a 168th of the list's change fingerprints
-  // (./freshness.ts); the weekly
+  // finishes people's grade requests that waited for Gemini 3.5 and makes the
+  // image library's hourly batch (./library.ts) and, with FRESHNESS_ENABLED, checks a 168th of the list's change fingerprints (./freshness.ts); the weekly
   // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
-  // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off;
-  // the ten-minute one is the newsletter's (./newsletter.ts), which does
-  // nothing while NEWSLETTER_ENABLED is off. Every cron is matched by name
-  // before the last line, which starts tonight's run.
+  // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
     // Staging's less frequent crons run the same jobs (./crons.ts).
     const cron = jobCron(controller.cron);
@@ -172,11 +167,12 @@ const worker = {
           ["night watch", () => nightWatchTick(env as NightEnv, at)],
           // People's grade requests that waited for Gemini 3.5 (./night.ts).
           ["people queue", () => drainPeople(env as NightEnv)],
-          // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts).
-          ["freshness", () => freshnessTick(at)],
-          // The daily tier update when it is due (./tiers.ts); the profiles whose letter changed leave the edge cache.
-          ["tiers", () => tiersTick(at, { purgeTags: purgeTagsOf(ctx) })],
+          // Tiers by ELO (./tiers.ts): the daily cutoffs when due (a background write). Profiles show the letter only with
+          // RANKING_V2, so only then do the ones whose letter changed leave the edge cache.
+          ["tiers", () => tiersTick(at, { purgeTags: /^true$/i.test(String(env.RANKING_V2 ?? "")) ? purgeTagsOf(ctx) : undefined })],
           // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
+          // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts); only with FRESHNESS_ENABLED.
+          ["freshness", () => (freshnessEnabled(env) ? freshnessTick(at) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
         ],
         {
@@ -191,8 +187,19 @@ const worker = {
       await goalsTick(env as NightEnv, controller.scheduledTime);
       await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     }
-    else if (cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
-    else if (cron === NEWSLETTER_CRON) await newsletterTick(env as unknown as NewsletterEnv, controller.scheduledTime);
+    else if (cron === GRADER_CRON) {
+      // The grader's tick, then the blog newsletter's (./newsletter.ts) on the same
+      // five-minute cron, so the newsletter adds no trigger of its own; it returns
+      // at once without NEWSLETTER_ENABLED or KIT_API_KEY.
+      const at = controller.scheduledTime;
+      await runEach(
+        [
+          ["grader", () => graderTick(env as GraderEnv, at)],
+          ["newsletter", () => newsletterTick(env as unknown as NewsletterEnv, at)],
+        ],
+        { report: (e, task) => Sentry.captureException(e, { tags: { cron: "five-minute", task } }), log: (line) => console.log(JSON.stringify(line)) }
+      );
+    }
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };

@@ -1,338 +1,340 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ArrowUpRight, Clock, Hourglass, Sparkles, Trophy } from "lucide-react";
-import { Socials } from "@/components/Diagnostics";
+import feed from "@/data/feed.json";
+import type { Portfolio } from "@/app/page";
+import { DetailDiagnostics, Socials } from "@/components/Diagnostics";
 import type { Inspection } from "@/app/api/inspect/route";
 import { peekCached } from "@/lib/cache";
 import { CHECK_KINDS } from "@/lib/freshness.mjs";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
+import { BASE_ELO } from "@/lib/elo";
+import { loadProfileTier } from "@/lib/tiers-view";
+import { ProfileTier } from "@/components/tiers/ProfileTier";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
+import { db, ensureSchema } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
-import { BELOW_TOP_TIERS, MIN_FACEOFFS, STARTING_TIER, familyOf, tierLabel } from "@/lib/tiers.mjs";
-import { TierBadge } from "@/components/ui/badges";
-import { ROUTES } from "@/lib/nav";
-import { eyebrow } from "@/components/ui/styles";
-import { loadProfile, type Profile } from "@/lib/profile";
-import { FixList } from "@/components/profile/FixList";
-import { RecheckButton } from "@/components/profile/RecheckButton";
+import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
+import { ownerState } from "@/lib/games/claims.mjs";
+import { toolsEnabled } from "@/lib/tools/server";
+import { ProfileV2, profileMetadata } from "./profile-v2";
+import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
+import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
+import { jsonLdHtml } from "@/lib/json-ld";
 
-// A portfolio's profile, the product (owner, 2026-11-12): four parts, Rank,
-// Report card, Fix list and Share, for a listed portfolio or one added
-// through "Add your portfolio" (lib/profile.ts). Rendered on first visit and
-// re-rendered at most every 5 minutes (ISR); a re-check revalidates it at
-// once. Nothing here depends on who is looking: the ♥ state and the owner's
-// "Re-check my site" load in the browser.
+// Rendered on first visit and then served from the cache, re-rendered at most
+// every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
+// is the visitor's own and loads in the browser (LikeButton hydrate).
+// With "Add your portfolio" launched (TOOLS_ENABLED) the profile is the
+// four-part one with a fix list, for listed and added sites alike
+// (./profile-v2.tsx); until then it is this page, unchanged.
 export const revalidate = 300;
 
 export async function generateStaticParams() {
   return [];
 }
 
-async function shotFor(p: Profile): Promise<string> {
-  if (p.listed) {
-    const base = (await shotBases([p.url])).get(p.url);
-    if (base) return heroOf(base);
+// The AI-judged criteria and their names come from the rubric itself
+// (pipeline/rubric.mjs), so the page follows it when it changes.
+const AXIS_LABELS: Record<string, string> = Object.fromEntries(
+  AI_CRITERIA.map((c) => [c.id, c.name])
+);
+
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
   }
-  const og = p.saved.share?.ok && p.saved.share.card?.image?.loads ? p.saved.share.card.image.url : null;
-  return og ?? mshotsUrl(p.url, 1200);
 }
 
-/** "Jane Doe, Frontend Developer Portfolio | PortfolioRank" from the grade's roles, for search. */
-function seoTitle(p: Profile) {
-  const role = p.report?.roles[0];
-  const cap = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
-  return `${p.name}${role ? `, ${cap(role)}` : ""} Portfolio | PortfolioRank`;
+async function shotFor(url: string): Promise<string> {
+  const base = (await shotBases([url])).get(url);
+  return base ? heroOf(base) : mshotsUrl(url, 1200);
 }
 
-/** Graded and a real portfolio: the only profiles search engines are asked to index. */
-const indexable = (p: Profile) => Boolean(p.report?.isPortfolio);
+/** What search engines read about a listed site (lib/profile-seo.ts), read once per request. */
+async function seoFacts(p: Portfolio): Promise<SeoFacts> {
+  return { name: p.name, url: p.url, domain: domainOf(p.url), tagline: p.tagline ?? null, ...(await loadSeoExtras(p.url)) };
+}
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  if (toolsEnabled()) return profileMetadata({ params });
   const { slug } = await params;
-  const p = await loadProfile(decodeURIComponent(slug));
+  const url = decodeURIComponent(slug);
+  const p = (feed as Portfolio[]).find((x) => x.url === url);
   if (!p) return {};
-  const canonical = `${SITE_URL}${p.path}`;
-  if (!indexable(p)) {
-    return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical } };
-  }
-  const title = seoTitle(p);
-  const roles = p.report?.roles ?? [];
-  const kind = roles.length ? `${roles.join(", ")} portfolio` : "developer portfolio";
-  const description = `${p.name}'s ${kind} at ${p.domain}${p.tagline ? `: ${p.tagline.replace(/\.$/, "")}` : ""}.${p.tier && !p.standing.provisional ? ` Tier ${tierLabel(p.tier)} on PortfolioRank.` : " On PortfolioRank."}`;
+  const [img, facts] = await Promise.all([shotFor(url), seoFacts(p)]);
+  const title = `${p.name} - PortfolioRank`;
+  // Indexed: a description from the grade (lib/profile-seo.ts). Ungraded,
+  // "not a portfolio", a hidden grade or a site the health check hides: noindex.
+  const index = indexable(facts);
+  const description = index
+    ? profileDescription(facts)
+    : p.tagline
+      ? `${p.tagline} · ${domainOf(url)}`
+      : `Developer portfolio · ${domainOf(url)}`;
+  const canonical = `${SITE_URL}/p/${encodeURIComponent(url)}`;
   return {
     title,
-    description: description.slice(0, 300),
+    description,
+    ...(index ? {} : { robots: { index: false, follow: true } }),
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: "profile" },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: {
+      title,
+      description,
+      url: canonical,
+      type: "website",
+      images: [{ url: img }],
+    },
+    twitter: { card: "summary_large_image", title, description, images: [img] },
   };
 }
 
-function SectionTitle({ id, kicker, title, children }: { id: string; kicker: string; title: string; children?: React.ReactNode }) {
+// The AI review shows for any graded site, but only the top tiers (S/A/B) get the
+// prominent letter badge - lower tiers show the axis scores under a neutral "AI"
+// mark, so we never slap a public "D" on someone's work.
+function publicGrade(raw: unknown): null | {
+  tier: string;
+  showTier: boolean;
+  model?: string;
+  /** Rubric v2: weighted AI quality (1-5) and the share of code checks passed (0-100). */
+  quality?: number;
+  checks?: number;
+  axes: { key: string; label: string; score: number; note?: string }[];
+} {
+  if (typeof raw !== "string") return null;
+  let r: Record<string, { score?: number; note?: string } | string | undefined>;
+  try {
+    r = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const tier = r.tier as string | undefined;
+  if (!tier || !["S", "A", "B", "C", "D"].includes(tier)) return null;
+  const axes = Object.entries(AXIS_LABELS)
+    .map(([key, label]) => {
+      const ax = r[key];
+      if (!ax || typeof ax === "string" || typeof ax.score !== "number") return null;
+      return { key, label, score: ax.score, note: ax.note };
+    })
+    .filter((a): a is NonNullable<typeof a> => a !== null);
+  return {
+    tier,
+    showTier: ["S", "A", "B"].includes(tier),
+    model: typeof r.model === "string" ? r.model : undefined,
+    quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
+    checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
+    axes,
+  };
+}
+
+export default async function PortfolioPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  if (toolsEnabled()) return ProfileV2({ params });
+  const { slug } = await params;
+  const url = decodeURIComponent(slug);
+  const portfolio = (feed as Portfolio[]).find((p) => p.url === url);
+  if (!portfolio) notFound();
+
+  await ensureSchema();
+  let rating = { elo: BASE_ELO, votes: 0 };
+  const row = (
+    await db().execute({
+      sql: "SELECT elo, votes FROM ratings WHERE url = ?",
+      args: [url],
+    })
+  ).rows[0];
+  if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
+  // The page check as last measured (/api/inspect's cache), so the social
+  // links and the checklist are there at first paint instead of moving the
+  // page when the browser's own request answers.
+  const inspection = await peekCached<Inspection>("inspect", url, CHECK_KINDS.polish.maxAgeMs, { isFailure: (d) => !d.ok, freshness: { kind: "polish", url } }).catch(() => null);
+
+  const stars = Number(
+    (
+      await db().execute({
+        // Kept by triggers on votes (lib/schema.mjs COUNTERS), not counted over the vote log.
+        sql: "SELECT n FROM star_counts WHERE url = ?",
+        args: [url],
+      })
+    ).rows[0]?.n ?? 0
+  );
+
+  // Likes are a separate signal from the ⭐ super-vote: a public save count
+  // plus whether the signed-in rater has liked this one (drives the ♥ state).
+  const saveCount = Number(
+    (
+      await db().execute({
+        sql: "SELECT COUNT(*) AS n FROM likes WHERE url = ?",
+        args: [url],
+      })
+    ).rows[0]?.n ?? 0
+  );
+
+  const rubricRow = (
+    await db().execute({
+      sql: "SELECT ai_rubric FROM portfolios WHERE url = ?",
+      args: [url],
+    })
+  ).rows[0];
+  // A verified owner may remove their portfolio or hide its grade
+  // (lib/games/claims.mjs); a removed one is gone at once.
+  const owner = await ownerState(db(), url);
+  if (owner.removedAt) notFound();
+  const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
+  // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise, and the page stays as it was.
+  const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
+
+  const [shot, facts] = await Promise.all([shotFor(url), seoFacts(portfolio)]);
+  // A ProfilePage about the person and its breadcrumb trail, indexable profiles only.
+  const jsonLd = profileJsonLd(facts, { canonical: `${SITE_URL}/p/${encodeURIComponent(url)}`, title: `${portfolio.name} - PortfolioRank` });
+
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />}
       <div>
-        <p className={eyebrow}>{kicker}</p>
-        <h2 id={id} className="mt-1 text-xl font-bold tracking-tight">
-          {title}
-        </h2>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Rank({ p }: { p: Profile }) {
-  const s = p.standing;
-  const faceoffs = Math.floor(s.faceoffs);
-  const strong = familyOf(p.tier) === "A" || familyOf(p.tier) === "S";
-  const toGo = Math.max(0, MIN_FACEOFFS - faceoffs);
-  const votesText = `${s.votes.toLocaleString("en-US")} real vote${s.votes === 1 ? "" : "s"}`;
-  return (
-    <section aria-labelledby="rank" className={`card p-5 sm:p-6 ${strong ? "card-featured" : ""}`}>
-      <SectionTitle id="rank" kicker="Rank" title={p.tier && !s.provisional ? (s.top != null ? `Top ${s.top}%` : `Tier ${tierLabel(p.tier)}`) : "Where it stands"} />
-      <div className="flex items-center gap-5">
-        {p.tier ? (
-          <a href="/grading#tiers" aria-label={`Tier ${tierLabel(p.tier)}: how tiers work`} className="rounded-2xl">
-            <TierBadge tier={p.tier} size="lg" />
-          </a>
-        ) : (
-          <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-raised text-lg font-semibold text-mute ring-1 ring-inset ring-edge" aria-hidden>
-            ?
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          {!p.listed ? (
-            <>
-              <p className="font-semibold">Not ranked yet</p>
-              <p className="text-sm text-mute">It joins the face-offs once it&apos;s graded, starting at tier {STARTING_TIER}.</p>
-            </>
-          ) : p.hideGrade ? (
-            <p className="text-sm text-mute">ELO {s.elo} from {votesText}. The owner hid the grade.</p>
-          ) : s.tier && s.seeded ? (
-            <>
-              <p className="font-semibold">Starting rank from automated checks</p>
-              <p className="text-sm text-mute">
-                ELO <span className="font-semibold tabular-nums text-ink">{s.elo}</span> · {votesText}
-                {p.tier && s.of != null ? ` · among ${s.of.toLocaleString("en-US")} ranked portfolios` : ""}. Votes move it from here.
+        <div className="mb-4 rounded-xl border border-edge bg-card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight">
+                {portfolio.name}
+              </h1>
+              <p className="mt-1 text-sm text-mute">
+                {portfolio.tagline ?? "Developer"} · {domainOf(url)}
               </p>
-              {!p.tier && <p className="text-sm text-mute">{BELOW_TOP_TIERS}.</p>}
-            </>
-          ) : s.tier && s.provisional ? (
-            <>
-              <p className="font-semibold">
-                {toGo} of {MIN_FACEOFFS} face-offs until its letter
-              </p>
-              <p className="text-sm text-mute">Every portfolio starts at {STARTING_TIER}; after {MIN_FACEOFFS} face-offs its ELO sets the tier.</p>
-              <div className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-edge" role="progressbar" aria-label="Face-offs toward a letter" aria-valuemin={0} aria-valuemax={MIN_FACEOFFS} aria-valuenow={Math.min(faceoffs, MIN_FACEOFFS)}>
-                <div className="h-1.5 rounded-full bg-accent" style={{ width: `${(Math.min(s.faceoffs, MIN_FACEOFFS) / MIN_FACEOFFS) * 100}%` }} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="mr-1 text-right">
+                <p className="text-xl font-bold tabular-nums">{eloTier ? eloTier.elo : rating.elo}</p>
+                <p className="text-xs text-mute">
+                  {eloTier ? (
+                    <>ELO · {eloTier.votes.toLocaleString("en-US")} real vote{eloTier.votes === 1 ? "" : "s"}</>
+                  ) : (
+                    <>
+                      ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
+                    </>
+                  )}
+                </p>
+                {stars > 0 && (
+                  <p className="text-xs font-semibold text-accent">
+                    ⭐ {stars} loved
+                  </p>
+                )}
               </div>
-            </>
-          ) : s.tier && p.tier ? (
-            <p className="text-sm text-mute">
-              ELO <span className="font-semibold tabular-nums text-ink">{s.elo}</span> from {faceoffs} face-offs
-              {s.of != null ? ` among ${s.of.toLocaleString("en-US")} ranked portfolios` : ""}. It moves as people vote.
-            </p>
-          ) : s.tier ? (
-            <p className="text-sm text-mute">
-              {BELOW_TOP_TIERS}. ELO {s.elo} from {faceoffs} face-offs.
-            </p>
-          ) : (
-            <p className="text-sm text-mute">
-              Not graded yet, so no letter. ELO {s.elo} from {faceoffs} face-offs.
-            </p>
-          )}
+              <Socials url={url} initial={inspection} />
+              {/* count+showCount → the ♥ label carries a live "saved" total that
+                  updates when this same button toggles (no stale server value). */}
+              <LikeButton
+                url={url}
+                name={portfolio.name}
+                hydrate
+                count={saveCount}
+                showCount
+              />
+              <AddToListButton url={url} />
+              <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg bg-fill px-4 py-2 text-sm font-semibold text-on-fill transition hover:opacity-85"
+              >
+                Visit site ↗
+              </a>
+            </div>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shot}
+            alt={`Screenshot of ${domainOf(url)}`}
+            fetchPriority="high"
+            className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
+          />
         </div>
-        {p.listed && ROUTES.faceoff && (
-          <a href={ROUTES.faceoff} className="hidden shrink-0 rounded-lg border border-edge-strong px-3 py-2 text-sm font-semibold transition hover:border-accent sm:block">
-            Vote in a face-off
-          </a>
-        )}
-      </div>
-      {!p.hideGrade && s.check && <PointsBreakdown check={s.check} />}
-    </section>
-  );
-}
 
-/** The points from automated checks behind the starting rank (lib/check-points.mjs), item by item. */
-function PointsBreakdown({ check }: { check: NonNullable<Profile["standing"]["check"]> }) {
-  return (
-    <div className="mt-5 border-t border-edge pt-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">
-          Automated checks: <span className="tabular-nums">{check.total}</span> of 100 points
-        </h3>
-        <a href="/grading#points" className="text-xs font-medium text-accent hover:underline">
-          How the points work
-        </a>
-      </div>
-      <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
-        {check.items.map((i) => (
-          <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-1.5">
-            <span className={i.measured ? "" : "text-mute"}>
-              {i.name}
-              {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
-            </span>
-            <span className={`shrink-0 tabular-nums ${i.id === "template" && i.points < 0 ? "text-down" : i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
-              {i.id === "template" ? (i.points < 0 ? i.points : "0") : `${i.points}/${i.max}`}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+        {eloTier && <ProfileTier t={eloTier} />}
 
-function ReportCard({ p }: { p: Profile }) {
-  const r = p.report;
-  return (
-    <section aria-labelledby="report" className="card p-5 sm:p-6">
-      <SectionTitle id="report" kicker="Report card" title={r ? "How to improve, weakest first" : "Coming"} />
-      {r ? (
-        <>
-          <p className="-mt-2 mb-4 text-xs text-mute">
-            AI design review by Gemini{r.model ? ` (${r.model})` : ""}: an opinion, not a verdict, and it doesn&apos;t set the tier ·{" "}
-            <a href="/grading" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
-              how grading works
-            </a>
-          </p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {[...r.axes]
-              .sort((a, b) => a.score - b.score)
-              .map((ax) => (
+        <DetailDiagnostics url={url} initialInspection={inspection} />
+
+        {grade && (
+          <div className="mt-4 rounded-xl border border-edge bg-card p-5">
+            <div className="flex items-center gap-3">
+              {/* With tiers by ELO the grade is the report card: no letter here (the tier above comes from votes). */}
+              <span
+                className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
+                  grade.showTier && !eloTier ? "bg-fill text-on-fill" : "bg-edge text-ink"
+                }`}
+              >
+                {grade.showTier && !eloTier ? grade.tier : "AI"}
+              </span>
+              <div>
+                <p className="font-semibold">{eloTier ? "Report card: how to improve" : "AI design review"}</p>
+                <p className="text-xs text-mute">
+                  by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
+                  a verdict
+                </p>
+                {(grade.quality !== undefined || grade.checks !== undefined) && (
+                  <p className="mt-0.5 text-xs text-mute">
+                    {grade.quality !== undefined && (
+                      <>
+                        Quality <span className="font-semibold tabular-nums text-ink">{grade.quality.toFixed(1)}/5</span>
+                      </>
+                    )}
+                    {grade.quality !== undefined && grade.checks !== undefined && " · "}
+                    {grade.checks !== undefined && (
+                      <>
+                        Checks passed <span className="font-semibold tabular-nums text-ink">{grade.checks}/100</span>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {grade.axes.map((ax) => (
                 <div key={ax.key} className="rounded-lg border border-edge p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{ax.label}</span>
-                    <span className="text-sm font-bold tabular-nums">{ax.score}/5</span>
+                    <span className="text-sm font-bold tabular-nums">
+                      {ax.score}/5
+                    </span>
                   </div>
                   <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
-                    <div className="h-1.5 rounded-full bg-accent" style={{ width: `${(ax.score / 5) * 100}%` }} />
+                    <div
+                      className="h-1.5 rounded-full bg-accent"
+                      style={{ width: `${(ax.score / 5) * 100}%` }}
+                    />
                   </div>
-                  {ax.note && <p className="mt-1.5 text-xs text-mute">{ax.note}</p>}
+                  {ax.note && (
+                    <p className="mt-1.5 text-xs text-mute">{ax.note}</p>
+                  )}
                 </div>
               ))}
+            </div>
           </div>
-        </>
-      ) : (
-        <p className="flex items-start gap-3 text-sm text-mute">
-          {p.stage === "grading" ? <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden /> : <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />}
-          <span>
-            {p.stage === "grading"
-              ? "Being graded now: Gemini reads a screenshot and the page and scores design, writing and projects. This page fills in when it's done."
-              : p.hideGrade
-                ? "The owner hid the grade."
-                : "Waiting for its AI grade. We grade new portfolios when there's room in the day's free quota; this page fills in when it's done."}
-            {p.job?.reason ? ` ${p.job.reason}` : ""}
-          </span>
-        </p>
-      )}
-    </section>
-  );
-}
+        )}
 
-function ShareCard({ p }: { p: Profile }) {
-  // Once it has its letter: the starting B while face-offs are under way isn't one.
-  if (!p.tier || p.standing.provisional) return null;
-  const link = `${SITE_URL}${p.path}`;
-  return (
-    <section aria-labelledby="share" className="card p-5 sm:p-6">
-      <SectionTitle id="share" kicker="Share" title={`Tier ${tierLabel(p.tier)}: show it off`}>
-        <ShareButton url={link} title={p.name} />
-      </SectionTitle>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={`${p.path}/opengraph-image`} alt={`${p.name}'s PortfolioRank card, tier ${tierLabel(p.tier)}`} className="aspect-[1200/630] w-full max-w-xl rounded-xl border border-edge bg-raised" />
-    </section>
-  );
-}
-
-export default async function PortfolioPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const p = await loadProfile(decodeURIComponent(slug));
-  if (!p) notFound();
-  const shot = await shotFor(p);
-  // The page check as last measured (/api/inspect's cache), so the social
-  // links are there at first paint instead of moving the header when the
-  // browser's own request answers.
-  const inspection = p.listed
-    ? await peekCached<Inspection>("inspect", p.url, CHECK_KINDS.polish.maxAgeMs, { isFailure: (d) => !d.ok, freshness: { kind: "polish", url: p.url } }).catch(() => null)
-    : null;
-  const jsonLd = indexable(p)
-    ? {
-        "@context": "https://schema.org",
-        "@type": "ProfilePage",
-        url: `${SITE_URL}${p.path}`,
-        name: seoTitle(p),
-        mainEntity: {
-          "@type": "Person",
-          name: p.name,
-          ...(p.report?.roles.length ? { jobTitle: p.report.roles[0] } : {}),
-          url: p.url,
-          sameAs: [p.url],
-        },
-      }
-    : null;
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-4 px-4 pb-12 pt-6 sm:px-6">
-      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />}
-      <header className="card overflow-hidden">
-        <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{p.name}</h1>
-            <p className="mt-1 text-sm text-mute">
-              {p.tagline ? `${p.tagline} · ` : ""}
-              {p.domain}
-            </p>
-            {p.report?.roles.length ? <p className="mt-2 text-xs font-medium uppercase tracking-wider text-mute">{p.report.roles.join(" · ")}</p> : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {p.listed && (
-              <>
-                <Socials url={p.url} initial={inspection} />
-                <LikeButton url={p.url} name={p.name} hydrate count={p.saves} showCount />
-                <AddToListButton url={p.url} />
-              </>
-            )}
-            <a href={p.url} target="_blank" rel="noopener" className="group btn-sheen inline-flex h-11 items-center gap-2 rounded-lg bg-fill px-5 text-sm font-semibold text-on-fill transition active:scale-[0.97]">
-              Visit {p.domain} <ArrowUpRight className="h-4 w-4" aria-hidden />
-            </a>
-          </div>
-        </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={shot} alt={`Screenshot of ${p.domain}`} fetchPriority="high" className="h-56 w-full border-t border-edge bg-raised object-cover object-top sm:h-80" />
-      </header>
-
-      {!p.listed && (
-        <p className="flex items-start gap-2 rounded-xl border border-edge bg-card p-3.5 text-sm">
-          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
-          <span>
-            Added to PortfolioRank. This page is private until the site is graded: only people with the link can see it, and search engines don&apos;t list it.
-          </span>
-        </p>
-      )}
-
-      <Rank p={p} />
-      <ReportCard p={p} />
-
-      <section aria-labelledby="fixes" className="card p-5 sm:p-6">
-        <SectionTitle id="fixes" kicker="Fix list" title="What to fix, and how">
-          {p.listed && <RecheckButton url={p.url} />}
-        </SectionTitle>
-        <FixList p={p} />
-      </section>
-
-      <ShareCard p={p} />
-
-      {!p.tier && ROUTES.add && (
-        <p className="flex items-center justify-center gap-2 pt-4 text-sm text-mute">
-          <Trophy className="h-4 w-4 text-accent" aria-hidden /> Know a great portfolio?{" "}
-          <a href={ROUTES.add} className="font-semibold text-accent underline-offset-4 hover:underline">
-            Add your portfolio
+        <p className="py-8 text-center text-xs text-mute">
+          Diagnostics run live against the site and are cached. Think something
+          is wrong?{" "}
+          <a
+            href="https://github.com/n8watkins/portfolio-rank/issues"
+            className="underline underline-offset-4 hover:text-ink"
+          >
+            Open an issue
           </a>
+          .
         </p>
-      )}
+      </div>
     </div>
   );
 }

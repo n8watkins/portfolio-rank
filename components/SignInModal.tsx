@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { signIn } from "next-auth/react";
 import { Modal } from "@/components/Modal";
 import { EmailSignIn } from "@/components/signin/EmailSignIn";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 
 // One sign-in dialog for the whole site, mounted in the root layout. Anything
 // that needs a signed-in user calls useSignIn()(...) with its own wording.
@@ -62,7 +63,9 @@ function fromAddress(): State | null {
     error,
     title: error ? "Sign-in didn't finish" : "Sign in to PortfolioRank",
     body: error
-      ? "The sign-in didn't complete. Try again, or use the other way in below."
+      ? EMAIL_SIGNIN_ENABLED
+        ? "The sign-in didn't complete. Try again, or use the other way in below."
+        : "GitHub didn't complete the sign-in. Try again - if it keeps failing, open an issue on GitHub."
       : "Vote in the official rankings, like portfolios and keep lists. One account, one vote per matchup.",
   };
 }
@@ -110,14 +113,20 @@ export function SignInProvider({ children }: { children: React.ReactNode }) {
           Continue with GitHub
         </button>
 
-        <div className="my-4 flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-mute" aria-hidden>
-          <span className="h-px flex-1 bg-edge" /> or <span className="h-px flex-1 bg-edge" />
-        </div>
+        {EMAIL_SIGNIN_ENABLED && (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-mute" aria-hidden>
+              <span className="h-px flex-1 bg-edge" /> or <span className="h-px flex-1 bg-edge" />
+            </div>
 
-        <EmailSignIn callbackUrl={s.callbackUrl ?? (typeof window === "undefined" ? "/" : window.location.pathname + window.location.search)} />
+            <EmailSignIn callbackUrl={s.callbackUrl ?? (typeof window === "undefined" ? "/" : window.location.pathname + window.location.search)} />
+          </>
+        )}
 
         <p className="mt-4 text-xs text-mute">
-          GitHub shares only your public profile; email, only your address. Either way, one account counts one vote.
+          {EMAIL_SIGNIN_ENABLED
+            ? "GitHub shares only your public profile; email, only your address. Either way, one account counts one vote."
+            : "We only see your public profile - used to count one vote per person."}
         </p>
 
         {s.skipLabel && (

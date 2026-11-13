@@ -40,9 +40,9 @@ export async function startGrade(
     now?: number;
   }
 ): Promise<NextResponse> {
-  // The free checks, at once: the page is fetched again (its fingerprint is
-  // what the cooldown compares), its link checks reused while it is
-  // unchanged, a failure reused for 10 minutes (lib/grader/quick.ts).
+  // The free checks, at once (cached per address for a day).
+  // The page is fetched again (its fingerprint is what the cooldown compares),
+  // its link checks reused while it is unchanged (lib/grader/quick.ts).
   const quick = await quickFacts(client, { url: target.url, siteKey: target.siteKey, fetcher: graderFetcher(), now, listedUrl: listedSite(target.siteKey)?.url ?? null });
   if (!quick.ok) {
     const { cached, ...checks } = quick;

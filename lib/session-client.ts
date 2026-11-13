@@ -46,16 +46,9 @@ function load() {
   if (started) return;
   started = true;
   readSession()
-    .then((s) => {
+    .then((s: { login?: string; provider?: string; isAdmin?: boolean; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
       state = s?.login
-        ? {
-            login: s.login,
-            provider: s.provider === "email" ? "email" : "github",
-            isAdmin: s.isAdmin === true,
-            name: s.user?.name ?? null,
-            email: s.user?.email ?? null,
-            image: s.user?.image ?? null,
-          }
+        ? { login: s.login, provider: s.provider === "email" ? "email" : "github", isAdmin: s.isAdmin === true, name: s.user?.name ?? null, email: s.user?.email ?? null, image: s.user?.image ?? null }
         : null;
     })
     .catch(() => {

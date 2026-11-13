@@ -382,7 +382,8 @@ test("how grading works: tiers by ELO, the fine print, how to improve, the bands
     assert.deepEqual(errors, []);
     await context.close();
   }
-  const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+  // The site's own pages are in the sitemap's pages part (lib/sitemap-entries.ts).
+  const sitemap = await (await fetch(`${BASE}/sitemap/pages.xml`)).text();
   assert.match(sitemap, /\/grading<\/loc>/);
   assert.doesNotMatch(sitemap, /\/grade\/[A-Za-z0-9_-]{22}/);
 });

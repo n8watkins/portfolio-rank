@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { useNewsletterOn } from "@/components/newsletter/useNewsletterOn";
 import { useSignIn } from "@/components/SignInModal";
 import { SHELL_SIGN_IN } from "@/components/shell/AccountMenu";
 import { ThemeChooser } from "@/components/shell/ThemeChooser";
@@ -11,6 +10,8 @@ import { useStoredFlag } from "@/lib/client-state";
 import { ROUTES } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { setTheme } from "@/lib/theme";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
+import { useNewsletterOn } from "@/components/newsletter/useNewsletterOn";
 
 // Settings: the account, the theme and voting, then what this site keeps in
 // your browser, in plain words. Nothing here tracks you, so there is no
@@ -19,7 +20,7 @@ import { setTheme } from "@/lib/theme";
 
 /** Cookies: needed for what you do on the site, never for tracking. */
 const COOKIES = [
-  { what: "Sign-in session", why: "Keeps you signed in. Only after you sign in with GitHub or an email link, with two short-lived helpers for the sign-in itself." },
+  { what: "Sign-in session", why: `Keeps you signed in. Only after you sign in with GitHub${EMAIL_SIGNIN_ENABLED ? " or an email link" : ""}, with two short-lived helpers for the sign-in itself.` },
   { what: "Browser id", why: "A random, signed id so a vote, poll answer or quiz counts once. Set the first time you vote, play or grade." },
   { what: "Your reports", why: "Which grade reports this browser asked for, so only you see the owner's tools." },
   { what: "Print pass", why: "A one-hour pass to print a portfolio's report." },
@@ -170,9 +171,9 @@ const box = "divide-y divide-edge rounded-xl border border-edge bg-card";
 const smallBtn = "inline-flex h-10 items-center gap-2 rounded-lg border border-edge px-3.5 text-sm font-semibold transition hover:border-edge-strong";
 
 export default function SettingsPage() {
-  const newsletterOn = useNewsletterOn();
   const [autoOpen, setAutoOpen] = useStoredFlag("pr_autoopen");
   const session = useClientSession();
+  const newsletterOn = useNewsletterOn();
   const openSignIn = useSignIn();
   const [forgot, setForgot] = useState(false);
 
@@ -220,7 +221,7 @@ export default function SettingsPage() {
               <SignOutEverywhere />
             </>
           ) : (
-            <Row id="gh" title="Not signed in" desc="Sign in with GitHub or your email to make your votes count and keep likes, lists and badges on every device.">
+            <Row id="gh" title="Not signed in" desc={`Sign in with GitHub${EMAIL_SIGNIN_ENABLED ? " or your email" : ""} to make your votes count and keep likes, lists and badges on every device.`}>
               <button type="button" onClick={() => openSignIn(SHELL_SIGN_IN)} className={smallBtn}>
                 Sign in
               </button>

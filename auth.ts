@@ -3,6 +3,7 @@ import GitHub from "next-auth/providers/github";
 import Credentials from "next-auth/providers/credentials";
 import { db, ensureSchema } from "@/lib/db";
 import { consumeToken } from "@/lib/signin/store.mjs";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 import { authLogger } from "@/lib/log";
 import { SESSION_VERSION, isCurrentSession } from "@/lib/session-version.mjs";
 import { adminRaterId, revokedAt, sessionValid, signedInAt } from "@/lib/session-revocation.mjs";
@@ -22,16 +23,30 @@ declare module "next-auth" {
     login?: string;
     /** When the account was created (ISO 8601): GitHub's date, for MIN_GITHUB_ACCOUNT_AGE_DAYS, or the email account's. */
     accountCreatedAt?: string;
-    /** How the account signs in. */
-    provider?: "github" | "email";
     /**
      * This is the admin's account (ADMIN_GITHUB_ID), so the menus show an
      * "Admin" link. Display only: every admin page and API checks again on
      * the server (lib/admin.ts requireAdmin).
      */
     isAdmin?: boolean;
+    /** How the account signs in. */
+    provider?: "github" | "email";
   }
 }
+
+/** The "email-link" provider: consumes a sign-in link's token once (lib/signin/store.mjs). */
+const emailLink = Credentials({
+  id: "email-link",
+  name: "Email link",
+  credentials: { token: {} },
+  async authorize(credentials) {
+    await ensureSchema();
+    const out = await consumeToken(db(), String(credentials?.token ?? ""), { secret: process.env.AUTH_SECRET });
+    const account = "account" in out ? out.account : null;
+    if (!account) return null;
+    return { id: account.id, email: account.email, createdAt: account.createdAt } as { id: string; email: string };
+  },
+});
 
 /**
  * Whether a signed-in session may go on (lib/session-revocation.mjs): not
@@ -53,21 +68,8 @@ async function stillValid(token: Record<string, unknown>): Promise<boolean> {
 }
 
 const config: NextAuthConfig = {
-  providers: [
-    GitHub,
-    Credentials({
-      id: "email-link",
-      name: "Email link",
-      credentials: { token: {} },
-      async authorize(credentials) {
-        await ensureSchema();
-        const out = await consumeToken(db(), String(credentials?.token ?? ""), { secret: process.env.AUTH_SECRET });
-        const account = "account" in out ? out.account : null;
-        if (!account) return null;
-        return { id: account.id, email: account.email, createdAt: account.createdAt } as { id: string; email: string };
-      },
-    }),
-  ],
+  // The email link only while email sign-in is on (lib/signin/flag.ts).
+  providers: EMAIL_SIGNIN_ENABLED ? [GitHub, emailLink] : [GitHub],
   trustHost: true,
   // Sign-in and its errors open the site's own dialog (components/SignInModal),
   // never Auth.js's unstyled stock pages.
@@ -81,16 +83,16 @@ const config: NextAuthConfig = {
         token.raterId = `gh:${profile.id}`;
         token.login = String(profile.login);
         if (typeof profile.created_at === "string") token.accountCreatedAt = profile.created_at;
-        token.provider = "github";
         token.at = Date.now();
+        token.provider = "github";
       }
       if (account?.provider === "email-link" && user?.id && user.email) {
         token.sv = SESSION_VERSION;
         token.raterId = user.id;
         token.login = user.email;
         token.accountCreatedAt = (user as { createdAt?: string }).createdAt;
-        token.provider = "email";
         token.at = Date.now();
+        token.provider = "email";
       }
       // Returning null ends the session (the cookie is cleared): a session
       // from before the current version is signed out, once.

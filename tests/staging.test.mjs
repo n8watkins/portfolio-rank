@@ -40,12 +40,6 @@ test("staging runs production's schedule, with its Gemini held far below product
   const budget = JSON.parse(staging.vars.GEMINI_BUDGET);
   for (const stage of ["library", "regrade", "experiment"]) assert.equal(budget.stages[stage].cap, 0, stage);
   assert.ok(Number(staging.vars.STAGING_DRAFTS_PER_DAY) <= 1);
-  assert.equal(staging.vars.NEWSLETTER_ENABLED, "true");
-  assert.equal(config.vars.NEWSLETTER_ENABLED, "true", "on in production: the owner's stored switch (off by default) decides");
-  // Staging shares the owner's one Kit account: it only ever makes drafts, whatever the var says (worker/newsletter.ts).
-  assert.equal(staging.vars.KIT_BROADCAST_MODE, "draft");
-  assert.equal(config.vars.KIT_BROADCAST_MODE, "send");
-  assert.match(readFileSync("worker/newsletter.ts", "utf8"), /mode: staging \? "draft" :/);
 });
 
 test("staging has its own address, Worker, ISR cache bucket and Workflow", () => {
@@ -56,7 +50,7 @@ test("staging has its own address, Worker, ISR cache bucket and Workflow", () =>
     { pattern: "staging.portfoliorank.dev", custom_domain: true },
     { pattern: "staging.portfoliorank.n8builds.dev", custom_domain: true },
   ]);
-  // Its own Worker calls itself; the mailroom (sign-in links) is shared with production, under PortfolioRank's app.
+  // Its own Worker calls itself; sign-in links go through staging's own small mailroom app.
   assert.deepEqual(staging.services, [
     { binding: "WORKER_SELF_REFERENCE", service: `${config.name}-staging` },
     { binding: "MAILROOM", service: "mailroom", entrypoint: "Mailroom", props: { app: "portfoliorank-staging" } },

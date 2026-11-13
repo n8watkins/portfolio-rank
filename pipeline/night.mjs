@@ -69,6 +69,7 @@ import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
 import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import { rankForWrite } from "../lib/tiers-store.mjs";
 import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
@@ -78,7 +79,6 @@ import { recompute } from "../lib/ranking/views.mjs";
 import { ensurePollsSchema, schedulePolls } from "./polls.mjs";
 import { contentStage } from "./content/engine.mjs";
 import { libraryStage } from "./content/library-stage.mjs";
-import { rankForWrite } from "../lib/tiers-store.mjs";
 
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
@@ -228,7 +228,7 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   }
   if (!image) return "skipped";
   const now = new Date(ctx.now());
-  // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
+  // The new grade carries its tier rank (lib/tiers-store.mjs; a background write, shown only with RANKING_V2).
   const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { url, now: ctx.now() });
   await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
   return "ok";

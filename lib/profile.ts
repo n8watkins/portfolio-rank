@@ -7,6 +7,11 @@ import { readSiteRow, readTierMeta, standingOf as liveStanding } from "@/lib/tie
 import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { seen } from "@/lib/discovery/sites.mjs";
+import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
+import { indexable, profilePageLd, socialsFrom, type SeoFacts } from "@/lib/profile-seo";
+import { breadcrumbList, graph } from "@/lib/json-ld";
+import { SITE, SITE_URL } from "@/lib/site";
+import { cache } from "react";
 import type { QuickFacts } from "@/lib/grader/quick";
 import type { PsiResult } from "@/lib/tools/psi";
 import type { ShareResult } from "@/lib/tools/share";
@@ -214,3 +219,45 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     saves,
   };
 }
+
+/**
+ * A profile's JSON-LD: the ProfilePage about the person and its breadcrumb
+ * trail (PortfolioRank > Browse > name), for an indexable profile only.
+ */
+export function profileJsonLd(f: SeoFacts, { canonical, title }: { canonical: string; title: string }) {
+  if (!indexable(f)) return null;
+  return graph([
+    profilePageLd(f, { canonical, title, siteUrl: SITE_URL, siteName: SITE.name }),
+    breadcrumbList([
+      { name: SITE.name, url: SITE_URL },
+      { name: "Browse", url: `${SITE_URL}/browse` },
+      { name: f.name, url: canonical },
+    ]),
+  ]);
+}
+
+/**
+ * What search engines read about a site beyond what its profile shows
+ * (lib/profile-seo.ts): the list's AI grade (null when the owner hid it),
+ * whether the health check hides the site, and the social links its page
+ * check found. One batch of reads, once per request (the page and its
+ * metadata share it).
+ */
+export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "report" | "hidden" | "socials">> => {
+  await ensureSchema();
+  const client = db();
+  const [row, inspect, owner] = await Promise.all([
+    client.execute({ sql: `SELECT ai_rubric, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]),
+    client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`inspect:${url}`] }).then((r) => r.rows[0]),
+    ownerState(client, url),
+  ]);
+  let inspected = null;
+  try {
+    inspected = inspect ? JSON.parse(String(inspect.v)) : null;
+  } catch {}
+  return {
+    report: owner.hideGrade ? null : reportCard(row?.ai_rubric),
+    hidden: Number(row?.hidden ?? 0) === 1,
+    socials: socialsFrom(inspected),
+  };
+});

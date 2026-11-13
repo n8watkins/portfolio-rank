@@ -68,6 +68,8 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
 
 Owner decision of 2026-11-11 ([docs/DECISIONS.md](docs/DECISIONS.md#infrastructure)): if a site hasn't changed, don't measure it again; if it has, measure it again.
 It isn't about saving free API requests: re-runs take time, and a changed site should not show old results.
+It has a launch switch, `FRESHNESS_ENABLED` ([lib/freshness-flag.ts](lib/freshness-flag.ts)): `"false"` in production and `"true"` on staging.
+While it is off, the hourly cron makes no fingerprint fetches and profiles say "Measured on <date>" as before, without "site unchanged since" or "re-measuring"; the reuse rules below apply either way.
 The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mjs).
 
 **The rule, for every check on a portfolio:** reuse the stored result while the site is unchanged.
@@ -436,6 +438,8 @@ While `GRADER_ENABLED` is not `"true"` it returns before reading anything.
 ## Email sign-in
 
 Owner request of 2026-11-12: besides GitHub, anyone can sign in with an emailed one-time link; email accounts' votes count fully (owner decision: deal with fake accounts only if it actually happens).
+It has its own launch switch (decision D3): `EMAIL_SIGNIN_ENABLED` in wrangler.jsonc, `"false"` in production and `"true"` on staging, inlined at build time as `NEXT_PUBLIC_EMAIL_SIGNIN_ENABLED` ([lib/signin/flag.ts](lib/signin/flag.ts)).
+While it is off the sign-in dialog and Settings offer GitHub only, `/signin/email` and `POST /api/signin/email` answer 404, and the `email-link` provider is not registered, so nothing is sent.
 
 - **The request** (`POST /api/signin/email { email, turnstileToken?, callbackUrl? }`, [app/api/signin/email/route.ts](app/api/signin/email/route.ts)): this site's Origin, a plausible address, 10 attempts an hour and 30 a day per network (the IPv4 address or IPv6 /64), Turnstile (action `signin-email`, refused on the deployed Workers without the secret), then 3 links an hour and 6 a day per address; networks and addresses are kept only as keyed hashes in `rate_limits`.
   The answer is the same `{ sent: true }` for any address that gets that far, new or known; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited` with `retry-after`, 503 `email_unavailable`.
@@ -453,19 +457,19 @@ Owner request of 2026-11-12: besides GitHub, anyone can sign in with an emailed 
 
 Owner request of 2026-11-12: people sign up on the blog and get each new post by email; the owner sees who signs up.
 It replaces the planned weekly digest (docs/DECISIONS.md "A weekly newsletter"): one email per published post, at most two a week (the blog's publish cap).
-Two switches, both needed (owner, 2026-11-13): `NEWSLETTER_ENABLED`, the deploy-level kill switch (wrangler.jsonc: `"true"` in production and on staging; the build also inlines it for the forms as `NEXT_PUBLIC_NEWSLETTER_ENABLED`), and the owner's stored switch, "Turn newsletter on/off" on `/admin/blog/newsletter` (off until turned on, no deploy needed).
+Two switches, both needed (owner, 2026-11-13): `NEWSLETTER_ENABLED`, the deploy-level kill switch (wrangler.jsonc: `"false"` in production until launch, `"true"` on staging; the build also inlines it for the forms as `NEXT_PUBLIC_NEWSLETTER_ENABLED`, so while it is off pages make no status request at all), and the owner's stored switch, "Turn newsletter on/off" on `/admin/blog/newsletter` (off until turned on, no deploy needed).
 The stored switch ([lib/newsletter/switch.mjs](lib/newsletter/switch.mjs), `POST /api/admin/newsletter/switch`, admin only) logs every change with who and when in `newsletter_switch_log`.
-While either is off, no sign-up form shows anywhere (the forms and the settings note ask `GET /api/newsletter/status` once per page load, because the blog's pages are cached at the edge), `POST /api/newsletter/subscribe` answers 404, and the cron queues and creates nothing; Kit stays connected.
+While either is off, or there is no `KIT_API_KEY`, no sign-up form shows anywhere (the forms and the settings note ask `GET /api/newsletter/status` once per page load, because the blog's pages are cached at the edge), `POST /api/newsletter/subscribe` answers 404, and the newsletter's tick queues and creates nothing, returning before any database read; Kit stays connected.
 Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12, replacing the self-sent version through mailroom); our database keeps no address.
 
-- **The forms** ([components/newsletter/NewsletterSignup.tsx](components/newsletter/NewsletterSignup.tsx)): beside a post in the right-hand margin on wide screens (1280 px and up, sticky while you read), after the post below that, on `/blog`, and in the site footer on every other page.
+- **The forms** ([components/newsletter/NewsletterSignup.tsx](components/newsletter/NewsletterSignup.tsx)): after a post, on `/blog`, and in the site footer on every other page.
   An address ("Email for new posts") and Turnstile (action `newsletter`, loaded on first hover or focus).
 - **The request** (`POST /api/newsletter/subscribe { email, turnstileToken?, source?, form? }`, [app/api/newsletter/subscribe/route.ts](app/api/newsletter/subscribe/route.ts)): this site's Origin, a plausible address, 10 attempts an hour and 30 a day per network, Turnstile (refused on the deployed Workers without the secret), then 3 sign-ups a day per address, all as keyed hashes in `rate_limits` like email sign-in.
   Then Kit ([lib/newsletter/kit.mjs](lib/newsletter/kit.mjs)): the address is created as an `inactive` subscriber and added to the sign-up form, with the page it came from as the referrer.
   The answer is the same `{ ok: true }` for a new, pending or confirmed address; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited`, 503 `email_unavailable` (Kit not set up or not answering).
 - **Double opt-in and unsubscribe** are Kit's: the form has double opt-in on, so Kit sends its confirm email and only confirmed subscribers get posts; every broadcast carries Kit's unsubscribe link (`{{ unsubscribe_url }}`) and one-click header, and Kit handles bounces and complaints.
 - **The form:** `KIT_FORM_ID` when set, else the account's only active form (asked once a day, cached); with several forms and no `KIT_FORM_ID`, sign-ups answer 503.
-- **New posts** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the ten-minute cron (`*/10 * * * *`, production and staging) turns each such post, once it is live, into an issue and the issue into one Kit broadcast to every subscriber.
+- **New posts** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the newsletter's tick (on the five-minute grader cron `*/5 * * * *`, no trigger of its own; production and staging) turns each such post, once it is live, into an issue and the issue into one Kit broadcast to every subscriber.
   `KIT_BROADCAST_MODE` `"send"` (production) schedules it 10 minutes ahead (the V4 API has no "send now"); `"draft"` saves a draft, and so does a 403 when scheduling.
   A draft emails the owner one line, "Newsletter: draft ready in Kit", through the owner-alert gate to `OWNER_EMAIL`.
   Staging always makes drafts, with `[staging]` in the subject: it shares the owner's one Kit account.
@@ -479,6 +483,7 @@ Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12,
 - **Privacy:** no address is stored here; `newsletter_issues` holds only posts and broadcast ids, and the first version's subscriber tables are dropped by the schema; settings "Cookies and privacy" says Kit keeps the list.
 - **Setup:** the `KIT_API_KEY` secret (V4 key, `pass-env pipe portfolio-rank/KIT_API_KEY -- npx wrangler secret put KIT_API_KEY [--env staging]`); `KIT_FORM_ID` only once the account has more than one form.
 - **Tests:** [tests/newsletter.test.mjs](tests/newsletter.test.mjs) (the Kit client against a mocked API, broadcasts in both modes, the 403, 429 and 500 paths, stuck calls, the migration, the email) and [tests/newsletter-e2e.test.mjs](tests/newsletter-e2e.test.mjs) (production build with a Kit stand-in: guards, rate limits, what reaches Kit, no address in any table, Kit down, the admin page and preview, the forms at 1440 and 390 px).
+- **Launching in production:** set `NEWSLETTER_ENABLED` to `"true"` in wrangler.jsonc (a deploy), add `KIT_API_KEY`, then turn on the owner's switch. From then on every page view asks `GET /api/newsletter/status` once (cached 60 seconds in the browser): one more Worker request per page view.
 
 
 ## Model watch

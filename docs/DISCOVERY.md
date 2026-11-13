@@ -74,6 +74,7 @@ A rechecked reason comes back after 90 days (dead, empty, parked), 30 (blocked) 
 
 ## Switches and target
 
+- `DISCOVERY_SCHEDULE`: `on` lets the daily schedule (22:00 UTC) run. Off until the owner turns it on: until then nothing runs unless someone starts the workflow by hand.
 - `DISCOVERY_TARGET`: `production` points the job at the production database; anything else (the default) at staging.
 - `DISCOVERY_SCREEN`: `on` runs the AI screen. Off until the owner turns it on.
 - `DISCOVERY_HANDOFF`: `on` hands sites to the grader. Off until the owner turns it on.

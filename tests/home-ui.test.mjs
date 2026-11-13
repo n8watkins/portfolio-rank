@@ -151,6 +151,12 @@ test("home, browse and /me don't scroll sideways from 320 to 1440px", async () =
   }
 });
 
+test("every site icon on home asks for a site's address, never its tagline", async () => {
+  const html = await (await fetch(`${BASE}/`)).text();
+  const icons = [...html.matchAll(/src="\/favicon\/([^"]*)"/g)].map((m) => decodeURIComponent(m[1]));
+  for (const domain of icons) assert.match(domain, /^[a-z0-9.-]+\.[a-z]{2,}$/i, `favicon for "${domain}"`);
+});
+
 test("old browse links land on /browse with their filters", async () => {
   const { page, context } = await freshPage(1280);
   await page.goto(BASE + "/?q=dev&role=Frontend");

@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/polls/store.mjs";
 import { SITE_URL } from "@/lib/site";
 import { kitClient } from "./kit.mjs";
 import { readSwitch } from "./switch.mjs";
+import { testStandInsAllowed } from "@/lib/test-mode.mjs";
 
 // What the newsletter's routes and admin pages share (AUTOMATION.md "Newsletter").
 
@@ -17,7 +18,8 @@ export const newsletterEnabled = () => /^true$/i.test(String(process.env.NEWSLET
  * switch) and the owner's stored switch (lib/newsletter/switch.mjs) both on.
  */
 export async function newsletterLive(): Promise<boolean> {
-  if (!newsletterEnabled()) return false;
+  // Without Kit nothing can be sent: off, before any database read.
+  if (!newsletterEnabled() || !process.env.KIT_API_KEY) return false;
   await ensureSchema();
   return (await readSwitch(db())).on;
 }
@@ -28,7 +30,7 @@ export const siteBase = () => (process.env.SITE_URL || SITE_URL).replace(/\/$/, 
 const nlSecret = () => String(process.env.AUTH_SECRET ?? "");
 
 /** KIT_TEST_API: a local stand-in for Kit in the end-to-end tests, ignored on the deployed Workers. */
-const kitTestApi = () => (["production", "staging"].includes(String(process.env.SITE_ENV ?? "")) ? undefined : process.env.KIT_TEST_API || undefined);
+const kitTestApi = () => (testStandInsAllowed(process.env) ? process.env.KIT_TEST_API || undefined : undefined);
 
 /** The Kit client (KIT_API_KEY, a Worker secret), or null without the key. */
 export const kit = () => kitClient({ apiKey: process.env.KIT_API_KEY, base: kitTestApi() });

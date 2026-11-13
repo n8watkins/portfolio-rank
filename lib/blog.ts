@@ -56,6 +56,8 @@ export type BlogListItem = {
   images: PostImage[];
   dataAsOf: string;
   publishAt: string;
+  /** The row's last change (a publish, an owner's decision, an edit). */
+  updatedAt: string | null;
   minutes: number;
 };
 

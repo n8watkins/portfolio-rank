@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 import { Mail, MailWarning } from "lucide-react";
 import { EmailLinkConfirm } from "@/components/signin/EmailLinkConfirm";
 import { SignInButton } from "@/components/SignInModal";
@@ -19,6 +21,8 @@ const WHY = {
 } as const;
 
 export default async function EmailSignInPage({ searchParams }: { searchParams: Promise<{ t?: string }> }) {
+  // Off while email sign-in is (lib/signin/flag.ts).
+  if (!EMAIL_SIGNIN_ENABLED) notFound();
   const { t } = await searchParams;
   await ensureSchema();
   const peek = await peekToken(db(), t ?? "");

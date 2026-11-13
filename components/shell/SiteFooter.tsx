@@ -1,10 +1,10 @@
+import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 import { Coffee } from "lucide-react";
 import { SITE } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
 import { Wordmark } from "@/components/shell/Wordmark";
 import { BlogFooterLink } from "@/components/shell/useBlogLive";
 import { CONTRIBUTOR_COUNT_LABEL, PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
-import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 
 type Link = { href: string | null; label: string; ext?: boolean };
 
@@ -50,7 +50,7 @@ const POLICIES = [
 export function SiteFooter() {
   return (
     <footer className="mt-20 border-t border-edge">
-      {/* The newsletter (off until NEWSLETTER_ENABLED; not on the blog's pages, which have their own). */}
+      {/* The newsletter sign-up (not on the blog's own pages, which have theirs); it shows only while the newsletter is live. */}
       <NewsletterSignup form="footer" layout="wide" className="wrap py-10" />
       <div className="wrap grid grid-cols-1 gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
         <div className="max-w-xs">

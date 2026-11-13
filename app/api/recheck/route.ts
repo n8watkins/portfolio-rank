@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { PRIVATE, fail, keyed, readJsonBody, sameOrigin } from "@/lib/grader/server";
-import { isVerifiedOwner } from "@/lib/games/claims.mjs";
+import { controlProof } from "@/lib/games/claims.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { networkOf } from "@/lib/grader/caps.mjs";
 import { clientIp } from "@/lib/polls/server";
@@ -11,8 +11,8 @@ import { toolsEnabled } from "@/lib/tools/server";
 import { reservePage, runAllChecks } from "@/lib/tools/run";
 import { profilePath } from "@/lib/profile";
 
-// "Re-check my site" on a portfolio's profile: the verified owner (signed
-// in, lib/games/claims.mjs) runs every check again, at most once an hour
+// "Re-check my site" on a portfolio's profile: the verified owner (signed in,
+// proven by POST /api/owner/verify, lib/games/claims.mjs) runs every check again, at most once an hour
 // per portfolio, within the tools' daily caps (lib/tools/caps.mjs). The
 // results replace the saved ones, so the profile's fix list updates.
 //
@@ -26,7 +26,10 @@ const lastKey = (url: string) => `recheck:${siteKeyOf(url)}`;
 async function ownerOf(url: string): Promise<string | null> {
   const session = await auth();
   const owner = session?.raterId;
-  if (!owner || !(await isVerifiedOwner(db(), { url, owner }))) return null;
+  // Only an owner proven with code they deployed (the verification file or
+  // meta tag) or by GitHub Pages: a link from the page to a GitHub profile
+  // isn't enough (lib/ownership/verify.mjs, lib/games/claims.mjs controlProof).
+  if (!owner || !(await controlProof(db(), { url, owner }))) return null;
   return owner;
 }
 

@@ -289,3 +289,15 @@ test("the admin's counts: unchanged, changed this week, never checked, checked a
   const s = await freshnessSummary(db, { now: NOW, active: ACTIVE });
   assert.deepEqual(s, { unchanged: 2, changedThisWeek: 1, unchecked: 1, checkedToday: 1, remeasuredToday: { lighthouse: 1, polish: 1, screenshots: 1, links: 0, total: 3 } });
 });
+
+test('FRESHNESS_ENABLED gates the hourly fingerprints: on only when it is "true", off in production', async () => {
+  const { freshnessEnabled } = await import("../lib/freshness-flag.ts");
+  assert.equal(freshnessEnabled({ FRESHNESS_ENABLED: "true" }), true);
+  for (const v of [undefined, "", "false", "yes"]) assert.equal(freshnessEnabled({ FRESHNESS_ENABLED: v }), false, String(v));
+  const { readFileSync } = await import("node:fs");
+  const { parseJsonc } = await import("../scripts/check-worker-exports.mjs");
+  assert.match(readFileSync("worker/index.ts", "utf8"), /\["freshness", \(\) => \(freshnessEnabled\(env\) \? freshnessTick\(at\) : null\)\]/);
+  const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
+  assert.equal(config.vars.FRESHNESS_ENABLED, "false", "off in production");
+  assert.equal(config.env.staging.vars.FRESHNESS_ENABLED, "true", "on in staging");
+});

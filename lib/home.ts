@@ -6,9 +6,9 @@ import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
-import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 import { gamesEnabled } from "@/lib/games/server";
-import { rankedOrder } from "@/lib/leaderboard";
+import { rankedSites } from "@/lib/tiers-board";
+import { isPublicTier } from "@/lib/tiers.mjs";
 import { readPolls } from "@/lib/polls/store.mjs";
 import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
 
@@ -40,36 +40,24 @@ type PoolSite = {
   url: string;
   name: string;
   mu: number;
-  /** The grade key (lib/grade-score.mjs) and the tier by ELO from face-offs (lib/tiers.mjs). */
-  key: number | null;
-  tier: string | null;
+  tier: string;
   quality: number | null;
   axes: Record<string, number | null>;
   roles: string[];
 };
 
-/** A graded portfolio in the leaderboard's ranked order: its place on the board, tier, ELO and face-offs. */
-type HomeSite = PoolSite & { rank: number; elo: number; faceoffs: number; top: number | null };
-
-/** How many of the leaderboard's first portfolios the home page reads (top 10, hero cards, portfolio of the day). */
-const HOME_RANKED = 300;
-
 /**
- * The graded, listed portfolios in the leaderboard's ranked order (by tier,
- * then ELO from face-offs: lib/leaderboard.ts rankedOrder), each with its
- * place on that board, so the home page and /top tell one story. The pool
- * (axes, roles) is cached an hour (lib/grader/report.mjs gradedPool), the
- * order is one cached row.
+ * The graded, listed portfolios best first (by the AI grade's level), with
+ * each one's rank by AI grade. The pool itself is cached an hour
+ * (lib/grader/report.mjs gradedPool).
  */
-async function rankedPool(): Promise<{ sites: HomeSite[]; all: PoolSite[] }> {
+async function rankedPool(): Promise<(PoolSite & { aiRank: number })[]> {
   await ensureSchema();
-  const [pool, { sites: order }] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, rankedOrder(HOME_RANKED)]);
-  const byPool = new Map(pool.map((p) => [p.url, p]));
-  const sites = order
-    .map((r, i) => ({ r, rank: i + 1, p: byPool.get(r.e.url) }))
-    .filter((x): x is { r: (typeof order)[number]; rank: number; p: PoolSite } => x.p != null)
-    .map(({ r, rank, p }) => ({ ...p, tier: r.p.tier, rank, elo: r.e.elo, faceoffs: r.e.faceoffs, top: r.p.provisional ? null : r.p.top }));
-  return { sites, all: pool };
+  const [pool, hidden] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, hiddenUrls()]);
+  return pool
+    .filter((p) => byUrl.has(p.url) && !hidden.has(p.url))
+    .sort((a, b) => b.mu - a.mu || (b.quality ?? 0) - (a.quality ?? 0) || a.url.localeCompare(b.url))
+    .map((p, i) => ({ ...p, aiRank: i + 1 }));
 }
 
 /**
@@ -87,13 +75,13 @@ export type ShowItem = {
   name: string;
   domain: string;
   hero: string;
-  tier: string | null;
+  tier: string;
   rank: number;
   href: string;
 };
 
 /** The hero's card deck: the best-graded portfolios whose screenshots are strong. */
-async function showcase(pool: HomeSite[], count = 6): Promise<ShowItem[]> {
+async function showcase(pool: (PoolSite & { aiRank: number })[], count = 6): Promise<ShowItem[]> {
   const strong = pool.filter(strongCapture).slice(0, count * 2);
   const shots = await shotBases(strong.map((p) => p.url));
   return strong
@@ -105,7 +93,7 @@ async function showcase(pool: HomeSite[], count = 6): Promise<ShowItem[]> {
       domain: domainOf(p.url),
       hero: heroOf(shots.get(p.url)!),
       tier: p.tier,
-      rank: p.rank,
+      rank: p.aiRank,
       href: reportPath(p.url),
     }));
 }
@@ -117,49 +105,53 @@ export type BoardItem = {
   rank: number;
   tied: boolean;
   hero: string | null;
-  /** The public tier by ELO (lib/tiers.mjs), or "" for none. */
-  tier: string;
-  /** The ELO from face-offs; null without face-offs. */
-  elo: number | null;
+  /** What the score column shows: ELO, or the tier on the new boards. */
+  score: string;
   href: string;
 };
 
-export type TopTen = { kind: "ranked"; rows: BoardItem[] };
+export type TopTen =
+  | { kind: "ai"; rows: BoardItem[] }
+  /** Tiers by ELO (RANKING_V2): the ranked board's first 10 (lib/tiers-board.ts), the score a tier by ELO. */
+  | { kind: "ranked"; rows: BoardItem[] };
 
-/** The top 10 of the leaderboard's ranked board (tiers by ELO, graded only), the same rows /top shows first. */
-async function topTen(pool: HomeSite[]): Promise<TopTen> {
-  const rows: BoardItem[] = pool.slice(0, 10).map((p) => {
-    const f = byUrl.get(p.url);
-    return {
-      url: p.url,
-      name: f?.name ?? domainOf(p.url),
-      line: f?.tagline || domainOf(p.url),
-      rank: p.rank,
-      tied: false,
-      hero: null,
-      tier: isPublicTier(p.tier) ? p.tier! : "",
-      elo: p.faceoffs > 0 ? p.elo : null,
-      href: reportPath(p.url),
-    };
-  });
+/**
+ * The top 10. With RANKING_V2 on: the ranked board's first 10, tiers by ELO
+ * (lib/tiers-board.ts), the same rows /top shows first. Until then the order
+ * of the AI grade (the people's ELO board is too thin to rank on yet: most
+ * sites share one vote), with the tier in the score column.
+ */
+async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
+  await ensureSchema();
+  const item = (url: string, rank: number, score: string, tied = false): BoardItem => {
+    const p = byUrl.get(url);
+    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, score, href: reportPath(url) };
+  };
+  if (/^true$/i.test(String(process.env.RANKING_V2 ?? ""))) {
+    // Tiers by ELO: the ranked board's first 10, the same rows /top shows first (public letters only).
+    const { sites } = await rankedSites(10);
+    const rows = sites.map((s) => item(s.url, s.rank, isPublicTier(s.tier) ? s.tier : ""));
+    const shots = await shotBases(rows.map((r) => r.url));
+    for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
+    return { kind: "ranked", rows };
+  }
+  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, p.tier));
   const shots = await shotBases(rows.map((r) => r.url));
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-  return { kind: "ranked", rows };
+  return { kind: "ai", rows };
 }
 
-/** `tier` is the tier by rank (lib/tiers.mjs); shown publicly only from B up. */
 export type GradedItem = { url: string; name: string; domain: string; tier: string; at: string; hero: string | null; href: string };
 
 /** The portfolios Gemini graded most recently. Cached an hour: it reads the whole list. */
 async function recentlyGraded(count = 6): Promise<GradedItem[]> {
   const hidden = await hiddenUrls();
-  // v3: the tier by ELO from face-offs (lib/tiers.mjs), not Gemini's letter or the old tier by grade score.
-  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades-v3", { ttlMs: HOUR }, async () => {
+  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades", { ttlMs: HOUR }, async () => {
     const res = await db().execute(
-      `SELECT url, json_extract(ai_rubric, '$.rank.tier') AS tier, json_extract(ai_rubric, '$.judged_at') AS at
+      `SELECT url, json_extract(ai_rubric, '$.tier') AS tier, json_extract(ai_rubric, '$.judged_at') AS at
        FROM portfolios
        WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)
-         AND json_extract(ai_rubric, '$.rank.tier') IS NOT NULL AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
+         AND json_extract(ai_rubric, '$.tier') IS NOT NULL AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
          AND COALESCE(json_extract(ai_rubric, '$.is_portfolio'), 1) != 0
        ORDER BY at DESC LIMIT 30`
     );
@@ -195,9 +187,7 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
       return { n: Number(r.rows[0]?.n ?? 0) };
     }),
   ]);
-  // The S family: the top 1% (SSS to S-, lib/tiers.mjs).
-  // Tiers come from face-offs and start at B, so the count that is never 0 is the graded library.
-  const graded = pool.length;
+  const sGrades = pool.filter((p) => p.tier === "S").length;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
@@ -211,10 +201,10 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     // A quiet week would read as a dead site: then a number that is never 0.
     week.n > 0
       ? { key: "votesWeek", label: "Votes this week", value: n(week.n), tone: 3 }
-      : { key: "graded", label: "Portfolios graded", value: n(graded), tone: 3 },
+      : { key: "sGrades", label: "Portfolios graded S", value: n(sGrades), tone: 3 },
     counts.votes > 0 ? { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 } : null,
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
-    // No "Average tier": tiers by ELO (lib/tiers.mjs) make it B by design.
+    site.averageTier?.tier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
     site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
     site.changedThisMonth > 0 ? { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 } : null,
     gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
@@ -228,11 +218,8 @@ export type PortfolioOfTheDay = {
   line: string;
   domain: string;
   hero: string;
-  tier: string | null;
-  /** Its place on the leaderboard's ranked board (tier, then ELO), its "top N%" once it has a tier of its own, and its ELO. */
+  tier: string;
   rank: number;
-  top: number | null;
-  elo: number | null;
   total: number;
   best: { label: string; note: string }[];
   facts: { id: string; label: string; pass: boolean }[];
@@ -240,12 +227,8 @@ export type PortfolioOfTheDay = {
 };
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
-async function portfolioOfTheDay(pool: HomeSite[], graded: number, skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  // The A family or better: the top 30% by ELO (SSS to A-, lib/tiers.mjs); while few have enough
-  // face-offs for a tier, the best AI grades (the pool is in grade order).
-  const open = pool.filter((p) => strongCapture(p) && !skip.has(p.url));
-  const strong = open.filter((p) => atLeast(p.tier, "A"));
-  const candidates = (strong.length >= 10 ? strong : open).slice(0, 100);
+async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
+  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && (p.tier === "S" || p.tier === "A")).slice(0, 100);
   if (candidates.length === 0) return null;
   const day = Math.floor(now.getTime() / 86_400_000);
   // Walk from today's pick to the first one with a capture.
@@ -276,10 +259,8 @@ async function portfolioOfTheDay(pool: HomeSite[], graded: number, skip: Set<str
       domain: domainOf(p.url),
       hero: heroOf(base),
       tier: p.tier,
-      rank: p.rank,
-      total: graded,
-      top: p.top,
-      elo: p.faceoffs > 0 ? p.elo : null,
+      rank: p.aiRank,
+      total: pool.length,
       best: judgments.slice(0, 2).map((j) => ({ label: j.label, note: j.note })),
       facts: facts.slice(0, 6),
       href: reportPath(p.url),
@@ -300,11 +281,11 @@ export type HomeData = Awaited<ReturnType<typeof homeData>>;
 
 export async function homeData() {
   await ensureSchema();
-  const { sites: pool, all } = await rankedPool();
+  const pool = await rankedPool();
   const hidden = await hiddenUrls();
   const total = FEED.filter((p) => !hidden.has(p.url)).length;
-  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total, all), polls()]);
-  const potd = await portfolioOfTheDay(pool, all.length, new Set(show.map((s) => s.url)));
+  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total, pool), polls()]);
+  const potd = await portfolioOfTheDay(pool, new Set(show.map((s) => s.url)));
   return {
     /** Listed portfolios anyone can see (the browse grid's count). */
     total,

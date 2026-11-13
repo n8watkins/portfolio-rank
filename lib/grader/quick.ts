@@ -93,7 +93,7 @@ export async function measureQuick(
   }
   // measureFacts is plain JavaScript; its inferred parameter type is narrower than what it reads.
   const facts = measureFacts({ html, text, url, finalUrl, source: "http", now } as never) as Record<string, unknown>;
-const fp = pageFingerprint({ html, finalUrl, headers: res.headers, now: now.getTime() });
+  const fp = pageFingerprint({ html, finalUrl, headers: res.headers, now: now.getTime() });
   // The link checks are the slow part: an unchanged page reuses them for 30 days.
   const linksAt = reuse?.linksCheckedAt ? Date.parse(reuse.linksCheckedAt) : NaN;
   let linksCheckedAt = measuredAt;

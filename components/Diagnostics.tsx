@@ -5,6 +5,7 @@ import { CalendarClock, Cloud, FolderGit2, Gauge, Layers, Loader2, Moon, Newspap
 import type { Inspection } from "@/app/api/inspect/route";
 import type { PsiResult } from "@/app/api/psi/route";
 import type { CacheMeta } from "@/lib/cache";
+import { FRESHNESS_UI } from "@/lib/freshness-flag";
 import { useClientSession } from "@/lib/session-client";
 import type { SiteDetails } from "@/lib/play/details";
 import { retryMeasure, useSiteDetails } from "@/lib/play/details-client";
@@ -70,6 +71,16 @@ function MeasuredOn({ meta }: { meta: CacheMeta }) {
   if (!measuredAt) return null;
   const d = new Date(measuredAt);
   if (Number.isNaN(d.getTime())) return null;
+  // Until FRESHNESS_ENABLED (lib/freshness-flag.ts): the line as it was.
+  if (!FRESHNESS_UI) {
+    return (
+      <p className="mt-3 text-xs text-mute">
+        Measured on{" "}
+        <time dateTime={measuredAt}>{d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</time>
+        {stale ? " · updating in the background" : ""}
+      </p>
+    );
+  }
   const when = <time dateTime={measuredAt}>{shortDate(d)}</time>;
   if (stale) {
     return (
@@ -396,10 +407,10 @@ function ShareSkeleton() {
 
 /** Full panel for the detail page. Order: Lighthouse → Polish → Share card. */
 export function DetailDiagnostics({ url, initialInspection = null }: { url: string; initialInspection?: Inspection | null }) {
-  // A result being measured again is asked for again: a PageSpeed run takes
-  // about 30 seconds, the polish check a few.
-  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { pollStaleMs: 8_000, initial: initialInspection });
-  const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`, { pollStaleMs: 35_000 });
+  // With FRESHNESS_ENABLED, a result being measured again is asked for again:
+  // a PageSpeed run takes about 30 seconds, the polish check a few.
+  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { initial: initialInspection, pollStaleMs: FRESHNESS_UI ? 8_000 : undefined });
+  const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`, { pollStaleMs: FRESHNESS_UI ? 35_000 : undefined });
   const psiFailure = psi && !psi.ok ? psiProblem(psi.error) : null;
 
   return (

@@ -1,20 +1,20 @@
-// The blog newsletter's cron (AUTOMATION.md "Newsletter"): every 10 minutes,
+// The blog newsletter's tick (AUTOMATION.md "Newsletter"), on the five-minute cron (./index.ts):
 // newly published posts become issues and each issue one Kit broadcast
 // (lib/newsletter/send.mjs), scheduled or a draft by KIT_BROADCAST_MODE. A
 // draft sends the owner a one-line note through the owner-alert email. It
-// returns at once while NEWSLETTER_ENABLED is not "true", and leaves the
-// queue alone without KIT_API_KEY. It calls no AI, so staging runs it too;
+// returns at once, before any database read, while NEWSLETTER_ENABLED is not
+// "true" or there is no KIT_API_KEY. It calls no AI, so staging runs it too;
 // staging only ever makes drafts, marked [staging].
 import { db as database } from "../lib/db";
 import { kitClient } from "../lib/newsletter/kit.mjs";
 import { broadcastMode, newsletterTick as tick } from "../lib/newsletter/send.mjs";
 import { emailSender } from "../pipeline/alerts.mjs";
+import { testStandInsAllowed } from "../lib/test-mode.mjs";
 
-export const NEWSLETTER_CRON = "*/10 * * * *";
 
 export type NewsletterEnv = {
   NEWSLETTER_ENABLED?: string;
-  SITE_URL?: string;
+  SITE_URL: string;
   AUTH_SECRET?: string;
   SITE_ENV?: string;
   KIT_API_KEY?: string;
@@ -27,18 +27,18 @@ export type NewsletterEnv = {
 const log = (event: string, data: object = {}) => console.log(JSON.stringify({ event, ...data }));
 
 export async function newsletterTick(env: NewsletterEnv, scheduledTime: number) {
-  if (!/^true$/i.test(String(env.NEWSLETTER_ENABLED ?? ""))) return null;
+  if (!/^true$/i.test(String(env.NEWSLETTER_ENABLED ?? "")) || !env.KIT_API_KEY) return null;
   const db = database();
   const staging = env.SITE_ENV === "staging";
   try {
     const sender = emailSender(env, { db });
     const r = await tick({
       db,
-      kit: kitClient({ apiKey: env.KIT_API_KEY, base: env.SITE_ENV === "production" || staging ? undefined : env.KIT_TEST_API }),
+      kit: kitClient({ apiKey: env.KIT_API_KEY, base: testStandInsAllowed(env) ? env.KIT_TEST_API : undefined }),
       // Staging shares the owner's one Kit account with production: drafts only.
       mode: staging ? "draft" : broadcastMode(env.KIT_BROADCAST_MODE),
       label: staging ? "staging" : null,
-      base: String(env.SITE_URL ?? "").replace(/\/$/, ""),
+      base: env.SITE_URL.replace(/\/$/, ""),
       now: scheduledTime,
       notify: async (line: string) => {
         if (!sender || !env.OWNER_EMAIL) return log("newsletter.note_not_sent", { line });
