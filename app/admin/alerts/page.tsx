@@ -53,6 +53,10 @@ export default async function AdminAlertsPage() {
           <dt className="text-mute">From</dt>
           <dd>{from ?? <span className="font-semibold text-down">not set (EMAIL_FROM)</span>}</dd>
         </dl>
+        <p className="text-sm text-mute" data-alert-system>
+          Site alerts go through Cloudflare Email Service, from {from ?? "EMAIL_FROM"}, and each one says so at the bottom. Newsletters go through Kit. The test below sends
+          &ldquo;Test: PortfolioRank site alerts (Cloudflare Email Service)&rdquo;.
+        </p>
         <TestAlert to={to} />
       </section>
 
