@@ -5,6 +5,8 @@ import { gamesEnabled } from "@/lib/games/server";
 import { ownedJobs } from "@/lib/grader/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
+import { withEloLetters } from "@/lib/tiers-letters.mjs";
+import { tiersShown } from "@/lib/tiers-view";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
@@ -83,7 +85,10 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   const raw = await readJob(client, id);
   if (!raw) return null;
   const [owned, emails] = await Promise.all([ownedJobs(), emailState(client, id)]);
-  const job = publicJob(raw, { mine: owned.includes(id), emails }) as PageJob;
+  const plain = publicJob(raw, { mine: owned.includes(id), emails }) as PageJob;
+  // The report card's own line follows Gemini's letter; the letter shown is the tier by ELO while RANKING_V2 is on.
+  const geminiTier = plain.report?.tier ?? "";
+  const job = (tiersShown() ? await withEloLetters(client, plain, raw) : plain) as PageJob;
   const site = listedSite(String(raw.site_key));
   const title = job.checks?.ok && typeof job.checks.title === "string" ? job.checks.title.replace(/\s+/g, " ").trim() : "";
   const name = site?.name ?? (title && title.length <= 60 ? title : job.domain);
@@ -129,7 +134,7 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   return {
     ...base,
     report: {
-      verdict: verdictOf(rep.tier),
+      verdict: verdictOf(geminiTier),
       groups: hiringGroups(rep.facts),
       fixes: fixEffects(raw.result, rep.fixes, pool, { isSelf }),
       better,

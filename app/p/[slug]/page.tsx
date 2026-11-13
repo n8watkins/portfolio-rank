@@ -3,19 +3,31 @@ import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { DetailDiagnostics, Socials } from "@/components/Diagnostics";
+import type { Inspection } from "@/app/api/inspect/route";
+import { peekCached } from "@/lib/cache";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
 import { BASE_ELO } from "@/lib/elo";
+import { loadProfileTier } from "@/lib/tiers-view";
+import { ProfileTier } from "@/components/tiers/ProfileTier";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
+import { toolsEnabled } from "@/lib/tools/server";
+import { ProfileV2, profileMetadata } from "./profile-v2";
+import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
+import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
+import { jsonLdHtml } from "@/lib/json-ld";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
 // is the visitor's own and loads in the browser (LikeButton hydrate).
+// With "Add your portfolio" launched (TOOLS_ENABLED) the profile is the
+// four-part one with a fix list, for listed and added sites alike
+// (./profile-v2.tsx); until then it is this page, unchanged.
 export const revalidate = 300;
 
 export async function generateStaticParams() {
@@ -41,24 +53,36 @@ async function shotFor(url: string): Promise<string> {
   return base ? heroOf(base) : mshotsUrl(url, 1200);
 }
 
+/** What search engines read about a listed site (lib/profile-seo.ts), read once per request. */
+async function seoFacts(p: Portfolio): Promise<SeoFacts> {
+  return { name: p.name, url: p.url, domain: domainOf(p.url), tagline: p.tagline ?? null, ...(await loadSeoExtras(p.url)) };
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
+  if (toolsEnabled()) return profileMetadata({ params });
   const { slug } = await params;
   const url = decodeURIComponent(slug);
   const p = (feed as Portfolio[]).find((x) => x.url === url);
   if (!p) return {};
-  const img = await shotFor(url);
+  const [img, facts] = await Promise.all([shotFor(url), seoFacts(p)]);
   const title = `${p.name} - PortfolioRank`;
-  const description = p.tagline
-    ? `${p.tagline} · ${domainOf(url)}`
-    : `Developer portfolio · ${domainOf(url)}`;
+  // Indexed: a description from the grade (lib/profile-seo.ts). Ungraded,
+  // "not a portfolio", a hidden grade or a site the health check hides: noindex.
+  const index = indexable(facts);
+  const description = index
+    ? profileDescription(facts)
+    : p.tagline
+      ? `${p.tagline} · ${domainOf(url)}`
+      : `Developer portfolio · ${domainOf(url)}`;
   const canonical = `${SITE_URL}/p/${encodeURIComponent(url)}`;
   return {
     title,
     description,
+    ...(index ? {} : { robots: { index: false, follow: true } }),
     alternates: { canonical },
     openGraph: {
       title,
@@ -114,6 +138,7 @@ export default async function PortfolioPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  if (toolsEnabled()) return ProfileV2({ params });
   const { slug } = await params;
   const url = decodeURIComponent(slug);
   const portfolio = (feed as Portfolio[]).find((p) => p.url === url);
@@ -128,6 +153,10 @@ export default async function PortfolioPage({
     })
   ).rows[0];
   if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
+  // The page check as last measured (/api/inspect's cache), so the social
+  // links and the checklist are there at first paint instead of moving the
+  // page when the browser's own request answers.
+  const inspection = await peekCached<Inspection>("inspect", url).catch(() => null);
 
   const stars = Number(
     (
@@ -161,11 +190,16 @@ export default async function PortfolioPage({
   const owner = await ownerState(db(), url);
   if (owner.removedAt) notFound();
   const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
+  // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise, and the page stays as it was.
+  const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
 
-  const shot = await shotFor(url);
+  const [shot, facts] = await Promise.all([shotFor(url), seoFacts(portfolio)]);
+  // A ProfilePage about the person and its breadcrumb trail, indexable profiles only.
+  const jsonLd = profileJsonLd(facts, { canonical: `${SITE_URL}/p/${encodeURIComponent(url)}`, title: `${portfolio.name} - PortfolioRank` });
 
   return (
     <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />}
       <div>
         <div className="mb-4 rounded-xl border border-edge bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -179,9 +213,15 @@ export default async function PortfolioPage({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="mr-1 text-right">
-                <p className="text-xl font-bold tabular-nums">{rating.elo}</p>
+                <p className="text-xl font-bold tabular-nums">{eloTier ? eloTier.elo : rating.elo}</p>
                 <p className="text-xs text-mute">
-                  ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
+                  {eloTier ? (
+                    <>ELO · {eloTier.votes.toLocaleString("en-US")} real vote{eloTier.votes === 1 ? "" : "s"}</>
+                  ) : (
+                    <>
+                      ELO · {rating.votes} vote{rating.votes === 1 ? "" : "s"}
+                    </>
+                  )}
                 </p>
                 {stars > 0 && (
                   <p className="text-xs font-semibold text-accent">
@@ -189,7 +229,7 @@ export default async function PortfolioPage({
                   </p>
                 )}
               </div>
-              <Socials url={url} />
+              <Socials url={url} initial={inspection} />
               {/* count+showCount → the ♥ label carries a live "saved" total that
                   updates when this same button toggles (no stale server value). */}
               <LikeButton
@@ -220,20 +260,23 @@ export default async function PortfolioPage({
           />
         </div>
 
-        <DetailDiagnostics url={url} />
+        {eloTier && <ProfileTier t={eloTier} />}
+
+        <DetailDiagnostics url={url} initialInspection={inspection} />
 
         {grade && (
           <div className="mt-4 rounded-xl border border-edge bg-card p-5">
             <div className="flex items-center gap-3">
+              {/* With tiers by ELO the grade is the report card: no letter here (the tier above comes from votes). */}
               <span
                 className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
-                  grade.showTier ? "bg-fill text-on-fill" : "bg-edge text-ink"
+                  grade.showTier && !eloTier ? "bg-fill text-on-fill" : "bg-edge text-ink"
                 }`}
               >
-                {grade.showTier ? grade.tier : "AI"}
+                {grade.showTier && !eloTier ? grade.tier : "AI"}
               </span>
               <div>
-                <p className="font-semibold">AI design review</p>
+                <p className="font-semibold">{eloTier ? "Report card: how to improve" : "AI design review"}</p>
                 <p className="text-xs text-mute">
                   by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
                   a verdict

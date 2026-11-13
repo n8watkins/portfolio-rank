@@ -357,8 +357,8 @@ test("email gate: report links can't spend the part of the day held back for gra
   assert.equal(capReason(caps, "grade-report", { "report-link": 2 }), null);
   assert.equal(capReason(caps, "report-link", { "report-link": 5 }), "cap:day");
   assert.equal(capReason(caps, "report-link", { "report-link": 3, "grade-report": 6 }), "cap:day", "a reserve used up holds nothing back");
-  assert.deepEqual(emailCaps('{"reserve":{"grade-report":50}}').reserve, { "grade-report": 50, "owner-alert": 10 });
-  assert.deepEqual(DEFAULT_EMAIL_CAPS.reserve, { "grade-report": 30, "owner-alert": 10 });
+  assert.deepEqual(emailCaps('{"reserve":{"grade-report":50}}').reserve, { "grade-report": 50, "owner-alert": 10, signin: 10 });
+  assert.deepEqual(DEFAULT_EMAIL_CAPS.reserve, { "grade-report": 30, "owner-alert": 10, signin: 10 });
 });
 
 test("email caps: the owner is alerted at 80% of a kind's cap or of the day's", async () => {
@@ -386,7 +386,10 @@ test("email transport: the send_email binding from EMAIL_FROM; the test outbox i
   assert.deepEqual(sent[0].from, { email: "portfoliorank@n8builds.dev", name: "PortfolioRank" });
   assert.equal(emailTransport({ SEND_EMAIL: { send() {} } }), null, "no sender address, no transport");
   assert.equal(emailTransport({}), null);
-  assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "production" }, { db: {} }), /test runs only/);
+  for (const SITE_ENV of ["production", "staging", undefined, "Production", "prod"]) {
+    assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV }, { db: {} }), /test runs only/, String(SITE_ENV));
+  }
+  assert.equal(emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "test" }, { db: {} }).name, "outbox");
   for (const bad of ["a@b", "a b@example.com", "a@example.com\nBcc: x@example.com", "<a@example.com>", "a@example.com, b@example.com"]) assert.equal(validEmail(bad), null, bad);
   assert.equal(validEmail(" jane.doe+pr@example.co.uk "), "jane.doe+pr@example.co.uk");
 });

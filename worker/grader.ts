@@ -41,7 +41,9 @@ export async function graderTick(env: GraderEnv, scheduledTime = Date.now()) {
   const out: Record<string, unknown> = {};
 
   const gate = createEmailGate({ db, transport: emailTransport(env, { db }), caps: emailCaps(env.EMAIL_CAPS), secret, log: (line) => log("grader.email", { line }) });
-  out.emails = await sendDueEmails(db, { gate, secret, base, now, log: (line: string) => log("grader.email", { line }) });
+  // With tiers by ELO (RANKING_V2) the email names the tier by ELO, as the report shows it.
+  const eloTiers = /^true$/i.test(String((env as { RANKING_V2?: string }).RANKING_V2 ?? ""));
+  out.emails = await sendDueEmails(db, { gate, secret, base, now, eloTiers, log: (line: string) => log("grader.email", { line }) });
 
   const token = env.GITHUB_DISPATCH_TOKEN;
   out.stalled = await retryStalled(db, { token, now, log: (line: string) => log("grader.dispatch", { line }) });

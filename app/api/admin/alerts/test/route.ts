@@ -31,8 +31,8 @@ export async function POST(req: Request) {
   try {
     await sender.send({
       to: String(env.OWNER_EMAIL),
-      subject: "[PortfolioRank] Test: PortfolioRank alerts work",
-      text: `This is a test owner alert, sent at ${new Date().toISOString()} by ${who.login} from /api/admin/alerts/test.\n\nReal alerts (a missed or stuck end-of-day run, a stopped stage, email caps, held removals, model changes) arrive the same way, once a day while they hold.`,
+      subject: "Test: PortfolioRank site alerts (Cloudflare Email Service)",
+      text: `Test: PortfolioRank site alerts (Cloudflare Email Service).\n\nThis is a test owner alert, sent at ${new Date().toISOString()} by ${who.login} from /admin/alerts.\n\nReal alerts (a missed or stuck end-of-day run, a stopped stage, email caps, held removals, model changes) arrive the same way, once a day while they hold.`,
     });
   } catch (e) {
     return NextResponse.json({ error: "not_sent", reason: String((e as Error)?.message ?? e).slice(0, 200) }, { status: 502, headers: PRIVATE });

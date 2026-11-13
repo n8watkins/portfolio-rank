@@ -11,6 +11,7 @@ import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, im
 import { ROUTES } from "@/lib/nav";
 import { postLinkFor } from "@/lib/portfolio-links";
 import { SITE, sitePath } from "@/lib/site";
+import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
@@ -70,7 +71,20 @@ const domainOf = (url: string) => {
   }
 };
 
-export function Article({ post, related, banner, more = [] }: { post: BlogPost; related: Related[]; banner?: ReactNode; more?: BlogListItem[] }) {
+export function Article({
+  post,
+  related,
+  banner,
+  more = [],
+  signup = false,
+}: {
+  post: BlogPost;
+  related: Related[];
+  banner?: ReactNode;
+  more?: BlogListItem[];
+  /** Show the newsletter sign-up (the public post; not the owner's draft preview). */
+  signup?: boolean;
+}) {
   const cover = coverOf(post.images);
   const bySlot = new Map(post.images.map((im) => [im.slot, im]));
   const sources = post.claims.map((c) => c.url);
@@ -229,6 +243,9 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
           <p className="mb-3 text-sm font-semibold">Share this post</p>
           <ShareLinks url={postUrl(post.slug)} text={post.shareLine || post.title} />
         </div>
+
+        {/* The newsletter sign-up for readers (not the owner's draft preview); it shows only while the newsletter is live. */}
+        {signup && <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal" />}
       </div>
       </div>
 

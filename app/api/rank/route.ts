@@ -19,6 +19,16 @@ import { starBalance } from "@/lib/stats";
 import { sameOrigin } from "@/lib/polls/server";
 import { shotBases } from "@/lib/shots";
 import type { Portfolio } from "@/app/page";
+import { rankingViewsEnabled } from "@/lib/leaderboard";
+import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
+import { drawCandidates } from "@/lib/play/draw.mjs";
+import { applyFaceoff, ensureTierSchema } from "@/lib/tiers-db.mjs";
+
+/** Portfolios with MIN_FACEOFFS or more people's face-offs (ratings.votes): drawn less, so the rest catch up. */
+async function settledUrls(): Promise<Set<string>> {
+  const res = await db().execute({ sql: "SELECT url FROM ratings WHERE votes >= ?", args: [MIN_FACEOFFS] });
+  return new Set(res.rows.map((r) => String(r.url)));
+}
 
 type Rating = { elo: number; votes: number };
 
@@ -56,12 +66,18 @@ export async function GET() {
 
   // Sample a handful of distinct entries, then face off the two least-voted
   // so every vote goes where the rating is most uncertain.
-  const picked = new Map<number, Portfolio>();
-  while (picked.size < 8) {
-    const i = Math.floor(Math.random() * pool.length);
-    picked.set(i, pool[i]);
+  let candidates: Portfolio[];
+  if (rankingViewsEnabled()) {
+    // Tiers by ELO (RANKING_V2): mostly portfolios that still need face-offs (lib/play/draw.mjs).
+    candidates = drawCandidates(pool, await settledUrls()) as Portfolio[];
+  } else {
+    const picked = new Map<number, Portfolio>();
+    while (picked.size < 8) {
+      const i = Math.floor(Math.random() * pool.length);
+      picked.set(i, pool[i]);
+    }
+    candidates = [...picked.values()];
   }
-  const candidates = [...picked.values()];
   const ratings = await getRatings(candidates.map((p) => p.url));
   candidates.sort(
     (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)
@@ -185,6 +201,7 @@ export async function POST(req: Request) {
   }
 
   await ensureSchema();
+  await ensureTierSchema(db());
   const rater = await getRater();
   const key = pairKey(winner, loser);
   // Only a pair the server served to this rater can be voted on.
@@ -291,7 +308,7 @@ export async function POST(req: Request) {
 
     // Insert first: a UNIQUE violation here means this rater already voted on
     // this matchup (either direction) - caught below as 409.
-    await tx.execute({
+    const inserted = await tx.execute({
       // served = 1: cast on a pair recorded in matchups; only such practice
       // votes can be claimed (/api/claim).
       sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta, starred, served) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
@@ -299,6 +316,9 @@ export async function POST(req: Request) {
     });
 
     if (rater.type === "human") {
+      // The tier rating of the two portfolios moves at once, in the same transaction (lib/tiers-db.mjs). A
+      // background write: nothing shows it while RANKING_V2 is off.
+      await applyFaceoff(tx, { winner, loser, rater: "human", starred: useStar, voteId: Number(inserted.lastInsertRowid) });
       const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
         VALUES (?, ?, ?, datetime('now'))
         ON CONFLICT(url) DO UPDATE SET

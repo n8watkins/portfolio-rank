@@ -53,4 +53,7 @@ test("alerts page: the admin sees the email setup and the Send test alert button
   const html = await r.text();
   assert.match(html, /Send test alert/);
   assert.match(html, /not set \(OWNER_EMAIL\)/);
+  assert.match(html, /Site alerts go through Cloudflare Email Service/);
+  assert.match(html, /Newsletters go through Kit/);
+  assert.match(html, /Test: PortfolioRank site alerts \(Cloudflare Email Service\)/);
 });

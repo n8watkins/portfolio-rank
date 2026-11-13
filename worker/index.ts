@@ -25,14 +25,17 @@ import { OLD_SITE_HOSTS } from "../lib/site";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
+import { tiersTick } from "./tiers";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
+import { newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
+import { runEach } from "../pipeline/hourly.mjs";
 import { jobCron } from "./crons";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
@@ -81,6 +84,12 @@ type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): P
  * owner's removal took effect, and the blog when a post's scheduled time came in the
  * last hour. Best effort: a failure only means the page refreshes when its day is up.
  */
+/** CachedPages.purgeTags for scheduled work, when this Worker exposes it (./edge-cache.ts). */
+function purgeTagsOf(ctx: { exports?: unknown }) {
+  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
+  return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
+}
+
 async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   if (!cached) return;
@@ -139,17 +148,35 @@ const worker = {
     // Staging's less frequent crons run the same jobs (./crons.ts).
     const cron = jobCron(controller.cron);
     if (cron === PEOPLE_QUEUE_CRON) {
-      // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
-      const removals = await removalsTick(env as NightEnv, controller.scheduledTime);
-      // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
-      await purgeAfterHour(ctx, removals.applied, controller.scheduledTime);
-      // An alert at 80% of any email cap (./email-alerts.ts).
-      await emailAlertsTick(env as NightEnv, controller.scheduledTime);
-      // An alert when last night's run never started or died (./night-watch.ts).
-      await nightWatchTick(env as NightEnv, controller.scheduledTime);
-      await drainPeople(env as NightEnv);
-      // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
-      await libraryTick(env as NightEnv, controller.scheduledTime);
+      // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
+      // Sentry and the log, and the rest still run this hour.
+      const at = controller.scheduledTime;
+      let removed: string[] = [];
+      await runEach(
+        [
+          // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
+          ["owner removals", async () => {
+            removed = (await removalsTick(env as NightEnv, at)).applied;
+          }],
+          // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
+          ["edge purge", () => purgeAfterHour(ctx, removed, at)],
+          // An alert at 80% of any email cap (./email-alerts.ts).
+          ["email caps", () => emailAlertsTick(env as NightEnv, at)],
+          // An alert when last night's run never started or died (./night-watch.ts).
+          ["night watch", () => nightWatchTick(env as NightEnv, at)],
+          // People's grade requests that waited for Gemini 3.5 (./night.ts).
+          ["people queue", () => drainPeople(env as NightEnv)],
+          // Tiers by ELO (./tiers.ts): the daily cutoffs when due (a background write). Profiles show the letter only with
+          // RANKING_V2, so only then do the ones whose letter changed leave the edge cache.
+          ["tiers", () => tiersTick(at, { purgeTags: /^true$/i.test(String(env.RANKING_V2 ?? "")) ? purgeTagsOf(ctx) : undefined })],
+          // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
+          ["image library", () => libraryTick(env as NightEnv, at)],
+        ],
+        {
+          report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),
+          log: (line) => console.log(JSON.stringify(line)),
+        }
+      );
     }
     else if (cron === MODEL_WATCH_CRON) {
       // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).
@@ -157,7 +184,19 @@ const worker = {
       await goalsTick(env as NightEnv, controller.scheduledTime);
       await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     }
-    else if (cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
+    else if (cron === GRADER_CRON) {
+      // The grader's tick, then the blog newsletter's (./newsletter.ts) on the same
+      // five-minute cron, so the newsletter adds no trigger of its own; it returns
+      // at once without NEWSLETTER_ENABLED or KIT_API_KEY.
+      const at = controller.scheduledTime;
+      await runEach(
+        [
+          ["grader", () => graderTick(env as GraderEnv, at)],
+          ["newsletter", () => newsletterTick(env as unknown as NewsletterEnv, at)],
+        ],
+        { report: (e, task) => Sentry.captureException(e, { tags: { cron: "five-minute", task } }), log: (line) => console.log(JSON.stringify(line)) }
+      );
+    }
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };

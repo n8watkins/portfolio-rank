@@ -37,10 +37,16 @@ export function guardConfig() {
   };
 }
 
-/** True when MIN_GITHUB_ACCOUNT_AGE_DAYS is set and this signed-in rater's account is younger. */
-export function accountTooNew(rater: Pick<Rater, "type" | "accountCreatedAt">): boolean {
+/**
+ * True when MIN_GITHUB_ACCOUNT_AGE_DAYS is set and this signed-in rater's
+ * GitHub account is younger. Email accounts (em:) are never too new: their
+ * votes count fully (owner decision 2026-11-12: deal with fake accounts only
+ * if it actually happens).
+ */
+export function accountTooNew(rater: Pick<Rater, "type" | "accountCreatedAt"> & { id?: string }): boolean {
   const { minAccountAgeDays } = guardConfig();
   if (rater.type !== "human" || !minAccountAgeDays) return false;
+  if (rater.id?.startsWith("em:")) return false;
   const created = Date.parse(rater.accountCreatedAt ?? "");
   if (!Number.isFinite(created)) return true;
   return Date.now() - created < minAccountAgeDays * 24 * 60 * 60 * 1000;
@@ -57,7 +63,7 @@ export const ANON_COOKIE = "pr_anon";
 
 /**
  * Identify the voter: signed-in users are canonical (`human`, raterId is
- * provider-prefixed: gh:<id> / g:<sub>), everyone else gets a sticky anon
+ * provider-prefixed: gh:<GitHub id> / em:<email account id>), everyone else gets a sticky anon
  * session id whose votes are logged but never count toward official ELO.
  */
 export async function getRater(): Promise<Rater> {

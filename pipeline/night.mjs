@@ -54,6 +54,7 @@
 // plan.parkAfterNights nights in a row is parked (night_item_failures) and
 // listed in the summary instead of retried. A spent quota stops the run as
 // planned waiting, never as a failure.
+import { NIGHT_TABLES } from "../lib/pipeline-schema.mjs";
 import { STAGES, backgroundAllowance, nightTimeline, pacificParts, previousDay, usageToday } from "./budget.mjs";
 import {
   createGemini,
@@ -68,6 +69,7 @@ import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
 import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import { rankForWrite } from "../lib/tiers-store.mjs";
 import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
@@ -81,28 +83,7 @@ import { libraryStage } from "./content/library-stage.mjs";
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
 export async function ensureNightSchema(db) {
-  await db.batch(
-    [
-      `CREATE TABLE IF NOT EXISTS night_runs (
-        night TEXT PRIMARY KEY,
-        started_at TEXT NOT NULL,
-        finished_at TEXT,
-        status TEXT NOT NULL,
-        run_id TEXT,
-        summary TEXT
-      )`,
-      `CREATE TABLE IF NOT EXISTS night_item_failures (
-        job TEXT NOT NULL,
-        item TEXT NOT NULL,
-        nights INTEGER NOT NULL,
-        last_night TEXT NOT NULL,
-        reason TEXT,
-        parked_at TEXT,
-        PRIMARY KEY (job, item)
-      )`,
-    ],
-    "write"
-  );
+  await db.batch(NIGHT_TABLES, "write");
 }
 
 const iso = (ms) => new Date(ms).toISOString();
@@ -247,7 +228,8 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   }
   if (!image) return "skipped";
   const now = new Date(ctx.now());
-  const rubric = await gradeFromEvidence(gemini, { row, image, now });
+  // The new grade carries its tier rank (lib/tiers-store.mjs; a background write, shown only with RANKING_V2).
+  const rubric = await rankForWrite(ctx.db, await gradeFromEvidence(gemini, { row, image, now }), { url, now: ctx.now() });
   await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
   return "ok";
 }

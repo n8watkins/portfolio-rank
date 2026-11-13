@@ -51,7 +51,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
-      <Article post={post} related={related} more={more} />
+      <Article post={post} related={related} more={more} signup />
     </>
   );
 }

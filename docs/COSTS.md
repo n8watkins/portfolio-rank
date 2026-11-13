@@ -36,6 +36,7 @@ Shared assumptions:
 | R2 operations | $0 | $0 | $0 (Class A about 40k, Class B under 4M) | 1M Class A and 10M Class B free |
 | Workers AI illustrations | $0 | $0 | $0 | 10,000 neurons a day free; PortfolioRank capped at 40 images (2,500 neurons) a day by code ([Workers AI](#workers-ai)) |
 | Web Analytics | $0 | $0 | $0 | on every plan, no price listed |
+| Email (reports, links, alerts, sign-in) | $0 | $0 | $0 | inside the 3,000 a month Workers Paid includes; PortfolioRank's mailroom share is 150 a month ([Email](#email)) |
 | GitHub Actions (public repository) | $0 | $0 | $0 | standard runners free |
 | Turso (Free plan) | $0 | $0 with the fixes in section C (without them reads exceed Free around month 5) | $0 with the fixes; without them Free blocks in the first week and Developer costs about $5 to $10 | section C |
 | Gemini background work | $0 (free tier) | $23 ($17 with Batch API) | $23 ($17 with Batch API) | below |
@@ -211,6 +212,24 @@ Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("
   Staging's database is 2.4 MB; the whole account uses 11 MB of 5 GB and 1.7M of 500M rows read.
 - GitHub Actions: staging adds about a minute per push to main.
 - Total extra cost: $0.
+
+## Email
+
+All of PortfolioRank's email goes out through Cloudflare Email Service on the account's Workers Paid plan, which includes 3,000 sends a month.
+The shared mailroom Worker splits 2,500 of them between the owner's apps; PortfolioRank's share is 60 a day and 150 a month, 6 to one address a day (mailroom `deployments/n8builds/apps.ts`).
+Sign-in links go through the mailroom (the `MAILROOM` binding); grade reports, report links and owner alerts still use the Worker's own `send_email` binding, inside the same account allowance, and the app's gate caps all of them at 100 a day (`lib/email/gate.mjs`).
+
+Expected sign-in volume (email sign-in, added 2026-11-12):
+
+| Scenario | Sign-ins a day | Links a month | Share of the 150 |
+| --- | ---: | ---: | ---: |
+| Today (staging walkthrough, a few testers) | 0 to 5 | under 30 | under 20% |
+| Modest (most people use GitHub; JWT sessions last 30 days) | about 3 | about 90 | 60% |
+| Popular | 15 or more | 450 or more | over the share |
+
+- Cost: $0 in every scenario: a send past the mailroom share is refused (the person sees "We can't send email right now" and can use GitHub), never billed.
+- Caps on the way: 3 links an hour and 6 a day per address, 10 an hour and 30 a day per network (keyed hashes in `rate_limits`), Turnstile, the gate's 40 sign-in emails a day with 10 kept for them, and the mailroom's priority share for sign-in.
+- Watch: if sign-ins grow past about 4 a day, PortfolioRank's mailroom month share runs out before the month does; raise it in the mailroom (taking from another app, inside the 2,500) or move reports to their own slice.
 
 ## Tavily credits
 
