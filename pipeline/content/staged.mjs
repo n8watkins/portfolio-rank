@@ -73,7 +73,7 @@ const json = (x) => JSON.stringify(x, null, 1);
 export function buildOutlineRequest(sheet, problems = [], previous = null) {
   const text = [
     "Plan one post from this fact sheet. Do not write the body yet.",
-    `Plan: hook_fact_ids are the placeholder ids (like f3, without braces) of ONE notable fact to lead with; title and alt titles; subtitle; tags (2 to 4); share_line and newsletter_blurb; tldr with exactly three bullets, each containing at least one {{placeholder}}, the first built on the hook; exactly ${SECTIONS} sections, each with a subhead that says what it proves, a one-line intent and the ids of the facts it will use (every fact id exists in the sheet, no fact in two sections); callout_fact_id: the id of ONE numeric fact for the pull quote; actions: three concrete steps a reader can do today (where example_sites lists a site strong on the step's axis, say which site to point to); images: a hero and 2 or 3 inline images as described in the rules.`,
+    `Plan: hook_fact_ids are the placeholder ids (like f3, without braces) of ONE notable fact to lead with; title and alt titles; subtitle; tags (2 to 4); share_line and newsletter_blurb; tldr with exactly three bullets, each containing at least one {{placeholder}}, the first built on the hook, every bullet a point one of the sections makes with the same placeholders; exactly ${SECTIONS} sections, each with a subhead that says what it proves, a one-line intent that matches the subhead and the ids of the facts it will use (every fact id exists in the sheet, no fact in two sections; spread the named sites' positive facts over the sections so at least three named sites are each linked in a section when the sheet names three or more); callout_fact_id: the id of ONE numeric fact for the pull quote; actions: three concrete steps a reader can do today (where example_sites lists a site strong on the step's axis, say which site to point to); images: a hero and 2 or 3 inline images as described in the rules.`,
     ...(problems.length ? ["", "Your earlier plan failed these checks:", ...problems.map((p) => `- ${p}`), "<earlier_plan>", json(previous), "</earlier_plan>"] : []),
     "",
     "<fact_sheet>",
@@ -113,6 +113,17 @@ export function checkOutline(o, sheet) {
   if (!(sheet.notable ?? []).length) {
     /* nothing to lead with */
   } else if (!(sheet.notable ?? []).some((n) => n.factIds.every((i) => hook.includes(i)))) p.push("the hook must use all the facts of one notable fact");
+  // Every TL;DR placeholder is planned into a section, so the body covers it.
+  const planned = new Set([...used.keys()].map((i) => String(i).replace(/[{}]/g, "")));
+  (o?.tldr ?? []).forEach((b, i) => {
+    const missing = [...String(b).matchAll(PLACEHOLDER)].map((m) => m[1]).filter((id) => ids.has(id) && !planned.has(id) && !hook.includes(id));
+    if (missing.length) p.push(`tldr bullet ${i + 1} uses ${missing.map((m) => `{{${m}}}`).join(", ")}, which no section covers: plan it into a section`);
+  });
+  // At least three named sites (when the sheet names three), each through one of its positive facts.
+  const sites = new Set(sheet.names.map((n) => n.url));
+  const need = Math.min(3, sites.size);
+  const linked = new Set([...planned].map((id) => byId.get(id)).filter((f) => f?.tone === "positive" && sites.has(f.about)).map((f) => f.about));
+  if (linked.size < need) p.push(`sections plan the positive facts of ${linked.size} named site(s); plan at least ${need}, so each can be linked with what it does well`);
   const c = byId.get(String(o?.callout_fact_id ?? "").replace(/[{}]/g, ""));
   if (!c || typeof c.value !== "number") p.push("callout_fact_id must be a numeric fact in the sheet");
   if ((o?.actions ?? []).length !== 3) p.push(`${(o?.actions ?? []).length} actions, exactly 3 needed`);
@@ -130,7 +141,7 @@ function factsFor(sheet, ids) {
 
 export function buildSectionsRequest(sheet, outline, indexes) {
   const text = [
-    "Write these sections of a blog post. Each section is one or two paragraphs; every paragraph has two to four sentences, with each sentence on its own line and no paragraph of one sentence. Use only the facts listed for that section, written as their {{placeholders}}; never type a digit. Where a tie is listed, say the items tie. Be concrete, no filler, nothing about how PortfolioRank is built or run. About 110 to 140 words per section; the whole post must stay under 800 words.",
+    "Write these sections of a blog post. Each section is two or three paragraphs; every paragraph has two to four sentences, with each sentence on its own line and no paragraph of one sentence. Use only the facts listed for that section, written as their {{placeholders}}; never type a digit. Where a tie is listed, say the items tie. Be concrete, no filler, nothing about how PortfolioRank is built or run. About 180 to 240 words per section, written like a person (never copy a fact label, never \"a share of\", call the top group \"the top-graded portfolios\", no tier letters, no sizes in words); where the section has named example sites, link each as [Name](site_url) and say what it does well; the whole post must stay under 1,000 words.",
     "",
     `Post title: ${outline.title}`,
     ...indexes.flatMap((i) => {
@@ -143,7 +154,7 @@ export function buildSectionsRequest(sheet, outline, indexes) {
 
 export function buildFinishRequest(sheet, outline, sections) {
   const text = [
-    "Finish this post. Write the body in Markdown from the plan and the sections below: an opener paragraph that starts with the hook and ends with the one takeaway the reader can use on their own portfolio, addressed to them (two to four sentences), then the three sections (smooth the transitions, remove repetition, keep each paragraph two to four sentences, keep their {{placeholders}}), the callout of two quote lines, \"### Try this\" with the three numbered steps, and a closing takeaway paragraph of two or three sentences. Put [[image:inline-1]], [[image:inline-2]] (and inline-3 if planned) after the paragraph each supports. Finalise the title and alt titles. Return the whole post in the response shape; tldr, tags, share_line, newsletter_blurb and images may stay as planned. Total body: 550 to 700 words; under 475 or over 840 fails, so cut sentences that repeat another.",
+    "Finish this post. Write the body in Markdown from the plan and the sections below: an opener paragraph that starts with the hook and ends with the one takeaway the reader can use on their own portfolio, addressed to them (two to four sentences), then the three sections (smooth the transitions, remove repetition, keep each paragraph two to four sentences, keep their {{placeholders}}), the callout of two quote lines, \"### Try this\" with the three numbered steps, and a closing takeaway paragraph of two or three sentences. Put [[image:inline-1]], [[image:inline-2]] (and inline-3 if planned) after the paragraph each supports. Finalise the title and alt titles. Return the whole post in the response shape; tldr, tags, share_line, newsletter_blurb and images may stay as planned. Total body: 700 to 1,000 words; under 665 or over 1,050 fails, so cut sentences that repeat another. Check before returning: every TL;DR bullet is covered in the body with the same placeholder, each subhead matches its section, at least three named example sites are linked when the sheet has three, and no two sentences in a row start with the same word.",
     "",
     "<plan>",
     json({ ...outline, sections: outline.sections.map((s, i) => ({ ...s, written: sections[i] })) }),
@@ -153,7 +164,7 @@ export function buildFinishRequest(sheet, outline, sections) {
     json(sheetForWriter(sheet)),
     "</fact_sheet>",
   ].join("\n");
-  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: { ...OPTIONS, maxOutputTokens: 4096 } };
+  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: { ...OPTIONS, maxOutputTokens: 6144 } };
 }
 
 /**

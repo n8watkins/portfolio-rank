@@ -226,15 +226,15 @@ export async function topGrades(db, { now }) {
     b.notable([leadId, gapId], `the biggest lead of S and A portfolios is {{${gapId}}} on {{${leadId}}}${lead.length > 1 ? " (a tie)" : ""}`);
   }
   b.chart({
-    title: "Average score by axis: S and A portfolios against the rest",
+    title: "Average score by axis: the top-graded portfolios against the rest",
     unit: "",
     max: 5,
     categories: bestIds.map(([l]) => l),
     series: [
-      { name: "Graded S or A", facts: bestIds.map(([, id]) => id) },
+      { name: `Top-graded (top ${fmt.pct(best.length / rows.length)})`, facts: bestIds.map(([, id]) => id) },
       { name: "Everyone else", facts: restIds.map(([, id]) => id) },
     ],
-    alt: "Bar chart of the average AI score per axis, S and A portfolios next to all others; the top group leads on every axis.",
+    alt: "Bar chart of the average AI score per axis, the top-graded portfolios next to all others; the top group leads on every axis.",
   });
   // Up to 5 S-tier sites with a name, highest total first: named only for being graded S.
   const named = rows
@@ -244,6 +244,9 @@ export async function topGrades(db, { now }) {
   for (const r of named) {
     b.name(r, "graded S by the AI judge");
     b.fact(`${r.name} (${domainOf(r.url)}) is graded`, "S", "S", { tone: "positive", about: r.url });
+    // What it does well, for the post to say when it links the site: its full-mark axes.
+    const strong = per.filter((p) => axisScore(r, p.k) === 5).map((p) => p.label);
+    if (strong.length) b.fact(`${r.name} (${domainOf(r.url)}) scores 5 out of 5 on ${joinWords(strong)}`, strong.length, joinWords(strong), { tone: "positive", about: r.url });
   }
   // For each axis, the named S site that scores highest on it: a positive example a "Try this" step can link.
   for (const p of per) {
@@ -271,6 +274,8 @@ export async function pageCraft(db, { now }) {
   });
   b.fact("Portfolios measured and graded", rows.length, fmt.int(rows.length));
   b.fact("Of them, graded S or A", best.length, fmt.int(best.length));
+  // The top group as a share, so a post can call it "the top 23%" rather than by tier letters.
+  b.fact("Share of measured portfolios that are graded S or A (the top-graded group)", best.length / rows.length, fmt.pct(best.length / rows.length));
   const share = (xs, f) => {
     const known = xs.filter((r) => typeof f(r) === "boolean");
     return known.length ? known.filter(f).length / known.length : null;
@@ -306,17 +311,30 @@ export async function pageCraft(db, { now }) {
     b.fact("Median number of network requests of S and A portfolios", qb, fmt.int(qb));
     b.fact("Median number of network requests of other portfolios", qr, fmt.int(qr));
   }
+  // Up to 5 named S sites that fit a phone, load with no console errors and
+  // weigh no more than the others' median: positive examples to link, each
+  // with what it does well. Named only for those reasons.
+  const examples = best
+    .filter((r) => r.rubric.tier === "S" && r.name && r.meta.overflow390 === false && r.meta.consoleErrors === 0 && typeof r.meta.bytes === "number" && r.meta.bytes > 0 && (wr == null || r.meta.bytes <= wr))
+    .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
+    .slice(0, 5);
+  for (const r of examples) {
+    b.name(r, "graded S, fits a phone screen and loads light with no console errors");
+    const traits = ["fits a phone screen", "no console errors", ...(r.meta.darkMode === true ? ["dark mode by default"] : []), ...(r.meta.motion === true ? ["motion on the page"] : [])];
+    b.fact(`${r.name} (${domainOf(r.url)}) is graded S and has ${joinWords(traits)}`, "S", "S", { tone: "positive", about: r.url });
+    b.fact(`${r.name} (${domainOf(r.url)}) page weight, first load`, r.meta.bytes, `${fmt.dec(r.meta.bytes / 1e6)} MB`, { tone: "positive", about: r.url });
+  }
   if (cats.length) {
     b.chart({
-      title: "What the capture measured: S and A portfolios against the rest",
+      title: "What the capture measured: the top-graded portfolios against the rest",
       unit: "%",
       max: 1,
       categories: cats,
       series: [
-        { name: "Graded S or A", facts: bestIds },
+        { name: `Top-graded (top ${fmt.pct(best.length / rows.length)})`, facts: bestIds },
         { name: "Everyone else", facts: restIds },
       ],
-      alt: "Bar chart comparing the share of S and A portfolios and of all others with dark mode, motion, a phone-friendly layout and no console errors.",
+      alt: "Bar chart comparing the share of top-graded portfolios and of all others with dark mode, motion, a phone-friendly layout and no console errors.",
     });
   }
   return b.done();

@@ -25,9 +25,16 @@ export const SYSTEM_INSTRUCTION = [
   "- Editor's guidelines: when the sheet has editor_guidelines, follow every one of them; they come from the owner's notes on earlier drafts. When it has owner_notes, they are the owner's notes on the previous version of this post: fix every point they raise.",
   "- Hook: the sheet lists notable facts. Lead with one of them: the first TL;DR bullet and the opener build on it.",
   "- Superlatives: write largest, smallest, most, least or only about a fact only if the sheet supports it. Where the sheet says a lead or a low is tied, say it is a tie (use the tie placeholders), never name one winner.",
-  "- Shape: tldr has exactly three bullets, each containing at least one {{placeholder}}. body is Markdown of 550 to 700 words (count them: under 475 or over 840 fails; say each thing once, no filler), with real paragraphs: every paragraph is two to four sentences, never one sentence on its own, each sentence on its own line, paragraphs separated by a blank line:",
+  "- Write like a person, not a spreadsheet. Never copy a fact's label into a sentence. Put the subject first and the number in the middle, and compare in the same breath: \"Only {{f3}} of the top-graded portfolios open in dark mode, against {{f4}} of everyone else.\" Never write \"a share of\", \"the average <axis> score of <group> is\", \"representing a tie across\" or \"<number> axes\". Vary how sentences start: no two sentences in a row begin with the same word, and no two paragraphs begin the same way.",
+  "- Groups: the sheet's labels say \"S and A portfolios\"; in the post call them \"the top-graded portfolios\" or \"the top {{placeholder}}\" (the sheet's share of the top group), and \"everyone else\" or \"the rest\". Never write tier letters (S, A, S or A, top tier S).",
+  "- Size of the data: say how many portfolios only with the count's placeholder; never \"thousands\", \"hundreds\", \"most sites\" or any other size in words.",
+  "- Ties: say which items tie and at what (\"storytelling and memorability tie for the biggest lead, {{f17}}\"); never count the tied items.",
+  "- Consistency: every TL;DR bullet is a point the body makes too, with the same placeholder; a TL;DR bullet the body never covers fails. Each subhead names only what its section covers: a subhead that promises a topic its section does not discuss fails. Never put two facts side by side that seem to contradict each other (a count of one group next to a share of a wider group) without saying how they relate.",
+  "- Examples: when the sheet's names list has at least three sites, the body names and links at least three of them, each as [Name](site_url) with the exact site_url, with one or two sentences on what that portfolio does well, taken from its positive facts. Spread them over the sections where they illustrate the point; a screenshot of one of them makes a good inline image.",
+  "- Try this: each step is specific to this post's findings: name the axis or measurement, say exactly what to change on a portfolio, and point to the example site that does it well where there is one. No generic advice (\"polish your writing\", \"improve your design\").",
+  "- Shape: tldr has exactly three bullets, each containing at least one {{placeholder}}. body is Markdown of 700 to 1,000 words (count them: under 665 or over 1,050 fails; say each thing once, no filler; the length comes from examples and explanation, not repetition), with real paragraphs: every paragraph is two to four sentences, never one sentence on its own, each sentence on its own line, paragraphs separated by a blank line:",
   "  an opener paragraph that starts with the hook and ends with the takeaway for the reader;",
-  '  three sections, each starting with a line "### <subhead>" that says what the section proves, each with one or two paragraphs;',
+  '  three sections, each starting with a line "### <subhead>" that says what the section proves, each with two or three paragraphs;',
   "  one callout of two Markdown quote lines: the first a bold line restating exactly one numeric fact with the scope its label gives (if the label says 'of all graded portfolios', do not say 'of top portfolios'); the second a line of context that adds no other number;",
   '  then the line "### Try this" with nothing else on it, followed by three numbered lines ("1. ", "2. ", "3. "), each a concrete step a reader can do today; where the sheet lists an example site strong on that axis, point to it with a Markdown link [Name](site_url) using the exact site_url;',
   "  then a closing paragraph of two or three sentences that states the takeaway. No other heading levels, no HTML, no tables, no images, and no links except those example sites.",
@@ -80,17 +87,17 @@ export function sheetForWriter(sheet) {
     ...(sheet.guidelines?.length ? { editor_guidelines: sheet.guidelines } : {}),
     ...(sheet.ownerNotes ? { owner_notes: sheet.ownerNotes } : {}),
     data_as_of: sheet.dataAsOf.slice(0, 10),
-    facts: sheet.facts.map((f) => ({ placeholder: `{{${f.id}}}`, label: f.label, display: f.display, ...(f.scope ? { scope: f.label } : {}) })),
+    facts: sheet.facts.map((f) => ({ placeholder: `{{${f.id}}}`, label: f.label, display: f.display, ...(f.scope ? { scope: f.label } : {}), ...(f.tone === "positive" && f.about ? { site_url: f.about } : {}) })),
     notable_facts: (sheet.notable ?? []).map((n) => n.why),
     ties: (sheet.superlatives ?? []).filter((x) => x.tied).map((x) => ({ claim: x.term, facts: x.factIds.map((i) => `{{${i}}}`), tie_placeholder: `{{${x.tieFactId}}}` })),
     example_sites: (sheet.examples ?? []).map((e) => ({ axis: e.axis, name: e.name, site_url: e.url, fact: `{{${e.factId}}}` })),
     charts: sheet.charts.map((c) => ({ chart_id: c.id, title: c.title })),
-    names: sheet.names.map((n) => ({ name: n.name, site: n.domain, reason: n.reason })),
+    names: sheet.names.map((n) => ({ name: n.name, site: n.domain, site_url: n.url, reason: n.reason })),
     screenshots: sheet.screenshots.map((s) => ({ site_url: s.url, name: s.name })),
   };
 }
 
-export const OPTIONS = { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: "low", maxOutputTokens: 4096, temperature: 0.7 };
+export const OPTIONS = { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: "low", maxOutputTokens: 6144, temperature: 0.7 };
 
 export function buildWriteRequest(sheet) {
   const text = ["Write one post from this fact sheet.", "", "<fact_sheet>", JSON.stringify(sheetForWriter(sheet), null, 1), "</fact_sheet>"].join("\n");
@@ -100,7 +107,7 @@ export function buildWriteRequest(sheet) {
 /** A rewrite with the failures listed; the draft goes back with its placeholders. */
 export function buildReviseRequest(sheet, draft, failures) {
   const text = [
-    "Rewrite this post so it passes every check below. Keep what works; fix only what failed. Same rules and shape: body 280 to 360 words (under 250 or over 400 fails), real paragraphs of two to four sentences, exactly three TL;DR bullets with a placeholder each.",
+    "Rewrite this post so it passes every check below. Keep what works; fix only what failed. Same rules and shape: body 700 to 1,000 words (under 665 or over 1,050 fails), real paragraphs of two to four sentences, exactly three TL;DR bullets with a placeholder each.",
     "",
     "Failed checks:",
     ...failures.map((f) => `- ${f}`),

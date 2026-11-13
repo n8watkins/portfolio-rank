@@ -17,8 +17,9 @@
 // the review queue. Plain JavaScript: the app, the engine and the tests
 // share it.
 
-/** The length the owner asked for (2026-11-11): about 500 to 800 words unless the data earns more. */
-export const TARGET_WORDS = { min: 500, max: 800 };
+/** The length the owner asked for (2026-11-12, after 500 to 800 on 2026-11-11): 700 to 1,000 words. */
+import { WORDS as TARGET_WORDS } from "./checks.mjs";
+export { TARGET_WORDS };
 /** A takeaway must be stated within this many words of the start. */
 export const PAYOFF_WITHIN = 150;
 /** The reading grade above which a post is flagged as hard going. */

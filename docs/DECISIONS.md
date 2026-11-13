@@ -391,7 +391,12 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   Only Google's own sources; "what's trending" outside them is not read.
   Why: when Google retires 3.5 Flash-Lite, every grade and comparison method needs warning and a re-run plan.
 
-- **Post length is 250 to 400 words, with real paragraphs** (owner, 2026-11-10: option A). Status: built.
+- **Posts read like a person wrote them, 700 to 1,000 words, with at least three linked examples** (owner, 2026-11-12, after grading the first two staging posts C+ to B-). Status: building (#131).
+  Code checks ("substance", pipeline/content/quality.mjs): no spreadsheet phrasing ("a share of", "the average <axis> score of <group> is", "a tie across N axes"), no tier letters (the top group is "the top-graded portfolios" or "the top 23%" until the rank-based tiers land), no size of the data in words ("thousands"), every TL;DR placeholder also in the body, no subhead without content, no two sentences in a row with the same first word, and at least three named sites from the sheet linked when it names three.
+  The outline check plans every TL;DR point and three named sites into the sections; the writer sees each named site's address and what it does well (top grades: its full-mark axes; page craft: new positive examples, S sites that fit a phone, load with no console errors and weigh no more than the others' median); the final review also checks that subheads match their sections and that figures don't seem to contradict each other.
+  Charts say "the top-graded portfolios" with the group's share in the legend.
+  Why: the drafts read robotic, misstated ties and the data's size, promised sections they didn't deliver and linked one site.
+- **Post length is 250 to 400 words, with real paragraphs** (owner, 2026-11-10: option A). Status: superseded by 500 to 800 (2026-11-11), then 700 to 1,000 (2026-11-12).
   The template, the length check (10% slack either side) and the revision prompt say 250 to 400 words, down from 400 to 600.
   Paragraphs are 2 to 4 sentences with an opening hook and a closing takeaway; a draft where most paragraphs are one sentence fails.
   The TL;DR is exactly three bullets, each with a fact placeholder.
