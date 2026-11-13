@@ -183,7 +183,7 @@ export async function purgeDelisted(
       await db.batch(
         [
           { sql: "DELETE FROM portfolios WHERE url = ? AND delisted_at IS NOT NULL", args: [row.url] },
-          { sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi:${row.url}`, `inspect:${row.url}`] },
+          { sql: "DELETE FROM cache WHERE k IN (?, ?, ?)", args: [`psi:${row.url}`, `psi-desktop:${row.url}`, `inspect:${row.url}`] },
         ],
         "write"
       );

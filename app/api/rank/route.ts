@@ -18,6 +18,8 @@ import { MATCHUP_TTL_MS, issueMatchupToken, verifyMatchupToken } from "@/lib/mat
 import { starBalance } from "@/lib/stats";
 import { sameOrigin } from "@/lib/polls/server";
 import { shotBases } from "@/lib/shots";
+import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
+import { drawCandidates } from "@/lib/play/draw.mjs";
 import type { Portfolio } from "@/app/page";
 
 type Rating = { elo: number; votes: number };
@@ -44,24 +46,44 @@ async function countVotes(raterId: string): Promise<number> {
   return Number(res.rows[0].n);
 }
 
+/** Portfolios with MIN_FACEOFFS or more people's face-offs (ratings.votes): drawn less, so the rest catch up. */
+async function settledUrls(): Promise<Set<string>> {
+  const res = await db().execute({ sql: "SELECT url FROM ratings WHERE votes >= ?", args: [MIN_FACEOFFS] });
+  return new Set(res.rows.map((r) => String(r.url)));
+}
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-export async function GET() {
+/** Each roster site's place in the feed: its short id in a pair (`id`) and in `?seen=`. */
+const FEED_INDEX = new Map((feed as Portfolio[]).map((p, i) => [p.url, i]));
+/** At most this many ids are read from `?seen=` (a long session forgets its oldest). */
+const SEEN_MAX = 400;
+
+/** `?seen=3,17,…`: feed indices the browser already showed this session. */
+function seenOf(req: Request): Set<number> {
+  const raw = new URL(req.url).searchParams.get("seen") ?? "";
+  const ids = raw.split(",").slice(-SEEN_MAX).map(Number).filter(Number.isInteger);
+  return new Set(ids);
+}
+
+export async function GET(req: Request) {
   await ensureSchema();
   const rater = await getRater();
-  // Keep hidden sites out of matchups (same rule as browse: lib/roster).
+  // Keep hidden sites out of matchups (same rule as browse: lib/roster), and
+  // the ones this browser already saw this session, so no portfolio comes
+  // back; when nearly all are seen, the whole roster is open again.
   const hidden = await hiddenUrls();
-  const pool = (feed as Portfolio[]).filter((p) => !hidden.has(p.url));
+  const listed = (feed as Portfolio[]).filter((p) => !hidden.has(p.url));
+  const seen = seenOf(req);
+  const fresh = listed.filter((p) => !seen.has(FEED_INDEX.get(p.url)!));
+  const pool = fresh.length >= 8 ? fresh : listed;
 
-  // Sample a handful of distinct entries, then face off the two least-voted
-  // so every vote goes where the rating is most uncertain.
-  const picked = new Map<number, Portfolio>();
-  while (picked.size < 8) {
-    const i = Math.floor(Math.random() * pool.length);
-    picked.set(i, pool[i]);
-  }
-  const candidates = [...picked.values()];
+  // Sample a handful of distinct entries, mostly from portfolios that still
+  // need face-offs for their own tier (lib/tiers.mjs MIN_FACEOFFS), then face
+  // off the two least-voted, so every portfolio reaches its tier and every
+  // vote goes where the rating is most uncertain.
+  const candidates = drawCandidates(pool, await settledUrls()) as Portfolio[];
   const ratings = await getRatings(candidates.map((p) => p.url));
   candidates.sort(
     (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)
@@ -139,6 +161,7 @@ export async function GET() {
       : new Set<string>();
   const withRating = (p: Portfolio) => ({
     ...p,
+    id: FEED_INDEX.get(p.url),
     elo: ratings.get(p.url)?.elo ?? BASE_ELO,
     votes: ratings.get(p.url)?.votes ?? 0,
     // Capture base dir (`${SHOTS_BASE_URL}/${shot_key}`) or null; the client
@@ -226,21 +249,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
 
-    // Anon votes are logged (they're still signal) but never move official ELO,
-    // and after the free allowance the gate asks for sign-in.
-    if (rater.type === "anon") {
-      const used = await tx.execute({
-        sql: "SELECT COUNT(*) AS n FROM votes WHERE rater_id = ?",
-        args: [rater.id],
-      });
-      if (Number(used.rows[0].n) >= ANON_VOTE_LIMIT) {
-        await tx.rollback();
-        return NextResponse.json(
-          { error: "signin_required", anonVoteLimit: ANON_VOTE_LIMIT },
-          { status: 403 }
-        );
-      }
-    }
+    // Anon votes are logged (they're still signal) but never move official ELO
+    // or any board. There is no sign-in wall (owner, 2026-11-12): a guest
+    // keeps voting, within the same daily limit as everyone, and up to
+    // ANON_VOTE_LIMIT of these practice votes convert at sign-in (/api/claim).
 
     // Superstar super-vote: only a signed-in rater with a banked star can spend
     // one. It doubles the ELO weight and flags the vote (= the ⭐ for the winner).

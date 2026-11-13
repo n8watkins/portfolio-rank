@@ -85,6 +85,8 @@ const pool = feed.slice(300, 312).map((f, i) => ({
   name: f.name,
   mu: i < 6 ? 40 - i : 20 - i,
   tier: i < 6 ? "A" : "B",
+  // Rank keys (lib/tiers.mjs): one portfolio above the graded one, eleven below, so its report is 2nd of 13: tier A.
+  key: i === 0 ? 999999 : 1000 - i,
   quality: 4,
   axes: Object.fromEntries(AI_CRITERIA.map((c) => [c.id, 5])),
   roles: ["designer"],
@@ -134,36 +136,37 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   await finish(id);
   // The page notices on its next look and turns into the report.
   await p.getByRole("heading", { level: 1, name: "Grade UI Tester" }).waitFor({ timeout: 15000 });
-  await p.getByRole("img", { name: "Tier A" }).first().waitFor();
+  // The tier comes from face-offs: a new report starts at B. The verdict and "top N%" are the grade's (Gemini's A).
+  await p.getByRole("img", { name: "Tier B" }).first().waitFor();
+  await p.getByText("Starting tier, until 10 face-offs").waitFor();
   await p.getByText("Strong and clear, with a few rough edges.").waitFor();
-  assert.match(await p.getByText(/^Top \d+/).first().textContent(), /Top \d+%/);
+  assert.match(await p.getByText(/^GradeTop \d+%$/).first().textContent(), /Top \d+%/);
 
   // The owner's result is celebrated by its level, once per report in this browser.
   const stored = JSON.parse(String((await db.execute({ sql: "SELECT report FROM grade_jobs WHERE id = ?", args: [id] })).rows[0].report));
-  const level = celebrationLevel({ tier: "A", percentile: stored.percentile });
+  const level = celebrationLevel({ tier: "B", percentile: stored.percentile });
   if (level) {
     const banner = p.getByRole("status").filter({ hasText: `${CELEBRATIONS[level].title}!` });
     await banner.waitFor();
     await banner.getByRole("button", { name: "Dismiss" }).click();
     await p.reload();
-    await p.getByRole("img", { name: "Tier A" }).first().waitFor();
+    await p.getByRole("img", { name: "Tier B" }).first().waitFor();
     await p.waitForTimeout(800);
     assert.equal(await banner.count(), 0);
   }
 
-  const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
-  assert.match(await hiring.textContent(), /Can they reach you\?.*1 to fix/s);
-  assert.match(await hiring.textContent(), /Resume: .*Recruiters look for a resume first.*Fix: Link a PDF/s);
-  assert.equal(await p.getByRole("region", { name: "How it looks and reads" }).getByRole("listitem").count(), AI_CRITERIA.length);
-  const fixes = p.getByRole("region", { name: "Fix these first" });
-  await fixes.getByText("Biggest win").waitFor();
+  // A report, not a sales page: the fixes in order, then the findings, dense.
+  const fixes = p.getByRole("region", { name: "Fix these, in order" });
   assert.match(await fixes.textContent(), /Expected:/);
-  await p.getByRole("region", { name: "Portfolios doing it better" }).getByRole("link", { name: "See its report" }).waitFor();
-  assert.equal(await p.getByRole("region", { name: "Similar portfolios" }).getByRole("link").count(), 4);
+  const hiring = p.getByRole("region", { name: "What a hiring manager sees" });
+  assert.match(await hiring.textContent(), /Resume link.*No resume link/s);
+  assert.equal(await p.getByRole("region", { name: "How it looks and reads" }).getByRole("listitem").count(), AI_CRITERIA.length);
+  // One portfolio doing it better and four similar ones, as names with links.
+  assert.equal(await p.getByRole("region", { name: "Portfolios to learn from" }).getByRole("link").count(), 5);
 
   // Share is the primary action; the PDF is the browser's own print.
-  await p.getByRole("button", { name: "Share your result" }).waitFor();
-  await p.getByRole("button", { name: "Download PDF" }).waitFor();
+  await p.getByRole("button", { name: "Share" }).waitFor();
+  await p.getByRole("button", { name: "PDF" }).waitFor();
   // Not on the list: the request goes to the community list's form.
   assert.match(await p.getByRole("link", { name: /Add me to the leaderboard/ }).getAttribute("href"), /submit-portfolio\.yml&url=/);
   // The owner's own panel.
@@ -172,9 +175,9 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   // The print view: the report alone, no shell, no buttons.
   await p.emulateMedia({ media: "print" });
   assert.equal(await p.getByRole("banner").isVisible(), false);
-  assert.equal(await p.getByRole("button", { name: "Share your result" }).isVisible(), false);
+  assert.equal(await p.getByRole("button", { name: "Share" }).isVisible(), false);
   assert.equal(await p.getByRole("region", { name: "Your report" }).isVisible(), false);
-  assert.ok(await p.getByText(/Graded by Gemini \(gemini-3\.5-flash-lite\)/).isVisible());
+  assert.ok(await p.getByText(/Gemini's scores \(gemini-3\.5-flash-lite\) are an opinion/).isVisible());
   await p.emulateMedia({ media: "screen" });
 
   // The share image says the grade, for the report's link only.
@@ -228,7 +231,7 @@ test("nothing to fix: the calm empty state, and a stranger sees no owner tools",
   // A shared link is not celebrated: that is for the owner.
   await p.waitForTimeout(800);
   assert.equal(await p.locator("canvas[data-celebration]").count(), 0);
-  assert.equal(await p.getByRole("status").filter({ hasText: "S tier!" }).count(), 0);
+  assert.equal(await p.getByRole("status").filter({ hasText: "SSS tier!" }).count(), 0);
   // No sideways scroll on a phone.
   assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   assert.deepEqual(errors, []);
@@ -239,7 +242,7 @@ test("the report by email: a one-time link makes another browser the owner, once
   assert.ok(reportId, "the first test made a report");
   const reader = await freshPage(1440);
   await reader.page.goto(`${BASE}/grade/${reportId}`);
-  await reader.page.getByRole("button", { name: /Email me the report/ }).click();
+  await reader.page.getByRole("button", { name: "Email it to me" }).click();
   await reader.page.getByLabel("Your email").fill("reader@example.com");
   await reader.page.getByRole("button", { name: "Email me the link" }).click();
   await reader.page.getByText(/Check your inbox for the link/).waitFor();
@@ -319,13 +322,14 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   await owner.context.close();
 });
 
-test("how grading works: the five tiers, the bands, what's checked, how votes combine; in the sitemap", async () => {
+test("how grading works: tiers by ELO, the fine print, how to improve, the bands, what's checked, how face-offs make a tier; in the sitemap", async () => {
   for (const width of [1440, 390]) {
     const { page: p, context, errors } = await freshPage(width);
     await p.goto(`${BASE}/grading`);
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
-    for (const t of ["S", "A", "B", "C", "D"]) await p.getByRole("img", { name: `Tier ${t}` }).first().waitFor();
-    for (const name of ["Five tiers, S to D", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
+    for (const t of ["SSS", "S plus", "S minus", "A plus", "A minus", "B minus", "C plus", "D"]) await p.getByRole("img", { name: `Tier ${t}`, exact: true }).first().waitFor();
+    for (const name of ["Your tier is your place by ELO", "A careful ELO, updates and the grade", "How to improve your tier", "Facts by code, quality by AI", "How face-offs make a tier"]) await p.getByRole("heading", { name }).waitFor();
+    await p.getByText(/Every portfolio starts at tier B, with an ELO of 1,200/).waitFor();
     assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
