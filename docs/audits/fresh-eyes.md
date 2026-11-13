@@ -22,6 +22,19 @@ There is also one route that still lets a visitor start our Gemini key, and the 
 | 7 | Give the admin short sessions and add per-account session revocation | M5 | M |
 | 8 | Move to a nonce CSP, allow-list test seams, give staging its own mailroom apps, and fix contrast and CLS | M7, L2, L4, L5 | M |
 
+## P0 status (STRATEGY.md, approved 2026-11-13)
+
+| P0 item | Status |
+| --- | --- |
+| Alerts: `OWNER_EMAIL` on production | Done 2026-11-13: a Worker secret from `pass-env` (`portfolio-rank/OWNER_EMAIL`), so deploys keep it. |
+| Alerts: dead-man check for a missed or stuck night; only a duplicate id is "already exists" (H1, H2, L3) | Merged: #153. |
+| Alerts: prove delivery end to end | #160 adds `/admin/alerts` with a Send test alert button; after deploy the owner presses it once (production had never sent an email). |
+| Privacy: `/privacy`, `/terms`, `/removal`, footer links (H4) | #155: pages name n8builds, with email and @n8watkins on X. |
+| Privacy: backups expire after 35 days (M1) | Done 2026-11-13: R2 rule `expire-backups-35d` on `portfolio-rank-backups` (prefix `backups/`); the history uploaded 2026-11-03 expires around 2026-12-08. |
+| Visitor-to-Gemini gap in "use the free tier" (H3) | #159: the route only enqueues; `tests/gemini-reach.test.mjs` fails if any visitor route can reach Gemini on our key. |
+| Workers CPU | Measured: account at 14.6M of 30M ms on 2026-11-13, on pace for 35.8M. portfolio-rank #156 (anonymous session answered by the Worker), n8builds-web #201 (Sentry relay before Next). Page caching is the edge-caching lane's. |
+| Owner goals (added 2026-11-13) | #161: weekly check, one email with an .ics invite per goal, `GET /api/admin/goals`. |
+
 ## High
 
 ### H1. Production owner alerts are never emailed (observability)
