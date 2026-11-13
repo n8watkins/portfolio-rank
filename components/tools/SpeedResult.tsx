@@ -91,7 +91,7 @@ function Device({ r }: { r: PsiResult }) {
       {r.metrics && r.metrics.length > 0 && (
         <section aria-label="Core Web Vitals">
           <h3 className="text-sm font-semibold">How it feels to a visitor</h3>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-3">
             {r.metrics.map((m) => {
               const words = METRIC_WORDS[m.id];
               const tone = metricTone(m.score);
