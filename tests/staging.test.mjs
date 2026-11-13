@@ -37,7 +37,7 @@ test("staging has its own address, Worker, ISR cache bucket and Workflow", () =>
   // Its own Worker calls itself; the mailroom (sign-in links) is shared with production, under PortfolioRank's app.
   assert.deepEqual(staging.services, [
     { binding: "WORKER_SELF_REFERENCE", service: `${config.name}-staging` },
-    { binding: "MAILROOM", service: "mailroom", entrypoint: "Mailroom", props: { app: "portfoliorank" } },
+    { binding: "MAILROOM", service: "mailroom", entrypoint: "Mailroom", props: { app: "portfoliorank-staging" } },
   ]);
   const bucket = (c, binding) => c.r2_buckets.find((b) => b.binding === binding).bucket_name;
   assert.notEqual(bucket(staging, "NEXT_INC_CACHE_R2_BUCKET"), bucket(config, "NEXT_INC_CACHE_R2_BUCKET"));
