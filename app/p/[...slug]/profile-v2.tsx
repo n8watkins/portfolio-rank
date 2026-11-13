@@ -9,7 +9,7 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
 import { eyebrow } from "@/components/ui/styles";
-import { loadProfile, loadSeoExtras, profileJsonLd, type Profile } from "@/lib/profile";
+import { loadProfile, loadSeoExtras, profileJsonLd, profileUrlForPath, type Profile } from "@/lib/profile";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
 import { FixList } from "@/components/profile/FixList";
@@ -43,9 +43,10 @@ async function seoFactsOf(p: Profile): Promise<SeoFacts> {
   return { name: p.name, url: p.url, domain: p.domain, tagline: p.tagline, report: p.report, hidden, socials };
 }
 
-export async function profileMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+export async function profileMetadata({ params }: { params: Promise<{ slug: string[] }> }): Promise<Metadata> {
   const { slug } = await params;
-  const p = await loadProfile(decodeURIComponent(slug));
+  const url = await profileUrlForPath(slug.join("/"));
+  const p = url ? await loadProfile(url) : null;
   if (!p) return {};
   const canonical = `${SITE_URL}${p.path}`;
   const facts = await seoFactsOf(p);
@@ -158,9 +159,10 @@ function ReportCard({ p }: { p: Profile }) {
   );
 }
 
-export async function ProfileV2({ params }: { params: Promise<{ slug: string }> }) {
+export async function ProfileV2({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const p = await loadProfile(decodeURIComponent(slug));
+  const url = await profileUrlForPath(slug.join("/"));
+  const p = url ? await loadProfile(url) : null;
   if (!p) notFound();
   const shot = await shotFor(p);
   // A ProfilePage about the person and its breadcrumb trail, indexable profiles only (lib/profile-seo.ts).

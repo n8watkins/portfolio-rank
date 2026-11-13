@@ -12,6 +12,7 @@ import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { Showcase } from "@/components/home/Showcase";
 import { KitSignup, KitIconButtons } from "./parts";
 import { SITE_URL } from "@/lib/site";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // Flat stand-in frames for the deck, so the browser tests need no captures.
 const frame = (hue: number) =>
@@ -23,7 +24,7 @@ const DECK = ["Ada", "Grace", "Linus", "Margaret"].map((name, i) => ({
   hero: frame(30 + i * 70),
   tier: "A",
   rank: i + 1,
-  href: `/p/${encodeURIComponent(`https://${name.toLowerCase()}.example/`)}`,
+  href: profilePath(`https://${name.toLowerCase()}.example/`),
 }));
 
 // The shared building blocks on one page, for screenshots and the browser

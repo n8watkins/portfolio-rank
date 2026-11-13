@@ -9,6 +9,7 @@ import { graderEnabled } from "@/lib/grader/server";
 import { toolsEnabled } from "@/lib/tools/server";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 const BASE = SITE_URL;
 
@@ -50,7 +51,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const hidden = await hiddenUrls();
   const graded = await gradedUrls(db());
   const detail: MetadataRoute.Sitemap = sitemapProfiles(feed as Portfolio[], hidden, graded).map((url) => ({
-    url: `${BASE}/p/${encodeURIComponent(url)}`,
+    url: `${BASE}${profilePath(url)}`,
     changeFrequency: "weekly",
     priority: 0.5,
   }));

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { LikeButton } from "@/components/LikeButton";
 import { useUndoToast } from "@/components/UndoToast";
 import { faviconOf } from "@/lib/shot-url";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 export type LikeItem = { url: string; name: string; domain: string };
 
@@ -52,7 +53,7 @@ export function ProfileLikes({ items }: { items: LikeItem[] }) {
           className="group flex items-center justify-between gap-2 rounded-xl border border-edge bg-card p-4"
         >
           <a
-            href={`/p/${encodeURIComponent(p.url)}`}
+            href={profilePath(p.url)}
             className="flex min-w-0 items-center gap-2.5"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

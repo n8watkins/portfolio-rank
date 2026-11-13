@@ -2,6 +2,7 @@
 
 import { Bookmark, ExternalLink, PanelRightOpen } from "lucide-react";
 import { AddToListButton } from "@/components/AddToListButton";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // Details, Visit and Save under a portfolio in the games. Details opens the
 // portfolio's page (its report) in a new tab, so a game in progress stays;
@@ -32,7 +33,7 @@ export function SiteActions({
   return (
     <div className={`flex items-center ${compact ? "gap-1 sm:gap-1.5" : "gap-1.5"}`}>
       {details && (
-        <a href={`/p/${encodeURIComponent(url)}`} target="_blank" rel="noopener" className={btn(compact)} aria-label={`Details for ${name} (opens in a new tab)`}>
+        <a href={profilePath(url)} target="_blank" rel="noopener" className={btn(compact)} aria-label={`Details for ${name} (opens in a new tab)`}>
           <PanelRightOpen className="h-3.5 w-3.5 shrink-0" aria-hidden /> <span className={label(compact)}>Details</span>
         </a>
       )}

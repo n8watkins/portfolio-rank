@@ -24,6 +24,7 @@ import { canonicalRedirect } from "./canonical-host";
 import { OLD_SITE_HOSTS } from "../lib/site";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
+import { legacyProfileRedirect } from "./profile-redirect";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { tiersTick } from "./tiers";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
@@ -125,6 +126,9 @@ const worker = {
     if (locked) return locked;
     const robots = stagingRobots(request, env);
     if (robots) return robots;
+    // Old or untidy profile addresses: one 301 to the readable one (./profile-redirect.ts).
+    const legacy = legacyProfileRedirect(request);
+    if (legacy) return legacy;
     const probe = probeAnswer(request);
     if (probe) return probe;
     // A signed-out visitor's session read is `null` without starting Next (./anonymous-session.ts).

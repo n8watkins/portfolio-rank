@@ -6,6 +6,7 @@ import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import type { BoardKind, Entry, Leaderboard as Board, Why } from "@/lib/leaderboard";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // The leaderboard (owner-approved redesign preview): Merged, AI and People
 // as tabs when the ranking views are on, today's ELO board when they are
@@ -141,7 +142,7 @@ function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boole
   const sub = kind === "ai" ? (r.topPct != null ? `top ${r.topPct}%` : null) : kind === "elo" ? `${r.votes} ${r.votes === 1 ? "vote" : "votes"}` : r.likely ? `likely ${r.likely.replace(/-#/, "-")}` : null;
   return (
     <li className="border-b border-edge last:border-b-0">
-      <a href={`/p/${encodeURIComponent(r.url)}`} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
+      <a href={profilePath(r.url)} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
         <span className="flex w-9 shrink-0 justify-end md:w-10">
           <RankBadge rank={r.rank} place={r.place} tied={r.tied} size={r.place <= 3 ? "lg" : "md"} />
         </span>

@@ -18,7 +18,7 @@ import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { ProfileV2, profileMetadata } from "./profile-v2";
-import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
+import { loadSeoExtras, profileJsonLd, profilePath, profileUrlForPath } from "@/lib/profile";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
 
@@ -61,11 +61,11 @@ async function seoFacts(p: Portfolio): Promise<SeoFacts> {
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string[] }>;
 }): Promise<Metadata> {
   if (toolsEnabled()) return profileMetadata({ params });
   const { slug } = await params;
-  const url = decodeURIComponent(slug);
+  const url = (await profileUrlForPath(slug.join("/"))) ?? "";
   const p = (feed as Portfolio[]).find((x) => x.url === url);
   if (!p) return {};
   const [img, facts] = await Promise.all([shotFor(url), seoFacts(p)]);
@@ -78,7 +78,7 @@ export async function generateMetadata({
     : p.tagline
       ? `${p.tagline} · ${domainOf(url)}`
       : `Developer portfolio · ${domainOf(url)}`;
-  const canonical = `${SITE_URL}/p/${encodeURIComponent(url)}`;
+  const canonical = `${SITE_URL}${profilePath(url)}`;
   return {
     title,
     description,
@@ -136,11 +136,11 @@ function publicGrade(raw: unknown): null | {
 export default async function PortfolioPage({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ slug: string[] }>;
 }) {
   if (toolsEnabled()) return ProfileV2({ params });
   const { slug } = await params;
-  const url = decodeURIComponent(slug);
+  const url = (await profileUrlForPath(slug.join("/"))) ?? "";
   const portfolio = (feed as Portfolio[]).find((p) => p.url === url);
   if (!portfolio) notFound();
 
@@ -195,7 +195,7 @@ export default async function PortfolioPage({
 
   const [shot, facts] = await Promise.all([shotFor(url), seoFacts(portfolio)]);
   // A ProfilePage about the person and its breadcrumb trail, indexable profiles only.
-  const jsonLd = profileJsonLd(facts, { canonical: `${SITE_URL}/p/${encodeURIComponent(url)}`, title: `${portfolio.name} - PortfolioRank` });
+  const jsonLd = profileJsonLd(facts, { canonical: `${SITE_URL}${profilePath(url)}`, title: `${portfolio.name} - PortfolioRank` });
 
   return (
     <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
@@ -240,7 +240,7 @@ export default async function PortfolioPage({
                 showCount
               />
               <AddToListButton url={url} />
-              <ShareButton url={`${SITE_URL}/p/${encodeURIComponent(url)}`} title={portfolio.name} />
+              <ShareButton url={`${SITE_URL}${profilePath(url)}`} title={portfolio.name} />
               <a
                 href={url}
                 target="_blank"

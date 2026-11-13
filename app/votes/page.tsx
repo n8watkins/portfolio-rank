@@ -3,6 +3,7 @@ import type { Portfolio } from "@/app/page";
 import { auth } from "@/auth";
 import { SignInButton } from "@/components/SignInModal";
 import { db, ensureSchema } from "@/lib/db";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ function Entry({ url, won }: { url: string; won: boolean }) {
   const p = byUrl.get(url);
   return (
     <a
-      href={`/p/${encodeURIComponent(url)}`}
+      href={profilePath(url)}
       className={`truncate text-sm underline-offset-2 hover:underline ${
         won ? "font-semibold" : "text-mute"
       }`}

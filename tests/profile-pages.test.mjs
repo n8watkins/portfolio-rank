@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
 import { migrate } from "../lib/schema.mjs";
+import { profilePath } from "../lib/profile-url.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -34,7 +35,7 @@ before(async () => {
 const tools = process.env.TOOLS_ENABLED === "true";
 const plain = feed.filter((p) => !new URL(p.url).search && new URL(p.url).pathname.replace(/\/+$/, "") === "");
 const [graded, hidden, ungraded] = tools ? plain.slice(-3) : plain.slice(-6, -3);
-const pathOf = (url) => `/p/${encodeURIComponent(url)}`;
+const pathOf = profilePath;
 const rubric = JSON.stringify({
   tier: "A",
   is_portfolio: true,
@@ -96,4 +97,39 @@ test("a profile the health check hides, or one not graded, says noindex and has 
     assert.equal(robotsOf(html), "noindex, follow", p.url);
     assert.equal(jsonLdOf(html), null, p.url);
   }
+});
+
+// Readable addresses (lib/profile-url.mjs). The old and untidy forms are 301s from the
+// Worker before Next.js runs (worker/profile-redirect.ts, tests/profile-url.test.mjs);
+// nothing is in front here, so they aren't checked end to end.
+const canonicalOf = (html) => html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
+const deeps = feed.filter((p) => !new URL(p.url).search && /[A-Z]/.test(new URL(p.url).pathname));
+const deep = tools ? deeps[0] : deeps[1];
+const get = (path) => fetch(BASE + path, { redirect: "manual" });
+
+test("a profile answers at its readable address, which is also its canonical", async () => {
+  for (const p of [ungraded, deep]) {
+    const path = profilePath(p.url);
+    assert.ok(!path.includes("%3A"), path);
+    const res = await get(path);
+    assert.equal(res.status, 200, path);
+    assert.ok(canonicalOf(await res.text())?.endsWith(path), path);
+  }
+});
+
+test("another case or www finds the same profile, and its canonical names the one address; no page answers with a redirect", async () => {
+  const u = new URL(deep.url);
+  const target = profilePath(deep.url);
+  for (const from of [`/p/${u.host.toUpperCase()}${u.pathname}`, `/p/www.${u.host.replace(/^www\./, "")}${u.pathname}`, `/p/${u.host}${u.pathname.toLowerCase()}`]) {
+    const res = await get(from);
+    assert.equal(res.status, 200, from);
+    assert.equal(res.headers.get("location"), null, from);
+    assert.ok(canonicalOf(await res.text())?.endsWith(target), from);
+  }
+});
+
+test("an unknown site is a 404, and so is the old encoded address without the Worker in front", async () => {
+  assert.equal((await get("/p/no-such-portfolio.example")).status, 404);
+  assert.equal((await get("/p/no-such-portfolio.example/deep/path")).status, 404);
+  assert.equal((await get(`/p/${encodeURIComponent(ungraded.url)}`)).status, 404);
 });
