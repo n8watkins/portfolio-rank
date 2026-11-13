@@ -28,18 +28,16 @@
 // (lib/grader/finish.mjs syncFromPeople), and the report email goes out
 // from the grader's own queue (worker/grader.ts), so such requests carry no
 // email address here.
-import { PEOPLE_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { peopleAllowance, usageToday } from "./budget.mjs";
 import { createGemini, createLimiter, GeminiAuthError, GeminiUnavailableError, PRIMARY_MODEL } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { gradeFromEvidence } from "./night.mjs";
 import { syncFromPeople } from "../lib/grader/finish.mjs";
+import { ensurePeopleSchema, enqueueRequest, readRequest } from "./people-store.mjs";
+
+export { ensurePeopleSchema, enqueueRequest, readRequest };
 
 export const MAX_ATTEMPTS = 3;
-
-export async function ensurePeopleSchema(db) {
-  await applyTables(db, PEOPLE_TABLES);
-}
 
 const iso = (ms) => new Date(ms).toISOString();
 const msg = (e) => String(e?.message ?? e).slice(0, 200);
@@ -48,23 +46,11 @@ const msg = (e) => String(e?.message ?? e).slice(0, 200);
  * Queues a request and tries it at once (unless `tryNow` is false: then the
  * hourly drain does). Returns the request row as stored.
  */
-export async function requestGrade(ctx, { kind = "grade", url, name = "", email = null, shot_key, page_text, facts, meta = null }, { tryNow = true } = {}) {
-  await ensurePeopleSchema(ctx.db);
+export async function requestGrade(ctx, input, { tryNow = true } = {}) {
   await ensureGeminiLog(ctx.db);
-  const at = iso(ctx.now());
-  const res = await ctx.db.execute({
-    sql: `INSERT INTO people_requests (kind, url, name, email, shot_key, page_text, facts, meta, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?) RETURNING id`,
-    args: [kind, url, name, email, shot_key, page_text, typeof facts === "string" ? facts : JSON.stringify(facts ?? null), meta == null ? null : typeof meta === "string" ? meta : JSON.stringify(meta), at, at],
-  });
-  const id = Number(res.rows[0].id);
+  const id = await enqueueRequest(ctx.db, input, { now: ctx.now() });
   if (tryNow) await processRequest(ctx, id);
   return readRequest(ctx.db, id);
-}
-
-export async function readRequest(db, id) {
-  const r = (await db.execute({ sql: "SELECT * FROM people_requests WHERE id = ?", args: [id] })).rows[0];
-  return r ? { ...r, result: r.result ? JSON.parse(String(r.result)) : null } : null;
 }
 
 async function setStatus(db, id, fields, now) {

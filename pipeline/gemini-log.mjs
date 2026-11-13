@@ -70,8 +70,8 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
       try {
         await db.execute({
           sql: `INSERT INTO gemini_requests (at, run_id, job, model, status, reason, latency_ms,
-                                             input_tokens, output_tokens, thoughts_tokens, retry, fallback, finish_reason, detail)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                             input_tokens, output_tokens, thoughts_tokens, retry, fallback, finish_reason, detail, prompt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             r.at,
             runId,
@@ -87,6 +87,7 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
             r.fallback ? 1 : 0,
             r.finishReason ?? null,
             r.detail ?? null,
+            r.prompt ?? null,
           ],
         });
       } catch {

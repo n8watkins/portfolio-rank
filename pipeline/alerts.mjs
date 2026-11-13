@@ -43,7 +43,7 @@ export function tractionLevels(raw = globalThis.process?.env?.ALERT_TRACTION) {
  * stays unsent for the day.
  * @param {any} env
  * @param {{ db?: { execute: Function, transaction: Function } }} [options]
- * @returns {null | { send(m: { to: string, subject: string, text: string }): Promise<void> }}
+ * @returns {null | { send(m: { to: string, subject: string, text: string, attachments?: import("../lib/email/gate.mjs").EmailAttachment[] }): Promise<void> }}
  */
 export function emailSender(env, { db } = {}) {
   if (!db || !env?.OWNER_EMAIL) return null;
@@ -51,8 +51,8 @@ export function emailSender(env, { db } = {}) {
   if (!transport) return null;
   const gate = createEmailGate({ db, transport, caps: emailCaps(env.EMAIL_CAPS), secret: env.AUTH_SECRET ?? globalThis.process?.env?.AUTH_SECRET });
   return {
-    async send({ to, subject, text }) {
-      const r = await gate.send({ kind: "owner-alert", to, subject, text });
+    async send({ to, subject, text, attachments }) {
+      const r = await gate.send({ kind: "owner-alert", to, subject, text, attachments });
       if (!r.sent) throw new Error(`owner alert email not sent (${r.reason})`);
     },
   };

@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
-import { budgetPlan } from "../pipeline/budget.mjs";
+import { DEFAULT_PLAN, budgetPlan } from "../pipeline/budget.mjs";
 import { createRequestLog, ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { PRIMARY_MODEL, BACKUP_MODEL } from "../pipeline/gemini.mjs";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
@@ -85,7 +85,9 @@ function mockGemini(steps, { onCall } = {}) {
 function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, rankingV2 = false, rubricRegrade = false, rankingBudget } = {}) {
   const clock = { t: start };
   const lines = [];
-  const plan = budgetPlan(JSON.stringify(budget));
+  // Re-grades are off by default (DEFAULT_PLAN); these tests turn them on
+  // unless a test sets the regrade stage itself.
+  const plan = budgetPlan(JSON.stringify({ ...budget, stages: { regrade: { cap: 300 }, ...budget.stages } }));
   return {
     clock,
     lines,
@@ -177,6 +179,18 @@ test("caps: a stage stops at its request cap and the next one starts", async () 
   const r = await drive(ctx, clock);
   assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "content", "regrade", "regrade"]);
   assert.match(r.summary.stages.find((s) => s.key === "grade_new").result, /cap reached \(2 requests today\)/);
+});
+
+test("re-grades are off by default until rubric v3: the night spends nothing on them", async () => {
+  assert.equal(DEFAULT_PLAN.stages.regrade.cap, 0);
+  assert.equal(budgetPlan(undefined).stages.regrade.cap, 0, "no GEMINI_BUDGET: re-grades stay off");
+  const { db } = await setup({ fresh: 2, old31: 2 });
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]), budget: { stages: { regrade: DEFAULT_PLAN.stages.regrade } } });
+  const r = await drive(ctx, clock);
+  assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "content"]);
+  const regrade = r.summary.stages.find((s) => s.key === "regrade");
+  assert.equal(regrade.requests ?? 0, 0);
+  assert.equal(r.summary.estimate.perStage.regrade ?? 0, 0, "the estimate plans none");
 });
 
 test("the reserve is never spent, and it grows with people's demand", async () => {
