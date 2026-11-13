@@ -145,3 +145,10 @@ jobs:
         env:
           STAGING_GATE_KEY: ${{ secrets.STAGING_GATE_KEY }}
         run: node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev
+
+      # As in deploy.yml: all but the newest two builds' ISR cache goes
+      # (scripts/prune-build-cache.mjs). A failure here never fails staging.
+      - name: Remove old builds' ISR cache
+        if: steps.setup.outputs.ready == 'true'
+        continue-on-error: true
+        run: node scripts/prune-build-cache.mjs --env staging

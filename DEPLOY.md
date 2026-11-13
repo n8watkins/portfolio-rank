@@ -36,6 +36,9 @@ Staging does the same from `staging.portfoliorank.n8builds.dev` to https://stagi
 - **Sentry source maps:** add the `SENTRY_AUTH_TOKEN` secret (a Sentry auth token with project release access) and the `SENTRY_ORG` and `SENTRY_PROJECT` repository variables.
   The deploy then builds browser source maps, uploads them for the release (the commit SHA) and deletes them before publishing; without those settings it skips the step.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
+  OpenNext keeps each build's entries under `incremental-cache/<build id>/` and a Worker reads only its own build's folder, so after the smoke check the deploy removes every build folder but the newest two (`scripts/prune-build-cache.mjs`; staging does the same in its bucket).
+  It is not an R2 lifecycle rule because the live build's prerendered entries are written once, at deploy, and an age rule would expire them after enough days without a deploy.
+  A rollback with `wrangler rollback` to a version older than the previous one finds no cache, so its first requests render the pages again.
   The deploy log prints "A DurableObjectNamespace in the config referenced the class "DOQueueHandler", but no such Durable Object class is exported from the worker".
   It is a false alarm: `opennextjs-cloudflare deploy` starts a local Miniflare proxy (wrangler's `getPlatformProxy`) only to read the config's variables, and that proxy runs none of our code.
   The uploaded Worker does export the class (`worker/index.ts`), and CI proves it on every change (`scripts/check-worker-exports.mjs` on the dry-run bundle).
