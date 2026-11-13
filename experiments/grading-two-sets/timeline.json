@@ -1,25 +1,93 @@
 {
  "note": "UTC. Times come from the step outputs (selection.json, capture-state.json, manifest.json, groupings.json, lock.json) or, where marked approximate, from file times. The Gemini phases are filled in by grading-two-sets-run.mjs; the expert phases by the coordinator.",
  "phases": [
-  { "phase": "setup: read the plan, make the worktree, read exp/grading-v3", "start": "2026-11-13T18:03:50Z", "end": "2026-11-13T18:10:00Z", "approximate": true },
-  { "phase": "event: dcg blocked a read-only junk-site query ('<' in quoted SQL read as a redirect); stopped and reported; the coordinator ruled it a method block and the query was rewritten with BETWEEN", "start": "2026-11-13T18:06:00Z", "approximate": true },
-  { "phase": "select: Set A and Set B candidates (read-only DB)", "start": "2026-11-13T18:10:00Z", "end": "2026-11-13T18:11:30Z", "approximate_start": true },
-  { "phase": "capture: Set A first-screen facts, Set B full capture (local Playwright)", "start": "2026-11-13T18:11:58Z", "end": "2026-11-13T18:25:44Z" },
-  { "phase": "prompts, harness, analysis and mocked tests (during the capture)", "start": "2026-11-13T18:12:00Z", "end": "2026-11-13T18:24:00Z", "approximate": true },
-  { "phase": "bundles, groupings, expert-runs.md", "start": "2026-11-13T18:25:47Z", "end": "2026-11-13T18:25:52Z" },
-  { "phase": "lock", "start": "2026-11-13T18:26:18Z", "end": "2026-11-13T18:26:18Z" },
-  { "phase": "expert:solo (the answer key)" },
-  { "phase": "expert:pass1" },
-  { "phase": "expert:pass2" },
-  { "phase": "expert:pass3" },
-  { "phase": "expert:solo-repeat" },
-  { "phase": "expert:pass1-repeat" },
-  { "phase": "gemini:solo" },
-  { "phase": "gemini:pass1" },
-  { "phase": "gemini:pass2" },
-  { "phase": "gemini:pass3" },
-  { "phase": "gemini:solo-repeat" },
-  { "phase": "gemini:pass1-repeat" },
-  { "phase": "analysis and report" }
+  {
+   "phase": "setup: read the plan, make the worktree, read exp/grading-v3",
+   "start": "2026-11-13T18:03:50Z",
+   "end": "2026-11-13T18:10:00Z",
+   "approximate": true
+  },
+  {
+   "phase": "event: dcg blocked a read-only junk-site query ('<' in quoted SQL read as a redirect); stopped and reported; the coordinator ruled it a method block and the query was rewritten with BETWEEN",
+   "start": "2026-11-13T18:06:00Z",
+   "approximate": true
+  },
+  {
+   "phase": "select: Set A and Set B candidates (read-only DB)",
+   "start": "2026-11-13T18:10:00Z",
+   "end": "2026-11-13T18:11:30Z",
+   "approximate_start": true
+  },
+  {
+   "phase": "capture: Set A first-screen facts, Set B full capture (local Playwright)",
+   "start": "2026-11-13T18:11:58Z",
+   "end": "2026-11-13T18:25:44Z"
+  },
+  {
+   "phase": "prompts, harness, analysis and mocked tests (during the capture)",
+   "start": "2026-11-13T18:12:00Z",
+   "end": "2026-11-13T18:24:00Z",
+   "approximate": true
+  },
+  {
+   "phase": "bundles, groupings, expert-runs.md",
+   "start": "2026-11-13T18:25:47Z",
+   "end": "2026-11-13T18:25:52Z"
+  },
+  {
+   "phase": "lock",
+   "start": "2026-11-13T18:26:18Z",
+   "end": "2026-11-13T18:26:18Z"
+  },
+  {
+   "phase": "expert:solo (the answer key)"
+  },
+  {
+   "phase": "expert:pass1"
+  },
+  {
+   "phase": "expert:pass2"
+  },
+  {
+   "phase": "expert:pass3"
+  },
+  {
+   "phase": "expert:solo-repeat"
+  },
+  {
+   "phase": "expert:pass1-repeat"
+  },
+  {
+   "phase": "gemini:solo",
+   "start": "2026-11-13T18:28:32.980Z",
+   "end": "2026-11-13T18:34:09.214Z"
+  },
+  {
+   "phase": "gemini:pass1",
+   "start": "2026-11-13T18:34:09.235Z"
+  },
+  {
+   "phase": "event: one HTTP 503 on solo/B12, retried after 30 s, answered",
+   "start": "2026-11-13T18:32:08Z"
+  },
+  {
+   "phase": "event: paused at pass1/A-b1 (the first 5-at-a-time request) on HTTP 400 INVALID_ARGUMENT; 42 HTTP requests used, solo step complete; waiting for a decision before any change to the locked batch request",
+   "start": "2026-11-13T18:34:13Z"
+  },
+  {
+   "phase": "gemini:pass2"
+  },
+  {
+   "phase": "gemini:pass3"
+  },
+  {
+   "phase": "gemini:solo-repeat"
+  },
+  {
+   "phase": "gemini:pass1-repeat"
+  },
+  {
+   "phase": "analysis and report"
+  }
  ]
 }
