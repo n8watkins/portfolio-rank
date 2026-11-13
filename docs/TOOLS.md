@@ -81,16 +81,16 @@ With `TOOLS_ENABLED` off, `/claim` is unchanged.
 ## Discovery seen-set
 
 `discovery_sites` (`lib/discovery/sites.mjs`) is the one memory of sites PortfolioRank has come across but not listed.
-The free tools are its first source; the discovery pipeline (GitHub topics, Hacker News, community lists) will write to the same table instead of keeping its own, so a site found twice is judged once.
+The free tools and the discovery pipeline ([DISCOVERY.md](DISCOVERY.md): GitHub topics, Hacker News, community lists) write to the same table, so a site found twice is judged once.
 
 - One row per normalized address (host without `www`, path without the trailing slash, lower case, no query or fragment), keyed by the first 64 bits of its SHA-256 as SQLite's rowid, so a seen-check is one primary-key read.
-- `status`: `pending` (waiting to be graded), `graded` (graded and handed to the list) or `dropped` (left out, with a `reason`).
-- `source` (`tools`, later `github`, `hn`, ...), `first_seen`, `checked_at`, `recheck_at` and `tries`.
-- The address is kept only while the row will be looked at again: pending, or dropped as dead, empty, parked, blocked or unsure.
+- `status`: a site the tools add is `pending` (waiting to be graded); the pipeline's own stages are `found`, `screen`, `queued` and `graded`, and `dropped` means left out, with a `reason` ([DISCOVERY.md](DISCOVERY.md) "The seen-set").
+- `source` (`tools`, `github`, `hn`, ...), `first_seen`, `checked_at`, `recheck_at` and `tries`.
+- The address is kept only while the row is in a queue, graded, or dropped as dead, empty, parked, blocked or unsure.
   A permanent drop (not a portfolio, a template, not English) keeps only the hash, the reason and the dates.
 - Never public, never counted from a page.
 
-Grading pending rows (the AI report card, when the day's Gemini quota allows) is the discovery pipeline's job and is not built yet; until then pending rows wait.
+Pending rows are handed to the grader's queue by the discovery pipeline at a capped pace, once the owner switches the hand-off on (`DISCOVERY_HANDOFF`); until then they wait.
 
 ## Tests
 

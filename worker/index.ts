@@ -37,6 +37,7 @@ import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
 import { jobCron } from "./crons";
+import { freshnessEnabled, freshnessTick } from "./freshness";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -141,7 +142,7 @@ const worker = {
   // applies owners' held removals (./owner-removals.ts), checks that last
   // night's run started and finished (./night-watch.ts),
   // finishes people's grade requests that waited for Gemini 3.5 and makes the
-  // image library's hourly batch (./library.ts); the weekly
+  // image library's hourly batch (./library.ts) and, with FRESHNESS_ENABLED, checks a 168th of the list's change fingerprints (./freshness.ts); the weekly
   // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
@@ -170,6 +171,8 @@ const worker = {
           // RANKING_V2, so only then do the ones whose letter changed leave the edge cache.
           ["tiers", () => tiersTick(at, { purgeTags: /^true$/i.test(String(env.RANKING_V2 ?? "")) ? purgeTagsOf(ctx) : undefined })],
           // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
+          // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts); only with FRESHNESS_ENABLED.
+          ["freshness", () => (freshnessEnabled(env) ? freshnessTick(at) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
         ],
         {

@@ -8,9 +8,13 @@
 //
 // As a script (the nightly checks in sync-upstream.yml): measures and stores
 // the evidence for listed, captured rows that are waiting for a grade or a
-// re-grade and have none, at most --limit of them.
+// re-grade and have none, at most --limit of them; then, with --links N,
+// measures again up to N rows whose project link checks are due by the
+// check rule (lib/freshness.mjs: the page changed, the admin or the owner
+// asked, or the checks are 30 days old, since links rot without the page
+// changing), without a new capture.
 //
-//   node pipeline/evidence.mjs [--limit N] [--no-browser]
+//   node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,13 +44,14 @@ const parseJson = (v) => {
  * captured before facts existed, measured now (free) and stored: over plain
  * HTTP, or in a browser (`renderer`, pipeline/render.mjs) when the server
  * sends little text. Motion always comes from the capture (meta.motion).
+ * `force` measures again even when evidence is stored (the link re-checks).
  */
-export async function pageEvidence(db, row, { renderer = null } = {}) {
+export async function pageEvidence(db, row, { renderer = null, force = false } = {}) {
   const url = String(row.url);
   const m = parseJson(row.meta)?.motion;
   const motion = typeof m === "boolean" ? m : null;
   const stored = parseJson(row.facts);
-  if (row.page_text != null && stored) {
+  if (row.page_text != null && stored && !force) {
     return { pageText: String(row.page_text), facts: stored.motion == null && motion != null ? { ...stored, motion } : stored, measured: false };
   }
   const gate = await httpGate(url).catch(() => null);
@@ -109,6 +114,9 @@ if (isMain) {
   const args = process.argv.slice(2);
   const i = args.indexOf("--limit");
   const limit = i >= 0 ? Number(args[i + 1]) : 200;
+  const j = args.indexOf("--links");
+  const linksLimit = j >= 0 ? Number(args[j + 1]) : 0;
+  const { ensureFreshnessSchema, linksDue } = await import("../lib/freshness.mjs");
   const ROOT = path.join(import.meta.dirname, "..");
   const db = pipelineDb(ROOT);
   await ensureRosterSchema(db);
@@ -116,16 +124,29 @@ if (isMain) {
   const rows = await rowsNeedingEvidence(db, { limit, rubricVersion: regradeOld ? RUBRIC_VERSION : null });
   const renderer = args.includes("--no-browser") ? null : createRenderer();
   let measured = 0;
+  let relinked = 0;
+  let linkRows = [];
   try {
     for (const [n, row] of rows.entries()) {
       const out = await pageEvidence(db, row, { renderer });
       if (out.measured) measured++;
       console.log(`[${n + 1}/${rows.length}] ${row.url} - ${out.measured ? `${out.pageText.length} characters, facts from ${out.facts?.source ?? "?"}` : "not reachable, left for the next run"}`);
     }
+    if (linksLimit > 0) {
+      await ensureFreshnessSchema(db);
+      linkRows = await linksDue(db, { limit: linksLimit, active: ACTIVE });
+      for (const [n, row] of linkRows.entries()) {
+        const out = await pageEvidence(db, row, { renderer, force: true });
+        if (out.measured) relinked++;
+        const l = out.facts?.project_links;
+        console.log(`[links ${n + 1}/${linkRows.length}] ${row.url} - ${out.measured ? `${l?.checked ?? 0} link(s) checked, ${l?.broken ?? 0} broken` : "not reachable, left for the next run"}`);
+      }
+    }
   } finally {
     await renderer?.close();
   }
-  const line = `evidence: measured ${measured} of ${rows.length} row(s) waiting for a grade without page text or facts`;
-  console.log(line);
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${line}\n`);
+  const lines = [`evidence: measured ${measured} of ${rows.length} row(s) waiting for a grade without page text or facts`];
+  if (linksLimit > 0) lines.push(`links: checked again ${relinked} of ${linkRows.length} site(s) whose link checks were due`);
+  console.log(lines.join("\n"));
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
 }

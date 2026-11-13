@@ -16,9 +16,12 @@
 //
 // Failed captures are retried later with backoff (see recordCaptureFailure).
 //
-// --refresh N also re-captures the N listed sites captured longest ago (the
-// nightly checks, sync-upstream.yml): their screenshots, text, facts and
-// page fingerprint are renewed, so a redesign is found
+// --refresh N also re-captures up to N listed sites whose screenshots are due
+// by the check rule (lib/freshness.mjs, AUTOMATION.md "When checks re-run"):
+// the weekly change fingerprint found the page changed, the admin pressed
+// "Re-measure" or the owner asked for a re-grade, or the capture is 90 days
+// old (the nightly checks, sync-upstream.yml). Their screenshots, text,
+// facts and page fingerprint are renewed, so a redesign is found
 // (scripts/detect-changes.mjs) and re-graded the same night. A refresh that
 // fails keeps the existing capture and records nothing: whether a site is
 // down is the weekly health check's call.
@@ -38,6 +41,7 @@ import {
   pipelineDb,
   syncRoster,
 } from "./roster.mjs";
+import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -338,22 +342,17 @@ if (!FORCE) {
   queue = await dueForCapture(db, queue);
 }
 queue = queue.slice(0, LIMIT);
-// The nightly refresh: listed, healthy sites captured longest ago.
+// The nightly refresh: listed, healthy sites whose screenshots are due
+// (changed or asked for first, then captures past 90 days).
 if (REFRESH > 0 && !ONLY) {
+  await ensureFreshnessSchema(db);
   const queued = new Set(queue.map((p) => p.url));
   const listed = new Map(feed.map((p) => [p.url, p]));
-  const due = (
-    await db.execute({
-      sql: `SELECT url FROM portfolios WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
-            ORDER BY captured_at, url LIMIT ?`,
-      args: [REFRESH + queue.length],
-    })
-  ).rows
-    .map((r) => String(r.url))
+  const due = (await screenshotsDue(db, { limit: REFRESH + queue.length, active: ACTIVE }))
     .filter((u) => !queued.has(u) && listed.has(u))
     .slice(0, REFRESH);
   for (const u of due) queue.push({ ...listed.get(u), refresh: true });
-  console.log(`refresh: re-capturing ${due.length} site(s) captured longest ago`);
+  console.log(`refresh: re-capturing ${due.length} site(s) that changed, were asked for, or are 90 days old`);
 }
 console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
 
