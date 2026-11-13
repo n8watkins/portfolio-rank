@@ -756,10 +756,12 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
               <article
                 key={`${pair.token}-${side}`}
                 aria-label={e.name}
-                className="card deal-in @container relative flex min-w-0 flex-col overflow-hidden transition-shadow has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
+                className="card deal-in @container relative flex min-w-0 flex-col overflow-clip transition-shadow has-[.pick:hover]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)] has-[.pick:focus-visible]:shadow-[0_0_0_2px_var(--color-fill),0_0_28px_-6px_var(--color-fill)]"
                 // The card's view-transition name lets it ease to its new size when the view changes or the spotlight opens.
                 style={{ "--d": `${side === "a" ? 0 : 90}ms`, viewTransitionName: `faceoff-card-${side}` } as React.CSSProperties}
               >
+                {/* The name and the screenshot stay in view (under the site header) while longer details scroll beneath them. */}
+                <div className="sticky top-16 z-[2] bg-card">
                 <NameLine compact name={e.name} url={e.url} liked={e.liked} onSaved={() => onBadgeCheck()} className="border-b border-edge" />
                 {/* The screenshot picks too; nothing is drawn over the site itself. */}
                 <button
@@ -773,6 +775,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                   <Frame e={e} phone />
                   <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
                 </button>
+                </div>
                 {/* What was measured, under the screenshot: Simple's strip or the chosen parts (from md up; on a phone behind Details). */}
                 <div className="flex-1 max-md:hidden">
                   {simple ? <PlaySummary url={e.url} /> : <DetailsPanel id={`details-${side}`} url={e.url} record={false} profile={false} metrics={prefs.metrics} sections={prefs.sections} />}
@@ -783,8 +786,9 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                   </summary>
                   <PlaySummary url={e.url} />
                 </details>
-                {/* The pick, centered under its card. */}
-                <div className="flex items-center justify-center border-t border-edge p-1.5 sm:p-2">
+                {/* The pick, centered under its card, and the full profile beside it (a new tab: this pair and the round stay as they are).
+                    It stays in view at the bottom while the details scroll; on a phone above the hint bar and the tab bar. */}
+                <div className="sticky bottom-0 z-[2] flex flex-col items-center justify-center gap-x-4 gap-y-0.5 border-t border-edge bg-card p-1.5 max-md:bottom-[calc(7rem+env(safe-area-inset-bottom))] sm:p-2 md:flex-row">
                   <button
                     type="button"
                     onClick={() => vote(side)}
@@ -795,6 +799,15 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
                   >
                     <Check className="h-4 w-4 shrink-0" aria-hidden /> <span className="truncate">Pick {e.name.split(" ")[0]}</span>
                   </button>
+                  <a
+                    href={`/p/${encodeURIComponent(e.url)}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-accent underline-offset-4 hover:underline md:text-sm"
+                  >
+                    See full profile <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+                    <span className="sr-only"> of {e.name} (opens in a new tab)</span>
+                  </a>
                 </div>
               </article>
             );
