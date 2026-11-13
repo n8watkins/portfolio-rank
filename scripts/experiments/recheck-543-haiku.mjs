@@ -10,7 +10,7 @@
 // Safety:
 // - the key comes from ANTHROPIC_API_KEY and is never printed or saved;
 // - one request at a time;
-// - a HARD STOP at a cumulative $3.00 across all runs (state.json keeps the
+// - a HARD STOP at a cumulative $5.00 across all runs (state.json keeps the
 //   total): before each request the exact input is counted (count_tokens,
 //   free) and the output estimated from the largest so far of that kind;
 // - 429, 529 and 5xx are retried after 30 s, 60 s, 120 s and 300 s; a 4xx
@@ -32,12 +32,17 @@ import { readJson, sha256, writeJson } from "./grading-two-sets-lib.mjs";
 import { loadBundle, loadPrompts, parseResult } from "./grading-two-sets-run.mjs";
 import { DIR, PROMPT_DIR, PROMPT_VERSION, capturedIds, makePlan, promptReady } from "./recheck-543.mjs";
 
-export const SETTINGS = { ...HAIKU, folder: "haiku", hard_stop_usd: 3.0, first_output_estimate: { solo: 6000, batch: 30000 } };
+// Owner, 2026-11-13: about $1.40 expected and accepted; the $5 stop is only a guard against a bug.
+export const SETTINGS = { ...HAIKU, folder: "haiku", hard_stop_usd: 5.0, first_output_estimate: { solo: 6000, batch: 30000 } };
 const SPEND = /spend|usage limit|credit|billing|quota|limit.*(reached|exceeded)/i;
 
-/** Batches (the Gemini plan's) first, then every site alone. */
-export function haikuRequests(sites, ids) {
-  const plan = makePlan(sites, ids);
+/**
+ * Batches first, then every site alone. The batches are Gemini 3.1's own
+ * (gemini31/plan.json, as it ran) when that file is here, so both models
+ * see the same groups in the same positions; else the same seeded plan.
+ */
+export function haikuRequests(sites, ids, geminiPlan = null) {
+  const plan = geminiPlan ?? makePlan(sites, ids);
   return [
     ...plan.requests.filter((r) => r.kind === "batch"),
     ...ids.map((id) => ({ key: `solo/${id}`, step: "solo", set: id[0], kind: "solo", ids: [id] })),
@@ -62,7 +67,8 @@ export async function runHaiku({
   if (!apiKey) throw new Error("Needs ANTHROPIC_API_KEY (run through pass-env).");
   if (!promptReady()) throw new Error(`The prompts are not ${PROMPT_VERSION} yet (experiments/grading-two-sets/prompt-log.md doesn't name it); nothing was sent.`);
   const sel = readJson(path.join(dir, "selection.json"));
-  const requests = haikuRequests(sel.sites, capturedIds(path.join(dir, "bundles")));
+  const geminiPlanPath = path.join(dir, "gemini31", "plan.json");
+  const requests = haikuRequests(sel.sites, capturedIds(path.join(dir, "bundles")), fs.existsSync(geminiPlanPath) ? readJson(geminiPlanPath) : null);
   const prompts = loadPrompts(PROMPT_DIR);
   const out = path.join(dir, settings.folder);
   const rawDir = path.join(dir, "raw", settings.folder);
