@@ -275,11 +275,13 @@ test("tierOf reads the stored rank, never Gemini's letter", () => {
   assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S+" } })), null);
 });
 
-test("a visitor's report without a library: B to start (a listed site keeps its own ELO), and the grade's top N% by score", () => {
+test("a visitor's report without a library: a starting rank from its own points (a listed site keeps its own ELO), and the grade's top N% by score", () => {
   const pool = Array.from({ length: 200 }, (_, i) => ({ url: `https://s${i}.example/`, name: `s${i}`, mu: 25, key: gradeKey(grade(1 + (i % 5), i % 100)), tier: null, axes: {}, roles: [] }));
   const best = compareWithPool(grade(5, 100, "S"), pool);
   assert.equal(best.rank.tier, "B");
-  assert.equal(best.rank.provisional, true);
+  assert.equal(best.rank.provisional, false);
+  assert.equal(best.rank.seeded, true);
+  assert.ok(best.rank.points > 0);
   assert.equal(best.percentile.total, 201);
   assert.equal(best.percentile.topPct, 1);
   // A listed site with enough face-offs keeps the tier its ELO earns.
