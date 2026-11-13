@@ -18,9 +18,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { readJson, writeJson } from "./grading-two-sets-lib.mjs";
-import { DIR, SET } from "./recheck-543.mjs";
+import { BOT_CHECK, DIR, SET } from "./recheck-543.mjs";
 
-const BOT = /just a moment|attention required|checking your browser|verify (you are|you're) human|access denied|cf-ray|cloudflare|captcha|are you a robot|request blocked|forbidden/i;
 
 /** What kind of failure a capture's meta records. */
 export function kindOf(meta) {
@@ -37,8 +36,9 @@ export function kindOf(meta) {
     if (/page\.evaluate|TypeError|ReferenceError/i.test(f)) return { kind: "script error in our capture", detail: f };
     return { kind: "other load failure", detail: f };
   }
+  // A bot or security check in place of the site, whether or not the capture counted as blocked.
+  if (BOT_CHECK.test(meta.page_text ?? "") || BOT_CHECK.test(text)) return { kind: "bot or Cloudflare block", detail: meta.blocked ?? (meta.page_text ?? "").slice(0, 80) };
   if (meta.blocked) {
-    if (BOT.test(meta.page_text ?? "") || BOT.test(text)) return { kind: "bot or Cloudflare block", detail: meta.blocked };
     if (/gate|loader/.test(meta.blocked)) return { kind: "blocked: gate still on screen", detail: meta.blocked };
     if (/dialog/.test(meta.blocked)) return { kind: "blocked: dialog still on screen", detail: meta.blocked };
     if (/picker/.test(meta.blocked)) return { kind: "blocked: mode picker still on screen", detail: meta.blocked };

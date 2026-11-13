@@ -69,6 +69,14 @@ export const GROUP_LABELS = {
   live_ungraded: "Live, never graded",
 };
 
+/**
+ * A bot or security check standing in for the site (Vercel Security Checkpoint,
+ * Cloudflare's "Performing security verification", "Confirm you are human"):
+ * the capture was stopped, the site isn't broken. Never graded; it goes to the
+ * review queue as a blocked capture and is retried from another network.
+ */
+export const BOT_CHECK = /security checkpoint|failed to verify your browser|performing security verification|confirm you are human|checking your browser|verify (you are|you're) (a )?human|are you a robot|not a robot|just a moment\.\.\.|attention required/i;
+
 /** The R2 key of a site's re-check screenshots: 16 hex characters, so /shots serves it (worker/assets.ts). */
 export const shotKeyOf = (url) => crypto.createHash("sha1").update(`${JOB}|${url}`).digest("hex").slice(0, 16);
 

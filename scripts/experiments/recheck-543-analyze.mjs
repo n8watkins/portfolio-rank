@@ -26,7 +26,7 @@ import { buildDupIndex, junkCheck } from "../../pipeline/junk-rules.mjs";
 import { guardVerdict } from "../../pipeline/portfolio-guard.mjs";
 import { actionNote } from "../../pipeline/splash.mjs";
 import { readJson, writeJson } from "./grading-two-sets-lib.mjs";
-import { DIR, GROUPS, JOB, PROMPT_VERSION, SET } from "./recheck-543.mjs";
+import { BOT_CHECK, DIR, GROUPS, JOB, PROMPT_VERSION, SET } from "./recheck-543.mjs";
 
 const PARTS = ["visual_design", "project_presentation", "writing"];
 
@@ -68,7 +68,8 @@ export function decide(site, meta, { g, h, dupIndex }) {
   const signals = meta?.signals ?? null;
   const capture = {
     action: meta ? actionNote({ splash: meta.gate?.desktop, modal: meta.modal?.desktop, mode: meta.mode_pick?.desktop }) : null,
-    blocked: meta?.blocked ?? null,
+    // A bot or security check that stood in for the site is a blocked capture too, even when it had words enough.
+    blocked: meta?.blocked ?? (meta && !meta.failed && BOT_CHECK.test(meta.page_text ?? "") ? "a bot or security check stood in for the site" : null),
     failed: meta ? meta.failed ?? null : "not captured",
     retried: Boolean(meta?.retried),
   };
