@@ -16,10 +16,15 @@ import { db, ensureSchema } from "@/lib/db";
 import { SITE_URL } from "@/lib/site";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
+import { toolsEnabled } from "@/lib/tools/server";
+import { ProfileV2, profileMetadata } from "./profile-v2";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
 // is the visitor's own and loads in the browser (LikeButton hydrate).
+// With "Add your portfolio" launched (TOOLS_ENABLED) the profile is the
+// four-part one with a fix list, for listed and added sites alike
+// (./profile-v2.tsx); until then it is this page, unchanged.
 export const revalidate = 300;
 
 export async function generateStaticParams() {
@@ -50,6 +55,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
+  if (toolsEnabled()) return profileMetadata({ params });
   const { slug } = await params;
   const url = decodeURIComponent(slug);
   const p = (feed as Portfolio[]).find((x) => x.url === url);
@@ -118,6 +124,7 @@ export default async function PortfolioPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  if (toolsEnabled()) return ProfileV2({ params });
   const { slug } = await params;
   const url = decodeURIComponent(slug);
   const portfolio = (feed as Portfolio[]).find((p) => p.url === url);

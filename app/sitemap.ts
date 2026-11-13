@@ -6,6 +6,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { db, ensureSchema } from "@/lib/db";
 import { gradedUrls, sitemapProfiles } from "@/lib/sitemap-profiles.mjs";
 import { graderEnabled } from "@/lib/grader/server";
+import { toolsEnabled } from "@/lib/tools/server";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
 
@@ -14,6 +15,7 @@ const BASE = SITE_URL;
 // Rebuilt once a day: sites the health check hides (down, dead or parked)
 // drop out, so search engines aren't sent to pages for sites that are gone.
 export const revalidate = 86400;
+
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
@@ -26,6 +28,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/polls`, changeFrequency: "weekly", priority: 0.6 },
     // Reports (/grade/<id>) and claims are unlisted and never indexed.
     ...(graderEnabled() ? [{ url: `${BASE}/grade`, changeFrequency: "monthly" as const, priority: 0.7 }] : []),
+    // "Add your portfolio".
+    ...(toolsEnabled() ? [{ url: `${BASE}/add`, changeFrequency: "monthly" as const, priority: 0.8 }] : []),
     { url: `${BASE}/how`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/grading`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/removed`, changeFrequency: "weekly", priority: 0.3 },
