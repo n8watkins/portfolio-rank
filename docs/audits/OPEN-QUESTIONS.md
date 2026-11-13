@@ -35,6 +35,7 @@ Last updated 2026-11-13 (evening).
 | 19 | Blog author in search results: you (Nathan Watkins, n8builds.dev, GitHub) or the PortfolioRank organization? #180 uses you. Suggested: you, since /about-posts already says you publish each post | Before #180 merges |
 | 20 | List graded sites added through "Add your portfolio" (not on the original list) in the sitemap too? Suggested: yes | After #184 |
 | 21 | NetTrailers serves public/check-store-data.html and public/clear-cache.html to anyone. Suggested: remove both | Any time |
+| 22 | Walk through staging and approve (or not) the look of the report-card redesign and the compact face-off (#123). They stay off the real site until you OK screenshots | When you have 15 minutes |
 
 ## Answered
 
