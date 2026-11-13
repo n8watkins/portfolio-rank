@@ -123,6 +123,16 @@ The free tools (speed check, share preview checker, portfolio checklist) work wi
 - To take a site off PortfolioRank: if it's listed, use "Remove my portfolio" (see "Your choices"); if it's still waiting to be graded, email me at nate@n8builds.dev from any address and I'll remove it within 14 days.
   [owner: confirm this flow, and whether a waiting site gets a self-serve removal too]
 
+## If your site was found on a public list (when discovery launches)
+
+PortfolioRank also looks for portfolios on public pages: GitHub repositories tagged as a portfolio, Hacker News posts where people share their own site, and community lists people add themselves to (personalsit.es, uses.tech).
+
+- I store the site's address and where it was found, then load its home page once (respecting robots.txt) to check it is a live, English, personal portfolio.
+- A site that isn't one keeps only a one-way hash of its address, the reason and the date, so it is never checked again; a site that couldn't load keeps its address until it is checked again, at most three times.
+- A site that passes waits, privately, to be graded; it's shown on PortfolioRank only once it's graded, and never if it turns out not to be a portfolio.
+- To keep your site out, email me at nate@n8builds.dev or use "Remove my portfolio"; it goes on the takedown list and discovery never adds it again.
+  [owner: confirm before discovery is switched on]
+
 ## If you subscribe to the newsletter (when it launches)
 
 - I store your email address, when you signed up and when you confirmed.
