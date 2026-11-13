@@ -29,6 +29,9 @@ Last updated 2026-11-13 (evening).
 | 13 | Press "Send test alert" on the admin page and check the email arrives (not in spam) | When the button is live |
 | 14 | Approve the priority experiments (Claude is the answer key, so nothing to build) | When the grading experiment report lands |
 | 15 | Keep or retire the unmerged `feat/report-redesign` branch (no PR, last commit Nov 12) | Any time |
+| 16 | Add your portfolio (#140): a site someone added that isn't listed yet can't be claimed, re-checked or removed by its real owner. Suggested: let the real owner claim it by the usual GitHub/site check, then re-check or remove it | Before #140 goes live |
+| 17 | Add your portfolio (#140): people who add a site they don't own have no limit of their own, only the grader's overall caps. Suggested: 3 unclaimed adds a day per account | Before #140 goes live |
+| 18 | Sentry: after #167 deploys, resolve PORTFOLIORANK-2 and add an alert for new issues (I can do it with sentry-cli on your yes) | After #167 |
 
 ## Answered
 
