@@ -17,7 +17,8 @@ const SITE = feed[205].url;
 
 const get = async (path) => {
   const res = await fetch(BASE + path, { redirect: "manual" });
-  return { status: res.status, html: await res.text() };
+  // React separates neighbouring text with <!-- --> markers; the text a visitor reads has none.
+  return { status: res.status, html: (await res.text()).replaceAll("<!-- -->", "") };
 };
 
 /** What only tiers by ELO would show; none of it may appear with the flag off. */
