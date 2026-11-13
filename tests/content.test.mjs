@@ -22,7 +22,7 @@ import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
-import { CTA, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
+import { CTA, LENGTHS, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
 import { WRITE_SYSTEM, assemble, buildWriteRequests, parseBlocks, reflow, cutBadSentences } from "../pipeline/content/compose.mjs";
 import { planPost } from "../pipeline/content/plan.mjs";
 import { clausesOf } from "../pipeline/content/clauses.mjs";
@@ -65,9 +65,6 @@ const rubric = (tier, score, over = {}) => ({
   ...over,
 });
 
-// The tier by rank each fixture grade carries (lib/tiers.mjs; refreshTiers writes it as grade.rank): Gemini's S sites hold the top tier.
-const RANKED = { S: "SSS", A: "A", B: "B", C: "C", D: "D" };
-
 async function fixture({ motion = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "content-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
@@ -79,7 +76,7 @@ async function fixture({ motion = null } = {}) {
   const add = async ({ url, name, tier, score, meta = {}, delisted = null, over = {} }) =>
     db.execute({
       sql: "INSERT INTO portfolios (url, name, status, shot_key, ai_rubric, meta, delisted_at) VALUES (?, ?, 'live', ?, ?, ?, ?)",
-      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, { rank: { tier: RANKED[tier] }, ...over })), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
+      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, over)), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
     });
   for (let i = 1; i <= 30; i++) await add({ url: `https://top-${i}.dev`, name: `Top Person ${i}`, tier: i <= 8 ? "S" : "A", score: i <= 8 ? 5 : 4, over: motion ? { motion: { score: motion[0], note: "n" } } : {} });
   for (let i = 1; i <= 30; i++) await add({ url: `https://low-${i}.dev`, name: `Low Person ${i}`, tier: ["B", "C", "D"][i % 3], score: 2, meta: { darkMode: false, overflow390: true, consoleErrors: 3, bytes: 4000000 }, over: motion ? { motion: { score: motion[1], note: "n" } } : {} });
@@ -115,7 +112,7 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason.startsWith("has the AI judge's highest grade") && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason === "has the AI judge's highest grade" && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
   assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);
@@ -196,9 +193,9 @@ test("fact builders: before and after, same-judge re-grades only; improvers name
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.equal(s.facts.find((f) => f.label === "Portfolios re-graded after their page changed").display, "23");
-  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved up at least one letter").display, "96%");
-  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved down at least one letter").about, null);
-  assert.ok(s.names.length > 0 && s.names.every((n) => /grade moved up from B to (S|A)/.test(n.reason)));
+  assert.equal(s.facts.find((f) => f.label === "Share that moved up at least one tier").display, "96%");
+  assert.equal(s.facts.find((f) => f.label === "Share that moved down at least one tier").about, null);
+  assert.ok(s.names.length > 0 && s.names.every((n) => /moved up from B to (S|A)/.test(n.reason)));
   assert.ok(!s.names.some((n) => n.url.includes("low-") || n.url === "https://top-25.dev"));
   assert.equal(s.charts.length, 1);
 });
@@ -464,7 +461,7 @@ test("writer: a passing draft is stored privately in dry-run, with its fact shee
   assert.ok(post.images.every((i) => i.licence));
   assert.ok([...stored.keys()].every((k) => k.startsWith(`content/test/${post.id}/`)));
   // At least three named sites are linked, and the writer never saw a raw value or a query.
-  assert.ok((post.body.match(/\]\(https:\/\/portfoliorank\.n8builds\.dev\/p\//g) ?? []).length >= 3 || (post.body.match(/\]\(https:\/\/top-/g) ?? []).length >= 3);
+  assert.ok((post.body.match(/\]\(https:\/\/portfoliorank\.dev\/p\//g) ?? []).length >= 3 || (post.body.match(/\]\(https:\/\/top-/g) ?? []).length >= 3);
   const sent = g.calls[0].parts[0].text;
   assert.ok(!sent.includes('"query"') && !sent.includes('"value"'));
 });
@@ -1075,27 +1072,29 @@ test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences
   assert.equal(r.listedNotFound, undefined);
 });
 
-test("length profiles: a long post wants 1,800 to 2,200 words, 5 sections and 4 or 5 inline images; the writer sees its length and related posts", async () => {
+test("length profiles: a long post wants LENGTHS.long words, its sections and inline images; the writer sees its length and related posts", async () => {
+  const L = LENGTHS.long;
   const { sheet, roster } = await sheetAndRoster();
-  const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.n8builds.dev/blog/older-post-abc123", tags: ["data"] }] };
+  const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.dev/blog/older-post-abc123", tags: ["data"] }] };
   const t = checkOf(goodDraft(long), long, roster, "template");
-  assert.match(t.problems.join("; "), /words; 1800 to 2200 wanted: add/);
-  assert.match(t.problems.join("; "), /inline image slots, 4 to 5 needed/);
+  assert.match(t.problems.join("; "), new RegExp(`words; ${L.min} to ${L.max} wanted: add`));
+  assert.match(t.problems.join("; "), new RegExp(`inline image slots, ${L.inline[0]} to ${L.inline[1]} needed`));
   const view = sheetForWriter(long);
-  assert.ok(buildWriteRequests(long, planPost(long))[0].parts[0].text.includes("https://portfoliorank.n8builds.dev/blog/older-post-abc123"), "the writer is offered the related post");
-  assert.deepEqual(view.length, { words: "1800 to 2200", sections: 5, inline_images: "4 to 5" });
-  assert.equal(view.related_posts[0].url, "https://portfoliorank.n8builds.dev/blog/older-post-abc123");
-  assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "standard stays 700 to 1,000");
+  assert.ok(buildWriteRequests(long, planPost(long))[0].parts[0].text.includes("https://portfoliorank.dev/blog/older-post-abc123"), "the writer is offered the related post");
+  assert.deepEqual(view.length, { words: `${L.min} to ${L.max}`, sections: L.sections, inline_images: `${L.inline[0]} to ${L.inline[1]}` });
+  assert.equal(view.related_posts[0].url, "https://portfoliorank.dev/blog/older-post-abc123");
+  assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "a standard post passes at the standard length");
 });
 
-test("quality: length is 700 to 1,000 words (owner, 2026-11-12), with 5% slack", async () => {
+test("quality: a standard post is LENGTHS.standard words, with the soft gate below it", async () => {
+  const S = LENGTHS.standard;
   const { sheet, roster } = await sheetAndRoster();
   const body = goodDraft(sheet).body;
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true);
   const tooShort = checkOf(goodDraft(sheet, { body: body.split("\n").slice(0, 24).join("\n") }), sheet, roster, "template");
-  assert.ok(tooShort.problems.some((p) => /words; 700 to 1000 wanted: add/.test(p)), tooShort.problems.join("; "));
+  assert.ok(tooShort.problems.some((p) => new RegExp(`words; ${S.min} to ${S.max} wanted: add`).test(p)), tooShort.problems.join("; "));
   const tooLong = checkOf(goodDraft(sheet, { body: body.replace("### Try this", `${LONG(30)}\n\n### Try this`) }), sheet, roster, "template");
-  assert.ok(tooLong.problems.some((p) => /words; 700 to 1000 wanted: cut/.test(p)), tooLong.problems.join("; "));
+  assert.ok(tooLong.problems.some((p) => new RegExp(`words; ${S.min} to ${S.max} wanted: cut`).test(p)), tooLong.problems.join("; "));
 });
 
 test("editorial rules: dev meta and infrastructure claims fail a draft; so does a missing early takeaway", async () => {
@@ -1338,7 +1337,7 @@ function manualCtx(db, { answers, prompts, mode = "publish", apiKey = "k", quota
     now: () => MONDAY,
     log: () => {},
     fetchImpl: manualFetch(answers, prompts),
-    flags: { contentMode: mode, writerMode: "single" },
+    flags: { contentMode: mode },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     env: { GEMINI_DAILY_QUOTA: JSON.stringify(quota) },
   };
