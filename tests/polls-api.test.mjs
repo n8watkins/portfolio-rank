@@ -10,6 +10,7 @@ import { insertPoll } from "../pipeline/polls.mjs";
 import { ensurePollsSchema } from "../lib/polls/schema.mjs";
 import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
 import feed from "../data/feed.json" with { type: "json" };
+import { profilePath } from "../lib/profile-url.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -102,7 +103,7 @@ test("polls API: the public read has this week's poll, past results, and the upc
     [0, "Left", feed[0].url, feed[0].name],
     [1, "Right", feed[1].url, feed[1].name],
   ]);
-  assert.equal(body.active.options[0].site.path, `/p/${encodeURIComponent(feed[0].url)}`);
+  assert.equal(body.active.options[0].site.path, profilePath(feed[0].url));
   const past = body.past.find((p) => p.id === last.id);
   assert.equal(past.status, "closed");
   assert.deepEqual(past.options.map((o) => [o.label, o.votes, o.percent]), [["Dark", 7, 70], ["Light", 3, 30]]);

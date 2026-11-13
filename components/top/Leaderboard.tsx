@@ -7,6 +7,7 @@ import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import type { BoardKind, Entry, Leaderboard as Board, Why } from "@/lib/leaderboard";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // The leaderboard (owner-approved redesign preview): the ranked board (tiers
 // by ELO from face-offs, lib/tiers.mjs), with Merged, AI and People as more
@@ -165,7 +166,7 @@ function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boole
   const sub = kind !== "rank" && r.elo != null ? [base, `ELO ${r.elo}`].filter(Boolean).join(" · ") : base;
   return (
     <li className="border-b border-edge last:border-b-0">
-      <a href={`/p/${encodeURIComponent(r.url)}`} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
+      <a href={profilePath(r.url)} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
         <span className="flex w-9 shrink-0 justify-end md:w-10">
           <RankBadge rank={r.rank} place={r.place} tied={r.tied} size={r.place <= 3 ? "lg" : "md"} />
         </span>

@@ -6,6 +6,7 @@ import { PlayDiagnostics, SocialIcons } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import { GitHubMark } from "@/components/ui/GitHubMark";
 import type { PlayDetails } from "@/lib/play/card";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // The pieces the games draw around a portfolio (face-off and Guess the
 // percentile). The screenshot is the hero: above it a slim line with the
@@ -156,7 +157,7 @@ export function DetailsPanel({
       <PlayDiagnostics url={url} part={part} projects={card?.projects} metrics={metrics} sections={sections} />
       {rest && record && <RecordLine card={card} />}
       {rest && profile && (
-        <a href={`/p/${encodeURIComponent(url)}`} target="_blank" rel="noopener" className="group inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent">
+        <a href={profilePath(url)} target="_blank" rel="noopener" className="group inline-flex items-center gap-1 justify-self-start text-sm font-semibold text-accent">
           Full profile <ArrowUpRight className="h-4 w-4 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
           <span className="sr-only"> (opens in a new tab)</span>
         </a>

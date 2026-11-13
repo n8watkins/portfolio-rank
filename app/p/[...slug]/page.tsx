@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArrowUpRight, Clock, Hourglass, Sparkles, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
@@ -11,13 +11,17 @@ import { BELOW_TOP_TIERS, MIN_FACEOFFS, STARTING_TIER, familyOf, tierLabel } fro
 import { TierBadge } from "@/components/ui/badges";
 import { ROUTES } from "@/lib/nav";
 import { eyebrow } from "@/components/ui/styles";
-import { loadProfile, type Profile } from "@/lib/profile";
+import { routeProfile, type Profile } from "@/lib/profile";
+import { profileImagePath } from "@/lib/profile-url.mjs";
+import { SHARE_SIZE } from "@/lib/play/share-card";
 import { FixList } from "@/components/profile/FixList";
 import { RecheckButton } from "@/components/profile/RecheckButton";
 
 // A portfolio's profile, the product (owner, 2026-11-12): four parts, Rank,
 // Report card, Fix list and Share, for a listed portfolio or one added
-// through "Add your portfolio" (lib/profile.ts). Rendered on first visit and
+// through "Add your portfolio" (lib/profile.ts). Its address is
+// /p/<host><path> (lib/profile-url.mjs); any other form of it, the old
+// encoded one included, redirects there for good. Rendered on first visit and
 // re-rendered at most every 5 minutes (ISR); a re-check revalidates it at
 // once. Nothing here depends on who is looking: the ♥ state and the owner's
 // "Re-check my site" load in the browser.
@@ -46,13 +50,18 @@ function seoTitle(p: Profile) {
 /** Graded and a real portfolio: the only profiles search engines are asked to index. */
 const indexable = (p: Profile) => Boolean(p.report?.isPortfolio);
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+/** The share card (app/og/p/[...slug]/route.tsx), absolute. */
+const shareImage = (p: Profile) => ({ url: `${SITE_URL}${profileImagePath(p.url)}`, ...SHARE_SIZE, alt: `${p.name} on PortfolioRank` });
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string[] }> }): Promise<Metadata> {
   const { slug } = await params;
-  const p = await loadProfile(decodeURIComponent(slug));
-  if (!p) return {};
+  const r = await routeProfile(slug.join("/"));
+  if (!r || "to" in r) return {};
+  const { p } = r;
   const canonical = `${SITE_URL}${p.path}`;
+  const images = [shareImage(p)];
   if (!indexable(p)) {
-    return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical } };
+    return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical }, openGraph: { images } };
   }
   const title = seoTitle(p);
   const roles = p.report?.roles ?? [];
@@ -62,8 +71,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title,
     description: description.slice(0, 300),
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: "profile" },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: { title, description, url: canonical, type: "profile", images },
+    twitter: { card: "summary_large_image", title, description, images },
   };
 }
 
@@ -239,15 +248,17 @@ function ShareCard({ p }: { p: Profile }) {
         <ShareButton url={link} title={p.name} />
       </SectionTitle>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={`${p.path}/opengraph-image`} alt={`${p.name}'s PortfolioRank card, tier ${tierLabel(p.tier)}`} className="aspect-[1200/630] w-full max-w-xl rounded-xl border border-edge bg-raised" />
+      <img src={profileImagePath(p.url)} alt={`${p.name}'s PortfolioRank card, tier ${tierLabel(p.tier)}`} className="aspect-[1200/630] w-full max-w-xl rounded-xl border border-edge bg-raised" />
     </section>
   );
 }
 
-export default async function PortfolioPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PortfolioPage({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
-  const p = await loadProfile(decodeURIComponent(slug));
-  if (!p) notFound();
+  const r = await routeProfile(slug.join("/"));
+  if (!r) notFound();
+  if ("to" in r) permanentRedirect(r.to);
+  const { p } = r;
   const shot = await shotFor(p);
   const jsonLd = indexable(p)
     ? {

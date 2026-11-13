@@ -6,7 +6,9 @@ import { tierOf, isPublicTier } from "@/lib/tiers.mjs";
 import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
 import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
-import { seen } from "@/lib/discovery/sites.mjs";
+import { seen, seenId } from "@/lib/discovery/sites.mjs";
+import { legacyAddress, profilePath, requestedSlug, slugKey } from "@/lib/profile-url.mjs";
+import { cache } from "react";
 import type { QuickFacts } from "@/lib/grader/quick";
 import type { PsiResult } from "@/lib/tools/psi";
 import type { ShareResult } from "@/lib/tools/share";
@@ -21,7 +23,8 @@ import { psiKey, quickKey, shareKey } from "@/lib/tools/keys";
 
 export type Feed = { name: string; url: string; tagline?: string };
 
-export const profilePath = (url: string) => `/p/${encodeURIComponent(url)}`;
+/** /p/<host><path> (lib/profile-url.mjs). */
+export { profilePath };
 
 const AXIS_LABELS: Record<string, string> = Object.fromEntries(AI_CRITERIA.map((c) => [c.id, c.name]));
 
@@ -122,6 +125,33 @@ export type Profile = {
 
 const listedBy = new Map((feed as Feed[]).map((p) => [p.url, p]));
 
+/** The list by site key: what a readable profile address (/p/<host><path>) is looked up by. */
+const listedByKey = new Map(
+  (feed as Feed[]).flatMap((p) => {
+    try {
+      return [[siteKeyOf(p.url), p.url] as const];
+    } catch {
+      return [];
+    }
+  })
+);
+
+/**
+ * The stored address behind a site key (lib/profile-url.mjs slugKey): a listed
+ * portfolio's, else the newest grade job's for that site, else the discovery
+ * seen-set's while it keeps the address. Null when PortfolioRank doesn't know it.
+ */
+export async function profileUrlFor(key: string): Promise<string | null> {
+  const listed = listedByKey.get(key);
+  if (listed) return listed;
+  await ensureSchema();
+  const client = db();
+  const job = await client.execute({ sql: "SELECT url FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [key] });
+  if (job.rows[0]?.url) return String(job.rows[0].url);
+  const found = await client.execute({ sql: "SELECT url FROM discovery_sites WHERE id = ? AND url IS NOT NULL", args: [seenId(`https://${key}`)] });
+  return found.rows[0]?.url ? String(found.rows[0].url) : null;
+}
+
 function domainOf(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -203,3 +233,21 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     saves,
   };
 }
+
+/**
+ * What a request for /p/<path> gets (`path`: the route's segments joined with
+ * "/", still percent-encoded): the profile; a permanent redirect to its one
+ * address (an old encoded address, or www, a scheme, another case); or null
+ * for a site PortfolioRank doesn't know. Once per request (a string, so
+ * React's cache matches it), shared by the page and its metadata.
+ */
+export const routeProfile = cache(async (path: string): Promise<{ to: string } | { p: Profile } | null> => {
+  const slug = requestedSlug(path);
+  const legacy = legacyAddress(slug);
+  if (legacy) return { to: profilePath(legacy) };
+  const key = slugKey(slug);
+  const url = key ? await profileUrlFor(key) : null;
+  const p = url ? await loadProfile(url) : null;
+  if (!p) return null;
+  return requestedSlug(p.path.slice("/p/".length)) === slug ? { p } : { to: p.path };
+});

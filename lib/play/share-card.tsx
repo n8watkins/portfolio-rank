@@ -11,7 +11,7 @@ import { tierLabel } from "@/lib/tiers.mjs";
 
 // A listed portfolio's share card: its name, its public grade and "top N%"
 // (top tiers only, as on the page) beside its own screenshot. It is the
-// portfolio page's Open Graph image (app/p/[slug]/opengraph-image.tsx). The
+// portfolio page's Open Graph image (app/og/p/[...slug]/route.tsx). The
 // shared card design (the report lane's lib/og-portfolio.tsx) replaces the
 // drawing below when it lands.
 

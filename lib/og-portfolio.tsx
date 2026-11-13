@@ -8,7 +8,7 @@ import { TierChip } from "@/lib/og-tier";
 /**
  * The share card of one portfolio (1200x630), shared by a grade report
  * (app/grade/[id]/opengraph-image.tsx) and a listed portfolio's page
- * (app/p/[slug]/opengraph-image.tsx), so both look alike. It is an ad for the
+ * (app/og/p/[...slug]/route.tsx), so both look alike. It is an ad for the
  * person (owner, 2026-11-12): their name and address top left, their own
  * screenshot large on the right with the tier letter on its corner, the
  * result framed against the whole library ("Top 13% of 1,300+ portfolios")

@@ -9,6 +9,7 @@ import { heroOf, shotBases } from "@/lib/shots";
 import { buildPool } from "@/lib/games/pool.mjs";
 import { progress } from "@/lib/games/quiz.mjs";
 import { HIT } from "@/lib/games/pool.mjs";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // Request-side helpers for the games, badges, claims, live stats and report
 // APIs: the GAMES_V2 flag, who is playing, the cached quiz pool and the
@@ -118,7 +119,7 @@ export async function publicQuiz(quiz: { id: string; kind: string; day: string |
         name: p?.name ?? domainOf(url),
         tagline: p?.tagline ?? null,
         domain: domainOf(url),
-        path: `/p/${encodeURIComponent(url)}`,
+        path: profilePath(url),
         shot,
         hero: shot ? heroOf(shot) : null,
       };

@@ -16,6 +16,7 @@ import { healthCheck } from "./health";
 import { forEdge, mayUseEdgeCache, probeAnswer } from "./edge-cache";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
+import { legacyProfileRedirect } from "./profile-redirect";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
@@ -66,6 +67,9 @@ const worker = {
     if (locked) return locked;
     const robots = stagingRobots(request, env);
     if (robots) return robots;
+    // Old profile addresses: one 301 to the readable one (./profile-redirect.ts).
+    const legacy = legacyProfileRedirect(request);
+    if (legacy) return legacy;
     const probe = probeAnswer(request);
     if (probe) return probe;
     if (mayUseEdgeCache(request, new URL(env.AUTH_URL).hostname)) {

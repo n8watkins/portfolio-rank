@@ -7,6 +7,7 @@ import { readAnonId, signAnonId } from "@/lib/matchup";
 import { ANON_COOKIE } from "@/lib/rater";
 import { heroOf, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // Request-side helpers for the polls API (app/api/polls): who is voting,
 // the Origin check, Turnstile, and the public shape of a poll.
@@ -68,7 +69,7 @@ export async function publicPolls(polls: StoredPoll[]): Promise<PublicPoll[]> {
       const shot = shots.get(url) ?? null;
       return {
         ...o,
-        site: { url, name: names.get(url) ?? domainOf(url), domain: domainOf(url), path: `/p/${encodeURIComponent(url)}`, shot, hero: shot ? heroOf(shot) : null },
+        site: { url, name: names.get(url) ?? domainOf(url), domain: domainOf(url), path: profilePath(url), shot, hero: shot ? heroOf(shot) : null },
       };
     }),
   }));

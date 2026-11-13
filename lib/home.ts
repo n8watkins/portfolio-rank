@@ -11,6 +11,7 @@ import { gamesEnabled } from "@/lib/games/server";
 import { rankedOrder } from "@/lib/leaderboard";
 import { readPolls } from "@/lib/polls/store.mjs";
 import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // The home page's data, all real, read once per render of the cached page
 // (app/page.tsx is rendered at most every few minutes, never per visit).
@@ -31,7 +32,7 @@ export const domainOf = (url: string) => {
 };
 
 /** A listed portfolio's page on PortfolioRank (its report). */
-export const reportPath = (url: string) => `/p/${encodeURIComponent(url)}`;
+export const reportPath = profilePath;
 
 /** The AI grade's "top N%" for a rank among `total`, never 0. */
 export const topPct = (rank: number, total: number) => Math.max(1, Math.round((100 * rank) / Math.max(1, total)));

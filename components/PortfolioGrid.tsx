@@ -5,6 +5,7 @@ import type { Portfolio } from "@/app/page";
 import { SITE } from "@/lib/site";
 import { LikeButton } from "@/components/LikeButton";
 import { faviconOf } from "@/lib/shot-url";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 const PAGE_SIZE = 18; // 6 rows on desktop (3-col); "Show more" reveals the rest
 const LETTERS = ["All", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
@@ -218,7 +219,7 @@ export function PortfolioGrid({ portfolios }: { portfolios: Portfolio[] }) {
                 />
                 <div className="min-w-0">
                   <a
-                    href={`/p/${encodeURIComponent(p.url)}`}
+                    href={profilePath(p.url)}
                     className="block truncate text-sm font-semibold after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent"
                   >
                     {p.name}

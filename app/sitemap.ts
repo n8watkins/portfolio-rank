@@ -9,6 +9,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 const BASE = SITE_URL;
 
@@ -56,12 +57,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   const hidden = await hiddenUrls().catch(() => new Set<string>());
   // With profiles as the searchable pages (TOOLS_ENABLED), only graded real
-  // portfolios are listed; the rest say noindex (app/p/[slug]).
+  // portfolios are listed; the rest say noindex (app/p/[...slug]).
   const graded = toolsEnabled() ? await gradedUrls().catch(() => null) : null;
   const detail: MetadataRoute.Sitemap = (feed as Portfolio[])
     .filter((p) => !hidden.has(p.url) && (!graded || graded.has(p.url)))
     .map((p) => ({
-      url: `${BASE}/p/${encodeURIComponent(p.url)}`,
+      url: `${BASE}${profilePath(p.url)}`,
       changeFrequency: "weekly",
       priority: 0.5,
     }));
