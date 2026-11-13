@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { SCHEMA_VERSION, migrate, schemaVersion } from "../lib/schema.mjs";
+import { SCHEMA_VERSION, migrate, recordedFingerprint, schemaFingerprint, schemaIsCurrent, schemaVersion } from "../lib/schema.mjs";
 
 const dir = mkdtempSync(path.join(tmpdir(), "pr-schema-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -36,4 +36,22 @@ test("an older database gets the missing columns without losing rows", async () 
   assert.ok(added.includes("votes.pair_key") && added.includes("votes.served") && added.includes("matchups.day_start"), added.join());
   const row = (await db.execute("SELECT winner, served, claimed FROM votes")).rows[0];
   assert.deepEqual([row.winner, Number(row.served), Number(row.claimed)], ["a", 0, 0]);
+});
+
+test("the fingerprint decides whether a database is current, whatever version number it records", async () => {
+  const db = fresh("fingerprint.db");
+  assert.equal(await schemaIsCurrent(db), false);
+  assert.match(schemaFingerprint(), /^s[0-9a-f]{8}$/);
+  await migrate(db);
+  assert.equal(await recordedFingerprint(db), schemaFingerprint());
+  assert.equal(await schemaIsCurrent(db), true);
+  // Another branch's schema (a higher version, a different fingerprint) was
+  // applied here: this file's schema is not current, and migrating again
+  // keeps the higher version number instead of lowering it.
+  await db.execute("UPDATE schema_meta SET v = 999 WHERE k = 'version'");
+  await db.execute("UPDATE schema_meta SET v = 's00000000' WHERE k = 'fingerprint'");
+  assert.equal(await schemaIsCurrent(db), false);
+  await migrate(db);
+  assert.equal(await schemaIsCurrent(db), true);
+  assert.equal(await schemaVersion(db), Math.max(999, SCHEMA_VERSION));
 });
