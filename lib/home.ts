@@ -149,8 +149,8 @@ export type GradedItem = { url: string; name: string; domain: string; tier: stri
 /** The portfolios Gemini graded most recently. Cached an hour: it reads the whole list. */
 async function recentlyGraded(count = 6): Promise<GradedItem[]> {
   const hidden = await hiddenUrls();
-  // v2: the tier by rank (lib/tiers.mjs), not Gemini's letter.
-  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades-v2", { ttlMs: HOUR }, async () => {
+  // v3: the tier by ELO from face-offs (lib/tiers.mjs), not Gemini's letter or the old tier by grade score.
+  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades-v3", { ttlMs: HOUR }, async () => {
     const res = await db().execute(
       `SELECT url, json_extract(ai_rubric, '$.rank.tier') AS tier, json_extract(ai_rubric, '$.judged_at') AS at
        FROM portfolios
