@@ -27,7 +27,8 @@ Last updated 2026-11-13 (evening).
 | # | What | When |
 |---|---|---|
 | 13 | Press "Send test alert" on the admin page and check the email arrives (not in spam) | When the button is live |
-| 14 | Approve the priority experiments and build your answer key (about 40 portfolios, 15 minutes) | After P0 and P1 |
+| 14 | Approve the priority experiments (Claude is the answer key, so nothing to build) | When the grading experiment report lands |
+| 15 | Keep or retire the unmerged `feat/report-redesign` branch (no PR, last commit Nov 12) | Any time |
 
 ## Answered
 
