@@ -109,3 +109,21 @@ test("the cache key: profiles and the blog drop their query; every key carries t
   assert.equal(appRequest(edgeRequest(get("/play?mode=guess"), "abc123")).url, `${BASE}/play?mode=guess`);
   assert.equal(appRequest(edgeRequest(get("/p/x?utm=1"), "abc123")).url, `${BASE}/p/x`);
 });
+
+test("share images are made once per change: kept like their page, tagged with it, their ?hash ignored", () => {
+  const url = "https://example.com";
+  const slug = encodeURIComponent(url);
+  for (const path of [`/p/${slug}/opengraph-image`, `/p/${slug}/twitter-image`]) {
+    assert.equal(mayUseEdgeCache(get(`${path}?c399de7409d3d8cb`), HOST), true, path);
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["profiles", profileTag(url)], path);
+    assert.equal(new URL(edgeRequest(get(`${path}?c399de7409d3d8cb`), "abc").url).search, "?__a=abc");
+  }
+  for (const path of ["/blog/a-post/opengraph-image", "/blog/a-post/twitter-image"]) {
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["blog"], path);
+  }
+  assert.equal(ttlFor("/twitter-image"), 86400);
+  // Grade reports' images stay private and uncached; other deeper paths are not pages.
+  for (const path of ["/grade/abc/opengraph-image", "/p/x/other", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
+});
