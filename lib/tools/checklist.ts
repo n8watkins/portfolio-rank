@@ -23,7 +23,6 @@ const TIPS: Record<string, { label: string; tip: string }> = {
   project_links: { label: "Project links load", tip: "Fix or remove project and demo links that answer with an error. A dead demo reads as an abandoned project." },
   own_domain: { label: "Your own domain", tip: "A domain like yourname.dev costs about $10 to $15 a year and looks more serious than a vercel.app or github.io address. Point it at the same host." },
   fresh_footer: { label: "Footer year is current", tip: "Update the © year in your footer, or print it from the current date. An old year makes the site look unmaintained." },
-  original: { label: "Not an unedited template", tip: "Your page matches a well-known template. Make the layout, colors and copy your own so it doesn't look like hundreds of others." },
 };
 
 /** The checklist rows for a free-checks result. Pure: the tests call it with plain objects. */
@@ -54,6 +53,5 @@ export function checklistItems(q: QuickFacts, now = new Date()): ChecklistItem[]
     ),
     row("own_domain", checks.own_domain ?? null, said(checks.own_domain, host || "Yes", host ? `${host} is a free hosting address` : "No")),
     row("fresh_footer", checks.fresh_footer ?? null, year ? `© ${year}${year < now.getUTCFullYear() ? "" : " (current)"}` : "No year in the footer"),
-    row("original", checks.original ?? null, said(checks.original, "Doesn't match a known template", "Matches a known template")),
   ];
 }
