@@ -416,6 +416,23 @@ The weekly run reconciles only the `model-watch:*` keys and the end-of-day run n
 They are emailed like every owner alert once `OWNER_EMAIL` is set ("Owner alerts" above); `GET /api/admin/quota` returns `modelWatch` (the latest report with its text, and the last 8 runs).
 By hand: `pass-env run -- node scripts/model-watch.mjs [--dry-run]`.
 
+## Owner goals
+
+Milestones that call for a decision once they are reached, listed in [lib/goals/config.mjs](lib/goals/config.mjs) (owner decision 2026-11-13).
+The first two:
+
+- "Newsletter: 100 subscribers": 100 or more confirmed subscribers in Kit, which keeps the list; the count comes from Kit's API with `KIT_API_KEY` and is cached a day (`cache` row `kit:confirmed`), and without the key it is unknown and never reached.
+- "Library: 5,000 graded portfolios": 5,000 or more listed portfolios with an AI grade (not counting sites judged "not a portfolio").
+
+A goal is reached when any of its conditions holds; a condition may ask for two finished weeks in a row.
+The check ([pipeline/goals.mjs](pipeline/goals.mjs), [worker/goals.ts](worker/goals.ts)) runs on the weekly Cron Trigger with model watch, Mondays at 16:00 UTC (8 am Pacific in winter, 9 am in summer), and is plain code with no Gemini.
+It measures the week that just finished (Monday to Monday, Pacific) and records each goal's numbers in `goal_progress`.
+The first time a goal is reached it records the event in `goal_events` and emails the owner through the owner-alert path (the email gate, kind `owner-alert`, to `OWNER_EMAIL`), with an `.ics` invite for a 30-minute decision slot three days later at 10:00 Pacific (moved to Monday from a weekend).
+Once that email went out the goal never emails again, even if its number drops and climbs back; an email that couldn't go out is tried again the next Monday.
+`GET /api/admin/goals` (admin only) returns every goal with its numbers measured now, its last 12 weeks, its event and, for a goal that is reached and not yet emailed, the email the next check would send.
+By hand, always a dry run that writes and sends nothing (beyond refreshing the cached Kit count): `node scripts/goals-check.mjs [--now=2026-11-16T16:00:00Z] [--json]` (production numbers with `pass-env run --`).
+To add a goal, add an entry with a new id to the list; never reuse an id, since the id is what records that a goal fired.
+
 ## GitHub Actions
 
 All run on GitHub-hosted runners. The repo is **public → unlimited free Actions
