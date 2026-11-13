@@ -113,11 +113,12 @@
     "MAX_AI_IMAGES_PER_DAY": "40",
     "AI_NEURON_CEILING": "2500",
     // The image library (pipeline/content/library-stage.mjs, worker/library.ts):
-    // images the hourly tick makes (at most 40, within the day's 40; "0"
-    // stops all library work; the owner's "Make now" may use what is left of
-    // the day) and the model: "schnell", or "flux2dev" (2,400 neurons an
-    // image at 1024x576 and 16 steps, so one a day).
-    "LIBRARY_PER_HOUR": "40",
+    // the UTC hour of the once-a-day automatic run on the "15 * * * *" cron
+    // ("23": 23:15 UTC, 3:15 pm Pacific in winter, just before the image day
+    // resets at 00:00 UTC; "off" for none), which makes whatever the owner's
+    // "Make now" left of the day's 40; and the model: "schnell", or
+    // "flux2dev" (2,400 neurons an image at 1024x576 and 16 steps, so one a day).
+    "LIBRARY_RUN_HOUR_UTC": "23",
     "LIBRARY_MODEL": "schnell",
     // The blog newsletter (AUTOMATION.md "Newsletter"): the sign-up forms,
     // its API and the ten-minute cron. Off in production until the owner
@@ -241,7 +242,7 @@
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
         "AI_NEURON_CEILING": "0",
-        "LIBRARY_PER_HOUR": "0",
+        "LIBRARY_RUN_HOUR_UTC": "off",
         "LIBRARY_MODEL": "schnell",
         // The newsletter runs on staging first (its own staging database of
         // subscribers; the emails go through the same mailroom app).

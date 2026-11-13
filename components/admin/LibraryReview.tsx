@@ -328,7 +328,7 @@ export function LibraryReview({
           {list.length === 0 ? (
             libraryEmpty ? (
               <EmptyState icon={ImageIcon} title="The library is empty" className="mt-4" action={<a href="#h-make" className={btn}>Make images</a>}>
-                No images have been made on this site yet. Make some now, or the hourly run adds them while the library is on.
+                No images have been made on this site yet. Make some now, or the daily run adds them while the library is on.
               </EmptyState>
             ) : query || tag ? (
               <EmptyState icon={Inbox} title="No image matches that search" className="mt-4" action={<button type="button" className={btn} onClick={() => (setQuery(""), setTag(""))}>Clear the search</button>} />
@@ -349,7 +349,7 @@ export function LibraryReview({
                   ) : undefined
                 }
               >
-                {view === "review" ? "New images land here after their Gemini check. Make some with Make images, or wait for the hourly run." : undefined}
+                {view === "review" ? "New images land here after their Gemini check. Make some with Make images, or wait for the daily run." : undefined}
               </EmptyState>
             )
           ) : (
@@ -737,7 +737,7 @@ function MakeYourOwn({ busy, themes, houseStyle, disabled, onMake }: { busy: boo
   );
 }
 
-/** The queued subjects: what the hourly run will make next, each editable or skippable. */
+/** The queued subjects: what the daily run and Make now will make next, each editable or skippable. */
 function UpNext({ queue, busy, onChanged, post }: { queue: QueueItem[]; busy: boolean; onChanged: () => void; post: Post }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -757,7 +757,7 @@ function UpNext({ queue, busy, onChanged, post }: { queue: QueueItem[]; busy: bo
 
   return (
     <>
-      <p className="text-xs text-mute">The hourly run makes these in order, one from each theme in turn. Edit the wording or skip one before it is made; every prompt ends with the house style (flat 2D vector, warm greys with one amber accent, no text, no people).</p>
+      <p className="text-xs text-mute">The daily run and Make now take these in order, one from each theme in turn. Edit the wording or skip one before it is made; every prompt ends with the house style (flat 2D vector, warm greys with one amber accent, no text, no people).</p>
       {error && <p className="mt-2 text-sm text-down">{error}</p>}
       <ol className="mt-3 space-y-2">
         {rows.map((q) => (
