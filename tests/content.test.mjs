@@ -65,6 +65,9 @@ const rubric = (tier, score, over = {}) => ({
   ...over,
 });
 
+// The tier by rank each fixture grade carries (lib/tiers.mjs; refreshTiers writes it as grade.rank): Gemini's S sites hold the top tier.
+const RANKED = { S: "SSS", A: "A", B: "B", C: "C", D: "D" };
+
 async function fixture({ motion = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "content-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
@@ -76,7 +79,7 @@ async function fixture({ motion = null } = {}) {
   const add = async ({ url, name, tier, score, meta = {}, delisted = null, over = {} }) =>
     db.execute({
       sql: "INSERT INTO portfolios (url, name, status, shot_key, ai_rubric, meta, delisted_at) VALUES (?, ?, 'live', ?, ?, ?, ?)",
-      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, over)), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
+      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, { rank: { tier: RANKED[tier] }, ...over })), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
     });
   for (let i = 1; i <= 30; i++) await add({ url: `https://top-${i}.dev`, name: `Top Person ${i}`, tier: i <= 8 ? "S" : "A", score: i <= 8 ? 5 : 4, over: motion ? { motion: { score: motion[0], note: "n" } } : {} });
   for (let i = 1; i <= 30; i++) await add({ url: `https://low-${i}.dev`, name: `Low Person ${i}`, tier: ["B", "C", "D"][i % 3], score: 2, meta: { darkMode: false, overflow390: true, consoleErrors: 3, bytes: 4000000 }, over: motion ? { motion: { score: motion[1], note: "n" } } : {} });
@@ -112,7 +115,7 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "has the AI judge's highest grade" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason.startsWith("has the AI judge's highest grade") && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
   assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);
@@ -193,9 +196,9 @@ test("fact builders: before and after, same-judge re-grades only; improvers name
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.equal(s.facts.find((f) => f.label === "Portfolios re-graded after their page changed").display, "23");
-  assert.equal(s.facts.find((f) => f.label === "Share that moved up at least one tier").display, "96%");
-  assert.equal(s.facts.find((f) => f.label === "Share that moved down at least one tier").about, null);
-  assert.ok(s.names.length > 0 && s.names.every((n) => /moved up from B to (S|A)/.test(n.reason)));
+  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved up at least one letter").display, "96%");
+  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved down at least one letter").about, null);
+  assert.ok(s.names.length > 0 && s.names.every((n) => /grade moved up from B to (S|A)/.test(n.reason)));
   assert.ok(!s.names.some((n) => n.url.includes("low-") || n.url === "https://top-25.dev"));
   assert.equal(s.charts.length, 1);
 });
