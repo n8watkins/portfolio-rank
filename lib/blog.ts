@@ -39,6 +39,8 @@ export type BlogPost = {
   publishAt: string | null;
   publishedAt: string | null;
   createdAt: string;
+  /** The row's last change (a publish, an owner's decision, an edit). */
+  updatedAt: string | null;
   requests: number;
   minutes: number;
   shareLine: string | null;

@@ -13,6 +13,7 @@ import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { applyDueRemovals, autoProof } from "../lib/games/claims.mjs";
 import feed from "../data/feed.json" with { type: "json" };
+import { listen } from "./helpers/listen.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -93,7 +94,7 @@ before(async () => {
     } catch {}
     await sleep(1000);
   }
-  await new Promise((r) => gh.listen(GH_PORT, "127.0.0.1", r));
+  await listen(gh, GH_PORT);
   await ensureRankingSchema(db);
   const stmts = [{ sql: `DELETE FROM site_ratings WHERE url IN (${SITES.map(() => "?").join(",")})`, args: SITES }];
   SITES.forEach((url, i) => {

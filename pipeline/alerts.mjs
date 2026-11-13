@@ -52,7 +52,7 @@ export function alertFooter(from) {
  * stays unsent for the day. Every email ends with alertFooter.
  * @param {any} env
  * @param {{ db?: { execute: Function, transaction: Function } }} [options]
- * @returns {null | { send(m: { to: string, subject: string, text: string }): Promise<void> }}
+ * @returns {null | { send(m: { to: string, subject: string, text: string, attachments?: import("../lib/email/gate.mjs").EmailAttachment[] }): Promise<void> }}
  */
 export function emailSender(env, { db } = {}) {
   if (!db || !env?.OWNER_EMAIL) return null;
@@ -61,8 +61,8 @@ export function emailSender(env, { db } = {}) {
   const gate = createEmailGate({ db, transport, caps: emailCaps(env.EMAIL_CAPS), secret: env.AUTH_SECRET ?? globalThis.process?.env?.AUTH_SECRET });
   const footer = alertFooter(env.EMAIL_FROM);
   return {
-    async send({ to, subject, text }) {
-      const r = await gate.send({ kind: "owner-alert", to, subject, text: `${text}\n\n--\n${footer}\n` });
+    async send({ to, subject, text, attachments }) {
+      const r = await gate.send({ kind: "owner-alert", to, subject, text: `${text}\n\n--\n${footer}\n`, attachments });
       if (!r.sent) throw new Error(`owner alert email not sent (${r.reason})`);
     },
   };
