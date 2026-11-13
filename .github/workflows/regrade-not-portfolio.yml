@@ -6,18 +6,22 @@ name: Re-check non-ranked sites (recheck-543)
 # experiment branch (gh workflow run regrade-not-portfolio.yml --ref
 # exp/recheck-543); a manual workflow runs from the branch it's started on.
 #
-#   capture          read-only selection, then a fresh capture in 10 shards
-#                    (no AI, no database writes); bundles are kept as
-#                    workflow artifacts, the screenshots go to R2 under
-#                    their own keys for the review page.
+#   capture          read-only selection, a one-site check, then a fresh
+#                    capture on up to 20 machines (none under about 10 sites;
+#                    no AI, no database writes); bundles are kept as workflow
+#                    artifacts, the screenshots go to R2 under their own keys.
 #   recapture        capture again only the ids in `only` (comma-separated),
-#                    with the selection of capture_run, so ids stay the same;
-#                    kept as the artifact recheck-bundles-fix (pass the run as
-#                    fix_run to the gemini steps; it replaces those sites).
-#   gemini-dry-run   the request plan and today's gemini-3.1-flash-lite count.
-#   gemini           the plan on gemini-3.1-flash-lite: a hard stop at 230
-#                    HTTP requests and never past 480 on the model's quota
-#                    day. Resumable: pass the last gemini run as resume_run.
+#                    with the selection of capture_run so ids stay the same,
+#                    split the same way; kept as recheck-bundles-fix-* (pass
+#                    the run as fix_run to the gemini steps; it replaces those
+#                    sites).
+#   gemini-dry-run   the request plan, the job's and the day's request counts.
+#   gemini-pilot     real requests for the ids in `only` (a multiple of 5, in
+#                    batches of 5), at most 6 HTTP requests.
+#   gemini           the full plan on gemini-3.1-flash-lite: the job's 230
+#                    HTTP requests (pilot included) and never past 480 on the
+#                    model's quota day. Resumable: pass the last gemini run as
+#                    resume_run.
 #   queue-dry-run,   the review rows committed in experiments/recheck-543/
 #   queue            queue.json into status_reviews (INSERT OR IGNORE), for the
 #                    owner to confirm on /admin/review; nothing else changes.
@@ -27,17 +31,17 @@ on:
   workflow_dispatch:
     inputs:
       step:
-        description: "capture, recapture, gemini-dry-run, gemini, queue-dry-run or queue"
+        description: "capture, recapture, gemini-dry-run, gemini-pilot, gemini, queue-dry-run or queue"
         required: true
         default: "gemini-dry-run"
         type: choice
-        options: ["capture", "recapture", "gemini-dry-run", "gemini", "queue-dry-run", "queue"]
+        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "queue-dry-run", "queue"]
       capture_run:
         description: "recapture and gemini steps: the run id of the capture"
         required: false
         default: ""
       only:
-        description: "recapture: the site ids to capture again (X003,X023,...)"
+        description: "recapture and gemini-pilot: the site ids (X003,X023,...)"
         required: false
         default: ""
       fix_run:
@@ -61,74 +65,18 @@ env:
   RECHECK_DIR: /home/runner/recheck
 
 jobs:
-  select:
-    if: inputs.step == 'capture'
+  # The selection (capture) or the earlier one (recapture), the machine count, and the one-site check.
+  prepare:
+    if: inputs.step == 'capture' || inputs.step == 'recapture'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
+    outputs:
+      shards: ${{ steps.shards.outputs.shards }}
     env:
-      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      TURSO_DATABASE_URL: ${{ inputs.step == 'capture' && secrets.TURSO_DATABASE_URL || '' }}
+      TURSO_AUTH_TOKEN: ${{ inputs.step == 'capture' && secrets.TURSO_AUTH_TOKEN || '' }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: node scripts/experiments/recheck-543.mjs select
-      - uses: actions/upload-artifact@v6
-        with:
-          name: recheck-selection
-          path: |
-            ${{ env.RECHECK_DIR }}/selection.json
-            ${{ env.RECHECK_DIR }}/dups.json
-          retention-days: 30
-
-  capture:
-    needs: select
-    runs-on: ubuntu-24.04
-    timeout-minutes: 330
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    env:
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - uses: actions/download-artifact@v6
-        with:
-          name: recheck-selection
-          path: ${{ env.RECHECK_DIR }}
-      - run: node scripts/experiments/recheck-543.mjs capture --shard ${{ matrix.shard }}/10
-      - run: node scripts/experiments/recheck-543.mjs upload
-      - uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: recheck-bundles-${{ matrix.shard }}
-          path: ${{ env.RECHECK_DIR }}/bundles/
-          retention-days: 30
-
-  recapture:
-    if: inputs.step == 'recapture'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
-    steps:
-      - if: inputs.capture_run == '' || inputs.only == ''
+      - if: inputs.step == 'recapture' && (inputs.capture_run == '' || inputs.only == '')
         run: echo "capture_run and only are required" && exit 1
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -137,18 +85,62 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - uses: actions/download-artifact@v6
+      - if: inputs.step == 'capture'
+        run: node scripts/experiments/recheck-543.mjs select
+      - if: inputs.step == 'recapture'
+        uses: actions/download-artifact@v6
         with:
           name: recheck-selection
           path: ${{ env.RECHECK_DIR }}
           run-id: ${{ inputs.capture_run }}
           github-token: ${{ github.token }}
-      - run: node scripts/experiments/recheck-543.mjs capture --only "${{ inputs.only }}"
+      - name: One-site check before the long capture
+        run: node scripts/experiments/recheck-543.mjs check
+      - id: shards
+        run: echo "shards=$(node scripts/experiments/recheck-543.mjs shards ${{ inputs.step == 'recapture' && format('--only "{0}"', inputs.only) || '' }})" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v6
+        if: inputs.step == 'capture'
+        with:
+          name: recheck-selection
+          path: |
+            ${{ env.RECHECK_DIR }}/selection.json
+            ${{ env.RECHECK_DIR }}/dups.json
+          retention-days: 30
+
+  capture:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # The selection of this run (capture) or of capture_run (recapture).
+      - uses: actions/download-artifact@v6
+        with:
+          name: recheck-selection
+          path: ${{ env.RECHECK_DIR }}
+          run-id: ${{ inputs.step == 'recapture' && inputs.capture_run || github.run_id }}
+          github-token: ${{ github.token }}
+      - run: node scripts/experiments/recheck-543.mjs capture --shard ${{ matrix.shard }}/${{ strategy.job-total }} ${{ inputs.step == 'recapture' && format('--only "{0}"', inputs.only) || '' }}
       - run: node scripts/experiments/recheck-543.mjs upload
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: recheck-bundles-fix
+          name: ${{ inputs.step == 'recapture' && 'recheck-bundles-fix' || 'recheck-bundles' }}-${{ matrix.shard }}
           path: ${{ env.RECHECK_DIR }}/bundles/
           retention-days: 30
 
@@ -159,10 +151,10 @@ jobs:
     env:
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      GEMINI_API_KEY: ${{ inputs.step == 'gemini' && secrets.GEMINI_API_KEY || '' }}
+      GEMINI_API_KEY: ${{ (inputs.step == 'gemini' || inputs.step == 'gemini-pilot') && secrets.GEMINI_API_KEY || '' }}
     steps:
-      - if: inputs.capture_run == ''
-        run: echo "capture_run is required" && exit 1
+      - if: inputs.capture_run == '' || (inputs.step == 'gemini-pilot' && inputs.only == '')
+        run: echo "capture_run (and only, for a pilot) is required" && exit 1
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -177,38 +169,49 @@ jobs:
           github-token: ${{ github.token }}
       - uses: actions/download-artifact@v6
         with:
-          pattern: recheck-bundles-*
+          pattern: recheck-bundles-[0-9]*
           merge-multiple: true
           path: ${{ env.RECHECK_DIR }}/bundles
           run-id: ${{ inputs.capture_run }}
           github-token: ${{ github.token }}
+      # A recapture replaces its sites whole: no file of the first capture stays next to them.
       - uses: actions/download-artifact@v6
         if: inputs.fix_run != ''
         with:
-          name: recheck-bundles-fix
-          path: ${{ env.RECHECK_DIR }}/bundles
+          pattern: recheck-bundles-fix*
+          merge-multiple: true
+          path: ${{ env.RECHECK_DIR }}/fix
           run-id: ${{ inputs.fix_run }}
           github-token: ${{ github.token }}
+      - if: inputs.fix_run != ''
+        run: |
+          for d in "$RECHECK_DIR"/fix/X/*/; do
+            id=$(basename "$d")
+            rm -rf "$RECHECK_DIR/bundles/X/$id"
+            cp -r "$d" "$RECHECK_DIR/bundles/X/$id"
+          done
+          echo "replaced $(ls "$RECHECK_DIR"/fix/X | wc -l) sites from the recapture"
       - uses: actions/download-artifact@v6
         if: inputs.resume_run != ''
         with:
-          name: recheck-gemini31
+          name: ${{ inputs.step == 'gemini-pilot' && 'recheck-gemini31-pilot' || 'recheck-gemini31' }}
           path: ${{ env.RECHECK_DIR }}
           run-id: ${{ inputs.resume_run }}
           github-token: ${{ github.token }}
       - name: Gemini 3.1
         run: |
-          if [ "${{ inputs.step }}" = "gemini" ]; then
-            node scripts/experiments/recheck-543.mjs gemini
-          else
-            node scripts/experiments/recheck-543.mjs gemini --dry-run
-          fi
+          case "${{ inputs.step }}" in
+            gemini) node scripts/experiments/recheck-543.mjs gemini ;;
+            gemini-pilot) node scripts/experiments/recheck-543.mjs gemini --pilot "${{ inputs.only }}" ;;
+            *) node scripts/experiments/recheck-543.mjs gemini --dry-run ;;
+          esac
       - uses: actions/upload-artifact@v6
-        if: always() && inputs.step == 'gemini'
+        if: always() && inputs.step != 'gemini-dry-run'
         with:
-          name: recheck-gemini31
+          name: ${{ inputs.step == 'gemini-pilot' && 'recheck-gemini31-pilot' || 'recheck-gemini31' }}
           path: |
             ${{ env.RECHECK_DIR }}/gemini31/
+            ${{ env.RECHECK_DIR }}/gemini31-pilot/
             ${{ env.RECHECK_DIR }}/raw/
             ${{ env.RECHECK_DIR }}/timeline.json
           if-no-files-found: ignore

@@ -189,30 +189,68 @@ export const GEMINI31 = {
   job: JOB,
 };
 
-async function gemini({ dryRun }) {
+/** Capture machines for n sites: up to 20, none with fewer than about 10 sites. */
+export const shardCount = (n) => Math.max(1, Math.min(20, Math.floor(n / 10)));
+
+/** The job's cap: HTTP requests to Gemini 3.1 for recheck-543 in all, pilot and full run, retries included. */
+export const JOB_CAP = 230;
+export const PILOT_MAX_HTTP = 6;
+
+/** A pilot plan: the given ids in batches of 5, in the given order (never a partial batch). */
+export function pilotPlan(ids) {
+  if (!ids.length || ids.length % BATCH) throw new Error(`a pilot needs a multiple of ${BATCH} sites, got ${ids.length}`);
+  const requests = [];
+  for (let i = 0; i < ids.length; i += BATCH) requests.push({ key: `batch/p${String(i / BATCH + 1).padStart(2, "0")}`, step: "batch", set: SET, kind: "batch", ids: ids.slice(i, i + BATCH), pad: [] });
+  return { pilot: true, sites: ids.length, batches: requests.length, solo: 0, requests };
+}
+
+/** HTTP requests already logged for this job (pilot and full run together). */
+async function jobUsed(db) {
+  try {
+    return Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM gemini_requests WHERE job = ?", args: [JOB] })).rows[0].n);
+  } catch (e) {
+    if (/no such table/i.test(String(e?.message ?? e))) return 0;
+    throw e;
+  }
+}
+
+async function gemini({ dryRun, pilot = null }) {
   const { pipelineDb } = await import("../../pipeline/roster.mjs");
   const { dailyTotals } = await import("../../pipeline/gemini-log.mjs");
   const db = pipelineDb(path.join(import.meta.dirname, "..", ".."));
   const sel = readJson(path.join(DIR, "selection.json"));
-  const planPath = path.join(DIR, "gemini31", "plan.json");
-  const plan = fs.existsSync(planPath) ? readJson(planPath) : makePlan(sel.sites, capturedIds());
+  const folder = pilot ? "gemini31-pilot" : "gemini31";
+  const planPath = path.join(DIR, folder, "plan.json");
+  let plan;
+  if (fs.existsSync(planPath)) plan = readJson(planPath);
+  else if (pilot) {
+    const ids = pilot.split(",").map((x) => x.trim()).filter(Boolean);
+    const gradable = new Set(capturedIds());
+    const bad = ids.filter((id) => !gradable.has(id));
+    if (bad.length) throw new Error(`not gradable (missing, failed or blocked): ${bad.join(", ")}`);
+    plan = pilotPlan(ids);
+  } else plan = makePlan(sel.sites, capturedIds());
   if (!fs.existsSync(planPath)) writeJson(planPath, plan);
-  const statePath = path.join(DIR, "gemini31", "state.json");
+  const statePath = path.join(DIR, folder, "state.json");
   const state = fs.existsSync(statePath) ? readJson(statePath) : { http_requests: 0, items: {} };
   const left = plan.requests.filter((r) => !state.items[r.key]?.answers).length;
   const used = (await dailyTotals(db)).used.get(GEMINI31.model)?.n ?? 0;
-  console.log(`${plan.sites} captured sites: ${plan.batches} batches of ${BATCH} + ${plan.solo} one at a time = ${plan.requests.length} requests`);
-  console.log(`${left} requests left; ${state.http_requests} of the ${GEMINI31.hard_stop} HTTP requests used by this job`);
+  const job = await jobUsed(db);
+  // This run may send what the job has left of its cap (a pilot at most PILOT_MAX_HTTP).
+  const budget = Math.max(0, Math.min(JOB_CAP - job, pilot ? PILOT_MAX_HTTP - state.http_requests : Infinity));
+  const settings = { ...GEMINI31, hard_stop: state.http_requests + budget };
+  console.log(`${pilot ? "PILOT: " : ""}${plan.sites} sites: ${plan.batches} batches of ${BATCH} + ${plan.solo} one at a time = ${plan.requests.length} requests`);
+  console.log(`${left} requests left; job ${JOB} has used ${job} of its ${JOB_CAP} HTTP requests; this run may send ${budget}`);
   console.log(`${GEMINI31.model}: ${used} requests this Pacific quota day (cap ${GEMINI31.day_cap})`);
-  if (used + Math.min(left, GEMINI31.hard_stop - state.http_requests) > GEMINI31.day_cap) console.log(`note: the day cap stops the run at ${GEMINI31.day_cap}; run it again after the quota day turns`);
+  if (used + Math.min(left, budget) > GEMINI31.day_cap) console.log(`note: the day cap stops the run at ${GEMINI31.day_cap}; run it again after the quota day turns`);
   console.log(`prompt ${PROMPT_VERSION}: ${promptReady() ? "in place" : "NOT in place yet (prompt-log.md doesn't name it)"}`);
   if (dryRun) return 0;
   if (!promptReady()) {
     console.log(`refusing to run: the prompts are not ${PROMPT_VERSION} yet`);
     return 3;
   }
-  if (state.http_requests >= GEMINI31.hard_stop) {
-    console.log(`hard stop reached (${GEMINI31.hard_stop})`);
+  if (budget <= 0) {
+    console.log(`hard stop: no requests left (job cap ${JOB_CAP}${pilot ? `, pilot cap ${PILOT_MAX_HTTP}` : ""})`);
     return 3;
   }
   const { loadPrompts, run } = await import("./grading-two-sets-run.mjs");
@@ -220,9 +258,9 @@ async function gemini({ dryRun }) {
     db,
     plan,
     prompts: loadPrompts(PROMPT_DIR),
-    settings: GEMINI31,
-    out: path.join(DIR, "gemini31"),
-    rawDir: path.join(DIR, "raw", "gemini31"),
+    settings,
+    out: path.join(DIR, folder),
+    rawDir: path.join(DIR, "raw", folder),
     bundleRoot: path.join(DIR, "bundles"),
     timelinePath: path.join(DIR, "timeline.json"),
   });
@@ -274,6 +312,17 @@ async function main() {
     const { captureAll } = await import("./recheck-543-capture.mjs");
     return captureAll({ dir: DIR, set: SET, shard: opt("--shard"), only: opt("--only") });
   }
+  if (step === "check") {
+    const { checkOne } = await import("./recheck-543-capture.mjs");
+    return (await checkOne({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "recheck-check-")) }), 0);
+  }
+  if (step === "shards") {
+    // The capture matrix: up to 20 machines, none with fewer than about 10 sites.
+    const sel = readJson(path.join(DIR, "selection.json"));
+    const n = opt("--only") ? opt("--only").split(",").filter(Boolean).length : sel.sites.length;
+    console.log(JSON.stringify(Array.from({ length: shardCount(n) }, (_, i) => i)));
+    return 0;
+  }
   if (step === "upload") return (await upload(), 0);
   if (step === "plan") {
     const sel = readJson(path.join(DIR, "selection.json"));
@@ -281,7 +330,7 @@ async function main() {
     console.log(`${plan.sites} captured: ${plan.batches} batches + ${plan.solo} solo = ${plan.requests.length} requests`);
     return 0;
   }
-  if (step === "gemini") return gemini({ dryRun: flag("--dry-run") });
+  if (step === "gemini") return gemini({ dryRun: flag("--dry-run"), pilot: opt("--pilot") });
   if (step === "queue") {
     // The review rows (experiments/recheck-543/queue.json, written by recheck-543-analyze.mjs and
     // committed for the record) into status_reviews. Never updates a row the owner has decided:
@@ -330,7 +379,7 @@ async function main() {
     if (gem) gh(gem, "-n", "recheck-gemini31", "-D", DIR);
     return 0;
   }
-  console.error("usage: recheck-543.mjs <select|capture [--shard k/n]|upload|plan|gemini [--dry-run]|fetch [--capture-run N] [--fix-run N] [--gemini-run N]>");
+  console.error("usage: recheck-543.mjs <select|check|shards [--only ids]|capture [--shard k/n] [--only ids]|upload|plan|gemini [--dry-run] [--pilot X001,...]|fetch [--capture-run N] [--fix-run N] [--gemini-run N]>");
   return 1;
 }
 

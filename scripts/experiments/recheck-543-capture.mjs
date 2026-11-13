@@ -197,11 +197,12 @@ export async function captureSite(browser, site, dir) {
 export async function captureAll({ dir: DIR, set: SET, shard = null, only = null }) {
   const sel = readJson(path.join(DIR, "selection.json"));
   let sites = sel.sites;
+  // `only` first, then the shard, so a recapture of a few sites splits across machines too.
+  if (only) sites = sites.filter((s) => only.split(",").includes(s.id) || only.split(",").includes(s.url));
   if (shard) {
     const [k, n] = shard.split("/").map(Number);
     sites = sites.filter((_, i) => i % n === k);
   }
-  if (only) sites = sites.filter((s) => only.split(",").includes(s.id) || only.split(",").includes(s.url));
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   const counts = { ok: 0, failed: 0, blocked: 0, skipped: 0, retried: 0, gate: 0, modal: 0, mode: 0 };
@@ -229,4 +230,25 @@ export async function captureAll({ dir: DIR, set: SET, shard = null, only = null
   }
   console.log(`capture: ${JSON.stringify(counts)}`);
   return 0;
+}
+
+/**
+ * The one-site check before a long capture: one known-good portfolio, captured
+ * into a scratch folder; throws unless it is gradable (both screenshots, text,
+ * facts, signals, not blocked). Catches a broken browser install or a code
+ * error in minutes instead of hours.
+ */
+export async function checkOne({ dir, url = "https://cade.codes", name = "Cade Kynaston" }) {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch();
+  try {
+    const t0 = Date.now();
+    const meta = await captureSite(browser, { id: "CHECK", url, name, group: "check" }, dir);
+    const missing = ["desktop.jpg", "phone.jpg", "text.txt", "facts.json"].filter((f) => !fs.existsSync(path.join(dir, f)));
+    const why = meta.failed ? `failed: ${meta.failed}` : meta.blocked ? `blocked: ${meta.blocked}` : missing.length ? `missing ${missing.join(", ")}` : !meta.signals ? "no signals" : null;
+    console.log(`check ${url}: ${why ?? `ok, ${meta.words} words, signals ${meta.signals.score}`} in ${Math.round((Date.now() - t0) / 1000)} s`);
+    if (why) throw new Error(`the one-site check failed (${why}); not starting the capture`);
+  } finally {
+    await browser.close();
+  }
 }
