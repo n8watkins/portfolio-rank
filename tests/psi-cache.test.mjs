@@ -207,7 +207,7 @@ test("cached=1 never runs PageSpeed, and desktop is measured and stored apart fr
 });
 
 test("Play's details carry the stored results, never measure, and only for listed sites", async () => {
-  const url = feed[109].url;
+  const url = feed[113].url;
   await clean(url);
   await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi-desktop:${url}`, `lease:psi-desktop:${url}`] });
   calls = 0;
@@ -229,7 +229,7 @@ test("Play's details carry the stored results, never measure, and only for liste
   assert.equal(calls, 1);
   // Unknown sites are refused; at most two sites per request.
   assert.equal((await details("url=https%3A%2F%2Fnot-listed.example")).status, 404);
-  const three = [feed[109].url, feed[110].url, feed[112].url].map((u) => `url=${encodeURIComponent(u)}`).join("&");
+  const three = [feed[113].url, feed[114].url, feed[115].url].map((u) => `url=${encodeURIComponent(u)}`).join("&");
   assert.equal(Object.keys((await (await details(three)).json()).details).length, 2);
   // A face-off pair carries both cards' details, so a pair is one request.
   const pair = await (await fetch(`${BASE}/api/rank`)).json();
