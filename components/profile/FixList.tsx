@@ -1,4 +1,5 @@
-import { CircleCheck, CircleX, Clock, Gauge, ListChecks, Share2 } from "lucide-react";
+import { CircleCheck, CircleX, Clock, Gauge, ListChecks, Share2, Trophy } from "lucide-react";
+import { pointFixes } from "@/lib/check-points.mjs";
 import type { Profile } from "@/lib/profile";
 import { checklistItems } from "@/lib/tools/checklist";
 import { ShareResultView } from "@/components/tools/ShareResult";
@@ -42,11 +43,28 @@ export function FixList({ p }: { p: Profile }) {
   const nothingSaved = !quick && !share && !mobile;
   const nothingToFix = !nothingSaved && failed.length === 0 && shareFixes.length === 0 && weak.length === 0;
 
+  // The points behind the starting rank, as fixes worth the most first ("+5 if you add a share image").
+  const gains = !p.hideGrade && p.standing.check ? pointFixes(p.standing.check, 4) : [];
+  const points =
+    gains.length > 0 ? (
+      <Group icon={Trophy} title="Quickest points for your starting rank">
+        <ul className="space-y-2">
+          {gains.map((g) => (
+            <li key={g.id} className="flex items-start gap-3 text-sm">
+              <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs font-bold leading-5 text-accent tabular-nums">+{Math.round(g.gain)}</span>
+              <span>{g.text.slice(g.text.indexOf(" if you ") + 1)}</span>
+            </li>
+          ))}
+        </ul>
+      </Group>
+    ) : null;
+
   if (nothingSaved) {
-    return <p className="text-sm text-mute">No checks saved for this site yet. They run when the site is added or re-checked.</p>;
+    return points ?? <p className="text-sm text-mute">No checks saved for this site yet. They run when the site is added or re-checked.</p>;
   }
   return (
     <div className="space-y-4">
+      {points}
       {nothingToFix && (
         <p className="flex items-center gap-2 rounded-xl border border-edge bg-card p-4 text-sm">
           <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden /> Nothing to fix from the checks. Nice work.

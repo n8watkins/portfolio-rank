@@ -82,9 +82,9 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
               </span>
             )}
           </span>
-          {rep.tier && rep.provisional && (
+          {rep.tier && (rep.seeded || rep.provisional) && (
             <p className="max-w-[7.5rem] text-[11px] leading-snug text-mute sm:max-w-none">
-              Starting tier, until {MIN_FACEOFFS} face-offs
+              {rep.seeded ? "Starting rank from automated checks" : `Starting tier, until ${MIN_FACEOFFS} face-offs`}
             </p>
           )}
           {pct ? (

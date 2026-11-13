@@ -107,6 +107,10 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Roles are read from the page text when a portfolio is graded** (owner, 2026-11-10). Status: building (#81).
   Every grade (the nightly ones and "grade my portfolio") also returns up to three roles the page claims, cleaned by code; they are labels, never scored, so the rubric version stays 2.
   Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
+- **Starting ranks from automated checks** (owner, 2026-11-12, later still). Status: building.
+  Every graded portfolio gets up to 100 points from saved data (Lighthouse, the share card, project links, resume, GitHub, contact, own domain, phone fit, footer year, minus 15 for a known template; `lib/check-points.mjs` `CHECK_POINTS`), and its starting rating comes from its place by points, with high uncertainty, so letters appear at once and real votes refine them.
+  No vote is invented; a missing measurement gets the library median, never a zero.
+  This replaces "everyone starts at B until 10 face-offs" for graded portfolios.
 - **Tiers by ELO from face-offs, the grade as the report card** (owner, 2026-11-12, later the same day). Status: building, replaces the score-based tiers below.
   The rank is the ELO: everyone starts at the same rating (tier B, ELO 1200) and stays B until 10 face-offs; then SSS is the top 3, S+, S and S- the rest of the top 1%, A+ to A- 1% to 30% (A is the top 30%, so many more people can be proud to share it, and it gets visual emphasis), B+ to B- 30% to 70%, C+ to C- 70% to 85%, D the bottom 15%, among the portfolios with 10 face-offs.
   People's votes count fully and AI head-to-head comparisons at 0.25 of a vote (proposed, not yet confirmed by the owner; `AI_VOTE_WEIGHT`).

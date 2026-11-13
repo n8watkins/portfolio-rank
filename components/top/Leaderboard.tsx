@@ -2,7 +2,7 @@ import { Bot, Check, Crown, Merge, Sparkles, Split, Swords, Trophy, Users, X } f
 import { BoardCard } from "@/components/top/BoardCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Movement, RankBadge, TierBadge } from "@/components/ui/badges";
-import { AI_VOTE_WEIGHT, MIN_FACEOFFS, STARTING_TIER, isPublicTier } from "@/lib/tiers.mjs";
+import { AI_VOTE_WEIGHT, MIN_FACEOFFS, isPublicTier } from "@/lib/tiers.mjs";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
@@ -88,16 +88,11 @@ export function Leaderboard({ board, views = true }: { board: Board; views?: boo
             {kind === "rank" ? (
               <>
                 <li>
-                  <strong className="font-semibold text-ink">{STARTING_TIER}</strong> everyone starts here, until {MIN_FACEOFFS} face-offs
+                  <strong className="font-semibold text-ink">Start</strong> a rank from automated checks; real votes move it
                 </li>
                 <li>
                   <strong className="font-semibold text-ink">ELO</strong> a person&apos;s vote counts fully, an AI comparison {AI_VOTE_WEIGHT === 0.25 ? "a quarter" : `${AI_VOTE_WEIGHT} of one`}
                 </li>
-                {board.ranked != null && (
-                  <li>
-                    <strong className="font-semibold text-ink tabular-nums">{board.ranked.toLocaleString("en-US")}</strong> of {board.total.toLocaleString("en-US")} have {MIN_FACEOFFS} face-offs
-                  </li>
-                )}
               </>
             ) : kind === "merged" || kind === "people" ? (
               <li>
@@ -146,11 +141,8 @@ export function Leaderboard({ board, views = true }: { board: Board; views?: boo
 }
 
 const scoreLabel = (kind: BoardKind) => (kind === "rank" ? "ELO" : "Score");
-/** Face-offs on the ranked board: "4 of 10" until a tier is earned (quarters from AI face-offs dropped), then the count. */
-const faceoffText = (r: Entry) => {
-  const n = Math.floor(r.faceoffs ?? 0);
-  return r.provisional ? `${n} of ${MIN_FACEOFFS}` : String(n);
-};
+/** Real votes on the ranked board (people's and AI comparisons, each once); "4 of 10" face-offs for a portfolio still at the starting tier. */
+const faceoffText = (r: Entry) => (r.provisional ? `${Math.floor(r.faceoffs ?? 0)} of ${MIN_FACEOFFS}` : (r.votes ?? 0).toLocaleString("en-US"));
 
 function Head({ kind, hasMoves }: { kind: BoardKind; hasMoves: boolean }) {
   return (
@@ -160,7 +152,7 @@ function Head({ kind, hasMoves }: { kind: BoardKind; hasMoves: boolean }) {
       {hasMoves && <span className="w-12 text-right">Week</span>}
       <span className="w-12 text-center">Tier</span>
       {kind !== "rank" && <span className="w-28 text-right">{kind === "ai" ? "Percentile" : "Likely rank"}</span>}
-      {kind === "rank" && <span className="w-24 text-right">Face-offs</span>}
+      {kind === "rank" && <span className="w-24 text-right">Real votes</span>}
       {kind !== "rank" && <span className="w-14 text-right">ELO</span>}
       <span className="w-16 text-right">{scoreLabel(kind)}</span>
     </div>
@@ -168,7 +160,7 @@ function Head({ kind, hasMoves }: { kind: BoardKind; hasMoves: boolean }) {
 }
 
 function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boolean }) {
-  const base = kind === "ai" ? (r.topPct != null ? `top ${r.topPct}%` : null) : kind === "rank" ? `${faceoffText(r)} face-offs` : r.likely ? `likely ${r.likely.replace(/-#/, "-")}` : null;
+  const base = kind === "ai" ? (r.topPct != null ? `top ${r.topPct}%` : null) : kind === "rank" ? `${faceoffText(r)} ${r.provisional ? "face-offs" : r.votes === 1 ? "vote" : "votes"}` : r.likely ? `likely ${r.likely.replace(/-#/, "-")}` : null;
   // On a phone the ELO column is folded into the line under the score.
   const sub = kind !== "rank" && r.elo != null ? [base, `ELO ${r.elo}`].filter(Boolean).join(" · ") : base;
   return (
