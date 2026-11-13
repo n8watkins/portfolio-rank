@@ -20,7 +20,7 @@ if (existsSync(".env.local")) {
   }
 }
 
-const PROD = process.env.PROD_BASE_URL || "https://portfoliorank.n8builds.dev";
+const PROD = process.env.PROD_BASE_URL || "https://portfoliorank.dev";
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const LIMIT = limitArg ? Number(limitArg.split("=")[1]) : 150;
 // Same TTL as app/api/psi/route.ts: a PSI result younger than this is fresh.
