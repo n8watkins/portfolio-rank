@@ -13,6 +13,7 @@ import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
 import { healthCheck } from "./health";
+import { anonymousSession } from "./anonymous-session";
 import { BLOG_TAG, appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag } from "./edge-cache";
 // The build's static-files fingerprint (scripts/assets-fingerprint.mjs, written after
 // the OpenNext build), part of every edge cache key (./edge-cache.ts).
@@ -98,8 +99,9 @@ const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerpri
 
 // Requests on the old address or www go to the same path on SITE_URL first
 // (./canonical-host.ts). Screenshots and favicons skip the Next.js app
-// (./assets.ts); scanner probes get
-// a plain 404 and the public pages go through the edge cache (./edge-cache.ts);
+// (./assets.ts); scanner probes get a plain 404, a signed-out session read
+// gets `null` (./anonymous-session.ts), and the public pages go through the
+// edge cache (./edge-cache.ts);
 // the rest is the app. On staging, robots.txt disallows everything and every
 // response says noindex (./staging.ts).
 const worker = {
@@ -116,6 +118,9 @@ const worker = {
     if (robots) return robots;
     const probe = probeAnswer(request);
     if (probe) return probe;
+    // A signed-out visitor's session read is `null` without starting Next (./anonymous-session.ts).
+    const anonymous = anonymousSession(request);
+    if (anonymous) return anonymous;
     if (mayUseEdgeCache(request, new URL(env.SITE_URL).hostname)) {
       return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(edgeRequest(request, ASSETS));
     }
