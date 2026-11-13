@@ -2,28 +2,10 @@
 // only adds a request never imports the code that calls Gemini: a visitor's
 // request enqueues here, and the Worker's hourly drain grades it
 // (tests/gemini-reach.test.mjs).
+import { PEOPLE_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 
 export async function ensurePeopleSchema(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS people_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL,
-    url TEXT NOT NULL,
-    name TEXT,
-    email TEXT,
-    shot_key TEXT,
-    page_text TEXT,
-    facts TEXT,
-    meta TEXT,
-    status TEXT NOT NULL,
-    reason TEXT,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    done_at TEXT,
-    result TEXT,
-    notified_at TEXT
-  )`);
-  await db.execute("CREATE INDEX IF NOT EXISTS people_requests_status_idx ON people_requests (status, created_at)");
+  await applyTables(db, PEOPLE_TABLES);
 }
 
 /**
