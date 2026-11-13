@@ -37,7 +37,7 @@ const yesNo = (v) => (v == null ? "-" : v.is_portfolio ? "portfolio" : "not a po
 // pages not about a person, and broken, blank or error pages. A "no" whose reason
 // is only one of these is a reason v2.1 does not allow.
 const DISALLOWED = /\bblog\b|\brole\b|professional identity|personal identity|lacks (a )?(clear )?(name|identity)|no projects|lacks projects|without projects|no (project|work) (content|links)|way to (view|see) (their )?(work|projects)|contact page|gimmick|single project/i;
-const ALLOWED = /parked|for sale|placeholder|template|demo name|404|error|broken|blank|not load|inaccessible|security|bot|verification|checkpoint|repository|repo\b|readme|link-in-bio|linktree|company|studio|agency|product|tool|landing page|gambling|slot|spam|login|redirect|expired|deployment|loading screen/i;
+const ALLOWED = /moved|sign-up|signup|sign up|boot screen|no person|not about a person|parked|for sale|placeholder|template|demo name|404|error|broken|blank|not load|inaccessible|security|bot|verification|checkpoint|repository|repo\b|readme|link-in-bio|linktree|company|studio|agency|product|tool|landing page|gambling|slot|spam|login|redirect|expired|deployment|loading screen/i;
 export const disallowedNo = (reason) => DISALLOWED.test(reason ?? "") && !ALLOWED.test(reason ?? "");
 
 /** Agreement between two verdict getters on the sites both answered. */
@@ -87,6 +87,7 @@ export function build(dir = DIR) {
   const results = readJson(path.join(dir, "results.json"));
   const g = requestStats(read(path.join(dir, "gemini31", "state.json")));
   const gp = requestStats(read(path.join(dir, "gemini31-pilot", "state.json")));
+  const gx = requestStats(read(path.join(dir, "gemini31-extra", "state.json")));
   const h = requestStats(read(path.join(dir, "haiku", "state.json")));
   const ungraded = read(path.join(dir, "ungraded.json"), []);
   const retry = read(path.join(dir, "retry.json"), {});
@@ -130,6 +131,7 @@ export function build(dir = DIR) {
     metas,
     g,
     gp,
+    gx,
     h,
     ag,
     byGroup,
@@ -147,7 +149,7 @@ export function build(dir = DIR) {
     haikuDisallowed: results.filter((r) => r.verdicts?.haiku?.batch?.is_portfolio === false && disallowedNo(r.verdicts.haiku.batch.reason)),
     n: {
       sites: results.length,
-      graded: count((r) => r.path === "graders"),
+      graded: count((r) => r.path === "graders" && r.outcome !== "pending"),
       relist: count((r) => r.proposed === "relist" && r.agreed),
       remove: count((r) => r.proposed === "remove" && r.agreed),
       flagged: count((r) => r.outcome === "disagree" && r.proposed),
@@ -178,8 +180,9 @@ function sections(d) {
       `Both say portfolio for ${N.bothPortfolio} sites and both say not a portfolio for ${N.bothNot}; they disagree on ${d.disagree.length}.`,
       `${N.relist} sites would come back (both agree, pre-ticked), ${N.remove} listed sites would leave, ${N.flagged} disagreements are flagged, and ${N.review} need a person (a blocked capture or the same text on another domain).`,
       `${N.failed} sites failed to load and ${N.blocked} captures stayed blocked, so they were never graded; most failed loads are names that no longer resolve.`,
+      `${d.results.filter((r) => r.proposed === "relist" && r.agreed && r.off_list).length} of the agreed relists are sites that left the community list (delisted on 2026-11-10); bringing those back is a policy decision for the owner, separate from the grades.`,
       `Gemini said no on grounds v2.1 does not allow (a blog, a missing role) for ${d.geminiDisallowed.length} sites; Haiku for ${d.haikuDisallowed.length}.`,
-      `Cost: Gemini ${d.g?.http ?? 0} HTTP requests on the free tier, Haiku ${money(d.h?.cost)}. Nothing has changed on the site: every change waits on the owner on /admin/review.`,
+      `Cost: Gemini ${(d.gp?.http ?? 0) + (d.g?.http ?? 0) + (d.gx?.http ?? 0)} HTTP requests on the free tier (pilot, full run and extra batch), Haiku ${money(d.h?.cost)}. Nothing has changed on the site: every change waits on the owner on /admin/review.`,
     ],
   });
   out.push({
@@ -216,6 +219,26 @@ function sections(d) {
     ],
     means: ["The owner's queue is the relist, remove, flagged and needs-a-person rows; nothing else needs a decision."],
   });
+  const offList = d.results.filter((r) => r.proposed === "relist" && r.agreed && r.off_list);
+  out.push({
+    id: "off-list",
+    title: `A decision for the owner: ${offList.length} delisted sites`,
+    lines: [
+      `${offList.length} of the ${N.relist} agreed relists are delisted sites: they left the community list and were delisted in the 2026-11-10 cleanup (#53), not because anything was wrong with them.`,
+      "Both models call them portfolios, so a pass rule (PR #220, REVIEW_AUTO_APPLY) would relist them all once it is on; each row says \"no longer on the community list\".",
+      "Whether sites that left the community list should come back is a policy choice, not a grading result; the other relists (sites graded \"not a portfolio\" before, or marked broken) are corrections.",
+    ],
+    table: {
+      head: ["Agreed relists", "Sites"],
+      rows: [
+        ["Delisted after grading (off the community list)", d.results.filter((r) => r.proposed === "relist" && r.agreed && r.group === "delisted_graded").length],
+        ["Delisted before grading (off the community list)", d.results.filter((r) => r.proposed === "relist" && r.agreed && r.group === "delisted_ungraded").length],
+        ["Graded \"not a portfolio\" before", d.results.filter((r) => r.proposed === "relist" && r.agreed && r.group === "not_portfolio").length],
+        ["Marked broken before, never graded", d.results.filter((r) => r.proposed === "relist" && r.agreed && r.group === "broken").length],
+      ],
+    },
+    means: ["Decide the delisted ones as a group before turning auto-apply on; the corrections can go through as they are."],
+  });
   // (a) agreement
   out.push({
     id: "agree",
@@ -243,6 +266,17 @@ function sections(d) {
     sites: d.disagree,
     means: ["A disagreement is where a person adds the most: one model is wrong on each of these."],
   });
+  const pendingSites = d.results.filter((r) => r.outcome === "pending");
+  if (pendingSites.length)
+    out.push({
+      id: "pending",
+      title: `Haiku pending (${pendingSites.length})`,
+      lines: [
+        "These sites failed on the GitHub capture but loaded when retried from the owner's machine, so they went to the graders in a small extra batch.",
+        "Gemini 3.1 has answered where shown; Haiku runs when the owner runs the Haiku command again, and the report is regenerated then.",
+      ],
+      list: pendingSites.map((r) => `- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]}): Gemini 3.1 ${r.verdicts.gemini31.batch ? yesNo(r.verdicts.gemini31.batch) : "pending"}; Haiku pending`),
+    });
   // (c) not a portfolio, and why
   out.push({
     id: "not",
@@ -289,7 +323,7 @@ function sections(d) {
     title: "(e) Retries and failures",
     table: {
       head: ["Run", "HTTP requests", "Retries", "Busy (5xx or network)", "Statuses", "Answers that did not parse", "Wrong site count", "Left unanswered"],
-      rows: [["Gemini 3.1 pilot", ...fail(d.gp)], ["Gemini 3.1 full run", ...fail(d.g)], ["Claude Haiku 5.5", ...fail(d.h)]],
+      rows: [["Gemini 3.1 pilot", ...fail(d.gp)], ["Gemini 3.1 full run", ...fail(d.g)], ["Gemini 3.1 extra batch", ...fail(d.gx)], ["Claude Haiku 5.5", ...fail(d.h)]],
     },
     lines: [
       ...d.cancellations.map((c) => `The first full Gemini run (${c.run}) was cancelled at ${c.cancelled} for the owner (tests first); ${c.answered.length} batches were answered and kept, one request was in flight, and the run resumed from that state.`),
@@ -319,6 +353,7 @@ function sections(d) {
       rows: [
         ["Gemini 3.1 pilot", d.gp?.http ?? 0, tok(d.gp), money2(d.gp), d.gp?.start ?? "-", d.gp?.end ?? "-", `${d.gp?.minutes ?? 0} min`],
         ["Gemini 3.1 full run", d.g?.http ?? 0, tok(d.g), money2(d.g), d.g?.start ?? "-", d.g?.end ?? "-", `${d.g?.minutes ?? 0} min`],
+        ["Gemini 3.1 extra batch", d.gx?.http ?? 0, tok(d.gx), money2(d.gx), d.gx?.start ?? "-", d.gx?.end ?? "-", `${d.gx?.minutes ?? 0} min`],
         ["Claude Haiku 5.5", d.h?.http ?? 0, tok(d.h), money2(d.h), d.h?.start ?? "-", d.h?.end ?? "-", `${d.h?.minutes ?? 0} min`],
       ],
     },
@@ -354,7 +389,7 @@ function sections(d) {
       "Never graded: a capture still showing a gate, a dialog or a bot check, or under 40 words with no outbound links.",
       "Code: the portfolio signals of the full page, and the narrow rules (unedited placeholders, parked pages, code-host and link-in-bio addresses; templates are fine).",
       `The graders: prompt ${PROMPT_VERSION} (the locked two-sets prompts with the owner's definition in STEP 3), Gemini 3.1 Flash-Lite at temperature 0.2 and thinking "low", Haiku 5.5 at its defaults; the same 83 batches of 5 for both, the last filled up from the first.`,
-      "The decision: both models' batched answers, each after the strong-signals guard (4 or more signals keep a site a portfolio).",
+      "The decision: both models' batched answers. Two \"no\" answers stand; where the models disagree, the strong-signals guard (4 or more signals) keeps a one-model \"no\" from removing a site. The same text on another domain sends a site to a person only when a model calls it a portfolio.",
       "Raw data stays local in ~/research/portfoliorank-experiments/recheck-543 and in the workflow artifacts.",
     ],
   });

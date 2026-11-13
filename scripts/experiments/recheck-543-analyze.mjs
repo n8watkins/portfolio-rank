@@ -82,7 +82,17 @@ export function decide(site, meta, { g, h, dupIndex }) {
     const proposed = changeFor(site, false);
     return { ...base, junk: junk.rule, path: "code_rule", outcome: "not_portfolio", proposed, agreed: true, reason: `Code rule: ${junk.rule}.` };
   }
+  // Both models' raw answers first: two independent "no" answers are not overridden by the
+  // strong-signals guard (it would relist a product site, a README or an unedited template
+  // that has a name, a projects word and a contact link), and a page that both call not a
+  // portfolio is not a copy worth a person's time (identical GitHub 404 pages share text).
+  const bothNo = g && h && g.is_portfolio.answer === false && h.is_portfolio.answer === false;
+  if (bothNo) {
+    const proposed = changeFor(site, false);
+    return { ...base, path: "graders", outcome: "not_portfolio", proposed, agreed: true, guarded: { gemini31: { portfolio: false, guard: false }, haiku: { portfolio: false, guard: false } }, reason: "Gemini 3.1 and Haiku agree: not a portfolio." };
+  }
   if (junk.review) return { ...base, junk: junk.rule, path: "same_text", outcome: "needs_review", proposed: "review", agreed: false, reason: "The same page text is on another domain: a copy, or the original. A person decides." };
+  // The guard applies only where the models disagree: it keeps a one-model "no" from removing a page with strong portfolio signals.
   const gg = g ? guardVerdict({ is_portfolio: g.is_portfolio.answer }, signals) : null;
   const hh = h ? guardVerdict({ is_portfolio: h.is_portfolio.answer }, signals) : null;
   const guarded = { gemini31: gg ? { portfolio: gg.is_portfolio, guard: Boolean(gg.review) } : null, haiku: hh ? { portfolio: hh.is_portfolio, guard: Boolean(hh.review) } : null };

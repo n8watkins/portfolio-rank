@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GROUPS, groupOf, makePlan, pilotPlan, shardCount, shotKeyOf } from "../scripts/experiments/recheck-543.mjs";
 import { changeFor, decide, queueRow } from "../scripts/experiments/recheck-543-analyze.mjs";
+import { buildDupIndex } from "../pipeline/junk-rules.mjs";
 
 test("groups: graded not-a-portfolio first, then delisted, broken and live", () => {
   assert.equal(groupOf({ graded: 1, not_portfolio: 1, delisted_at: "2026-11-10" }), "not_portfolio");
@@ -54,6 +55,21 @@ test("decisions: failed, blocked, code rule, copy, agreement and disagreement", 
   const guarded = decide(site("not_portfolio"), meta({ signals: { score: 5, projects: true } }), { g: answer(false), h: answer(true), dupIndex });
   assert.deepEqual([guarded.outcome, guarded.proposed, guarded.agreed], ["portfolio", "relist", true]);
   assert.equal(decide(site("not_portfolio"), meta(), { g: answer(true), dupIndex }).outcome, "pending");
+});
+
+test("two 'no' answers stand: the guard never overrides both models, and a shared 404 page is not a copy", () => {
+  // techfolios.github.io's kind: a template tool's site with a name, a projects word and a contact link (signals 4+).
+  const strong = meta({ signals: { score: 6, projects: true } });
+  const both = decide(site("not_portfolio"), strong, { g: answer(false), h: answer(false), dupIndex: new Map() });
+  assert.deepEqual([both.outcome, both.proposed, both.agreed], ["not_portfolio", null, true]);
+  // Identical GitHub "Site not found" text on many hosts: dead, not a copy, when both models say so.
+  const text = "404 There isn't a GitHub Pages site here. If you're trying to publish one, read the full documentation to learn how to set up GitHub Pages for your repository.";
+  const idx = buildDupIndex([{ url: "https://other.github.io", page_text: text }]);
+  const dead = decide(site("delisted_graded"), meta({ page_text: text }), { g: answer(false), h: answer(false), dupIndex: idx });
+  assert.deepEqual([dead.path, dead.outcome], ["graders", "not_portfolio"]);
+  // The same text with a model saying portfolio is a possible copy: a person decides.
+  const copy = decide(site("delisted_graded"), meta({ page_text: text }), { g: answer(true), h: answer(false), dupIndex: idx });
+  assert.equal(copy.path, "same_text");
 });
 
 test("changes and queue rows: only what would change, with the capture note", () => {
