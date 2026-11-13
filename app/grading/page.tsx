@@ -6,6 +6,8 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
+import { rankingViewsEnabled } from "@/lib/leaderboard";
+import { EloGrading } from "@/components/tiers/EloGrading";
 
 // How grading works, kept short: the tiers, what "top X%" means, what is
 // checked and how votes combine. The criteria come from the rubric
@@ -48,6 +50,8 @@ const FACT_NAMES: Record<string, string> = {
 const pct = (w: number) => `${Math.round(w * 100)}%`;
 
 export default function GradingPage() {
+  // Tiers by ELO (RANKING_V2): the explanation of letters from votes and starting ranks from checks.
+  if (rankingViewsEnabled()) return <EloGrading />;
   const facts = CODE_CRITERIA.filter((c) => c.weight > 0);
   return (
     <div className="pb-20">

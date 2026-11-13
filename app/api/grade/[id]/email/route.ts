@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tiersShown } from "@/lib/tiers-view";
 import { db, ensureSchema } from "@/lib/db";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
@@ -46,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const r = await requestEmail(client, { jobId: id, email: body.email, secret: authSecret(), now });
   if (!r.ok) return fail(r.error, r.error === "too_many" ? 409 : 400);
   if (job.status === "done" || job.status === "failed") {
-    await sendDueEmails(client, { gate: await emailGate(client), secret: authSecret(), base: siteBase(), now, jobId: id });
+    await sendDueEmails(client, { gate: await emailGate(client), secret: authSecret(), base: siteBase(), now, jobId: id, eloTiers: tiersShown() });
   }
   const state = await emailState(client, id);
   return NextResponse.json({ requested: true, sent: state.sent && !state.waiting }, { headers: PRIVATE });

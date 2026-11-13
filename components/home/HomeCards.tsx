@@ -1,11 +1,10 @@
 import { Activity, ArrowRight, BookOpen, Bot, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
-import { RankBadge, TierBadge } from "@/components/ui/badges";
+import { EloTierBadge, RankBadge, TierBadge } from "@/components/ui/badges";
 import { sectionTitle } from "@/components/ui/styles";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { LiveStats } from "@/components/home/LiveStats";
 import { PollBar } from "@/components/home/PollBar";
 import { Thumb } from "@/components/home/Thumb";
-import { ViewTabs } from "@/components/home/ViewTabs";
 import { ROUTES } from "@/lib/nav";
 import type { BoardItem, GradedItem, LiveStat, PortfolioOfTheDay as Potd, ShowItem, TopTen as TopTenData } from "@/lib/home";
 import { topPct } from "@/lib/home";
@@ -24,7 +23,8 @@ function ago(iso: string, now: number) {
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-function BoardRow({ r, tier }: { r: BoardItem; tier: boolean }) {
+/** `elo`: the score is a tier by ELO (RANKING_V2), drawn with its plus or minus (EloTierBadge). */
+function BoardRow({ r, tier, elo = false }: { r: BoardItem; tier: boolean; elo?: boolean }) {
   return (
     <li>
       <a href={r.href} className="group flex items-center gap-3.5 rounded-xl px-2 py-3 transition hover:bg-raised">
@@ -36,13 +36,13 @@ function BoardRow({ r, tier }: { r: BoardItem; tier: boolean }) {
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.line}</span>
         </span>
-        <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? <TierBadge tier={r.score} /> : r.score}</span>
+        <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? elo ? <EloTierBadge tier={r.score} /> : <TierBadge tier={r.score} /> : r.score}</span>
       </a>
     </li>
   );
 }
 
-function Board({ rows, scoreLabel }: { rows: BoardItem[]; scoreLabel: string }) {
+function Board({ rows, scoreLabel, elo = false }: { rows: BoardItem[]; scoreLabel: string; elo?: boolean }) {
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex items-center gap-3.5 px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-mute" aria-hidden>
@@ -53,7 +53,7 @@ function Board({ rows, scoreLabel }: { rows: BoardItem[]; scoreLabel: string }) 
       </div>
       <ol className="flex flex-1 flex-col justify-between">
         {rows.map((r) => (
-          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} />
+          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} elo={elo} />
         ))}
       </ol>
     </div>
@@ -74,16 +74,10 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
             <Bot className="h-3.5 w-3.5" aria-hidden /> By AI grade
           </p>
         )}
+        {top.kind === "ranked" && <p className="text-xs text-mute">By tier and ELO</p>}
       </div>
-      {top.kind === "views" ? (
-        <ViewTabs
-          label="Leaderboard view"
-          panels={{
-            merged: <Board rows={top.views[0].rows} scoreLabel="Tier" />,
-            ai: <Board rows={top.views[1].rows} scoreLabel="Tier" />,
-            people: <Board rows={top.views[2].rows} scoreLabel="Tier" />,
-          }}
-        />
+      {top.kind === "ranked" ? (
+        <Board rows={top.rows} scoreLabel="Tier" elo />
       ) : empty ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-edge-strong px-6 py-12 text-center">
           <span className="icon-tile h-11 w-11">

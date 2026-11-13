@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, X } from "lucide-react";
+import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Plus, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, X } from "lucide-react";
 import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { useSignIn } from "@/components/SignInModal";
@@ -12,12 +12,19 @@ import { useBlogLive } from "@/components/shell/useBlogLive";
 
 type Tab = { key: NavKey; href: string | null; label: string; Icon: typeof Trophy };
 
-const TABS: Tab[] = [
-  { key: "top", href: ROUTES.top, label: "Top", Icon: Trophy },
-  { key: "play", href: ROUTES.play, label: "Play", Icon: Gamepad2 },
-  { key: "grade", href: null, label: "Grade", Icon: Sparkles },
-  { key: "browse", href: ROUTES.browse, label: "Browse", Icon: LayoutGrid },
-];
+// With "Add your portfolio" on: Play, Top, Add and More (Browse moves into More).
+const TABS: Tab[] = ROUTES.add
+  ? [
+      { key: "play", href: ROUTES.play, label: "Play", Icon: Gamepad2 },
+      { key: "top", href: ROUTES.top, label: "Top", Icon: Trophy },
+      { key: "grade", href: null, label: "Add", Icon: Plus },
+    ]
+  : [
+      { key: "top", href: ROUTES.top, label: "Top", Icon: Trophy },
+      { key: "play", href: ROUTES.play, label: "Play", Icon: Gamepad2 },
+      { key: "grade", href: null, label: "Grade", Icon: Sparkles },
+      { key: "browse", href: ROUTES.browse, label: "Browse", Icon: LayoutGrid },
+    ];
 
 const tab =
   "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium text-mute transition aria-[current=page]:text-ink";
@@ -44,6 +51,7 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
   const blogLive = useBlogLive();
   const links: { href: string | null; label: string; Icon: typeof Trophy; signIn?: boolean }[] = [
     { href: blogLive ? ROUTES.blog : null, label: "Blog", Icon: Newspaper },
+    { href: ROUTES.add ? ROUTES.browse : null, label: "Browse", Icon: LayoutGrid },
     { href: ROUTES.polls, label: "Polls", Icon: Vote },
     { href: ROUTES.about, label: ROUTES.about === "/how" ? "How it works" : "About", Icon: BookOpen },
     signedIn ? { href: ROUTES.profile, label: "Account", Icon: User } : { href: "#signin", label: "Sign in", Icon: User, signIn: true },

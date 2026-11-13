@@ -8,7 +8,8 @@ import { GradeProgress } from "@/components/grade/GradeProgress";
 import { HiringView } from "@/components/grade/HiringView";
 import { OwnerPanel } from "@/components/grade/OwnerPanel";
 import { ReportActions } from "@/components/grade/ReportActions";
-import { RankBadge, TierBadge } from "@/components/ui/badges";
+import { LetterBadge, RankBadge } from "@/components/ui/badges";
+import { tierLabel } from "@/lib/tiers.mjs";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ACTIVE_STATES, JOB_ID } from "@/lib/grader/jobs.mjs";
@@ -41,8 +42,11 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!page) return { title: "Report not found - PortfolioRank", robots };
   const rep = page.job.report;
   const title = rep ? `${page.job.domain} - grade report - PortfolioRank` : `Grading ${page.job.domain} - PortfolioRank`;
+  // With tiers by ELO the letter and the grade's own standing are told apart: "Tier B. The grade: about top 7% of 60 ...".
   const description = rep
-    ? `Tier ${rep.tier}${rep.percentile ? `, about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
+    ? rep.eloTiers
+      ? `${rep.tier ? `Tier ${tierLabel(rep.tier)}. ` : ""}${rep.percentile ? `The grade: about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios. ` : ""}What a hiring manager sees, how it looks and reads, and what to fix first.`
+      : `Tier ${rep.tier}${rep.percentile ? `, about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
     : "A PortfolioRank grade on its way.";
   return { title, description, robots, openGraph: { title, description, type: "article" }, twitter: { card: "summary_large_image", title, description } };
 }
@@ -198,7 +202,7 @@ export default async function GradeReportPage({ params, searchParams }: Params &
 
           <div className="mt-6 flex items-center gap-5">
             <span id="report-tier" className="shrink-0">
-              <TierBadge tier={rep.tier} size="lg" />
+              <LetterBadge tier={rep.tier} elo={rep.eloTiers} size="lg" />
             </span>
             <div className="min-w-0">
               {pct ? (
@@ -213,7 +217,9 @@ export default async function GradeReportPage({ params, searchParams }: Params &
                 </>
               ) : (
                 <>
-                  <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">Tier {rep.tier}</p>
+                  <p className="text-4xl font-bold leading-none tracking-tight sm:text-5xl">
+                    {rep.eloTiers ? (rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded") : <>Tier {rep.tier}</>}
+                  </p>
                   <p className="mt-1.5 text-sm text-mute">Its place among other portfolios shows once more are graded.</p>
                 </>
               )}
@@ -387,7 +393,7 @@ export default async function GradeReportPage({ params, searchParams }: Params &
                       <span className="block truncate text-sm font-semibold">{r.name}</span>
                       <span className="block truncate text-xs text-mute tabular-nums">{r.rank ? `#${r.rank} · Top ${r.topPct}%` : r.domain}</span>
                     </span>
-                    <TierBadge tier={r.tier} />
+                    <LetterBadge tier={r.tier} elo={rep.eloTiers} />
                   </span>
                 </a>
               </li>

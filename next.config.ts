@@ -9,7 +9,7 @@ import { parseJsonc } from "./scripts/check-worker-exports.mjs";
 // when the build environment sets it (the test runs), else wrangler.jsonc's
 // value for the Worker being built (staging or production). Flipping one in
 // wrangler.jsonc ships with a deploy, which rebuilds.
-function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2"): "true" | "false" {
+function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED"): "true" | "false" {
   if (process.env[name] !== undefined) return /^true$/i.test(String(process.env[name])) ? "true" : "false";
   try {
     const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
@@ -19,12 +19,13 @@ function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2"): "true
     return "false";
   }
 }
-// GAMES_V2 and RANKING_V2 are read on the server only (lib/games/server.ts,
-// lib/leaderboard.ts, lib/home.ts), from process.env: setting them here
+// GAMES_V2, RANKING_V2 and TOOLS_ENABLED are read on the server (lib/games/server.ts,
+// lib/leaderboard.ts, lib/home.ts, lib/tools/server.ts), from process.env: setting them here
 // reaches the build's prerender, and the Worker sets the same values at run
 // time. "Grade my portfolio" is also read in the browser (lib/nav.ts
-// ROUTES.grade), so it is inlined as NEXT_PUBLIC_GRADER_ENABLED below.
-for (const name of ["GAMES_V2", "RANKING_V2"] as const) process.env[name] = launchSwitch(name);
+// ROUTES.grade), so it is inlined as NEXT_PUBLIC_GRADER_ENABLED below, and
+// so are the free tools (ROUTES.tools, NEXT_PUBLIC_TOOLS_ENABLED).
+for (const name of ["GAMES_V2", "RANKING_V2", "TOOLS_ENABLED"] as const) process.env[name] = launchSwitch(name);
 
 // Defense-in-depth response headers applied to every route: HSTS (the site is
 // HTTPS-only), clickjacking, MIME sniffing, referrer leakage, and a
@@ -80,7 +81,7 @@ const nextConfig: NextConfig = {
   // Browser source maps only for the deploy that uploads them to Sentry; the
   // deploy deletes them before publishing, so they're never public.
   productionBrowserSourceMaps: process.env.SENTRY_UPLOAD_SOURCEMAPS === "1",
-  env: { NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED") },
+  env: { NEXT_PUBLIC_GRADER_ENABLED: launchSwitch("GRADER_ENABLED"), NEXT_PUBLIC_TOOLS_ENABLED: launchSwitch("TOOLS_ENABLED") },
   async headers() {
     // Grade reports are unlisted (shareable by link only) and claims are
     // personal: never indexed, whatever a page's own metadata says.
@@ -93,7 +94,16 @@ const nextConfig: NextConfig = {
   },
   // The face-off moved into Play; old links and bookmarks still land on it.
   async redirects() {
-    return [{ source: "/rank", destination: "/play", permanent: true }];
+    return [
+      { source: "/rank", destination: "/play", permanent: true },
+      // The free tools' pages became "Add your portfolio" (owner, 2026-11-12).
+      ...(launchSwitch("TOOLS_ENABLED") === "true"
+        ? [
+            { source: "/tools", destination: "/add", permanent: false },
+            { source: "/tools/:path*", destination: "/add", permanent: false },
+          ]
+        : []),
+    ];
   },
 };
 
