@@ -1,4 +1,5 @@
-// Prewarm the PSI (Lighthouse) + inspect (polish) caches for graded S/A/B sites
+// Prewarm the PSI (Lighthouse) + inspect (polish) caches for every graded site,
+// whatever Gemini's letter (PREWARM_TIERS),
 // whose results are due by the check rule (lib/freshness.mjs: never measured,
 // the site changed, the admin asked, or past the maximum age) by hitting the
 // prod API endpoints, which cache results to Turso (shared with
@@ -11,7 +12,7 @@
 // Usage: node scripts/prewarm-metrics.mjs [--limit=N]
 import { appendFileSync, existsSync, readFileSync } from "fs";
 import path from "path";
-import { runPrewarm } from "./lib/prewarm.mjs";
+import { PREWARM_LIMIT, runPrewarm } from "./lib/prewarm.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb, syncRoster } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema, lighthouseDue } from "../lib/freshness.mjs";
 import feed from "../data/feed.json" with { type: "json" };
@@ -25,7 +26,7 @@ if (existsSync(".env.local")) {
 
 const PROD = process.env.PROD_BASE_URL || "https://portfoliorank.n8builds.dev";
 const limitArg = process.argv.find((a) => a.startsWith("--limit="));
-const LIMIT = limitArg ? Number(limitArg.split("=")[1]) : 150;
+const LIMIT = limitArg ? Number(limitArg.split("=")[1]) : PREWARM_LIMIT;
 
 const db = pipelineDb(path.join(import.meta.dirname, ".."));
 await ensureRosterSchema(db);
@@ -34,12 +35,15 @@ await ensureFreshnessSchema(db);
 // left it are marked delisted and skipped.
 await syncRoster(db, feed);
 
-// Listed, not confirmed down, graded S/A/B (the voting robot's pool), and
+// Every Gemini letter: check points, the seed of every ELO, are 35% Lighthouse.
+const PREWARM_TIERS = ["S", "A", "B", "C", "D"];
+
+// Listed, not confirmed down, graded (any letter), and
 // with a Lighthouse or polish result that is due: never measured first, then
 // sites that changed or the admin re-measured, then the oldest.
-const urls = await lighthouseDue(db, { limit: LIMIT, active: ACTIVE });
+const urls = await lighthouseDue(db, { limit: LIMIT, active: ACTIVE, tiers: PREWARM_TIERS });
 
-console.log(`prewarming PSI + inspect for ${urls.length} S/A/B site(s) whose metrics are due via ${PROD}`);
+console.log(`prewarming PSI + inspect for ${urls.length} graded site(s) whose metrics are due via ${PROD}`);
 const { exitCode, summary, verdict } = await runPrewarm({
   urls,
   base: PROD,

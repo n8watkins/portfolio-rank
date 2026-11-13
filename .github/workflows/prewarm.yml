@@ -1,8 +1,8 @@
 name: Prewarm metrics
 
-# Fill the PSI (Lighthouse) + inspect (polish) caches for graded S/A/B sites so
-# the daily voting robot's comparisons actually have objective metrics (the cache
-# is otherwise only populated lazily by visitors). Hits the prod API endpoints,
+# Fill the PSI (Lighthouse) + inspect (polish) caches for every graded portfolio
+# (whatever Gemini's letter), so check points and comparisons have objective
+# metrics (the cache is otherwise only populated lazily by visitors). Hits the prod API endpoints,
 # which cache to Turso; PSI quota is 25k/day so this is comfortably free.
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       limit:
         description: "Max sites to prewarm this run"
         required: false
-        default: "150"
+        default: "400"
   schedule:
     - cron: "0 9 * * *" # daily 09:00 UTC - clear of sync (06:00) and vote (13:00)
 
@@ -42,7 +42,7 @@ jobs:
       - name: Prewarm PSI + inspect caches
         # Inputs reach the shell as variables, never pasted into the script.
         env:
-          LIMIT: ${{ github.event.inputs.limit || '150' }}
+          LIMIT: ${{ github.event.inputs.limit || '400' }}
         run: node scripts/prewarm-metrics.mjs --limit="$LIMIT"
 
       - name: Notify on failure

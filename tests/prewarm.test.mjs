@@ -158,15 +158,16 @@ test("the script exits 0 when lookups succeed", async () => {
   assert.match(r.summary, /OK: 8 of 8 lookups succeeded/);
 });
 
-test("the script picks listed S/A/B sites whose results are due: never measured, then changed, then failed or past 90 days", async () => {
+test("the script picks listed graded sites of any letter whose results are due: never measured, then changed, then failed or past 90 days", async () => {
   const r = await runScript((req, res) => {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ok: true }));
   }, { limit: 50 });
   assert.equal(r.code, 0);
   // Never measured (by URL), then the changed site, then the oldest due
-  // results (the 100-day-old one, the failure past its hour). Not: tier C,
+  // results (the 100-day-old one, the failure past its hour); tier C too, since
+  // Gemini's letter no longer gates Lighthouse. Not:
   // fresh and unchanged, a failure still in its hour, confirmed down,
   // delisted, or not on the roster.
-  assert.deepEqual(r.psi, [...[...urls].sort(), changed, old, failedLong]);
+  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), changed, old, failedLong]);
 });

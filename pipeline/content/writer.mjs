@@ -120,7 +120,7 @@ export const OPTIONS = { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: "
 
 export function buildWriteRequest(sheet) {
   const text = ["Write one post from this fact sheet.", "", "<fact_sheet>", JSON.stringify(sheetForWriter(sheet), null, 1), "</fact_sheet>"].join("\n");
-  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: OPTIONS };
+  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: { ...OPTIONS, prompt: "content-write-v1" } };
 }
 
 /** A rewrite with the failures listed; the draft goes back with its placeholders. */
@@ -139,7 +139,7 @@ export function buildReviseRequest(sheet, draft, failures) {
     JSON.stringify(draft, null, 1),
     "</draft>",
   ].join("\n");
-  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: OPTIONS };
+  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: { ...OPTIONS, prompt: "content-revise-v1" } };
 }
 
 export const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]*)\s*\}\}/gi;
