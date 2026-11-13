@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Phase 0 capture pipeline: gate every portfolio (dead/parked/blank), then
-// Playwright-capture the live ones - desktop hero, mobile, full-page - plus
+// Playwright-capture the live ones - desktop hero and mobile - plus
 // diagnostics (console errors, page weight, broken assets, 390px overflow,
 // dark-mode support, motion from a frame difference, DOM-shape hash), the
 // page's visible text (capped) and the facts code can check
@@ -92,7 +92,9 @@ if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
 }
 
 // Only the frames the app serves go to R2 (the AI grade uses hero.jpg too).
-const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg", "full.jpg"]);
+// No full-page frame: nothing ever showed it, and at about 250 KB it was 70%
+// of a site's storage (docs/audits/free-tier-limits.md, R2 free 10 GB).
+const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg"]);
 
 async function uploadDir(key, dir) {
   if (!s3) return;
@@ -220,10 +222,6 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     fs.writeFileSync(
       path.join(dir, "hero.jpg"),
       await page.screenshot({ type: "jpeg", quality: 75 })
-    );
-    fs.writeFileSync(
-      path.join(dir, "full.jpg"),
-      await page.screenshot({ type: "jpeg", quality: 70, fullPage: true })
     );
 
     // Dark-mode support: pixel-diff light vs dark.
