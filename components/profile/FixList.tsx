@@ -41,10 +41,10 @@ export function FixList({ p }: { p: Profile }) {
   const shareFixes = share?.ok ? (share.issues ?? []).filter((i) => i.level === "fix") : [];
   const weak = mobile?.ok ? Object.entries(WEAK).filter(([id, line]) => typeof mobile.scores?.[id] === "number" && mobile.scores[id]! < line) : [];
   const nothingSaved = !quick && !share && !mobile;
-  const nothingToFix = !nothingSaved && failed.length === 0 && shareFixes.length === 0 && weak.length === 0;
 
   // The points behind the starting rank, as fixes worth the most first ("+5 if you add a share image").
   const gains = !p.hideGrade && p.standing.check ? pointFixes(p.standing.check, 4) : [];
+  const nothingToFix = !nothingSaved && failed.length === 0 && shareFixes.length === 0 && weak.length === 0 && gains.length === 0;
   const points =
     gains.length > 0 ? (
       <Group icon={Trophy} title="Quickest points for your starting rank">
