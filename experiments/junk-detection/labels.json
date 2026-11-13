@@ -1,0 +1,702 @@
+[
+ {
+  "id": 1,
+  "blind_id": "B012",
+  "url": "https://jerryhirsch.com",
+  "label": "JUNK",
+  "reason": "Placeholder: name plus \"example project\" and a password button, no content"
+ },
+ {
+  "id": 2,
+  "blind_id": "B010",
+  "url": "https://vauth.github.io/hueco",
+  "label": "UNSURE",
+  "reason": "Terminal-style page on a project subpath, shots show only a prompt; may be a personal terminal homepage"
+ },
+ {
+  "id": 3,
+  "blind_id": "B022",
+  "url": "https://pepalonso.com",
+  "label": "REAL",
+  "reason": "Personal portfolio (phone shot is loading)"
+ },
+ {
+  "id": 4,
+  "blind_id": "B048",
+  "url": "https://damianmarkowski.com",
+  "label": "REAL",
+  "reason": "Sparse own-domain personal card with LinkedIn, X and email"
+ },
+ {
+  "id": 5,
+  "blind_id": "B087",
+  "url": "https://yogeshpaliyal.com",
+  "label": "REAL",
+  "reason": "Personal blog-first site that has a Projects section"
+ },
+ {
+  "id": 6,
+  "blind_id": "B070",
+  "url": "https://majd-portfolio.framer.website",
+  "label": "UNSURE",
+  "reason": "Framer template preview with \"Use for Free / More Templates\" buttons; may be the template author's own page"
+ },
+ {
+  "id": 7,
+  "blind_id": "B096",
+  "url": "https://jeremiahhaastrup.com",
+  "label": "REAL",
+  "reason": "Personal portfolio of a creative developer"
+ },
+ {
+  "id": 8,
+  "blind_id": "B090",
+  "url": "http://vaibhavsingh97.com",
+  "label": "JUNK",
+  "reason": "Coming-soon placeholder (\"cooking up something\"), only social links"
+ },
+ {
+  "id": 9,
+  "blind_id": "B083",
+  "url": "https://devrimmehmet.com",
+  "label": "JUNK",
+  "reason": "Turkish tech blog, blog only"
+ },
+ {
+  "id": 10,
+  "blind_id": "B095",
+  "url": "https://palmeida.netlify.app",
+  "label": "REAL",
+  "reason": "Sparse personal portfolio with role and links"
+ },
+ {
+  "id": 11,
+  "blind_id": "B027",
+  "url": "https://dorlugasigal.netlify.app",
+  "label": "REAL",
+  "reason": "Sparse personal landing with name, role and social links"
+ },
+ {
+  "id": 12,
+  "blind_id": "B086",
+  "url": "https://maggioni.dev",
+  "label": "JUNK",
+  "reason": "Blog only (Hugo PaperMod home), no portfolio content"
+ },
+ {
+  "id": 13,
+  "blind_id": "B093",
+  "url": "https://sauravmh.com",
+  "label": "REAL",
+  "reason": "Bento-style personal page with bio, links, current projects"
+ },
+ {
+  "id": 14,
+  "blind_id": "B046",
+  "url": "https://git.id.au",
+  "label": "UNSURE",
+  "reason": "Domain lands on a GitHub profile with a rich bio; not a site of its own"
+ },
+ {
+  "id": 15,
+  "blind_id": "B025",
+  "url": "https://enesehs.github.io",
+  "label": "REAL",
+  "reason": "Personal site gated by a GPU check (\"browser not supported\"), gated intro counts as real"
+ },
+ {
+  "id": 16,
+  "blind_id": "B076",
+  "url": "https://ericc.vercel.app",
+  "label": "REAL",
+  "reason": "Sparse personal landing with name, school and links"
+ },
+ {
+  "id": 17,
+  "blind_id": "B029",
+  "url": "https://vidu.sh/an",
+  "label": "REAL",
+  "reason": "Personal homepage with photo, bio, about and posts"
+ },
+ {
+  "id": 18,
+  "blind_id": "B069",
+  "url": "https://linktr.ee/drepin",
+  "label": "JUNK",
+  "reason": "Linktree profile, not a portfolio site"
+ },
+ {
+  "id": 19,
+  "blind_id": "B066",
+  "url": "https://kidus.ca",
+  "label": "JUNK",
+  "reason": "Joke \"301 Moved Permanently to another career\" page, no portfolio"
+ },
+ {
+  "id": 20,
+  "blind_id": "B099",
+  "url": "https://ccm.securityops.com.br",
+  "label": "REAL",
+  "reason": "Linux-desktop style personal portfolio with about and contact"
+ },
+ {
+  "id": 21,
+  "blind_id": "B041",
+  "url": "https://ashifek.in",
+  "label": "REAL",
+  "reason": "Portfolio text is full (393 words: projects, contact); screenshot caught an error page"
+ },
+ {
+  "id": 22,
+  "blind_id": "B007",
+  "url": "https://github.com/AnamuddinAhmad/Portfolio_1",
+  "label": "JUNK",
+  "reason": "GitHub repository page, not a portfolio site"
+ },
+ {
+  "id": 23,
+  "blind_id": "B011",
+  "url": "https://www.hungrybearstudios.com",
+  "label": "REAL",
+  "reason": "One-person animation studio showreel with work grid and resume link"
+ },
+ {
+  "id": 24,
+  "blind_id": "B054",
+  "url": "https://wltweerasinghe.com",
+  "label": "REAL",
+  "reason": "Personal portfolio (desktop shot hit a bot wall; phone shows hero)"
+ },
+ {
+  "id": 25,
+  "blind_id": "B015",
+  "url": "https://deepsaha.com",
+  "label": "REAL",
+  "reason": "Interactive 3D life-story portfolio (phone shot is the loading screen)"
+ },
+ {
+  "id": 26,
+  "blind_id": "B002",
+  "url": "https://akhshyganesh.github.io",
+  "label": "JUNK",
+  "reason": "Stub: \"this page has moved\" notice pointing to another domain, no portfolio content"
+ },
+ {
+  "id": 27,
+  "blind_id": "B017",
+  "url": "https://www.adamalston.com",
+  "label": "REAL",
+  "reason": "Sparse personal landing with name, role, GitHub, LinkedIn, resume"
+ },
+ {
+  "id": 28,
+  "blind_id": "B088",
+  "url": "https://ashwinhariharan.com/software-engineering",
+  "label": "JUNK",
+  "reason": "Blog category listing page, not a portfolio"
+ },
+ {
+  "id": 29,
+  "blind_id": "B075",
+  "url": "https://www.beterbekend.nl",
+  "label": "JUNK",
+  "reason": "Web agency company site (Beter Bekend), not a person's portfolio"
+ },
+ {
+  "id": 30,
+  "blind_id": "B040",
+  "url": "https://cschad.com",
+  "label": "REAL",
+  "reason": "Sparse personal landing with name, blog and git links"
+ },
+ {
+  "id": 31,
+  "blind_id": "B082",
+  "url": "https://expensive.toys",
+  "label": "REAL",
+  "reason": "Sparse personal site with name, blog, toys and links"
+ },
+ {
+  "id": 32,
+  "blind_id": "B045",
+  "url": "https://www.patrickhyatt.com",
+  "label": "JUNK",
+  "reason": "Blog only, no portfolio content"
+ },
+ {
+  "id": 33,
+  "blind_id": "B028",
+  "url": "https://github.com/AnshulGora/portfolio_template_v1",
+  "label": "JUNK",
+  "reason": "GitHub repository of a portfolio template, not a portfolio"
+ },
+ {
+  "id": 34,
+  "blind_id": "B001",
+  "url": "https://adittya.site",
+  "label": "JUNK",
+  "reason": "Parked: GoDaddy \"has expired and is parked\" page"
+ },
+ {
+  "id": 35,
+  "blind_id": "B043",
+  "url": "https://www.trixum.net",
+  "label": "JUNK",
+  "reason": "Personal essay page (\"The Reset\" manifesto), not a portfolio"
+ },
+ {
+  "id": 36,
+  "blind_id": "B063",
+  "url": "https://abbasraza.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio gated behind a click-to-continue intro"
+ },
+ {
+  "id": 37,
+  "blind_id": "B057",
+  "url": "https://andy-bell.design",
+  "label": "JUNK",
+  "reason": "Company and education business (Piccalilli), not a personal portfolio"
+ },
+ {
+  "id": 38,
+  "blind_id": "B068",
+  "url": "https://armujahid.me",
+  "label": "JUNK",
+  "reason": "Blog only (post list), no portfolio content"
+ },
+ {
+  "id": 39,
+  "blind_id": "B024",
+  "url": "https://calzye.com",
+  "label": "JUNK",
+  "reason": "Calculator web app, not a person's portfolio"
+ },
+ {
+  "id": 40,
+  "blind_id": "B064",
+  "url": "https://andrianaivo-ismael.vercel.app/admin",
+  "label": "JUNK",
+  "reason": "Admin login page of a portfolio CMS, not the portfolio"
+ },
+ {
+  "id": 41,
+  "blind_id": "B056",
+  "url": "https://manojmandal.com",
+  "label": "REAL",
+  "reason": "Personal portfolio with CV, projects, GitHub activity"
+ },
+ {
+  "id": 42,
+  "blind_id": "B100",
+  "url": "https://dangor220.github.io/developer-portfolio",
+  "label": "REAL",
+  "reason": "Personal portfolio with about, skills, portfolio"
+ },
+ {
+  "id": 43,
+  "blind_id": "B033",
+  "url": "https://red1-for-hek.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio (desktop shot mid-loader; phone shows photo and role)"
+ },
+ {
+  "id": 44,
+  "blind_id": "B061",
+  "url": "http://www.bluexguardian.com",
+  "label": "REAL",
+  "reason": "Personal portfolio of an engineer with products and contact"
+ },
+ {
+  "id": 45,
+  "blind_id": "B018",
+  "url": "https://missaelr.com/en",
+  "label": "REAL",
+  "reason": "Personal portfolio with nav, contact, LinkedIn"
+ },
+ {
+  "id": 46,
+  "blind_id": "B051",
+  "url": "https://aboutzahin.pages.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, work, contact"
+ },
+ {
+  "id": 47,
+  "blind_id": "B092",
+  "url": "https://devlucas.website",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, work, contact"
+ },
+ {
+  "id": 48,
+  "blind_id": "B021",
+  "url": "https://naveenkumarm.space",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects, resume, contact"
+ },
+ {
+  "id": 49,
+  "blind_id": "B026",
+  "url": "https://www.borcarazvan.tech/",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, about, resume"
+ },
+ {
+  "id": 50,
+  "blind_id": "B016",
+  "url": "https://mouraocode.com.br",
+  "label": "REAL",
+  "reason": "Sparse personal intro page with name, role and Get Started gate"
+ },
+ {
+  "id": 51,
+  "blind_id": "B098",
+  "url": "https://mushfiq.xyz",
+  "label": "REAL",
+  "reason": "One-person freelancer site (email admin services) with his name and photo"
+ },
+ {
+  "id": 52,
+  "blind_id": "B023",
+  "url": "http://iamreliq.com",
+  "label": "REAL",
+  "reason": "Personal designer/developer site with about, showcase, resume"
+ },
+ {
+  "id": 53,
+  "blind_id": "B062",
+  "url": "https://iamridoydey.com",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, resume, projects"
+ },
+ {
+  "id": 54,
+  "blind_id": "B084",
+  "url": "https://aliahtisham.pro",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects, skills, contact"
+ },
+ {
+  "id": 55,
+  "blind_id": "B079",
+  "url": "https://crackedontiti.github.io",
+  "label": "REAL",
+  "reason": "Personal portfolio of a student with projects (phone shot is a desktop-only notice)"
+ },
+ {
+  "id": 56,
+  "blind_id": "B085",
+  "url": "https://clixmods.github.io",
+  "label": "REAL",
+  "reason": "Personal portfolio of a game developer with CV and projects"
+ },
+ {
+  "id": 57,
+  "blind_id": "B049",
+  "url": "https://www.hitaarthh.com/",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects and resume"
+ },
+ {
+  "id": 58,
+  "blind_id": "B039",
+  "url": "https://kwamehdhegbo.com",
+  "label": "REAL",
+  "reason": "Personal portfolio of a student with bio, skills, projects, CV"
+ },
+ {
+  "id": 59,
+  "blind_id": "B053",
+  "url": "https://vallarasuk.com",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, projects, resume"
+ },
+ {
+  "id": 60,
+  "blind_id": "B034",
+  "url": "https://pabloramon.com.br",
+  "label": "REAL",
+  "reason": "Personal portfolio with skills, works, blog"
+ },
+ {
+  "id": 61,
+  "blind_id": "B044",
+  "url": "https://iamrashy.netlify.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with 3D desk scene and about/work/contact"
+ },
+ {
+  "id": 62,
+  "blind_id": "B013",
+  "url": "https://aravinthvr.github.io/portfolio/?utm_source=github&utm_medium=developer-portfolios&utm_campaign=personal_branding&utm_content=v1_27_07_25",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, bio, nav"
+ },
+ {
+  "id": 63,
+  "blind_id": "B052",
+  "url": "https://abhijitmondal.info",
+  "label": "REAL",
+  "reason": "Personal portfolio (sparse hero; phone shot is loader)"
+ },
+ {
+  "id": 64,
+  "blind_id": "B047",
+  "url": "https://sanketchaudhari.in",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects, resume, contact"
+ },
+ {
+  "id": 65,
+  "blind_id": "B089",
+  "url": "https://macios.vercel.app",
+  "label": "REAL",
+  "reason": "macOS-desktop style personal portfolio with resume, projects"
+ },
+ {
+  "id": 66,
+  "blind_id": "B031",
+  "url": "https://divij.tech",
+  "label": "REAL",
+  "reason": "Personal portfolio of a senior engineer with photo, projects, blog"
+ },
+ {
+  "id": 67,
+  "blind_id": "B037",
+  "url": "https://sabbirahmed.net",
+  "label": "REAL",
+  "reason": "Personal portfolio with about, services, portfolio"
+ },
+ {
+  "id": 68,
+  "blind_id": "B058",
+  "url": "https://react-portfolio-fawn-three.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects and about"
+ },
+ {
+  "id": 69,
+  "blind_id": "B094",
+  "url": "https://www.shubhamgupta.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with experience and skills"
+ },
+ {
+  "id": 70,
+  "blind_id": "B032",
+  "url": "https://isub.dev",
+  "label": "REAL",
+  "reason": "Plain HTML personal home page with bio, projects, languages"
+ },
+ {
+  "id": 71,
+  "blind_id": "B080",
+  "url": "https://aahil-khan.xyz",
+  "label": "REAL",
+  "reason": "Personal portfolio with work, experience, resume"
+ },
+ {
+  "id": 72,
+  "blind_id": "B059",
+  "url": "https://www.saikiransomanagoudar.com",
+  "label": "REAL",
+  "reason": "Personal portfolio with experience, projects, resume"
+ },
+ {
+  "id": 73,
+  "blind_id": "B077",
+  "url": "https://djayanth.site",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, projects, contact"
+ },
+ {
+  "id": 74,
+  "blind_id": "B014",
+  "url": "https://cadenchau.com",
+  "label": "REAL",
+  "reason": "Personal portfolio, handwriting style, bio and projects"
+ },
+ {
+  "id": 75,
+  "blind_id": "B091",
+  "url": "https://chriscoyier.net",
+  "label": "UNSURE",
+  "reason": "Capture shows only a bot check; the site behind it is a famous personal site that is mostly a blog"
+ },
+ {
+  "id": 76,
+  "blind_id": "B065",
+  "url": "https://codewithstu.tv",
+  "label": "REAL",
+  "reason": "Personal portfolio of a principal engineer with projects and links"
+ },
+ {
+  "id": 77,
+  "blind_id": "B019",
+  "url": "https://ali-wordpress-developer.com",
+  "label": "REAL",
+  "reason": "Freelance WordPress developer personal portfolio (Ali Saleem)"
+ },
+ {
+  "id": 78,
+  "blind_id": "B074",
+  "url": "https://purnankjadhav-portfolio.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with about, connect, resume"
+ },
+ {
+  "id": 79,
+  "blind_id": "B005",
+  "url": "https://eric4048.framer.website",
+  "label": "REAL",
+  "reason": "Framer portfolio of a real engineer with photo and stats"
+ },
+ {
+  "id": 80,
+  "blind_id": "B020",
+  "url": "https://portfolio-fayed.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio, terminal-style intro"
+ },
+ {
+  "id": 81,
+  "blind_id": "B060",
+  "url": "https://saini-yogesh.github.io/Portfolio",
+  "label": "REAL",
+  "reason": "Personal portfolio with resume, projects, about"
+ },
+ {
+  "id": 82,
+  "blind_id": "B006",
+  "url": "https://www.abdusamad.uz",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, bio, nav and links"
+ },
+ {
+  "id": 83,
+  "blind_id": "B009",
+  "url": "https://chandradithya.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with bio, projects, resume"
+ },
+ {
+  "id": 84,
+  "blind_id": "B097",
+  "url": "https://felipeschmidt.me",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects and links"
+ },
+ {
+  "id": 85,
+  "blind_id": "B004",
+  "url": "https://www.tajmirul.site",
+  "label": "REAL",
+  "reason": "Personal portfolio (desktop hero; phone shot caught the intro splash)"
+ },
+ {
+  "id": 86,
+  "blind_id": "B081",
+  "url": "https://ezekielekunola.com",
+  "label": "REAL",
+  "reason": "Sparse personal landing with name, role and links"
+ },
+ {
+  "id": 87,
+  "blind_id": "B050",
+  "url": "https://port-folio-nine-lemon-27.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects, resume, contact"
+ },
+ {
+  "id": 88,
+  "blind_id": "B042",
+  "url": "https://kavy-sachaniya.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with work, stack, about"
+ },
+ {
+  "id": 89,
+  "blind_id": "B035",
+  "url": "https://barquero.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with bio, projects, resume"
+ },
+ {
+  "id": 90,
+  "blind_id": "B078",
+  "url": "https://devravik.github.io",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects, contributions, resume"
+ },
+ {
+  "id": 91,
+  "blind_id": "B071",
+  "url": "https://www.lexnguyen.dev",
+  "label": "REAL",
+  "reason": "Personal resume-style portfolio with experience"
+ },
+ {
+  "id": 92,
+  "blind_id": "B038",
+  "url": "https://cuierd.github.io",
+  "label": "REAL",
+  "reason": "Personal portfolio of a linguistics student with projects"
+ },
+ {
+  "id": 93,
+  "blind_id": "B055",
+  "url": "https://itsmebravo.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with about, skills, projects"
+ },
+ {
+  "id": 94,
+  "blind_id": "B008",
+  "url": "https://forbrig.github.io",
+  "label": "REAL",
+  "reason": "Personal portfolio, Matrix theme, bio and photo"
+ },
+ {
+  "id": 95,
+  "blind_id": "B030",
+  "url": "https://vishvaas.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with pixel-art intro, GitHub, tech stack, projects"
+ },
+ {
+  "id": 96,
+  "blind_id": "B072",
+  "url": "https://ilyaglebov.dev",
+  "label": "REAL",
+  "reason": "Personal portfolio with work, projects, experience"
+ },
+ {
+  "id": 97,
+  "blind_id": "B067",
+  "url": "https://vineetcodes.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with projects and contact"
+ },
+ {
+  "id": 98,
+  "blind_id": "B073",
+  "url": "https://prashanth-kumar-g.github.io",
+  "label": "REAL",
+  "reason": "Personal portfolio with photo, resume, projects"
+ },
+ {
+  "id": 99,
+  "blind_id": "B036",
+  "url": "https://hasan-ashab.vercel.app",
+  "label": "REAL",
+  "reason": "Personal portfolio with role, about, projects"
+ },
+ {
+  "id": 100,
+  "blind_id": "B003",
+  "url": "https://avisek.codeltix.com",
+  "label": "REAL",
+  "reason": "Personal portfolio with bio, posts, links"
+ }
+]
