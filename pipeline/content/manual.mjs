@@ -23,15 +23,14 @@ import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, CONTENT_RETRY_BUDGET, isBusy, retryC
 import { createRequestLog, dailyQuota, ensureGeminiLog } from "../gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "../budget.mjs";
 import { BUILDERS, KIND_LABELS } from "./facts.mjs";
-import { PHASES, runDraft } from "./engine.mjs";
-import { STAGED_REQUESTS } from "./staged.mjs";
+import { MIN_DRAFT_REQUESTS, PHASES, runDraft } from "./engine.mjs";
 import { addSpent, finishJob, getJob, resumeJob, setPhase, startJob } from "../../lib/content/jobs.mjs";
 import { writerGuidelines } from "../../lib/content/guidelines.mjs";
 
-/** Gemini requests one manual draft may spend at most (a draft that passes first time uses about 9). */
-export const MANUAL_REQUESTS = 20;
-/** The fewest requests a draft needs to start (the staged writer and two checks). */
-export const MANUAL_MIN = STAGED_REQUESTS + 2;
+/** Gemini requests one manual draft may spend at most (a draft that passes first time uses 2 or 3). */
+export const MANUAL_REQUESTS = 8;
+/** The fewest requests a draft needs to start (engine.mjs MIN_DRAFT_REQUESTS). */
+export const MANUAL_MIN = MIN_DRAFT_REQUESTS;
 
 export { PHASES };
 

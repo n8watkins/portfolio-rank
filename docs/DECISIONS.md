@@ -408,7 +408,13 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   A "Try this" step links to a named positive example (an S site strong on that axis) where the naming rule allows.
   Why: each of these was a way the first draft read well and was subtly wrong.
 
-- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90).
+- **Code plans the post, Gemini writes the prose** (owner, 2026-11-13, after the blog engine audit, [audits/blog-engine.md](audits/blog-engine.md); replaces the staged writer). Status: building on #131, tested with a mocked Gemini only (no Gemini spending until the owner approves the experiment).
+  Code builds finished clauses from the fact sheet (pairs worded together, ties never one winner), the sections that fit the post's length, the hook, the TL;DR points, the callout, the Try this examples and the image slots ([pipeline/content/plan.mjs](../pipeline/content/plan.mjs)).
+  Gemini writes plain-text blocks (up to three sections a request); code assembles them, repairs what is safe (paragraph sizes, sentences with stray numbers, missing links or facts, the hero marker) and runs the checks; one fix call rewrites only the failing blocks; one review checks topic, tone, names and voice and lists outside claims, which alone go to Tavily (the owner's gate 2, kept).
+  A post costs 2 requests (standard), 3 (a long post) and up to 2 more for a fix and a claims judgement, against 8 to 12 before; length profiles are short 500 to 750, standard 700 to 1,000, medium 1,200 to 1,600 and long 1,800 to 2,200 words, a soft gate below 85% of the minimum.
+  Posts no longer generate a fresh Workers AI picture (the library job does, for approval); the hero takes a library image only on 2 or more shared tags, else one Pexels search.
+  Why: 0 of 16 staging drafts passed under the staged writer, length failed 17 of 21 check rounds, and whole-post revisions traded one failure for another.
+- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90). Status: superseded on 2026-11-13 by "Code plans the post, Gemini writes the prose"; `staged.mjs` and `WRITER_MODE` are deleted.
   `staged` writes a post as an outline (hook, title, TL;DR, three sections with their facts; structure-checked and retried once before any section is written), two section requests and a finish request, then runs the same code checks: 4 write requests (5 after an outline retry) against 1 for `single`.
   Why: better reading quality for about 1 to 4 more Gemini requests per post.
   `single` stays available by setting `WRITER_MODE` to "single"; unset or unknown values now mean "staged".

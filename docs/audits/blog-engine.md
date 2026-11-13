@@ -158,16 +158,20 @@ For the write call, consider a non-Lite Flash model with its own free quota, sin
 
 ## What to delete or change
 
-| Piece | Action | Why |
-| --- | --- | --- |
-| `pipeline/content/staged.mjs` (outline, sections, finish, `OutlineError`), `WRITER_MODE` | Delete | Replaced by the code outline and one plain-text write call. It caused 4 outline drops and the length loss. |
-| Most of `SYSTEM_INSTRUCTION` (about 30 rules) and the structural fields of `RESPONSE_SCHEMA` | Shrink | Keep the voice, naming, topic and placeholder rules. The shape rules become code. |
-| `buildReviseRequest` and the `MAX_REVISIONS=2` whole-post loop | Delete | Replaced by at most one paragraph-scoped fix call. |
-| `claims.mjs` list, Tavily and judge in the default path; `tavily-credits.mjs`, `TAVILY_*` caps | Off by default | Posts come from our data. The review flags outside claims and code cuts them. This is the owner's gate 2, so the owner has to decide. |
-| Pick request (`buildPickRequest`, `choosePicks`) | Delete | Every builder is on topic by construction, so code rotation is enough. |
-| Fresh Workers AI illustration in the post path | Move | Make it an offline library job with owner approval. |
-| `checkLinksLoad` every round | Once | Links come from the sheet, so load them once per draft. |
-| Code checks, `fill`, placeholders, naming rule, scorecard, `storePost`, caps, kill switch | Keep | This is the part that works. Every number comes from code. |
+Status as of 2026-11-13, on `feat/blog-owner-feedback` (#131), tested with a mocked Gemini only: the owner has asked for no Gemini spending until the audits are done.
+
+| Piece | Action | Why | Status |
+| --- | --- | --- | --- |
+| `pipeline/content/staged.mjs` (outline, sections, finish, `OutlineError`), `WRITER_MODE` | Delete | Replaced by the code outline and one plain-text write call. It caused 4 outline drops and the length loss. | Done: deleted, with `WRITER_MODE` in `wrangler.jsonc` and the Worker types. |
+| Most of `SYSTEM_INSTRUCTION` (about 30 rules) and the structural fields of `RESPONSE_SCHEMA` | Shrink | Keep the voice, naming, topic and placeholder rules. The shape rules become code. | Done: both deleted; the writer's rules are `compose.mjs` `WRITE_SYSTEM` (11 lines), and the shape comes from `plan.mjs`. |
+| `buildReviseRequest` and the `MAX_REVISIONS=2` whole-post loop | Delete | Replaced by at most one paragraph-scoped fix call. | Done: one fix call that rewrites only the failing blocks (`compose.mjs` `blocksToFix`). |
+| `claims.mjs` list, Tavily and judge in the default path; `tavily-credits.mjs`, `TAVILY_*` caps | Off by default | Posts come from our data. The review flags outside claims and code cuts them. This is the owner's gate 2, so the owner has to decide. | Done, as decided: the list request is gone; the review lists outside claims, and only those go to Tavily and the judge (`checkClaims` `flagged`). The caps stay. |
+| Pick request (`buildPickRequest`, `choosePicks`) | Delete | Every builder is on topic by construction, so code rotation is enough. | Open: still 1 request a week. |
+| Fresh Workers AI illustration in the post path | Move | Make it an offline library job with owner approval. | Done: posts pass no Workers AI binding; the hourly library job still makes images for approval. The hero takes a library image only on 2 or more shared tags, else one Pexels search. |
+| `checkLinksLoad` every round | Once | Links come from the sheet, so load them once per draft. | Done: once, before the review. |
+| Code checks, `fill`, placeholders, naming rule, scorecard, `storePost`, caps, kill switch | Keep | This is the part that works. Every number comes from code. | Kept. Added: `clauses.mjs` (finished sentences, ties pre-worded), `plan.mjs`, code repairs, length as a soft gate below 85% of the minimum. |
+| Bugs: revise length text, scorecard length, `short` profile, tie wording | Fix | See "Bugs found on the way". | Done: the scorecard and checks follow the post's profile (short 500 to 750, standard 700 to 1,000, medium 1,200 to 1,600, long 1,800 to 2,200); a tied lead reads "X and Y tie for the biggest lead". |
+| Replay harness | Build | Measure every step on the same recorded sheets. | Done: `scripts/content-replay.mjs` on 10 staging sheets in `tests/fixtures/content-replay`, with a mock, a recorded replay or a guarded live Gemini (`CONTENT_REPLAY_LIVE=1`). Live runs wait for the owner's approval. |
 
 ## Action plan for the blog lane
 

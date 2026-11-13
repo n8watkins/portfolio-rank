@@ -16,10 +16,11 @@ function family(label) {
 }
 
 /** A sentence for a top-against-rest pair of facts, by the shape of its label. */
-function compareText(label, top, rest) {
+function compareText(label, top, rest, v = 0) {
   let m;
   if ((m = label.match(/^Average (.+?) score \(1 to 5\)/i))) {
-    return `On ${m[1]}, the top-graded portfolios average ${ph(top.id)} and everyone else ${ph(rest.id)}, on the judge's 1 to 5 scale.`;
+    // Two wordings, alternating, so clauses side by side never open the same way.
+    return v % 2 ? `The top-graded portfolios average ${ph(top.id)} on ${m[1]}, against ${ph(rest.id)} for everyone else, on the 1 to 5 scale.` : `On ${m[1]}, the top-graded portfolios average ${ph(top.id)} and everyone else ${ph(rest.id)}, on the judge's 1 to 5 scale.`;
   }
   if ((m = label.match(/^Share of .*? with (.+)$/i))) {
     const what = /^fits /i.test(m[1]) ? m[1].replace(/^fits /i, "fit ") : `have ${m[1]}`;
@@ -74,7 +75,7 @@ export function clausesOf(sheet) {
     const other = facts.find((g) => !used.has(g.id) && g.id !== f.id && !g.about && REST.test(g.label) && family(g.label) === family(f.label));
     if (!other) continue;
     const axis = f.label.match(/^Average (.+?) score/i)?.[1] ?? f.label.match(/ with (.+)$/i)?.[1] ?? null;
-    add({ text: compareText(f.label, f, other), facts: [f.id, other.id], kind: "compare", ...(axis ? { axis } : {}) });
+    add({ text: compareText(f.label, f, other, out.length), alt: compareText(f.label, f, other, out.length + 1), facts: [f.id, other.id], kind: "compare", ...(axis ? { axis } : {}) });
   }
 
   // Ties and superlatives, worded by code: a tie is never one winner.

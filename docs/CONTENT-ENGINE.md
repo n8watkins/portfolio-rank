@@ -21,7 +21,7 @@ They are collected at the end.
 Once or twice a week, PortfolioRank writes a short blog post from its own data: who climbed the leaderboard, what an experiment found, how people and the AI disagree, what changed in Google's models.
 Code computes every number and draws every chart; Gemini 3.5 Flash-Lite only writes the words around them.
 Before a post goes out, code checks every number and name, a search checks every claim that doesn't come from our data, a topic filter keeps it on careers, hiring and portfolios, and every image comes from a copyright-safe source.
-A draft that fails is revised at most twice, then dropped.
+A draft that fails a check gets one targeted fix of the failing blocks, then is dropped (see "The writer" below).
 It all runs inside the end-of-day run on whatever Gemini quota people didn't use, with hard caps and one kill switch.
 The first week runs privately (a dry run) before anything is published.
 
@@ -404,7 +404,7 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Write a draft now, rewrites, the cost panel | [pipeline/content/manual.mjs](../pipeline/content/manual.mjs), [worker/draft.ts](../worker/draft.ts), [lib/content/jobs.mjs](../lib/content/jobs.mjs), [lib/content/costs.mjs](../lib/content/costs.mjs), [app/api/admin/content/draft/route.ts](../app/api/admin/content/draft/route.ts) |
 | The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/(tools)/blog/guidelines](<../app/admin/(tools)/blog/guidelines>), [app/admin/(tools)/blog/compare](<../app/admin/(tools)/blog/compare>) |
 | Charts drawn from the facts (SVG) | [pipeline/content/charts.mjs](../pipeline/content/charts.mjs) |
-| The writer, placeholders and filling, the revision request | [pipeline/content/writer.mjs](../pipeline/content/writer.mjs) |
+| The writer: finished clauses from the facts, the code plan, the plain-text write, assembly and repairs, one fix call, the review that lists outside claims; placeholders and filling | [pipeline/content/clauses.mjs](../pipeline/content/clauses.mjs), [plan.mjs](../pipeline/content/plan.mjs), [compose.mjs](../pipeline/content/compose.mjs), [writer.mjs](../pipeline/content/writer.mjs); replay harness [scripts/content-replay.mjs](../scripts/content-replay.mjs) |
 | Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |
 | Outside claims through Tavily, the verbatim quote rule | [pipeline/content/claims.mjs](../pipeline/content/claims.mjs) |
 | The topic filter: deny list, pick, final review | [pipeline/content/topic.mjs](../pipeline/content/topic.mjs) |
@@ -420,7 +420,7 @@ How it runs, in short:
 
 - The Content stage runs the weekly polls first, then one content job a night while `CONTENT_MODE` is not "off": the pick on Sunday night (or the first night of a week without one), a draft on Monday and Wednesday nights, and a later night when an earlier draft of the week was dropped or deferred.
 - A draft runs in one batch and never spends more than that batch has left (at most 20 requests); it needs at least 4 to start, else it waits for the next night.
-- One round is the write request, the claim listing, the claim judgement (only when Tavily found results) and the final review; a failed round is revised, at most twice, then the draft is stored as `dropped` with its failures.
+- The writer (owner, 2026-11-13; [audits/blog-engine.md](audits/blog-engine.md)): code plans the post from finished clauses, Gemini writes plain-text blocks (one request for up to three sections, so 1 to 2), code assembles and repairs them and runs the checks, one fix call rewrites only the failing blocks, and one review checks topic, tone, names and voice and lists outside claims, which alone are searched with Tavily and judged; a draft that still fails is stored as `dropped` with its failures. A post costs 2 to 3 requests when it passes first time.
 - Outside claims are cut by code (exact sentences), not by a rewrite; a rewrite happens only when a code check or the review fails.
 - The writer gets each fact's placeholder, label and display, never its raw value or query; code assembles the TL;DR block, the image markers and the call to action, and puts each sentence on its own line.
 - The number check allows years, list numbers, the Gemini model names, the rubric's "1 to 5", the post's allowed names and addresses, and the sentences of supported outside claims; the template's 250 to 400 words get 10% slack.
@@ -428,5 +428,5 @@ How it runs, in short:
   Pexels photos are hotlinked with their credit.
 - Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `PEXELS_API_KEY` the Pexels step is skipped; without the `AI` binding (or with no neuron room) the fresh illustration is skipped.
 - The weekly summary is an owner alert of kind "info" (`content-weekly`) on Sunday nights while the engine is on.
-- The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs); `WRITER_MODE` ("staged" by default, or "single"; [pipeline/content/staged.mjs](../pipeline/content/staged.mjs)) picks how the first draft is written: staged is an outline, two section requests and a finish request (4 requests, 5 after an outline retry), single is one request.
+- The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs).
 - Tests: [tests/blog.test.mjs](../tests/blog.test.mjs), [tests/blog-pages.test.mjs](../tests/blog-pages.test.mjs), [tests/content.test.mjs](../tests/content.test.mjs), [tests/admin-content.test.mjs](../tests/admin-content.test.mjs), [tests/image-library.test.mjs](../tests/image-library.test.mjs) and [tests/admin-library.test.mjs](../tests/admin-library.test.mjs).

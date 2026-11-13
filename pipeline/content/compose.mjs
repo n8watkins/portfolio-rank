@@ -20,7 +20,7 @@
 // Length is a soft gate: a body below 85% of its profile's minimum fails.
 import { CTA, PLACEHOLDER, fill, normalizeDraft } from "./writer.mjs";
 import { planPost } from "./plan.mjs";
-import { codeChecks, wordCount } from "./checks.mjs";
+import { checkLinksLoad, codeChecks, urlsIn, wordCount } from "./checks.mjs";
 import { buildReviewRequest, reviewCheck } from "./topic.mjs";
 import { checkClaims } from "./claims.mjs";
 
@@ -29,7 +29,7 @@ export const WRITE_SYSTEM = [
   "You write blog posts for PortfolioRank, a site that ranks developer portfolio websites, from finished facts its code computed.",
   "Rules:",
   "- Keep every {{placeholder}} exactly as given (code fills in the numbers) and never type a digit of your own.",
-  "- Keep every Markdown link [Name](url) you are given, with its exact url, and add no other links. Name a person or site only from the clauses you are given.",
+  "- Keep every Markdown link [Name](url) you are given, with its exact url, and add no other links than those and the related posts offered. Name a person or site only from the clauses you are given.",
   "- Rephrase the clauses freely so the text reads like a person wrote it, but keep each figure with the group it belongs to. Never put two figures side by side so they look like one comparison.",
   "- Say \"the top-graded portfolios\" and \"everyone else\"; never grade letters. Never describe how many portfolios there are in words (\"thousands\").",
   "- Explain what each measure means for a portfolio and why a reader should care; that, the named sites and concrete advice make the length. No outside claims about hiring, recruiters, the job market or studies.",
@@ -64,6 +64,9 @@ export function buildWriteRequests(sheet, plan) {
       `Data as of ${String(sheet.dataAsOf ?? "").slice(0, 10)}. The post is ${plan.sections.length} sections, about ${mid(plan.length)} words in all.`,
       "",
     ];
+    // The owner's standing guidelines and notes on an earlier version (lib/content/guidelines.mjs, "Rewrite with these notes").
+    if (sheet.guidelines?.length) lines.push("The editor's guidelines; follow every one:", ...sheet.guidelines.map((x) => `- ${x}`), "");
+    if (sheet.ownerNotes) lines.push(`The owner's notes on the previous version of this post; fix every point: ${sheet.ownerNotes}`, "");
     if (first) {
       lines.push(
         `The hook (lead with it): ${plan.hook?.why ?? ""}`,
@@ -99,6 +102,9 @@ export function buildWriteRequests(sheet, plan) {
       );
     }
     if (!first) lines.push("These blocks continue a post already started; don't repeat its opener.", "");
+    // Interlinks (owner, 2026-11-12): published posts the sections may link once where they fit.
+    const related = (sheet.relatedPosts ?? []).slice(0, 6);
+    if (related.length) lines.push("Other PortfolioRank posts you may link once where a section touches the same subject, with the exact url (or not at all):", ...related.map((p) => `- [${p.title}](${p.url})`), "");
     lines.push("Write these blocks:", ...ask);
     return { parts: [{ text: lines.join("\n") }], options: WRITE_OPTIONS, sections: group.map((s) => s.n), first, last };
   });
@@ -157,17 +163,17 @@ export function reflow(text) {
 
 const ALLOWED_DIGITS = /\b(?:19|20)\d\d\b|\b1\s?(?:to|-)\s?5\b|\b\d\.\d\s+Flash(?:-Lite)?\b/g;
 /** Whether a sentence has a digit that didn't come from a placeholder (urls and allowed forms aside). */
-const strayDigit = (s) => /\d/.test(s.replace(PLACEHOLDER_G(), "").replace(/\]\([^)]*\)/g, "]").replace(ALLOWED_DIGITS, ""));
+const strayDigit = (s, names = []) => /\d/.test(names.reduce((t, n) => (n ? t.split(n).join(" ") : t), s).replace(PLACEHOLDER_G(), "").replace(/\]\([^)]*\)/g, "]").replace(ALLOWED_DIGITS, ""));
 function PLACEHOLDER_G() {
   return new RegExp(PLACEHOLDER.source, "g");
 }
 
 /** Cuts sentences with stray digits or placeholders the sheet doesn't have; returns the text and what was cut. */
-export function cutBadSentences(text, factIds) {
+export function cutBadSentences(text, factIds, names = []) {
   const cut = [];
   const keep = (s) => {
     const unknown = [...s.matchAll(PLACEHOLDER_G())].some((m) => !factIds.has(m[1]));
-    if (unknown || strayDigit(s)) {
+    if (unknown || strayDigit(s, names)) {
       cut.push(s);
       return false;
     }
@@ -194,10 +200,11 @@ const line1 = (s) => clean(String(s ?? "").split("\n").find((l) => l.trim()) ?? 
 /** The post's draft (writer.mjs shape) from the plan and the answers' blocks, repaired by code. */
 export function assemble(sheet, plan, blocks) {
   const factIds = new Set((sheet.facts ?? []).map((f) => f.id));
+  const names = (sheet.names ?? []).map((n) => n.name).filter(Boolean);
   const byId = new Map(plan.clauses.map((c) => [c.id, c]));
   const notes = [];
   const fix = (text, where) => {
-    const r = cutBadSentences(clean(text), factIds);
+    const r = cutBadSentences(clean(text), factIds, names);
     for (const s of r.cut) notes.push(`${where}: cut "${s.slice(0, 80)}"`);
     return r.text;
   };
@@ -213,7 +220,7 @@ export function assemble(sheet, plan, blocks) {
     const c = byId.get(id);
     const b = clean(bullets[i] ?? "");
     const ids = [...b.matchAll(PLACEHOLDER_G())].map((m) => m[1]);
-    const ok = b && c.facts.every((f) => ids.includes(f)) && ids.every((f) => c.facts.includes(f)) && !strayDigit(b);
+    const ok = b && c.facts.every((f) => ids.includes(f)) && ids.every((f) => c.facts.includes(f)) && !strayDigit(b, names);
     if (!ok) notes.push(`TL;DR ${i + 1}: used the clause`);
     return ok ? b : c.text;
   });
@@ -236,19 +243,33 @@ export function assemble(sheet, plan, blocks) {
   // Sections, verbatim apart from the repairs, with their images.
   const calloutAfter = Math.max(1, Math.floor(plan.sections.length / 2));
   const parts = [openerPara];
-  for (const s of plan.sections) {
-    const raw = String(blocks[`SECTION ${s.n}`] ?? "");
-    const lines = raw.split("\n");
+  const written = plan.sections.map((s) => {
+    const lines = String(blocks[`SECTION ${s.n}`] ?? "").split("\n");
     const headIdx = lines.findIndex((l) => l.trim());
-    const subhead = clean(lines[headIdx] ?? "").replace(/[.:]$/, "") || `What the data shows, part ${s.n}`;
-    let text = fix(lines.slice(headIdx + 1).join("\n"), `section ${s.n}`);
-    // A named site this section was given, but whose link the writer dropped, gets its clause back.
-    for (const c of s.clauses.filter((x) => x.kind === "example")) {
-      if (!text.includes(`](${c.about})`)) {
-        text = `${text}\n\n${c.text}`;
-        notes.push(`section ${s.n}: put back ${c.name}`);
+    return {
+      subhead: clean(lines[headIdx] ?? "").replace(/[.:]$/, "") || `What the data shows, part ${s.n}`,
+      text: fix(lines.slice(headIdx + 1).join("\n"), `section ${s.n}`),
+    };
+  });
+  // A clause the writer left out everywhere (its figures nowhere in the post,
+  // or a named site's link dropped) goes back into its section as code wrote
+  // it, so the data, the TL;DR's points and the linked examples are all there.
+  const everything = [openerPara, ...written.map((w) => w.text)].join("\n");
+  plan.sections.forEach((s, i) => {
+    for (const c of s.clauses) {
+      const missing = c.kind === "example" ? !everything.includes(`](${c.about})`) : !c.facts.every((f) => everything.includes(`{{${f}}}`));
+      if (missing) {
+        // The other wording when the section's last sentence opens the same way.
+        const first = (s) => String(s).trim().split(/\s+/)[0]?.toLowerCase();
+        const last = sentencesOf(written[i].text).at(-1) ?? "";
+        const put = c.alt && first(last) === first(c.text) ? c.alt : c.text;
+        written[i].text = `${written[i].text}\n\n${put}`;
+        notes.push(`section ${s.n}: put back ${c.name ?? c.id}`);
       }
     }
+  });
+  for (const [i, s] of plan.sections.entries()) {
+    const { subhead, text } = written[i];
     const paras = reflow(text).split("\n\n");
     if (s.image) paras.splice(1, 0, `[[image:${s.image.slot}]]`);
     parts.push(`### ${subhead}`, ...paras);
@@ -263,12 +284,12 @@ export function assemble(sheet, plan, blocks) {
   const stepLines = String(blocks.STEPS ?? "").split("\n").map((l) => clean(l.replace(/^\s*\d+[.)]\s*/, ""))).filter(Boolean);
   const steps = plan.steps.slice(0, 3).map((st, i) => {
     let t = stepLines[i] ?? (st.axis ? `Look at your own ${st.axis} and change one thing this week.` : "Pick one thing from this post and change it this week.");
-    t = cutBadSentences(t, factIds).text.replace(/\n/g, " ") || "Pick one thing from this post and change it this week.";
+    t = cutBadSentences(t, factIds, names).text.replace(/\n/g, " ") || "Pick one thing from this post and change it this week.";
     if (st.url && !t.includes(`](${st.url})`)) t = `${t} See how [${st.name}](${st.url}) does it.`;
     return `${i + 1}. ${t}`;
   });
   while (steps.length < 3) steps.push(`${steps.length + 1}. Check your portfolio against one figure in this post and change one thing.`);
-  parts.push("### Try this", steps.join("\n"));
+  parts.push(`### Try this\n${steps.join("\n")}`);
   const closing = sentencesOf(fix(blocks.CLOSING ?? "", "closing"));
   parts.push((closing.length >= 2 ? closing : [...closing, "Small changes add up when a reviewer has only seconds."]).slice(0, 3).join("\n"));
 
@@ -310,7 +331,10 @@ export function blocksToFix(blocks, problems, plan) {
     for (const [n, text] of Object.entries(blocks)) if (quoted.some((q) => text.includes(q))) names.add(n);
     if (/words; .* wanted: (add|cut)/.test(p)) {
       const cut = /wanted: cut/.test(p);
-      const shortest = [...sections].sort((a, b) => (cut ? -1 : 1) * (wordCount(blocks[a] ?? "") - wordCount(blocks[b] ?? ""))).slice(0, Math.max(1, Math.ceil(sections.length / 2)));
+      // Every section under (or, to cut, over) its share of the words.
+      const per = sectionWords(plan);
+      const off = sections.filter((n) => (cut ? wordCount(blocks[n] ?? "") > per * 1.1 : wordCount(blocks[n] ?? "") < per * 0.9));
+      const shortest = off.length ? off : sections;
       shortest.forEach((n) => names.add(n));
     }
     if (/takeaway|payoff|first 150 words/i.test(p)) names.add("TAKEAWAY").add("OPENER");
@@ -328,6 +352,7 @@ export function blocksToFix(blocks, problems, plan) {
  */
 export async function composeDraft(sheet, ctx) {
   const log = ctx.log ?? (() => {});
+  const phase = async (name, detail = null) => (ctx.onPhase ? ctx.onPhase(name, detail) : undefined);
   const plan = planPost(sheet);
   let requests = 0;
   const call = async (req) => (requests++, ctx.generate(req));
@@ -342,12 +367,14 @@ export async function composeDraft(sheet, ctx) {
   log(`words: sections ${sectionWordsOut.join(" + ")} = ${sectionWordsOut.reduce((a, b) => a + b, 0)}; body ${wordCount(fill(draft.body, sheet.facts))}; repairs: ${notes.length}`);
 
   // 4. Checks, then one targeted fix.
+  await phase("checking");
   let code = codeChecks(draft, sheet, { roster: ctx.roster ?? [] });
   history.push({ round: 0, checks: code.checks, repairs: notes, claims: { supported: [], cut: [], unchecked: false } });
   if (!code.ok && ctx.left() >= 2) {
     const which = blocksToFix(blocks, code.failures, plan);
     if (which.length) {
       log(`fix: ${which.join(", ")} for ${code.failures.length} problem(s)`);
+      await phase("revising", which.join(", "));
       Object.assign(blocks, parseBlocks(await call(buildFixRequest(sheet, plan, blocks, code.failures, which))));
       ({ draft, notes } = assemble(sheet, plan, blocks));
       code = codeChecks(draft, sheet, { roster: ctx.roster ?? [] });
@@ -356,10 +383,17 @@ export async function composeDraft(sheet, ctx) {
   }
   const words = wordCount(fill(draft.body, sheet.facts));
   if (!code.ok) return { passed: false, draft, plan, history, failures: code.failures, supported: [], requests, searches: 0, words };
+  // External links load (checked once a draft, not every round).
+  if (ctx.fetchImpl) {
+    const links = await checkLinksLoad([fill(draft.body, sheet.facts)].flatMap((t) => urlsIn(t)), ctx.fetchImpl);
+    history.at(-1).checks.push(links);
+    if (!links.ok) return { passed: false, draft, plan, history, failures: links.problems.map((p) => `links-load: ${p}`), supported: [], requests, searches: 0, words };
+  }
 
   // 5. One review; outside claims it flags go to Tavily, the unsupported are cut.
   if (ctx.left() < 1) return { passed: false, draft, plan, history, failures: ["review: no budget left for the review"], supported: [], requests, searches: 0, words };
   const filled = `# ${fill(draft.title, sheet.facts)}\n\n${fill(draft.subtitle, sheet.facts)}\n\n${fill(draft.body, sheet.facts)}`;
+  await phase("checking", "the review");
   const answer = await call(buildReviewRequest(sheet, filled));
   const review = reviewCheck(answer);
   history.at(-1).checks.push(review);
@@ -368,6 +402,7 @@ export async function composeDraft(sheet, ctx) {
   let supported = [];
   let searches = 0;
   if (flagged.length) {
+    await phase("researching");
     const claims = await checkClaims(draft.body, {
       flagged,
       names,

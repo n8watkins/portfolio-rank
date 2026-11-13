@@ -167,7 +167,8 @@ export function checkSubstance(draft, sheet) {
     .filter((l) => l.trim() && !/^(#|>|\[\[|\d+\.|[-*]\s)/.test(l.trim()))
     .map((l) => l.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z{}0-9]/g, ""));
   for (let i = 1; i < starts.length; i++) {
-    if (starts[i] && starts[i] === starts[i - 1] && !starts[i].startsWith("{{")) {
+    // Articles open sentences naturally; repeating any other first word in a row reads robotic.
+    if (starts[i] && starts[i] === starts[i - 1] && !starts[i].startsWith("{{") && !["the", "a", "an"].includes(starts[i])) {
       p.push(`two sentences in a row start with "${starts[i]}": vary how sentences begin`);
       break;
     }
