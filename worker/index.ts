@@ -81,6 +81,12 @@ type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): P
  * owner's removal took effect, and the blog when a post's scheduled time came in the
  * last hour. Best effort: a failure only means the page refreshes when its day is up.
  */
+/** CachedPages.purgeTags for scheduled work, when this Worker exposes it (./edge-cache.ts). */
+function purgeTagsOf(ctx: { exports?: unknown }) {
+  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
+  return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
+}
+
 async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   if (!cached) return;
@@ -149,8 +155,8 @@ const worker = {
       await drainPeople(env as NightEnv);
       // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts).
       await freshnessTick(controller.scheduledTime);
-      // Every tier by rank placed again in the library (./tiers.ts): new grades move it.
-      await tiersTick(controller.scheduledTime);
+      // The daily tier update when it is due (./tiers.ts); the profiles whose letter changed leave the edge cache.
+      await tiersTick(controller.scheduledTime, { purgeTags: purgeTagsOf(ctx) });
       // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }
