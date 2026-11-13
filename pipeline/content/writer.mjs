@@ -152,7 +152,9 @@ export function normalizeDraft(draft) {
   const body = String(draft?.body ?? "")
     .replace(/([^\n])[ \t]+(###\s)/g, "$1\n\n$2")
     .replace(/^[ \t]+(###\s)/gm, "$1")
-    .replace(/^###\s+Try this\b.*$/gim, "### Try this");
+    .replace(/^###\s+Try this\b.*$/gim, "### Try this")
+    // The hero goes above the body (assembleBody); a writer that also places it in the body loses nothing.
+    .replace(/^[ \t]*\[\[image:hero\]\][ \t]*\n?/gm, "");
   return { ...draft, body };
 }
 

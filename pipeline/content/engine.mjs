@@ -258,7 +258,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
         .filter(([k]) => !k.startsWith("images."))
         .map(([, v]) => v)
         .join("\n");
-      const claims = await checkClaims(text, { tavilyKey: ctx.content?.keys?.tavily, fetchImpl: ctx.fetchImpl, budget: { gemini: g.left() - 1, tavily: tavilyLeft - searches }, generate: g.generate, credits: creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), now: () => new Date(now) }) });
+      const claims = await checkClaims(text, { tavilyKey: ctx.content?.keys?.tavily, fetchImpl: ctx.fetchImpl, budget: { gemini: g.left() - 1, tavily: tavilyLeft - searches }, generate: g.generate, names: sheet.names.map((n) => n.name), credits: creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), now: () => new Date(now) }) });
       searches += claims.searches;
       supported = [...supported.filter((c) => text.includes(c.sentence) && !claims.cut.some((x) => x.sentence === c.sentence)), ...claims.supported].filter(
         (c, i, all) => all.findIndex((x) => x.sentence === c.sentence) === i

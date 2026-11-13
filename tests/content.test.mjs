@@ -22,7 +22,7 @@ import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
-import { CTA, SYSTEM_INSTRUCTION, assembleBody, buildWriteRequest, fill } from "../pipeline/content/writer.mjs";
+import { CTA, SYSTEM_INSTRUCTION, assembleBody, buildWriteRequest, fill, normalizeDraft } from "../pipeline/content/writer.mjs";
 import { devMetaHits, editorialChecks, findPayoff, readingGrade, repeatedPhrases, scorecard, syllables } from "../pipeline/content/scorecard.mjs";
 import { DEFAULT_WRITER_MODE, STAGED_REQUESTS, checkOutline, writerMode } from "../pipeline/content/staged.mjs";
 import { renderPreview } from "../pipeline/content/preview.mjs";
@@ -1038,6 +1038,15 @@ test("quality: substance (owner, 2026-11-12): robotic phrasing, TL;DR the body s
   fails({ body: d.body.replace(/\[(Top Person [23])\]\([^)]+\)/g, "$1") }, /1 named example site\(s\) linked; link at least 3/);
 });
 
+test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences on our own facts or named sites are not outside claims", async () => {
+  assert.equal(normalizeDraft({ body: "Opener one.\nOpener two.\n\n[[image:hero]]\n\n### A\nText." }).body, "Opener one.\nOpener two.\n\n\n### A\nText.");
+  const listed = ["Consider Top Person 1, who earns {{f30}} on visual design.", "Projects by Top Person 2 are clear.", "Recruiters spend six seconds on a portfolio."];
+  const text = listed.join("\n");
+  const r = await checkClaims(text, { tavilyKey: null, budget: { gemini: 5, tavily: 5 }, generate: async () => ({ claims: listed }), names: ["Top Person 1", "Top Person 2"] });
+  assert.deepEqual(r.cut.map((c) => c.sentence), ["Recruiters spend six seconds on a portfolio."]);
+  assert.equal(r.listedNotFound, undefined);
+});
+
 test("quality: length is 700 to 1,000 words (owner, 2026-11-12), with 5% slack", async () => {
   const { sheet, roster } = await sheetAndRoster();
   const body = goodDraft(sheet).body;
@@ -1232,7 +1241,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
       {
         subhead: "Top portfolios lead on most axes",
         intent: "the gap",
-        fact_ids: [f("The biggest lead, in points on a 1 to 5 scale"), f("The axes where the top-graded portfolios lead the rest by the most (tied)")],
+        fact_ids: [f("The biggest lead, in points on a 1 to 5 scale"), f("The axes where the top-graded portfolios lead the rest by the most (tied)"), f("Average visual design score (1 to 5) of the top-graded portfolios")],
       },
       {
         subhead: "The first screen carries the most weight",
@@ -1240,7 +1249,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
         // Three named sites, each through one of its positive facts (the outline check asks for three).
         fact_ids: [f("Portfolios with the judge's highest grade, a small part of the top-graded group"), ...sheet.names.slice(0, 3).map((n) => sheet.facts.find((x) => x.tone === "positive" && x.about === n.url).id)],
       },
-      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge"), f("Share of all graded portfolios that are top-graded")] },
+      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge"), f("Share of all graded portfolios that are top-graded"), f("Average writing score (1 to 5) of the top-graded portfolios")] },
     ],
     callout_fact_id: f("The biggest lead, in points on a 1 to 5 scale"),
     actions: ["a", "b", "c"],
