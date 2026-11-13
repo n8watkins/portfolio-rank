@@ -12,8 +12,9 @@ import { buildBatchRequest, buildPairRequest } from "../pipeline/compare-prompts
 import { PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
 import { buildPickRequest, buildReviewRequest as buildPostReviewRequest } from "../pipeline/content/topic.mjs";
 import { buildJudgeRequest, buildListRequest } from "../pipeline/content/claims.mjs";
-import { buildReviseRequest, buildWriteRequest } from "../pipeline/content/writer.mjs";
-import { buildFinishRequest, buildOutlineRequest, buildSectionsRequest } from "../pipeline/content/staged.mjs";
+import { readFileSync } from "node:fs";
+import { buildFixRequest, buildWriteRequests } from "../pipeline/content/compose.mjs";
+import { planPost } from "../pipeline/content/plan.mjs";
 import { buildReviewRequest as buildPhotoReviewRequest } from "../pipeline/content/images.mjs";
 import { buildCheckRequest } from "../pipeline/content/workers-ai.mjs";
 import { buildPollRequest } from "../pipeline/polls.mjs";
@@ -32,7 +33,10 @@ const sheet = {
   names: [],
   screenshots: [],
 };
-const outline = { title: "T", subtitle: "S", sections: [{ subhead: "H", intent: "i", fact_ids: ["n_sites"] }] };
+// The writer plans from a real fact sheet (one of the replay fixtures).
+const recorded = JSON.parse(readFileSync(new URL("./fixtures/content-replay/top-grades-5bcb50a626f8ebde.json", import.meta.url), "utf8"));
+const writerSheet = recorded.sheet ?? recorded;
+const plan = planPost(writerSheet);
 
 // Every builder that makes a Gemini request, with the label it must carry.
 const BUILDERS = [
@@ -43,11 +47,8 @@ const BUILDERS = [
   ["content final review", () => buildPostReviewRequest(sheet, "# Title"), "content-review-v1"],
   ["content claims list", () => buildListRequest("draft"), "content-claims-list-v1"],
   ["content claims judge", () => buildJudgeRequest([{ sentence: "c", results: [] }]), "content-claims-judge-v1"],
-  ["content write", () => buildWriteRequest(sheet), "content-write-v1"],
-  ["content revise", () => buildReviseRequest(sheet, { title: "t", body: "b" }, ["too long"]), "content-revise-v1"],
-  ["content outline", () => buildOutlineRequest(sheet), "content-outline-v1"],
-  ["content sections", () => buildSectionsRequest(sheet, outline, [0]), "content-sections-v1"],
-  ["content finish", () => buildFinishRequest(sheet, outline, [{ heading: "H", body: "b" }]), "content-finish-v1"],
+  ["content write", () => buildWriteRequests(writerSheet, plan)[0], "content-write-v2"],
+  ["content fix", () => buildFixRequest(writerSheet, plan, { "SECTION 1": "## H\nText." }, ["too short"], []), "content-fix-v1"],
   ["content stock photo review", () => buildPhotoReviewRequest({ slot: "hero", purpose: "p", alt: "a" }, "para", [{ mime: "image/jpeg", base64: "AAAA" }], "stock photos"), "content-photo-review-v1"],
   ["library check", () => buildCheckRequest({ subject: "a laptop", bytes: new Uint8Array([1, 2, 3]) }), "library-check-v1"],
   ["polls", () => buildPollRequest({ digest: {}, asked: [] }), "polls-v1"],

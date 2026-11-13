@@ -238,7 +238,7 @@ export function createGemini({
 
   // One HTTP request. Returns { kind: "ok", result } | { kind: "transient" |
   // "daily" | "slow", reason, body }; throws for auth and other 4xx errors.
-  async function attempt(model, body, { retry, fallback, thinking = false, prompt = null }) {
+  async function attempt(model, body, { retry, fallback, thinking = false, plain = false, prompt = null }) {
     await pace.take();
     requests[model]++;
     const started = now();
@@ -348,7 +348,7 @@ export function createGemini({
     for (let n = 0; ; n++) {
       const model = models[idx];
       const { body, thinking } = bodyFor(model, parts, schema, options);
-      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking, prompt: options.prompt ?? null });
+      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking, plain: !schema, prompt: options.prompt ?? null });
       if (out.kind === "ok") {
         answered[model]++;
         return { result: out.result, model, fallback: idx > 0, usage: out.usage };
