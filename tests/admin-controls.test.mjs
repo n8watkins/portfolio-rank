@@ -45,10 +45,11 @@ async function pageAs(cookie, { width = 1440, height = 900 } = {}) {
 const post = async (body, cookie) =>
   fetch(`${BASE}/api/admin/content/automation`, { method: "POST", headers: { cookie, origin: BASE, "content-type": "application/json" }, body: JSON.stringify(body) });
 
-test("/admin: the admin lands on the usage page; anyone else gets a 404", async () => {
+test("/admin: the admin gets the overview; anyone else gets a 404", async () => {
   const res = await fetch(`${BASE}/admin`, { headers: { cookie: await admin() }, redirect: "manual" });
-  assert.ok([303, 307, 308].includes(res.status), `redirect, got ${res.status}`);
-  assert.match(res.headers.get("location") ?? "", /\/admin\/usage$/);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  for (const href of ["/admin/usage", "/admin/images", "/admin/blog", "/admin/polls"]) assert.ok(html.includes(`data-admin-card="${href}"`), `a card for ${href}`);
   assert.equal((await fetch(`${BASE}/admin`, { headers: { cookie: await someone() } })).status, 404);
   assert.equal((await fetch(`${BASE}/admin`)).status, 404);
   assert.equal((await (await fetch(`${BASE}/api/auth/session`, { headers: { cookie: await admin() } })).json()).isAdmin, true);
@@ -66,7 +67,7 @@ test("the account menu and the phone menu show Admin to the admin only", async (
     const menu = desk.page.getByRole("menu", { name: "Account" });
     await menu.getByRole("menuitem", { name: "Sign out" }).waitFor();
     assert.equal(await menu.getByRole("menuitem", { name: "Admin" }).count(), shown ? 1 : 0, `${who}, desktop`);
-    if (shown) assert.equal(await menu.getByRole("menuitem", { name: "Admin" }).getAttribute("href"), "/admin/usage");
+    if (shown) assert.equal(await menu.getByRole("menuitem", { name: "Admin" }).getAttribute("href"), "/admin");
     assert.deepEqual(desk.errors, []);
     await desk.context.close();
 
