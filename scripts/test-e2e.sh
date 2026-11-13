@@ -42,6 +42,9 @@ unset GEMINI_API_KEY TURNSTILE_SECRET_KEY SEND_EMAIL
 # stand-in for the GitHub API served by tests/games-api.test.mjs on its own
 # port (lib/grader/server.ts testSeam: ignored on the deployed Workers).
 export GAMES_V2=true
+# The content engine's ceiling as in production (wrangler.jsonc): drafts for
+# review, at most 2 a week (tests/admin-controls.test.mjs, the Automation panel).
+export CONTENT_MODE=dry-run CONTENT_DRAFTS_PER_WEEK=2
 # The blog (tests/blog-pages.test.mjs): post images from the fixture folder
 # instead of the R2 bucket (lib/blog-media.ts, ignored on the deployed Workers).
 export BLOG_TEST_MEDIA_DIR="$PWD/tests/fixtures/blog/media"
