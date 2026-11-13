@@ -17,6 +17,8 @@ import { redactContacts } from "./redact.mjs";
 import { SITE_DATA_MARKER } from "./site-data.mjs";
 
 export const RUBRIC_VERSION = 2;
+/** The grade prompt's id and version in gemini_requests.prompt. */
+export const GRADE_PROMPT = `grade-v${RUBRIC_VERSION}`;
 
 /** Characters of visible page text sent with a grade (about 1,000 tokens). */
 export const PAGE_TEXT_MAX = 4000;
@@ -374,6 +376,7 @@ export function buildRubricRequest({ name, url, pageText, facts, image, now = ne
   return {
     parts,
     options: {
+      prompt: GRADE_PROMPT,
       systemInstruction: SYSTEM_INSTRUCTION,
       thinkingLevel: THINKING_LEVEL,
       maxOutputTokens: MAX_OUTPUT_TOKENS,

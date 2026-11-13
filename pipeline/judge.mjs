@@ -49,6 +49,7 @@ import {
 } from "./rubric.mjs";
 import { pageEvidence } from "./evidence.mjs";
 import { siteNameBlock } from "./site-data.mjs";
+import { PROMPT_VERSION_LEGACY } from "../lib/ranking/config.mjs";
 import { createRenderer } from "./render.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
@@ -640,7 +641,8 @@ async function runPairwise() {
           heroB,
           { text: siteNameBlock("B", b.name) },
         ],
-        pairSchema
+        pairSchema,
+        { prompt: PROMPT_VERSION_LEGACY }
       );
       consecutiveErrors = 0;
       seen.add(pairKey(a.url, b.url));
