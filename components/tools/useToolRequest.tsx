@@ -33,8 +33,17 @@ export function useToolRequest() {
     setArmed(true);
   }, [armed]);
 
+  // Set when Cloudflare shows its checkbox: the token waits for the visitor's tick.
+  const interactive = useRef(false);
+  const [needsTick, setNeedsTick] = useState(false);
+
+  /** Waits a few seconds for the token, or up to two minutes while the checkbox waits for a tick. */
   const waitForToken = async () => {
-    for (let k = 0; k < 40 && !token.current && !failed.current; k++) await new Promise((r) => setTimeout(r, 150));
+    const start = Date.now();
+    while (!token.current && !failed.current && Date.now() - start < (interactive.current ? 120_000 : 6_000)) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    setNeedsTick(false);
     return token.current;
   };
 
@@ -67,12 +76,19 @@ export function useToolRequest() {
     <Turnstile
       ref={widget}
       action="tools"
-      onToken={(t) => (token.current = t)}
+      onToken={(t) => {
+        token.current = t;
+        setNeedsTick(false);
+      }}
       onExpire={() => (token.current = null)}
       onError={() => (failed.current = true)}
+      onInteractive={() => {
+        interactive.current = true;
+        setNeedsTick(true);
+      }}
       className="empty:hidden mt-3"
     />
   ) : null;
 
-  return { arm, post, turnstile };
+  return { arm, post, turnstile, needsTick };
 }
