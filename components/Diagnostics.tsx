@@ -552,14 +552,16 @@ function SpecList({ inspect, psi, projects }: { inspect: Inspection | null; psi:
   if (updated) rows.push({ icon: CalendarClock, label: "Last updated", value: updated });
   if (!rows.length) return null;
   return (
-    <section className="details-in grid gap-2">
+    // Its own container: two columns only when the list itself has room (about
+    // 30rem), and values wrap rather than cut off ("840 KB, 27 requests").
+    <section className="details-in @container/spec grid gap-2">
       <PlayLabel>Built with</PlayLabel>
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-1.5 @md:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-x-5 gap-y-1.5 @[30rem]/spec:grid-cols-2">
         {rows.map(({ icon: Icon, label, value }) => (
-          <div key={label} className="flex min-w-0 items-center gap-2 text-xs">
-            <Icon className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
+          <div key={label} className="flex min-w-0 items-start gap-2 text-xs leading-5">
+            <Icon className="mt-[3px] h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
             <dt className="shrink-0 text-mute">{label}</dt>
-            <dd className="min-w-0 truncate font-medium">{value}</dd>
+            <dd className="min-w-0 font-medium break-words">{value}</dd>
           </div>
         ))}
       </dl>
