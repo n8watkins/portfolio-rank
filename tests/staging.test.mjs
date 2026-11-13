@@ -6,15 +6,29 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseJsonc } from "../scripts/check-worker-exports.mjs";
 import { STAGING_ROBOTS_TXT, markStaging, stagingRobots } from "../worker/staging.ts";
+import { STAGING_CRON_ALIASES, jobCron } from "../worker/crons.ts";
 
 const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
 const staging = config.env.staging;
 const STAGING = { SITE_ENV: "staging" };
 const PRODUCTION = { SITE_ENV: "production" };
 
-test("staging has no Cron Triggers, so nothing there calls Gemini", () => {
-  assert.deepEqual(staging.triggers, { crons: [] });
+test("staging runs production's schedule, with its Gemini held far below production's day", () => {
   assert.ok(config.triggers.crons.length > 0, "production keeps its crons");
+  // The same jobs, the hourly and five-minute ones less often (worker/crons.ts).
+  assert.deepEqual(staging.triggers.crons.map(jobCron).sort(), [...config.triggers.crons].sort());
+  for (const [alias, cron] of Object.entries(STAGING_CRON_ALIASES)) {
+    assert.ok(staging.triggers.crons.includes(alias), alias);
+    assert.ok(config.triggers.crons.includes(cron), cron);
+  }
+  assert.match(readFileSync("worker/night.ts", "utf8"), /PEOPLE_QUEUE_CRON = "15 \* \* \* \*"/);
+  assert.match(readFileSync("worker/grader.ts", "utf8"), /GRADER_CRON = "\*\/5 \* \* \* \*"/);
+  assert.match(readFileSync("worker/index.ts", "utf8"), /const cron = jobCron\(controller\.cron\)/);
+  const quota = JSON.parse(staging.vars.GEMINI_DAILY_QUOTA);
+  for (const n of Object.values(quota)) assert.ok(n <= 50, `staging quota ${n}`);
+  const budget = JSON.parse(staging.vars.GEMINI_BUDGET);
+  for (const stage of ["library", "regrade", "experiment"]) assert.equal(budget.stages[stage].cap, 0, stage);
+  assert.ok(Number(staging.vars.STAGING_DRAFTS_PER_DAY) <= 1);
 });
 
 test("staging has its own address, Worker, ISR cache bucket and Workflow", () => {
@@ -31,8 +45,13 @@ test("staging has its own address, Worker, ISR cache bucket and Workflow", () =>
   assert.notEqual(staging.workflows[0].name, config.workflows[0].name);
 });
 
+// Staging's own caps and allowlist; production keeps its Gemini caps in
+// secrets and never emails through an allowlist.
+const STAGING_ONLY_VARS = ["GEMINI_BUDGET", "GEMINI_DAILY_QUOTA", "STAGING_DRAFTS_PER_DAY", "STAGING_EMAIL_TO"];
+
 test("staging repeats every production var and binding (wrangler does not inherit them)", () => {
-  assert.deepEqual(Object.keys(staging.vars).sort(), Object.keys(config.vars).sort());
+  assert.deepEqual(Object.keys(staging.vars).filter((k) => !STAGING_ONLY_VARS.includes(k)).sort(), Object.keys(config.vars).sort());
+  for (const k of STAGING_ONLY_VARS) assert.equal(config.vars[k], undefined, `${k} is staging's only`);
   const bindings = (c) => [
     ...c.r2_buckets.map((b) => b.binding),
     ...c.durable_objects.bindings.map((b) => b.name),

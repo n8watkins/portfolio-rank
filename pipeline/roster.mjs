@@ -15,6 +15,7 @@
 
 import { createClient } from "@libsql/client";
 import path from "path";
+import { HIDDEN_INDEX } from "../lib/hidden.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -89,6 +90,8 @@ export async function ensureRosterSchema(db) {
       if (!/duplicate column/i.test(String(e?.message))) throw e;
     }
   }
+  // Needs the health column above (lib/hidden.mjs).
+  await db.execute(HIDDEN_INDEX);
 }
 
 /**

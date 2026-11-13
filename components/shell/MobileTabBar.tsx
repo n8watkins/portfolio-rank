@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Settings, Sparkles, Trophy, User, Vote, X } from "lucide-react";
+import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, X } from "lucide-react";
 import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { useSignIn } from "@/components/SignInModal";
@@ -44,6 +44,8 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
     { href: ROUTES.about, label: ROUTES.about === "/how" ? "How it works" : "About", Icon: BookOpen },
     signedIn ? { href: ROUTES.profile, label: "Account", Icon: User } : { href: "#signin", label: "Sign in", Icon: User, signIn: true },
     { href: ROUTES.settings, label: "Settings", Icon: Settings },
+    // The admin's own account only (display; the admin pages check on the server).
+    ...(signedIn && session.isAdmin ? [{ href: "/admin", label: "Admin", Icon: ShieldCheck }] : []),
   ];
 
   return (

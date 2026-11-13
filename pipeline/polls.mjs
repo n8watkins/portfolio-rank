@@ -319,6 +319,9 @@ export const RESPONSE_SCHEMA = {
   required: ["polls"],
 };
 
+/** The poll prompt's id and version in gemini_requests.prompt; bump it when the prompt or schema changes. */
+export const POLLS_PROMPT = "polls-v1";
+
 /** The one request: aggregate data, the questions already asked, how many to write. */
 export function buildPollRequest({ digest, asked, count = CANDIDATES, heroAllowed = true }) {
   const text = [
@@ -333,7 +336,7 @@ export function buildPollRequest({ digest, asked, count = CANDIDATES, heroAllowe
   return {
     parts: [{ text }],
     schema: RESPONSE_SCHEMA,
-    options: { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: "minimal", maxOutputTokens: 2048, temperature: 0.9 },
+    options: { prompt: POLLS_PROMPT, systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: "minimal", maxOutputTokens: 2048, temperature: 0.9 },
   };
 }
 

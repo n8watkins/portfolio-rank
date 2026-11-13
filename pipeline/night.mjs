@@ -371,7 +371,9 @@ async function rebuildBoards(ctx, stage) {
   const config = ctx.flags.ranking;
   const input = await loadInput(ctx.db);
   const result = recompute({ ...input, aiWeight: config.aiWeight, batchedCounts: config.batchedCounts });
-  await writeResults(ctx.db, { ...result, digest: inputDigest(input), config, now: new Date(ctx.now()) });
+  const out = await writeResults(ctx.db, { ...result, digest: inputDigest(input), config, now: new Date(ctx.now()) });
+  // Only changed rows are written (docs/COSTS.md section C); the counts show what a night costs in Turso writes.
+  ctx.log(`boards: ${out.ratings.written} row(s) written, ${out.ratings.deleted} deleted, ${out.ratings.unchanged} unchanged; history ${out.history.written} written`);
   stage.boards = "rebuilt";
 }
 
