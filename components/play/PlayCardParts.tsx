@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { PlayDiagnostics, SocialIcons } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import type { PlayDetails } from "@/lib/play/card";
+import { useSiteDetails } from "@/lib/play/details-client";
 
 // The pieces the games draw around a portfolio (face-off and Guess the
 // percentile). The screenshot is the hero: above it a slim line with the
@@ -63,29 +63,10 @@ export function SiteLink({ url, className = "" }: { url: string; className?: str
   );
 }
 
-const cache = new Map<string, Promise<PlayDetails | null>>();
-function loadDetails(url: string) {
-  let p = cache.get(url);
-  if (!p) {
-    p = fetch(`/api/play/card?url=${encodeURIComponent(url)}`)
-      .then((r) => (r.ok ? (r.json() as Promise<PlayDetails>) : null))
-      .catch(() => null);
-    p.then((d) => d ?? cache.delete(url));
-    cache.set(url, p);
-  }
-  return p;
-}
-
-export function useCard(url: string) {
-  const [d, setD] = useState<PlayDetails | null | undefined>(undefined);
-  useEffect(() => {
-    let live = true;
-    loadDetails(url).then((x) => live && setD(x));
-    return () => {
-      live = false;
-    };
-  }, [url]);
-  return d;
+/** A site's card (record, ELO, projects) from Play's shared details: undefined while unknown. */
+export function useCard(url: string): PlayDetails | null | undefined {
+  const d = useSiteDetails(url);
+  return d === undefined ? undefined : d.card;
 }
 
 /** The face-off record: how often people picked it. Shown after the vote only, so it can't steer it. */

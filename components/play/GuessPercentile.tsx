@@ -8,6 +8,7 @@ import { useSignIn } from "@/components/SignInModal";
 import { DetailsPanel, NameLine } from "@/components/play/PlayCardParts";
 import { ViewControls } from "@/components/play/ViewControls";
 import { useViewPrefs } from "@/lib/play/view-prefs";
+import { setVisible } from "@/lib/play/details-client";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Burst, useCountUp, useReducedMotion } from "@/components/ui/motion";
@@ -184,6 +185,13 @@ export function GuessPercentile({ quizId, guest, onBadgeCheck }: { quizId: strin
   const finishedAll = quiz != null && i >= quiz.rounds.length;
   const round = quiz && !finishedAll ? quiz.rounds[i] : null;
   const last = shown ? results[results.length - 1] : null;
+
+  // Only the portfolio on screen is polled while its Lighthouse run finishes (lib/play/details-client.ts).
+  const roundUrl = round?.url;
+  useEffect(() => {
+    setVisible(roundUrl ? [roundUrl] : []);
+    return () => setVisible([]);
+  }, [roundUrl]);
 
   const submit = useCallback(async () => {
     if (!quiz || !round || shown || busy) return;
