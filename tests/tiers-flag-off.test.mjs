@@ -65,6 +65,22 @@ test("with RANKING_V2 off, no page shows tiers by ELO, though the tier data is t
   for (const m of TIER_MARKERS) assert.ok(!top.html.includes(m), `/top shows "${m}"`);
   assert.equal((await get("/top/ai")).status, 404);
 
+  // A grade report for the same site: Gemini's letter (B) on the page and in the API, not the tier by ELO (SSS).
+  const id = "flagOffTierReport00001";
+  const report = { facts: [], judgments: [], strengths: [], fixes: [], percentile: null, similar: [], better: [] };
+  await db.execute({
+    sql: `INSERT OR REPLACE INTO grade_jobs (id, url, site_key, status, result, report, created_at, updated_at, done_at)
+          VALUES (?, ?, ?, 'done', ?, ?, '2026-11-13T00:00:00Z', '2026-11-13T00:00:00Z', '2026-11-13T00:00:00Z')`,
+    args: [id, SITE, new URL(SITE).hostname.replace(/^www\./, ""), JSON.stringify(grade), JSON.stringify(report)],
+  });
+  const api = await (await fetch(`${BASE}/api/grade/${id}`)).json();
+  assert.equal(api.report.tier, "B");
+  assert.equal(api.report.eloTiers, undefined);
+  const page = await get(`/grade/${id}`);
+  assert.equal(page.status, 200);
+  assert.match(page.html, /aria-label="Tier B"/);
+  for (const m of TIER_MARKERS) assert.ok(!page.html.includes(m), `the report shows "${m}"`);
+
   // Home, and How grading works: as before.
   for (const path of ["/", "/grading"]) {
     const page = await get(path);
