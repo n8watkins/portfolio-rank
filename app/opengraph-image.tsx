@@ -1,6 +1,7 @@
 import { OG_SIZE, WindowShot, dataUrl, shareCard } from "@/lib/og-card";
 import { readPublicFile } from "@/lib/publicFile";
 import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
+import { SITE_HOST } from "@/lib/site";
 
 // The share card (Open Graph and Twitter): the n8builds family layout in
 // PortfolioRank's black and amber, with the home page leaderboard on the right.
@@ -37,7 +38,7 @@ export default async function Image() {
     ],
     logo: dataUrl(mark, "image/svg+xml"),
     n8Icon: dataUrl(n8, "image/png"),
-    host: "portfoliorank.n8builds.dev",
+    host: SITE_HOST,
     name: (
       <div style={{ display: "flex" }}>
         <span>Portfolio</span>
