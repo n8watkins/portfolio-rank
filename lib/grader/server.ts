@@ -2,7 +2,7 @@ import { createHmac } from "crypto";
 import { cookies } from "next/headers";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 import { clientIp, currentVoter, sameOrigin } from "@/lib/polls/server";
 import { OWNER_COOKIE, ownerCookieValue, readOwnerCookie } from "./links.mjs";
 import { network48Of, networkOf, trustedAccount } from "./caps.mjs";
@@ -89,15 +89,15 @@ export async function addOwnedJob(id: string): Promise<void> {
   jar.set(OWNER_COOKIE, ownerCookieValue(ids, secret()), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production" && !/^http:/.test(process.env.AUTH_URL ?? ""),
+    secure: process.env.NODE_ENV === "production" && !/^http:/.test(process.env.SITE_URL ?? ""),
     maxAge: 60 * 60 * 24 * 180,
     path: "/",
   });
 }
 
-/** The site's own address for links in emails: AUTH_URL (staging or production), else SITE_URL. */
+/** The site's own address for links in emails (lib/site.ts siteUrl: staging or production). */
 export function siteBase(): string {
-  return (process.env.AUTH_URL || SITE_URL).replace(/\/+$/, "");
+  return siteUrl();
 }
 
 /**

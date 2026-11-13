@@ -4,6 +4,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
 import { ownerAction } from "@/lib/games/claims.mjs";
+import { purgeProfile } from "@/lib/edge-purge";
 import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } from "@/lib/games/server";
 import { accountTooNew, guardConfig } from "@/lib/rater";
 
@@ -21,7 +22,7 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 //                  applies; one open request per site)
 //   200 { state: { hideGrade, removedAt, removeAfter }, regrade? }
 //   400 bad_request | bad_action | confirm_required, 401 signin_required,
-//   403 bad_origin | not_owner | account_too_new | remove_needs_meta,
+//   403 bad_origin | not_owner | account_too_new | remove_needs_meta | hide_needs_meta,
 //   429 rate_limited
 // Every action is written to the claims audit log.
 export const dynamic = "force-dynamic";
@@ -53,7 +54,9 @@ export async function POST(req: Request) {
   const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);
   if (over) return rateLimited(over);
   const out = await ownerAction(db(), { url, owner: s.raterId, action, now: new Date() });
-  if (!out.ok) return fail(out.error ?? "bad_request", out.error === "not_owner" || out.error === "remove_needs_meta" ? 403 : 400);
+  if (!out.ok) return fail(out.error ?? "bad_request", out.error === "not_owner" || out.error === "remove_needs_meta" || out.error === "hide_needs_meta" ? 403 : 400);
+  // Its profile shows the change at once (worker/edge-cache.ts keeps profiles a day).
+  await purgeProfile(url);
   if (action === "hide_grade" || action === "show_grade") {
     // The quiz pool leaves out removed sites and hidden grades.
     await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });

@@ -1,14 +1,9 @@
-# Builds PortfolioRank with OpenNext and ships every push to main in two steps
-# (DEPLOY.md "How a change ships"): the staging site first
-# (https://staging.portfoliorank.n8builds.dev, wrangler.jsonc env.staging) and
-# a smoke check there (scripts/smoke.mjs), then production, which is checked
-# the same way right after its deploy. A failed staging deploy or check stops
-# production.
-# Run it by hand on a branch to put that branch on staging; production only
-# ever deploys from main.
-# The deploys skip with a notice until the CLOUDFLARE_API_TOKEN secret exists.
-# The staging job skips until STAGING_TURSO_DATABASE_URL and
-# STAGING_TURSO_AUTH_TOKEN exist, and production then deploys without it.
+# Builds PortfolioRank with OpenNext and ships every push to main to
+# production (https://portfoliorank.dev), then smoke checks it
+# (scripts/smoke.mjs). Staging is its own workflow (staging.yml): main plus
+# the pull requests labeled "staging", so a merge here never replaces what is
+# being tried there (DEPLOY.md "How a change ships").
+# The deploy skips with a notice until the CLOUDFLARE_API_TOKEN secret exists.
 name: Deploy
 
 on:
@@ -25,76 +20,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  staging:
-    name: Staging
-    if: github.repository == 'n8watkins/portfolio-rank'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      # Staging's own database (a copy of production; DEPLOY.md "Staging"),
-      # never the production TURSO_* secrets: the migration and the build's
-      # prerender use these.
-      TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
-      SHOTS_BASE_URL: /shots
-      # The Staging ribbon and the robots noindex tag (lib/site.ts IS_STAGING).
-      NEXT_PUBLIC_SITE_ENV: staging
-      # Browser errors reach Sentry tagged "staging" (no source maps upload).
-      NEXT_PUBLIC_SENTRY_DSN: https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136
-      NEXT_PUBLIC_SENTRY_RELEASE: ${{ github.sha }}-staging
-    steps:
-      - name: Check the staging secrets
-        id: setup
-        run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$TURSO_DATABASE_URL" ] && [ -n "$TURSO_AUTH_TOKEN" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::Skipping staging until the CLOUDFLARE_API_TOKEN, STAGING_TURSO_DATABASE_URL and STAGING_TURSO_AUTH_TOKEN secrets exist (DEPLOY.md \"Staging\")."
-          fi
-
-      - uses: actions/checkout@v7
-        if: steps.setup.outputs.ready == 'true'
-
-      - uses: actions/setup-node@v7
-        if: steps.setup.outputs.ready == 'true'
-        with:
-          node-version: 24
-          cache: npm
-
-      - if: steps.setup.outputs.ready == 'true'
-        run: npm ci
-
-      # The additive migration production gets next, tried here first.
-      - name: Migrate the staging database
-        if: steps.setup.outputs.ready == 'true'
-        run: node scripts/migrate.mjs
-
-      - name: Build
-        if: steps.setup.outputs.ready == 'true'
-        run: npm run build:worker
-
-      # Never publish source maps (they'd expose the original source).
-      - name: Remove source maps from the published assets
-        if: steps.setup.outputs.ready == 'true'
-        run: find .open-next/assets -name '*.map' -delete
-
-      - name: Deploy to staging
-        if: steps.setup.outputs.ready == 'true'
-        run: npx opennextjs-cloudflare deploy --env staging
-
-      - name: Smoke check staging
-        if: steps.setup.outputs.ready == 'true'
-        env:
-          # Sent as X-Staging-Gate; the Cloudflare rule that locks staging lets it through.
-          STAGING_GATE_KEY: ${{ secrets.STAGING_GATE_KEY }}
-        run: node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging
-
   deploy:
     name: Deploy
-    needs: staging
-    # Production deploys only from main; a run by hand on another branch
-    # stops after staging.
+    # Production deploys only from main.
     if: github.repository == 'n8watkins/portfolio-rank' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -161,4 +89,4 @@ jobs:
 
       - name: Smoke check production
         if: env.CLOUDFLARE_API_TOKEN != ''
-        run: node scripts/smoke.mjs https://portfoliorank.n8builds.dev
+        run: node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev

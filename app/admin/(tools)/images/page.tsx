@@ -7,6 +7,7 @@ import { associations, librarySummary, listImages, queueItems } from "@/lib/cont
 import { aiHeadroom, aiLimits, aiUsage, neuronsFor } from "@/lib/content/neurons.mjs";
 import { HOUSE_STYLE, THEMES } from "@/pipeline/content/house-style.mjs";
 import { libraryConfig, libraryOffReason } from "@/pipeline/content/library-stage.mjs";
+import { automaticText } from "@/lib/content/library-view.mjs";
 import { LibraryReview, type LibraryImage } from "@/components/admin/LibraryReview";
 
 // The image library's review page (docs/CONTENT-ENGINE.md, "The image
@@ -80,6 +81,9 @@ export default async function AdminImagesPage() {
         <p className="text-xs leading-relaxed text-mute">
           <strong className="text-ink">{MODEL_NAME[model] ?? model}</strong> on Cloudflare Workers AI, about {n(neuronsFor(model))} neurons an image.{" "}
           <strong className="text-ink">Cost: $0</strong>, inside the free daily allowance: at most 40 a day and 2,500 neurons, reserved before every call, and nothing is made once a limit is reached, so it can never bill. If {MODEL_NAME[model] ?? model} errors, the fallback is Lucid Origin (about {n(neuronsFor("lucid"))} neurons), only when the day has room. Flux 2 Dev is {model === "flux2dev" ? "on" : "off"}. Each image gets one Gemini check, then waits for you.
+        </p>
+        <p className="mt-2 text-xs text-mute" data-daily-run>
+          <strong className="text-ink">{automaticText(config.runHour, now)}</strong> Make now and Make your own can use the 40 at any time before then.
         </p>
         <dl className="mt-3 grid grid-cols-2 gap-2" data-ai-images>
           <Stat label="Made today" value={`${ai.images} of ${ai.maxImages}`} hint={`${ai.maxImages} a day, resets 00:00 UTC`} />

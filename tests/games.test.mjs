@@ -21,6 +21,7 @@ import {
   REMOVAL_HOLD_MS,
   applyDueRemovals,
   autoProof,
+  pagesAccount,
   claimById,
   hostOf,
   isRemovalAlert,
@@ -434,15 +435,30 @@ test("claims: owner actions need a verified claim, and every step is in the audi
   assert.equal((await undoRemoval(db, { url, actor: "admin:n8", now: T0 })).error, "not_removed");
 });
 
-test("claims: a link proves enough to hide a grade, not to remove the site; the meta tag does", async () => {
+test("claims: a github.io site is its own account's, and a link on someone else's github.io proves nothing", async () => {
+  const html = `<a href="https://github.com/octo-cat">GitHub</a> <a href="https://github.com/mallory">Designed by Mallory</a>`;
+  const url = "https://octo-cat.github.io/";
+  assert.equal(pagesAccount(url), "octo-cat");
+  assert.equal(pagesAccount("https://octo-cat.dev"), null);
+  assert.equal(autoProof({ url, page: { html, finalUrl: url }, login: "Octo-Cat" }), "github_pages");
+  // The page links Mallory too (a credit, a collaborator): not Mallory's site.
+  assert.equal(autoProof({ url, page: { html, finalUrl: url }, login: "mallory" }), null);
+  // A fork lives at the forker's own address: Mallory's copy proves nothing about Octo-cat's listing.
+  assert.equal(autoProof({ url, page: { html, finalUrl: "https://mallory.github.io/" }, login: "mallory" }), null);
+  assert.equal(autoProof({ url: "https://octo-cat.github.io/portfolio/", page: null, login: "octo-cat" }), "github_pages");
+});
+
+test("claims: a link proves enough to ask for a re-grade, not to hide a grade or remove the site; the meta tag does", async () => {
   const db = await freshDb();
   const url = site(4);
   const claim = await openClaim(db, { url, owner: "gh:7", login: "bob", token: "tok", now: T0 });
   await setClaimStatus(db, { claim, status: "verified", method: "github_link", actor: "gh:7", now: T0 });
   assert.equal(await removalProof(db, { url, owner: "gh:7" }), false);
   assert.deepEqual(await ownerAction(db, { url, owner: "gh:7", action: "remove", now: T0 }), { ok: false, error: "remove_needs_meta" });
-  assert.equal((await ownerAction(db, { url, owner: "gh:7", action: "hide_grade", now: T0 })).ok, true);
-  assert.deepEqual(await ownerState(db, url), { hideGrade: true, removedAt: null, removeAfter: null });
+  // A collaborator linked from the page can't hide someone's grade.
+  assert.deepEqual(await ownerAction(db, { url, owner: "gh:7", action: "hide_grade", now: T0 }), { ok: false, error: "hide_needs_meta" });
+  assert.equal((await ownerAction(db, { url, owner: "gh:7", action: "regrade", now: T0 })).ok, true, "a re-grade request is fine");
+  assert.deepEqual(await ownerState(db, url), { hideGrade: false, removedAt: null, removeAfter: null });
   // A verification logged by someone who isn't the admin is no review.
   await logClaim(db, { url, actor: "gh:7", action: "claim_verified", detail: { claim: claim.id }, now: T0 });
   assert.equal(await removalProof(db, { url, owner: "gh:7" }), false);
@@ -450,6 +466,7 @@ test("claims: a link proves enough to hide a grade, not to remove the site; the 
   // With the meta tag it may; and while held, the owner can cancel.
   await setClaimStatus(db, { claim: await claimById(db, claim.id), status: "verified", method: "meta", actor: "gh:7", now: T0 });
   assert.equal(await removalProof(db, { url, owner: "gh:7" }), true);
+  assert.equal((await ownerAction(db, { url, owner: "gh:7", action: "hide_grade", now: T0 })).ok, true);
   assert.ok((await ownerAction(db, { url, owner: "gh:7", action: "remove", now: T0 })).state.removeAfter);
   assert.deepEqual((await ownerAction(db, { url, owner: "gh:7", action: "cancel_remove", now: T0 })).state, { hideGrade: true, removedAt: null, removeAfter: null });
   assert.deepEqual(await applyDueRemovals(db, { now: new Date(T0.getTime() + 2 * REMOVAL_HOLD_MS) }), [], "a cancelled removal never happens");
@@ -600,7 +617,7 @@ test("the print report escapes what it shows and keeps the tier letter for the t
   const g = printView(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "<b>busy</b>" }, writing: 3, checks: { resume: true, github: false } }));
   assert.equal(g.showTier, false);
   assert.deepEqual(g.judgments.map((j) => [j.id, j.score]), [["visual_design", 2], ["writing", 3]], "older bare scores count too");
-  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.n8builds.dev", now: T0 });
+  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.dev", now: T0 });
   assert.ok(html.includes("Zoë &lt;script&gt;"));
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&lt;b&gt;busy&lt;/b&gt;"));

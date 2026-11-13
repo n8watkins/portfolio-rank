@@ -10,9 +10,16 @@
   // the server's own fetches (GitHub, PageSpeed, inspected sites) on the public
   // internet.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // Served only at its custom domain; deploys keep the domain attached.
+  // Served only at its custom domains; deploys keep them attached. The site is
+  // portfoliorank.dev (SITE_URL below); www and the old address
+  // portfoliorank.n8builds.dev stay attached only to redirect to it
+  // (worker/canonical-host.ts).
   "workers_dev": false,
-  "routes": [{ "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }],
+  "routes": [
+    { "pattern": "portfoliorank.dev", "custom_domain": true },
+    { "pattern": "www.portfoliorank.dev", "custom_domain": true },
+    { "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }
+  ],
   "preview_urls": false,
   "assets": {
     "directory": ".open-next/assets",
@@ -51,8 +58,10 @@
     // bucket's r2.dev address is rate-limited, uncached and for the pipeline
     // only (its SHOTS_BASE_URL repository secret).
     "SHOTS_BASE_URL": "/shots",
-    // Auth.js builds its callback URL (/api/auth/callback/github) from this.
-    "AUTH_URL": "https://portfoliorank.n8builds.dev",
+    // The site's address (lib/site.ts): canonical URLs, the sitemap, email
+    // links, the origin and Turnstile checks, and Auth.js's callback URL
+    // (/api/auth/callback/github, auth.ts). Other hosts redirect here.
+    "SITE_URL": "https://portfoliorank.dev",
     // Server errors go to Sentry (worker/sentry.ts). A DSN is public by design:
     // it only lets a sender add events to this one project.
     "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
@@ -103,17 +112,17 @@
     "MAX_AI_IMAGES_PER_DAY": "40",
     "AI_NEURON_CEILING": "2500",
     // The image library (pipeline/content/library-stage.mjs, worker/library.ts):
-    // images the hourly tick makes (at most 40, within the day's 40; "0"
-    // stops all library work; the owner's "Make now" may use what is left of
-    // the day) and the model: "schnell", or "flux2dev" (2,400 neurons an
-    // image at 1024x576 and 16 steps, so one a day).
-    "LIBRARY_PER_HOUR": "40",
+    // the UTC hour of the once-a-day automatic run on the "15 * * * *" cron
+    // ("23": 23:15 UTC, 3:15 pm Pacific in winter, just before the image day
+    // resets at 00:00 UTC; "off" for none), which makes whatever the owner's
+    // "Make now" left of the day's 40; and the model: "schnell", or
+    // "flux2dev" (2,400 neurons an image at 1024x576 and 16 steps, so one a day).
+    "LIBRARY_RUN_HOUR_UTC": "23",
     "LIBRARY_MODEL": "schnell"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
     // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
-    // Optional: OWNER_EMAIL (owner alerts go there, the owner's verified
-    // address), TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
+    // Optional: TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
     // pages render; the secret is TURNSTILE_SECRET_KEY).
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
@@ -123,7 +132,8 @@
   // grader's captures on GitHub Actions; a fine-grained token for
   // n8watkins/portfolio-rank with Actions read and write only) and
   // TURNSTILE_SECRET_KEY (poll votes and grade requests; both Workers
-  // refuse them without it). See DEPLOY.md.
+  // refuse them without it) and OWNER_EMAIL (owner alerts go there, the
+  // owner's verified address). See DEPLOY.md.
   // The end-of-day run: Cloudflare's clock instead of GitHub's schedule,
   // which starts jobs hours late. Cron Triggers run in UTC; 03:30 is 20:30
   // in Los Angeles under daylight time and 04:30 under standard time, and
@@ -152,7 +162,9 @@
   // CachedPages entrypoint, so the public pages, sitemap, robots.txt and share image
   // cost no CPU time once cached, for visitors without PortfolioRank's own cookies.
   // The default entrypoint runs on every request and sends only those to CachedPages.
-  "cache": { "enabled": false },
+  // cross_version_cache: a deploy keeps the cached pages; the key carries a fingerprint
+  // of the static files instead, so new CSS or JavaScript still starts fresh.
+  "cache": { "enabled": false, "cross_version_cache": true },
   "exports": {
     "default": { "type": "worker", "cache": { "enabled": false } },
     "CachedPages": { "type": "worker", "cache": { "enabled": true } }
@@ -169,7 +181,12 @@
   "env": {
     "staging": {
       "workers_dev": false,
-      "routes": [{ "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }],
+      // The old staging address stays attached only to redirect to SITE_URL
+      // (worker/canonical-host.ts).
+      "routes": [
+        { "pattern": "staging.portfoliorank.dev", "custom_domain": true },
+        { "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }
+      ],
       "preview_urls": false,
       "r2_buckets": [
         { "binding": "SHOTS", "bucket_name": "portfolio-rank" },
@@ -189,8 +206,8 @@
         "TAVILY_MONTHLY_CREDITS": "200",
         "SHOTS_BASE_URL": "/shots",
         // The staging GitHub OAuth app's callback is
-        // https://staging.portfoliorank.n8builds.dev/api/auth/callback/github.
-        "AUTH_URL": "https://staging.portfoliorank.n8builds.dev",
+        // https://staging.portfoliorank.dev/api/auth/callback/github.
+        "SITE_URL": "https://staging.portfoliorank.dev",
         "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
         // Staging runs the launch features ahead of production (the launch
         // walkthrough, 2026-11-11). It has no crons, so RANKING_V2 only
@@ -216,14 +233,14 @@
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
         "AI_NEURON_CEILING": "0",
-        "LIBRARY_PER_HOUR": "0",
+        "LIBRARY_RUN_HOUR_UTC": "off",
         "LIBRARY_MODEL": "schnell"
       },
       // No crons at all: the end-of-day run, the people queue and model watch
       // all call Gemini.
       "triggers": { "crons": [] },
       // The same edge cache as production (worker/edge-cache.ts).
-      "cache": { "enabled": false },
+      "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {
         "default": { "type": "worker", "cache": { "enabled": false } },
         "CachedPages": { "type": "worker", "cache": { "enabled": true } }

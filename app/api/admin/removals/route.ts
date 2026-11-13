@@ -3,6 +3,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdmin, requireAdminPost } from "@/lib/admin";
 import { isKnownPortfolio } from "@/lib/roster";
 import { pendingRemovals, undoRemoval } from "@/lib/games/claims.mjs";
+import { purgeProfile } from "@/lib/edge-purge";
 import { PRIVATE, fail, forgetPool } from "@/lib/games/server";
 
 // Owners' removals, for the admin (ADMIN_GITHUB_ID). Always on, like claims.
@@ -42,7 +43,8 @@ export async function POST(req: Request) {
   await ensureSchema();
   const out = await undoRemoval(db(), { url, actor: `admin:${admin.login}`, now: new Date() });
   if (!out.ok) return fail(out.error ?? "not_removed", 404);
-  // The site is back in the quiz pool.
+  // Its profile is back (worker/edge-cache.ts keeps profiles a day), and so is the site in the quiz pool.
+  await purgeProfile(url);
   await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
   forgetPool();
   return NextResponse.json(

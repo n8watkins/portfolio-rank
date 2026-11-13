@@ -93,7 +93,7 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 | 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`) | 100 | 30 min |
 | 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
 | 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
-| 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run on the hourly tick (up to `LIBRARY_PER_HOUR`, 40, never 20:00 to midnight Pacific, at most 40 AI images a UTC day; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
+| 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
 | 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics | 300 | 60 min |
 | 7 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
@@ -134,6 +134,12 @@ After every run, [pipeline/alerts.mjs](pipeline/alerts.mjs) checks: the quota us
 A condition that holds sends one email a day, every day, until it clears; the state is the `owner_alerts` table.
 They go through Cloudflare Email Service and the shared email gate ("Grade my portfolio", Email) to `OWNER_EMAIL`, the owner's verified address, which is free and doesn't count against the monthly sends.
 Until `OWNER_EMAIL` is set the sender is off: alerts are recorded, logged and shown in the admin view, and none is marked sent; a send the gate refuses or the provider fails stays unsent and is tried on the next run.
+
+A night that never runs can't check itself, so the hourly cron (`15 * * * *`) also runs a dead-man check ([pipeline/night-watch.mjs](pipeline/night-watch.mjs)) on the latest night that should have started.
+It raises `night-watch:missed` when that night has no `night_runs` row an hour after 20:30 Pacific (the cron didn't fire, the Workflow couldn't be created, or `GEMINI_API_KEY` is missing).
+It raises `night-watch:stuck` when the night still says `running` an hour after its hard stop and its Workflow instance is not paused; a run the owner paused on purpose is left alone.
+Both clear once a later night finishes.
+Creating tonight's Workflow treats only the duplicate-id error as "already ran"; any other error is logged as `night.cron.failed` and reaches Sentry.
 
 ### What stays on GitHub Actions, and why
 
@@ -218,12 +224,14 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   A check is reused for 15 seconds (`badge_checks`), and each read is capped (1,000 votes, plays and guesses).
 - **Your eye:** the share of a player's face-off votes whose winner ranks higher on the People board (or the AI board), plus quiz guesses within 15 points of that view's percentile.
 - **Save to list:** the games use the existing lists API (`/api/lists`, `/api/lists/<id>/items`); nothing new.
-- **Claims** ([lib/games/claims.mjs](lib/games/claims.mjs)): signed in with GitHub, a claim is verified automatically when the portfolio's home page links to `github.com/<login>` (not for a site built from a known template, and only if the page didn't redirect elsewhere; the current login comes from the GitHub API by numeric id, cached a day, `GITHUB_API_TOKEN` optional).
+- **Claims** ([lib/games/claims.mjs](lib/games/claims.mjs)): signed in with GitHub, a claim is verified automatically when the portfolio is `<login>.github.io` (`github_pages`: GitHub itself says whose site it is), or when its home page links to `github.com/<login>` (not for a site built from a known template, not on another account's github.io site, and only if the page didn't redirect elsewhere; the current login comes from the GitHub API by numeric id, cached a day, `GITHUB_API_TOKEN` optional).
+  Every proof is checked on the listed address's own page, so a fork or copy at another address (the copier's github.io or domain) can't claim or remove the original.
   The GitHub profile's Website field is never proof: anyone can set it to any domain, and claims once verified that way count as pending and give no owner rights (`RETIRED_PROOFS`).
   Otherwise the owner adds `<meta name="portfoliorank-verify" content="<token>">` and asks again with `method: "meta"`, or asks for manual review, which the admin decides through `/api/admin/claims`.
   An account verifies at most 3 portfolios by itself; more go to review.
 - **Owner actions:** remove, hide or show the grade, and re-grade.
-  Removing needs the meta tag or a reviewed claim (a link to the GitHub profile is enough to hide a grade, not to remove), and a removal is held for 24 hours: the hourly cron alerts the owner of PortfolioRank about each held removal (`worker/owner-removals.ts`), the claimant can cancel it, and the admin can undo it before or after it takes effect (`/api/admin/removals`).
+  A link to the GitHub profile is enough only to ask for a re-grade: pages link collaborators', designers' and template authors' profiles too.
+  Hiding or showing the grade and removing need proof only the site's owner can give (`controlProof`): the meta tag, `github_pages`, or a claim the admin reviewed; and a removal is held for 24 hours: the hourly cron alerts the owner of PortfolioRank about each held removal (`worker/owner-removals.ts`), the claimant can cancel it, and the admin can undo it before or after it takes effect (`/api/admin/removals`).
   Once the day is up the site is hidden (`lib/roster.ts`), then added to `data/excluded.json` as `owner_request` with reason "owner request" by the weekly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
   A hidden grade is left out of the portfolio page, the print report (except for the owner) and the quiz pool.
   A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
@@ -293,7 +301,7 @@ report ◄── GET /api/grade/<id> (progress, then the report) ── email: o
 1. The flag, the `Origin` header (the site's own) and a JSON body of at most 8 KB.
 2. The address ([lib/grader/url.mjs](lib/grader/url.mjs)): http or https (https when no scheme is given), ports 80 and 443 only, no user name or password, a public host name with a dot (never an IP literal, a local name or a private range, [lib/net-guard.mjs](lib/net-guard.mjs)), at most 500 characters; the query and fragment are dropped, so `?x=1` makes no new address for the caches, the caps or the cooldown.
 3. A rate limit on attempts, before any work: 20 an hour per visitor and 60 per network (`rate_limits`).
-4. Cloudflare Turnstile (action `grade`), refused on the deployed Workers when the `TURNSTILE_SECRET_KEY` secret is missing; the token's hostname must be the Worker's own (`AUTH_URL`); only local runs skip it ([lib/turnstile.ts](lib/turnstile.ts)).
+4. Cloudflare Turnstile (action `grade`), refused on the deployed Workers when the `TURNSTILE_SECRET_KEY` secret is missing; the token's hostname must be the Worker's own (`SITE_URL`); only local runs skip it ([lib/turnstile.ts](lib/turnstile.ts)).
 5. An own key, if sent, is checked with a free metadata call (`models.get` for `gemini-3.5-flash-lite`, no generate quota).
 6. The free checks ([lib/grader/quick.ts](lib/grader/quick.ts)): one plain fetch from the Worker through `safeFetch` (every redirect hop re-checked, 10-second timeout, 1.5 MB cap, and `global_fetch_strictly_public` refuses names that resolve to private addresses), then the facts code can check (`pipeline/facts.mjs`, project links checked through the same fetch) and a fingerprint of the HTML's structure.
    Cached per address for a day (failures for 10 minutes) in the `cache` table.
@@ -408,6 +416,23 @@ It goes to the owner through the owner alerts, keys `model-watch:*`:
 The weekly run reconciles only the `model-watch:*` keys and the end-of-day run never clears them.
 They are emailed like every owner alert once `OWNER_EMAIL` is set ("Owner alerts" above); `GET /api/admin/quota` returns `modelWatch` (the latest report with its text, and the last 8 runs).
 By hand: `pass-env run -- node scripts/model-watch.mjs [--dry-run]`.
+
+## Owner goals
+
+Milestones that call for a decision once they are reached, listed in [lib/goals/config.mjs](lib/goals/config.mjs) (owner decision 2026-11-13).
+The first two:
+
+- "Newsletter: 100 subscribers": 100 or more confirmed subscribers in Kit, which keeps the list; the count comes from Kit's API with `KIT_API_KEY` and is cached a day (`cache` row `kit:confirmed`), and without the key it is unknown and never reached.
+- "Library: 5,000 graded portfolios": 5,000 or more listed portfolios with an AI grade (not counting sites judged "not a portfolio").
+
+A goal is reached when any of its conditions holds; a condition may ask for two finished weeks in a row.
+The check ([pipeline/goals.mjs](pipeline/goals.mjs), [worker/goals.ts](worker/goals.ts)) runs on the weekly Cron Trigger with model watch, Mondays at 16:00 UTC (8 am Pacific in winter, 9 am in summer), and is plain code with no Gemini.
+It measures the week that just finished (Monday to Monday, Pacific) and records each goal's numbers in `goal_progress`.
+The first time a goal is reached it records the event in `goal_events` and emails the owner through the owner-alert path (the email gate, kind `owner-alert`, to `OWNER_EMAIL`), with an `.ics` invite for a 30-minute decision slot three days later at 10:00 Pacific (moved to Monday from a weekend).
+Once that email went out the goal never emails again, even if its number drops and climbs back; an email that couldn't go out is tried again the next Monday.
+`GET /api/admin/goals` (admin only) returns every goal with its numbers measured now, its last 12 weeks, its event and, for a goal that is reached and not yet emailed, the email the next check would send.
+By hand, always a dry run that writes and sends nothing (beyond refreshing the cached Kit count): `node scripts/goals-check.mjs [--now=2026-11-16T16:00:00Z] [--json]` (production numbers with `pass-env run --`).
+To add a goal, add an entry with a new id to the list; never reuse an id, since the id is what records that a goal fired.
 
 ## GitHub Actions
 

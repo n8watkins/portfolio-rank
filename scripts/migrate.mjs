@@ -4,7 +4,7 @@
 //   node scripts/migrate.mjs
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { SCHEMA_VERSION, migrate, schemaVersion } from "../lib/schema.mjs";
+import { SCHEMA_VERSION, migrate, recordedFingerprint, schemaFingerprint, schemaVersion } from "../lib/schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const client = url
@@ -14,8 +14,9 @@ const client = url
     });
 
 const before = await schemaVersion(client);
+const was = await recordedFingerprint(client);
 const added = await migrate(client);
 console.log(
-  `schema: version ${before} -> ${SCHEMA_VERSION}` +
+  `schema: version ${before} -> ${Math.max(before, SCHEMA_VERSION)}, fingerprint ${was ?? "none"} -> ${schemaFingerprint()}` +
     (added.length ? `; added ${added.join(", ")}` : "; no columns to add")
 );

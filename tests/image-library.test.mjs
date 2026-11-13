@@ -14,11 +14,11 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { MAX_AI_IMAGES_PER_DAY, MAX_AI_IMAGES_PER_HOUR, MAX_NEURON_CEILING, PORTFOLIORANK_SLICE, aiLimits, aiUsage, guardedRun, NeuronBudgetError, neuronDay, neuronsFor, reserveImage } from "../lib/content/neurons.mjs";
 import { altFor, associations, cleanAlt, cleanSubject, cleanTags, decide, editImage, editQueueItem, getImage, insertImage, librarySummary, listImages, matchLibrary, matchScore, queueItems, queuedSubjects, rankLibrary, recordConsidered, recordUse } from "../lib/content/library.mjs";
-import { arrivalView, countsText, describeMake, filterImages, idleReason, imageTags, makeChoices, progressText, searchImages, tagCounts, viewCounts, withStatuses } from "../lib/content/library-view.mjs";
+import { arrivalView, automaticText, countsText, describeMake, filterImages, idleReason, imageTags, makeChoices, progressText, searchImages, tagCounts, viewCounts, withStatuses } from "../lib/content/library-view.mjs";
 import { pexelsCap, reserveSearch, searchUsage } from "../lib/content/pexels-searches.mjs";
 import { LIBRARY_SUBJECTS, THEMES, imagePrompt } from "../pipeline/content/house-style.mjs";
 import { cropTo16x9, generateIllustration, libraryModel } from "../pipeline/content/workers-ai.mjs";
-import { libraryConfig, libraryStage, makeLibraryImage, perHour, runLibraryBatch } from "../pipeline/content/library-stage.mjs";
+import { libraryConfig, libraryRunDue, libraryStage, makeLibraryImage, runDeadline, runHour, runLibraryBatch } from "../pipeline/content/library-stage.mjs";
 import { STAGES, budgetPlan } from "../pipeline/budget.mjs";
 import { GeminiUnavailableError, PRIMARY_MODEL, createGemini } from "../pipeline/gemini.mjs";
 
@@ -313,14 +313,25 @@ test("library image: one per queue item, checked on the 16:9 crop; a failed chec
   assert.equal((await makeLibraryImage(later, gen(CHECK_OK), first)).status, "skipped");
   assert.equal((await listImages(db)).length, 2);
 
-  assert.equal(perHour(undefined), 40);
-  assert.equal(perHour("0"), 0);
-  assert.equal(perHour("5"), 5);
-  assert.equal(perHour("40"), 40);
-  assert.equal(perHour("400"), 40, "never more than the day's 40");
-  assert.deepEqual(libraryConfig({ LIBRARY_PER_HOUR: "0", MAX_AI_IMAGES_PER_DAY: "0", AI_NEURON_CEILING: "0", SITE_ENV: "staging" }), { perHour: 0, model: "schnell", limits: { maxImages: 0, perHour: 40, ceiling: 0, problem: null }, env: "staging" });
+  assert.equal(runHour(undefined), 23);
+  assert.equal(runHour("0"), 0);
+  assert.equal(runHour("23"), 23);
+  for (const off of ["off", "24", "-1", "2.5", "x"]) assert.equal(runHour(off), null, off);
+  assert.deepEqual(libraryConfig({ LIBRARY_RUN_HOUR_UTC: "off", MAX_AI_IMAGES_PER_DAY: "0", AI_NEURON_CEILING: "0", SITE_ENV: "staging" }), { runHour: null, model: "schnell", limits: { maxImages: 0, perHour: 40, ceiling: 0, problem: null }, env: "staging" });
   assert.match(libraryConfig({ MAX_AI_IMAGES_PER_DAY: "50" }).limits.problem, /0 to 40/);
-  assert.match(libraryStage.off(), /hourly tick/);
+  assert.match(libraryStage.off(), /once a day/);
+});
+
+test("daily run: only the cron firing in LIBRARY_RUN_HOUR_UTC (23:15 UTC) runs; every other hour does nothing", () => {
+  const firings = Array.from({ length: 24 }, (_, h) => Date.UTC(2026, 10, 11, h, 15));
+  assert.deepEqual(firings.filter((t) => libraryRunDue(t, {})).map((t) => new Date(t).getUTCHours()), [23]);
+  assert.deepEqual(firings.filter((t) => libraryRunDue(t, { LIBRARY_RUN_HOUR_UTC: "7" })).map((t) => new Date(t).getUTCHours()), [7]);
+  assert.deepEqual(firings.filter((t) => libraryRunDue(t, { LIBRARY_RUN_HOUR_UTC: "off" })), []);
+  // 23:15 UTC is 3:15 pm Pacific in winter, 4:15 pm in summer, never in the evening's quiet hours.
+  assert.equal(automaticText(23, Date.UTC(2026, 10, 11)), "Automatic images: once a day at 3:15 pm Pacific, using what's left of the 40.");
+  assert.equal(automaticText(23, Date.UTC(2026, 6, 11)), "Automatic images: once a day at 4:15 pm Pacific, using what's left of the 40.");
+  assert.equal(automaticText(null), "Automatic images: off.");
+  assert.equal(runDeadline(Date.UTC(2026, 10, 11, 23, 15)), Date.UTC(2026, 10, 12, 0, 0) - 5 * 60000);
 });
 
 test("library image: a check that cannot run keeps the image pending, without a retry", async () => {
@@ -334,30 +345,65 @@ test("library image: a check that cannot run keeps the image pending, without a 
   assert.match((await getImage(db, r.id)).check.error, /busy/);
 });
 
-const TICK_ENV = { SITE_ENV: "production", GEMINI_RPM: "6000", LIBRARY_PER_HOUR: "2" };
+const TICK_ENV = { SITE_ENV: "production", GEMINI_RPM: "6000" };
+// 23:15 UTC: the daily run.
+const RUN = Date.parse("2026-11-11T23:15:00Z");
 
-test("hourly batch: the tick makes LIBRARY_PER_HOUR (2), logged as job library, within its Gemini cap", async () => {
+test("daily run: makes what Make now left of the day's 40, logged as job library, then stops cleanly at the cap", async () => {
   const { db } = await freshDb();
   assert.deepEqual(STAGES.map((s) => s.key), ["grade_new", "grade_changed", "compare", "content", "library", "regrade", "experiment"]);
   assert.deepEqual(budgetPlan().stages.library, { cap: 40, minutes: 25 });
   const calls = [];
-  const r = await batch(db, { ai: schnellAi(calls), env: TICK_ENV });
-  assert.deepEqual(r.made.map((m) => m.status), ["pending", "pending"]);
-  assert.equal(calls.length, 2);
-  assert.deepEqual([r.usage.images, r.usage.lastHour, r.usage.maxImages], [2, 2, 40], "every answer carries the counters");
+  // The owner made 3 earlier in the day.
+  assert.equal((await batch(db, { ai: schnellAi(calls), env: TICK_ENV, count: 3 })).made.length, 3);
+  const r = await batch(db, { ai: schnellAi(calls), env: TICK_ENV, now: () => RUN });
+  assert.equal(r.made.length, 37, "whatever is left of the 40");
+  assert.equal(calls.length, 40);
+  assert.deepEqual([r.usage.images, r.usage.maxImages], [40, 40], "every answer carries the counters");
   const logged = (await db.execute("SELECT job, COUNT(*) AS n FROM gemini_requests GROUP BY job")).rows.map((x) => `${x.job}:${x.n}`);
-  assert.deepEqual(logged, ["library:2"]);
+  assert.deepEqual(logged, ["library:40"]);
+  // Nothing left: the next run makes nothing and calls no model.
+  const again = await batch(db, { ai: schnellAi(calls), env: TICK_ENV, now: () => RUN + 60000 });
+  assert.deepEqual([again.made.length, again.reason], [0, "day"]);
+  assert.equal(calls.length, 40);
   // The library job's Gemini cap spent: no batch.
-  const capped = await batch(db, { now: () => MORNING + 600000, env: { ...TICK_ENV, GEMINI_BUDGET: JSON.stringify({ stages: { library: { cap: 2 } } }) } });
-  assert.equal(capped.error, "no_gemini_budget");
+  const { db: db2 } = await freshDb();
+  const capped = await batch(db2, { now: () => RUN, env: { ...TICK_ENV, GEMINI_BUDGET: JSON.stringify({ stages: { library: { cap: 0 } } }) } });
   assert.equal(capped.reason, "no_gemini_budget");
+});
+
+test("daily run: a refused reservation stops it cleanly, and it starts no image within 5 minutes of 00:00 UTC", async () => {
+  // Another path took the last 2 slots while the run was going: the reservation is refused, the run stops, nothing more is called.
+  const { db } = await freshDb();
+  const calls = [];
+  for (let i = 0; i < 38; i++) await db.execute({ sql: "INSERT INTO ai_image_calls (at, day, neurons, model) VALUES (?, ?, 58, 'schnell')", args: [new Date(RUN - 7200000 - i * 1000).toISOString(), "2026-11-11"] });
+  let n = 0;
+  const racing = { run: async (model) => (calls.push(model), n++ === 0 && (await db.execute({ sql: "INSERT INTO ai_image_calls (at, day, neurons, model) VALUES (?, '2026-11-11', 58, 'schnell')", args: [new Date(RUN).toISOString()] })), { image: SQUARE_B64 }) };
+  const r = await batch(db, { ai: racing, env: TICK_ENV, now: () => RUN });
+  assert.equal(r.made.length, 1);
+  assert.equal(r.reason, "day");
+  assert.equal(calls.length, 1, "the refused reservation never reaches the model");
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM ai_image_calls WHERE day = '2026-11-11'")).rows[0].n), 40);
+  // Started late (23:56 UTC): no image at all, so nothing spills into the next image day.
+  const { db: db2 } = await freshDb();
+  const late = await batch(db2, { ai: schnellAi(calls), env: TICK_ENV, now: () => Date.parse("2026-11-11T23:56:00Z") });
+  assert.deepEqual([late.made.length, late.reason], [0, "deadline"]);
+  // A run whose clock crosses the deadline mid-way stops there.
+  const { db: db3 } = await freshDb();
+  // Each image takes a minute: started 23:52:30, it makes the ones started before 23:55 and stops.
+  let t = Date.parse("2026-11-11T23:52:30Z");
+  const minuteEach = { run: async () => ((t += 60000), { image: SQUARE_B64 }) };
+  const slow = await batch(db3, { ai: minuteEach, env: TICK_ENV, now: () => t });
+  assert.equal(slow.reason, "deadline");
+  assert.equal(slow.made.length, 3);
+  assert.equal(Number((await db3.execute("SELECT COUNT(*) AS n FROM ai_image_calls WHERE day != '2026-11-11'")).rows[0].n), 0, "nothing counted against the next day");
 });
 
 test("Make now: up to 10 a click with no hourly cap, until the day's 40 ('day', back at 00:00 UTC); the neurons stop it too", async () => {
   const { db } = await freshDb();
   const calls = [];
-  // The tick made 2 at 10:15; the owner asks for 10 three times within the hour and gets them all.
-  await batch(db, { ai: schnellAi(calls), env: TICK_ENV });
+  // The owner made 2 at 10:15, then asks for 10 three times within the hour and gets them all.
+  await batch(db, { ai: schnellAi(calls), env: TICK_ENV, count: 2 });
   for (let i = 1; i <= 3; i++) assert.equal((await batch(db, { ai: schnellAi(calls), env: TICK_ENV, count: 10, now: () => MORNING + i * 60000 })).made.length, 10);
   assert.equal(calls.length, 32);
   // Asking for 10 more gets the 8 left of the day's 40, then the day is used.
@@ -387,7 +433,7 @@ test("audit: every Workers AI path (tick, Make now, Make your own, a post's fres
     },
   };
   // The gateway: one hourly limit far above the day's, so only the database can stop the call.
-  const env = { SITE_ENV: "production", GEMINI_RPM: "6000", LIBRARY_PER_HOUR: "40" };
+  const env = { SITE_ENV: "production", GEMINI_RPM: "6000" };
   for (const [what, fill] of Object.entries(full)) {
     const paths = {
       tick: (db, ai) => batch(db, { ai, env }),
@@ -443,10 +489,10 @@ test("hourly batch: quiet from 20:00 to midnight Pacific, off without the bindin
   assert.equal(evening.error, "off");
   assert.equal(evening.reason, "quiet");
   assert.match(evening.stopped, /quiet hours/);
-  assert.equal((await batch(db, { env: TICK_ENV, now: () => Date.parse("2026-11-12T08:15:00Z") })).made.length, 2, "00:15 Pacific is fine");
+  assert.equal((await batch(db, { env: TICK_ENV, count: 2, now: () => Date.parse("2026-11-12T08:15:00Z") })).made.length, 2, "00:15 Pacific is fine");
   assert.match((await batch(db, { ai: null })).stopped, /no Workers AI binding/);
   assert.match((await batch(db, { apiKey: "" })).stopped, /GEMINI_API_KEY/);
-  assert.match((await batch(db, { env: { LIBRARY_PER_HOUR: "0" } })).stopped, /LIBRARY_PER_HOUR is 0/);
+  assert.match((await batch(db, { env: { MAX_AI_IMAGES_PER_DAY: "0" } })).stopped, /MAX_AI_IMAGES_PER_DAY or AI_NEURON_CEILING is 0/);
   assert.match((await batch(db, { env: { AI_NEURON_CEILING: "9000" } })).stopped, /AI_NEURON_CEILING "9000"/);
   assert.equal(calls.length, 0);
   // The gateway answers 429: one call, no Lucid, nothing stored, the batch stops.

@@ -42,8 +42,8 @@
 //      engine.mjs, docs/CONTENT-ENGINE.md) while CONTENT_MODE is not "off":
 //      the week's pick on Sunday, one post a night on the drafting nights
 //   5. Image library: no work in the night, only the cap for the library's
-//      Gemini checks, which run on the Worker's hourly tick
-//      (worker/library.ts, pipeline/content/library-stage.mjs)
+//      Gemini checks, which run in the daily run at 23:15 UTC and in the
+//      owner's Make now (worker/library.ts, pipeline/content/library-stage.mjs)
 //   6. Re-grades: 3.1 grades on 3.5, then (RUBRIC_REGRADE) older rubrics
 //   7. Experiments (none scheduled)
 //
