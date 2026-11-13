@@ -34,8 +34,10 @@ import { assertNotOurs, mulberry32, readFirstScreen, readJson, shuffled, writeJs
 import { SETTINGS, run } from "./grading-two-sets-run.mjs";
 import { HAIKU, runClaude } from "./grading-two-sets-claude.mjs";
 
-// The full-page helpers live on the feat/fullpage-shots branch (not on main yet).
-export const FULLPAGE = path.join(os.homedir(), "worktrees", "portfolio-rank-feat-fullpage-shots", "pipeline", "fullpage.mjs");
+// The full-page helpers of the feat/fullpage-shots branch at e36fce7 (not on
+// main yet), vendored so the mini tests do not follow that worktree's
+// uncommitted changes. Mini 5 ran on the same code, imported from the worktree.
+export const FULLPAGE = path.join(import.meta.dirname, "vendor", "fullpage.mjs");
 const ROOT = path.join(os.homedir(), "research", "portfoliorank-experiments", "mini5");
 const SEED = 20261113;
 const JOB = "exp-mini5";

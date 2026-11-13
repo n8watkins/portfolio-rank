@@ -20,6 +20,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { buildExcerpt } from "../../pipeline/excerpt.mjs";
 import { dailyTotals } from "../../pipeline/gemini-log.mjs";
+import { parkingPhrase } from "../../pipeline/gate.mjs";
 import { redactContacts } from "../../pipeline/redact.mjs";
 import { clean, factsFor } from "./grading-two-sets.mjs";
 import { mulberry32, readJson, shuffled, writeJson } from "./grading-two-sets-lib.mjs";
@@ -55,6 +56,8 @@ async function select() {
 
 async function capture() {
   const sel = readJson(path.join(ROOT, "selection.json"));
+  // A manifest from an earlier, unfinished run must never be graded.
+  fs.rmSync(path.join(ROOT, "manifest.json"), { force: true });
   const fp = await import(FULLPAGE);
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
@@ -98,8 +101,34 @@ async function capture() {
   writeJson(path.join(ROOT, "manifest.json"), { created_at: new Date().toISOString(), seed: SEED, sites, tries });
 }
 
+export const BUNDLE_FILES = ["desktop.jpg", "phone.jpg", "text.txt", "facts.json"];
+
+/**
+ * Refuses to grade until all 7 bundles exist: 5 new sites in batch 1 and the
+ * 2 mini5 sites in batch 2, each with non-empty images, text and facts.
+ * Throws "captures not ready" with what is missing.
+ */
+export function assertReady(root = ROOT) {
+  const missing = [];
+  const manPath = path.join(root, "manifest.json");
+  const sites = fs.existsSync(manPath) ? readJson(manPath).sites ?? [] : [];
+  if (!fs.existsSync(manPath)) missing.push("manifest.json (the capture has not finished)");
+  const b1 = sites.filter((s) => s.batch === 1).length;
+  const b2 = sites.filter((s) => s.batch === 2).length;
+  if (b1 !== 5) missing.push(`batch 1 has ${b1} of 5 new sites`);
+  if (b2 !== 2) missing.push(`batch 2 has ${b2} of 2 mini5 sites`);
+  for (const s of sites) {
+    for (const f of BUNDLE_FILES) {
+      const p = path.join(root, "bundles", "N", s.id, f);
+      if (!fs.existsSync(p) || fs.statSync(p).size === 0) missing.push(`${s.id} ${f}`);
+    }
+  }
+  if (missing.length) throw new Error(`captures not ready: ${missing.join("; ")}. Wait for "node scripts/experiments/mini7.mjs capture" to finish, then run this again. Nothing was sent.`);
+  return sites;
+}
+
 const requests = () => {
-  const s = readJson(path.join(ROOT, "manifest.json")).sites;
+  const s = assertReady();
   return [1, 2].map((b) => ({ key: `mini7/batch${b}`, step: "mini7", set: "N", kind: "batch", ids: s.filter((x) => x.batch === b).map((x) => x.id) }));
 };
 
@@ -121,18 +150,70 @@ async function haiku() {
   process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
 }
 
+/**
+ * Haiku's batch 2 again with the 2-site batch wording (amendment
+ * 2026-11-13): the first batch-2 answer, sent with the five-site wording
+ * before the fix, is kept as evidence in claude-haiku-api/evidence/.
+ */
+async function haikuBatch2() {
+  const out = path.join(ROOT, "claude-haiku-api");
+  const first = path.join(out, "mini7", "batch2.json");
+  if (fs.existsSync(first)) {
+    fs.mkdirSync(path.join(out, "evidence"), { recursive: true });
+    fs.renameSync(first, path.join(out, "evidence", "batch2-five-site-wording.json"));
+  }
+  const settings = { ...HAIKU, folder: "claude-haiku-api", hard_stop_usd: 0.1, job: JOB, prompt_version: "portfolio-definition-v2" };
+  const reqs = requests().filter((r) => r.key === "mini7/batch2");
+  const { exit } = await runClaude({ settings, requestList: reqs, prompts: loadPrompts(PROMPTS_DIR), out, rawDir: path.join(ROOT, "raw", "claude-haiku-api"), bundleRoot: path.join(ROOT, "bundles"), timelinePath: path.join(ROOT, "timeline.json") });
+  process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
+}
+
 // ---------------------------------------------------------------- code only
 const ROLE = /\b(developer|engineer|engineering|designer|programmer|coder|architect|scientist|analyst|full[\s-]?stack|front[\s-]?end|back[\s-]?end|devops|software|web\s?dev|student|researcher|freelancer|consultant|hacker|maker|creative technologist)\b/i;
 const fold = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// Definition v2.1 (owner, 2026-11-13): only the exclusions decide. What code
+// can see of them: an error or blank page, a parked page, a demo or
+// placeholder name, a link-in-bio host or a bare code repository. A company
+// or studio site needs judgment, so code never says no for that.
+const ERROR_PAGE = /\b(error running app|application error|something went wrong|page not found|404 not found|not found|502 bad gateway|503 service|internal server error|this site can'?t be reached|deployment not found|this app has gone to sleep|site not found)\b/i;
+const PLACEHOLDER = /\b(aaaaby|john doe|jane doe|your name|lorem ipsum)\b/i;
+const LINK_IN_BIO = /(^|\.)(linktr\.ee|bio\.link|beacons\.ai|lnk\.bio|campsite\.bio|carrd\.co)$/i;
+const CODE_REPO = /(^|\.)(github\.com|gitlab\.com|bitbucket\.org)$/i;
+
+/** The exclusions code can see, as short reasons (empty: none applies). */
+export function codeExclusions({ facts, text, measured, parked = null }) {
+  const out = [];
+  const all = String(text ?? "");
+  const words = (all.match(/\S+/g) ?? []).length;
+  const head = `${facts.page_title ?? ""} ${all.slice(0, 400)}`;
+  const err = head.match(ERROR_PAGE);
+  if (err && words < 120) out.push(`an error page ("${err[0]}")`);
+  else if (words < 8) out.push(`a blank page (${words} words of text)`);
+  if (parked) out.push(`a parked page ("${parked}")`);
+  const ph = `${facts.name ?? ""} ${all.slice(0, 1500)}`.match(PLACEHOLDER);
+  if (ph) out.push(`a placeholder name ("${ph[0]}")`);
+  let host = "";
+  try {
+    host = new URL(measured?.final_url || facts.url).hostname.replace(/^www\./, "");
+  } catch {
+    /* no URL */
+  }
+  if (LINK_IN_BIO.test(host)) out.push(`a link-in-bio page (${host})`);
+  if (CODE_REPO.test(host)) out.push(`a code repository (${host})`);
+  return out;
+}
+
 /**
- * The definition, by code: (1) a name (in the title or top heading, or the
- * listed name's tokens in the top of the page with spaces and symbols
- * removed, so spaced-out letters count), (2) role words in the top of the
- * page, (3) a way to the work (a projects or work link in the first screen,
- * a GitHub link, project links, or a resume). All three: a portfolio.
+ * The definition v2.1, by code: a portfolio unless an exclusion applies
+ * (codeExclusions). The three signs are reported for the scores and tips but
+ * never decide: (1) a name (in the title or top heading, or the listed name's
+ * tokens in the top of the page with spaces and symbols removed, so
+ * spaced-out letters count), (2) role words in the top of the page, (3) a
+ * way to the work (a projects or work link in the first screen, a GitHub
+ * link, project links, or a resume).
  */
-export function codeVerdict({ facts, text, measured }) {
+export function codeVerdict({ facts, text, measured, parked = null }) {
   const top = fold(String(text).slice(0, 1500));
   const squashed = top.replace(/[^a-z0-9]+/g, "");
   const tokens = fold(facts.name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
@@ -146,20 +227,23 @@ export function codeVerdict({ facts, text, measured }) {
   if (github) workBits.push("a GitHub link");
   if ((facts.project_links?.checked ?? 0) > 0) workBits.push(`${facts.project_links.checked} project links`);
   if (facts.resume_link_anywhere || fs1.desktop?.resume || fs1.phone?.resume) workBits.push("a resume link");
-  const verdict = name && Boolean(roleMatch) && workBits.length > 0;
-  const why = [
+  const exclusions = codeExclusions({ facts, text, measured, parked });
+  const signs = [
     name ? `name found (${facts.name_in_page_title ? `title: ${facts.name_in_page_title}` : facts.name_in_top_heading ? `heading: ${facts.name_in_top_heading}` : "in the page text"})` : "no name found",
     roleMatch ? `role word "${roleMatch[0]}"` : "no role word in the top of the page",
     workBits.length ? workBits.join(", ") : "no way to the work",
   ];
-  return { is_portfolio: verdict, name, role: Boolean(roleMatch), work: workBits.length > 0, reason: why.join("; ") };
+  const reason = exclusions.length ? `excluded: ${exclusions.join("; ")}` : `no exclusion applies (signs, for the scores only: ${signs.join("; ")})`;
+  return { is_portfolio: exclusions.length === 0, exclusions, name, role: Boolean(roleMatch), work: workBits.length > 0, reason, definition: "portfolio-definition-v2.1" };
 }
 
 function code() {
   const man = readJson(path.join(ROOT, "manifest.json"));
   const out = {};
   for (const s of man.sites) {
-    out[s.id] = codeVerdict({ facts: readJson(path.join(s.dir, "facts.json")), text: fs.readFileSync(path.join(s.dir, "text.txt"), "utf8"), measured: readJson(path.join(s.dir, "measured.json")) });
+    const facts = readJson(path.join(s.dir, "facts.json"));
+    const text = fs.readFileSync(path.join(s.dir, "text.txt"), "utf8");
+    out[s.id] = codeVerdict({ facts, text, measured: readJson(path.join(s.dir, "measured.json")), parked: parkingPhrase({ text, title: facts.page_title ?? "" }) ?? null });
     console.log(`${s.id} ${s.url}: ${out[s.id].is_portfolio ? "portfolio" : "not a portfolio"} (${out[s.id].reason})`);
   }
   writeJson(path.join(ROOT, "code-verdicts.json"), out);
@@ -167,10 +251,16 @@ function code() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const step = process.argv[2];
-  const steps = { select, capture, gemini, haiku, code };
+  const steps = { select, capture, gemini, haiku, "haiku-batch2": haikuBatch2, code };
   if (!steps[step]) {
-    console.error("usage: mini7.mjs <select|capture|gemini|haiku|code>");
+    console.error("usage: mini7.mjs <select|capture|gemini|haiku|haiku-batch2|code>");
     process.exit(1);
   }
-  await steps[step]();
+  try {
+    await steps[step]();
+  } catch (e) {
+    if (!/^captures not ready/.test(String(e?.message))) throw e;
+    console.error(e.message);
+    process.exit(2);
+  }
 }
