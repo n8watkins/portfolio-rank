@@ -14,6 +14,7 @@ export const ROUTES: Record<
   | "about"
   | "grading"
   | "grade"
+  | "tools"
   | "me"
   | "removed"
   | "profile"
@@ -38,6 +39,8 @@ export const ROUTES: Record<
   // The grade pages, while "grade my portfolio" is on (GRADER_ENABLED, read
   // at build time by next.config.ts so server and browser agree).
   grade: process.env.NEXT_PUBLIC_GRADER_ENABLED === "true" ? "/grade" : null,
+  // The free tools, while TOOLS_ENABLED is on (inlined the same way).
+  tools: process.env.NEXT_PUBLIC_TOOLS_ENABLED === "true" ? "/tools" : null,
   me: "/me",
   removed: "/removed",
   profile: "/profile",
@@ -46,7 +49,7 @@ export const ROUTES: Record<
 };
 
 /** Which top-level destination a path belongs to (for aria-current). */
-export type NavKey = "home" | "top" | "play" | "browse" | "blog" | "grade" | "other";
+export type NavKey = "home" | "top" | "play" | "browse" | "blog" | "tools" | "grade" | "other";
 
 export function navKeyFor(pathname: string): NavKey {
   if (pathname === "/") return "home";
@@ -61,6 +64,8 @@ export function navKeyFor(pathname: string): NavKey {
       return "browse";
     case "/blog":
       return "blog";
+    case "/tools":
+      return "tools";
     case "/grade":
     case "/me":
       return "grade";
@@ -80,6 +85,7 @@ export const NAV: NavItem[] = only([
   { key: "play" as const, href: ROUTES.play, label: "Play" },
   { key: "browse" as const, href: ROUTES.browse, label: "Browse" },
   { key: "blog" as const, href: ROUTES.blog, label: "Blog" },
+  { key: "tools" as const, href: ROUTES.tools, label: "Free tools" },
 ]);
 
 /** What the visitor has done, as far as the shell needs to know. */

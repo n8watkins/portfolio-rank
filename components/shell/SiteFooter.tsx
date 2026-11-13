@@ -24,6 +24,7 @@ const COLS: { title: string; links: Link[] }[] = [
       { href: ROUTES.about, label: ROUTES.about === "/how" ? "How it works" : "About" },
       { href: ROUTES.grading === ROUTES.about ? null : ROUTES.grading, label: "How grading works" },
       { href: ROUTES.blog, label: "Blog" },
+      { href: ROUTES.tools, label: "Free portfolio tools" },
       { href: ROUTES.polls, label: "Polls" },
       { href: ROUTES.removed, label: "Removed and why" },
     ],
