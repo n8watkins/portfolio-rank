@@ -173,3 +173,50 @@ These numbers come from a simulation and only say the machinery works as intende
 3. Set `RANKING_V2` to `"true"` in `wrangler.jsonc` (and `RANKING_BUDGET` if the split should change) through a pull request: from the next night, the end-of-day run makes the comparisons and rebuilds the boards.
 4. With the redesign, read the boards from `lib/ranking/board.ts` (or `/api/leaderboard`) on `/top`, and have `/api/rank` write human votes straight to `comparisons` with the order shown.
 5. After about two weeks, compare `ai_experiment` with `ai`; if batched agrees well enough with one-on-one, set `RANKING_BATCHED_COUNTS` to `true`.
+
+## Tier letters (owner rule, 2026-11-13)
+
+Behind `RANKING_V2`, like the rest; the code is [lib/tiers.mjs](lib/tiers.mjs) and [lib/tiers-db.mjs](lib/tiers-db.mjs).
+
+- Every graded portfolio has a letter from day one.
+  The face-off count only says how settled it is: 10 face-offs (an AI one counts a quarter) is settled.
+- The starting order is points from automated checks ([lib/check-points.mjs](lib/check-points.mjs)); face-offs move it from there.
+- A is the top 30% of that order, B the next 40%, C the rest, each split in thirds (A+, A, A-).
+  The boundaries are shares of the library, not point lines, so they hold as votes move ratings.
+- S is earned, never given at the start: 3 face-off wins (an AI win counts a quarter) while in the top 1%.
+  SSS is the first 3 of those, S+, S and S- split the rest in thirds.
+  A site that drops out of the top 1% loses S at the next daily run.
+- D is reserved for portfolios failing the must-haves (a name, a role, a way forward) from the five-second checks.
+  The hook is `failsMustHaves` in lib/tiers.mjs, switched off, so no one is D.
+- Equal ratings break by the date added (first graded), then the address.
+
+## Settling
+
+How far the library is from every member having 10 face-offs, and how long that takes at a given pace.
+A projection only: nothing is spent.
+Rerun it with `node scripts/settling.mjs` (read-only; `--json`, `--people 100,500`, `--gemini 400`), with `TURSO_DATABASE_URL` set for a remote database.
+
+Staging, 2026-11-13 (1,369 graded portfolios, 66 weighted face-offs so far):
+
+| | Count |
+| --- | --- |
+| Letters now | A 411, B 547, C 411, S 0, D 0 |
+| Settled (10+ face-offs) | 0 |
+| Face-offs short, summed over every member | 13,624 |
+| Distinct pairs in the library | 936,396 |
+| People's votes needed (each vote pairs two unsettled sites) | 6,812 |
+| Gemini one-on-one comparisons needed (each counts a quarter) | 27,248 |
+| Gemini batches of 5 needed (10 pairs each) | 2,725 |
+
+| Pace | Days to settle everyone |
+| --- | --- |
+| People, 100 votes a day | 69 |
+| People, 500 a day | 14 |
+| People, 1,000 a day | 7 |
+| People, 5,000 a day | 2 |
+| Gemini one-on-one, 400 a day | 69 |
+| Gemini batches of 5, 400 a day | 7 |
+
+The counts are a best case: they assume every face-off pairs two sites that both still need one, which Play's draw favours ([lib/play/draw.mjs](lib/play/draw.mjs)) but does not guarantee.
+The AI one-on-one budget today is 100 a day (`RANKING_BUDGET`), so 400 a day is a raise.
+Batched results do not count toward tiers today (only one-on-one face-offs are replayed); the batch line is what it would take if they did.
