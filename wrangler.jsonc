@@ -99,9 +99,6 @@
     // The most drafts a week the owner may choose on /admin/blog
     // (lib/content/automation.mjs; at most 4). The page can only go lower.
     "CONTENT_DRAFTS_PER_WEEK": "2",
-    // How the content engine writes a post: "staged" (outline, sections, finish;
-    // pipeline/content/staged.mjs) or "single" (one request).
-    "WRITER_MODE": "staged",
     // Never pay for Workers AI (lib/content/neurons.mjs, docs/COSTS.md "Workers
     // AI"): at most 40 AI images a UTC day, and behind it at most 2,500
     // neurons (40 Schnell images are about 2,320) of PortfolioRank's 5,000
@@ -229,11 +226,11 @@
         // never use up production's day. Kinds left out keep their defaults,
         // capped by the day's total.
         "EMAIL_CAPS": "{\"day\":20,\"perRecipient\":3,\"kinds\":{\"grade-report\":12,\"report-link\":8,\"owner-alert\":5},\"reserve\":{\"grade-report\":5,\"owner-alert\":3}}",
+        // Off until the owner approves Gemini spending again after the audits
+        // (2026-11-13). The 2026-11-12 walkthrough of automatic publishing used
+        // "publish". Off, staging's crons write no post whatever key it has.
         "CONTENT_MODE": "off",
         "CONTENT_DRAFTS_PER_WEEK": "2",
-        // How the content engine writes a post: "staged" (outline, sections, finish;
-        // pipeline/content/staged.mjs) or "single" (one request).
-        "WRITER_MODE": "staged",
         // Staging never spends Workers AI: production's counter can't see
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
