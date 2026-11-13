@@ -301,8 +301,14 @@ export async function checkPage(row, { fetchPage, fetchText = async () => null }
     html = await readCapped(res, MAX_BYTES);
   } catch (e) {
     const msg = String(e?.cause?.code ?? e?.name ?? e?.message ?? e);
-    const detail = /timeout/i.test(msg) ? "timeout" : /ENOTFOUND|EAI_AGAIN/.test(msg) ? "dns_not_found" : /blocked/.test(String(e?.message)) ? "private_address" : "fetch_error";
-    return { status: "dropped", reason: detail === "private_address" ? "not_portfolio" : "dead", detail };
+    // guardedFetch's own refusals say "blocked: <why>": a private address or an odd port is final, a redirect loop is not.
+    const refused = String(e?.message ?? "").match(/^blocked: (.*)$/)?.[1];
+    if (refused) {
+      const loop = /redirect/.test(refused);
+      return { status: "dropped", reason: loop ? "dead" : "not_portfolio", detail: loop ? "too_many_redirects" : `refused:${refused.replace(/\s+/g, "_").slice(0, 30)}` };
+    }
+    const detail = /timeout/i.test(msg) ? "timeout" : /ENOTFOUND|EAI_AGAIN/.test(msg) ? "dns_not_found" : "fetch_error";
+    return { status: "dropped", reason: "dead", detail };
   }
   const finalUrl = res.url || row.url;
   const readme = row.context?.repo ? await fetchText(`https://raw.githubusercontent.com/${row.context.repo}/HEAD/README.md`).catch(() => null) : null;

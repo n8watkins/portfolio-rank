@@ -36,7 +36,7 @@ test("normalize: one spelling per site, platforms and private hosts refused", ()
   }
   assert.equal(n("https://jane.github.io/portfolio/").url, "https://jane.github.io/portfolio");
   assert.equal(n("https://blog.jane.dev/posts/1", { root: true }).url, "https://blog.jane.dev/");
-  for (const u of ["https://github.com/jane", "https://www.linkedin.com/in/jane", "https://linktr.ee/jane", "https://jane.notion.site/x", "https://medium.com/@jane"]) assert.deepEqual(n(u), { ok: false, reason: "platform" }, u);
+  for (const u of ["https://github.com/jane", "https://www.linkedin.com/in/jane", "https://linktr.ee/jane", "https://jane.notion.site/x", "https://medium.com/@jane", "https://crates.io/crates/x"]) assert.deepEqual(n(u), { ok: false, reason: "platform" }, u);
   for (const u of ["http://localhost:3000", "http://10.0.0.1/", "ftp://jane.dev", "", "not a url"]) assert.equal(n(u).ok, false, u);
 });
 
