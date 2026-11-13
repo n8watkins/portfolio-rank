@@ -5,7 +5,6 @@ import { listedSite } from "@/lib/me";
 import { createJob, countWaiting, readJob, regradeCheck } from "@/lib/grader/jobs.mjs";
 import { graderCaps, reserveCaps } from "@/lib/grader/caps.mjs";
 import { startCapture } from "@/lib/grader/dispatch.mjs";
-import { checkOwnKey } from "@/lib/grader/own-key.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
 import { quotaDay } from "@/pipeline/quota-day.mjs";
 import { recordEvent } from "@/lib/games/badges.mjs";
@@ -18,10 +17,28 @@ import { PRIVATE, addOwnedJob, fail, graderFetcher, ownedJobs, requester, testSe
 // capture. Shared by POST /api/grade and POST /api/add ("Add your
 // portfolio"), so both follow the same rules and caps (lib/grader/caps.mjs).
 // Answers what POST /api/grade answers (its comment lists the statuses).
+//
+// Nothing here calls Gemini (tests/gemini-reach.test.mjs): the grade is a
+// job in the grader's queue, graded later within the day's caps. The one
+// Gemini call a request may make, checking a visitor's own key, is passed in
+// by POST /api/grade as `checkKey`; "Add your portfolio" never passes one.
 
 export async function startGrade(
   client: Client,
-  { who, target, geminiKey = null, now = Date.now() }: { who: Awaited<ReturnType<typeof requester>>; target: { url: string; siteKey: string }; geminiKey?: string | null; now?: number }
+  {
+    who,
+    target,
+    geminiKey = null,
+    checkKey,
+    now = Date.now(),
+  }: {
+    who: Awaited<ReturnType<typeof requester>>;
+    target: { url: string; siteKey: string };
+    geminiKey?: string | null;
+    /** Checks the visitor's own key with Google (lib/grader/own-key.mjs); required when geminiKey is given. */
+    checkKey?: (key: string) => Promise<string>;
+    now?: number;
+  }
 ): Promise<NextResponse> {
   // The free checks, at once: the page is fetched again (its fingerprint is
   // what the cooldown compares), its link checks reused while it is
@@ -62,8 +79,8 @@ export async function startGrade(
   // free checks and the caps: a key check costs a grade from the day's
   // allowance, so this can't be used to test keys in bulk.
   if (geminiKey) {
-    const apiBase = testSeam("GRADER_TEST_GEMINI_API");
-    const check = await checkOwnKey(geminiKey, apiBase ? { apiBase } : {});
+    if (!checkKey) throw new Error("startGrade: a geminiKey needs checkKey");
+    const check = await checkKey(geminiKey);
     if (check === "rejected") return fail("own_key_rejected", 400, { message: "Google didn't accept that key for gemini-3.5-flash-lite." });
   }
 
