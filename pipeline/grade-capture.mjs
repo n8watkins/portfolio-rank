@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { UA, parkingPhrase, readRenderedPage } from "./gate.mjs";
-import { passModal, passSplashGate } from "./splash.mjs";
+import { actionNote, passModal, passSplashGate } from "./splash.mjs";
 import { measurePage } from "./facts.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import { pngDiff } from "./png-diff.mjs";
@@ -163,6 +163,8 @@ export async function capturePage(browser, url, { dir, linkFetch, settlePolls = 
       classHash: createHash("sha1").update(sig.classes).digest("hex"),
       ...(splash ? { splash } : {}),
       ...(modal ? { modal } : {}),
+      // One line of what was done to reach the screenshots; only the screen after it is stored.
+      ...(actionNote({ splash, modal }) ? { action: actionNote({ splash, modal }) } : {}),
     };
     return { ok: true, finalUrl, pageText, facts, meta, files: { hero, ...(fs.existsSync(mobile) ? { mobile } : {}) } };
   } finally {

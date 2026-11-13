@@ -33,7 +33,7 @@ import path from "path";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
-import { passModal, passSplashGate } from "./splash.mjs";
+import { actionNote, passModal, passSplashGate } from "./splash.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -309,6 +309,8 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       ...(splash ? { splash: { ...splash, mobile: mobileSplash ? mobileSplash.passed : null } } : {}),
       // The dialog closed on the way in (./splash.mjs passModal), when there was one.
       ...(modal || mobileModal ? { modal: { ...(modal ?? {}), mobile: mobileModal ? mobileModal.passed : null } } : {}),
+      // One line of what was done to reach the screenshots; only the screen after it is stored.
+      ...(actionNote({ splash, modal }) ? { action: actionNote({ splash, modal }) } : {}),
     };
 
     await uploadDir(key, dir);
