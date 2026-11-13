@@ -28,6 +28,7 @@
 // (lib/grader/finish.mjs syncFromPeople), and the report email goes out
 // from the grader's own queue (worker/grader.ts), so such requests carry no
 // email address here.
+import { PEOPLE_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { peopleAllowance, usageToday } from "./budget.mjs";
 import { createGemini, createLimiter, GeminiAuthError, GeminiUnavailableError, PRIMARY_MODEL } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
@@ -37,26 +38,7 @@ import { syncFromPeople } from "../lib/grader/finish.mjs";
 export const MAX_ATTEMPTS = 3;
 
 export async function ensurePeopleSchema(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS people_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL,
-    url TEXT NOT NULL,
-    name TEXT,
-    email TEXT,
-    shot_key TEXT,
-    page_text TEXT,
-    facts TEXT,
-    meta TEXT,
-    status TEXT NOT NULL,
-    reason TEXT,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    done_at TEXT,
-    result TEXT,
-    notified_at TEXT
-  )`);
-  await db.execute("CREATE INDEX IF NOT EXISTS people_requests_status_idx ON people_requests (status, created_at)");
+  await applyTables(db, PEOPLE_TABLES);
 }
 
 const iso = (ms) => new Date(ms).toISOString();

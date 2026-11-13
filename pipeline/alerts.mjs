@@ -22,6 +22,7 @@
 // no send_email binding, EMAIL_FROM or OWNER_EMAIL the sender is null:
 // alerts are recorded and logged but not delivered, and a day's alert is
 // only marked sent once the email went out.
+import { ALERT_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
 import { createEmailGate, emailCaps, emailTransport } from "../lib/email/gate.mjs";
 
@@ -58,17 +59,7 @@ export function emailSender(env, { db } = {}) {
 }
 
 export async function ensureAlertSchema(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS owner_alerts (
-    key TEXT PRIMARY KEY,
-    kind TEXT NOT NULL,
-    title TEXT NOT NULL,
-    detail TEXT,
-    first_seen TEXT NOT NULL,
-    last_seen TEXT NOT NULL,
-    last_sent_day TEXT,
-    sends INTEGER NOT NULL DEFAULT 0,
-    cleared_at TEXT
-  )`);
+  await applyTables(db, ALERT_TABLES);
 }
 
 /** The conditions an end-of-day run's summary (pipeline/night.mjs finishNight) shows. */
