@@ -36,6 +36,8 @@ Last updated 2026-11-13 (evening).
 | 20 | List graded sites added through "Add your portfolio" (not on the original list) in the sitemap too? Suggested: yes | After #184 |
 | 21 | NetTrailers serves public/check-store-data.html and public/clear-cache.html to anyone. Suggested: remove both | Any time |
 | 22 | Walk through staging and approve (or not) the look of the report-card redesign and the compact face-off (#123). They stay off the real site until you OK screenshots | When you have 15 minutes |
+| 23 | Approve the new blog look (#131: contents rail, TL;DR box, image motion, More articles). Screenshots in the ops scratchpad shots/blog-layout/ (post and index, desktop and mobile). Stays staging-only until you OK it | When you have 5 minutes |
+| 24 | OK to remove two leftover throwaway things the safety guard wouldn't let lanes discard: worktree ~/worktrees/portfolio-rank-staging-check (mid-merge, no real work) and the 7 merged NetTrailers branches in ~/projects/net_trailers | Any time |
 
 ## Answered
 
