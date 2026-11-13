@@ -187,6 +187,45 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   await context.close();
 });
 
+test("Cloudflare's checkbox: the grade waits for the tick, says so, then sends its token", { skip: !grading }, async () => {
+  const { page: p, context, errors } = await freshPage(1280);
+  // A stand-in for Turnstile that asks for a tick (before-interactive-callback)
+  // and gives its token only when the test ticks; Turnstile.tsx uses an
+  // existing window.turnstile instead of loading Cloudflare's script.
+  await p.addInitScript(() => {
+    window.turnstile = {
+      render(el, opts) {
+        el.textContent = "Verify you are human";
+        setTimeout(() => opts["before-interactive-callback"]?.(), 50);
+        window.__tick = () => opts.callback("ticked-token");
+        return "w1";
+      },
+      reset() {},
+      remove() {},
+    };
+  });
+  const posts = [];
+  await p.route("**/api/grade", (route) => {
+    posts.push(route.request().postDataJSON());
+    return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "bad_request", message: "Stopped by the test." }) });
+  });
+  await p.goto(BASE + "/grade");
+  const form = p.locator("#grade form");
+  await form.getByLabel("Your portfolio address").fill(`tick-${RUN}.example.dev`);
+  await form.getByRole("button", { name: "Grade it" }).click();
+  await form.getByText(/tick the box and your grade starts/).waitFor();
+  // Past the few seconds an invisible check gets, nothing was sent without a token.
+  await p.waitForTimeout(6000);
+  assert.equal(posts.length, 0);
+  await p.evaluate(() => window.__tick());
+  await form.getByText("Stopped by the test.").waitFor();
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].turnstileToken, "ticked-token");
+  assert.equal(await form.getByText(/tick the box/).count(), 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test("no capture service (staging): the free checks are the answer, said plainly, not a failure", { skip: !grading }, async () => {
   for (const [width, height] of [
     [1440, 900],
