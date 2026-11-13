@@ -33,7 +33,7 @@ export function buildListRequest(draftText) {
     draftText,
     "</draft>",
   ].join("\n");
-  return { parts: [{ text }], schema: LIST_SCHEMA, options: { systemInstruction: "You are a fact-checking assistant.", thinkingLevel: "minimal", maxOutputTokens: 1024, temperature: 0 } };
+  return { parts: [{ text }], schema: LIST_SCHEMA, options: { prompt: "content-claims-list-v1", systemInstruction: "You are a fact-checking assistant.", thinkingLevel: "minimal", maxOutputTokens: 1024, temperature: 0 } };
 }
 
 export const JUDGE_SCHEMA = {
@@ -72,7 +72,7 @@ export function buildJudgeRequest(claims) {
     JSON.stringify(claims.map((c, i) => ({ claim: i, results: c.results.map((r) => ({ url: r.url, title: r.title, text: String(r.content ?? "").slice(0, 1200) })) }))),
     "</untrusted_search_results>",
   ].join("\n");
-  return { parts: [{ text }], schema: JUDGE_SCHEMA, options: { systemInstruction: JUDGE_SYSTEM, thinkingLevel: "low", maxOutputTokens: 2048, temperature: 0 } };
+  return { parts: [{ text }], schema: JUDGE_SCHEMA, options: { prompt: "content-claims-judge-v1", systemInstruction: JUDGE_SYSTEM, thinkingLevel: "low", maxOutputTokens: 2048, temperature: 0 } };
 }
 
 /** A Tavily search; returns [{ title, url, content }] with denied results dropped. */

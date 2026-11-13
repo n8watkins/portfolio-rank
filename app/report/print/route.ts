@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     jar.set(PASS_COOKIE, sign("report", `${exp}|${url}`), {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production" && !/^http:/.test(process.env.AUTH_URL ?? ""),
+      secure: process.env.NODE_ENV === "production" && !/^http:/.test(process.env.SITE_URL ?? ""),
       maxAge: PASS_MS / 1000,
       path: "/report",
     });

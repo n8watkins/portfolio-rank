@@ -113,7 +113,7 @@ export function buildCheckRequest({ subject, bytes, mime = "image/jpeg" }) {
   return {
     parts: [{ text }, { inline_data: { mime_type: mime, data: b64(bytes) } }],
     schema: CHECK_SCHEMA,
-    options: { systemInstruction: "You are a strict photo editor for a tech publication.", thinkingLevel: "low", maxOutputTokens: 512, temperature: 0, noRetry: true },
+    options: { prompt: "library-check-v1", systemInstruction: "You are a strict photo editor for a tech publication.", thinkingLevel: "low", maxOutputTokens: 512, temperature: 0, noRetry: true },
   };
 }
 
