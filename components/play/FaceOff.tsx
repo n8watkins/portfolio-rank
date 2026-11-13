@@ -6,7 +6,9 @@ import { ArrowRight, ArrowUpRight, Check, ExternalLink, Flame, MousePointerClick
 import { CopyButton } from "@/components/ui/CopyButton";
 import { isModalOpen } from "@/components/Modal";
 import { useSignIn } from "@/components/SignInModal";
-import { PlaySummary, prefetchPlayData } from "@/components/Diagnostics";
+import { PlaySummary } from "@/components/Diagnostics";
+import type { SiteDetails } from "@/lib/play/details";
+import { seedDetails, setVisible } from "@/lib/play/details-client";
 import { DetailsPanel, EloLine, NameLine } from "@/components/play/PlayCardParts";
 import { ViewControls } from "@/components/play/ViewControls";
 import { animated, useViewPrefs } from "@/lib/play/view-prefs";
@@ -37,6 +39,8 @@ type Entry = {
   votes: number;
   shot?: string | null;
   liked?: boolean;
+  /** Everything its card shows, from storage (lib/play/details.ts). */
+  details?: SiteDetails | null;
 };
 type Pair = { a: Entry; b: Entry; token: string };
 type Rater = {
@@ -109,14 +113,43 @@ async function drawPair(): Promise<{ res: { ok: boolean; status: number }; data:
   return { res: { ok: r.ok, status: r.status }, data: await r.json() };
 }
 
-/** Starts loading a portfolio's screenshot and stored details, so its card fills at once. */
+type Drawn = Awaited<ReturnType<typeof drawPair>>;
+
+/**
+ * The pair to show next, kept in sessionStorage (the site's links load whole
+ * pages, so module state doesn't last): the unvoted pair on screen, or after
+ * a vote the one drawn ahead. Coming back to Play shows it without a new
+ * draw. Dropped well before its vote token (MATCHUP_TTL_MS, 30 minutes) runs out.
+ */
+const HELD_KEY = "pr-faceoff-held";
+const HOLD_MS = 20 * 60 * 1000;
+type Held = { at: number; drawn: Promise<Drawn> };
+function hold(at: number, data: Drawn["data"] | null) {
+  try {
+    if (data) sessionStorage.setItem(HELD_KEY, JSON.stringify({ at, data }));
+    else sessionStorage.removeItem(HELD_KEY);
+  } catch {
+    /* storage off: a return to Play draws a new pair */
+  }
+}
+function takeHeld(): Held | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(HELD_KEY) ?? "null");
+    if (!v || !Number.isFinite(v.at) || Date.now() - v.at >= HOLD_MS || !v.data?.a || !v.data?.b || !v.data?.token) return null;
+    return { at: v.at, drawn: Promise.resolve({ res: { ok: true, status: 200 }, data: v.data }) };
+  } catch {
+    return null;
+  }
+}
+
+/** Starts loading a portfolio's screenshot and puts its details (carried by the pair) in Play's store. */
 function warm(e: Entry) {
   if (e.shot) {
     const img = new Image();
     img.decoding = "async";
     img.src = frameOf(e.shot, "hero.jpg");
   }
-  prefetchPlayData(e.url);
+  seedDetails({ [e.url]: e.details });
 }
 
 const domainOf = (url: string) => {
@@ -257,7 +290,7 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
   );
 
   // A pair drawn ahead of time (after a vote), used by the next load().
-  const upcoming = useRef<ReturnType<typeof drawPair> | null>(null);
+  const upcoming = useRef<Held | null>(null);
 
   const load = useCallback(async () => {
     const n = ++seq.current;
@@ -265,10 +298,14 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     let res: { ok: boolean; status: number };
     let data: (Pair & { rater?: Rater; error?: string }) | null = null;
     try {
-      // The pair drawn ahead while the last one was on screen, else a new draw.
-      const ahead = upcoming.current;
+      // The pair drawn ahead while the last one was on screen, else the one
+      // held from before the viewer left Play, else a new draw.
+      const ahead = upcoming.current ?? takeHeld();
       upcoming.current = null;
-      ({ res, data } = await (ahead ?? drawPair()));
+      const drawn = ahead ?? { at: Date.now(), drawn: drawPair() };
+      ({ res, data } = await drawn.drawn);
+      // Held until it's voted on, for a return to Play.
+      if (n === seq.current) hold(drawn.at, res.ok && data?.a && data?.b ? data : null);
     } catch {
       if (n === seq.current) {
         setLoadError(true);
@@ -304,6 +341,12 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  // Only the pair on screen is polled while a measurement runs (lib/play/details-client.ts).
+  useEffect(() => {
+    setVisible(pair ? [pair.a.url, pair.b.url] : []);
+    return () => setVisible([]);
+  }, [pair]);
 
   const dismissIntro = () => {
     setIntro(false);
@@ -389,11 +432,13 @@ export function FaceOff({ games, intro: introAtFirst, onBadgeCheck }: { games: b
       onBadgeCheck();
       // The vote spent this pair: draw the next one now, while the result is
       // on screen, and warm its screenshots and details, so Next is instant.
-      const ahead = drawPair();
+      hold(0, null);
+      const ahead = { at: Date.now(), drawn: drawPair() };
       upcoming.current = ahead;
-      ahead
+      ahead.drawn
         .then(({ res: r, data: d }) => {
           if (r.ok && d?.a && d?.b) {
+            if (upcoming.current === ahead) hold(ahead.at, d);
             warm(d.a);
             warm(d.b);
           }

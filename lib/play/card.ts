@@ -10,7 +10,7 @@ import { isPublicTier, tierOf } from "@/lib/tiers.mjs";
 // only: nothing here depends on who is looking.
 //
 // The share card (lib/play/share-card.tsx) and the games' face-off record
-// (/api/play/card) read it.
+// (lib/play/details.ts, with each pair and /api/play/details) read it.
 
 
 export type CheckState = "ok" | "fix" | "unknown";

@@ -6,6 +6,8 @@ import type { Inspection } from "@/app/api/inspect/route";
 import type { PsiResult } from "@/app/api/psi/route";
 import type { CacheMeta } from "@/lib/cache";
 import { useClientSession } from "@/lib/session-client";
+import type { SiteDetails } from "@/lib/play/details";
+import { retryMeasure, useSiteDetails } from "@/lib/play/details-client";
 
 /**
  * A page's title and description as the page shows them: the polish fetch
@@ -109,16 +111,6 @@ function getJson(endpoint: string, attempt: number): Promise<unknown> {
     firstLoads.set(endpoint, p);
   }
   return p;
-}
-
-/**
- * Starts the stored-details reads Play makes for a site (the polish check and
- * both stored Lighthouse results, all in parallel), so a card that shows it
- * next fills at once. Never starts a PageSpeed run.
- */
-export function prefetchPlayData(url: string) {
-  const q = encodeURIComponent(url);
-  for (const e of [`/api/inspect?url=${q}`, `/api/psi?url=${q}&cached=1`, `/api/psi?url=${q}&strategy=desktop&cached=1`]) getJson(e, 0).catch(() => {});
 }
 
 const STALE_POLLS = 4;
@@ -251,7 +243,8 @@ export function Socials({ url }: { url: string }) {
  * none were found.
  */
 export function SocialIcons({ url, name }: { url: string; name: string }) {
-  const data = useInspection(url);
+  // Play's shared details (no request of its own).
+  const data = useSiteDetails(url)?.inspect;
   if (!data?.ok) return null;
   const links = [
     data.githubUrl && { href: data.githubUrl, label: `${name} on GitHub (${data.githubUrl.replace(/^https?:\/\/github\.com\//, "@")})`, path: GH_PATH },
@@ -577,65 +570,20 @@ function SpecList({ inspect, psi, projects }: { inspect: Inspection | null; psi:
 type Strategy = "mobile" | "desktop";
 type PsiState = { phase: "loading" | "measuring" | "done"; data: PsiResult | null; retry: () => void };
 
-// One measurement per site and strategy on the page, however many cards ask.
-const measuring = new Map<string, Promise<PsiResult>>();
-const POLL_MS = 5_000;
-const POLL_FOR_MS = 150_000;
-
-const psiEndpoint = (url: string, strategy: Strategy, cachedOnly: boolean) =>
-  `/api/psi?url=${encodeURIComponent(url)}${strategy === "desktop" ? "&strategy=desktop" : ""}${cachedOnly ? "&cached=1" : ""}`;
-
 /**
- * Measures when missing (owner, 2026-11-12): a site with no stored
- * Lighthouse result (and no stored failure) is measured as soon as Play shows
- * it, through the normal /api/psi, whose per-site lease lets every viewer
- * share one PageSpeed run. While another viewer's run is going ("in_progress"),
- * this polls the stored result until it lands.
+ * One strategy's Lighthouse state for a card, from Play's shared details
+ * (lib/play/details-client.ts, which measures a missing result once and
+ * polls slowly while one is running): loading before anything is known,
+ * measuring while missing or running, else the stored result.
  */
-function usePsi(url: string, strategy: Strategy): PsiState {
-  const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<{ key: string; phase: PsiState["phase"]; data: PsiResult | null } | null>(null);
-  const key = `${strategy}:${url}:${attempt}`;
-  useEffect(() => {
-    let live = true;
-    const set = (phase: PsiState["phase"], data: PsiResult | null) => live && setState({ key, phase, data });
-    const peek = () => fetch(psiEndpoint(url, strategy, true), { cache: "no-store" }).then((r) => r.json() as Promise<PsiResult>);
-    const measure = () => {
-      const k = `${strategy}:${url}`;
-      let p = attempt === 0 ? measuring.get(k) : undefined;
-      if (!p) {
-        p = fetch(psiEndpoint(url, strategy, false)).then((r) => r.json() as Promise<PsiResult>);
-        measuring.set(k, p);
-        p.finally(() => measuring.get(k) === p && measuring.delete(k));
-      }
-      return p;
-    };
-    const run = async () => {
-      try {
-        // The first read is shared with prefetchPlayData (the next pair warms it).
-        const stored = attempt === 0 ? ((await getJson(psiEndpoint(url, strategy, true), 0)) as PsiResult) : null;
-        if (stored && !(stored.ok === false && stored.error === "not_measured")) return set("done", stored);
-        set("measuring", null);
-        let result = await measure();
-        const until = Date.now() + POLL_FOR_MS;
-        while (live && !result.ok && result.error === "in_progress" && Date.now() < until) {
-          await new Promise((r) => setTimeout(r, POLL_MS));
-          const p = await peek();
-          if (!(p.ok === false && p.error === "not_measured")) result = p;
-        }
-        set("done", !result.ok && result.error === "in_progress" ? { ok: false, error: "still_measuring" } : result);
-      } catch {
-        set("done", { ok: false, error: "fetch_error" });
-      }
-    };
-    run();
-    return () => {
-      live = false;
-    };
-  }, [url, strategy, attempt, key]);
-  const current = state?.key === key ? state : null;
-  return { phase: current?.phase ?? "loading", data: current?.data ?? null, retry: () => setAttempt((a) => a + 1) };
+function psiStateOf(url: string, d: SiteDetails | undefined, strategy: Strategy): PsiState {
+  const r = d?.psi[strategy] ?? null;
+  const retry = () => retryMeasure(url, strategy);
+  if (!d) return { phase: "loading", data: null, retry };
+  if (!r || (r.ok === false && (r.error === "not_measured" || r.error === "in_progress" || r.error === "still_measuring"))) return { phase: "measuring", data: null, retry };
+  return { phase: "done", data: r, retry };
 }
+
 
 /** One strategy's Lighthouse scores: a placeholder, "Measuring…", the four scores, or the reason with Retry. */
 function PsiRow({ label, state, metrics, short = false }: { label: string; state: PsiState; metrics: string[]; short?: boolean }) {
@@ -717,9 +665,11 @@ function ScoreRing({ label, state }: { label: string; state: PsiState }) {
  * a miss, like Detailed); each part fades in as it arrives.
  */
 export function PlaySummary({ url }: { url: string }) {
-  const { data: inspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
-  const mobile = usePsi(url, "mobile");
-  const desktop = usePsi(url, "desktop");
+  // Play's shared details: no request of its own (lib/play/details-client.ts).
+  const d = useSiteDetails(url);
+  const inspect = d?.inspect ?? null;
+  const mobile = psiStateOf(url, d, "mobile");
+  const desktop = psiStateOf(url, d, "desktop");
   const s = inspect?.ok ? inspect.spec : undefined;
   const lines = inspect?.ok ? polishLines(inspect as Inspection & { ok: true }) : null;
   const passed = lines?.filter((l) => l.pass).length ?? 0;
@@ -778,8 +728,8 @@ export function PlaySummary({ url }: { url: string }) {
  * - "checks": its own link preview (og:image, title, description), the
  *   Lighthouse scores and the polish checklist;
  * - "all": both, one after the other.
- * Lighthouse (mobile and desktop) is measured when missing (usePsi); the
- * polish fetch is the portfolio page's own (/api/inspect). Each part fades in when
+ * All of it comes from Play's shared details (lib/play/details-client.ts,
+ * which measures a missing Lighthouse result once). Each part fades in when
  * its data arrives, over a placeholder of its shape.
  */
 export function PlayDiagnostics({
@@ -797,9 +747,11 @@ export function PlayDiagnostics({
   /** Which other parts to show: "preview", "polish", "built". */
   sections?: string[];
 }) {
-  const { data: inspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`);
-  const mobile = usePsi(url, "mobile");
-  const desktop = usePsi(url, "desktop");
+  // Play's shared details: no request of its own (lib/play/details-client.ts).
+  const d = useSiteDetails(url);
+  const inspect = d?.inspect ?? null;
+  const mobile = psiStateOf(url, d, "mobile");
+  const desktop = psiStateOf(url, d, "desktop");
   const psi = mobile.data;
   const spec = part !== "checks" && sections.includes("built");
   const checks = part !== "spec";

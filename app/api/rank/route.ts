@@ -18,6 +18,7 @@ import { MATCHUP_TTL_MS, issueMatchupToken, verifyMatchupToken } from "@/lib/mat
 import { starBalance } from "@/lib/stats";
 import { sameOrigin } from "@/lib/polls/server";
 import { shotBases } from "@/lib/shots";
+import { siteDetails } from "@/lib/play/details";
 import type { Portfolio } from "@/app/page";
 
 type Rating = { elo: number; votes: number };
@@ -141,7 +142,8 @@ export async function GET(req: Request) {
     throw e;
   }
 
-  const shots = await shotBases([candidates[0].url, candidates[1].url]);
+  // The screenshots and everything both cards show (lib/play/details.ts), so a pair costs one request.
+  const [shots, details] = await Promise.all([shotBases([candidates[0].url, candidates[1].url]), siteDetails([candidates[0].url, candidates[1].url])]);
   // Which of the two the signed-in rater already likes, so the ♥ renders filled.
   const likedSet =
     rater.type === "human"
@@ -163,6 +165,7 @@ export async function GET(req: Request) {
     // builds hero/mobile frame URLs from it. Null → mShots fallback.
     shot: shots.get(p.url) ?? null,
     liked: likedSet.has(p.url),
+    details: details[p.url] ?? null,
   });
 
   const anonVotesUsed =
