@@ -17,9 +17,9 @@ export const SLOTS = ["hero", "inline-1", "inline-2", "inline-3", "inline-4", "i
  */
 export const LENGTHS = {
   standard: { name: "standard", min: 700, max: 1000, sections: 3, inline: [2, 3] },
-  short: { name: "short", min: 850, max: 1150, sections: 3, inline: [2, 3] },
-  medium: { name: "medium", min: 1300, max: 1700, sections: 4, inline: [3, 4] },
-  long: { name: "long", min: 1750, max: 2300, sections: 5, inline: [4, 5] },
+  short: { name: "short", min: 500, max: 750, sections: 2, inline: [1, 2] },
+  medium: { name: "medium", min: 1200, max: 1600, sections: 4, inline: [3, 4] },
+  long: { name: "long", min: 1800, max: 2200, sections: 5, inline: [4, 5] },
 };
 
 /** The length profile of a sheet: its `length` if set, else standard. */
@@ -126,7 +126,7 @@ export function buildWriteRequest(sheet) {
 /** A rewrite with the failures listed; the draft goes back with its placeholders. */
 export function buildReviseRequest(sheet, draft, failures) {
   const text = [
-    "Rewrite this post so it passes every check below. Keep what works; fix only what failed. Same rules and shape: body 700 to 1,000 words (under 665 or over 1,050 fails), real paragraphs of two to four sentences, exactly three TL;DR bullets with a placeholder each.",
+    `Rewrite this post so it passes every check below. Keep what works; fix only what failed. Same rules and shape: body ${lengthOf(sheet).min} to ${lengthOf(sheet).max} words (5% under or over fails), real paragraphs of two to four sentences, exactly three TL;DR bullets with a placeholder each.`,
     "",
     "Failed checks:",
     ...failures.map((f) => `- ${f}`),

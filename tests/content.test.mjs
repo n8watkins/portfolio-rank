@@ -1047,14 +1047,14 @@ test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences
   assert.equal(r.listedNotFound, undefined);
 });
 
-test("length profiles: a long post wants 1,750 to 2,300 words, 5 sections and 4 or 5 inline images; the writer sees its length and related posts", async () => {
+test("length profiles: a long post wants 1,800 to 2,200 words, 5 sections and 4 or 5 inline images; the writer sees its length and related posts", async () => {
   const { sheet, roster } = await sheetAndRoster();
   const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.n8builds.dev/blog/older-post-abc123", tags: ["data"] }] };
   const t = checkOf(goodDraft(long), long, roster, "template");
-  assert.match(t.problems.join("; "), /words; 1750 to 2300 wanted: add/);
+  assert.match(t.problems.join("; "), /words; 1800 to 2200 wanted: add/);
   assert.match(t.problems.join("; "), /inline image slots, 4 to 5 needed/);
   const view = JSON.parse(buildWriteRequest(long).parts[0].text.split("<fact_sheet>\n")[1].split("\n</fact_sheet>")[0]);
-  assert.deepEqual(view.length, { words: "1750 to 2300", sections: 5, inline_images: "4 to 5" });
+  assert.deepEqual(view.length, { words: "1800 to 2200", sections: 5, inline_images: "4 to 5" });
   assert.equal(view.related_posts[0].url, "https://portfoliorank.n8builds.dev/blog/older-post-abc123");
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "standard stays 700 to 1,000");
 });

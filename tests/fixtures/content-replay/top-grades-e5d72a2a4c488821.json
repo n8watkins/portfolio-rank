@@ -1,0 +1,546 @@
+{
+ "kind": "top-grades",
+ "ready": true,
+ "headline": "What the AI grader rewards, and what it marks down",
+ "angle": "Compare the AI judge's scores on each axis for portfolios graded S or A with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
+ "dataAsOf": "2026-11-13T02:16:15.148Z",
+ "dataLink": "https://portfoliorank.n8builds.dev/top",
+ "facts": [
+  {
+   "id": "f1",
+   "label": "Portfolios graded by the AI judge",
+   "value": 1369,
+   "display": "1,369",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f2",
+   "label": "Share of all graded portfolios that are graded S or A",
+   "value": 0.22498173849525202,
+   "display": "22%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z",
+   "scope": {
+    "need": "graded|all portfolios|every portfolio|everyone",
+    "avoid": "of (?:the )?(?:top|best|leading) (?:portfolios|sites)"
+   }
+  },
+  {
+   "id": "f3",
+   "label": "Portfolios graded S, the top tier",
+   "value": 14,
+   "display": "14",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f4",
+   "label": "Average visual design score (1 to 5) of S and A portfolios",
+   "value": 4.827922077922078,
+   "display": "4.8",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f5",
+   "label": "Average visual design score (1 to 5) of all other graded portfolios",
+   "value": 3.242224316682375,
+   "display": "3.2",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f6",
+   "label": "Average the five-second test score (1 to 5) of S and A portfolios",
+   "value": 4.89935064935065,
+   "display": "4.9",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f7",
+   "label": "Average the five-second test score (1 to 5) of all other graded portfolios",
+   "value": 4.502356267672008,
+   "display": "4.5",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f8",
+   "label": "Average project storytelling score (1 to 5) of S and A portfolios",
+   "value": 3.7694805194805197,
+   "display": "3.8",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f9",
+   "label": "Average project storytelling score (1 to 5) of all other graded portfolios",
+   "value": 2.1206409048067862,
+   "display": "2.1",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f10",
+   "label": "Average writing score (1 to 5) of S and A portfolios",
+   "value": 4.675324675324675,
+   "display": "4.7",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f11",
+   "label": "Average writing score (1 to 5) of all other graded portfolios",
+   "value": 3.3836003770028276,
+   "display": "3.4",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f12",
+   "label": "Average memorability score (1 to 5) of S and A portfolios",
+   "value": 4.10064935064935,
+   "display": "4.1",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f13",
+   "label": "Average memorability score (1 to 5) of all other graded portfolios",
+   "value": 2.4486333647502354,
+   "display": "2.4",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f14",
+   "label": "Average motion score (1 to 5) of S and A portfolios",
+   "value": 2.3896103896103895,
+   "display": "2.4",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f15",
+   "label": "Average motion score (1 to 5) of all other graded portfolios",
+   "value": 1.6720075400565504,
+   "display": "1.7",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f16",
+   "label": "The axis where S and A portfolios lead the rest by the most",
+   "value": "memorability",
+   "display": "memorability",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f17",
+   "label": "The biggest lead, in points on a 1 to 5 scale",
+   "value": 1.6520159858991148,
+   "display": "1.7 points",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f18",
+   "label": "Number of axes sharing the biggest lead",
+   "value": 1,
+   "display": "1",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f19",
+   "label": "The axis where the gap is smallest",
+   "value": "the five-second test",
+   "display": "the five-second test",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f20",
+   "label": "Othmaro Fallas (othmaro.dev) is graded",
+   "value": "S",
+   "display": "S",
+   "tone": "positive",
+   "about": "https://othmaro.dev",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f21",
+   "label": "Othmaro Fallas (othmaro.dev) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing, memorability and motion",
+   "value": 6,
+   "display": "visual design, the five-second test, project storytelling, writing, memorability and motion",
+   "tone": "positive",
+   "about": "https://othmaro.dev",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f22",
+   "label": "Poorvaj Hinge (poorvajhinge.vercel.app) is graded",
+   "value": "S",
+   "display": "S",
+   "tone": "positive",
+   "about": "https://poorvajhinge.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f23",
+   "label": "Poorvaj Hinge (poorvajhinge.vercel.app) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing, memorability and motion",
+   "value": 6,
+   "display": "visual design, the five-second test, project storytelling, writing, memorability and motion",
+   "tone": "positive",
+   "about": "https://poorvajhinge.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f24",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) is graded",
+   "value": "S",
+   "display": "S",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f25",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing and memorability",
+   "value": 5,
+   "display": "visual design, the five-second test, project storytelling, writing and memorability",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f26",
+   "label": "Chanhdai (chanhdai.com) is graded",
+   "value": "S",
+   "display": "S",
+   "tone": "positive",
+   "about": "https://chanhdai.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f27",
+   "label": "Chanhdai (chanhdai.com) scores 5 out of 5 on visual design, the five-second test, writing and memorability",
+   "value": 4,
+   "display": "visual design, the five-second test, writing and memorability",
+   "tone": "positive",
+   "about": "https://chanhdai.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f28",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) is graded",
+   "value": "S",
+   "display": "S",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f29",
+   "label": "Malaka Venugopal Reddy (malakavenu.com) scores 5 out of 5 on visual design, the five-second test, project storytelling, writing and memorability",
+   "value": 5,
+   "display": "visual design, the five-second test, project storytelling, writing and memorability",
+   "tone": "positive",
+   "about": "https://malakavenu.com",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f30",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on visual design",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f31",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on the five-second test",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f32",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on project storytelling",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f33",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on writing",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f34",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) scores 5 out of 5 on memorability",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  },
+  {
+   "id": "f35",
+   "label": "Othmaro Fallas (othmaro.dev) scores 5 out of 5 on motion",
+   "value": 5,
+   "display": "5",
+   "tone": "positive",
+   "about": "https://othmaro.dev",
+   "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+   "at": "2026-11-13T02:16:15.148Z"
+  }
+ ],
+ "charts": [
+  {
+   "id": "c1",
+   "title": "Average score by axis: the top-graded portfolios against the rest",
+   "unit": "",
+   "max": 5,
+   "categories": [
+    "visual design",
+    "the five-second test",
+    "project storytelling",
+    "writing",
+    "memorability",
+    "motion"
+   ],
+   "series": [
+    {
+     "name": "Top-graded (top 22%)",
+     "facts": [
+      "f4",
+      "f6",
+      "f8",
+      "f10",
+      "f12",
+      "f14"
+     ]
+    },
+    {
+     "name": "Everyone else",
+     "facts": [
+      "f5",
+      "f7",
+      "f9",
+      "f11",
+      "f13",
+      "f15"
+     ]
+    }
+   ],
+   "alt": "Bar chart of the average AI score per axis, the top-graded portfolios next to all others; the top group leads on every axis."
+  }
+ ],
+ "names": [
+  {
+   "name": "Othmaro Fallas",
+   "url": "https://othmaro.dev",
+   "domain": "othmaro.dev",
+   "reason": "graded S by the AI judge"
+  },
+  {
+   "name": "Poorvaj Hinge",
+   "url": "https://poorvajhinge.vercel.app",
+   "domain": "poorvajhinge.vercel.app",
+   "reason": "graded S by the AI judge"
+  },
+  {
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app",
+   "domain": "aaabaa-aayush.vercel.app",
+   "reason": "graded S by the AI judge"
+  },
+  {
+   "name": "Chanhdai",
+   "url": "https://chanhdai.com",
+   "domain": "chanhdai.com",
+   "reason": "graded S by the AI judge"
+  },
+  {
+   "name": "Malaka Venugopal Reddy",
+   "url": "https://malakavenu.com",
+   "domain": "malakavenu.com",
+   "reason": "graded S by the AI judge"
+  }
+ ],
+ "screenshots": [
+  {
+   "url": "https://othmaro.dev",
+   "name": "Othmaro Fallas",
+   "shotKey": "4dec7593b56ad749"
+  },
+  {
+   "url": "https://poorvajhinge.vercel.app",
+   "name": "Poorvaj Hinge",
+   "shotKey": "2e0f79d1105aacf6"
+  },
+  {
+   "url": "https://aaabaa-aayush.vercel.app",
+   "name": "Aayush Bharti",
+   "shotKey": "1fef5ea23ebe8cb5"
+  },
+  {
+   "url": "https://chanhdai.com",
+   "name": "Chanhdai",
+   "shotKey": "19c43b130eee376c"
+  },
+  {
+   "url": "https://malakavenu.com",
+   "name": "Malaka Venugopal Reddy",
+   "shotKey": "2ac94d15ab783b67"
+  }
+ ],
+ "notable": [
+  {
+   "factIds": [
+    "f14",
+    "f15"
+   ],
+   "why": "motion is the lowest-scoring axis for every group: {{f14}} on average for S and A portfolios against {{f15}} for the rest"
+  },
+  {
+   "factIds": [
+    "f16",
+    "f17"
+   ],
+   "why": "the biggest lead of S and A portfolios is {{f17}} on {{f16}}"
+  }
+ ],
+ "superlatives": [
+  {
+   "term": "biggest lead",
+   "factIds": [
+    "f16",
+    "f17"
+   ],
+   "tied": false,
+   "tieFactId": "f18"
+  },
+  {
+   "term": "smallest gap",
+   "factIds": [
+    "f19"
+   ],
+   "tied": false,
+   "tieFactId": "f18"
+  },
+  {
+   "term": "lowest score",
+   "factIds": [
+    "f14",
+    "f15"
+   ],
+   "tied": false,
+   "tieFactId": null
+  }
+ ],
+ "examples": [
+  {
+   "axis": "visual design",
+   "factId": "f30",
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app"
+  },
+  {
+   "axis": "the five-second test",
+   "factId": "f31",
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app"
+  },
+  {
+   "axis": "project storytelling",
+   "factId": "f32",
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app"
+  },
+  {
+   "axis": "writing",
+   "factId": "f33",
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app"
+  },
+  {
+   "axis": "memorability",
+   "factId": "f34",
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app"
+  },
+  {
+   "axis": "motion",
+   "factId": "f35",
+   "name": "Othmaro Fallas",
+   "url": "https://othmaro.dev"
+  }
+ ]
+}
