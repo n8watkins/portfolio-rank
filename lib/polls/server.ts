@@ -115,9 +115,9 @@ export function sameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
   if (!origin) return false;
   const allowed = new Set([new URL(SITE_URL).origin, new URL(req.url).origin]);
-  if (process.env.AUTH_URL) {
+  if (process.env.SITE_URL) {
     try {
-      allowed.add(new URL(process.env.AUTH_URL).origin);
+      allowed.add(new URL(process.env.SITE_URL).origin);
     } catch {
       /* not a URL */
     }
