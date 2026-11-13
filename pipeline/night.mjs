@@ -54,6 +54,7 @@
 // plan.parkAfterNights nights in a row is parked (night_item_failures) and
 // listed in the summary instead of retried. A spent quota stops the run as
 // planned waiting, never as a failure.
+import { NIGHT_TABLES } from "../lib/pipeline-schema.mjs";
 import { STAGES, backgroundAllowance, nightTimeline, pacificParts, previousDay, usageToday } from "./budget.mjs";
 import {
   createGemini,
@@ -82,28 +83,7 @@ import { rankForWrite } from "../lib/tiers-store.mjs";
 export const HUMAN_VOTES_NOTE = "Human votes (the face-off) use no Gemini and are never scheduled; people's grades run all day as they arrive.";
 
 export async function ensureNightSchema(db) {
-  await db.batch(
-    [
-      `CREATE TABLE IF NOT EXISTS night_runs (
-        night TEXT PRIMARY KEY,
-        started_at TEXT NOT NULL,
-        finished_at TEXT,
-        status TEXT NOT NULL,
-        run_id TEXT,
-        summary TEXT
-      )`,
-      `CREATE TABLE IF NOT EXISTS night_item_failures (
-        job TEXT NOT NULL,
-        item TEXT NOT NULL,
-        nights INTEGER NOT NULL,
-        last_night TEXT NOT NULL,
-        reason TEXT,
-        parked_at TEXT,
-        PRIMARY KEY (job, item)
-      )`,
-    ],
-    "write"
-  );
+  await db.batch(NIGHT_TABLES, "write");
 }
 
 const iso = (ms) => new Date(ms).toISOString();

@@ -5,6 +5,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { consumeToken } from "@/lib/signin/store.mjs";
 import { authLogger } from "@/lib/log";
 import { SESSION_VERSION, isCurrentSession } from "@/lib/session-version.mjs";
+import { adminRaterId, revokedAt, sessionValid, signedInAt } from "@/lib/session-revocation.mjs";
 
 // JWT sessions (no DB adapter). Two ways in:
 // - GitHub: raterId is the stable GitHub identity (gh:<github numeric id>);
@@ -32,6 +33,25 @@ declare module "next-auth" {
   }
 }
 
+/**
+ * Whether a signed-in session may go on (lib/session-revocation.mjs): not
+ * signed out by "Sign out everywhere" or account deletion, and for the
+ * admin, signed in within ADMIN_SESSION_MS. If the database can't say, an
+ * admin session ends (it signs in again) and anyone else's goes on.
+ */
+async function stillValid(token: Record<string, unknown>): Promise<boolean> {
+  const raterId = typeof token.raterId === "string" ? token.raterId : null;
+  if (!raterId) return true;
+  const isAdmin = raterId === adminRaterId();
+  try {
+    await ensureSchema();
+    return sessionValid(token, { revokedAt: await revokedAt(db(), raterId), isAdmin, now: Date.now() });
+  } catch (e) {
+    console.error(JSON.stringify({ event: "session_check_failed", admin: isAdmin, error: String((e as Error)?.message ?? e).slice(0, 200) }));
+    return !isAdmin;
+  }
+}
+
 const config: NextAuthConfig = {
   providers: [
     GitHub,
@@ -55,13 +75,14 @@ const config: NextAuthConfig = {
   // Error type and a masked message only; see lib/log.ts.
   logger: authLogger,
   callbacks: {
-    jwt({ token, account, profile, user }) {
+    async jwt({ token, account, profile, user }) {
       if (account?.provider === "github" && profile) {
         token.sv = SESSION_VERSION;
         token.raterId = `gh:${profile.id}`;
         token.login = String(profile.login);
         if (typeof profile.created_at === "string") token.accountCreatedAt = profile.created_at;
         token.provider = "github";
+        token.at = Date.now();
       }
       if (account?.provider === "email-link" && user?.id && user.email) {
         token.sv = SESSION_VERSION;
@@ -69,10 +90,14 @@ const config: NextAuthConfig = {
         token.login = user.email;
         token.accountCreatedAt = (user as { createdAt?: string }).createdAt;
         token.provider = "email";
+        token.at = Date.now();
       }
       // Returning null ends the session (the cookie is cleared): a session
       // from before the current version is signed out, once.
-      return isCurrentSession(token) ? token : null;
+      if (!isCurrentSession(token)) return null;
+      // A session from before the sign-in time was kept counts from its issue time.
+      token.at ??= signedInAt(token) ?? Date.now();
+      return (await stillValid(token)) ? token : null;
     },
     session({ session, token }) {
       session.raterId = token.raterId as string | undefined;

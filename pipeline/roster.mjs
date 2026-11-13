@@ -52,8 +52,8 @@ const COLUMNS = [
   "retry_at TEXT",
   "signals TEXT",
   "needs_review INTEGER NOT NULL DEFAULT 0",
-  // Pipeline-only (the app never reads them, so lib/db.ts does not add
-  // them): the page's visible text (capped, pipeline/rubric.mjs
+  // Pipeline-only (the app never reads them; lib/schema.mjs adds them too,
+  // from lib/pipeline-schema.mjs): the page's visible text (capped, pipeline/rubric.mjs
   // PAGE_TEXT_MAX) and the facts measured by code (pipeline/facts.mjs),
   // both input to the AI grade.
   "page_text TEXT",

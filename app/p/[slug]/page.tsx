@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, Clock, Hourglass, Sparkles, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
+import type { Inspection } from "@/app/api/inspect/route";
+import { peekCached } from "@/lib/cache";
+import { CHECK_KINDS } from "@/lib/freshness.mjs";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
@@ -249,6 +252,12 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   const p = await loadProfile(decodeURIComponent(slug));
   if (!p) notFound();
   const shot = await shotFor(p);
+  // The page check as last measured (/api/inspect's cache), so the social
+  // links are there at first paint instead of moving the header when the
+  // browser's own request answers.
+  const inspection = p.listed
+    ? await peekCached<Inspection>("inspect", p.url, CHECK_KINDS.polish.maxAgeMs, { isFailure: (d) => !d.ok, freshness: { kind: "polish", url: p.url } }).catch(() => null)
+    : null;
   const jsonLd = indexable(p)
     ? {
         "@context": "https://schema.org",
@@ -281,7 +290,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
           <div className="flex flex-wrap items-center gap-2">
             {p.listed && (
               <>
-                <Socials url={p.url} />
+                <Socials url={p.url} initial={inspection} />
                 <LikeButton url={p.url} name={p.name} hydrate count={p.saves} showCount />
                 <AddToListButton url={p.url} />
               </>

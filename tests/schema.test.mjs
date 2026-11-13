@@ -1,7 +1,7 @@
 // The schema migration (lib/schema.mjs) on throwaway local databases.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
@@ -21,6 +21,25 @@ test("a fresh database gets every table and the current version, and a second ru
   for (const c of ["served", "claimed", "starred", "delta"]) assert.ok((await columns(db, "votes")).includes(c), c);
   assert.ok((await columns(db, "matchups")).includes("day_draws"));
   assert.deepEqual(await migrate(db), []);
+});
+
+test("a fresh database has every table any module creates", async () => {
+  const db = fresh("all-tables.db");
+  await migrate(db);
+  const tables = new Set((await db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")).rows.map((r) => String(r.name)));
+  // Every CREATE TABLE in the code, wherever it is, must be in lib/schema.mjs,
+  // so staging and a fresh restore have the tables production has.
+  const files = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(dir, e.name)) : /\.(mjs|ts|tsx)$/.test(e.name) ? [path.join(dir, e.name)] : []));
+  const created = new Set();
+  for (const f of ["lib", "pipeline", "worker", "app", "scripts"].flatMap(files)) {
+    for (const m of readFileSync(f, "utf8").matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)) created.add(m[1]);
+  }
+  for (const t of ["night_runs", "night_item_failures", "owner_alerts", "gemini_daily", "rubric_history", "comparisons"]) assert.ok(created.has(t), t);
+  assert.deepEqual([...created].filter((t) => !tables.has(t)), []);
+  for (const c of ["page_text", "facts", "facts_at"]) assert.ok((await columns(db, "portfolios")).includes(c), c);
+  assert.ok((await columns(db, "site_ratings")).includes("shown_rank"));
+  for (const c of ["thoughts_tokens", "finish_reason", "detail"]) assert.ok((await columns(db, "gemini_requests")).includes(c), c);
 });
 
 test("an older database gets the missing columns without losing rows", async () => {

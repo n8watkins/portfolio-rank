@@ -187,8 +187,8 @@ test("post links: a listed portfolio's site opens its PortfolioRank page; a /p/ 
   assert.equal(portfolioHref("https://top-1.dev", index), "/p/https%3A%2F%2Ftop-1.dev");
   assert.equal(portfolioHref("http://www.TOP-1.dev/", index), "/p/https%3A%2F%2Ftop-1.dev");
   assert.equal(portfolioHref("https://jane.github.io/folio", index), "/p/https%3A%2F%2Fjane.github.io%2Ffolio%2F");
-  assert.equal(portfolioHref("https://portfoliorank.n8builds.dev/p/https%3A%2F%2Ftop-1.dev", index), "/p/https%3A%2F%2Ftop-1.dev");
-  assert.equal(portfolioHref("https://portfoliorank.n8builds.dev/p/https%3A%2F%2Fgone.dev", index), "https://gone.dev");
+  assert.equal(portfolioHref("https://portfoliorank.dev/p/https%3A%2F%2Ftop-1.dev", index), "/p/https%3A%2F%2Ftop-1.dev");
+  assert.equal(portfolioHref("https://portfoliorank.dev/p/https%3A%2F%2Fgone.dev", index), "https://gone.dev");
   assert.equal(portfolioHref("https://example.com/article", index), "https://example.com/article");
   assert.equal(portfolioHref("https://jane.github.io/other", index), "https://jane.github.io/other");
 });

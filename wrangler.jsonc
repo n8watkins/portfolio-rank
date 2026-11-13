@@ -247,10 +247,15 @@
         "TOOLS_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
-        // "publish" so the owner can walk through automatic publishing on
-        // staging (owner, 2026-11-12). Staging has no crons and no Gemini key,
-        // so this writes nothing by itself; it only lets /admin/blog choose it.
-        "CONTENT_MODE": "publish",
+        // Staging's own, lower email caps (lib/email/gate.mjs): it sends from the
+        // same address and account as production, so a day of testing here can
+        // never use up production's day. Kinds left out keep their defaults,
+        // capped by the day's total.
+        "EMAIL_CAPS": "{\"day\":20,\"perRecipient\":3,\"kinds\":{\"grade-report\":12,\"report-link\":8,\"owner-alert\":5,\"signin\":10},\"reserve\":{\"grade-report\":5,\"owner-alert\":3,\"signin\":3}}",
+        // Off until the owner approves Gemini spending again after the audits
+        // (2026-11-13). The 2026-11-12 walkthrough of automatic publishing used
+        // "publish". Off, staging's crons write no post whatever key it has.
+        "CONTENT_MODE": "off",
         "CONTENT_DRAFTS_PER_WEEK": "2",
         // Staging never spends Workers AI: production's counter can't see
         // staging's database, and both share the account's free allowance.

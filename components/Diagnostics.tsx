@@ -115,13 +115,18 @@ function getJson(endpoint: string, attempt: number): Promise<unknown> {
 
 const STALE_POLLS = 4;
 /**
- * GETs a JSON endpoint; null until the answer for this endpoint (and attempt)
- * arrives, so switching URLs never shows the previous site's result.
- * retry() asks again. With `pollStaleMs`, a result that is being measured
- * again (`stale`) is asked for again after that long, a few times, so the
- * new result replaces "Re-measuring" without a reload.
+ * GETs a JSON endpoint; until the answer for this endpoint (and attempt)
+ * arrives, `initial` (what the server had cached, so the first paint already
+ * has the right shape) or null, so switching URLs never shows the previous
+ * site's result. retry() asks again, showing null meanwhile. With
+ * `pollStaleMs`, a result that is being measured again (`stale`) is asked
+ * for again after that long, a few times, so the new result replaces
+ * "Re-measuring" without a reload.
  */
-function useJson<T>(endpoint: string, { pollStaleMs }: { pollStaleMs?: number } = {}): { data: T | null; retry: () => void } {
+function useJson<T>(
+  endpoint: string,
+  { pollStaleMs, initial = null }: { pollStaleMs?: number; initial?: T | null } = {}
+): { data: T | null; retry: () => void } {
   const [attempt, setAttempt] = useState(0);
   const key = `${attempt}:${endpoint}`;
   const [result, setResult] = useState<{ key: string; data: T; polls: number } | null>(null);
@@ -137,7 +142,7 @@ function useJson<T>(endpoint: string, { pollStaleMs }: { pollStaleMs?: number } 
       live = false;
     };
   }, [endpoint, key, attempt, polls]);
-  const data = result?.key === key ? result.data : null;
+  const data = result?.key === key ? result.data : attempt === 0 ? initial : null;
   const stale = Boolean((data as CacheMeta | null)?.stale);
   useEffect(() => {
     if (!pollStaleMs || !stale || polls >= STALE_POLLS) return;
@@ -153,8 +158,8 @@ function useJson<T>(endpoint: string, { pollStaleMs }: { pollStaleMs?: number } 
   };
 }
 
-export function useInspection(url: string) {
-  return useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`).data;
+export function useInspection(url: string, initial: Inspection | null = null) {
+  return useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { initial }).data;
 }
 
 /** Compact one-line chips for the face-off cards. */
@@ -198,8 +203,8 @@ function SocialIcon({ path }: { path: string }) {
 
 // Social profile buttons (GitHub / LinkedIn / X) scraped from the portfolio page
 // - reach someone's profiles without opening their site. Renders nothing if none.
-export function Socials({ url }: { url: string }) {
-  const data = useInspection(url);
+export function Socials({ url, initial = null }: { url: string; initial?: Inspection | null }) {
+  const data = useInspection(url, initial);
   if (!data?.ok) return null;
   const links: { href: string; label: string; path: string }[] = [];
   if (data.githubUrl)
@@ -341,11 +346,59 @@ function ShareImage({ src, compact = false }: { src: string; compact?: boolean }
   );
 }
 
+/**
+ * Placeholders that take the space the loaded results will, so the profile
+ * doesn't move when they arrive (mobile CLS). Hidden from screen readers;
+ * each section says "Checking…" to them instead.
+ */
+const bar = "rounded bg-edge motion-safe:animate-pulse";
+const POLISH_WIDTHS = ["w-32", "w-28", "w-36", "w-20", "w-32", "w-28", "w-36", "w-24", "w-20"];
+
+function PolishSkeleton() {
+  return (
+    <>
+      <p className="sr-only" role="status">
+        Checking…
+      </p>
+      <ul aria-hidden className="space-y-1.5">
+        {POLISH_WIDTHS.map((w, i) => (
+          <li key={i} className="flex h-5 items-center gap-2">
+            <span className={`h-3.5 w-3.5 ${bar}`} />
+            <span className={`h-3.5 ${w} ${bar}`} />
+          </li>
+        ))}
+      </ul>
+      {/* The "Measured on" line. */}
+      <p aria-hidden className="mt-3 text-xs">
+        &nbsp;
+      </p>
+    </>
+  );
+}
+
+function ShareSkeleton() {
+  return (
+    <>
+      <p className="sr-only" role="status">
+        Checking…
+      </p>
+      <div aria-hidden className="overflow-hidden rounded-lg border border-edge">
+        <div className={`aspect-[1.91/1] w-full ${bar} rounded-none`} />
+        <div className="space-y-1.5 border-t border-edge p-3">
+          <div className={`h-4 w-3/4 ${bar}`} />
+          <div className={`h-3 w-full ${bar}`} />
+          <div className={`h-3 w-1/3 ${bar}`} />
+        </div>
+      </div>
+    </>
+  );
+}
+
 /** Full panel for the detail page. Order: Lighthouse → Polish → Share card. */
-export function DetailDiagnostics({ url }: { url: string }) {
+export function DetailDiagnostics({ url, initialInspection = null }: { url: string; initialInspection?: Inspection | null }) {
   // A result being measured again is asked for again: a PageSpeed run takes
   // about 30 seconds, the polish check a few.
-  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { pollStaleMs: 8_000 });
+  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { pollStaleMs: 8_000, initial: initialInspection });
   const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`, { pollStaleMs: 35_000 });
   const psiFailure = psi && !psi.ok ? psiProblem(psi.error) : null;
 
@@ -359,10 +412,27 @@ export function DetailDiagnostics({ url }: { url: string }) {
           </span>
         </h2>
         {!psi ? (
-          <p className="flex items-center gap-2 text-sm text-mute">
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-accent" />
-            Running Lighthouse on Google&apos;s servers - first run takes ~30s…
-          </p>
+          <>
+            {/* The score grid's shape, so the page doesn't move when the scores arrive. */}
+            <div aria-hidden className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Object.entries(PSI_LABELS).map(([id, label]) => (
+                <div key={id} className="rounded-lg border border-edge p-3 text-center">
+                  <div className="flex h-8 items-center justify-center">
+                    <span className={`h-6 w-10 ${bar}`} />
+                  </div>
+                  <p className="mt-1 text-xs text-mute">{label}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 flex items-center gap-2 text-xs text-mute" role="status">
+              <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-edge border-t-accent" />
+              Running Lighthouse (about 30s)…
+            </p>
+            {/* The "Measured on" line. */}
+            <p aria-hidden className="mt-3 text-xs">
+              &nbsp;
+            </p>
+          </>
         ) : psiFailure ? (
           <div role="alert">
             <p className="text-sm text-red-400">{psiFailure.text}</p>
@@ -399,7 +469,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
         <section className="rounded-xl border border-edge bg-card p-5">
           <h2 className="mb-3 font-semibold">Polish checklist</h2>
           {!inspect ? (
-            <p className="text-sm text-mute">Checking…</p>
+            <PolishSkeleton />
           ) : !inspect.ok ? (
             <Unreachable onRetry={retryInspect} />
           ) : (
@@ -446,7 +516,7 @@ export function DetailDiagnostics({ url }: { url: string }) {
         <section className="rounded-xl border border-edge bg-card p-5">
           <h2 className="mb-3 font-semibold">Share card</h2>
           {!inspect ? (
-            <p className="text-sm text-mute">Checking…</p>
+            <ShareSkeleton />
           ) : !inspect.ok ? (
             <p className="text-sm text-red-400">Couldn&apos;t reach the site.</p>
           ) : inspect.ogImage && inspect.ogImageLoads ? (

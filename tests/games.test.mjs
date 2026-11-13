@@ -627,4 +627,7 @@ test("the print report escapes what it shows and keeps the tier letter for the t
   assert.ok(!html.includes(">D<"), "no public D");
   assert.ok(html.includes("@media print"));
   assert.ok(html.includes("✓ Resume link") && html.includes("✗ GitHub link"));
+  // The CSP allows no inline event handlers: the print button's script is a file.
+  assert.doesNotMatch(html, /\son[a-z]+=/i);
+  assert.ok(html.includes('<script src="/report-print.js" defer></script>'));
 });

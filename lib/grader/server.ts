@@ -1,6 +1,6 @@
 import { createHmac } from "crypto";
 import { cookies } from "next/headers";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { cloudflareContext } from "@/lib/cloudflare-context";
 import { NextResponse } from "next/server";
 import { siteUrl } from "@/lib/site";
 import { clientIp, currentVoter, sameOrigin } from "@/lib/polls/server";
@@ -8,6 +8,7 @@ import { OWNER_COOKIE, ownerCookieValue, readOwnerCookie } from "./links.mjs";
 import { network48Of, networkOf, trustedAccount } from "./caps.mjs";
 import { auth } from "@/auth";
 import { createEmailGate, emailCaps, emailTransport } from "@/lib/email/gate.mjs";
+import { testStandInsAllowed } from "@/lib/test-mode.mjs";
 import type { Fetcher } from "./quick";
 import { publicFetcher } from "./quick";
 
@@ -101,15 +102,15 @@ export function siteBase(): string {
 }
 
 /**
- * A test stand-in's setting, honoured only off the deployed Workers
- * (SITE_ENV "production" or "staging" ignore them all), so a stray variable
- * can never reroute production traffic.
+ * A test stand-in's setting, honoured only in the test runs (SITE_ENV
+ * "test") and `next dev` (lib/test-mode.mjs): everywhere else, a Worker with
+ * no SITE_ENV included, they are all ignored, so a stray variable can never
+ * reroute real traffic.
  */
 export function testSeam(
   name: "GRADER_TEST_SITE" | "GRADER_TEST_GITHUB_API" | "GRADER_TEST_GEMINI_API" | "GRADER_TEST_SHOTS_DIR" | "GAMES_TEST_GITHUB_API" | "BLOG_TEST_MEDIA_DIR"
 ): string | undefined {
-  const env = process.env.SITE_ENV;
-  if (env === "production" || env === "staging") return undefined;
+  if (!testStandInsAllowed(process.env)) return undefined;
   return process.env[name] || undefined;
 }
 
@@ -140,7 +141,7 @@ type Env = Partial<CloudflareEnv> & Record<string, unknown>;
  */
 export async function workerEnv(): Promise<Env> {
   try {
-    const { env } = await getCloudflareContext({ async: true });
+    const { env } = await cloudflareContext();
     return { ...(env as unknown as Env), ...(process.env as Record<string, unknown>) };
   } catch {
     return process.env as unknown as Env;

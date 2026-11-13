@@ -34,8 +34,7 @@ const sheet = {
   screenshots: [],
 };
 // The writer plans from a real fact sheet (one of the replay fixtures).
-const recorded = JSON.parse(readFileSync(new URL("./fixtures/content-replay/top-grades-5bcb50a626f8ebde.json", import.meta.url), "utf8"));
-const writerSheet = recorded.sheet ?? recorded;
+const writerSheet = JSON.parse(readFileSync(new URL("./fixtures/content-replay/top-grades-5bcb50a626f8ebde.json", import.meta.url), "utf8"));
 const plan = planPost(writerSheet);
 
 // Every builder that makes a Gemini request, with the label it must carry.

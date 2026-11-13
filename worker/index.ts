@@ -36,6 +36,7 @@ import { emailAlertsTick } from "./email-alerts";
 import { freshnessTick } from "./freshness";
 import { tiersTick } from "./tiers";
 import { nightWatchTick } from "./night-watch";
+import { runEach } from "../pipeline/hourly.mjs";
 import { jobCron } from "./crons";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
@@ -153,21 +154,36 @@ const worker = {
     // Staging's less frequent crons run the same jobs (./crons.ts).
     const cron = jobCron(controller.cron);
     if (cron === PEOPLE_QUEUE_CRON) {
-      // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
-      const removals = await removalsTick(env as NightEnv, controller.scheduledTime);
-      // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
-      await purgeAfterHour(ctx, removals.applied, controller.scheduledTime);
-      // An alert at 80% of any email cap (./email-alerts.ts).
-      await emailAlertsTick(env as NightEnv, controller.scheduledTime);
-      // An alert when last night's run never started or died (./night-watch.ts).
-      await nightWatchTick(env as NightEnv, controller.scheduledTime);
-      await drainPeople(env as NightEnv);
-      // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts).
-      await freshnessTick(controller.scheduledTime);
-      // The daily tier update when it is due (./tiers.ts); the profiles whose letter changed leave the edge cache.
-      await tiersTick(controller.scheduledTime, { purgeTags: purgeTagsOf(ctx) });
-      // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
-      await libraryTick(env as NightEnv, controller.scheduledTime);
+      // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
+      // Sentry and the log, and the rest still run this hour.
+      const at = controller.scheduledTime;
+      let removed: string[] = [];
+      await runEach(
+        [
+          // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
+          ["owner removals", async () => {
+            removed = (await removalsTick(env as NightEnv, at)).applied;
+          }],
+          // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
+          ["edge purge", () => purgeAfterHour(ctx, removed, at)],
+          // An alert at 80% of any email cap (./email-alerts.ts).
+          ["email caps", () => emailAlertsTick(env as NightEnv, at)],
+          // An alert when last night's run never started or died (./night-watch.ts).
+          ["night watch", () => nightWatchTick(env as NightEnv, at)],
+          // People's grade requests that waited for Gemini 3.5 (./night.ts).
+          ["people queue", () => drainPeople(env as NightEnv)],
+          // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts).
+          ["freshness", () => freshnessTick(at)],
+          // The daily tier update when it is due (./tiers.ts); the profiles whose letter changed leave the edge cache.
+          ["tiers", () => tiersTick(at, { purgeTags: purgeTagsOf(ctx) })],
+          // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
+          ["image library", () => libraryTick(env as NightEnv, at)],
+        ],
+        {
+          report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),
+          log: (line) => console.log(JSON.stringify(line)),
+        }
+      );
     }
     else if (cron === MODEL_WATCH_CRON) {
       // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).

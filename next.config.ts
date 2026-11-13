@@ -53,7 +53,17 @@ const securityHeaders = [
       // Turnstile (components/ui/Turnstile.tsx) is a script plus an iframe
       // from challenges.cloudflare.com. React's dev build needs eval for its
       // debugging tools; production never gets it.
+      //
+      // 'unsafe-inline' stays for script elements: the App Router writes its
+      // data into inline <script> tags on every page, and a nonce would need
+      // every page rendered per request, which ends the prerendered and
+      // edge-cached pages (worker/edge-cache.ts). What inline scripts can do
+      // is narrowed instead: no inline event handler attributes
+      // (script-src-attr 'none', the usual way an injected tag runs code) and
+      // no plugins (object-src 'none'); base-uri and form-action stay 'self'.
       `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://static.cloudflareinsights.com https://challenges.cloudflare.com`,
+      "script-src-attr 'none'",
+      "object-src 'none'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",

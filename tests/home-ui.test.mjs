@@ -12,6 +12,7 @@ import { chromium } from "playwright";
 import { createClient } from "@libsql/client";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
+import { listen } from "./helpers/listen.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -40,7 +41,7 @@ before(async () => {
       res.writeHead(404).end();
     });
   });
-  await new Promise((r) => mock.listen(MOCK_PORT, "127.0.0.1", r));
+  await listen(mock, MOCK_PORT);
   for (let i = 0; i < 60; i++) {
     try {
       if ((await fetch(BASE + "/api/rank")).ok) break;
