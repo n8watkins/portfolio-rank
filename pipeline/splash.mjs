@@ -287,27 +287,50 @@ function findModal([minDialog, minOverlay]) {
     }
   }
   if (!found) {
-    // A fixed overlay: covers most of the screen, sits on top, and hides a page with more text than it has itself.
-    const all = words(document.body?.innerText);
+    // A fixed overlay: covers most of the screen, sits on top, holds little text itself, and
+    // actually hides page text in the first screen (text outside it whose spot it covers). A site
+    // drawn inside a full-screen fixed container (a canvas-style portfolio) is the page, not an
+    // overlay: nothing outside it is covered.
+    const covered = (overlay) => {
+      let n = 0;
+      for (const t of document.querySelectorAll("h1, h2, h3, p, li, a, span, button")) {
+        if (overlay.contains(t) || t.children.length > 3) continue;
+        const r = t.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) continue;
+        const s = getComputedStyle(t);
+        if (s.visibility === "hidden" || s.display === "none") continue;
+        const hit = document.elementFromPoint(Math.min(Math.max((r.left + r.right) / 2, 1), vw - 1), Math.min(Math.max((r.top + r.bottom) / 2, 1), vh - 1));
+        if (hit && overlay.contains(hit)) n += words(t.innerText);
+        if (n >= 20) return true;
+      }
+      return false;
+    };
     for (const el of document.querySelectorAll("body *")) {
       const s = getComputedStyle(el);
       if (s.position !== "fixed" || !shown(el)) continue;
       if (area(el.getBoundingClientRect()) <= minOverlay || !onTop(el)) continue;
       const own = words(el.innerText);
-      if (own === 0 || all - own < 40) continue;
+      if (own === 0 || own > 150 || !covered(el)) continue;
       found = { el, kind: "overlay" };
       break;
     }
   }
   if (!found) return null;
-  const PRIMARY = /^(continue|enter|start|get started|let'?s go|explore)\b/i;
+  // A gate's wording counts too: "CLICK TO ENTER" over a page with plenty of text never trips the splash check.
+  const PRIMARY = /^(continue|enter|start|get started|let'?s go|explore|(click|tap) to (enter|continue)|skip intro)\b/i;
   const CLOSE = /^(close|dismiss|skip|×|✕|x)$/i;
-  const clickables = [...found.el.querySelectorAll("button, a, [role=button]")].filter(shown);
-  const label = (b) => (b.innerText || b.getAttribute("aria-label") || b.getAttribute("title") || "").replace(/\s+/g, " ").trim();
-  const go = clickables.find((b) => PRIMARY.test(label(b))) ?? clickables.find((b) => CLOSE.test(label(b)));
+  // Buttons and links, and anything a visitor can click (a pointer cursor): gates often draw their
+  // button as a div. A label matches when any of its lines does ("LOADING 100%" then "CLICK TO ENTER").
+  const INTERACTIVE = "button, a, [role=button], [onclick], [tabindex]";
+  const clickables = [...found.el.querySelectorAll(`${INTERACTIVE}, div, span`)].filter((b) => shown(b) && (b.matches(INTERACTIVE) || getComputedStyle(b).cursor === "pointer"));
+  const label = (b) => (b.innerText || b.getAttribute("aria-label") || b.getAttribute("title") || "").trim();
+  const lines = (b) => label(b).split(/\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  // The smallest match: the button itself, not the section around it.
+  const smallest = (re) => clickables.filter((b) => lines(b).some((l) => re.test(l))).sort((a, b) => label(a).length - label(b).length)[0];
+  const go = smallest(PRIMARY) ?? smallest(CLOSE);
   found.el.setAttribute("data-pr-modal", "1");
   if (go) go.setAttribute("data-pr-modal-go", "1");
-  return { kind: found.kind, area: Math.round(area(found.el.getBoundingClientRect()) * 100) / 100, button: go ? label(go).slice(0, 60) : null };
+  return { kind: found.kind, area: Math.round(area(found.el.getBoundingClientRect()) * 100) / 100, button: go ? (lines(go).find((l) => PRIMARY.test(l) || CLOSE.test(l)) ?? lines(go)[0] ?? "").slice(0, 60) : null };
 }
 
 /**
