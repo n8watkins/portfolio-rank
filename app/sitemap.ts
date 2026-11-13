@@ -4,6 +4,8 @@ import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { hiddenUrls } from "@/lib/roster";
 import { graderEnabled } from "@/lib/grader/server";
+import { toolsEnabled } from "@/lib/tools/server";
+import { TOOLS } from "@/lib/tools/catalog";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
@@ -27,6 +29,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/polls`, changeFrequency: "weekly", priority: 0.6 },
     // Reports (/grade/<id>) and claims are unlisted and never indexed.
     ...(graderEnabled() ? [{ url: `${BASE}/grade`, changeFrequency: "monthly" as const, priority: 0.7 }] : []),
+    // The free tools: the hub and each tool's own page.
+    ...(toolsEnabled()
+      ? [{ url: `${BASE}/tools`, changeFrequency: "monthly" as const, priority: 0.7 }, ...TOOLS.filter((t) => t.live).map((t) => ({ url: `${BASE}${t.href}`, changeFrequency: "monthly" as const, priority: 0.6 }))]
+      : []),
     { url: `${BASE}/how`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/grading`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/removed`, changeFrequency: "weekly", priority: 0.3 },

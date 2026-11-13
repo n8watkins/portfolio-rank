@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, X } from "lucide-react";
+import { BookOpen, Ellipsis, Gamepad2, LayoutGrid, Newspaper, Settings, ShieldCheck, Sparkles, Trophy, User, Vote, Wrench, X } from "lucide-react";
 import { ROUTES, navKeyFor, type NavKey, type PrimaryAction } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { useSignIn } from "@/components/SignInModal";
@@ -44,6 +44,7 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
   const blogLive = useBlogLive();
   const links: { href: string | null; label: string; Icon: typeof Trophy; signIn?: boolean }[] = [
     { href: blogLive ? ROUTES.blog : null, label: "Blog", Icon: Newspaper },
+    { href: ROUTES.tools, label: "Free tools", Icon: Wrench },
     { href: ROUTES.polls, label: "Polls", Icon: Vote },
     { href: ROUTES.about, label: ROUTES.about === "/how" ? "How it works" : "About", Icon: BookOpen },
     signedIn ? { href: ROUTES.profile, label: "Account", Icon: User } : { href: "#signin", label: "Sign in", Icon: User, signIn: true },
