@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { DetailDiagnostics, Socials } from "@/components/Diagnostics";
+import type { Inspection } from "@/app/api/inspect/route";
+import { peekCached } from "@/lib/cache";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
@@ -130,6 +132,10 @@ export default async function PortfolioPage({
     })
   ).rows[0];
   if (row) rating = { elo: Number(row.elo), votes: Number(row.votes) };
+  // The page check as last measured (/api/inspect's cache), so the social
+  // links and the checklist are there at first paint instead of moving the
+  // page when the browser's own request answers.
+  const inspection = await peekCached<Inspection>("inspect", url).catch(() => null);
 
   const stars = Number(
     (
@@ -199,7 +205,7 @@ export default async function PortfolioPage({
                   </p>
                 )}
               </div>
-              <Socials url={url} />
+              <Socials url={url} initial={inspection} />
               {/* count+showCount → the ♥ label carries a live "saved" total that
                   updates when this same button toggles (no stale server value). */}
               <LikeButton
@@ -232,7 +238,7 @@ export default async function PortfolioPage({
 
         {eloTier && <ProfileTier t={eloTier} />}
 
-        <DetailDiagnostics url={url} />
+        <DetailDiagnostics url={url} initialInspection={inspection} />
 
         {grade && (
           <div className="mt-4 rounded-xl border border-edge bg-card p-5">

@@ -17,6 +17,7 @@
 // GEMINI_CATCHUP (catch-up mode on 3.1) was removed on 2026-11-10: grades and
 // votes come from 3.5 only (GEMINI_FALLBACK, pipeline/gemini.mjs).
 
+import { GEMINI_LOG_COLUMNS, GEMINI_LOG_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
 
 export const DEFAULT_DAILY_QUOTA = {
@@ -44,37 +45,7 @@ export const dailyQuota = (raw = env().GEMINI_DAILY_QUOTA) => parseJson(raw, DEF
 export const prices = (raw = env().GEMINI_PRICES) => parseJson(raw, DEFAULT_PRICES);
 
 export async function ensureGeminiLog(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS gemini_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    at TEXT NOT NULL,
-    run_id TEXT,
-    job TEXT,
-    model TEXT NOT NULL,
-    status INTEGER,
-    reason TEXT,
-    latency_ms INTEGER,
-    input_tokens INTEGER,
-    output_tokens INTEGER,
-    retry INTEGER NOT NULL DEFAULT 0,
-    fallback INTEGER NOT NULL DEFAULT 0,
-    thoughts_tokens INTEGER,
-    finish_reason TEXT,
-    detail TEXT,
-    prompt TEXT
-  )`);
-  await db.execute("CREATE INDEX IF NOT EXISTS gemini_requests_at_idx ON gemini_requests (at)");
-  // Columns added later (thinking tokens, then the finish reason and the
-  // error detail, then the prompt id and version, such as "grade-v2", that
-  // the request builder sets); add them to older tables.
-  const cols = new Set((await db.execute("PRAGMA table_info(gemini_requests)")).rows.map((r) => String(r.name)));
-  for (const [name, type] of [["thoughts_tokens", "INTEGER"], ["finish_reason", "TEXT"], ["detail", "TEXT"], ["prompt", "TEXT"]]) {
-    if (cols.has(name)) continue;
-    try {
-      await db.execute(`ALTER TABLE gemini_requests ADD COLUMN ${name} ${type}`);
-    } catch (e) {
-      if (!/duplicate column/i.test(String(e?.message))) throw e;
-    }
-  }
+  await applyTables(db, GEMINI_LOG_TABLES, GEMINI_LOG_COLUMNS);
 }
 
 /**

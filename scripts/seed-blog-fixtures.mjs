@@ -16,7 +16,8 @@
 //
 // Without --published both posts go in as drafts waiting for review (what a
 // dry-run night leaves); with it, as published posts.
-// Then run the app with LOCAL_DB_FILE=<db file> and
+// Then run the app (next dev, or next start with SITE_ENV=test: the media
+// stand-in is honoured only there, lib/test-mode.mjs) with LOCAL_DB_FILE=<db file> and
 // BLOG_TEST_MEDIA_DIR=$PWD/tests/fixtures/blog/media.
 import fs from "node:fs";
 import path from "node:path";
