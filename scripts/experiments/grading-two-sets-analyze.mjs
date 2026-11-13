@@ -82,6 +82,10 @@ export function setReport({ answers, position }, key, set, plan, sites) {
   // Consistency 1: the same site, an identical solo request.
   const rIds = plan.sets[set].solo_repeat;
   rep.consistency_identical_solo = answers["solo-repeat"] ? { ids: rIds, ...compare(answers["solo-repeat"], S, rIds), checklist_same: CHECKS.reduce((n, q) => n + rIds.filter((id) => answers["solo-repeat"][id] && both(answers["solo-repeat"][id].five_second[q]) === both(S[id]?.five_second[q])).length, 0) } : null;
+  // Amendment control (Gemini only): the solo request again with the free-text level_line schema.
+  rep.schema_change_solo = answers["solo-freetext"]
+    ? { ids: rIds, ...compare(answers["solo-freetext"], S, rIds), note: "free-text level_line against the enum schema, same sites, otherwise the same solo request; compare with consistency_identical_solo to separate the schema effect from noise" }
+    : null;
   // Consistency 2: the same batch, an identical request.
   rep.consistency_identical_batch = answers["pass1-repeat"] ? compare(answers["pass1-repeat"], answers.pass1, ids) : null;
   // Consistency 3: the same site in a different batch (passes 1, 2 and 3).
@@ -229,6 +233,7 @@ export function analyze({ res = RES, exp = EXP } = {}) {
           different_batch_same_pairs: row((r) => r.consistency_different_batch?.[p].exact),
           pass1_within1_of_own_solo: row((r) => r.batch_vs_solo.pass1?.[p].within1),
           pass1_mean_shift_vs_own_solo: row((r) => r.batch_vs_solo.pass1?.[p].mean_diff),
+          solo_freetext_same_as_solo: row((r) => r.schema_change_solo?.[p].exact),
         },
       ])
     );

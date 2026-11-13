@@ -19,7 +19,11 @@
  "day_cap": 430,
  "prompt_ids": {
   "solo": "grade-two-sets-solo",
+  "solo_freetext": "grade-two-sets-solo-freetext",
   "batch": "grade-two-sets-batch"
  },
+ "amendments": [
+  "2026-11-13: batch schema level_line is free text; 10 solo-freetext control requests added"
+ ],
  "job": "exp-grading-two-sets"
 }

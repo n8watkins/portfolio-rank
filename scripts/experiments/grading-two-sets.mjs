@@ -335,6 +335,9 @@ export function requestList(plan) {
   for (const set of ["A", "B"]) pass(set, "pass3", "pass3");
   for (const set of ["A", "B"]) solo(set, "solo-repeat", plan.sets[set].solo_repeat);
   for (const set of ["A", "B"]) pass(set, "pass1-repeat", "pass1");
+  // Amendment 2026-11-13, Gemini only: the solo-repeat sites again, with the
+  // free-text level_line schema of the batches, to measure the schema change alone.
+  for (const set of ["A", "B"]) plan.sets[set].solo_repeat.forEach((id) => out.push({ key: `solo-freetext/${id}`, step: "solo-freetext", set, kind: "solo", schema: "solo_freetext", ids: [id], gemini_only: true }));
   return out;
 }
 
@@ -408,7 +411,7 @@ function expertRuns() {
     "",
   ];
   let step = null;
-  plan.requests.forEach((r, i) => {
+  plan.requests.filter((r) => !r.gemini_only).forEach((r, i) => {
     if (r.step !== step) {
       step = r.step;
       lines.push("", `### Step ${step}`, "");
@@ -417,7 +420,7 @@ function expertRuns() {
     lines.push(`${i + 1}. ${r.kind === "solo" ? "One at a time" : `5 at a time (${r.pass}, batch ${r.batch})`}: ${r.ids.join(", ")} -> \`${file}\``);
   });
   fs.writeFileSync(path.join(EXP, "expert-runs.md"), `${lines.join("\n")}\n`);
-  console.log(`expert-runs.md: ${plan.requests.length} requests`);
+  console.log(`expert-runs.md: ${plan.requests.filter((r) => !r.gemini_only).length} requests`);
 }
 
 // ---------------------------------------------------------------- lock
@@ -455,6 +458,25 @@ async function lock() {
   console.log(`locked at ${out.locked_at}`);
 }
 
+/** Append a dated amendment to lock.json with the hashes as they are now; the original lock stays as it was. */
+async function amend(note) {
+  if (!note) throw new Error("amend needs --note TEXT");
+  const lockPath = path.join(EXP, "lock.json");
+  const before = readJson(lockPath);
+  const { SETTINGS } = await import("./grading-two-sets-run.mjs");
+  writeJson(path.join(EXP, "settings.json"), SETTINGS);
+  const hash = (p) => sha256(fs.readFileSync(p));
+  const files = Object.fromEntries(Object.keys(before.files).map((f) => [f, hash(path.join(REPO_ROOT, f))]));
+  const code = Object.fromEntries(Object.keys(before.code).map((f) => [f, hash(path.join(REPO_ROOT, f))]));
+  const prev = { ...before.files, ...before.code, ...Object.assign({}, ...(before.amendments ?? []).map((a) => ({ ...a.files, ...a.code }))) };
+  const changed = Object.entries({ ...files, ...code }).filter(([f, h]) => prev[f] !== h).map(([f]) => f);
+  const plan = readJson(path.join(EXP, "groupings.json"));
+  (before.amendments ??= []).push({ at: new Date().toISOString(), note, requests_gemini: plan.requests.length, requests_expert: plan.requests.filter((r) => !r.gemini_only).length, changed, files, code });
+  writeJson(lockPath, before);
+  console.log(`amended at ${before.amendments.at(-1).at}; changed: ${changed.join(", ")}`);
+}
+const REPO_ROOT = path.join(EXP, "..", "..");
+
 // ---------------------------------------------------------------- main
 async function main() {
   const [step, ...rest] = process.argv.slice(2);
@@ -464,6 +486,7 @@ async function main() {
   if (step === "plan") return planStep();
   if (step === "expert-runs") return expertRuns();
   if (step === "lock") return lock();
+  if (step === "amend") return amend(flag("note"));
   if (step === "select") {
     const { pipelineDb } = await import("../../pipeline/roster.mjs");
     if (!process.env.TURSO_DATABASE_URL) throw new Error("select reads the production DB: run through pass-env with TURSO_DATABASE_URL");

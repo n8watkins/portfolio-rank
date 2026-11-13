@@ -1181,7 +1181,118 @@
     "B08",
     "B05"
    ]
+  },
+  {
+   "key": "solo-freetext/A05",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A05"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A01",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A01"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A07",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A07"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A15",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A15"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A06",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A06"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B02",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B02"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B08",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B08"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B11",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B11"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B10",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B10"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B19",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B19"
+   ],
+   "gemini_only": true
   }
  ],
- "created_at": "2026-11-13T18:25:49.940Z"
+ "created_at": "2026-11-13T18:25:49.940Z",
+ "amended_at": "2026-11-13"
 }

@@ -75,6 +75,12 @@
    "start": "2026-11-13T18:34:13Z"
   },
   {
+   "phase": "amendment: batch level_line free text, 10 solo-freetext controls added, expert as 12 sessions (one per step per set); recorded in lock.json amendments",
+   "start": "2026-11-13T18:35:00Z",
+   "end": "2026-11-13T18:37:51Z",
+   "approximate_start": true
+  },
+  {
    "phase": "gemini:pass2"
   },
   {
@@ -85,6 +91,9 @@
   },
   {
    "phase": "gemini:pass1-repeat"
+  },
+  {
+   "phase": "gemini:solo-freetext"
   },
   {
    "phase": "analysis and report"

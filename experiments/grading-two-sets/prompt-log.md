@@ -74,6 +74,21 @@ They come after every judgment, so writing a tip cannot pull a score.
 I removed the old batch prompt's `order` field (rank the 5 sites): asking for a ranking in the same answer invites the model to spread the scores to match it, which is exactly the batch drift the first test found.
 Every site's two screenshots come right before its own block, so the model never has to match images to text across the request.
 
+## Amendment, 2026-11-13, after the solo step
+
+The first 5-at-a-time request (pass1/A-b1) was refused with HTTP 400 INVALID_ARGUMENT, with no detail.
+The 40 solo requests before it had all been answered.
+The model allows 65,536 output tokens (the request asked for 32,768) and the five sites' images total about 576 KB, so the likely cause is the batch response schema: five copies of the answer, each with three long enum lists of level lines.
+Decision (coordinator, option 1): `level_line` becomes free text in the batch schema only; code still checks it against the rubric (a "5:" prefix, quotes, case and spacing are ignored) and logs a mismatch.
+The prompts and the rubric wording are unchanged.
+The solo schema is unchanged, so the solo-repeat step stays an identical repeat of the original solo requests.
+Because the solo answers used the enum and the batch answers do not, "batch vs solo" now mixes a schema change into the batch effect.
+To measure that change alone, 10 Gemini-only requests were added after all other steps (step `solo-freetext`): the same 10 sites as the solo-repeat step, the same solo prompt, with the free-text `level_line` schema (prompt id `grade-two-sets-solo-freetext`).
+Comparing solo-freetext with solo, next to solo-repeat with solo, separates the schema effect from run-to-run noise.
+The expert's instructions are unchanged: its output format never had an enum.
+Planned Gemini requests: 42 used before the amendment, 1 test (pass1/A-b1 again), 41 remaining and 10 controls, 94 in all, inside the hard stop of 120.
+The new hashes are in `lock.json`, under `amendments`.
+
 ## What I expect to go wrong
 
 - **Scores still bunch at 3 and 4.** The anchor fights the 4s-and-5s pile-up, but Flash-Lite may overcorrect into all 3s, which passes the spread rule and fails agreement on the strong and weak sites.

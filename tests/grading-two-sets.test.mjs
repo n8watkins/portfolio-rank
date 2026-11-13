@@ -104,8 +104,15 @@ test("groupings: 3 passes, each site in a different position each pass", () => {
 
 test("the request list: 41 per set, repeats after the first passes", () => {
   const f = fixture();
-  assert.equal(f.plan.requests.length, 82);
-  for (const set of ["A", "B"]) assert.equal(f.plan.requests.filter((r) => r.set === set).length, 41);
+  // 82 shared with the expert, plus 10 Gemini-only solo-freetext controls (amendment, last).
+  assert.equal(f.plan.requests.length, 92);
+  const shared = f.plan.requests.filter((r) => !r.gemini_only);
+  assert.equal(shared.length, 82);
+  for (const set of ["A", "B"]) assert.equal(shared.filter((r) => r.set === set).length, 41);
+  const free = f.plan.requests.filter((r) => r.gemini_only);
+  assert.deepEqual(free.map((r) => r.ids[0]), [...f.plan.sets.A.solo_repeat, ...f.plan.sets.B.solo_repeat]);
+  assert.ok(free.every((r) => r.step === "solo-freetext" && r.schema === "solo_freetext"));
+  assert.deepEqual(f.plan.requests.slice(-10), free);
   const at = (step) => f.plan.requests.findIndex((r) => r.step === step);
   assert.ok(at("solo-repeat") > at("pass3"));
   assert.ok(at("pass1-repeat") > at("solo-repeat"));
@@ -121,9 +128,20 @@ test("a full mocked run: 503 retried, broken answer asked again, raw log without
   try {
     const { exit, state } = await run(opts(f, base));
     assert.equal(exit, "done");
-    assert.equal(Object.values(state.items).filter((i) => i.answers).length, 82);
-    assert.equal(state.http_requests, 84);
-    assert.equal(seen.length, 84);
+    assert.equal(Object.values(state.items).filter((i) => i.answers).length, 92);
+    assert.equal(state.http_requests, 94);
+    assert.equal(seen.length, 94);
+    // Only the solo step keeps the level-line enum; batches and the control are free text.
+    const enumIn = (b) => JSON.stringify(b.generationConfig.responseSchema).includes('"enum":["Distinctive');
+    const kinds = f.plan.requests.map((r) => r.step);
+    assert.ok(seen.every((b) => {
+      const blocks = b.contents[0].parts.filter((p) => p.text?.startsWith("<site_data")).length;
+      return blocks === 1 ? true : !enumIn(b);
+    }));
+    assert.ok(kinds.includes("solo-freetext"));
+    assert.ok(enumIn(seen[0]), "the locked solo step keeps the enum");
+    assert.ok(seen.slice(-10).every((b) => !enumIn(b)), "solo-freetext has no enum");
+    assert.ok(seen.slice(-10).every((b) => b.contents[0].parts.filter((p) => p.text?.startsWith("<site_data")).length === 1));
     assert.equal(state.attempts.filter((a) => a.status === 503).length, 1);
     assert.equal(state.attempts.filter((a) => a.retry).length, 1);
     for (const b of seen) {
@@ -131,8 +149,8 @@ test("a full mocked run: 503 retried, broken answer asked again, raw log without
       assert.equal(b.generationConfig.temperature, 0.2);
     }
     const raw = fs.readdirSync(path.join(f.root, "raw"));
-    assert.equal(raw.filter((x) => x.endsWith(".request.json")).length, 84);
-    assert.equal(raw.filter((x) => x.endsWith(".response.json")).length, 84);
+    assert.equal(raw.filter((x) => x.endsWith(".request.json")).length, 94);
+    assert.equal(raw.filter((x) => x.endsWith(".response.json")).length, 94);
     const one = JSON.parse(fs.readFileSync(path.join(f.root, "raw", raw.find((x) => x.endsWith(".request.json"))), "utf8"));
     const img = one.body.contents[0].parts.find((p) => p.inline_data).inline_data;
     assert.ok(img.bundle_file && img.sha256 && !img.data);
@@ -175,8 +193,8 @@ test("a busy model: 5 tries, then the run pauses and a later run resumes at the 
     assert.match(first.state.paused.why, /503/);
     const second = await run(opts(f, base));
     assert.equal(second.exit, "done");
-    assert.equal(Object.values(second.state.items).filter((i) => i.answers).length, 82);
-    assert.equal(second.state.http_requests, 87);
+    assert.equal(Object.values(second.state.items).filter((i) => i.answers).length, 92);
+    assert.equal(second.state.http_requests, 97);
   } finally {
     server.close();
   }

@@ -39,7 +39,11 @@ export const SETTINGS = {
   max_tries: 5,
   broken_answer_retries: 1,
   day_cap: 430,
-  prompt_ids: { solo: "grade-two-sets-solo", batch: "grade-two-sets-batch" },
+  prompt_ids: { solo: "grade-two-sets-solo", solo_freetext: "grade-two-sets-solo-freetext", batch: "grade-two-sets-batch" },
+  // Amendment 2026-11-13: the batch schema (and the solo_freetext control
+  // step) take level_line as free text; the enum version was refused with
+  // HTTP 400 INVALID_ARGUMENT on the first batch request.
+  amendments: ["2026-11-13: batch schema level_line is free text; 10 solo-freetext control requests added"],
   job: JOB,
 };
 
@@ -83,7 +87,7 @@ export function siteBlock(b, label = null) {
 const jpeg = (img) => ({ inline_data: { mime_type: "image/jpeg", data: img.data } });
 
 /** Request parts, schema and options for one request, plus the image references for the raw log. */
-export function buildRequest(kind, bundles, prompts = loadPrompts()) {
+export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey = kind) {
   const parts = [];
   const refs = new Map();
   const labels = batchLabels(bundles.length);
@@ -98,9 +102,9 @@ export function buildRequest(kind, bundles, prompts = loadPrompts()) {
   return {
     parts,
     refs,
-    schema: prompts.schema[kind],
+    schema: prompts.schema[schemaKey],
     options: {
-      prompt: SETTINGS.prompt_ids[kind],
+      prompt: SETTINGS.prompt_ids[schemaKey],
       systemInstruction: prompts[kind],
       thinkingLevel: SETTINGS.thinkingLevel,
       temperature: SETTINGS.temperature,
@@ -123,7 +127,9 @@ export function parseAnswer(a, levels) {
     const s = Number(a[p]?.score);
     if (!Number.isInteger(s) || s < 1 || s > 5) throw new Error(`${p}.score missing or out of range`);
     const line = String(a[p].level_line ?? "");
-    const lineLevel = 5 - levels[p].indexOf(line);
+    // Free-text level lines (batch schema) may add a "5:" prefix, quotes or spacing.
+    const norm = (t) => t.toLowerCase().replace(/^\W*[1-5]\s*[:.)-]\s*/, "").replace(/[^a-z0-9]+/g, " ").trim();
+    const lineLevel = 5 - levels[p].map(norm).indexOf(norm(line));
     if (lineLevel !== s) out.notes.push(`${p}: level line ${lineLevel === 6 ? "not in the rubric" : lineLevel} but score ${s}`);
     out[p] = { evidence: String(a[p].evidence ?? ""), level_line: line, score: s };
   }
@@ -267,7 +273,7 @@ export async function run({
   let exit = "done";
   for (const req of todo) {
     const bundles = req.ids.map((id) => loadBundle(id, bundleRoot));
-    const built = buildRequest(req.kind, bundles, prompts);
+    const built = buildRequest(req.kind, bundles, prompts, req.schema ?? req.kind);
     // The request body without the API key, for "identical request" checks.
     const bodySha = sha256(JSON.stringify({ s: built.options.systemInstruction, p: built.parts, schema: built.schema, t: built.options.temperature, k: built.options.thinkingLevel, m: built.options.maxOutputTokens }));
     current = { req, refs: built.refs, tries: 0, bodySha };
