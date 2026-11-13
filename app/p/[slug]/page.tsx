@@ -56,7 +56,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
   const title = seoTitle(p);
   const roles = p.report?.roles ?? [];
-  const description = (p.tagline ? `${p.tagline} ` : "") + `${roles.length ? `${roles.join(", ")} portfolio` : "Developer portfolio"} at ${p.domain}${p.tier ? `, tier ${tierLabel(p.tier)} on PortfolioRank` : " on PortfolioRank"}.`;
+  const kind = roles.length ? `${roles.join(", ")} portfolio` : "developer portfolio";
+  const description = `${p.name}'s ${kind} at ${p.domain}${p.tagline ? `: ${p.tagline.replace(/\.$/, "")}` : ""}.${p.tier && !p.standing.provisional ? ` Tier ${tierLabel(p.tier)} on PortfolioRank.` : " On PortfolioRank."}`;
   return {
     title,
     description: description.slice(0, 300),
@@ -189,7 +190,8 @@ function ReportCard({ p }: { p: Profile }) {
 }
 
 function ShareCard({ p }: { p: Profile }) {
-  if (!p.tier) return null;
+  // Once it has its letter: the starting B while face-offs are under way isn't one.
+  if (!p.tier || p.standing.provisional) return null;
   const link = `${SITE_URL}${p.path}`;
   return (
     <section aria-labelledby="share" className="card p-5 sm:p-6">
@@ -197,7 +199,7 @@ function ShareCard({ p }: { p: Profile }) {
         <ShareButton url={link} title={p.name} />
       </SectionTitle>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={`${p.path}/opengraph-image`} alt={`${p.name}'s PortfolioRank card, tier ${tierLabel(p.tier)}`} loading="lazy" className="w-full max-w-xl rounded-xl border border-edge" />
+      <img src={`${p.path}/opengraph-image`} alt={`${p.name}'s PortfolioRank card, tier ${tierLabel(p.tier)}`} className="aspect-[1200/630] w-full max-w-xl rounded-xl border border-edge bg-raised" />
     </section>
   );
 }
