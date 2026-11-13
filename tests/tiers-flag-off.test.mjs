@@ -10,6 +10,7 @@ import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
 import { ensureTierSchema, writeTierMeta } from "../lib/tiers-db.mjs";
 import { cautious } from "../lib/tiers.mjs";
+import { profilePath } from "../lib/profile-url.mjs";
 
 const BASE = process.env.E2E_BASE_URL;
 const DB_URL = process.env.E2E_DB_URL;
@@ -52,7 +53,7 @@ test("with RANKING_V2 off, no page shows tiers by ELO, though the tier data is t
   await writeTierMeta(db, { n: 1, cutoffs: [{ tier: "SSS", min: null }], hist: [[0, 1]], perPoint: 4, at: new Date().toISOString() });
 
   // The profile: the plain ELO, the AI review with Gemini's own letter (B), no tier card.
-  const profile = await get(`/p/${encodeURIComponent(SITE)}`);
+  const profile = await get(profilePath(SITE));
   assert.equal(profile.status, 200);
   // The profile in production (ELO · votes), or the new profile the test run turns on with TOOLS_ENABLED (#191).
   assert.match(profile.html, /ELO · \d+ votes?|ELO <span[^>]*>\d+<\/span> from /);

@@ -8,6 +8,7 @@ import { ROUTES } from "@/lib/nav";
 import { AI_VOTE_WEIGHT, isPublicTier } from "@/lib/tiers.mjs";
 import type { RankedBoard as Board, RankedRow } from "@/lib/tiers-board";
 import type { Why } from "@/lib/leaderboard";
+import { profilePath } from "@/lib/profile-url.mjs";
 
 // The leaderboard as one ranked board (tiers by ELO, RANKING_V2 only): by
 // ELO, so by tier, each row with its letter (public tiers only), real votes
@@ -88,7 +89,7 @@ function Row({ r }: { r: RankedRow }) {
   const votes = `${r.votes.toLocaleString("en-US")} ${r.votes === 1 ? "vote" : "votes"}`;
   return (
     <li className="border-b border-edge last:border-b-0">
-      <a href={`/p/${encodeURIComponent(r.url)}`} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
+      <a href={profilePath(r.url)} className="group flex items-center gap-3 px-3 py-3 transition hover:bg-raised focus-visible:-outline-offset-2 md:gap-5 md:px-5 md:py-4">
         <span className="flex w-9 shrink-0 justify-end md:w-10">
           <RankBadge rank={r.rank} size={r.rank <= 3 ? "lg" : "md"} />
         </span>
