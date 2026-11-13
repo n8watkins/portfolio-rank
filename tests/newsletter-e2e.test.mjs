@@ -5,8 +5,8 @@
 // limits, the address handed to Kit (an unconfirmed subscriber added to the
 // one double opt-in form) and never stored by us, Kit being down, the
 // admin's Newsletter page with Kit's count and the email preview, and the
-// forms in a real browser on a post (sidebar on desktop, after the post on a
-// phone), on /blog and in the footer.
+// forms in a real browser after a post (desktop and phone),
+// on /blog and in the footer.
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -257,29 +257,22 @@ test("admin: Test the newsletter (Kit) shows the setup check, says which system 
   assert.ok(b.content.includes("{{ unsubscribe_url }}"));
 });
 
-test("the forms: beside a post on desktop, after it on a phone, on /blog and in the footer elsewhere", async () => {
+test("the forms: after a post, on /blog and in the footer elsewhere", async () => {
   const desk = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
   desk.on("pageerror", (e) => errors.push(String(e)));
   await desk.goto(`${BASE}/blog/${post.slug}`);
-  const side = desk.locator('[data-newsletter="sidebar"]');
   const after = desk.locator('[data-newsletter="after-post"]');
-  await side.waitFor();
-  assert.ok(await side.isVisible());
-  assert.ok(!(await after.isVisible()));
+  await after.waitFor();
+  assert.ok(await after.isVisible());
   assert.equal(await desk.locator('[data-newsletter="footer"]').count(), 0, "no second form in the footer of a post");
-  // The sidebar sits in the margin, right of the reading column, inside the window.
-  const box = await side.boundingBox();
-  const col = await desk.locator("article .prose, article [class*='max-w-[42rem]']").last().boundingBox();
-  assert.ok(box.x >= col.x + col.width, "right of the column");
-  assert.ok(box.x + box.width <= 1440, "inside the window");
   assert.equal(await desk.evaluate(() => document.documentElement.scrollWidth), 1440, "no sideways scroll");
 
-  // Signing up from the sidebar.
-  const email = `side-${RUN}@example.com`;
-  await side.getByLabel("Email for new posts").fill(email);
-  await side.getByRole("button", { name: "Subscribe" }).click();
-  await side.getByText("check your inbox and press Confirm").waitFor();
+  // Signing up from the form after the post.
+  const email = `after-${RUN}@example.com`;
+  await after.getByLabel("Email for new posts").fill(email);
+  await after.getByRole("button", { name: "Subscribe" }).click();
+  await after.getByText("check your inbox and press Confirm").waitFor();
   assert.equal(kitAdds(email).find((c) => c.path.startsWith("/forms/"))?.body.referrer, `${BASE}/blog/${post.slug}`);
 
   await desk.goto(`${BASE}/blog`);
@@ -292,7 +285,6 @@ test("the forms: beside a post on desktop, after it on a phone, on /blog and in 
   await phone.goto(`${BASE}/blog/${post.slug}`);
   await phone.locator('[data-newsletter="after-post"]').waitFor();
   assert.ok(await phone.locator('[data-newsletter="after-post"]').isVisible());
-  assert.ok(!(await phone.locator('[data-newsletter="sidebar"]').isVisible()));
   assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth), 390, "no sideways scroll");
   await phone.close();
   assert.deepEqual(errors, []);

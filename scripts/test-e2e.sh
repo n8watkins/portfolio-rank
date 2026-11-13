@@ -55,7 +55,7 @@ export EMAIL_SIGNIN_ENABLED=true
 # stand-in for Kit's API served by that test (KIT_TEST_API, a test stand-in,
 # lib/test-mode.mjs) and a fake key. The stand-in has one form, so
 # KIT_FORM_ID stays unset and the form is found by asking Kit.
-export NEWSLETTER_ENABLED=true OWNER_EMAIL=owner@example.com
+export NEWSLETTER_ENABLED=true
 export E2E_KIT_PORT="${E2E_KIT_PORT:-$FREE_KIT}"
 export KIT_TEST_API="http://127.0.0.1:$E2E_KIT_PORT/v4" KIT_API_KEY="e2e-kit-key"
 unset KIT_FORM_ID KIT_BROADCAST_MODE
