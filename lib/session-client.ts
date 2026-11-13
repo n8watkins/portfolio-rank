@@ -12,6 +12,8 @@ export type ClientSession = {
   login: string;
   /** How the account signs in (auth.ts). */
   provider: "github" | "email";
+  /** The admin's account: the menus show "Admin" (display only; the server checks again). */
+  isAdmin: boolean;
   name: string | null;
   email: string | null;
   image: string | null;
@@ -24,20 +26,29 @@ let state: SessionState = "loading";
 let started = false;
 const listeners = new Set<() => void>();
 
+// The one /api/auth/session request of a page load, shared by the shell and
+// anything else that needs the raw answer (components/ClaimVotes.tsx). Client
+// navigation keeps it, so moving between pages asks nothing.
+export type RawSession = {
+  login?: string;
+  raterId?: string;
+  provider?: string;
+  isAdmin?: boolean;
+  user?: { name?: string | null; email?: string | null; image?: string | null };
+};
+let raw: Promise<RawSession | null> | null = null;
+export function readSession(): Promise<RawSession | null> {
+  raw ??= fetch("/api/auth/session").then((r) => (r.ok ? r.json() : null));
+  return raw;
+}
+
 function load() {
   if (started) return;
   started = true;
-  fetch("/api/auth/session")
-    .then((r) => (r.ok ? r.json() : null))
-    .then((s: { login?: string; provider?: string; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
+  readSession()
+    .then((s: { login?: string; provider?: string; isAdmin?: boolean; user?: { name?: string | null; email?: string | null; image?: string | null } } | null) => {
       state = s?.login
-        ? {
-            login: s.login,
-            provider: s.provider === "email" ? "email" : "github",
-            name: s.user?.name ?? null,
-            email: s.user?.email ?? null,
-            image: s.user?.image ?? null,
-          }
+        ? { login: s.login, provider: s.provider === "email" ? "email" : "github", isAdmin: s.isAdmin === true, name: s.user?.name ?? null, email: s.user?.email ?? null, image: s.user?.image ?? null }
         : null;
     })
     .catch(() => {

@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/polls/store.mjs";
 import { SITE_URL } from "@/lib/site";
 import { issueToken, normalizeEmail, safeCallback, TOKEN_TTL_MS } from "@/lib/signin/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 
 // POST /api/signin/email { email, turnstileToken?, callbackUrl? }: emails a
 // one-time sign-in link (AUTOMATION.md "Email sign-in"). In this order, each
@@ -64,6 +65,8 @@ function signInEmail(link: string) {
 }
 
 export async function POST(req: Request) {
+  // Off while email sign-in is (lib/signin/flag.ts).
+  if (!EMAIL_SIGNIN_ENABLED) return fail("not_found", 404);
   if (!sameOrigin(req)) return fail("bad_origin", 403);
   const raw = await req.text().catch(() => "");
   if (raw.length > 4096) return fail("bad_request", 400);

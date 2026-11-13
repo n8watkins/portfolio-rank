@@ -12,7 +12,7 @@ ever cast one-click votes.
 
 ## Status (2026-06-20): Phases 0–2 shipped & live
 
-Live in production (portfoliorank.n8builds.dev, on Cloudflare Workers since 2026-11; Vercel before that): capture pipeline + R2 storage, PSI/polish
+Live in production (portfoliorank.dev, before that portfoliorank.n8builds.dev, on Cloudflare Workers since 2026-11; Vercel before that): capture pipeline + R2 storage, PSI/polish
 scorecards, the Gemini rubric + pairwise voting, the browse/face-off/leaderboard/detail
 UI, auth, and a self-running set of daily GitHub Actions (sync upstream, grade, vote,
 backup, prewarm). See **AUTOMATION.md** for the automation and **HANDOFF.md** for current

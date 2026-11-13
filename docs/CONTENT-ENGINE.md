@@ -21,7 +21,7 @@ They are collected at the end.
 Once or twice a week, PortfolioRank writes a short blog post from its own data: who climbed the leaderboard, what an experiment found, how people and the AI disagree, what changed in Google's models.
 Code computes every number and draws every chart; Gemini 3.5 Flash-Lite only writes the words around them.
 Before a post goes out, code checks every number and name, a search checks every claim that doesn't come from our data, a topic filter keeps it on careers, hiring and portfolios, and every image comes from a copyright-safe source.
-A draft that fails is revised at most twice, then dropped.
+A draft that fails a check gets one targeted fix of the failing blocks, then is dropped (see "The writer" below).
 It all runs inside the end-of-day run on whatever Gemini quota people didn't use, with hard caps and one kill switch.
 The first week runs privately (a dry run) before anything is published.
 
@@ -200,11 +200,14 @@ A library of house-style illustrations ([pipeline/content/house-style.mjs](../pi
 - **Statuses:** `pending` (passed the check, waiting for the owner), `approved`, `rejected` (dropped by the owner), `rejected-auto` (failed the check, kept for the owner to see), `retired`.
   Only approved images are ever used.
   A queue item gets one image, ever; one whose model calls both errored has no row and comes up on a later night.
-- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) opens on "To review" (pending images, with Keep and Drop), with tabs for Approved (with Retire), Dropped, Failed check (keep one anyway if the check was wrong) and All, each with its count.
+- **Review:** `/admin/images` (only for the account in `ADMIN_GITHUB_ID`; a 404 for anyone else) is a thumbnail grid under tabs that stay in view: To review (pending images, with Approve and Drop on each thumbnail), Approved (with Retire), Dropped, Failed check (approve one anyway if the check was wrong) and All, each with its count.
+  It opens on To review, or on Approved when nothing waits for review.
+  A thumbnail opens the image large with its alt text and tags (editable), its decision (A approves, D drops, the arrows step through the tab) and the drafts tied to it; the tab and the open image are in the address (`?view=`, `?image=`), and Back closes the large view.
+  Make now, Make your own, Up next and "How images are made" are compact panels beside the grid (below it on phones).
   Drop takes the image out at once and shows an Undo toast; Undo puts it back where it was (`restore`).
   Decisions are POSTs to `/api/admin/library` that must come from the site with a JSON body (CSRF), checked on the server.
   Nothing on the page, and nothing in the engine, deletes an image: rejecting or unpublishing a post leaves its images, their uses and their associations as they are.
-- **Associations:** each card lists the drafts and posts the image is tied to, with their status: "used in" (`image_library_uses`), "considered for" (up to 3 close tag matches a slot looked at and did not pick, `image_library_considered`) and "made for" (a post's fresh illustration).
+- **Associations:** the large view lists the drafts and posts the image is tied to, with their status: "used in" (`image_library_uses`), "considered for" (up to 3 close tag matches a slot looked at and did not pick, `image_library_considered`) and "made for" (a post's fresh illustration).
 - **Make now** (`POST /api/admin/library/generate`, production only): the owner picks 1, 2, 5 or 10, or "Make up to N" (all that is left of the day), or a single subject of their own ("Make your own": a subject of 8 to 300 characters after cleaning and an optional theme, with a preview of the final prompt with the house style).
   The page asks for one image a request, so it shows "Making 1 of 2... about 5 seconds each" with the day's and the hour's counts next to the button.
   Every answer says what happened in plain words: "Made N", "Today's 40 are used", "Today's neuron allowance is used", "Paused 8 pm to midnight Pacific", or, for the AI Gateway's own 429, "The AI Gateway allows N an hour: raise it in AI Gateway settings".
@@ -253,8 +256,13 @@ Owner decision of 2026-11-11: the engine writes drafts, the owner approves each 
   "publish" (automatic publishing) stays in the code and is not used.
 - **The queue,** `/admin/blog` (only the `ADMIN_GITHUB_ID` account; a 404 for anyone else): drafts waiting for review, published and scheduled posts, and rejected, dropped or unpublished ones with why.
 - **The review page,** `/admin/blog/[id]`: the post exactly as readers will see it (the same article component as `/blog/[slug]`), with Publish and Reject on top and, under it, the checks of every round, the outside claims kept and cut, the fact sheet and each image's source, licence and approval.
-- **Publish** (`POST /api/admin/content/<id>`, `{ "action": "publish" }`, same-origin JSON like the image library's): the post goes live at its scheduled time while that is still ahead, else at once; the cap of 2 posts in any 7 days is counted in the same write, and a full week answers "weekly cap" and leaves the draft as it is; it sets `newsletter_pending`.
+- **Publish now and Schedule** (`POST /api/admin/content/<id>`, same-origin JSON like the image library's): "Publish now" (`{ "action": "publish_now" }`, owner 2026-11-12) puts a draft live at once, and also a published post whose time is still ahead; "Schedule for <its 08:00 Pacific slot>" (`{ "action": "publish" }`) publishes for that time while it is still ahead (once it has passed, only Publish now is offered).
+  Either way the cap of 2 posts in any 7 days is counted in the same write, and a full week answers "weekly cap" and leaves the post as it is; publishing sets `newsletter_pending`.
 - **Reject** a draft or **Unpublish** a published post, each with an optional note; every decision is kept on the post as `checks.owner` (action, who, when, note).
+- **Links to portfolios** go to the portfolio's PortfolioRank page (`/p/<url>`), which links on to the site (owner, 2026-11-12; [lib/content/portfolio-links.mjs](../lib/content/portfolio-links.mjs)): the engine stores a new post with every `[Name](site_url)` of a portfolio on its fact sheet pointing at our page (after the checks, which still check and load the site itself), and the article renderer sends any link that matches a portfolio we list (`data/feed.json`, the list `/p/` answers for) to its page, so older posts link the same way; a stored `/p/` link to a portfolio no longer listed opens the site instead of a 404.
+  Outside sources keep their own addresses.
+- **More articles:** under a post, up to 3 other published posts, those sharing the most tags first, then the newest (`morePosts` in [lib/content/blog.mjs](../lib/content/blog.mjs)).
+  There is no newsletter sign-up yet: the newsletter is planned (DECISIONS.md "A weekly newsletter") but has no back end here, in mailroom (which is transactional only) or elsewhere, so the post page shows none rather than a form that goes nowhere.
 - **The pages** are ISR with a 5-minute revalidate, so a published post is on `/blog`, its tag pages and the feed within 5 minutes of its publish time, and anonymous visitors cost no database read in between; the sitemap lists posts once a day.
   Drafts and unpublished posts are a 404 on `/blog/[slug]`; their images (`/blog/media/<post id>/<slot>`) are served only to the admin, and a live post's images are public and cached for a day.
 
@@ -268,7 +276,7 @@ After reading the 2026-11-10 drafts the owner found them trite and too long for 
 - **The topics:** what people vote for and against (`vote-patterns`, from people's head-to-head votes), what the AI grader rewards and penalizes (`top-grades`, and `page-craft` for dark mode, motion, phones and page weight), how portfolios change over time (`regrade-changes`: same-judge re-grades before and after a page change), trends across the leaderboard (`leaderboard-movement`), new portfolios worth seeing, and portfolio or developer-hiring news with a real angle.
   "New portfolios worth seeing" and hiring news are not built yet: the roster stores no date a portfolio was added, and news needs its own builder with Tavily searches.
 - **Shorter, with a payoff:** every post states one clear takeaway a reader can use on their own portfolio, early: the opener ends with it, addressed to the reader.
-  About 500 to 800 words unless the data earns more (the template check allows 475 to 840), with throat-clearing and anecdotes that don't pay off cut.
+  700 to 1,000 words (owner, 2026-11-12; the template check allows 665 to 1,050), with throat-clearing and anecdotes that don't pay off cut.
 - **Facts:** no claim about PortfolioRank's infrastructure (one draft said "Amazon SES"; email goes through the Cloudflare mailroom), and any fact the writer can't source from our data or a cited link is cut (gate 2 already cuts unsupported outside claims).
 - **Enforced by code before review:** the editorial check ([pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs) `editorialChecks`, run with the other code checks) fails a draft with dev meta or infrastructure words (our pipeline, stack or costs, a postmortem, "we built", vendors such as Amazon SES, Cloudflare, Turso or Tavily, model versions and quotas) or without a takeaway for the reader in its first 150 words.
   A failing draft is revised with the problem listed, then dropped, so it never reaches the review queue; the scorecard shows the same two rules on every draft.
@@ -279,20 +287,45 @@ The owner's draft on demand, from `/admin/blog` (only the `ADMIN_GITHUB_ID` acco
 
 - **What it does:** an optional topic or angle (at most 200 characters) and an optional story kind (else the ready kind whose latest post is oldest), then the same writer, outside-claim research, images and code checks as the night ([pipeline/content/manual.mjs](../pipeline/content/manual.mjs) runs [pipeline/content/engine.mjs](../pipeline/content/engine.mjs) `runDraft`); the angle steers the writer over the same facts.
 - **Background job with live status:** `POST /api/admin/content/draft` queues a row in `content_jobs` ([lib/content/jobs.mjs](../lib/content/jobs.mjs)) and starts the `DraftWorkflow` ([worker/draft.ts](../worker/draft.ts), Workflow `portfolio-rank-draft`, binding `DRAFT`), so the draft can take its minutes after the request returns.
-  The page polls `GET /api/admin/content/draft?id=<job>` every 3 seconds: Reading the data, Writing, Researching, Checking, Picking images, Saving, then Done, with the time so far and "usually 1 to 3 minutes".
-  Production only (the Gemini key and the counters live there); one Workflow step, never retried, so a draft never spends its caps twice.
+  While it runs, the job is the first row of "Waiting for you": the step it is on (Reading the data, Writing, Researching, Checking, Picking images, Saving), the time so far and "usually 1 to 3 minutes"; the row polls `GET /api/admin/content/draft?id=<job>` every 3 seconds, and the server renders it on every load, so it survives a refresh and the owner can leave the page.
+  When the job ends the page refreshes and the draft is in the list; the "Write a draft now" panel keeps the last outcome and what it spent.
+  Production only (the Gemini key and the counters live there); each try is one Workflow step the platform never retries, so a draft never spends its caps twice.
+- **When Google's AI is busy** (owner, 2026-11-12, after a draft failed on three 503s in a row; [pipeline/content/busy.mjs](../pipeline/content/busy.mjs)): each request waits about 15, 45 and 90 seconds between tries (jittered from half to one and a half times), and after one busy retry on 3.5 Flash-Lite it goes to 3.1 Flash-Lite for the rest of its tries.
+  Both are free-tier models with their own daily quota, so the backup never touches the quota kept for people's grades, and a draft still spends at most its request budget whichever model answers.
+  When a request still gets no answer, the try ends with the job waiting ("Google's AI is busy. Retrying at 3:42 PM PT (try 2 of 4).") and the Workflow sleeps 15, 20, then 30 minutes before the next try; after 4 tries the job fails with a plain message.
+  A later try gets only what the earlier ones left of the draft's 20 requests, and the run is recorded as `deferred`, not `failed`.
+  The night does the same: its Content stage pauses 15, 20, then 30 minutes and drafts again (the pause doesn't count against the stage's time cap, and never runs past the hard stop); a spent daily quota or a rejected key still stops, as before.
+- **Attempts and answers:** the job shows Gemini attempts and answered requests apart, from the request log (`run_id` `manual:<job>`): a request Google turns away while busy does no work and is not billed on the free tier, but the budget accountant counts every attempt against the day anyway, to stay on the safe side.
+  ("Spent: 0 Gemini requests" on a draft that failed on three 503s was wrong both ways: it made 4 attempts, all turned away, and the job forgot what the try spent when it failed.)
 - **Caps:** at most 20 Gemini requests a draft (about 9 when it passes first time), and never more than the "content" job may spend today after the reserve the budget accountant keeps for people's grades, so people's grading is never starved; Tavily 10 a post (the weekly cap is now 50, a quarter of the monthly 200, raised from 40 so drafts on demand fit beside the nights; the month's 200 stays the hard cap); Pexels 2 a post; 1 fresh AI image a post within the day's 40; at most 5 manual drafts (new ones and rewrites together) a Pacific day, counted in the statement that queues one.
 - **Never publishes by itself:** a manual draft is stored as a draft whatever `CONTENT_MODE` says, and recorded in `content_runs` as step `manual`, which the night's schedule does not count.
 - **The cost panel** ([lib/content/costs.mjs](../lib/content/costs.mjs)), from the existing counters with no metered call: Gemini today (used, left, the reserve kept for people, what a draft may take now), Tavily this month and this week, AI images today and Pexels this month, and drafts today of 5.
 - **From the command line:** `wrangler workflows trigger portfolio-rank-draft '{"topic":"..."}'` queues and writes one draft under the same daily cap; only someone with the account's Cloudflare API token can run it.
 - **Images:** a slot's library match now also counts the post's own tags, so the writer prefers approved library images that fit the whole post.
 
+## Automation
+
+Owner request of 2026-11-12: the schedule is the owner's to change from `/admin/blog`, without a deploy ([lib/content/automation.mjs](../lib/content/automation.mjs), tables `content_settings` and `content_topics`).
+
+- **The panel** ("Automation" on `/admin/blog`): on or off; the drafting nights (Monday to Saturday; Sunday night picks the week's ideas); drafts a week; "Drafts for my review" (the default) or "Publish automatically", behind a warning; an optional topic queue; and "Next run" and "Last run" lines with the result.
+- **Read by the night:** the Content stage's `contentJob` reads the settings at every batch; a change applies from that night's run.
+- **The config is the ceiling:** `CONTENT_MODE` "off" turns everything off whatever is saved; "dry-run" allows drafts for review only; only "publish" lets the page choose publishing automatically.
+  `CONTENT_DRAFTS_PER_WEEK` (2, at most 4) is the most drafts a week the page may ask for, and one draft a night still holds, so drafts a week never exceed the nights chosen.
+  The API refuses a value above the ceiling; a saved value a later config lowered is clamped when read.
+- **Fail closed:** when the settings can't be read (a missing table, a row that isn't valid JSON), the night writes nothing and the panel says why.
+- **Before the owner saves:** the config's schedule applies (Monday and Wednesday, `CONTENT_DRAFTS_PER_WEEK` drafts, for review while `CONTENT_MODE` allows any).
+- **Publishing automatically** keeps every limit: 2 published posts in any 7 days, the 08:00 Pacific slot, and a clean quality scorecard; a draft the scorecard flags is kept for review with the reason (`checks.publishHeld`).
+- **Drafts to keep ready** (owner, 2026-11-12; 0 to 5, 0 by default): while fewer drafts than this wait for review, any night from Monday to Saturday writes one more, beyond the drafts a week, so the owner always has a queue to read.
+  It keeps one draft a night and every cap (Gemini, Tavily's 50 a week, images); once the week's ideas were all tried, it writes from them again in turn.
+- **The topic queue:** at most 20 topics of at most 200 characters; the next scheduled draft takes the first one as its angle (the same `focus` as Write a draft now), and the week's pick still chooses the data it is written from; a used topic is marked with its post, and a dropped draft marks it dropped.
+- **API:** `GET` and `POST /api/admin/content/automation` (`{ op: "save", settings }`, `{ op: "add-topic", topic }`, `{ op: "remove-topic", id }`), admin only, POSTs with this site's Origin and a JSON body.
+
 ## Quality tools
 
 - **Reject with notes, and "Rewrite with these notes":** on the review page, Reject keeps the owner's note on the draft; "Rewrite with these notes" rejects the draft with the notes and starts a new draft of the same kind and angle with the notes passed to the writer as `owner_notes` (same caps as Write a draft now; a rejected or dropped draft can be rewritten too).
 - **The editor's guidelines** (`/admin/blog/guidelines`, [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), table `content_guidelines`): a list of at most 20 rules of at most 200 characters (2,000 in all) that goes into every writer request as `editor_guidelines`, the night's and the manual ones.
   The page offers the owner's notes from rejected and rewritten drafts to turn into rules.
-- **The scorecard** ([pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs)), on each review page, plain code: words against 500 to 800, a takeaway in the first 150 words, no dev meta, the reading level (Flesch-Kincaid grade, flagged above 11), real portfolio examples named, sources cited, claims cut, images with alt text and repeated four-word phrases.
+- **The scorecard** ([pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs)), on each review page, plain code: words against 700 to 1,000, a takeaway in the first 150 words, no dev meta, the reading level (Flesch-Kincaid grade, flagged above 11), real portfolio examples named, sources cited, claims cut, images with alt text and repeated four-word phrases.
 - **Compare** (`/admin/blog/compare?a=<id>&b=<id>`): two drafts side by side with their scorecards; the review page links every other draft on the same story.
 - **Style guide:** the shape and rules are [docs/content/POST_TEMPLATE.md](content/POST_TEMPLATE.md); the voice is the owner's `VOICE.md` (in the owner's writing skill, outside this repository), which the writer's system instruction ([pipeline/content/writer.mjs](../pipeline/content/writer.mjs)) restates; the editor's guidelines are the owner's own additions, and there is no other style guide.
 
@@ -327,6 +360,7 @@ The owner switches `CONTENT_MODE` to `publish` by hand after the week; it never 
 
 **Owner decision (2026-11-10): 3.5 for everything, or 3.1 for bulk analysis.**
 Every content request on 3.5 (one consistent writer and reviewer, inside the content stage), and no bulk reading of portfolio text by Gemini in the first version: trend stories count things with code.
+Changed by the owner on 2026-11-12: when 3.5 is busy, a content request falls back to 3.1 Flash-Lite (free tier) rather than failing ("When Google's AI is busy" under "Write a draft now"); grades and votes stay on 3.5 alone.
 The budget page's idea of reading every portfolio's text on 3.1 for trends ("non-ranking analysis", which DECISIONS.md allows on 3.1) can come later as a labelled experiment if code counts turn out too shallow.
 
 ## Implementation plan
@@ -368,9 +402,9 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | Tables `posts` and `content_runs` (schema version 6), the switch, the publish cap in the same write, the admin read | [lib/content/schema.mjs](../lib/content/schema.mjs), [lib/content/store.mjs](../lib/content/store.mjs) |
 | Fact builders: what the AI grader rewards and penalizes, dark mode, motion and page weight, what people vote for and against, before and after a re-grade, and leaderboard movement (the "3.1 vs 3.5" builder was removed on 2026-11-11: dev meta) | [pipeline/content/facts.mjs](../pipeline/content/facts.mjs) |
 | Write a draft now, rewrites, the cost panel | [pipeline/content/manual.mjs](../pipeline/content/manual.mjs), [worker/draft.ts](../worker/draft.ts), [lib/content/jobs.mjs](../lib/content/jobs.mjs), [lib/content/costs.mjs](../lib/content/costs.mjs), [app/api/admin/content/draft/route.ts](../app/api/admin/content/draft/route.ts) |
-| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/blog/guidelines](../app/admin/blog/guidelines), [app/admin/blog/compare](../app/admin/blog/compare) |
+| The scorecard and the editorial checks, the editor's guidelines, compare | [pipeline/content/scorecard.mjs](../pipeline/content/scorecard.mjs), [lib/content/guidelines.mjs](../lib/content/guidelines.mjs), [app/admin/(tools)/blog/guidelines](<../app/admin/(tools)/blog/guidelines>), [app/admin/(tools)/blog/compare](<../app/admin/(tools)/blog/compare>) |
 | Charts drawn from the facts (SVG) | [pipeline/content/charts.mjs](../pipeline/content/charts.mjs) |
-| The writer, placeholders and filling, the revision request | [pipeline/content/writer.mjs](../pipeline/content/writer.mjs) |
+| The writer: finished clauses from the facts, the code plan, the plain-text write, assembly and repairs, one fix call, the review that lists outside claims; placeholders and filling | [pipeline/content/clauses.mjs](../pipeline/content/clauses.mjs), [plan.mjs](../pipeline/content/plan.mjs), [compose.mjs](../pipeline/content/compose.mjs), [writer.mjs](../pipeline/content/writer.mjs); replay harness [scripts/content-replay.mjs](../scripts/content-replay.mjs) |
 | Code checks: stray numbers, the naming rule, links, the template | [pipeline/content/checks.mjs](../pipeline/content/checks.mjs) |
 | Outside claims through Tavily, the verbatim quote rule | [pipeline/content/claims.mjs](../pipeline/content/claims.mjs) |
 | The topic filter: deny list, pick, final review | [pipeline/content/topic.mjs](../pipeline/content/topic.mjs) |
@@ -380,13 +414,13 @@ The back end, in dry-run shape and switched off (`CONTENT_MODE` "off" in both Wo
 | The blog: `/blog`, `/blog/tag/[tag]`, `/blog/[slug]` with its share image, `/blog/rss.xml`, `/blog/media/<post id>/<slot>`, `/about-posts`, sitemap entries; the strict Markdown renderer | [app/blog](../app/blog), [components/blog](../components/blog), [lib/content/blog.mjs](../lib/content/blog.mjs), [app/about-posts/page.tsx](../app/about-posts/page.tsx) |
 | Review and publish: the queue, the review page, Publish, Reject and Unpublish | [app/admin/blog](../app/admin/blog), [app/api/admin/content/[id]/route.ts](../app/api/admin/content/[id]/route.ts) |
 | Fixture posts for local previews (two real dry-run drafts of 2026-11-10 with their images) | [scripts/seed-blog-fixtures.mjs](../scripts/seed-blog-fixtures.mjs), [tests/fixtures/blog](../tests/fixtures/blog) |
-| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/images/page.tsx](../app/admin/images/page.tsx), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
+| The image library: queue, night stage, review page, never-pay guard, Pexels counter | [lib/content/library.mjs](../lib/content/library.mjs), [pipeline/content/library-stage.mjs](../pipeline/content/library-stage.mjs), [app/admin/(tools)/images/page.tsx](<../app/admin/(tools)/images/page.tsx>), [lib/content/neurons.mjs](../lib/content/neurons.mjs), [lib/content/pexels-searches.mjs](../lib/content/pexels-searches.mjs) |
 
 How it runs, in short:
 
 - The Content stage runs the weekly polls first, then one content job a night while `CONTENT_MODE` is not "off": the pick on Sunday night (or the first night of a week without one), a draft on Monday and Wednesday nights, and a later night when an earlier draft of the week was dropped or deferred.
 - A draft runs in one batch and never spends more than that batch has left (at most 20 requests); it needs at least 4 to start, else it waits for the next night.
-- One round is the write request, the claim listing, the claim judgement (only when Tavily found results) and the final review; a failed round is revised, at most twice, then the draft is stored as `dropped` with its failures.
+- The writer (owner, 2026-11-13; [audits/blog-engine.md](audits/blog-engine.md)): code plans the post from finished clauses, Gemini writes plain-text blocks (one request for up to three sections, so 1 to 2), code assembles and repairs them and runs the checks, one fix call rewrites only the failing blocks, and one review checks topic, tone, names and voice and lists outside claims, which alone are searched with Tavily and judged; a draft that still fails is stored as `dropped` with its failures. A post costs 2 to 3 requests when it passes first time.
 - Outside claims are cut by code (exact sentences), not by a rewrite; a rewrite happens only when a code check or the review fails.
 - The writer gets each fact's placeholder, label and display, never its raw value or query; code assembles the TL;DR block, the image markers and the call to action, and puts each sentence on its own line.
 - The number check allows years, list numbers, the Gemini model names, the rubric's "1 to 5", the post's allowed names and addresses, and the sentences of supported outside claims; the template's 250 to 400 words get 10% slack.
@@ -394,5 +428,5 @@ How it runs, in short:
   Pexels photos are hotlinked with their credit.
 - Each optional source is skipped cleanly: without `TAVILY_API_KEY` every outside claim is cut; without `PEXELS_API_KEY` the Pexels step is skipped; without the `AI` binding (or with no neuron room) the fresh illustration is skipped.
 - The weekly summary is an owner alert of kind "info" (`content-weekly`) on Sunday nights while the engine is on.
-- The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs); `WRITER_MODE` ("staged" by default, or "single"; [pipeline/content/staged.mjs](../pipeline/content/staged.mjs)) picks how the first draft is written: staged is an outline, two section requests and a finish request (4 requests, 5 after an outline retry), single is one request.
+- The checks beyond the template live in [pipeline/content/quality.mjs](../pipeline/content/quality.mjs) (paragraphs, superlatives and ties, callout, hook, actions); the review preview is [pipeline/content/preview.mjs](../pipeline/content/preview.mjs).
 - Tests: [tests/blog.test.mjs](../tests/blog.test.mjs), [tests/blog-pages.test.mjs](../tests/blog-pages.test.mjs), [tests/content.test.mjs](../tests/content.test.mjs), [tests/admin-content.test.mjs](../tests/admin-content.test.mjs), [tests/image-library.test.mjs](../tests/image-library.test.mjs) and [tests/admin-library.test.mjs](../tests/admin-library.test.mjs).

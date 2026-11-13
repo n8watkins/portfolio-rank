@@ -68,8 +68,11 @@ summary.digest = digest;
 summary.ms = Date.now() - started;
 
 if (db && !has("read-only")) {
-  const { runId, historyWeeks } = await writeResults(db, { ...result, digest, config, summary: { views: Object.fromEntries(Object.entries(summary.views).map(([k, v]) => [k, { ...v, top: undefined }])) }, full: has("full") });
-  console.log(`run ${runId}: site_ratings rewritten, ${historyWeeks} week(s) of rank history written`);
+  const { runId, historyWeeks, ratings, history } = await writeResults(db, { ...result, digest, config, summary: { views: Object.fromEntries(Object.entries(summary.views).map(([k, v]) => [k, { ...v, top: undefined }])) }, full: has("full") });
+  console.log(
+    `run ${runId}: site_ratings ${ratings.written} row(s) written, ${ratings.deleted} deleted, ${ratings.unchanged} unchanged; ` +
+      `rank history ${history.written} row(s) written, ${history.deleted} deleted over ${historyWeeks} finished week(s)`
+  );
 }
 if (flag("report")) fs.writeFileSync(flag("report"), JSON.stringify(summary, null, 2));
 

@@ -10,6 +10,7 @@ import { useStoredFlag } from "@/lib/client-state";
 import { ROUTES } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { setTheme } from "@/lib/theme";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 
 // Settings: the account, the theme and voting, then what this site keeps in
 // your browser, in plain words. Nothing here tracks you, so there is no
@@ -18,7 +19,7 @@ import { setTheme } from "@/lib/theme";
 
 /** Cookies: needed for what you do on the site, never for tracking. */
 const COOKIES = [
-  { what: "Sign-in session", why: "Keeps you signed in. Only after you sign in with GitHub or an email link, with two short-lived helpers for the sign-in itself." },
+  { what: "Sign-in session", why: `Keeps you signed in. Only after you sign in with GitHub${EMAIL_SIGNIN_ENABLED ? " or an email link" : ""}, with two short-lived helpers for the sign-in itself.` },
   { what: "Browser id", why: "A random, signed id so a vote, poll answer or quiz counts once. Set the first time you vote, play or grade." },
   { what: "Your reports", why: "Which grade reports this browser asked for, so only you see the owner's tools." },
   { what: "Print pass", why: "A one-hour pass to print a portfolio's report." },
@@ -108,6 +109,38 @@ function DeleteAccount({ login }: { login: string }) {
   );
 }
 
+/**
+ * Sign out everywhere: every session of this account, on every device, ends
+ * (POST /api/account/sessions), then this browser signs out too.
+ */
+function SignOutEverywhere() {
+  const [state, setState] = useState<"idle" | "busy" | "error">("idle");
+  const run = async () => {
+    setState("busy");
+    try {
+      const res = await fetch("/api/account/sessions", { method: "POST" });
+      if (!res.ok) throw new Error(String(res.status));
+      await signOut({ callbackUrl: "/" });
+    } catch {
+      setState("error");
+    }
+  };
+  return (
+    <Row id="everywhere" title="Sign out everywhere" desc="Ends your session on every device, this one too. Other devices sign out within a minute.">
+      <div className="flex flex-col items-start gap-1 sm:items-end">
+        <button type="button" onClick={() => void run()} disabled={state === "busy"} className={`${smallBtn} disabled:opacity-50`}>
+          {state === "busy" ? "Signing out..." : "Sign out everywhere"}
+        </button>
+        {state === "error" && (
+          <p role="alert" className="text-sm text-down">
+            That didn&apos;t work. Try again.
+          </p>
+        )}
+      </div>
+    </Row>
+  );
+}
+
 const LOCAL_KEYS =[...LOCAL.map((l) => l.key), "pr-faceoff-intro"];
 
 /** A setting: its name and note, the control at the right (under it on phones, unless `inline`, for a small control like a switch). */
@@ -166,24 +199,27 @@ export default function SettingsPage() {
           {session === "loading" ? (
             <div className="h-[4.5rem] sm:h-20" aria-hidden />
           ) : session ? (
-            <Row
-              id="gh"
-              title={session.provider === "email" ? "Email" : "GitHub"}
-              desc={`Signed in as ${session.provider === "email" ? session.login : `@${session.login}`}. Your votes, likes and lists follow you.`}
-            >
-              <div className="flex gap-2">
-                {ROUTES.profile && (
-                  <a href={ROUTES.profile} className={smallBtn}>
-                    Profile
-                  </a>
-                )}
-                <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className={`${smallBtn} text-down`}>
-                  Sign out
-                </button>
-              </div>
-            </Row>
+            <>
+              <Row
+                id="gh"
+                title={session.provider === "email" ? "Email" : "GitHub"}
+                desc={`Signed in as ${session.provider === "email" ? session.login : `@${session.login}`}. Your votes, likes and lists follow you.`}
+              >
+                <div className="flex gap-2">
+                  {ROUTES.profile && (
+                    <a href={ROUTES.profile} className={smallBtn}>
+                      Profile
+                    </a>
+                  )}
+                  <button type="button" onClick={() => signOut({ callbackUrl: "/" })} className={`${smallBtn} text-down`}>
+                    Sign out
+                  </button>
+                </div>
+              </Row>
+              <SignOutEverywhere />
+            </>
           ) : (
-            <Row id="gh" title="Not signed in" desc="Sign in with GitHub or your email to make your votes count and keep likes, lists and badges on every device.">
+            <Row id="gh" title="Not signed in" desc={`Sign in with GitHub${EMAIL_SIGNIN_ENABLED ? " or your email" : ""} to make your votes count and keep likes, lists and badges on every device.`}>
               <button type="button" onClick={() => openSignIn(SHELL_SIGN_IN)} className={smallBtn}>
                 Sign in
               </button>
@@ -224,7 +260,13 @@ export default function SettingsPage() {
         <div className={`${box} text-sm`}>
           <div className="p-4 sm:p-5">
             <p className="font-semibold">No tracking, so no cookie banner</p>
-            <p className="mt-0.5 text-mute">No ads or analytics cookies. Page views are counted without cookies. Every cookie here is needed for something you do.</p>
+            <p className="mt-0.5 text-mute">
+              No ads or analytics cookies. Page views are counted without cookies. Every cookie here is needed for something you do. The{" "}
+              <a href="/privacy" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                privacy policy
+              </a>{" "}
+              has the details.
+            </p>
           </div>
           <details className="group p-4 sm:p-5">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
@@ -268,7 +310,7 @@ export default function SettingsPage() {
           <Row
             id="remove"
             title="Remove my portfolio"
-            desc="First prove the site is yours: a link to your GitHub profile on it, or a short code you add to the page. Then hide its grade or remove it."
+            desc="First prove the site is yours: a link to your GitHub profile on it, or a short code you add to the page. With the code, you can hide its grade or remove it."
           >
             <a href="/claim" className={smallBtn}>
               Start

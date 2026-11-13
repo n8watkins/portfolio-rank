@@ -89,7 +89,7 @@ const CHIP: Record<string, string> = {
 };
 
 /** "Why it's good" for each url with a stored AI grade its owner hasn't hidden. */
-async function whyFor(urls: string[]): Promise<Map<string, Why>> {
+export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   const out = new Map<string, Why>();
   if (!urls.length) return out;
   const grades = await db().execute({
@@ -172,7 +172,8 @@ async function disagreements(urls: string[]): Promise<Map<string, { ai: number; 
           sql: `SELECT view, url, shown_rank, confidence FROM site_ratings WHERE view IN ('ai', 'people') AND shown_rank IS NOT NULL AND url IN (${marks(urls.length)})`,
           args: urls,
         },
-        "SELECT view, MAX(shown_rank) AS n FROM site_ratings WHERE view IN ('ai', 'people') GROUP BY view",
+        // One MAX per view, each a single index seek: a GROUP BY would read every row of both views on each render.
+        "SELECT 'ai' AS view, MAX(shown_rank) AS n FROM site_ratings WHERE view = 'ai' UNION ALL SELECT 'people', MAX(shown_rank) FROM site_ratings WHERE view = 'people'",
       ],
       "read"
     );
@@ -217,7 +218,7 @@ function likelyRanks(rows: BoardRow[], total: number): string[] {
   });
 }
 
-const shotUrl = (bases: Map<string, string>, url: string) => {
+export const shotUrl = (bases: Map<string, string>, url: string) => {
   const b = bases.get(url);
   return b ? heroOf(b) : mshotsUrl(url, 640);
 };

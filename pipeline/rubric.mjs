@@ -14,8 +14,11 @@
 // in a way that makes grades incomparable. Grades from an older version go on
 // the lowest-priority re-grade queue (pipeline/rubric-history.mjs).
 import { redactContacts } from "./redact.mjs";
+import { SITE_DATA_MARKER } from "./site-data.mjs";
 
 export const RUBRIC_VERSION = 2;
+/** The grade prompt's id and version in gemini_requests.prompt. */
+export const GRADE_PROMPT = `grade-v${RUBRIC_VERSION}`;
 
 /** Characters of visible page text sent with a grade (about 1,000 tokens). */
 export const PAGE_TEXT_MAX = 4000;
@@ -184,10 +187,11 @@ const TIERS = ["S", "A", "B", "C", "D"];
 export const ROLES_MAX = 3;
 
 // Marks the untrusted block. Anything that looks like a marker inside the
-// data is removed, so page text can never close the block early.
+// data is removed (pipeline/site-data.mjs), so page text can never close the
+// block early.
 const OPEN = "<site_data>";
 const CLOSE = "</site_data>";
-const MARKER = /<\s*\/?\s*site_data\s*>/gi;
+
 
 /** The system instruction: the rules, never mixed with site data. */
 export const SYSTEM_INSTRUCTION = [
@@ -250,7 +254,7 @@ export function normalizeRoles(raw) {
 
 const clean = (s, max) =>
   String(s ?? "")
-    .replace(MARKER, " ")
+    .replace(SITE_DATA_MARKER, " ")
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
     .slice(0, max);
 
@@ -372,6 +376,7 @@ export function buildRubricRequest({ name, url, pageText, facts, image, now = ne
   return {
     parts,
     options: {
+      prompt: GRADE_PROMPT,
       systemInstruction: SYSTEM_INSTRUCTION,
       thinkingLevel: THINKING_LEVEL,
       maxOutputTokens: MAX_OUTPUT_TOKENS,

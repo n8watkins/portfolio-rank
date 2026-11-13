@@ -27,6 +27,7 @@
 //                    address they were for, a day after they expire or once
 //                    used (each new request also clears them).
 import { pruneTokens } from "../lib/signin/store.mjs";
+import { GEMINI_DAILY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
 import { pruneLinks } from "../lib/grader/links.mjs";
 
@@ -38,20 +39,7 @@ export const CLEARED_ALERT_DAYS = 180;
 const DAY_MS = 86400000;
 
 export async function ensureGeminiDaily(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS gemini_daily (
-    day TEXT NOT NULL,
-    model TEXT NOT NULL,
-    job TEXT NOT NULL,
-    outcome TEXT NOT NULL,
-    requests INTEGER NOT NULL,
-    retries INTEGER NOT NULL DEFAULT 0,
-    input_tokens INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
-    thoughts_tokens INTEGER NOT NULL DEFAULT 0,
-    latency_p50 INTEGER,
-    latency_p95 INTEGER,
-    PRIMARY KEY (day, model, job, outcome)
-  )`);
+  await applyTables(db, GEMINI_DAILY_TABLES);
 }
 
 /** What a logged request came to: ok, cut_off, 429, 5xx, network or 4xx. */
