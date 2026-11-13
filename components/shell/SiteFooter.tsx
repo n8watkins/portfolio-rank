@@ -15,7 +15,7 @@ const COLS: { title: string; links: Link[] }[] = [
       { href: ROUTES.faceoff, label: "Face-off" },
       { href: ROUTES.guess, label: "Guess the percentile" },
       { href: ROUTES.browse, label: "Browse" },
-      { href: ROUTES.grade, label: "Grade your portfolio" },
+      { href: ROUTES.add ?? ROUTES.grade, label: ROUTES.add ? "Add your portfolio" : "Grade your portfolio" },
     ],
   },
   {
@@ -24,7 +24,6 @@ const COLS: { title: string; links: Link[] }[] = [
       { href: ROUTES.about, label: ROUTES.about === "/how" ? "How it works" : "About" },
       { href: ROUTES.grading === ROUTES.about ? null : ROUTES.grading, label: "How grading works" },
       { href: ROUTES.blog, label: "Blog" },
-      { href: ROUTES.tools, label: "Free portfolio tools" },
       { href: ROUTES.polls, label: "Polls" },
       { href: ROUTES.removed, label: "Removed and why" },
     ],
