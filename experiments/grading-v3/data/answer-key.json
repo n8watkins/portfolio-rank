@@ -1,0 +1,326 @@
+{
+ "created_at": "2026-11-13T08:18:51.244Z",
+ "judge": "Claude (Opus 5.5), acting as answer key for the owner",
+ "method": "Viewed each site's desktop top (1440x900), projects section screenshot and phone top (390x844), captured locally on 2026-11-13, plus the first ~1,500 characters of the page text, in a shuffled order that hid stored scores. Scored each 0-100 from a recruiter's and peer's eye (design craft, clarity in 5 seconds, project substance, writing, memorability), then sorted and broke ties by hand. No Gemini output was seen before this file was written.",
+ "ranking": [
+  {
+   "place": 1,
+   "url": "https://custard.top/en",
+   "sheet": "24",
+   "score": 85,
+   "reason": "Custard: refined serif editorial design, a specific research focus, reproducible case studies with real numbers, excellent writing; pseudonym instead of a name."
+  },
+  {
+   "place": 2,
+   "url": "https://dhruvjs.com",
+   "sheet": "13",
+   "score": 78,
+   "reason": "Dhruv Parmar: technical-drawing concept carried through, strong type, case studies with real scope; mobile hero cut off."
+  },
+  {
+   "place": 3,
+   "url": "https://jos.gg",
+   "sheet": "05",
+   "score": 74,
+   "reason": "Jos (jos.gg): pixel-art identity, live player count, testimonials, founder of a game studio; distinctive and specific."
+  },
+  {
+   "place": 4,
+   "url": "https://maveeshah.github.io/projects.html",
+   "sheet": "26",
+   "score": 74,
+   "reason": "Ameer Muavia Shah: projects page, elegant serif editorial with a warm palette, own ventures plus many real client systems, clear writing (\"Work built for real life\")."
+  },
+  {
+   "place": 5,
+   "url": "https://deveshchandan.me",
+   "sheet": "39",
+   "score": 73,
+   "reason": "Devesh Chandan: polished light editorial hero with big type around a portrait, specific about text and strong projects (code-hosting platform with CLI, a placed hackathon fintech build); role reads \"Backend\" on desktop and \"Full stack\" on phones."
+  },
+  {
+   "place": 6,
+   "url": "https://www.masabqurban.com",
+   "sheet": "19",
+   "score": 72,
+   "reason": "Masab Qurban: bold editorial hero (name behind a portrait), warm neutral palette, specific project blurbs (79 calculators, a solar company's invoicing); stat fluff."
+  },
+  {
+   "place": 7,
+   "url": "https://www.vishvajeetshukla.in",
+   "sheet": "02",
+   "score": 70,
+   "reason": "Vishvajeet Shukla: polished freelance-studio site, serif display, confident writing (\"Design that ships\"); only 2 client products shown."
+  },
+  {
+   "place": 8,
+   "url": "https://thony32.tech",
+   "sheet": "31",
+   "score": 68,
+   "reason": "Anthony Mahefa: striking 3D sphere and bold outlined type, clear role, three real client products with case studies; a sound pop-up covers content, text runs over the graphic."
+  },
+  {
+   "place": 9,
+   "url": "https://ashutoshdash.in",
+   "sheet": "28",
+   "score": 66,
+   "reason": "Ashutosh Dash: playful neo-brutalist look with a memory game in the hero, clear role, experience bullets with measured results; analytics banner covers content, small side projects."
+  },
+  {
+   "place": 10,
+   "url": "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app",
+   "sheet": "09",
+   "score": 66,
+   "reason": "Hussam Barqawi: polished dark AI-builder site with a clear focus and project cards that describe real systems; filler stats, \"I'm an\" typewriter shows blank."
+  },
+  {
+   "place": 11,
+   "url": "https://alilinares.com",
+   "sheet": "14",
+   "score": 64,
+   "reason": "Ali Linares: clean Swiss-style layout with sidebars, good hierarchy; generic headline, \"projects\" are jobs with concrete outcomes."
+  },
+  {
+   "place": 12,
+   "url": "https://abdulrehmanwaseem.me",
+   "sheet": "29",
+   "score": 63,
+   "reason": "Abdul Rehman Waseem: crisp minimal profile-card layout with nice touches (pull cord, pronunciation); a leaked CSS class name shows as text, role differs between views; founder of a live product, 14 projects, hackathon wins."
+  },
+  {
+   "place": 13,
+   "url": "https://zalt.me",
+   "sheet": "16",
+   "score": 63,
+   "reason": "Mahmoud Zalt: polished AI-consultancy site with a live product and a clear offer; salesy, stat fluff (\"101+ projects\"), endless tech marquee."
+  },
+  {
+   "place": 14,
+   "url": "https://andresilva.tech",
+   "sheet": "20",
+   "score": 62,
+   "reason": "Andre Nunes da Silva: compact, tidy student site; standout projects (own Scheme-like language in C, a coding agent); small type, little visual identity."
+  },
+  {
+   "place": 15,
+   "url": "https://batrasamarth.com",
+   "sheet": "04",
+   "score": 62,
+   "reason": "Samarth Batra: Windows-desktop metaphor, memorable and well executed; strong experience (Amazon, Leidos); overlapping windows cluttered, projects behind a click."
+  },
+  {
+   "place": 16,
+   "url": "https://althruist.fyi",
+   "sheet": "38",
+   "score": 60,
+   "reason": "Kieran (althruist): playful hand-drawn type over game art, a clear game-dev identity and a personal voice; projects shown only as thumbnails, logo pill overlaps the heading on phones."
+  },
+  {
+   "place": 17,
+   "url": "https://farhansegujja.com",
+   "sheet": "30",
+   "score": 60,
+   "reason": "Farhan Segujja: warm patterned light theme and an illustrated portrait; honest, specific writing about scope; the phone view is visibly broken (clipped circle)."
+  },
+  {
+   "place": 18,
+   "url": "https://ajyendu.vercel.app",
+   "sheet": "34",
+   "score": 58,
+   "reason": "Ajyendu Chaudhary: 3D keycaps and big display type, a playful cat; the name runs into the keyboard and off the phone screen; a real internship with measured results."
+  },
+  {
+   "place": 19,
+   "url": "https://aggelosladas.com",
+   "sheet": "40",
+   "score": 57,
+   "reason": "Aggelos Ladas: clean dark layout with a fake API console that suits a backend role but sits empty; solid student projects (Spring e-shop, Android app, a haptic wearable for deaf athletes)."
+  },
+  {
+   "place": 20,
+   "url": "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+   "sheet": "22",
+   "score": 55,
+   "reason": "Rajwardhan Patil: the listed URL is a projects page, so no name or role up top; strong editorial layout and ambitious projects (live code editor, urban-heat AI)."
+  },
+  {
+   "place": 21,
+   "url": "https://vineetcodes.vercel.app",
+   "sheet": "06",
+   "score": 55,
+   "reason": "Vineet Machchal: clean light modern layout, self-taught; small but real projects (bakery site, client portfolio, Discord bot); generic code-card hero."
+  },
+  {
+   "place": 22,
+   "url": "https://sambhusbabu.com",
+   "sheet": "08",
+   "score": 54,
+   "reason": "Sambhu S Babu: clear niche (Frappe/ERPNext freelancer in Kerala) and tidy dark layout; SEO-style headline, projects live on another page."
+  },
+  {
+   "place": 23,
+   "url": "https://ashleighsimonelli.co.uk",
+   "sheet": "33",
+   "score": 50,
+   "reason": "Ashleigh Simonelli: retro CRT with a Rick and Morty terminal intro and a Blockbuster nostalgia wall; unforgettable, but the intro hides who she is and what she does."
+  },
+  {
+   "place": 24,
+   "url": "https://www.osallak.tech",
+   "sheet": "27",
+   "score": 50,
+   "reason": "Oussama Sallak: purple-neon template with \"Welcome to my portfolio\" and a cut typewriter line; real substance below (MLOps platform, 45% inference cost cut)."
+  },
+  {
+   "place": 25,
+   "url": "https://www.pavangupta.in",
+   "sheet": "01",
+   "score": 50,
+   "reason": "Pavan Gupta: dark neon dev template with terminal gimmick; clear name and role; real projects with demos but filler stats (\"50+ projects\") and typos."
+  },
+  {
+   "place": 26,
+   "url": "https://lorenkamau.com",
+   "sheet": "17",
+   "score": 50,
+   "reason": "Loren Kamau: restrained one-column serif layout, calm and readable; corporate-generic copy and only two thin project blurbs."
+  },
+  {
+   "place": 27,
+   "url": "https://www.hafidziti.dev",
+   "sheet": "15",
+   "score": 46,
+   "reason": "Hafid Ziti: dated sky-blue hero with a stock illustration; clear senior role, jobs at IBM and Eaton shown as project cards buried in logo tag walls."
+  },
+  {
+   "place": 28,
+   "url": "https://mhuzaifa04.vercel.app",
+   "sheet": "25",
+   "score": 46,
+   "reason": "Mohammad Huzaifa: generic light template, the role changes between views (Full-Stack, AI & DS, Angular & .NET), \"100% commitment\" fluff; student projects are varied and real."
+  },
+  {
+   "place": 29,
+   "url": "https://antonmanaev.name",
+   "sheet": "36",
+   "score": 44,
+   "reason": "Anton Manaev: blurred gradient with low-contrast subtitle, \"Initiate system\", buzzword copy and fluff stats; real client work (Shopify store, Upwork extension) in a carousel."
+  },
+  {
+   "place": 30,
+   "url": "https://abhishek-kumar-t.vercel.app",
+   "sheet": "03",
+   "score": 44,
+   "reason": "Abhishek Kumar T: student, busy terminal theme; one solid ML project with a measured result, two small landing pages."
+  },
+  {
+   "place": 31,
+   "url": "https://www.mariokandut.com",
+   "sheet": "21",
+   "score": 44,
+   "reason": "Mario Kandut: consultancy page with a cookie banner over content, a typewriter headline cut mid-word, stack lists and 2023 blog posts; no projects on the page."
+  },
+  {
+   "place": 32,
+   "url": "https://abhijeetbhale.github.io/Portfolio",
+   "sheet": "12",
+   "score": 42,
+   "reason": "Abhijeet Bhale: wave-graphic hero with an outlined name; mobile hero is broken (name overflows, nothing else); projects with screenshots and demos, inflated copy."
+  },
+  {
+   "place": 33,
+   "url": "https://www.pawaret.dev",
+   "sheet": "10",
+   "score": 38,
+   "reason": "Pawaret Muengkaew: \"Hi there!\" with no role on desktop, a skill-icon wall, \"passionate developer\"; real work history but no projects visible."
+  },
+  {
+   "place": 34,
+   "url": "https://arkamahajan.in",
+   "sheet": "23",
+   "score": 37,
+   "reason": "Arka Mahajan: 3D board hero with the name and role printed over it (hard to read), the phone view stuck on a boot loader, broken \"0+ projects / 0 CGPA\" counters, thin projects."
+  },
+  {
+   "place": 35,
+   "url": "https://nikhilkumawat.netlify.app",
+   "sheet": "35",
+   "score": 36,
+   "reason": "Nikhil Kumawat: neon network-particle template, student projects (food delivery app, stats card), a typo in a project title (\"Dekstop\")."
+  },
+  {
+   "place": 36,
+   "url": "https://asfakur-portfolio-nextjs.vercel.app",
+   "sheet": "07",
+   "score": 36,
+   "reason": "Asfakur Nariz: dark template, role flips between UI/UX designer and full stack, the same job blurb pasted under three jobs, \"passionate\", \"pixel-perfect\"."
+  },
+  {
+   "place": 37,
+   "url": "https://www.adityakr.com",
+   "sheet": "18",
+   "score": 34,
+   "reason": "Aditya Kumar: stock centered-caps template, cliché copy (\"with finesse\"), blog and social-network clone projects."
+  },
+  {
+   "place": 38,
+   "url": "https://www.lexnguyen.dev",
+   "sheet": "11",
+   "score": 33,
+   "reason": "Nguyen Van Qui: a resume pasted as a page, dense monospace bullets, generic About; work is real but nothing is presented as projects."
+  },
+  {
+   "place": 39,
+   "url": "https://toukoum.fr",
+   "sheet": "37",
+   "score": 22,
+   "reason": "Toukoum: an AI-chat template (\"Build your AI portfolio\" link) showing \"Hey, I'm Aaaaby\"; nothing to read without chatting, no visible work."
+  },
+  {
+   "place": 40,
+   "url": "https://sameer27.netlify.app",
+   "sheet": "32",
+   "score": 18,
+   "reason": "Sameer: one red screen with a name, a Capricorn glyph and \"A passionate front-end developer\"; nothing else on the page, awkward \"Hello There!, I'm-\"."
+  }
+ ],
+ "tie_groups": [
+  [
+   "https://jos.gg",
+   "https://maveeshah.github.io/projects.html",
+   "https://deveshchandan.me",
+   "https://www.masabqurban.com"
+  ],
+  [
+   "https://ashutoshdash.in",
+   "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app",
+   "https://alilinares.com",
+   "https://abdulrehmanwaseem.me",
+   "https://zalt.me",
+   "https://andresilva.tech",
+   "https://batrasamarth.com"
+  ],
+  [
+   "https://ashleighsimonelli.co.uk",
+   "https://www.osallak.tech",
+   "https://www.pavangupta.in",
+   "https://lorenkamau.com"
+  ],
+  [
+   "https://www.hafidziti.dev",
+   "https://mhuzaifa04.vercel.app",
+   "https://antonmanaev.name",
+   "https://abhishek-kumar-t.vercel.app",
+   "https://www.mariokandut.com",
+   "https://abhijeetbhale.github.io/Portfolio"
+  ],
+  [
+   "https://www.pawaret.dev",
+   "https://arkamahajan.in",
+   "https://nikhilkumawat.netlify.app",
+   "https://asfakur-portfolio-nextjs.vercel.app",
+   "https://www.adityakr.com",
+   "https://www.lexnguyen.dev"
+  ]
+ ]
+}
