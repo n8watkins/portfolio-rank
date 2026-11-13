@@ -1,0 +1,56 @@
+name: Re-check not-a-portfolio grades
+
+# The one-off re-check of every listed portfolio graded "not a portfolio"
+# (scripts/regrade-not-portfolio.mjs): a fresh capture with the splash
+# click-through, then the current production grade with the strong-signals
+# guard. Started by hand only, with the same secrets as the nightly checks
+# (sync-upstream.yml): the production database, Gemini and R2 for the
+# screenshots. Gemini is capped inside the script (160 requests for the job,
+# retries included, and under 480 for the Pacific day). Resumable: run it
+# again to finish what a stopped run left.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "run (capture and grade), dry-run (list and budget), or report"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: ["dry-run", "run", "report"]
+
+concurrency:
+  group: regrade-not-portfolio
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  regrade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      GEMINI_API_KEY: ${{ inputs.mode == 'run' && secrets.GEMINI_API_KEY || '' }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        if: inputs.mode == 'run'
+      - name: Re-check
+        run: |
+          case "${{ inputs.mode }}" in
+            run) node scripts/regrade-not-portfolio.mjs ;;
+            report) node scripts/regrade-not-portfolio.mjs --report ;;
+            *) node scripts/regrade-not-portfolio.mjs --dry-run ;;
+          esac

@@ -14,7 +14,9 @@
 // site's progress is kept in the cache table (regrade-np:<url>), so a second
 // run picks up where the first stopped.
 //
-// Usage (TURSO_*, GEMINI_API_KEY and R2_* in the environment, as the
+// Run it from GitHub Actions, "Re-check not-a-portfolio grades"
+// (.github/workflows/regrade-not-portfolio.yml), which has the secrets the
+// nightly checks use. By hand (TURSO_*, GEMINI_API_KEY and R2_* in the environment, as the
 // nightly scripts get them):
 //   node scripts/regrade-not-portfolio.mjs --dry-run      # the list and the budget, nothing sent
 //   node scripts/regrade-not-portfolio.mjs                # capture, grade, report
