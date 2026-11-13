@@ -1,8 +1,8 @@
 import { db, ensureSchema } from "@/lib/db";
 import { factLines, gradedPool } from "@/lib/grader/report.mjs";
 import { hiringGroups, placeIn } from "@/lib/grader/present.mjs";
-import { isPublicTier, isRanked, placeNew, tierOf } from "@/lib/tiers.mjs";
-import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
+import { isPublicTier, tierOf } from "@/lib/tiers.mjs";
+import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 
 // A listed portfolio's public summary: the public grade (only the top tiers
 // get a letter and a "top N%", as on the portfolio page, so no one gets a
@@ -120,16 +120,15 @@ export async function playDetails(url: string): Promise<PlayDetails> {
 }
 
 /**
- * Its ELO from face-offs (lib/tiers.mjs) and, once it has enough face-offs
- * for its own tier, its place among the ranked portfolios, from the last
- * refresh's library (lib/tiers-store.mjs: one cached row).
+ * Its ELO from face-offs (lib/tiers.mjs) and its place among the ranked
+ * portfolios, derived on read from its rating row and the daily cutoffs
+ * (lib/tiers-db.mjs: two reads by key).
  */
 export async function eloStanding(url: string): Promise<EloStanding> {
   await ensureSchema();
-  const library = await cachedLibraryState(db());
-  const e = entryIn(library, url);
-  const eloTotal = library.order.filter(isRanked).length;
-  if (!(e.faceoffs > 0)) return { elo: null, eloRank: null, eloTotal };
-  const p = placeNew(library.order.filter((x: { url: string }) => x.url !== url), e);
-  return { elo: e.elo, eloRank: p.place ?? null, eloTotal: p.ranked ?? eloTotal };
+  const [row, meta] = await Promise.all([readSiteRow(db(), url), readTierMeta(db())]);
+  const s = standingOf(row, meta);
+  const eloTotal = (meta as { n?: number } | null)?.n ?? 0;
+  if (!(row.votes > 0)) return { elo: null, eloRank: null, eloTotal };
+  return { elo: s.elo, eloRank: s.place, eloTotal: s.of ?? eloTotal };
 }

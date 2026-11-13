@@ -3,7 +3,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { tierOf, isPublicTier } from "@/lib/tiers.mjs";
-import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
+import { readSiteRow, readTierMeta, standingOf as liveStanding } from "@/lib/tiers-db.mjs";
 import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { seen } from "@/lib/discovery/sites.mjs";
@@ -169,11 +169,22 @@ export async function loadProfile(url: string): Promise<Profile | null> {
 
   const jobResult = jobRow?.status === "done" && jobRow.result ? String(jobRow.result) : null;
   const report = owner.hideGrade ? null : reportCard(rubricRow?.ai_rubric ?? jobResult);
-  let standing = standingOf(rubricRow?.ai_rubric);
-  if (!standing) {
-    const e = entryIn(await cachedLibraryState(client), url);
-    standing = { tier: null, elo: e.elo, faceoffs: e.faceoffs, votes: e.votes, top: null, of: null, provisional: true, seeded: false, check: null };
-  }
+  // The letter, ELO and place derived on read from its rating row and the daily cutoffs (lib/tiers-db.mjs):
+  // two reads by key, as current as the last vote. The points breakdown comes with the stored grade.
+  const stored = standingOf(rubricRow?.ai_rubric);
+  const [row, meta] = await Promise.all([readSiteRow(client, url), readTierMeta(client)]);
+  const live = liveStanding(row, meta);
+  const standing: Standing = {
+    tier: stored ? (live.tier ?? stored.tier) : null,
+    elo: live.elo,
+    faceoffs: live.faceoffs,
+    votes: live.votes,
+    top: live.top,
+    of: live.of,
+    provisional: live.provisional,
+    seeded: live.seeded,
+    check: stored?.check ?? null,
+  };
   const tier = !owner.hideGrade && isPublicTier(standing.tier) ? standing.tier : null;
   const stage: Profile["stage"] = listed
     ? "listed"

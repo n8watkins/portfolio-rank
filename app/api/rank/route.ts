@@ -22,6 +22,7 @@ import { siteDetails } from "@/lib/play/details";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
 import { drawCandidates } from "@/lib/play/draw.mjs";
+import { applyFaceoff, ensureTierSchema } from "@/lib/tiers-db.mjs";
 import type { Portfolio } from "@/app/page";
 
 type Rating = { elo: number; votes: number };
@@ -218,6 +219,7 @@ export async function POST(req: Request) {
   }
 
   await ensureSchema();
+  await ensureTierSchema(db());
   const rater = await getRater();
   const key = pairKey(winner, loser);
   // Only a pair the server served to this rater can be voted on.
@@ -313,7 +315,7 @@ export async function POST(req: Request) {
 
     // Insert first: a UNIQUE violation here means this rater already voted on
     // this matchup (either direction) - caught below as 409.
-    await tx.execute({
+    const inserted = await tx.execute({
       // served = 1: cast on a pair recorded in matchups; only such practice
       // votes can be claimed (/api/claim).
       sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, delta, starred, served) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
@@ -321,6 +323,8 @@ export async function POST(req: Request) {
     });
 
     if (rater.type === "human") {
+      // The tier rating of the two portfolios moves at once, in the same transaction (lib/tiers-db.mjs).
+      await applyFaceoff(tx, { winner, loser, rater: "human", starred: useStar, voteId: Number(inserted.lastInsertRowid) });
       const upsert = `INSERT INTO ratings (url, elo, votes, updated_at)
         VALUES (?, ?, ?, datetime('now'))
         ON CONFLICT(url) DO UPDATE SET

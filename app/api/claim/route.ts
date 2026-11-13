@@ -7,6 +7,7 @@ import { ANON_COOKIE, ANON_VOTE_LIMIT, DAILY_VOTE_LIMIT, accountTooNew, getRater
 import { mergeGuest } from "@/lib/games/merge.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { sameOrigin } from "@/lib/polls/server";
+import { applyFaceoff, ensureTierSchema } from "@/lib/tiers-db.mjs";
 
 // Fold a visitor's practice votes into their signed-in identity: each becomes
 // an official human vote and moves ELO, except pairs they've already voted on
@@ -30,6 +31,7 @@ import { sameOrigin } from "@/lib/polls/server";
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   await ensureSchema();
+  await ensureTierSchema(db());
   const rater = await getRater();
   if (rater.type !== "human") {
     return NextResponse.json({ error: "signin_required" }, { status: 401 });
@@ -121,6 +123,8 @@ export async function POST(req: Request) {
       }
       await tx.execute({ sql: upsert, args: [winner, updated.winner, w.votes + 1] });
       await tx.execute({ sql: upsert, args: [loser, updated.loser, l.votes + 1] });
+      // A claimed practice vote now counts: the tier rating of the two moves (lib/tiers-db.mjs).
+      await applyFaceoff(tx, { winner, loser, rater: "human", voteId });
       await tx.commit();
       claimed++;
     } catch (e) {
