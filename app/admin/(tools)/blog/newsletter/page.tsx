@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ExternalLink, Eye, Inbox } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { NewsletterSwitch } from "@/components/admin/NewsletterSwitch";
+import { NewsletterTestDraft } from "@/components/admin/NewsletterTestDraft";
 import { pacificTime } from "@/components/admin/postStatus";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { btnSecondary } from "@/components/ui/styles";
@@ -45,6 +46,17 @@ function Pill({ tone, children }: { tone: string; children: React.ReactNode }) {
   return <span className={`inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold ring-1 ring-inset ${tone}`}>{children}</span>;
 }
 
+function Fact({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-mute">{label}</dt>
+      <dd className={`min-w-0 truncate text-right font-semibold ${ok ? "text-ink" : "text-down"}`} title={value}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 function Check({ ok, label, hint }: { ok: boolean; label: string; hint: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
@@ -69,7 +81,15 @@ export default async function AdminNewsletterPage() {
   const deployOn = newsletterEnabled();
   const on = deployOn && sw.on;
   const connected = Boolean(kit());
-  const form = Boolean(await kitFormId());
+  const formId = await kitFormId();
+  const client = kit();
+  // The setup check, read through the Worker (each part on its own, so one refusal shows as "-").
+  const diag = client ? await client.diagnostics() : null;
+  const sender = diag?.account.ok ? ((diag.account as { sendingAddress?: string | null }).sendingAddress ?? null) : null;
+  const senderDomain = sender?.split("@")[1] ?? null;
+  const forms = diag?.forms.ok ? ((diag.forms as { forms?: { id: number | string; name: string; archived: boolean }[] }).forms ?? []).filter((x) => !x.archived) : [];
+  const signupForm = forms.find((x) => String(x.id) === formId) ?? null;
+  const formNote = !connected ? "-" : forms.length === 0 ? "None: make one inline form" : forms.length > 1 && !formId ? `${forms.length} forms: set KIT_FORM_ID` : formId ? `Form ${formId}` : "-";
   const mode = IS_STAGING ? "draft" : broadcastMode(process.env.KIT_BROADCAST_MODE);
 
   return (
@@ -154,27 +174,38 @@ export default async function AdminNewsletterPage() {
               <NewsletterSwitch initial={sw.on} deployOn={deployOn} log={log} />
             </div>
           </section>
-          <section aria-labelledby="nl-kit" className="card p-5">
-            <h2 id="nl-kit" className="font-bold tracking-tight">
-              Kit
+          <section aria-labelledby="nl-test" className="card p-5" data-newsletter-test>
+            <h2 id="nl-test" className="font-bold tracking-tight">
+              Test the newsletter (Kit)
             </h2>
+            <p className="mt-1 text-sm text-mute">
+              Newsletters go through Kit: it sends the confirm email, the posts and the unsubscribe link. Site alerts go through Cloudflare Email Service; test those on{" "}
+              <a href="/admin/alerts" className="font-semibold text-ink underline underline-offset-2">
+                Alerts
+              </a>
+              .
+            </p>
             <dl className="mt-3 grid gap-2 text-sm">
               <Check ok={connected} label="API key" hint="Missing (KIT_API_KEY)" />
-              <Check ok={form} label="Sign-up form" hint="None (make one form, or set KIT_FORM_ID)" />
+              <Fact label="Sender" value={sender ?? (connected ? "Kit didn't say" : "-")} ok={Boolean(sender)} />
+              <Fact label="Sending domain" value={senderDomain ? `${senderDomain} (check Verified in Kit)` : "-"} ok={Boolean(senderDomain)} />
+              <Fact label="Sign-up form" value={signupForm ? `${signupForm.name} (${signupForm.id})` : formNote} ok={Boolean(signupForm)} />
+              <Fact label="Confirmed subscribers" value={count.count == null ? "-" : count.count.toLocaleString("en-US")} ok={count.count != null} />
             </dl>
-            <p className="mt-3 text-xs leading-relaxed text-mute">Kit sends the confirm email (double opt-in on the form), the posts and the unsubscribe link, and handles bounces. We keep no addresses.</p>
-            <a href={KIT_BROADCASTS_URL} target="_blank" rel="noreferrer" className={`${btnSecondary} mt-4 w-full sm:w-auto`}>
-              <ExternalLink className="h-4 w-4 text-accent" aria-hidden /> Open Kit broadcasts
-            </a>
-          </section>
-          <section aria-labelledby="nl-preview" className="card p-5">
-            <h2 id="nl-preview" className="font-bold tracking-tight">
-              Preview
-            </h2>
-            <p className="mt-1 mb-4 text-sm text-mute">The email of the latest post, as Kit gets it. Send yourself a test from the draft in Kit.</p>
-            <a href="/api/admin/newsletter/preview" target="_blank" className={`${btnSecondary} w-full sm:w-auto`}>
-              <Eye className="h-4 w-4 text-accent" aria-hidden /> Preview the email
-            </a>
+            <p className="mt-3 text-xs leading-relaxed text-mute">
+              Kit&apos;s API doesn&apos;t report whether the sending domain is verified: see Settings, Email, Verified Sending Domains in Kit.
+            </p>
+            <div className="mt-4">
+              <NewsletterTestDraft disabled={!connected} />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a href="/api/admin/newsletter/preview" target="_blank" className={btnSecondary}>
+                <Eye className="h-4 w-4 text-accent" aria-hidden /> Preview the email
+              </a>
+              <a href={KIT_BROADCASTS_URL} target="_blank" rel="noreferrer" className={btnSecondary}>
+                <ExternalLink className="h-4 w-4 text-accent" aria-hidden /> Open Kit broadcasts
+              </a>
+            </div>
           </section>
         </aside>
       </div>

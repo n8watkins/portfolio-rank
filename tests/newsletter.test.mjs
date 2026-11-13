@@ -11,7 +11,7 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { KitError, kitClient } from "../lib/newsletter/kit.mjs";
 import { CREATING_STUCK_MS, cleanSource, recentIssues } from "../lib/newsletter/store.mjs";
-import { SEND_DELAY_MS, broadcastMode, newsletterTick } from "../lib/newsletter/send.mjs";
+import { SEND_DELAY_MS, broadcastMode, createTestDraft, newsletterTick } from "../lib/newsletter/send.mjs";
 import { KIT_ADDRESS, KIT_UNSUBSCRIBE, postEmail } from "../lib/newsletter/emails.mjs";
 import { readSwitch, setSwitch, switchLog } from "../lib/newsletter/switch.mjs";
 
@@ -279,4 +279,19 @@ test("the owner's switch: off by default, every change logged, and off stops bro
     ],
     "every change, newest first; turning on twice logs once"
   );
+});
+
+test("the admin's test draft: marked [test], never scheduled, linked to the draft in Kit", async () => {
+  const db = await freshDb();
+  await addPost(db);
+  const { calls, kit } = mockKit();
+  const { postFromRow } = await import("../lib/content/store.mjs");
+  const post = postFromRow((await db.execute("SELECT * FROM posts")).rows[0]);
+  const made = await createTestDraft(kit, post, { base: BASE });
+  assert.deepEqual(made, { id: "100", url: "https://app.kit.com/campaigns/100/draft", subject: "[test] Title p1" });
+  const b = calls.find((c) => c.path === "/broadcasts").body;
+  assert.equal(b.send_at, null);
+  assert.equal(b.subject, "[test] Title p1");
+  assert.match(b.description, /sent to nobody/);
+  assert.equal((await recentIssues(db)).length, 0, "a test draft is not an issue");
 });
