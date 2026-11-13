@@ -1,14 +1,12 @@
-import { Activity, ArrowRight, BookOpen, Bot, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, Code, Crown, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
 import { PublicTierBadge, RankBadge, TierBadge } from "@/components/ui/badges";
 import { sectionTitle } from "@/components/ui/styles";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { LiveStats } from "@/components/home/LiveStats";
 import { PollBar } from "@/components/home/PollBar";
 import { Thumb } from "@/components/home/Thumb";
-import { ViewTabs } from "@/components/home/ViewTabs";
 import { ROUTES } from "@/lib/nav";
 import type { BoardItem, GradedItem, LiveStat, PortfolioOfTheDay as Potd, ShowItem, TopTen as TopTenData } from "@/lib/home";
-import { topPct } from "@/lib/home";
 import { voteCount } from "@/lib/polls/format";
 import type { PublicPoll } from "@/lib/polls/server";
 
@@ -66,31 +64,20 @@ function Board({ rows }: { rows: BoardItem[] }) {
   );
 }
 
-/** Top 10: Merged, AI and People with ranking v2; the people's board until then. */
+/** Top 10: the first rows of the leaderboard's ranked board (tiers by ELO, graded only). */
 export function TopTen({ top, className = "" }: { top: TopTenData; className?: string }) {
-  const empty = top.kind === "ai" && top.rows.length === 0;
+  const empty = top.rows.length === 0;
   return (
     <section aria-labelledby="top10" className={`card flex flex-col p-4 sm:p-6 ${className}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 id="top10" className={sectionTitle}>
           Top 10
         </h3>
-        {top.kind === "ai" && (
-          <p className="flex items-center gap-1.5 text-xs text-mute">
-            <Bot className="h-3.5 w-3.5" aria-hidden /> By AI grade
-          </p>
-        )}
+        <p className="flex items-center gap-1.5 text-xs text-mute">
+          <Crown className="h-3.5 w-3.5" aria-hidden /> By tier and ELO
+        </p>
       </div>
-      {top.kind === "views" ? (
-        <ViewTabs
-          label="Leaderboard view"
-          panels={{
-            merged: <Board rows={top.views[0].rows} />,
-            ai: <Board rows={top.views[1].rows} />,
-            people: <Board rows={top.views[2].rows} />,
-          }}
-        />
-      ) : empty ? (
+      {empty ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-edge-strong px-6 py-12 text-center">
           <span className="icon-tile h-11 w-11">
             <Swords className="h-5 w-5" aria-hidden />
@@ -278,9 +265,11 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
           {p.tier && <TierBadge tier={p.tier} size="lg" />}
           <p className="text-sm">
             <span className="block font-semibold">
-              Top {topPct(p.rank, p.total)}% · #{p.rank} by AI grade
+              {p.top != null ? `Top ${p.top}% · ` : ""}#{p.rank} on the leaderboard
             </span>
-            <span className="block text-mute">of {p.total.toLocaleString("en-US")} graded portfolios</span>
+            <span className="block text-mute">
+              {p.elo != null ? `ELO ${p.elo} · ` : ""}of {p.total.toLocaleString("en-US")} graded portfolios
+            </span>
           </p>
         </div>
         {p.best.length > 0 && (

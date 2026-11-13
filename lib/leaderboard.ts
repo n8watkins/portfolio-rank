@@ -295,23 +295,21 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
  * plus the rows shown.
  */
 type LibEntry = { url: string; rating: number; faceoffs: number; key: number | null; first: number; elo: number };
-type Placed = { tier: string; provisional: boolean; top: number | null };
+type Placed = { tier: string; provisional: boolean; top: number | null; place: number | null };
 
-async function loadRanked(limit: number): Promise<Leaderboard> {
-  const [state, hidden, votes] = await Promise.all([
-    cachedLibraryState(db()) as Promise<{ order: LibEntry[]; others: LibEntry[] }>,
-    hiddenUrls(),
-    db()
-      // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
-      .execute("SELECT n FROM vote_totals WHERE k = 'all'")
-      .then((r) => Number(r.rows[0]?.n ?? 0))
-      .catch((e) => {
-        if (noTable(e)) return 0;
-        throw e;
-      }),
-  ]);
+/** One portfolio in the ranked order: its library entry and its tier placement. */
+export type RankedSite = { e: LibEntry; p: Placed };
+
+/**
+ * Every listed, graded portfolio the site shows, in the ranked order the
+ * leaderboard and the home page share: by tier, then ELO, then face-offs
+ * (then, among exact ties, the better grade, the date first graded and the
+ * address). From the last refresh's library: one cached row.
+ */
+export async function rankedOrder(): Promise<RankedSite[]> {
+  const [state, hidden] = await Promise.all([cachedLibraryState(db()) as Promise<{ order: LibEntry[]; others: LibEntry[] }>, hiddenUrls()]);
   const ranks = rankLibrary(state.order) as Map<string, Placed>;
-  const members = state.order
+  return state.order
     .filter((e) => byUrl.has(e.url) && !hidden.has(e.url))
     .map((e) => ({ e, p: ranks.get(e.url)! }))
     .sort(
@@ -323,6 +321,20 @@ async function loadRanked(limit: number): Promise<Leaderboard> {
         a.e.first - b.e.first ||
         (a.e.url < b.e.url ? -1 : 1)
     );
+}
+
+async function loadRanked(limit: number): Promise<Leaderboard> {
+  const [members, votes] = await Promise.all([
+    rankedOrder(),
+    db()
+      // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
+      .execute("SELECT n FROM vote_totals WHERE k = 'all'")
+      .then((r) => Number(r.rows[0]?.n ?? 0))
+      .catch((e) => {
+        if (noTable(e)) return 0;
+        throw e;
+      }),
+  ]);
   const shown = members.slice(0, limit);
   const urls = shown.map((m) => m.e.url);
   const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);

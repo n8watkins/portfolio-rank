@@ -8,8 +8,7 @@ import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 import { gamesEnabled } from "@/lib/games/server";
-import { readBoard, VIEWS, type View } from "@/lib/ranking/board";
-import { eloOf } from "@/lib/leaderboard";
+import { rankedOrder } from "@/lib/leaderboard";
 import { readPolls } from "@/lib/polls/store.mjs";
 import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
 
@@ -49,18 +48,24 @@ type PoolSite = {
   roles: string[];
 };
 
+/** A graded portfolio in the leaderboard's ranked order: its place on the board, tier, ELO and face-offs. */
+type HomeSite = PoolSite & { rank: number; elo: number; faceoffs: number; top: number | null };
+
 /**
- * The graded, listed portfolios best first (by score, the order the tiers
- * come from: lib/tiers.mjs), with each one's rank by AI grade. The pool itself is cached an hour
- * (lib/grader/report.mjs gradedPool).
+ * The graded, listed portfolios in the leaderboard's ranked order (by tier,
+ * then ELO from face-offs: lib/leaderboard.ts rankedOrder), each with its
+ * place on that board, so the home page and /top tell one story. The pool
+ * (axes, roles) is cached an hour (lib/grader/report.mjs gradedPool), the
+ * order is one cached row.
  */
-async function rankedPool(): Promise<(PoolSite & { aiRank: number })[]> {
+async function rankedPool(): Promise<HomeSite[]> {
   await ensureSchema();
-  const [pool, hidden] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, hiddenUrls()]);
-  return pool
-    .filter((p) => byUrl.has(p.url) && !hidden.has(p.url))
-    .sort((a, b) => (b.key ?? -1) - (a.key ?? -1) || b.mu - a.mu || a.url.localeCompare(b.url))
-    .map((p, i) => ({ ...p, aiRank: i + 1 }));
+  const [pool, order] = await Promise.all([gradedPool(db()) as Promise<PoolSite[]>, rankedOrder()]);
+  const byPool = new Map(pool.map((p) => [p.url, p]));
+  return order
+    .map((r, i) => ({ r, rank: i + 1, p: byPool.get(r.e.url) }))
+    .filter((x): x is { r: (typeof order)[number]; rank: number; p: PoolSite } => x.p != null)
+    .map(({ r, rank, p }) => ({ ...p, tier: r.p.tier, rank, elo: r.e.elo, faceoffs: r.e.faceoffs, top: r.p.provisional ? null : r.p.top }));
 }
 
 /**
@@ -84,7 +89,7 @@ export type ShowItem = {
 };
 
 /** The hero's card deck: the best-graded portfolios whose screenshots are strong. */
-async function showcase(pool: (PoolSite & { aiRank: number })[], count = 6): Promise<ShowItem[]> {
+async function showcase(pool: HomeSite[], count = 6): Promise<ShowItem[]> {
   const strong = pool.filter(strongCapture).slice(0, count * 2);
   const shots = await shotBases(strong.map((p) => p.url));
   return strong
@@ -96,7 +101,7 @@ async function showcase(pool: (PoolSite & { aiRank: number })[], count = 6): Pro
       domain: domainOf(p.url),
       hero: heroOf(shots.get(p.url)!),
       tier: p.tier,
-      rank: p.aiRank,
+      rank: p.rank,
       href: reportPath(p.url),
     }));
 }
@@ -108,55 +113,34 @@ export type BoardItem = {
   rank: number;
   tied: boolean;
   hero: string | null;
-  /** The public tier by rank (lib/tiers.mjs), or "" for none. */
+  /** The public tier by ELO (lib/tiers.mjs), or "" for none. */
   tier: string;
-  /** People's ELO from face-off votes; null without a rating. */
+  /** The ELO from face-offs; null without face-offs. */
   elo: number | null;
   href: string;
 };
 
-export type TopTen =
-  | { kind: "views"; views: { key: View; label: string; rows: BoardItem[] }[] }
-  | { kind: "ai"; rows: BoardItem[] };
+export type TopTen = { kind: "ranked"; rows: BoardItem[] };
 
-const VIEW_LABEL: Record<View, string> = { merged: "Merged", ai: "AI", people: "People" };
-
-/**
- * The top 10. With RANKING_V2 on and the boards computed: Merged, AI and
- * People (lib/ranking/board.ts). Until then the order of the AI grade (the
- * people's ELO board is too thin to rank on yet: most sites share one
- * vote), with the tier in the score column.
- */
-async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
-  await ensureSchema();
-  const item = (url: string, rank: number, tier: string, tied = false): BoardItem => {
-    const p = byUrl.get(url);
-    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied, hero: null, tier, elo: null, href: reportPath(url) };
-  };
-  // People's ELO beside the tier on every board (owner, 2026-11-12).
-  const withElo = async (rows: BoardItem[]) => {
-    const elos = await eloOf([...new Set(rows.map((r) => r.url))]);
-    for (const r of rows) r.elo = elos.get(r.url) ?? null;
-  };
-  if (/^true$/i.test(String(process.env.RANKING_V2 ?? ""))) {
-    const boards = await Promise.all(VIEWS.map((v) => readBoard(v, { limit: 10 })));
-    if (boards.every((b) => b.rows.length > 0)) {
-      const views = boards.map((b) => ({
-        key: b.view,
-        label: VIEW_LABEL[b.view],
-        // Public tiers only (lib/tiers.mjs): the People board's top 10 can hold a lower tier.
-        rows: b.rows.map((r) => item(r.url, r.rank, isPublicTier(r.tier) ? r.tier! : "", r.tiedWithNext)),
-      }));
-      const [shots] = await Promise.all([shotBases([...new Set(views.flatMap((v) => v.rows.map((r) => r.url)))]), withElo(views.flatMap((v) => v.rows))]);
-      for (const v of views) for (const r of v.rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-      // People first is the order the leaderboard reads in; Merged leads.
-      return { kind: "views", views: (["merged", "ai", "people"] as View[]).map((k) => views.find((v) => v.key === k)!) };
-    }
-  }
-  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, isPublicTier(p.tier) ? p.tier! : ""));
-  const [shots] = await Promise.all([shotBases(rows.map((r) => r.url)), withElo(rows)]);
+/** The top 10 of the leaderboard's ranked board (tiers by ELO, graded only), the same rows /top shows first. */
+async function topTen(pool: HomeSite[]): Promise<TopTen> {
+  const rows: BoardItem[] = pool.slice(0, 10).map((p) => {
+    const f = byUrl.get(p.url);
+    return {
+      url: p.url,
+      name: f?.name ?? domainOf(p.url),
+      line: f?.tagline || domainOf(p.url),
+      rank: p.rank,
+      tied: false,
+      hero: null,
+      tier: isPublicTier(p.tier) ? p.tier! : "",
+      elo: p.faceoffs > 0 ? p.elo : null,
+      href: reportPath(p.url),
+    };
+  });
+  const shots = await shotBases(rows.map((r) => r.url));
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-  return { kind: "ai", rows };
+  return { kind: "ranked", rows };
 }
 
 /** `tier` is the tier by rank (lib/tiers.mjs); shown publicly only from B up. */
@@ -241,7 +225,10 @@ export type PortfolioOfTheDay = {
   domain: string;
   hero: string;
   tier: string | null;
+  /** Its place on the leaderboard's ranked board (tier, then ELO), its "top N%" once it has a tier of its own, and its ELO. */
   rank: number;
+  top: number | null;
+  elo: number | null;
   total: number;
   best: { label: string; note: string }[];
   facts: { id: string; label: string; pass: boolean }[];
@@ -249,7 +236,7 @@ export type PortfolioOfTheDay = {
 };
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
-async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
+async function portfolioOfTheDay(pool: HomeSite[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
   // The A family or better: the top 30% by ELO (SSS to A-, lib/tiers.mjs); while few have enough
   // face-offs for a tier, the best AI grades (the pool is in grade order).
   const open = pool.filter((p) => strongCapture(p) && !skip.has(p.url));
@@ -285,8 +272,10 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
       domain: domainOf(p.url),
       hero: heroOf(base),
       tier: p.tier,
-      rank: p.aiRank,
+      rank: p.rank,
       total: pool.length,
+      top: p.top,
+      elo: p.faceoffs > 0 ? p.elo : null,
       best: judgments.slice(0, 2).map((j) => ({ label: j.label, note: j.note })),
       facts: facts.slice(0, 6),
       href: reportPath(p.url),
