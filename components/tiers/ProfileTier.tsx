@@ -1,15 +1,17 @@
 import { EloTierBadge } from "@/components/ui/badges";
 import { ROUTES } from "@/lib/nav";
-import { BELOW_TOP_TIERS, familyOf, tierLabel } from "@/lib/tiers.mjs";
+import { BELOW_TOP_TIERS, SETTLED_FACEOFFS, familyOf, tierLabel } from "@/lib/tiers.mjs";
 import type { ProfileTier as Data } from "@/lib/tiers-view";
 
 // A profile's tier by ELO (RANKING_V2 only, lib/tiers-view.ts): the letter,
-// its place, "Starting rank from automated checks" and the real votes, the
-// points behind the start item by item, and the quickest points to gain.
+// its place, "Starting rank from automated checks" and the real votes, how
+// settled the rank is (face-offs out of SETTLED_FACEOFFS), the points behind
+// the start item by item, and the quickest points to gain.
 
 export function ProfileTier({ t }: { t: Data }) {
   const strong = familyOf(t.shown) === "A" || familyOf(t.shown) === "S";
   const votes = `${t.votes.toLocaleString("en-US")} real vote${t.votes === 1 ? "" : "s"}`;
+  const settling = t.settled ? "Settled" : `Settling: ${Math.floor(t.faceoffs)} of ${SETTLED_FACEOFFS} face-offs`;
   return (
     <section
       aria-labelledby="tier"
@@ -37,6 +39,7 @@ export function ProfileTier({ t }: { t: Data }) {
               </p>
               <p className="text-sm text-mute">
                 {t.seeded ? `Starting rank from automated checks · ${votes}. Votes move it from here.` : `ELO from ${votes}. It moves as people vote.`}
+                <span className="block text-xs">{settling}</span>
               </p>
             </>
           ) : (

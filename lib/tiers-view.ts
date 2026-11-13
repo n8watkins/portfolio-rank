@@ -20,6 +20,9 @@ export type ProfileTier = {
   elo: number;
   /** Real face-offs (people's votes and AI comparisons), each counted once. */
   votes: number;
+  /** Face-offs, weighted (an AI one counts a quarter), and whether that settles the rank (lib/tiers.mjs SETTLED_FACEOFFS). */
+  faceoffs: number;
+  settled: boolean;
   top: number | null;
   of: number | null;
   /** Its starting rank came from automated checks. */
@@ -51,6 +54,8 @@ export async function loadProfileTier(url: string, rawRubric: unknown, hideGrade
     hasTier,
     elo: s.elo,
     votes: s.votes,
+    faceoffs: s.faceoffs,
+    settled: s.settled,
     top: s.top,
     of: s.of,
     seeded: s.seeded,

@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { ShieldCheck } from "lucide-react";
 import feed from "@/data/feed.json";
 import { ClaimFlow } from "@/components/claim/ClaimFlow";
+import { VerifyFlow } from "@/components/claim/VerifyFlow";
+import { toolsEnabled } from "@/lib/tools/server";
+import { loadProfile } from "@/lib/profile";
+import { normalizeGradeUrl } from "@/lib/grader/url.mjs";
 import { btnPrimary } from "@/components/ui/styles";
 import { gamesEnabled } from "@/lib/games/server";
 import { isKnownPortfolio } from "@/lib/roster";
@@ -34,10 +38,19 @@ function find(input: string) {
   return host ? FEED.find((p) => hostOf(p.url) === host) : undefined;
 }
 
+/** With "Add your portfolio" on, a site added through /add can be claimed too (lib/profile.ts). */
+async function findAdded(input: string): Promise<{ name: string; url: string } | undefined> {
+  const target = normalizeGradeUrl(input);
+  if (!target.ok) return undefined;
+  const p = await loadProfile(target.url);
+  return p ? { name: p.name, url: p.url } : undefined;
+}
+
 export default async function ClaimPage({ searchParams }: { searchParams: Promise<{ url?: string }> }) {
   const asked = (await searchParams).url;
+  const tools = toolsEnabled();
   const found = typeof asked === "string" && asked.trim() ? find(asked.slice(0, 500)) : undefined;
-  const site = found && isKnownPortfolio(found.url) ? found : undefined;
+  const site = found && isKnownPortfolio(found.url) ? found : tools && typeof asked === "string" && asked.trim() ? await findAdded(asked.slice(0, 500)) : undefined;
   if (!site) {
     return (
       <div className="mx-auto w-full max-w-xl px-4 py-12 sm:px-6 sm:py-16">
@@ -49,7 +62,9 @@ export default async function ClaimPage({ searchParams }: { searchParams: Promis
             Remove or manage your portfolio
           </h1>
           <p className="mt-2 text-sm text-mute">
-            First prove it&apos;s yours: a link to your GitHub profile on the site, or a short code you add to the page. Then, with the code, you can hide its grade or remove it.
+            {tools
+              ? "First prove it's yours: put a short code we give you on your site. Then you can re-check it, hide its grade or remove it."
+              : "First prove it's yours: a link to your GitHub profile on the site, or a short code you add to the page. Then, with the code, you can hide its grade or remove it."}
           </p>
           <form method="get" className="mt-5 flex flex-col gap-2 sm:flex-row">
             <label className="sr-only" htmlFor="claim-url">
@@ -80,5 +95,7 @@ export default async function ClaimPage({ searchParams }: { searchParams: Promis
   const url = site.url;
   const domain = hostOf(url) || url;
   const shots = await shotBases([url]);
+  // With "Add your portfolio" on, ownership is proven with code the owner deploys (components/claim/VerifyFlow.tsx).
+  if (tools) return <VerifyFlow url={url} name={site.name ?? domain} domain={domain} hero={shots.has(url) ? heroOf(shots.get(url)!) : null} />;
   return <ClaimFlow url={url} name={site.name ?? domain} domain={domain} hero={shots.has(url) ? heroOf(shots.get(url)!) : null} regrade={gamesEnabled()} />;
 }

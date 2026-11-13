@@ -5,7 +5,7 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
-import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, FAMILIES, TIER_LADDER, familyOf, tierCounts } from "@/lib/tiers.mjs";
+import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, FAMILIES, SETTLED_FACEOFFS, S_MIN_WINS, TIER_LADDER, familyOf, tierCounts } from "@/lib/tiers.mjs";
 import { readTierMeta } from "@/lib/tiers-db.mjs";
 import { db, ensureSchema } from "@/lib/db";
 import { CHECK_ITEMS, CHECK_POINTS } from "@/lib/check-points.mjs";
@@ -24,9 +24,9 @@ const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
 async function liveCounts(): Promise<{ counts: Record<string, number>; total: number; ranked: number } | null> {
   try {
     await ensureSchema();
-    const meta = (await readTierMeta(db())) as { n?: number } | null;
+    const meta = (await readTierMeta(db())) as { n?: number; sBand?: { counts?: Record<string, number> } | null } | null;
     const n = meta?.n ?? 0;
-    return n ? { counts: tierCounts(n), total: n, ranked: n } : null;
+    return n ? { counts: tierCounts(n, meta?.sBand?.counts ?? null), total: n, ranked: n } : null;
   } catch {
     return null;
   }
@@ -85,7 +85,13 @@ export async function EloGrading() {
               Real face-offs move the ELO from there: win and it goes up, lose and it goes down. A person&apos;s vote counts fully, an AI
               comparison counts {share(AI_VOTE_WEIGHT)} as much. The starting rank is held loosely, so votes move it fast.
             </li>
-            <li>Your place by ELO among all graded portfolios sets your tier.</li>
+            <li>
+              Your place by ELO among all graded portfolios sets your tier from day one: A is the top 30%, B the next 40%, C the rest.
+            </li>
+            <li>
+              S is earned: {S_MIN_WINS} face-off wins while in the top 1%. Drop out of the top 1% and it goes back to your place&apos;s
+              letter.
+            </li>
           </ol>
           {live && <p className="mt-3 text-sm text-mute">Ranked against {live.total.toLocaleString("en-US")} graded portfolios today.</p>}
           <div className="mt-5 overflow-x-auto">
@@ -160,8 +166,8 @@ export async function EloGrading() {
             <div className="card p-5">
               <dt className="font-bold">When it updates</dt>
               <dd className="mt-2 text-sm text-mute text-pretty">
-                Every face-off counts. Tiers are placed again every hour, because other portfolios move too. Equal ELOs share a
-                place.
+                Every face-off counts at once. Tiers are placed again once a day, because other portfolios move too. With equal ELOs,
+                the portfolio added first ranks higher. After {SETTLED_FACEOFFS} face-offs a rank counts as settled.
               </dd>
             </div>
             <div className="card p-5">

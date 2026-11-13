@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ArrowUpRight, Clock, Hourglass, Sparkles, Trophy } from "lucide-react";
+import { ArrowUpRight, Clock, Hourglass, ShieldCheck, Sparkles, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
@@ -211,10 +211,18 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
 
       <section aria-labelledby="fixes" className="card p-5 sm:p-6">
         <SectionTitle id="fixes" kicker="Fix list" title="What to fix, and how">
-          {p.listed && <RecheckButton url={p.url} />}
+          <RecheckButton url={p.url} />
         </SectionTitle>
         <FixList p={p} />
       </section>
+
+      {/* Owners prove it with code they deploy (/claim, components/claim/VerifyFlow.tsx), then can re-check, hide the grade or remove it. */}
+      <p className="flex items-center justify-center gap-2 pt-2 text-sm text-mute">
+        <ShieldCheck className="h-4 w-4 text-mute" aria-hidden /> Is this your portfolio?{" "}
+        <a href={`/claim?url=${encodeURIComponent(p.url)}`} className="font-semibold text-accent underline-offset-4 hover:underline">
+          Claim it
+        </a>
+      </p>
 
       {ROUTES.add && (
         <p className="flex items-center justify-center gap-2 pt-4 text-sm text-mute">
