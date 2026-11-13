@@ -144,6 +144,9 @@ With the schema fingerprint (below), the order no longer matters to migrations; 
 - 2026-11-12: merged #143 (schema fingerprint), #144 (staging composition), #154 (staging concurrency), #153 (night dead-man alert) and #157 (edge cache for days); each production deploy and smoke check passed.
 - 2026-11-12: staging restored to all in-flight work through #158, including the latest #140 (add portfolio) and #149 (discovery, its screen and hand-off off).
 - 2026-11-12: merging #155 (privacy pages, owner-approved) was refused by the agent's permission check ("merge without review"); the owner has to merge it or allow agent merges. Queue after it: #159, #160, #161, #156, #146, #145, #162, then #163 (held for the owner's Turnstile and zone setup).
+- 2026-11-13: #163 (portfoliorank.dev, `SITE_URL`) landed; main merged into #158 with `SITE_URL` kept, and the in-flight code that still read `AUTH_URL` or the old host moved to `SITE_URL` on the integration branch (the lane branches still need it when they merge main).
+- 2026-11-13: #164 (newsletter on Kit, stacked on #133) merged into #158; staging at https://staging.portfoliorank.dev passes the smoke check.
+- Merging to main is paused until the owner says "merge the queue".
 
 ## Risks
 
