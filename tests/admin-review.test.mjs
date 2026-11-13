@@ -156,3 +156,48 @@ test("review page: agreed rows ticked, disagreements flagged; Confirm applies; t
     await browser.close();
   }
 });
+
+test("applied automatically: its own section with Undo; Undo puts the site back and the row waits for the owner", async () => {
+  const { autoApplyReviews } = await import("../lib/reviews/store.mjs");
+  const D = "https://e2e-review-auto.dev";
+  await db.execute({ sql: "INSERT OR REPLACE INTO portfolios (url, name, status, ai_rubric) VALUES (?, ?, 'live', ?)", args: [D, D, grade(false)] });
+  await db.execute({ sql: "DELETE FROM status_reviews WHERE url = ?", args: [D] });
+  await db.execute({
+    sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, reason, off_list, verdicts, signals, created_at)
+          VALUES ('e2e-auto', ?, 'not_portfolio', 'listed', 'relist', 1, 'Both models see a portfolio.', 0, ?, '{"score":5,"names":[],"junk_rule":null,"capture":{}}', '2026-11-14T00:00:00Z')`,
+    args: [D, verdicts(true, true)],
+  });
+  const applied = await autoApplyReviews(db, { onFeed: () => true, now: new Date() });
+  assert.ok(applied.some((r) => r.url === D && r.ok), "the rule applied the pass");
+  assert.equal(await isPortfolio(D), true);
+
+  const browser = await chromium.launch();
+  try {
+    // The phone first: the desktop pass ends with Undo, which empties the section.
+    for (const [width, height] of [
+      [390, 844],
+      [1440, 900],
+    ]) {
+      const context = await browser.newContext({ viewport: { width, height }, extraHTTPHeaders: { cookie } });
+      const page = await context.newPage();
+      await page.goto(`${BASE}/admin/review`);
+      const section = page.locator("[data-review-auto]");
+      await section.getByRole("heading", { name: /Applied automatically/ }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, `no sideways scroll at ${width}px`);
+      if (width === 390) {
+        await context.close();
+        continue;
+      }
+      const row = section.locator("[data-review-auto-row]", { has: page.locator(`a[href="${D}"]`) });
+      await row.locator("[data-review-undo]").click();
+      await row.waitFor({ state: "detached" });
+      assert.equal(await status(D), "pending");
+      assert.equal(await isPortfolio(D), false, "the site is back as it was");
+      const back = page.locator("[data-review-row]", { has: page.locator(`a[href="${D}"]`) });
+      await back.locator("[data-review-undone]").getByText(/then undone by e2e-admin/).waitFor();
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});

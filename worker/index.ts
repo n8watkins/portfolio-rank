@@ -38,6 +38,7 @@ import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
 import { jobCron } from "./crons";
 import { freshnessEnabled, freshnessTick } from "./freshness";
+import { reviewAutoApplyEnabled, reviewAutoApplyTick } from "./review";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -173,6 +174,8 @@ const worker = {
           // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
           // A 168th of the list's change fingerprints, so each site is checked once a week (./freshness.ts); only with FRESHNESS_ENABLED.
           ["freshness", () => (freshnessEnabled(env) ? freshnessTick(at) : null)],
+          // The owner's rule for the review queue: passes are applied without waiting (./review.ts); only with REVIEW_AUTO_APPLY.
+          ["review auto-apply", () => (reviewAutoApplyEnabled(env) ? reviewAutoApplyTick(at, { purgeTags: purgeTagsOf(ctx) }) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
         ],
         {
