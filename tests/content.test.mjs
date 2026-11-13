@@ -22,9 +22,12 @@ import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
-import { CTA, SYSTEM_INSTRUCTION, assembleBody, buildWriteRequest, fill } from "../pipeline/content/writer.mjs";
+import { CTA, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
+import { WRITE_SYSTEM, assemble, buildWriteRequests, parseBlocks, reflow, cutBadSentences } from "../pipeline/content/compose.mjs";
+import { planPost } from "../pipeline/content/plan.mjs";
+import { clausesOf } from "../pipeline/content/clauses.mjs";
+import { mockAnswer } from "../pipeline/content/mock-writer.mjs";
 import { devMetaHits, editorialChecks, findPayoff, readingGrade, repeatedPhrases, scorecard, syllables } from "../pipeline/content/scorecard.mjs";
-import { DEFAULT_WRITER_MODE, STAGED_REQUESTS, checkOutline, writerMode } from "../pipeline/content/staged.mjs";
 import { renderPreview } from "../pipeline/content/preview.mjs";
 import { checkLinksLoad, checkNames, checkNumbers, codeChecks, wordCount } from "../pipeline/content/checks.mjs";
 import { checkClaims, TAVILY_PER_WEEK } from "../pipeline/content/claims.mjs";
@@ -43,9 +46,8 @@ import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
 import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
-import { runManualJob } from "../pipeline/content/manual.mjs";
+import { MANUAL_REQUESTS, runManualJob } from "../pipeline/content/manual.mjs";
 import { review } from "../lib/content/blog.mjs";
-import { sheetForWriter } from "../pipeline/content/writer.mjs";
 
 // Monday 2026-11-16, 20:30 Pacific (standard time): a drafting night.
 const MONDAY = Date.parse("2026-11-17T04:30:00Z");
@@ -110,14 +112,15 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "graded S by the AI judge" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason === "has the AI judge's highest grade" && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
-  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are graded S or A").display, "50%");
+  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);
   const pc = await pageCraft(db, { now: MONDAY });
   assert.equal(pc.ready, true);
   assertNoBadNames(pc);
-  assert.equal(pc.names.length, 0);
+  // Named only as positive examples: graded S, fits a phone, no console errors, light.
+  assert.ok(pc.names.every((n) => /highest grade, fits a phone screen/.test(n.reason)));
   assert.equal(pc.facts.find((f) => f.label === "Median page weight of other portfolios, first load").display, "4.0 MB");
 });
 
@@ -238,27 +241,29 @@ export const ph = (sheet, label) => {
 function goodDraft(sheet, over = {}) {
   const named = sheet.names[0];
   const shot = sheet.screenshots[0];
-  const lowTop = ph(sheet, "Average motion score (1 to 5) of S and A portfolios");
+  const lowTop = ph(sheet, "Average motion score (1 to 5) of the top-graded portfolios");
   const lowRest = ph(sheet, "Average motion score (1 to 5) of all other graded portfolios");
-  const share = ph(sheet, "Share of all graded portfolios that are graded S or A");
+  const share = ph(sheet, "Share of all graded portfolios that are top-graded");
   const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where S and A portfolios lead the rest by the most (tied)");
+  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
   const nLead = ph(sheet, "Number of axes sharing the biggest lead");
   const total = ph(sheet, "Portfolios graded by the AI judge");
   const example = sheet.examples[0];
+  const [n1, n2, n3] = sheet.names;
+  void nLead;
   return {
     title: "Even the best portfolios are weak on motion",
-    alt_title_a: "Developer portfolio grades: what S and A sites share",
+    alt_title_a: "Developer portfolio grades: what the top-graded sites share",
     alt_title_b: "The one axis where nobody scores well",
     subtitle: "We compared the AI judge's scores of top portfolios with everyone else.",
     tags: ["portfolios", "data"],
-    share_line: `${share} of graded portfolios reach S or A. Here is what they do differently.`,
+    share_line: `${share} of graded portfolios are top-graded. Here is what they do differently.`,
     newsletter_blurb: "What the top portfolios share, from our grades.",
-    tldr: [`Motion is the lowest-scoring axis for every group: ${lowTop} for S and A portfolios, ${lowRest} for the rest.`, `${share} of all graded portfolios reach S or A.`, `${nLead} axes tie for the biggest lead, at ${gap}.`],
+    tldr: [`Motion is the lowest-scoring axis for every group: ${lowTop} for the top-graded portfolios, ${lowRest} for the rest.`, `Only ${share} of all graded portfolios are top-graded.`, `${lead} tie for the biggest lead, at ${gap}.`],
     body: [
       `Motion is the lowest-scoring axis for every group we graded.`,
-      `S and A portfolios average ${lowTop} on it, against ${lowRest} for the rest.`,
-      `We graded ${total} portfolios with the same rubric.`,
+      `The top-graded portfolios average ${lowTop} on it, against ${lowRest} for the rest.`,
+      `We graded ${total} portfolios with the same rubric, and only ${share} of them are top-graded.`,
       "If you change one thing on your portfolio this week, add a little purposeful motion to the first screen.",
       "",
       "### Top portfolios lead on most axes",
@@ -266,31 +271,46 @@ function goodDraft(sheet, over = {}) {
       "",
       para(4, 3),
       "",
-      para(3, 1),
+      "Every axis tells the same story in a different way.",
+      "Reviewers notice a page that knows what it wants to say.",
+      "Each choice on it points at one idea about the developer.",
+      "",
+      "Motion is the exception, and an interesting one for anyone building a portfolio this month.",
+      "Most sites either skip it entirely or add so much that it gets in the way of reading.",
+      "A single subtle transition on the first screen is usually enough to feel considered.",
+      "Anything beyond that should earn its place by explaining something a static page cannot.",
       "",
       "[[image:inline-1]]",
       "",
       `> **${gap} ahead on ${lead}**`,
-      "> Several axes tie for the widest lead between S and A portfolios and the rest.",
+      "> Several axes tie for the widest lead between the top-graded portfolios and the rest.",
       "",
       "### The first screen carries the most weight",
       para(3, 2),
       "",
-      para(2, 4),
-      `${named.name} is one of the portfolios the judge graded S.`,
+      `[${n1.name}](${n1.url}) is a good place to start, because its first screen says who the developer is in one line.`,
+      `Another strong case is [${n2.name}](${n2.url}), which keeps its projects short and specific.`,
+      `Finally, [${n3.name}](${n3.url}) shows how a clear contact link removes a step for a reviewer.`,
       "",
       para(4, 0),
       "",
-      para(3, 5),
+      "A good opening does not need a big budget or a new framework.",
+      "What it needs is a sentence about the work and a way to see it.",
       "",
       "[[image:inline-2]]",
       "",
       "### Clear stories beat long lists",
       para(3, 4),
       "",
-      para(4, 2),
+      "Lists of tools read like a shopping receipt to most reviewers.",
+      "Stories about one problem and its result are what they remember.",
+      "Picking three projects and telling each well beats showing twelve.",
       "",
       para(3, 3),
+      "",
+      "Writing about a project is easier with a simple frame to follow.",
+      "Start with the problem, then the decision you made, then the result someone saw.",
+      "Close with a link to the live thing so the claim can be checked.",
       "",
       "### Try this",
       `1. Study how [${example.name}](${example.url}) handles ${example.axis}.`,
@@ -322,7 +342,7 @@ test("code checks: a good draft passes; its word count is in the template's rang
   const r = codeChecks(d, sheet, { roster });
   assert.deepEqual(r.failures, []);
   const words = wordCount(fill(assembleBody(d), sheet.facts));
-  assert.ok(words >= 500 && words <= 800, `${words} words`);
+  assert.ok(words >= 665 && words <= 1050, `${words} words`);
   assert.ok(assembleBody(d).endsWith(CTA));
 });
 
@@ -371,8 +391,9 @@ test("code checks: years, list numbers and model names are not stray numbers; a 
 function fakeGemini(answers) {
   const calls = [];
   const kindOf = (schema) => {
+    // No schema: the plain-text writer (compose.mjs): a write, or the one fix call.
+    if (!schema) return "write";
     const p = schema?.properties ?? {};
-    if (p.title) return "write";
     if (p.claims) return "claims";
     if (p.verdicts) return "judge";
     if (p.on_topic) return "review";
@@ -390,7 +411,8 @@ function fakeGemini(answers) {
       const n = (counts[kind] = (counts[kind] ?? 0) + 1);
       calls.push({ kind, parts, options });
       this.requests[PRIMARY_MODEL]++;
-      const a = answers[kind];
+      // The writer answers with the deterministic mock (pipeline/content/mock-writer.mjs) unless a test says otherwise.
+      const a = answers[kind] ?? (kind === "write" ? (_n, p) => mockAnswer({ parts: p }) : undefined);
       const result = typeof a === "function" ? await a(n, parts) : a;
       if (result === undefined) throw new Error(`no mocked answer for ${kind}`);
       return { result, model: PRIMARY_MODEL, usage: {} };
@@ -417,67 +439,83 @@ function contentCtx(db, { now = MONDAY, mode = "dry-run", keys = {}, ai = null, 
 }
 
 test("writer: a passing draft is stored privately in dry-run, with its fact sheet, checks and images", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK });
+  const { db } = await sheetAndRoster();
+  const g = fakeGemini({ review: REVIEW_OK });
   const { ctx, stored } = contentCtx(db);
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
   assert.equal(r.stored, "draft");
-  assert.equal(r.requests, 3, "write, list claims, review");
+  assert.equal(r.requests, 2, "one plain-text write and the review");
+  assert.deepEqual(g.calls.map((c) => c.kind), ["write", "review"]);
   const [post] = await listPosts(db, { status: "draft" });
   assert.equal(post.mode, "dry-run");
   assert.equal(post.newsletterPending, false);
   assert.equal(post.aiLine, "Written with AI from PortfolioRank data.");
   assert.match(post.aiNote, /data as of 2026-11-17/);
-  assert.ok(post.body.includes(sheet.facts[0].display));
   assert.ok(!/\{\{/.test(post.body), "every placeholder is filled");
   assert.equal(post.facts.kind, "top-grades");
   assert.equal(post.checks.passed, true);
-  assert.deepEqual(post.images.map((i) => `${i.slot}:${i.kind}:${i.licence.split(":")[0]}`), ["hero:chart:ours", "inline-1:chart:ours", "inline-2:screenshot:ours"]);
+  // Code placed the chart and a named site's screenshot (the plan), and each image records its licence.
+  const kinds = post.images.map((i) => i.kind);
+  assert.ok(kinds.includes("chart") && kinds.includes("screenshot"), kinds.join(","));
+  assert.ok(post.images.every((i) => i.licence));
   assert.ok([...stored.keys()].every((k) => k.startsWith(`content/test/${post.id}/`)));
-  // The writer never saw a raw value or a query.
+  // At least three named sites are linked, and the writer never saw a raw value or a query.
+  assert.ok((post.body.match(/\]\(https:\/\/portfoliorank\.n8builds\.dev\/p\//g) ?? []).length >= 3 || (post.body.match(/\]\(https:\/\/top-/g) ?? []).length >= 3);
   const sent = g.calls[0].parts[0].text;
   assert.ok(!sent.includes('"query"') && !sent.includes('"value"'));
 });
 
-test("writer: a failed check is revised; a draft that keeps failing is dropped after two revisions", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const bad = goodDraft(sheet, { tldr: ["Exactly 38% do this.", "b", "c"] });
-  const g = fakeGemini({ write: (n) => (n === 1 ? bad : goodDraft(sheet)), claims: { claims: [] }, review: REVIEW_OK });
+test("writer: blocks that fail a check get one targeted fix call; still failing, the draft is dropped", async () => {
+  const { db } = await sheetAndRoster();
+  // Sections far too short: the fix call is asked for those sections only, and the mock lengthens them.
+  const short = (_n, parts) => mockAnswer({ parts }).replace(/(=== SECTION \d+ ===\n## [^\n]+\n)[\s\S]*?(?=\n=== |$)/g, "$1One short line here.\nAnd one more line.");
+  const g = fakeGemini({ write: (n, parts) => (n === 1 ? short(n, parts) : mockAnswer({ parts })), review: REVIEW_OK });
   const { ctx } = contentCtx(db);
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
-  const revise = g.calls.filter((c) => c.kind === "write")[1].parts[0].text;
-  assert.match(revise, /Failed checks:[\s\S]*38%/);
+  const fix = g.calls.filter((c) => c.kind === "write")[1].parts[0].text;
+  assert.match(fix, /Rewrite only the blocks listed below/);
+  assert.match(fix, /=== SECTION \d+ ===/);
+  assert.ok(!fix.includes("=== TITLE ==="), "only the failing blocks go back");
 
-  const g2 = fakeGemini({ write: bad, claims: { claims: [] }, review: REVIEW_OK });
+  // A fix that changes nothing: dropped after that one fix, with the failures kept for the owner.
+  const g2 = fakeGemini({ write: short, review: REVIEW_OK });
   const r2 = await runDraft(ctx, g2, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r2.status, "dropped");
-  assert.equal(g2.calls.filter((c) => c.kind === "write").length, 3, "the first write and two revisions");
+  assert.equal(g2.calls.filter((c) => c.kind === "write").length, 2, "the write and one fix");
+  assert.ok(!g2.calls.some((c) => c.kind === "review"), "no review for a draft that failed its checks");
   const [dropped] = await listPosts(db, { status: "dropped" });
   assert.equal(dropped.checks.passed, false);
-  assert.ok(dropped.checks.failures.some((f) => /38%/.test(f)));
-  assert.deepEqual(dropped.checks.proposedImages.map((i) => i.slot), ["hero", "inline-1", "inline-2"]);
+  assert.ok(dropped.checks.failures.some((f) => /words/.test(f)));
+  assert.ok(dropped.checks.proposedImages.some((i) => i.slot === "hero"));
   const runs = (await db.execute("SELECT status FROM content_runs WHERE step = 'draft' ORDER BY id")).rows.map((x) => x.status);
   assert.deepEqual(runs, ["ok", "dropped"]);
 });
 
-test("writer: an echoed or run-in Try this heading is repaired by code, not dropped (seen from the real model)", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const d = goodDraft(sheet);
-  const echoed = { ...d, body: d.body.replace("\n\n### Try this", " ### Try this with 3 numbered steps a reader can do today") };
-  const g = fakeGemini({ write: echoed, claims: { claims: [] }, review: REVIEW_OK });
+test("writer: code repairs what is safe to repair, without a fix call (seen from the real model)", async () => {
+  const { db } = await sheetAndRoster();
+  // One-sentence paragraphs, a stray number, the hero marker in the body, an em dash and a dropped link.
+  const messy = (_n, parts) =>
+    mockAnswer({ parts })
+      .replace(/=== OPENER ===\n/, "=== OPENER ===\n[[image:hero]]\n")
+      .replace(/(=== SECTION 1 ===\n## [^\n]+\n)/, "$1Exactly 38% of reviewers agree.\n\nThis line stands alone — for now.\n\n")
+      .replace(/\[(Top Person \d+)\]\(https:\/\/top-\d+\.dev\)/, "$1");
+  const g = fakeGemini({ write: messy, review: REVIEW_OK });
   const { ctx } = contentCtx(db);
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
-  assert.equal(g.calls.filter((c) => c.kind === "write").length, 1, "no revision needed");
+  assert.equal(g.calls.filter((c) => c.kind === "write").length, 1, "no fix call needed");
   const [post] = await listPosts(db, { status: "draft" });
+  assert.ok(!post.body.includes("38%"), "the stray number's sentence is cut");
+  assert.ok(!post.body.includes("—"));
+  assert.ok((post.body.match(/\[\[image:hero\]\]/g) ?? []).length <= 1, "the hero marker only where code puts it");
   assert.match(post.body, /\n### Try this\n1\. /);
 });
 
 test("writer: a review that finds the draft off topic or hostile fails it", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: { ...REVIEW_OK, on_topic: false, topic: "other", problems: ["it is about politics"] } });
+  const { db } = await sheetAndRoster();
+  const g = fakeGemini({ review: { ...REVIEW_OK, on_topic: false, topic: "other", problems: ["it is about politics"] } });
   const { ctx } = contentCtx(db);
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "dropped");
@@ -489,17 +527,19 @@ test("writer: a review that finds the draft off topic or hostile fails it", asyn
 // ---------------------------------------------------------------------------
 const CLAIM = "Recruiters spend about 7 seconds on a portfolio before deciding.";
 
-test("claims: without a Tavily key an outside claim is cut, and the draft passes without it", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const d = goodDraft(sheet);
-  const withClaim = { ...d, body: d.body.replace("Start with the first screen today.", `Start with the first screen today.\n\n${CLAIM}`) };
-  const g = fakeGemini({ write: withClaim, claims: { claims: [CLAIM] }, review: REVIEW_OK });
+test("claims: an outside claim the review flags is cut without a Tavily key, and the draft passes without it", async () => {
+  const { db } = await sheetAndRoster();
+  // The writer slips an outside claim into the closing; the review lists it; with no key, code cuts it.
+  const write = (_n, parts) => mockAnswer({ parts }).replace("=== CLOSING ===\n", `=== CLOSING ===\nRecruiters spend about seven seconds on a portfolio before deciding.\n`);
+  const claim = "Recruiters spend about seven seconds on a portfolio before deciding.";
+  const g = fakeGemini({ write, review: { ...REVIEW_OK, outside_claims: [claim] } });
   const { ctx } = contentCtx(db);
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
+  assert.ok(!g.calls.some((c) => c.kind === "claims"), "no separate claim-listing request: the review lists them");
   const [post] = await listPosts(db, { status: "draft" });
-  assert.ok(!post.body.includes("7 seconds"));
-  assert.match(post.checks.history[0].claims.cut[0].reason, /TAVILY_API_KEY/);
+  assert.ok(!post.body.includes("seven seconds"));
+  assert.match(post.checks.history.at(-1).claims.cut[0].reason, /TAVILY_API_KEY/);
 });
 
 function fakeWeb({ results, page = "<p>Recruiters spend about 7 seconds on a portfolio before deciding.</p>" }) {
@@ -567,12 +607,12 @@ test("claims: a quote must be word for word in the source; the Tavily caps cut w
 });
 
 test("claims: the weekly Tavily cap is counted from content_runs", async () => {
-  const { db, sheet } = await sheetAndRoster();
+  const { db } = await sheetAndRoster();
   await recordRun(db, { night: "2026-11-15", now: MONDAY - 86400000, step: "draft", mode: "dry-run", status: "ok", kind: "x", tavily: TAVILY_PER_WEEK });
-  const d = goodDraft(sheet);
-  const withClaim = { ...d, body: d.body.replace("Start with the first screen today.", `Start with the first screen today.\n\n${CLAIM}`) };
+  const claim = "Recruiters spend about seven seconds on a portfolio before deciding.";
+  const write = (_n, parts) => mockAnswer({ parts }).replace("=== CLOSING ===\n", `=== CLOSING ===\n${claim}\n`);
   const web = fakeWeb({ results: [] });
-  const g = fakeGemini({ write: withClaim, claims: { claims: [CLAIM] }, review: REVIEW_OK });
+  const g = fakeGemini({ write, review: { ...REVIEW_OK, outside_claims: [claim] } });
   const { ctx } = contentCtx(db, { keys: { tavily: "tvly-test" }, fetchImpl: web.fetchImpl });
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
@@ -608,10 +648,10 @@ test("owner direction: no dev-meta story kinds; every kind is about portfolios a
     assert.ok(TOPICS.includes(KIND_TOPIC[k]), k);
   }
   for (const [, label] of Object.entries(KIND_LABELS)) assert.equal(devMetaHits(label).length, 0, label);
-  const sys = SYSTEM_INSTRUCTION;
-  assert.match(sys, /No dev meta/);
-  assert.match(sys, /Payoff/);
-  assert.match(sys, /550 to 700 words/);
+  // The writer's standing rules (compose.mjs): no dev meta, no digits of its own, links only as given.
+  assert.match(WRITE_SYSTEM, /how PortfolioRank is built or run/);
+  assert.match(WRITE_SYSTEM, /never type a digit/);
+  assert.match(WRITE_SYSTEM, /add no other links/);
 });
 
 // ---------------------------------------------------------------------------
@@ -870,11 +910,11 @@ test("automation: the next run, in words", () => {
 });
 
 test("caps: a draft defers without enough budget; the publish cap holds a third post in 7 days back as a draft", async () => {
-  const { db, sheet } = await sheetAndRoster();
+  const { db } = await sheetAndRoster();
   const { ctx: base } = contentCtx(db, { mode: "publish" });
   // This test is about the publish cap, not the scorecard gate (tested below).
   const ctx = { ...base, flags: { ...base.flags, publishGate: "none" } };
-  const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK });
+  const g = fakeGemini({ review: REVIEW_OK });
   assert.equal((await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 3 })).status, "deferred");
   assert.equal(g.calls.length, 0);
 
@@ -898,9 +938,9 @@ test("caps: a draft defers without enough budget; the publish cap holds a third 
 });
 
 test("publishing automatically needs a clean scorecard: a flagged post waits for review", async () => {
-  const { db, sheet } = await sheetAndRoster();
+  const { db } = await sheetAndRoster();
   const { ctx } = contentCtx(db, { mode: "publish" });
-  const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK });
+  const g = fakeGemini({ review: REVIEW_OK });
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
   assert.equal(r.stored, "draft", "the fixture draft is short, so the scorecard flags it");
@@ -927,12 +967,15 @@ function geminiFetch(sheetDraft) {
   const fetchImpl = async (url, init) => {
     if (String(url).startsWith("https://top-")) return new Response("ok", { status: 200 });
     const body = JSON.parse(String(init.body));
+    const text = body.contents?.[0]?.parts?.[0]?.text ?? "";
+    // No schema: the plain-text writer (compose.mjs), answered by the mock writer; a test may pass its own text.
+    const plain = !body.generationConfig?.responseSchema;
     const p = body.generationConfig?.responseSchema?.properties ?? {};
-    const kind = p.title ? "write" : p.claims ? "claims" : p.on_topic ? "review" : p.ideas ? "pick" : p.polls ? "polls" : "other";
+    const kind = plain ? "write" : p.claims ? "claims" : p.on_topic ? "review" : p.ideas ? "pick" : p.polls ? "polls" : "other";
     calls.push(kind);
     const pick = { ideas: ["top-grades", "page-craft"].map((k, i) => ({ kind: k, interest: 9 - i, topic: "what the AI grader rewards and penalizes", tone: "positive" })) };
-    const json = kind === "write" ? sheetDraft : kind === "claims" ? { claims: [] } : kind === "review" ? REVIEW_OK : kind === "pick" ? pick : kind === "polls" ? { polls: [] } : {};
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(json) }] } }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 60 } }), { status: 200 });
+    const answer = kind === "write" ? (typeof sheetDraft === "string" ? sheetDraft : mockAnswer({ parts: [{ text }] })) : JSON.stringify(kind === "claims" ? { claims: [] } : kind === "review" ? REVIEW_OK : kind === "pick" ? pick : kind === "polls" ? { polls: [] } : {});
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: answer }] } }], usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 60 } }), { status: 200 });
   };
   return { fetchImpl, calls };
 }
@@ -974,11 +1017,11 @@ test("end-of-day run: in dry-run the Content stage picks and drafts on a Monday 
   const web = geminiFetch(goodDraft(sheet));
   const r = await nightRun(db, { mode: "dry-run", now: MONDAY, fetchImpl: web.fetchImpl });
   const content = r.summary.stages.find((s) => s.key === "content");
-  assert.ok(content.requests >= 4, `content spent ${content.requests}`);
+  assert.ok(content.requests >= 2, `content spent ${content.requests}`);
   assert.ok(content.requests <= 100);
   assert.deepEqual(
     web.calls.filter((k) => k !== "polls"),
-    ["pick", "write", "claims", "review"]
+    ["pick", "write", "review"]
   );
   const jobs = (await db.execute("SELECT DISTINCT job FROM gemini_requests")).rows.map((x) => String(x.job));
   assert.deepEqual(jobs, ["content"]);
@@ -1002,14 +1045,54 @@ test("end-of-day run: in dry-run the Content stage picks and drafts on a Monday 
 const checkOf = (draft, sheet, roster, name) => codeChecks(draft, sheet, { roster }).checks.find((c) => c.name === name);
 const LONG = (n) => Array.from({ length: n }, (_, i) => FILLER[i % FILLER.length]).join("\n");
 
-test("quality: length is about 500 to 800 words (owner, 2026-11-11), with 5% slack", async () => {
+test("quality: substance (owner, 2026-11-12): robotic phrasing, TL;DR the body skips, empty subheads, repeated openings and too few linked examples fail", async () => {
+  const { sheet, roster } = await sheetAndRoster();
+  const d = goodDraft(sheet);
+  assert.equal(checkOf(d, sheet, roster, "substance").ok, true);
+  const fails = (over, re) => {
+    const c = checkOf(goodDraft(sheet, over), sheet, roster, "substance");
+    assert.equal(c.ok, false, JSON.stringify(over).slice(0, 80));
+    assert.match(c.problems.join("; "), re);
+  };
+  for (const phrase of ["A share of {{f2}} use dark mode.", "The average the five-second test score of the group is {{f4}}.", "They lead, representing a tie across {{f18}} axes.", "Only S and A portfolios do this.", "We looked at thousands of sites."]) {
+    fails({ body: d.body.replace("Start with the first screen today.", `Start with the first screen today.\n${phrase}`) }, /never|drop|rewrite|size of the data|tie/);
+  }
+  fails({ tldr: [d.tldr[0], d.tldr[1], `${d.tldr[2]} {{f3}}`] }, /never mentions/);
+  fails({ body: d.body.replace("### Clear stories beat long lists", "### An empty section\n\n### Clear stories beat long lists") }, /has nothing under it/);
+  fails({ body: d.body.replace("Another strong case is", "Finally, the next strong case is") }, /start with "finally"/);
+  fails({ body: d.body.replace(/\[(Top Person [23])\]\([^)]+\)/g, "$1") }, /1 named example site\(s\) linked; link at least 3/);
+});
+
+test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences on our own facts or named sites are not outside claims", async () => {
+  assert.equal(normalizeDraft({ body: "Opener one.\nOpener two.\n\n[[image:hero]]\n\n### A\nText." }).body, "Opener one.\nOpener two.\n\n\n### A\nText.");
+  const listed = ["Consider Top Person 1, who earns {{f30}} on visual design.", "Projects by Top Person 2 are clear.", "Recruiters spend six seconds on a portfolio."];
+  const text = listed.join("\n");
+  const r = await checkClaims(text, { tavilyKey: null, budget: { gemini: 5, tavily: 5 }, generate: async () => ({ claims: listed }), names: ["Top Person 1", "Top Person 2"] });
+  assert.deepEqual(r.cut.map((c) => c.sentence), ["Recruiters spend six seconds on a portfolio."]);
+  assert.equal(r.listedNotFound, undefined);
+});
+
+test("length profiles: a long post wants 1,800 to 2,200 words, 5 sections and 4 or 5 inline images; the writer sees its length and related posts", async () => {
+  const { sheet, roster } = await sheetAndRoster();
+  const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.n8builds.dev/blog/older-post-abc123", tags: ["data"] }] };
+  const t = checkOf(goodDraft(long), long, roster, "template");
+  assert.match(t.problems.join("; "), /words; 1800 to 2200 wanted: add/);
+  assert.match(t.problems.join("; "), /inline image slots, 4 to 5 needed/);
+  const view = sheetForWriter(long);
+  assert.ok(buildWriteRequests(long, planPost(long))[0].parts[0].text.includes("https://portfoliorank.n8builds.dev/blog/older-post-abc123"), "the writer is offered the related post");
+  assert.deepEqual(view.length, { words: "1800 to 2200", sections: 5, inline_images: "4 to 5" });
+  assert.equal(view.related_posts[0].url, "https://portfoliorank.n8builds.dev/blog/older-post-abc123");
+  assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "standard stays 700 to 1,000");
+});
+
+test("quality: length is 700 to 1,000 words (owner, 2026-11-12), with 5% slack", async () => {
   const { sheet, roster } = await sheetAndRoster();
   const body = goodDraft(sheet).body;
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true);
   const tooShort = checkOf(goodDraft(sheet, { body: body.split("\n").slice(0, 24).join("\n") }), sheet, roster, "template");
-  assert.ok(tooShort.problems.some((p) => /words; 500 to 800 wanted: add/.test(p)), tooShort.problems.join("; "));
+  assert.ok(tooShort.problems.some((p) => /words; 700 to 1000 wanted: add/.test(p)), tooShort.problems.join("; "));
   const tooLong = checkOf(goodDraft(sheet, { body: body.replace("### Try this", `${LONG(30)}\n\n### Try this`) }), sheet, roster, "template");
-  assert.ok(tooLong.problems.some((p) => /words; 500 to 800 wanted: cut/.test(p)), tooLong.problems.join("; "));
+  assert.ok(tooLong.problems.some((p) => /words; 700 to 1000 wanted: cut/.test(p)), tooLong.problems.join("; "));
 });
 
 test("editorial rules: dev meta and infrastructure claims fail a draft; so does a missing early takeaway", async () => {
@@ -1088,7 +1171,7 @@ test("quality: ties are computed as facts and a superlative a tie contradicts is
   const { sheet, roster } = await sheetAndRoster();
   const nLead = sheet.facts.find((f) => f.label === "Number of axes sharing the biggest lead");
   assert.equal(nLead.value, 5, "five axes share the lead; motion is the exception");
-  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where S and A portfolios lead the rest by the most"));
+  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where the top-graded portfolios lead the rest by the most"));
   assert.match(lead.display, /^visual design, .* and memorability$|storytelling/);
   assert.equal(sheet.superlatives.find((x) => x.term === "biggest lead").tied, true);
   const leadPh = `{{${lead.id}}}`;
@@ -1110,9 +1193,9 @@ test("quality: a notable fact is flagged and the draft must lead with it", async
   assert.match(sheet.notable[0].why, /motion is the lowest-scoring axis for every group/);
   const d = goodDraft(sheet);
   assert.equal(checkOf(d, sheet, roster, "hook").ok, true);
-  const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^Motion is[^\n]*\nS and A[^\n]*\n/, "") });
+  const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^Motion is[^\n]*\nThe top-graded[^\n]*\n/, "") });
   assert.equal(checkOf(noHook, sheet, roster, "hook").ok, false);
-  const writerView = JSON.parse(buildWriteRequest(sheet).parts[0].text.split("<fact_sheet>\n")[1].split("\n</fact_sheet>")[0]);
+  const writerView = sheetForWriter(sheet);
   assert.ok(writerView.notable_facts.length >= 1 && writerView.ties.length >= 1 && writerView.example_sites.length >= 1);
 });
 
@@ -1135,9 +1218,9 @@ test("quality: Try this points to a named positive example with a link", async (
 
 test("quality: the callout restates exactly one numeric fact with its full scope", async () => {
   const { sheet, roster } = await sheetAndRoster();
-  const share = ph(sheet, "Share of all graded portfolios that are graded S or A");
+  const share = ph(sheet, "Share of all graded portfolios that are top-graded");
   const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where S and A portfolios lead the rest by the most (tied)");
+  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
   const body = goodDraft(sheet).body;
   const withCallout = (l1, l2) => body.replace(/^> \*\*.*\n> .*$/m, `> **${l1}**\n> ${l2}`);
   const run = (l1, l2) => checkOf(goodDraft(sheet, { body: withCallout(l1, l2) }), sheet, roster, "callout");
@@ -1152,8 +1235,8 @@ test("quality: the callout restates exactly one numeric fact with its full scope
 });
 
 test("preview: tight type, 60% centred images with captions, the data in a collapsed scrolling section", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK });
+  const { db } = await sheetAndRoster();
+  const g = fakeGemini({ review: REVIEW_OK });
   const { ctx } = contentCtx(db);
   await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   const [post] = await listPosts(db, { status: "draft" });
@@ -1165,133 +1248,82 @@ test("preview: tight type, 60% centred images with captions, the data in a colla
   assert.match(html, /<details class="data"><summary>Show the data<\/summary>/);
   assert.ok(!/<details class="data" open/.test(html));
   assert.match(html, /prefers-color-scheme:dark/);
-  assert.equal((html.match(/<figcaption>/g) ?? []).length, 3, "every image has a caption");
+  assert.equal((html.match(/<figcaption>/g) ?? []).length, post.images.length, "every image has a caption");
   assert.ok(html.indexOf("Show the data") > html.indexOf("</ol>"), "the data comes after the post");
-  assert.match(html, /<p>Motion is the lowest-scoring axis[^<]*S and A portfolios average/, "a paragraph's sentences share one <p>");
+  assert.match(html, /<p>[^<\n]+\. [A-Z][^<]*<\/p>/, "a paragraph's sentences share one <p>");
   assert.match(html, /Failed check: none/);
 });
 
-test("WRITER_MODE: staged or single, single when unset or unknown", () => {
-  assert.equal(writerMode("staged"), "staged");
-  assert.equal(writerMode(" Single "), "single");
-  assert.equal(DEFAULT_WRITER_MODE, "staged");
-  assert.equal(writerMode(undefined), DEFAULT_WRITER_MODE);
-  assert.equal(writerMode("turbo"), DEFAULT_WRITER_MODE);
+test("clauses and plan: pairs worded together, a tie never one winner, one sentence per site, sections that fit the length", async () => {
+  const { sheet } = await sheetAndRoster();
+  const clauses = clausesOf(sheet);
+  // Every comparison carries both figures of its pair; no raw label is copied.
+  for (const c of clauses.filter((x) => x.kind === "compare")) {
+    assert.equal(c.facts.length, 2);
+    assert.ok(c.facts.every((f) => c.text.includes(`{{${f}}}`)), c.text);
+    assert.ok(!/\(1 to 5\) of|S and A/.test(c.text), c.text);
+  }
+  // The fixture's lead is tied across five axes: worded as a tie.
+  assert.ok(clauses.some((c) => c.kind === "tie" && /tie for the biggest lead/.test(c.text)));
+  // One clause per named site, its link once.
+  for (const c of clauses.filter((x) => x.kind === "example")) assert.equal((c.text.match(/\]\(/g) ?? []).length, 1, c.text);
+  for (const length of ["short", "standard", "medium", "long"]) {
+    const plan = planPost({ ...sheet, length });
+    const L = { short: 2, standard: 3, medium: 4, long: 5 }[length];
+    assert.ok(plan.sections.length >= 2 && plan.sections.length <= L, `${length}: ${plan.sections.length} sections`);
+    assert.equal(plan.tldr.length, 3);
+    assert.ok(plan.callout && plan.callout.factId);
+    assert.ok(plan.images[0].slot === "hero");
+    // At least three named sites are in the sections when the sheet names three.
+    const named = new Set(plan.sections.flatMap((s) => s.clauses.filter((c) => c.kind === "example").map((c) => c.about)));
+    assert.ok(named.size >= 3, `${length}: ${named.size} named`);
+  }
+  // Longer posts get more of the sheet.
+  assert.ok(planPost({ ...sheet, length: "long" }).clauses.length >= planPost({ ...sheet, length: "short" }).clauses.length);
 });
 
-/** A mocked outline, sections and finish for the staged writer, answering by schema. */
-function stagedGemini(sheet, { outline, finish } = {}) {
-  const f = (label) => sheet.facts.find((x) => x.label === label).id;
-  const good = {
-    hook_fact_ids: sheet.notable[0].factIds,
-    title: "Even the best portfolios are weak on motion",
-    alt_title_a: "What S and A sites share",
-    alt_title_b: "The axis nobody aces",
-    subtitle: "Top portfolios against the rest.",
-    tags: ["portfolios", "data"],
-    share_line: "Top portfolios and motion.",
-    newsletter_blurb: "Motion is weak everywhere.",
-    tldr: goodDraft(sheet).tldr,
-    sections: [
-      { subhead: "Top portfolios lead on most axes", intent: "the gap", fact_ids: [f("The biggest lead, in points on a 1 to 5 scale")] },
-      { subhead: "The first screen carries the most weight", intent: "first screen", fact_ids: [f("Portfolios graded S, the top tier")] },
-      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge")] },
-    ],
-    callout_fact_id: f("The biggest lead, in points on a 1 to 5 scale"),
-    actions: ["a", "b", "c"],
-    images: goodDraft(sheet).images,
-  };
-  const calls = [];
-  const sectionsOut = (n) => ({ sections: Array.from({ length: n }, (_, i) => ({ subhead: `S${i}`, paragraphs: ["One.\nTwo."] })) });
-  return {
-    calls,
-    requests: { [PRIMARY_MODEL]: 0 },
-    async generate(parts, schema) {
-      const p = schema?.properties ?? {};
-      const kind = p.hook_fact_ids ? "outline" : p.sections ? "sections" : p.title ? "write" : p.claims ? "claims" : p.on_topic ? "review" : "unknown";
-      calls.push({ kind, text: parts[0].text });
-      this.requests[PRIMARY_MODEL]++;
-      const n = calls.filter((c) => c.kind === kind).length;
-      const result =
-        kind === "outline" ? (typeof outline === "function" ? outline(n, good) : outline ?? good)
-        : kind === "sections" ? sectionsOut(n === 1 ? 2 : 1)
-        : kind === "write" ? finish ?? goodDraft(sheet)
-        : kind === "claims" ? { claims: [] }
-        : REVIEW_OK;
-      return { result, model: PRIMARY_MODEL, usage: {} };
-    },
-  };
-}
-
-test("staged writer: outline, two section requests, finish; then the same code checks (4 write requests)", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const g = stagedGemini(sheet);
-  const { ctx } = contentCtx(db);
-  ctx.flags.writerMode = "staged";
-  const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
-  assert.equal(r.status, "ok");
-  assert.deepEqual(g.calls.map((c) => c.kind), ["outline", "sections", "sections", "write", "claims", "review"]);
-  assert.equal(r.requests, STAGED_REQUESTS + 2);
-  // A section sees only its own facts, never another section's.
-  const first = g.calls[1].text;
-  assert.ok(first.includes("Portfolios graded S, the top tier") && !first.includes("graded by the AI judge\""), "section 1 and 2 facts only");
-  const second = g.calls[2].text;
-  assert.ok(second.includes("Portfolios graded by the AI judge") && !second.includes("Portfolios graded S, the top tier"));
-  const [post] = await listPosts(db, { status: "draft" });
-  assert.equal(post.checks.passed, true);
+test("plain-text blocks: parsed by name; paragraphs reflowed to 2 to 4 sentences; sentences with stray numbers or unknown placeholders cut", () => {
+  const b = parseBlocks("=== TITLE ===\nA title\nAlt one\n\n=== SECTION 2 ===\n## Sub\nText here.\n=== CLOSING ===\nBye now.");
+  assert.deepEqual(Object.keys(b), ["TITLE", "SECTION 2", "CLOSING"]);
+  assert.equal(b["SECTION 2"], "## Sub\nText here.");
+  const r = reflow("One.\n\nTwo. Three.\n\nA. B. C. D. E. F.");
+  for (const p of r.split("\n\n")) {
+    const n = p.split("\n").length;
+    assert.ok(n >= 2 && n <= 4, r);
+  }
+  const ids = new Set(["f1", "f2"]);
+  const cut = cutBadSentences("Kept with {{f1}}.\nCut, 38% of people.\nCut too {{f9}}.\nKept 2026 and 1 to 5.", ids);
+  assert.equal(cut.text, "Kept with {{f1}}.\nKept 2026 and 1 to 5.");
+  assert.equal(cut.cut.length, 2);
 });
 
-test("staged writer: a bad outline is retried before any section is written, and dropped if it stays bad", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const badOutline = (o) => ({ ...o, tldr: o.tldr.slice(0, 2), sections: o.sections.slice(0, 2), hook_fact_ids: ["f1"] });
-  const g = stagedGemini(sheet, { outline: (n, good) => (n === 1 ? badOutline(good) : good) });
-  const { ctx } = contentCtx(db);
-  ctx.flags.writerMode = "staged";
-  const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
-  assert.equal(r.status, "ok");
-  assert.deepEqual(g.calls.slice(0, 3).map((c) => c.kind), ["outline", "outline", "sections"]);
-  assert.match(g.calls[1].text, /exactly 3 bullets|tldr has 2 bullets/);
-  assert.match(g.calls[1].text, /2 sections, exactly 3 needed/);
-  assert.match(g.calls[1].text, /hook must use all the facts of one notable fact/);
-
-  const g2 = stagedGemini(sheet, { outline: (n, good) => badOutline(good) });
-  const r2 = await runDraft(ctx, g2, { kind: "top-grades", night: "2026-11-16", budget: 20 });
-  assert.equal(r2.status, "dropped");
-  assert.deepEqual(g2.calls.map((c) => c.kind), ["outline", "outline"], "no section was written");
-  assert.match(r2.failures.join(";"), /outline failed its checks/);
-
-  const problems = checkOutline({}, sheet);
-  assert.ok(problems.length > 0);
+test("assembly: TL;DR bullets keep their clause's figures, the hook leads, and code builds the callout, Try this and image markers", async () => {
+  const { sheet } = await sheetAndRoster();
+  const plan = planPost(sheet);
+  const blocks = parseBlocks(mockAnswer({ parts: [{ text: "x" }] }) || "");
+  // A writer that returned nothing useful still gets a complete, checkable post from code.
+  const { draft, notes } = assemble(sheet, plan, { ...blocks, TLDR: "- made up 45%\n- \n- " });
+  assert.equal(draft.tldr.length, 3);
+  assert.ok(notes.some((n) => /TL;DR 1: used the clause/.test(n)));
+  assert.match(draft.body, /\n> \*\*.+\*\*\n> /);
+  assert.match(draft.body, /\n### Try this\n1\. /);
+  for (const im of plan.images.filter((i) => i.slot !== "hero")) assert.ok(draft.body.includes(`[[image:${im.slot}]]`), im.slot);
+  assert.ok(plan.hook.factIds.every((f) => draft.body.split("\n\n")[0].includes(`{{${f}}}`)), "the opener leads with the hook");
 });
 
-test("staged writer: a failing finish is dropped without budget for a revision, and a short budget defers", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const g = stagedGemini(sheet, { finish: goodDraft(sheet, { tldr: ["Exactly 38% do this.", "b", "c"] }) });
-  const { ctx } = contentCtx(db);
-  ctx.flags.writerMode = "staged";
-  const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 8 });
-  assert.equal(r.status, "dropped", "not enough budget for a revision after 6 requests");
-  assert.match(r.failures.join(";"), /38%/);
-  const g2 = stagedGemini(sheet);
-  const r2 = await runDraft(ctx, g2, { kind: "top-grades", night: "2026-11-16", budget: STAGED_REQUESTS + 2 });
-  assert.equal(r2.status, "ok");
-  const g3 = stagedGemini(sheet);
-  assert.equal((await runDraft(ctx, g3, { kind: "top-grades", night: "2026-11-16", budget: 3 })).status, "deferred");
-});
-
-// ---------------------------------------------------------------------------
-// "Write a draft now", rewrites and the editor's guidelines
-// ---------------------------------------------------------------------------
-/** A fetch that answers Gemini by the request's response schema (and 200 for anything else), recording the prompts. */
 function manualFetch(answers, prompts = []) {
   return async (url, init) => {
     if (!String(url).includes("generativelanguage")) return new Response("ok", { status: 200 });
     const body = JSON.parse(String(init.body));
+    const text = body.contents?.[0]?.parts?.[0]?.text ?? "";
+    // No schema: the plain-text writer, answered by the mock writer unless a test gives its own text (a function of the request text).
+    const plain = !body.generationConfig?.responseSchema;
     const p = body.generationConfig?.responseSchema?.properties ?? {};
-    const kind = p.claims ? "claims" : p.on_topic ? "review" : p.title ? "write" : "unknown";
-    prompts.push({ kind, text: body.contents?.[0]?.parts?.[0]?.text ?? "" });
-    const result = typeof answers[kind] === "function" ? answers[kind]() : answers[kind];
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } }), { status: 200 });
+    const kind = plain ? "write" : p.claims ? "claims" : p.on_topic ? "review" : "unknown";
+    prompts.push({ kind, text });
+    let result = typeof answers[kind] === "function" ? answers[kind](text) : answers[kind];
+    if (plain && typeof result !== "string") result = mockAnswer({ parts: [{ text }] });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: plain ? result : JSON.stringify(result) }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } }), { status: 200 });
   };
 }
 
@@ -1342,18 +1374,18 @@ test("write a draft now: the same writer and checks, live phases, stored as a dr
   assert.ok(["writing", "researching", "checking", "saving"].some((p) => seen.has(p)), [...seen].join());
   assert.ok(job.postId);
   assert.equal(job.kind, "top-grades");
-  assert.equal(job.gemini, 3, "write, list claims, review");
+  assert.equal(job.gemini, 2, "one write and the review");
   const [post] = await listPosts(db, { status: "draft" });
   assert.equal(post.id, job.postId);
   assert.equal(post.status, "draft", "never published by itself, even with CONTENT_MODE publish");
   assert.equal(post.facts.focus, "Hero mistakes people make");
   // The writer saw the angle and the editor's guidelines.
   const write = prompts.find((p) => p.kind === "write").text;
-  assert.match(write, /"focus": "Hero mistakes people make"/);
+  assert.match(write, /The owner's angle for this post: Hero mistakes people make/);
   assert.match(write, /Lead with what the reader should change/);
   // Logged as job content, recorded as step manual, which the night's schedule ignores.
   assert.equal((await db.execute("SELECT step FROM content_runs")).rows.map((r) => r.step).join(), "manual");
-  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'content'")).rows[0].n, 3);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'content'")).rows[0].n, 2);
   const { job: tonight } = await contentJob({ db, now: () => MONDAY, flags: { contentMode: "dry-run" } });
   assert.notEqual(tonight, null, "the night still drafts: a manual draft is not one of its drafts");
   // Running it again does nothing.
@@ -1362,7 +1394,7 @@ test("write a draft now: the same writer and checks, live phases, stored as a dr
 });
 
 test("write a draft now: people's reserve is never touched; no key, no data and a bad draft each end with a plain message", async () => {
-  const { db, sheet } = await sheetAndRoster();
+  const { db } = await sheetAndRoster();
   // 480 of 500 used: 20 left, all of it the reserve kept for people.
   await ensureGeminiLog(db);
   for (let i = 0; i < 480; i++) await db.execute({ sql: "INSERT INTO gemini_requests (at, job, model, status) VALUES (?, 'grade', ?, 200)", args: [new Date(MONDAY - 3600000).toISOString(), PRIMARY_MODEL] });
@@ -1382,9 +1414,10 @@ test("write a draft now: people's reserve is never touched; no key, no data and 
   assert.equal(nodata.status, "skipped");
   assert.match(nodata.message, /no data yet/);
   // A draft that keeps failing (dev meta) is dropped, never queued for review.
-  const meta = goodDraft(sheet, { body: goodDraft(sheet).body.replace("Start with the first screen today.", "Start with the first screen today.\nWe built this on Cloudflare.") });
+  // Every answer (the write and the one fix) slips in dev meta.
+  const meta = (text) => mockAnswer({ parts: [{ text }] }).replace(/(=== SECTION \d+ ===\n## [^\n]+\n)/g, "$1We built this on Cloudflare Workers and our pipeline grades every site at night.\n");
   await createJob(db2, { id: hex(403), kind: "top-grades", by: "admin:o", now: MONDAY });
-  const bad = await runManualJob(manualCtx(db2, { answers: { write: () => meta, claims: { claims: [] }, review: REVIEW_OK } }), hex(403));
+  const bad = await runManualJob(manualCtx(db2, { answers: { write: meta, review: REVIEW_OK } }), hex(403));
   assert.equal(bad.status, "dropped");
   assert.match(bad.message, /no dev meta/);
   assert.equal((await listPosts(db2, { status: "draft" })).length, 0);
@@ -1402,8 +1435,8 @@ test("rewrite with these notes: the owner's notes reach the writer, the kind and
   assert.equal(second.status, "done", second.message);
   assert.equal(second.kind, "top-grades");
   const write = prompts.filter((p) => p.kind === "write").at(-1).text;
-  assert.match(write, /"owner_notes": "Too long; lead with the takeaway."/);
-  assert.match(write, /"focus": "The first screen"/);
+  assert.match(write, /The owner's notes on the previous version of this post; fix every point: Too long; lead with the takeaway\./);
+  assert.match(write, /The owner's angle for this post: The first screen/);
   const suggestions = await noteSuggestions(db);
   assert.ok(suggestions.some((s) => s.postId === first.postId && /lead with the takeaway/.test(s.note)));
 });
@@ -1431,7 +1464,7 @@ test("cost panel: Gemini used and left with the people's reserve, Tavily month a
   for (let i = 0; i < 12; i++) await db.execute({ sql: "INSERT INTO gemini_requests (at, job, model, status) VALUES (?, 'content', ?, 200)", args: [new Date(MONDAY - 600000).toISOString(), PRIMARY_MODEL] });
   await createJob(db, { id: hex(600), by: "admin:o", now: MONDAY });
   const c = await contentCosts(db, { env: { GEMINI_DAILY_QUOTA: JSON.stringify({ [PRIMARY_MODEL]: 500 }) }, now: new Date(MONDAY) });
-  assert.deepEqual([c.gemini.used, c.gemini.left, c.gemini.contentUsed, c.gemini.draftNow], [12, 488, 12, 20]);
+  assert.deepEqual([c.gemini.used, c.gemini.left, c.gemini.contentUsed, c.gemini.draftNow], [12, 488, 12, MANUAL_REQUESTS]);
   assert.ok(c.gemini.reserve >= 25);
   assert.deepEqual([c.tavily.cap, c.tavily.weekCap, c.tavily.perPost], [200, 50, 10]);
   assert.deepEqual([c.images.used, c.images.cap, c.pexels.perPost], [0, 40, 2]);
@@ -1477,9 +1510,9 @@ test("busy Google: 3.5 overloaded moves each request to 3.1 Flash-Lite, and the 
   await createJob(db, { id: hex(600), kind: "top-grades", by: "admin:o", now: MONDAY });
   const job = await runManualJob(ctx, hex(600));
   assert.equal(job.status, "done", job.message);
-  assert.equal(job.gemini, 3, "the draft's own requests: write, list claims, review");
+  assert.equal(job.gemini, 2, "the draft's own requests: one write and the review");
   // Each request: 3.5 busy, a jittered wait, 3.5 busy again, then 3.1 answers.
-  assert.deepEqual((await jobCalls(db, [hex(600)]))[hex(600)], { attempts: 9, answered: 3, busy: 6, backup: 3 });
+  assert.deepEqual((await jobCalls(db, [hex(600)]))[hex(600)], { attempts: 6, answered: 2, busy: 4, backup: 2 });
   const models = (await db.execute("SELECT DISTINCT model FROM gemini_requests WHERE status = 200")).rows.map((r) => r.model);
   assert.deepEqual(models, [BACKUP_MODEL]);
 });
@@ -1519,7 +1552,7 @@ test("busy Google at night: the Content stage pauses and drafts again later the 
   // The first write request gets no answer from either model (5 attempts), then Google is back.
   let busyWrites = 5;
   const fetchImpl = async (url, init) => {
-    if (String(url).includes("generativelanguage") && busyWrites > 0 && JSON.parse(String(init.body)).generationConfig?.responseSchema?.properties?.title) {
+    if (String(url).includes("generativelanguage") && busyWrites > 0 && !JSON.parse(String(init.body)).generationConfig?.responseSchema) {
       busyWrites--;
       return OVERLOADED();
     }

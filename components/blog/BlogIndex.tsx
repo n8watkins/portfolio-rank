@@ -106,7 +106,7 @@ export function BlogIndex({ posts, tags, current }: { posts: BlogListItem[]; tag
           <nav aria-label="Tags" className="-mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <ul className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
               <li>
-                <Link href="/blog" aria-current={current ? undefined : "true"} className={chip}>
+                <Link href="/blog" prefetch={false} aria-current={current ? undefined : "true"} className={chip}>
                   All posts
                 </Link>
               </li>
@@ -128,7 +128,7 @@ export function BlogIndex({ posts, tags, current }: { posts: BlogListItem[]; tag
             title="No posts yet"
             className="mx-auto mt-10 max-w-xl"
             action={
-              <Link href="/top" className={btnSecondary}>
+              <Link href="/top" prefetch={false} className={btnSecondary}>
                 See the leaderboard
               </Link>
             }

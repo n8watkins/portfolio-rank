@@ -37,7 +37,6 @@ import { isRemovalAlert } from "../lib/games/claims.mjs";
 import { isEmailCapAlert } from "../lib/email/gate.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
-import { writerMode } from "../pipeline/content/staged.mjs";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
@@ -115,7 +114,6 @@ export function engine(env: NightEnv, runId: string) {
       contentMode: contentMode(env.CONTENT_MODE),
       // The most drafts a week the owner's automation settings may ask for (lib/content/automation.mjs).
       contentDraftsPerWeek: env.CONTENT_DRAFTS_PER_WEEK,
-      writerMode: writerMode(env.WRITER_MODE),
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
       ranking: rankingConfig({

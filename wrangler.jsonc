@@ -100,9 +100,6 @@
     // The most drafts a week the owner may choose on /admin/blog
     // (lib/content/automation.mjs; at most 4). The page can only go lower.
     "CONTENT_DRAFTS_PER_WEEK": "2",
-    // How the content engine writes a post: "staged" (outline, sections, finish;
-    // pipeline/content/staged.mjs) or "single" (one request).
-    "WRITER_MODE": "staged",
     // Never pay for Workers AI (lib/content/neurons.mjs, docs/COSTS.md "Workers
     // AI"): at most 40 AI images a UTC day, and behind it at most 2,500
     // neurons (40 Schnell images are about 2,320) of PortfolioRank's 5,000
@@ -235,9 +232,6 @@
         // so this writes nothing by itself; it only lets /admin/blog choose it.
         "CONTENT_MODE": "publish",
         "CONTENT_DRAFTS_PER_WEEK": "2",
-        // How the content engine writes a post: "staged" (outline, sections, finish;
-        // pipeline/content/staged.mjs) or "single" (one request).
-        "WRITER_MODE": "staged",
         // Staging never spends Workers AI: production's counter can't see
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
