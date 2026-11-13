@@ -2,15 +2,12 @@
 
 Every question asked of the owner that is not answered yet, with the recommendation.
 Updated by the ops session whenever one is asked or answered.
-Last updated 2026-11-13.
+Last updated 2026-11-13 (evening).
 
 ## Waiting on you now
 
 | # | Question | Recommendation | Asked |
 |---|---|---|---|
-| 1 | Privacy pages: show "Nathan Watkins" or "n8builds" as the operator? | n8builds, if you'd rather keep your name off public pages | 2026-11-13 |
-| 2 | Auto-delete database backups older than 35 days (keeps the privacy promise)? | Yes | 2026-11-13 |
-| 3 | Confirm: staging also moves to staging.portfoliorank.dev (assumed yes from "both are changed") | Yes | 2026-11-13 |
 | 4 | n8builds-web PR #201 (cuts about 1.5M ms of compute a month): merge and deploy it, or leave it to the n8builds session? | Leave it to the n8builds session, or let me merge it | 2026-11-13 |
 | 5 | NetTrailers used 812k ms of compute on Nov 11: flag it to the NetTrailers session? | Yes | 2026-11-13 |
 | 6 | Approve the "Add your portfolio" and profile screenshots (scratchpad shots/profile/) so readable profile URLs, sitemap index and structured data can proceed | Review | 2026-11-13 |
@@ -32,6 +29,9 @@ Last updated 2026-11-13.
 
 | Question | Answer | Date |
 |---|---|---|
+| Privacy operator name | "n8builds", with a link to x.com/n8watkins | 2026-11-13 |
+| Delete backups older than 35 days | Yes, only if the bucket holds nothing but backups (verified first) | 2026-11-13 |
+| Move staging to staging.portfoliorank.dev | Yes, owner updated sign-in for both | 2026-11-13 |
 | Pause all automated Gemini use until the audits finish | Yes, frozen | 2026-11-12 |
 | Start P0 and P1 | Yes | 2026-11-13 |
 | Release decisions 1 to 6 | Yes, with the picks | 2026-11-13 |
