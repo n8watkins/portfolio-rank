@@ -32,12 +32,13 @@ import {
   tierLabel,
   tierOf,
   tierOfValue,
+  tierSettled,
   tierValue,
 } from "../lib/tiers.mjs";
 import { rateFaceoffs } from "../lib/tiers-rating.mjs";
 import { CHECKS_WHEN_UNKNOWN, gradeKey, gradeScore, standing } from "../lib/grade-score.mjs";
 import { placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
-import { applyFaceoff, computeCutoffs, dailyTiers, ensureTierSchema, readSiteRow, readTierMeta, undoFaceoff } from "../lib/tiers-db.mjs";
+import { readSiteRow, readTierMeta } from "../lib/tiers-db.mjs";
 import { compareWithPool, printView } from "../lib/grader/report.mjs";
 import { drawCandidates } from "../lib/play/draw.mjs";
 import { CHECK_POINTS, checkPoints, checkShares, libraryMedians, pointFixes, unpackCheck } from "../lib/check-points.mjs";
@@ -445,4 +446,15 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   const joined = await readSiteRow(client, "https://brand-new.example/");
   assert.equal(joined.member, 1);
   assert.equal(joined.seeded, 1);
+});
+
+test("a tier letter is shown only once face-offs earn it: a starting rank never sits beside the grade", () => {
+  assert.equal(tierSettled(null), false);
+  assert.equal(tierSettled({ tier: "B", provisional: true, faceoffs: 40 }), false);
+  // A starting rank from automated checks: not provisional, but no face-offs yet.
+  assert.equal(tierSettled({ tier: "B", provisional: false, seeded: true, faceoffs: 0 }), false);
+  assert.equal(tierSettled({ tier: "A", provisional: false, faceoffs: MIN_FACEOFFS - 0.25 }), false);
+  assert.equal(tierSettled({ tier: "A", provisional: false, faceoffs: MIN_FACEOFFS }), true);
+  // Older reports carry no count: no letter.
+  assert.equal(tierSettled({ tier: "A", provisional: false }), false);
 });
