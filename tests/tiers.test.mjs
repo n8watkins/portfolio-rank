@@ -53,7 +53,7 @@ import { compareSeed, seedRating } from "../lib/tiers.mjs";
 test("points from automated checks: 100 in all, measured from saved data, the median where nothing was measured", () => {
   const max = Object.values(CHECK_POINTS).filter((v) => v > 0).reduce((a, b) => a + b, 0);
   assert.equal(max, 100);
-  assert.equal(CHECK_POINTS.template, -15);
+  assert.equal("template" in CHECK_POINTS, false, "a template is not a fault (owner, 2026-11-13)");
   const full = checkShares({
     psi: { ok: true, scores: { performance: 100, accessibility: 100, seo: 100, "best-practices": 100 } },
     psiDesktop: { ok: true, scores: { performance: 100 } },
@@ -67,19 +67,26 @@ test("points from automated checks: 100 in all, measured from saved data, the me
   assert.equal(all.total, 100);
   assert.ok(all.items.every((i) => i.measured));
   assert.deepEqual(pointFixes(all), []);
-  // A known template costs 15; two working links of the minimum three earn two thirds of the project points.
-  const template = checkShares({ grade: { facts: { template: "Some theme", project_links: { checked: 2, ok: 2 } } } });
+  // A known template costs nothing; two working links of the minimum three earn two thirds of the project points.
+  const template = checkShares({ grade: { checks: { original: false }, facts: { template: "Some theme", project_links: { checked: 2, ok: 2 } } } });
   const t = checkPoints(template, medians);
-  assert.equal(t.items.find((i) => i.id === "template").points, -15);
+  assert.equal(t.items.find((i) => i.id === "template"), undefined);
+  assert.equal(t.items.every((i) => i.points >= 0), true);
+  const same = checkPoints(checkShares({ grade: { checks: { original: true }, facts: { project_links: { checked: 2, ok: 2 } } } }), medians);
+  assert.equal(t.total, same.total, "with or without a template, the same points");
   assert.equal(t.items.find((i) => i.id === "projects").points, 10);
   // Nothing measured: never a zero, the library median, marked.
   const none = checkPoints(checkShares({}), libraryMedians([full, checkShares({ psi: { ok: true, scores: { performance: 0 } } })]));
   const perf = none.items.find((i) => i.id === "perfMobile");
   assert.equal(perf.measured, false);
   assert.equal(perf.points, 7.5);
-  // Nobody measured it: the same neutral value for everyone (half, no template penalty).
+  // Nobody measured it: the same neutral value for everyone (half).
   assert.equal(libraryMedians([checkShares({})]).phone, 0.5);
-  assert.equal(libraryMedians([checkShares({})]).template, 0);
+  assert.equal(libraryMedians([checkShares({})]).template, undefined);
+  // A breakdown stored before the change: its template row is left out of the items and the total.
+  const old = unpackCheck([["perfMobile", 15, 1], ["template", -15, 1]]);
+  assert.deepEqual(old.items.map((i) => i.id), ["perfMobile"]);
+  assert.equal(old.total, 15);
   // The fix list names the gain: "+5 if you add a share image".
   const noImage = checkPoints({ ...full, shareImage: 0 }, medians);
   assert.deepEqual(pointFixes(noImage), [{ id: "shareImage", gain: 5, text: "+5 if you add a share image" }]);
@@ -463,7 +470,7 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   const poor = await read(url(6));
   assert.equal(best.rank.seeded, true);
   assert.ok(best.rank.points > poor.rank.points, `${best.rank.points} > ${poor.rank.points}`);
-  assert.equal(best.rank.check.length, 14);
+  assert.equal(best.rank.check.length, 13);
   assert.deepEqual(best.rank.check.find((r) => r[0] === "perfMobile"), ["perfMobile", 15, 1]);
   assert.deepEqual(poor.rank.check.find((r) => r[0] === "shareImage"), ["shareImage", 0, 1]);
   // Not measured for site 7: the median of the two measured (15 and 3), marked.
@@ -500,7 +507,7 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   assert.equal((await readTierMeta(client)).n, 120);
   const fresh = await rankForWrite(client, grade(5, 100, "S"), { url: "https://brand-new.example/", now });
   assert.equal(fresh.rank.seeded, true);
-  assert.equal(fresh.rank.check.length, 14);
+  assert.equal(fresh.rank.check.length, 13);
   const regraded = await rankForWrite(client, grade(1, 0, "D"), { url: url(0), now });
   assert.equal(regraded.rank.tier, top.rank.tier, "a new grade doesn't change a member's tier until the refresh");
   const not = await rankForWrite(client, grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S" } }));

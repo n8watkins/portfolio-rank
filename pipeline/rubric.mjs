@@ -296,6 +296,13 @@ export function codeChecks(facts, now = new Date()) {
   };
 }
 
+/**
+ * Code checks that are never shown as a fault or a fix (owner, 2026-11-13: we
+ * grade the portfolio, not its origin). "original" (no known template) is
+ * still measured and kept with the grade.
+ */
+export const NOT_A_FAULT = new Set(["original"]);
+
 /** Weighted share (0-100) of passed code checks; unknown checks are left out. */
 export function checksScore(checks) {
   if (!checks) return null;
