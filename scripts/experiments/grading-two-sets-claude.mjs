@@ -136,6 +136,8 @@ export async function runClaude({
   prompts = loadPrompts(),
   timelinePath = path.join(EXP, "timeline.json"),
   log = console.log,
+  // Another experiment's request list (the mini test); default: this test's 58.
+  requestList = null,
 } = {}) {
   if (!apiKey) throw new Error("Needs ANTHROPIC_API_KEY (run through pass-env).");
   const cost = costWith(settings);
@@ -144,7 +146,7 @@ export async function runClaude({
   state.settings = settings;
   const save = () => writeJson(statePath, state);
   const headers = { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": settings.version };
-  const requests = claudeRequests(plan);
+  const requests = requestList ?? claudeRequests(plan);
   // Timeline: read fresh before each write, so another process's entries survive.
   const mark = (name, edge, extra = {}) => {
     if (!fs.existsSync(timelinePath)) return;
