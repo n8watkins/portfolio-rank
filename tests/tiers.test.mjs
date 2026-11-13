@@ -39,6 +39,69 @@ import { CHECKS_WHEN_UNKNOWN, gradeKey, gradeScore, standing } from "../lib/grad
 import { LIBRARY_KEY, cachedLibrary, cachedLibraryState, placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { compareWithPool, printView } from "../lib/grader/report.mjs";
 import { drawCandidates } from "../lib/play/draw.mjs";
+import { CHECK_POINTS, checkPoints, checkShares, libraryMedians, pointFixes, unpackCheck } from "../lib/check-points.mjs";
+import { compareSeed, seedRating } from "../lib/tiers.mjs";
+
+test("points from automated checks: 100 in all, measured from saved data, the median where nothing was measured", () => {
+  const max = Object.values(CHECK_POINTS).filter((v) => v > 0).reduce((a, b) => a + b, 0);
+  assert.equal(max, 100);
+  assert.equal(CHECK_POINTS.template, -15);
+  const full = checkShares({
+    psi: { ok: true, scores: { performance: 100, accessibility: 100, seo: 100, "best-practices": 100 } },
+    psiDesktop: { ok: true, scores: { performance: 100 } },
+    inspect: { ok: true, https: true, customDomain: true, ogTitle: "x", ogDescription: "y", ogImageLoads: true, githubUrl: "g", hasResume: true, hasContact: true, copyrightYear: 2026 },
+    grade: { checks: { original: true }, facts: { project_links: { checked: 4, ok: 4, broken: 0 } } },
+    meta: { overflow390: false, consoleErrors: 0 },
+    year: 2026,
+  });
+  const medians = libraryMedians([full]);
+  const all = checkPoints(full, medians);
+  assert.equal(all.total, 100);
+  assert.ok(all.items.every((i) => i.measured));
+  assert.deepEqual(pointFixes(all), []);
+  // A known template costs 15; two working links of the minimum three earn two thirds of the project points.
+  const template = checkShares({ grade: { facts: { template: "Some theme", project_links: { checked: 2, ok: 2 } } } });
+  const t = checkPoints(template, medians);
+  assert.equal(t.items.find((i) => i.id === "template").points, -15);
+  assert.equal(t.items.find((i) => i.id === "projects").points, 10);
+  // Nothing measured: never a zero, the library median, marked.
+  const none = checkPoints(checkShares({}), libraryMedians([full, checkShares({ psi: { ok: true, scores: { performance: 0 } } })]));
+  const perf = none.items.find((i) => i.id === "perfMobile");
+  assert.equal(perf.measured, false);
+  assert.equal(perf.points, 7.5);
+  // Nobody measured it: the same neutral value for everyone (half, no template penalty).
+  assert.equal(libraryMedians([checkShares({})]).phone, 0.5);
+  assert.equal(libraryMedians([checkShares({})]).template, 0);
+  // The fix list names the gain: "+5 if you add a share image".
+  const noImage = checkPoints({ ...full, shareImage: 0 }, medians);
+  assert.deepEqual(pointFixes(noImage), [{ id: "shareImage", gain: 5, text: "+5 if you add a share image" }]);
+  // Stored as [item, points, measured] rows and read back the same.
+  const rows = noImage.items.map((i) => [i.id, i.points, i.measured ? 1 : 0]);
+  assert.equal(unpackCheck(rows).total, noImage.total);
+  assert.deepEqual(pointFixes(unpackCheck(rows)), pointFixes(noImage));
+});
+
+test("starting ranks: by points (then the Gemini score), evenly from the best to the last, held loosely", () => {
+  assert.deepEqual(seedRating(1, 101), { mu: 33, sigma: 25 / 3 });
+  assert.deepEqual(seedRating(101, 101), { mu: 17, sigma: 25 / 3 });
+  assert.equal(seedRating(51, 101).mu, 25);
+  const a = { url: "a", points: 80, key: 10, first: 1 };
+  const b = { url: "b", points: 80, key: 20, first: 2 };
+  const c = { url: "c", points: 90, key: 0, first: 3 };
+  assert.deepEqual([a, b, c].sort(compareSeed).map((x) => x.url), ["c", "b", "a"]);
+  // A seeded portfolio is ranked at once, with no votes at all.
+  const order = orderLibrary(Array.from({ length: 200 }, (_, i) => ({ url: `s${i}`, ...seedRating(i + 1, 200), seeded: true })));
+  const ranks = rankLibrary(order);
+  assert.equal(ranks.get("s0").tier, "SSS");
+  assert.equal(ranks.get("s199").tier, "D");
+  assert.equal(ranks.get("s0").votes, 0);
+  assert.ok(ranks.get("s0").elo > ELO_START && ranks.get("s199").elo < ELO_START);
+  // Real votes move a seed: the last one beating the best a few times climbs.
+  const seeds = new Map([["low", seedRating(200, 200)], ["high", seedRating(1, 200)]]);
+  const after = rateFaceoffs([faceoff("low", "high"), faceoff("low", "high"), faceoff("low", "high")], { seeds });
+  assert.ok(after.get("low").mu > seeds.get("low").mu + 3);
+  assert.equal(after.get("low").wins, 3);
+});
 
 /** A rubric v2 grade with every AI axis at `axis` (1-5), a checks score and Gemini's letter. */
 const grade = (axis, checks = 80, letter = "B", extra = {}) => ({
@@ -121,7 +184,7 @@ test("the replay: a person's vote counts one face-off, an AI comparison a quarte
   assert.deepEqual(rateFaceoffs(votes).get("q"), rateFaceoffs([...votes].reverse()).get("q"));
 });
 
-test("everyone starts at the same ELO and stays B until 10 face-offs, however lucky", () => {
+test("without a starting rank, a portfolio starts at ELO 1200 and stays B until 10 face-offs, however lucky", () => {
   assert.equal(eloOf({ mu: 25, sigma: 25 / 3 }), ELO_START);
   assert.equal(entryOf({ url: "x" }).elo, ELO_START);
   // Nine straight wins: still B, with no place.
@@ -212,7 +275,7 @@ test("tierOf reads the stored rank, never Gemini's letter", () => {
   assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S+" } })), null);
 });
 
-test("a visitor's report: B to start (a listed site keeps its own ELO), and the grade's top N% by score", () => {
+test("a visitor's report without a library: B to start (a listed site keeps its own ELO), and the grade's top N% by score", () => {
   const pool = Array.from({ length: 200 }, (_, i) => ({ url: `https://s${i}.example/`, name: `s${i}`, mu: 25, key: gradeKey(grade(1 + (i % 5), i % 100)), tier: null, axes: {}, roles: [] }));
   const best = compareWithPool(grade(5, 100, "S"), pool);
   assert.equal(best.rank.tier, "B");
@@ -296,33 +359,64 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
     args: [JSON.stringify(grade(5, 100, "S")), JSON.stringify({ rank: { tier: "SSS", score: 100, top: 1, v: 4 }, percentile: { rank: 1, total: 10, topPct: 5, ahead: 90, level: 30 } })],
   });
 
+  // Saved check data for two sites: site 5 passes everything, site 6 is slow, has no share card and no links.
+  const cache = (k, v) => ({ sql: "INSERT INTO cache (k, v, at) VALUES (?, ?, 0)", args: [k, JSON.stringify(v)] });
+  const psi = (p) => ({ ok: true, scores: { performance: p, accessibility: p, "best-practices": p, seo: p } });
+  const inspect = (good) => ({
+    ok: true,
+    https: true,
+    customDomain: good,
+    title: good ? "Site" : null,
+    description: good ? "About" : null,
+    ogImageLoads: good,
+    githubUrl: good ? "https://github.com/x" : null,
+    hasGithubLink: good,
+    hasResume: good,
+    hasContact: good,
+    linkedinUrl: null,
+    copyrightYear: good ? 2026 : 2019,
+  });
+  await client.batch([cache(`psi:${url(5)}`, psi(100)), cache(`psi-desktop:${url(5)}`, psi(100)), cache(`inspect:${url(5)}`, inspect(true))], "write");
+  await client.batch([cache(`psi:${url(6)}`, psi(20)), cache(`psi-desktop:${url(6)}`, psi(20)), cache(`inspect:${url(6)}`, inspect(false))], "write");
+
   const first = await refreshTiers(client, { now: Date.parse("2026-11-12T00:00:00Z") });
   assert.equal(first.library, 120);
-  assert.equal(first.ranked, 30);
+  assert.equal(first.ranked, 120, "every graded portfolio has a starting rank from automated checks");
   assert.equal(first.cleared, 1);
   assert.equal(first.jobs, 1);
-  assert.equal(first.distribution.B >= 90, true, "everyone without 10 face-offs is B");
   assert.equal(Object.values(first.distribution).reduce((a, b) => a + b, 0), 120);
+  assert.equal(first.distribution.SSS, 1, "120 ranked: the top 1% is one place");
+  assert.ok(first.distribution.D >= 15, "letters appear at once, the bottom 15% too");
   const read = async (u) => JSON.parse(String((await client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [u] })).rows[0].ai_rubric));
+  // Points: measured items for site 5 and 6, the library median for everything nobody measured.
+  const best = await read(url(5));
+  const poor = await read(url(6));
+  assert.equal(best.rank.seeded, true);
+  assert.ok(best.rank.points > poor.rank.points, `${best.rank.points} > ${poor.rank.points}`);
+  assert.equal(best.rank.check.length, 14);
+  assert.deepEqual(best.rank.check.find((r) => r[0] === "perfMobile"), ["perfMobile", 15, 1]);
+  assert.deepEqual(poor.rank.check.find((r) => r[0] === "shareImage"), ["shareImage", 0, 1]);
+  // Not measured for site 7: the median of the two measured (15 and 3), marked.
+  assert.deepEqual((await read(url(7))).rank.check.find((r) => r[0] === "perfMobile"), ["perfMobile", 9, 0]);
+  assert.ok(best.rank.elo > poor.rank.elo);
+  // Real votes refine it; none are invented.
   const top = await read(url(0));
-  assert.equal(top.rank.provisional, false);
   assert.equal(top.rank.faceoffs, 12);
-  assert.equal(top.rank.of, 30);
+  assert.equal(top.rank.votes, 12);
+  assert.equal(top.rank.provisional, false);
   assert.ok(top.rank.elo > ELO_START);
-  assert.ok(["A+", "A"].includes(top.rank.tier), top.rank.tier);
   // Gemini's own letter stays as it was.
   assert.equal(top.tier, "B");
   const ai = await read(url(40));
-  assert.equal(ai.rank.tier, "B");
-  assert.equal(ai.rank.provisional, true);
   assert.equal(ai.rank.faceoffs, 5);
-  assert.equal((await read(url(60))).rank.faceoffs, 0);
+  assert.equal(ai.rank.votes, 20);
+  assert.equal((await read(url(60))).rank.votes, 0, "practice votes never count");
   assert.equal((await read("https://notone.example/")).rank, undefined);
   assert.equal((await read("https://broken.example/")).rank, undefined);
+  // A visitor's report: a starting rank from the points its grade can show; the grade's own standing stays.
   const job = JSON.parse(String((await client.execute("SELECT report FROM grade_jobs WHERE id = 'job1'")).rows[0].report));
-  assert.equal(job.rank.tier, "B");
-  assert.equal(job.rank.provisional, true);
-  // The grade's own standing stays as it was.
+  assert.equal(job.rank.seeded, true);
+  assert.equal(job.rank.provisional, false);
   assert.equal(job.percentile.topPct, 5);
 
   // Nothing changed: nothing written.
@@ -331,16 +425,17 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   assert.equal(second.cleared, 0);
   assert.equal(second.jobs, 0);
 
-  // The cached library places a new grade at once, with the site's own face-offs.
+  // The cached library places a new grade at once: its points among the members', or a member's own rank.
   const now = Date.parse("2026-11-12T01:30:00Z");
   assert.equal((await cachedLibrary(client, { now })).length, 120);
-  assert.equal((await rankForWrite(client, grade(5, 100, "S"), { url: "https://brand-new.example/", now })).rank.tier, "B");
+  const fresh = await rankForWrite(client, grade(5, 100, "S"), { url: "https://brand-new.example/", now });
+  assert.equal(fresh.rank.seeded, true);
+  assert.equal(fresh.rank.check.length, 14);
   const regraded = await rankForWrite(client, grade(1, 0, "D"), { url: url(0), now });
-  assert.equal(regraded.rank.tier, top.rank.tier, "a new grade doesn't change the tier");
+  assert.equal(regraded.rank.tier, top.rank.tier, "a new grade doesn't change a member's tier until the refresh");
   const not = await rankForWrite(client, grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S" } }));
   assert.equal(not.rank, undefined);
-  // Sites with face-offs that are not members still have their ELO.
   const state = await cachedLibraryState(client, { now });
-  assert.ok(state.order.find((e) => e.url === url(0)).elo > ELO_START);
+  assert.ok(state.medians && typeof state.medians.perfMobile === "number");
   assert.ok((await client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [LIBRARY_KEY] })).rows[0]);
 });

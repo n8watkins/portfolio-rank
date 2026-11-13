@@ -13,6 +13,7 @@ import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { BELOW_TOP_TIERS, MIN_FACEOFFS, STARTING_TIER, familyOf, isPublicTier, tierLabel, tierOf } from "@/lib/tiers.mjs";
 import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
+import { pointFixes, unpackCheck } from "@/lib/check-points.mjs";
 import { TierBadge } from "@/components/ui/badges";
 import { ROUTES } from "@/lib/nav";
 
@@ -78,7 +79,19 @@ export async function generateMetadata({
 // the top tiers (SSS to B-): a lower one says "Graded, below the top tiers",
 // so we never slap a public "D" on someone's work. The AI review is the report
 // card: its scores and notes, weakest first, as how to improve.
-type Standing = { tier: string | null; elo: number; faceoffs: number; top: number | null; of: number | null; provisional: boolean };
+type Standing = {
+  tier: string | null;
+  elo: number;
+  faceoffs: number;
+  /** Real face-offs (people's votes and AI comparisons), each counted once. */
+  votes: number;
+  top: number | null;
+  of: number | null;
+  provisional: boolean;
+  /** Its starting rank came from automated checks (lib/check-points.mjs); `check` is the points breakdown. */
+  seeded: boolean;
+  check: ReturnType<typeof unpackCheck>;
+};
 
 /** The stored rank of a grade (lib/tiers-store.mjs), or null. */
 function rankOf(raw: unknown): Standing | null {
@@ -88,7 +101,17 @@ function rankOf(raw: unknown): Standing | null {
     const tier = tierOf(g);
     const r = g?.rank;
     if (!tier || typeof r?.elo !== "number") return null;
-    return { tier, elo: r.elo, faceoffs: Number(r.faceoffs ?? 0), top: typeof r.top === "number" ? r.top : null, of: typeof r.of === "number" ? r.of : null, provisional: r.provisional !== false };
+    return {
+      tier,
+      elo: r.elo,
+      faceoffs: Number(r.faceoffs ?? 0),
+      votes: Number(r.votes ?? 0),
+      top: typeof r.top === "number" ? r.top : null,
+      of: typeof r.of === "number" ? r.of : null,
+      provisional: r.provisional !== false,
+      seeded: r.seeded === true,
+      check: unpackCheck(r.check),
+    };
   } catch {
     return null;
   }
@@ -173,11 +196,14 @@ export default async function PortfolioPage({
   let standing = rankOf(rubricRow?.ai_rubric);
   if (!standing) {
     const e = entryIn(await cachedLibraryState(db()), url);
-    standing = { tier: null, elo: e.elo, faceoffs: e.faceoffs, top: null, of: null, provisional: true };
+    standing = { tier: null, elo: e.elo, faceoffs: e.faceoffs, votes: e.votes, top: null, of: null, provisional: true, seeded: false, check: null };
   }
   // A hidden grade hides the tier too; C and D never show.
   const shownTier = !owner.hideGrade && isPublicTier(standing.tier) ? standing.tier : null;
   const faceoffs = Math.floor(standing.faceoffs);
+  const votes = standing.votes;
+  const votesText = `${votes.toLocaleString("en-US")} real vote${votes === 1 ? "" : "s"}`;
+  const fixes = standing.check ? pointFixes(standing.check) : [];
   const strong = familyOf(shownTier) === "A" || familyOf(shownTier) === "S";
 
   const shot = await shotFor(url);
@@ -198,9 +224,7 @@ export default async function PortfolioPage({
             <div className="flex flex-wrap items-center gap-2">
               <div className="mr-1 text-right">
                 <p className="text-xl font-bold tabular-nums">{standing.elo}</p>
-                <p className="text-xs text-mute">
-                  ELO · {faceoffs} face-off{faceoffs === 1 ? "" : "s"}
-                </p>
+                <p className="text-xs text-mute">ELO · {votesText}</p>
                 {stars > 0 && (
                   <p className="text-xs font-semibold text-accent">
                     ⭐ {stars} loved
@@ -254,16 +278,21 @@ export default async function PortfolioPage({
                 Tier
               </h2>
               {owner.hideGrade ? (
-                <p className="mt-0.5 text-sm text-mute">ELO from {faceoffs} face-offs.</p>
+                <p className="mt-0.5 text-sm text-mute">ELO from {votesText}.</p>
+              ) : standing.tier && standing.seeded ? (
+                <>
+                  <p className={`mt-0.5 font-semibold ${strong ? "text-accent" : ""}`}>
+                    {shownTier ? (standing.top != null ? `Top ${standing.top}%` : `Tier ${tierLabel(shownTier)}`) : BELOW_TOP_TIERS}
+                    {shownTier && standing.of != null && <span className="font-normal text-mute"> of {standing.of.toLocaleString("en-US")} ranked portfolios</span>}
+                  </p>
+                  <p className="text-sm text-mute">Starting rank from automated checks · {votesText}. Votes move it from here.</p>
+                </>
               ) : standing.tier && standing.provisional ? (
                 <>
-                  <p className="mt-0.5 font-semibold">Starting tier: every portfolio begins at {STARTING_TIER}</p>
+                  <p className="mt-0.5 font-semibold">Starting tier: {STARTING_TIER}</p>
                   <p className="text-sm text-mute">
                     {faceoffs} of {MIN_FACEOFFS} face-offs. After {MIN_FACEOFFS}, its place by ELO sets the tier.
                   </p>
-                  <div className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-edge" role="progressbar" aria-label="Face-offs toward a tier" aria-valuemin={0} aria-valuemax={MIN_FACEOFFS} aria-valuenow={Math.min(faceoffs, MIN_FACEOFFS)}>
-                    <div className="h-1.5 rounded-full bg-accent" style={{ width: `${(Math.min(standing.faceoffs, MIN_FACEOFFS) / MIN_FACEOFFS) * 100}%` }} />
-                  </div>
                 </>
               ) : standing.tier && shownTier ? (
                 <>
@@ -271,12 +300,12 @@ export default async function PortfolioPage({
                     {standing.top != null ? `Top ${standing.top}%` : `Tier ${tierLabel(shownTier)}`}
                     {standing.of != null && <span className="font-normal text-mute"> of {standing.of.toLocaleString("en-US")} ranked portfolios</span>}
                   </p>
-                  <p className="text-sm text-mute">By ELO from {faceoffs} face-offs. It moves as people vote.</p>
+                  <p className="text-sm text-mute">By ELO from {votesText}. It moves as people vote.</p>
                 </>
               ) : standing.tier ? (
-                <p className="mt-0.5 text-sm text-mute">{BELOW_TOP_TIERS}. By ELO from {faceoffs} face-offs.</p>
+                <p className="mt-0.5 text-sm text-mute">{BELOW_TOP_TIERS}. ELO from {votesText}.</p>
               ) : (
-                <p className="mt-0.5 text-sm text-mute">Not graded yet, so no tier. ELO from {faceoffs} face-offs.</p>
+                <p className="mt-0.5 text-sm text-mute">Not graded yet, so no tier. ELO from {votesText}.</p>
               )}
             </div>
             {ROUTES.faceoff && (
@@ -285,6 +314,46 @@ export default async function PortfolioPage({
               </a>
             )}
           </div>
+          {!owner.hideGrade && standing.check && (
+            <div className="mt-4 grid grid-cols-1 gap-4 border-t border-edge pt-4 md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  Automated checks: <span className="tabular-nums">{standing.check.total}</span> of 100 points
+                </h3>
+                <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
+                  {standing.check.items.map((i) => (
+                    <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-1.5">
+                      <span className={i.measured ? "" : "text-mute"}>
+                        {i.name}
+                        {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
+                      </span>
+                      <span className={`shrink-0 tabular-nums ${i.id === "template" && i.points < 0 ? "text-down" : i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
+                        {i.id === "template" ? (i.points < 0 ? i.points : "0") : `${i.points}/${i.max}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold">Quickest points</h3>
+                {fixes.length ? (
+                  <ul className="mt-2 grid gap-2 text-sm">
+                    {fixes.map((f) => (
+                      <li key={f.id} className="flex items-start gap-2">
+                        <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs font-bold leading-5 text-accent tabular-nums">+{Math.round(f.gain)}</span>
+                        <span>{f.text.slice(f.text.indexOf(" if you ") + 1)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-mute">Every measured check is full. Votes decide the rest.</p>
+                )}
+                <a href="/grading#points" className="mt-3 inline-block text-xs font-medium text-accent hover:underline">
+                  How the points work
+                </a>
+              </div>
+            </div>
+          )}
         </section>
 
         <DetailDiagnostics url={url} />

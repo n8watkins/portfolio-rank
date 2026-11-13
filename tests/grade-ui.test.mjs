@@ -136,21 +136,23 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   await finish(id);
   // The page notices on its next look and turns into the report.
   await p.getByRole("heading", { level: 1, name: "Grade UI Tester" }).waitFor({ timeout: 15000 });
-  // The tier comes from face-offs: a new report starts at B. The verdict and "top N%" are the grade's (Gemini's A).
-  await p.getByRole("img", { name: "Tier B" }).first().waitFor();
-  await p.getByText("Starting tier, until 10 face-offs").waitFor();
+  // The tier is a starting rank from automated checks (votes move it later). The verdict and "top N%" are the grade's (Gemini's A).
+  const tierImg = p.locator("#report-tier").getByRole("img", { name: /^Tier / });
+  await tierImg.waitFor();
+  const tierName = await tierImg.getAttribute("aria-label");
+  await p.getByText("Starting rank from automated checks").waitFor();
   await p.getByText("Strong and clear, with a few rough edges.").waitFor();
   assert.match(await p.getByText(/^GradeTop \d+%$/).first().textContent(), /Top \d+%/);
 
   // The owner's result is celebrated by its level, once per report in this browser.
   const stored = JSON.parse(String((await db.execute({ sql: "SELECT report FROM grade_jobs WHERE id = ?", args: [id] })).rows[0].report));
-  const level = celebrationLevel({ tier: "B", percentile: stored.percentile });
+  const level = celebrationLevel({ tier: stored.rank?.tier, percentile: stored.percentile });
   if (level) {
     const banner = p.getByRole("status").filter({ hasText: `${CELEBRATIONS[level].title}!` });
     await banner.waitFor();
     await banner.getByRole("button", { name: "Dismiss" }).click();
     await p.reload();
-    await p.getByRole("img", { name: "Tier B" }).first().waitFor();
+    await p.locator("#report-tier").getByRole("img", { name: tierName }).waitFor();
     await p.waitForTimeout(800);
     assert.equal(await banner.count(), 0);
   }
