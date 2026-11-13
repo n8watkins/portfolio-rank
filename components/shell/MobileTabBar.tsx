@@ -45,7 +45,7 @@ export function MobileTabBar({ action }: { action: PrimaryAction | null }) {
     signedIn ? { href: ROUTES.profile, label: "Account", Icon: User } : { href: "#signin", label: "Sign in", Icon: User, signIn: true },
     { href: ROUTES.settings, label: "Settings", Icon: Settings },
     // The admin's own account only (display; the admin pages check on the server).
-    ...(signedIn && session.isAdmin ? [{ href: "/admin/usage", label: "Admin", Icon: ShieldCheck }] : []),
+    ...(signedIn && session.isAdmin ? [{ href: "/admin", label: "Admin", Icon: ShieldCheck }] : []),
   ];
 
   return (
