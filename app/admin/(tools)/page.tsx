@@ -51,7 +51,7 @@ function Card({
       <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
         {stats.map((s) => (
           // The number reads first; the label is the term, so it comes first in the markup.
-          <div key={s.label} className="flex min-w-0 flex-col-reverse">
+          <div key={s.label} className="flex min-w-0 flex-col-reverse justify-end">
             <dt className="mt-1.5 text-xs text-mute">{s.label}</dt>
             <dd className={`text-2xl font-bold leading-none tabular-nums ${s.attention ? "text-accent" : ""}`}>{s.value}</dd>
           </div>
