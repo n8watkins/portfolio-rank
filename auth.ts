@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthConfig } from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { authLogger } from "@/lib/log";
 import { SESSION_VERSION, isCurrentSession } from "@/lib/session-version.mjs";
@@ -17,7 +17,7 @@ declare module "next-auth" {
   }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const config: NextAuthConfig = {
   providers: [GitHub],
   trustHost: true,
   // Sign-in and its errors open the site's own dialog (components/SignInModal),
@@ -44,4 +44,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
+};
+
+// Auth.js takes the site's address (its callback URL is
+// <address>/api/auth/callback/github) from AUTH_URL; the site has one address
+// setting, SITE_URL (lib/site.ts, wrangler.jsonc), so it is copied over before
+// each use. The function form runs per request, after the Worker has filled
+// process.env. Without SITE_URL (`next dev`) Auth.js uses the request's host.
+export const { handlers, auth, signIn, signOut } = NextAuth(() => {
+  if (process.env.SITE_URL) process.env.AUTH_URL = process.env.SITE_URL;
+  return config;
 });

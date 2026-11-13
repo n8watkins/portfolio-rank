@@ -1,8 +1,10 @@
 // A read-only check of a deployed site, run by the deploy workflow after each
 // deploy (DEPLOY.md "How a change ships"): staging must pass before
 // production deploys, and production is checked right after its deploy.
-//   node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging
-//   node scripts/smoke.mjs https://portfoliorank.n8builds.dev
+//   node scripts/smoke.mjs https://staging.portfoliorank.dev --staging
+//   node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev
+// --moved-from also checks that an old address redirects every path there
+// (worker/canonical-host.ts).
 // It only sends GETs plus the sign-in start (which writes nothing), so it is
 // safe against production. Retries cover the minute a new custom domain or
 // version can take to answer everywhere.
@@ -13,6 +15,7 @@ if (!base || !/^https?:\/\//.test(base)) {
 }
 const origin = new URL(base).origin;
 const staging = flags.includes("--staging");
+const movedFrom = flags.includes("--moved-from") ? flags[flags.indexOf("--moved-from") + 1] : null;
 const failures = [];
 
 const UA = "portfolio-rank-smoke (+https://github.com/n8watkins/portfolio-rank)";
@@ -123,6 +126,15 @@ await check("GitHub sign-in starts with this site's callback", async () => {
   const callback = url.searchParams.get("redirect_uri");
   expect(callback === `${origin}/api/auth/callback/github`, `callback ${callback}`);
 });
+
+if (movedFrom) {
+  await check(`the old address ${new URL(movedFrom).host} redirects to the same path here`, async () => {
+    const path = "/top?view=ai";
+    const res = await fetch(new URL(movedFrom).origin + path, { redirect: "manual", headers: { "user-agent": UA }, signal: AbortSignal.timeout(20_000) });
+    expect(res.status === 301, `HTTP ${res.status}`);
+    expect(res.headers.get("location") === origin + path, `to ${res.headers.get("location")}`);
+  });
+}
 
 if (failures.length) {
   console.log(`\n${failures.length} check(s) failed on ${origin}`);
