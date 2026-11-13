@@ -13,6 +13,10 @@
 //   traction:people-grades   people's grade requests that day passed a level
 //   traction:human-votes     human face-off votes that day passed a level
 //                            ("PortfolioRank is doing well")
+//   dispatch-token:missing   the night couldn't start the free checks on
+//                            GitHub Actions: GITHUB_DISPATCH_TOKEN is not set
+//   dispatch-token:expiring  that token expires within 14 days, or has
+//                            (dispatchTokenConditions)
 // Levels: ALERT_TRACTION (JSON, {"peopleGrades": 50, "humanVotes": 300}).
 //
 // Email: one interface, { send({ to, subject, text }) }, which throws when
@@ -22,6 +26,7 @@
 // no send_email binding, EMAIL_FROM or OWNER_EMAIL the sender is null:
 // alerts are recorded and logged but not delivered, and a day's alert is
 // only marked sent once the email went out.
+import { ALERT_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
 import { createEmailGate, emailCaps, emailTransport } from "../lib/email/gate.mjs";
 
@@ -69,17 +74,7 @@ export function emailSender(env, { db } = {}) {
 }
 
 export async function ensureAlertSchema(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS owner_alerts (
-    key TEXT PRIMARY KEY,
-    kind TEXT NOT NULL,
-    title TEXT NOT NULL,
-    detail TEXT,
-    first_seen TEXT NOT NULL,
-    last_seen TEXT NOT NULL,
-    last_sent_day TEXT,
-    sends INTEGER NOT NULL DEFAULT 0,
-    cleared_at TEXT
-  )`);
+  await applyTables(db, ALERT_TABLES);
 }
 
 /** The conditions an end-of-day run's summary (pipeline/night.mjs finishNight) shows. */
@@ -108,6 +103,49 @@ export function nightConditions(summary, plan) {
     });
   }
   return out;
+}
+
+/** Days before GITHUB_DISPATCH_TOKEN expires that the owner is warned, every day until it is replaced. */
+export const DISPATCH_TOKEN_WARN_DAYS = 14;
+const DAY_MS = 86400000;
+
+/**
+ * The night's GitHub dispatch (worker/night.ts "start the free checks"):
+ * a missing GITHUB_DISPATCH_TOKEN, or one that expires within
+ * DISPATCH_TOKEN_WARN_DAYS (GitHub says when on every response), is a
+ * problem alert, so the free checks never stop quietly.
+ * @param {{ skipped?: string, tokenExpires?: string | null } | null | undefined} nightly the nightly dispatch's result
+ * @param {{ now?: Date, warnDays?: number }} [options]
+ */
+export function dispatchTokenConditions(nightly, { now = new Date(), warnDays = DISPATCH_TOKEN_WARN_DAYS } = {}) {
+  if (!nightly) return [];
+  if (nightly.skipped) {
+    return [
+      {
+        key: "dispatch-token:missing",
+        kind: "problem",
+        title: "The nightly checks were not started from Cloudflare: GITHUB_DISPATCH_TOKEN is not set",
+        detail: `${nightly.skipped}. Add a fine-grained token for n8watkins/portfolio-rank with "Actions: Read and write" (DEPLOY.md, "Secrets").`,
+      },
+    ];
+  }
+  if (!nightly.tokenExpires) return [];
+  const expires = Date.parse(nightly.tokenExpires);
+  if (Number.isNaN(expires)) return [];
+  const days = Math.floor((expires - now.getTime()) / DAY_MS);
+  if (days >= warnDays) return [];
+  // The day as the site counts days (Pacific, ./quota-day.mjs).
+  const when = quotaDay(new Date(expires)).day;
+  return [
+    {
+      key: "dispatch-token:expiring",
+      kind: "problem",
+      title: days < 0 ? `GITHUB_DISPATCH_TOKEN expired on ${when}` : `GITHUB_DISPATCH_TOKEN expires on ${when} (${days} day(s) left)`,
+      detail:
+        "Without it the nightly checks and grade captures stop starting from Cloudflare. " +
+        'Make a new fine-grained token for n8watkins/portfolio-rank with "Actions: Read and write", store it with pass-env set portfolio-rank/GITHUB_DISPATCH_TOKEN, and send it to the Worker (DEPLOY.md, "Secrets").',
+    },
+  ];
 }
 
 /** Traction for the quota day that contains `now`: people's grade requests and human votes. */
