@@ -158,6 +158,16 @@ export function nightTimeline(startedAt, plan = DEFAULT_PLAN) {
 // Usage and allowances
 // ---------------------------------------------------------------------------
 
+// Every logged request counts, answered or not: Google counts failed ones
+// against the quota. "If your request fails with a 400 or 500 error, you
+// won't be charged for the tokens used. However, the request will still
+// count against your quota." (Gemini API billing docs,
+// https://aistudio.google.com/docs/billing, formerly
+// https://ai.google.dev/gemini-api/docs/billing, read 2026-11-12). So a 503
+// "model overloaded" and each retry after it spend one request of the 500.
+// Requests that never reached Google (status 0: timeouts, network) are
+// counted too, since a timeout may have reached it.
+
 /**
  * What the quota day has used so far, from gemini_requests:
  * { day, start, end, byModel: {model: n}, byJob: {job: {model: n}},
