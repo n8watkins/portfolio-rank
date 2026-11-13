@@ -115,13 +115,16 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   const { page, context } = await freshPage();
   await page.goto(BASE + "/play");
   await page.getByRole("button", { name: /^Pick / }).first().waitFor();
-  // Detailed by default: the polish checklist and the full Lighthouse rows.
+  // Simple by default: the short strip under the screenshot (performance rings, built with, polish count).
+  await page.getByLabel("Lighthouse performance").first().waitFor();
+  assert.equal(await page.getByRole("heading", { name: "Polish checklist" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed"), "true");
+  // Detailed: the polish checklist and the full Lighthouse rows.
+  await page.getByRole("button", { name: "Detailed" }).click();
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   await page.getByRole("button", { name: "Simple" }).click();
   // The swap runs inside a view transition, so it lands a moment later.
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor({ state: "detached" });
-  // Simple: the strip under the screenshot (performance rings, built with, polish count).
-  await page.getByLabel("Lighthouse performance").first().waitFor();
   // Remembered in this browser.
   await page.reload();
   await page.getByRole("button", { name: /^Pick / }).first().waitFor();
@@ -134,6 +137,28 @@ test("face-off: Simple and Detailed are remembered, and Show picks the parts", a
   await page.getByRole("heading", { name: "Polish checklist" }).first().waitFor();
   assert.equal(await page.getByRole("button", { name: "Simple" }).getAttribute("aria-pressed"), "false");
   await context.close();
+});
+
+test("face-off: both sites and both Picks show without scrolling, on a 1366x768 laptop, at 1440x900 and on a phone", async () => {
+  for (const [width, height] of [
+    [1366, 768],
+    [1440, 900],
+    [390, 844],
+  ]) {
+    const { page, context } = await freshPage(width, height);
+    await page.goto(BASE + "/play");
+    await page.getByRole("button", { name: /^Pick / }).first().waitFor();
+    await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))));
+    const picks = await page.getByRole("button", { name: /^Pick / }).all();
+    assert.equal(picks.length, 2);
+    const boxes = await Promise.all(picks.map((p) => p.boundingBox()));
+    for (const box of boxes) assert.ok(box.y >= 0 && box.y + box.height <= height, `${width}x${height}: Pick at ${JSON.stringify(box)}`);
+    // Side by side at every width: the same row, one left of the other.
+    assert.ok(Math.abs(boxes[0].y - boxes[1].y) < 2 && boxes[0].x + boxes[0].width <= boxes[1].x, `${width}x${height}: ${JSON.stringify(boxes)}`);
+    // Nothing drawn over the screenshots.
+    assert.equal(await page.getByText(/^(Click|Tap) to pick$/).count(), 0);
+    await context.close();
+  }
 });
 
 test("face-off on a 320px phone: no sideways scroll, and Save and Pick stay inside each card", async () => {
