@@ -22,7 +22,7 @@ import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
-import { CTA, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
+import { CTA, LENGTHS, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
 import { WRITE_SYSTEM, assemble, buildWriteRequests, parseBlocks, reflow, cutBadSentences } from "../pipeline/content/compose.mjs";
 import { planPost } from "../pipeline/content/plan.mjs";
 import { clausesOf } from "../pipeline/content/clauses.mjs";
@@ -1072,27 +1072,29 @@ test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences
   assert.equal(r.listedNotFound, undefined);
 });
 
-test("length profiles: a long post wants 1,800 to 2,200 words, 5 sections and 4 or 5 inline images; the writer sees its length and related posts", async () => {
+test("length profiles: a long post wants LENGTHS.long words, its sections and inline images; the writer sees its length and related posts", async () => {
+  const L = LENGTHS.long;
   const { sheet, roster } = await sheetAndRoster();
   const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.n8builds.dev/blog/older-post-abc123", tags: ["data"] }] };
   const t = checkOf(goodDraft(long), long, roster, "template");
-  assert.match(t.problems.join("; "), /words; 1800 to 2200 wanted: add/);
-  assert.match(t.problems.join("; "), /inline image slots, 4 to 5 needed/);
+  assert.match(t.problems.join("; "), new RegExp(`words; ${L.min} to ${L.max} wanted: add`));
+  assert.match(t.problems.join("; "), new RegExp(`inline image slots, ${L.inline[0]} to ${L.inline[1]} needed`));
   const view = sheetForWriter(long);
   assert.ok(buildWriteRequests(long, planPost(long))[0].parts[0].text.includes("https://portfoliorank.n8builds.dev/blog/older-post-abc123"), "the writer is offered the related post");
-  assert.deepEqual(view.length, { words: "1800 to 2200", sections: 5, inline_images: "4 to 5" });
+  assert.deepEqual(view.length, { words: `${L.min} to ${L.max}`, sections: L.sections, inline_images: `${L.inline[0]} to ${L.inline[1]}` });
   assert.equal(view.related_posts[0].url, "https://portfoliorank.n8builds.dev/blog/older-post-abc123");
-  assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "standard stays 700 to 1,000");
+  assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "a standard post passes at the standard length");
 });
 
-test("quality: length is 700 to 1,000 words (owner, 2026-11-12), with 5% slack", async () => {
+test("quality: a standard post is LENGTHS.standard words, with the soft gate below it", async () => {
+  const S = LENGTHS.standard;
   const { sheet, roster } = await sheetAndRoster();
   const body = goodDraft(sheet).body;
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true);
   const tooShort = checkOf(goodDraft(sheet, { body: body.split("\n").slice(0, 24).join("\n") }), sheet, roster, "template");
-  assert.ok(tooShort.problems.some((p) => /words; 700 to 1000 wanted: add/.test(p)), tooShort.problems.join("; "));
+  assert.ok(tooShort.problems.some((p) => new RegExp(`words; ${S.min} to ${S.max} wanted: add`).test(p)), tooShort.problems.join("; "));
   const tooLong = checkOf(goodDraft(sheet, { body: body.replace("### Try this", `${LONG(30)}\n\n### Try this`) }), sheet, roster, "template");
-  assert.ok(tooLong.problems.some((p) => /words; 700 to 1000 wanted: cut/.test(p)), tooLong.problems.join("; "));
+  assert.ok(tooLong.problems.some((p) => new RegExp(`words; ${S.min} to ${S.max} wanted: cut`).test(p)), tooLong.problems.join("; "));
 });
 
 test("editorial rules: dev meta and infrastructure claims fail a draft; so does a missing early takeaway", async () => {

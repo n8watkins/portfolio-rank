@@ -39,7 +39,8 @@ export const WRITE_SYSTEM = [
   "- Answer only with the blocks asked for, each starting with its === NAME === line.",
 ].join("\n");
 
-const WRITE_OPTIONS = { systemInstruction: WRITE_SYSTEM, thinkingLevel: "low", maxOutputTokens: 6144, temperature: 0.7 };
+// prompt: the id the Gemini request log records (#148); the client ignores it until then.
+const WRITE_OPTIONS = { prompt: "content-write-v2", systemInstruction: WRITE_SYSTEM, thinkingLevel: "low", maxOutputTokens: 6144, temperature: 0.7 };
 /** Sections written by one request: a long post (5 sections) takes two. */
 export const SECTIONS_PER_CALL = 3;
 
@@ -319,7 +320,7 @@ export function buildFixRequest(sheet, plan, blocks, problems, names) {
     ...names.flatMap((n) => [`=== ${n} ===`, blocks[n] ?? "", ""]),
     `The post's sections should each be about ${sectionWords(plan)} words.`,
   ].join("\n");
-  return { parts: [{ text }], options: WRITE_OPTIONS };
+  return { parts: [{ text }], options: { ...WRITE_OPTIONS, prompt: "content-fix-v1" } };
 }
 
 /** Which blocks a set of check problems points at (text quoted in a problem, or the shortest sections for length). */
