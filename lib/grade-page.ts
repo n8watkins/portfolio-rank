@@ -6,6 +6,8 @@ import { ownedJobs } from "@/lib/grader/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
 import { withEloLetters } from "@/lib/tiers-letters.mjs";
+import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
+import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
 import { tiersShown } from "@/lib/tiers-view";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
@@ -31,6 +33,14 @@ export type GradePage = {
   /** The page's own name: the list's name, the page title, else the domain. */
   name: string;
   hero: string | null;
+  /** The phone screenshot (390 px wide), when the grade captured one. */
+  mobile: string | null;
+  /**
+   * The result's one consistent answer: a tier earned in face-offs with its
+   * own "top N%" (both from the same ranking, so they never disagree), or
+   * provisional with the face-offs so far (MIN_FACEOFFS earn a tier).
+   */
+  standing: { settled: true; tier: string; topPct: number; faceoffs: number } | { settled: false; faceoffs: number };
   /** The listed portfolio this grade is about, when it's on the list. */
   listed: { url: string; path: string } | null;
   /** GAMES_V2: claims and owner actions are open. */
@@ -98,7 +108,8 @@ export async function gradePage(id: string): Promise<GradePage | null> {
     hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
   }
   const freeChecks = job.checks?.ok ? hiringGroups((job.checks as { facts?: Parameters<typeof hiringGroups>[0] }).facts ?? []) : null;
-  const base = { job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
+  const standing = await standingFor(client, site?.url ?? null);
+  const base = { job, name, hero, mobile: job.shots?.mobile ?? null, standing, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
   if (!job.report || !raw.result) return { ...base, report: null };
 
   const rep = job.report;
@@ -162,5 +173,23 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
       .map((u) => ({ url: u, domain: domainOf(u), hero: heroOf(shots.get(u)!) }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * A listed site's earned tier (MIN_FACEOFFS face-offs or more, by the daily
+ * cutoffs) with its "top N%", else provisional with its face-offs so far. A
+ * visitor's own site has no face-offs: provisional.
+ */
+async function standingFor(client: ReturnType<typeof db>, url: string | null): Promise<GradePage["standing"]> {
+  if (!url || !tiersShown()) return { settled: false, faceoffs: 0 };
+  try {
+    const [row, meta] = await Promise.all([readSiteRow(client, url), readTierMeta(client)]);
+    const faceoffs = Math.floor(Number(row?.faceoffs ?? 0));
+    const st = row && row.member === 1 ? standingOf(row, meta) : null;
+    if (st?.tier && typeof st.top === "number" && faceoffs >= MIN_FACEOFFS) return { settled: true, tier: st.tier, topPct: st.top, faceoffs };
+    return { settled: false, faceoffs };
+  } catch {
+    return { settled: false, faceoffs: 0 };
   }
 }

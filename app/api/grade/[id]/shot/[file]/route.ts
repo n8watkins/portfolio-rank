@@ -1,14 +1,14 @@
 import { db, ensureSchema } from "@/lib/db";
 import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
-import { disabled, fail, graderEnabled, readGradeShot } from "@/lib/grader/server";
+import { disabled, fail, graderEnabled, readGradeShot, type GradeShotFile } from "@/lib/grader/server";
 
-// A grade's screenshots (hero.jpg, mobile.jpg). They sit under a private
+// A grade's screenshots (hero.jpg, mobile.jpg; full.jpg and mobile-full.jpg, the whole page, where a capture made them). They sit under a private
 // prefix of the SHOTS bucket (private/grades/<id>/) that the public /shots
 // route never serves; only someone with the report's link gets them, never
 // from a shared cache.
 export const dynamic = "force-dynamic";
 
-const FILES = new Set(["hero.jpg", "mobile.jpg"]);
+const FILES = new Set(["hero.jpg", "mobile.jpg", "full.jpg", "mobile-full.jpg"]);
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; file: string }> }) {
   if (!graderEnabled()) return disabled();
@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   await ensureSchema();
   const job = await readJob(db(), id);
   if (!job?.shot_key || !job.captured_at) return fail("not_found", 404);
-  const bytes = await readGradeShot(String(job.shot_key), file as "hero.jpg" | "mobile.jpg");
+  const bytes = await readGradeShot(String(job.shot_key), file as GradeShotFile);
   if (!bytes) return fail("not_found", 404);
   return new Response(bytes as unknown as BodyInit, {
     headers: {

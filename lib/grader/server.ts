@@ -156,7 +156,10 @@ export async function emailGate(db: unknown, { via = "send_email" }: { via?: "se
 }
 
 /** Reads a grade screenshot (private/grades/<id>/<file>) from the SHOTS bucket, or the test directory. */
-export async function readGradeShot(shotKey: string, file: "hero.jpg" | "mobile.jpg"): Promise<Uint8Array | null> {
+/** A grade's screenshot files: the first screen on desktop and phone, and (mock, 2026-11-13) the whole page of each when a capture made it. */
+export type GradeShotFile = "hero.jpg" | "mobile.jpg" | "full.jpg" | "mobile-full.jpg";
+
+export async function readGradeShot(shotKey: string, file: GradeShotFile): Promise<Uint8Array | null> {
   const dir = testSeam("GRADER_TEST_SHOTS_DIR");
   if (dir) {
     const fs = await import("node:fs/promises");
