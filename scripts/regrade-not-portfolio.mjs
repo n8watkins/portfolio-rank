@@ -6,6 +6,12 @@
 // grade (rubric v2 on gemini-3.5-flash-lite, pipeline/night.mjs
 // gradeFromEvidence), which applies the strong-signals guard
 // (pipeline/portfolio-guard.mjs). The old grade moves to rubric_history.
+// Before Gemini, the narrow code rules from the junk-detection experiment
+// (pipeline/junk-rules.mjs, #212) run on the fresh page text: an exact
+// template, placeholder or parked string, or a code-host or link-in-bio
+// address, is not a portfolio without spending a request; the same text on
+// another domain is graded and flagged for review. Nothing is graded from an
+// old capture.
 //
 // Gemini is capped hard: at most CAP requests for this job in total,
 // retries included (every request is logged in gemini_requests as
@@ -32,6 +38,7 @@ import { gradeFromEvidence } from "../pipeline/night.mjs";
 import { ensureRubricHistory, replaceGradeStatements } from "../pipeline/rubric-history.mjs";
 import { RUBRIC_VERSION } from "../pipeline/rubric.mjs";
 import { guardedForReview } from "../pipeline/portfolio-guard.mjs";
+import { buildDupIndex, junkCheck } from "../pipeline/junk-rules.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
 import { quotaDay } from "../pipeline/quota-day.mjs";
 
@@ -106,31 +113,45 @@ export function outcomeOf(grade) {
   return grade?.is_portfolio === false ? "not_portfolio" : "portfolio";
 }
 
+/** Outcomes, in report order: the path each took and what it means. */
+export const OUTCOMES = {
+  junk_rule: "Not a portfolio by a narrow code rule (no Gemini)",
+  not_portfolio: "Still not a portfolio (Gemini)",
+  needs_review: "Kept as a portfolio for review: strong signals (Gemini said no)",
+  portfolio: "Flipped to portfolio (Gemini)",
+};
+
 function imageOf(root, shotKey) {
   const file = path.join(root, "captures", String(shotKey), "hero.jpg");
   if (!fs.existsSync(file) || fs.statSync(file).size > 5 * 1024 * 1024) return null;
   return { inline_data: { mime_type: "image/jpeg", data: fs.readFileSync(file).toString("base64") } };
 }
 
-async function report(db) {
+/** Counts per path and outcome, with profile links. */
+export async function report(db, { print = true } = {}) {
   const list = await candidates(db);
-  const out = { portfolio: [], not_portfolio: [], needs_review: [], pending: [] };
+  const out = Object.fromEntries([...Object.keys(OUTCOMES), "pending"].map((k) => [k, []]));
+  const copies = [];
+  const failedCaptures = [];
   for (const c of list) {
     const s = await readState(db, c.url);
     (s?.outcome ? out[s.outcome] : out.pending).push(c.url);
+    if (s?.copy) copies.push(c.url);
+    if (s && !s.outcome && s.captured === false) failedCaptures.push(c.url);
   }
+  if (!print) return { ...out, copies, failedCaptures };
   const link = (u) => `${SITE}/p/${encodeURIComponent(u)}`;
   console.log(`\nRe-check of "not a portfolio" grades (${list.length} sites):`);
-  console.log(`  flipped to portfolio: ${out.portfolio.length}`);
-  console.log(`  needs review (strong signals): ${out.needs_review.length}`);
-  console.log(`  still not a portfolio: ${out.not_portfolio.length}`);
-  if (out.pending.length) console.log(`  not done yet: ${out.pending.length}`);
-  for (const [k, title] of [["not_portfolio", "Still not a portfolio"], ["needs_review", "Needs review"], ["portfolio", "Flipped to portfolio"]]) {
+  console.log(`  By code rule, no Gemini: ${out.junk_rule.length} not a portfolio`);
+  console.log(`  By Gemini plus the guard: ${out.portfolio.length} flipped to portfolio, ${out.needs_review.length} needs review, ${out.not_portfolio.length} still not a portfolio`);
+  if (copies.length) console.log(`  Same text on another domain (flagged for review too): ${copies.length}`);
+  if (out.pending.length) console.log(`  Not done yet: ${out.pending.length}${failedCaptures.length ? ` (${failedCaptures.length} didn't load for a fresh capture)` : ""}`);
+  for (const [k, title] of Object.entries(OUTCOMES)) {
     if (!out[k].length) continue;
     console.log(`\n${title}:`);
     for (const u of out[k]) console.log(`  ${u}  ${link(u)}`);
   }
-  return out;
+  return { ...out, copies, failedCaptures };
 }
 
 async function main() {
@@ -150,27 +171,32 @@ async function main() {
   if (args.includes("--dry-run")) return;
   if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
 
-  // 1. Fresh captures, with the splash click-through, for the sites not captured by this job yet.
+  // 1. A fresh capture, with the splash click-through, of every site not done
+  // yet: half of these rows had no stored page text or facts, and a gated
+  // site's signals only count once the capture is past its intro. Nothing is
+  // graded from an old capture.
   const states = new Map();
   for (const c of list) states.set(c.url, (await readState(db, c.url)) ?? { before: { model: c.model, version: c.version } });
-  const toCapture = list.filter((c) => !states.get(c.url).captured).map((c) => c.url);
-  if (toCapture.length) {
+  const todo = list.filter((c) => !states.get(c.url).outcome).map((c) => c.url);
+  if (todo.length) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "regrade-np-"));
     const file = path.join(dir, "urls.txt");
-    fs.writeFileSync(file, toCapture.join("\n"));
+    fs.writeFileSync(file, todo.join("\n"));
     const startedAt = new Date().toISOString().replace("T", " ").slice(0, 19);
-    console.log(`Capturing ${toCapture.length} site(s)...`);
+    console.log(`Capturing ${todo.length} site(s)...`);
     spawnSync(process.execPath, [path.join(ROOT, "pipeline", "capture.mjs"), "--recapture", file, "--concurrency", "3"], { stdio: "inherit", cwd: ROOT, env: process.env });
-    for (const url of toCapture) {
+    for (const url of todo) {
       const r = (await db.execute({ sql: "SELECT captured_at FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-      const fresh = r?.captured_at && String(r.captured_at) >= startedAt;
-      const s = { ...states.get(url), captured: Boolean(fresh), capture: fresh ? "fresh" : "kept the old capture (the site didn't load)" };
+      const fresh = Boolean(r?.captured_at && String(r.captured_at) >= startedAt);
+      const s = { ...states.get(url), captured: fresh };
       states.set(url, s);
       await writeState(db, url, s);
     }
   }
 
-  // 2. The current production grade, within the caps.
+  // 2. The narrow code rules first (pipeline/junk-rules.mjs), on the fresh
+  // page text; then the current production grade, within the caps.
+  const dupIndex = buildDupIndex((await db.execute("SELECT url, page_text FROM portfolios WHERE page_text IS NOT NULL")).rows.map((r) => ({ url: String(r.url), page_text: String(r.page_text) })));
   const fetchImpl = cappedFetch(startUse);
   const log = createRequestLog({ db, job: JOB });
   const gemini = createGemini({
@@ -186,8 +212,20 @@ async function main() {
   for (const c of list) {
     const s = states.get(c.url);
     if (s.outcome) continue;
-    if (fetchImpl.exhausted) break;
+    if (!s.captured) {
+      console.log(`${c.url}: didn't load for a fresh capture, left for a later run`);
+      continue;
+    }
     const row = (await db.execute({ sql: "SELECT url, name, shot_key, meta, page_text, facts, ai_rubric FROM portfolios WHERE url = ?", args: [c.url] })).rows[0];
+    const rule = junkCheck({ url: c.url, name: row?.name, page_text: row?.page_text }, dupIndex);
+    if (rule.junk) {
+      const done = { ...s, outcome: "junk_rule", rule: rule.rule, at: new Date().toISOString() };
+      states.set(c.url, done);
+      await writeState(db, c.url, done);
+      console.log(`${c.url}: junk_rule (${rule.rule})`);
+      continue;
+    }
+    if (fetchImpl.exhausted) break;
     const image = row?.shot_key ? imageOf(ROOT, row.shot_key) : null;
     if (!image) {
       console.log(`${c.url}: no fresh screenshot here, left for a later run`);
@@ -197,11 +235,19 @@ async function main() {
       const now = new Date();
       const grade = await rankForWrite(db, await gradeFromEvidence(gemini, { row, image, now }), { url: c.url, now: now.getTime() });
       await db.batch(replaceGradeStatements(c.url, row.ai_rubric, grade, now), "write");
+      // Same text on another domain: a person decides which is the original.
+      if (rule.review) await db.execute({ sql: "UPDATE portfolios SET needs_review = 1 WHERE url = ?", args: [c.url] });
       const outcome = outcomeOf(grade);
-      const done = { ...s, outcome, after: { model: grade.model, version: RUBRIC_VERSION, is_portfolio: grade.is_portfolio, tier: grade.tier ?? null, review: grade.review?.reason ?? null }, at: now.toISOString() };
+      const done = {
+        ...s,
+        outcome,
+        ...(rule.review ? { copy: true } : {}),
+        after: { model: grade.model, version: RUBRIC_VERSION, is_portfolio: grade.is_portfolio, tier: grade.tier ?? null, review: grade.review?.reason ?? null },
+        at: now.toISOString(),
+      };
       states.set(c.url, done);
       await writeState(db, c.url, done);
-      console.log(`${c.url}: ${outcome}`);
+      console.log(`${c.url}: ${outcome}${rule.review ? " (same text on another domain: review)" : ""}`);
     } catch (e) {
       if (fetchImpl.exhausted) {
         console.log(`Stopped: the Gemini cap is reached (${CAP} for this job, under ${DAY_LIMIT} today).`);
