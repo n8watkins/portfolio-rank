@@ -205,3 +205,34 @@ test("cached=1 never runs PageSpeed, and desktop is measured and stored apart fr
   assert.equal(calls, 1);
   await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`psi-desktop:${url}`] });
 });
+
+test("Play's details carry the stored results, never measure, and only for listed sites", async () => {
+  const url = feed[109].url;
+  await clean(url);
+  await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi-desktop:${url}`, `lease:psi-desktop:${url}`] });
+  calls = 0;
+  const details = (qs) => fetch(`${BASE}/api/play/details?${qs}`);
+  // A miss is null: nothing is fetched or measured to answer.
+  let r = await details(`url=${encodeURIComponent(url)}`);
+  assert.equal(r.status, 200);
+  let d = (await r.json()).details[url];
+  assert.equal(d.inspect, null);
+  assert.deepEqual(d.psi, { mobile: null, desktop: null });
+  assert.ok(d.card && typeof d.card.votes === "number");
+  assert.equal(calls, 0);
+  // Once measured, the stored result rides along.
+  perf = 0.7;
+  assert.equal((await get("psi", url)).body.ok, true);
+  d = (await (await details(`url=${encodeURIComponent(url)}`)).json()).details[url];
+  assert.equal(d.psi.mobile.scores.performance, 70);
+  assert.equal(d.psi.desktop, null);
+  assert.equal(calls, 1);
+  // Unknown sites are refused; at most two sites per request.
+  assert.equal((await details("url=https%3A%2F%2Fnot-listed.example")).status, 404);
+  const three = [feed[109].url, feed[110].url, feed[112].url].map((u) => `url=${encodeURIComponent(u)}`).join("&");
+  assert.equal(Object.keys((await (await details(three)).json()).details).length, 2);
+  // A face-off pair carries both cards' details, so a pair is one request.
+  const pair = await (await fetch(`${BASE}/api/rank`)).json();
+  for (const side of [pair.a, pair.b]) assert.ok(side.details && "inspect" in side.details && "psi" in side.details && "card" in side.details);
+  await clean(url);
+});
