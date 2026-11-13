@@ -26,14 +26,23 @@ export const domainOf = (url: string) => {
  * Save: a heart button, outlined in rose so it never reads as the gold Pick,
  * that keeps the portfolio on your profile (the saves behind the portfolio
  * page's "saved" count), never a vote.
+ * - `compact` (the face-off, two cards side by side even on a phone): on a
+ *   phone the address sits under the name, the socials wait for the full
+ *   profile and Save is its heart alone (still a 44 px target).
  */
-export function NameLine({ name, url, liked, onSaved, className = "" }: { name: string; url: string; liked?: boolean; onSaved?: () => void; className?: string }) {
+export function NameLine({ name, url, liked, onSaved, compact = false, className = "" }: { name: string; url: string; liked?: boolean; onSaved?: () => void; compact?: boolean; className?: string }) {
   return (
-    <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-2 pr-2 pl-3 sm:flex-nowrap sm:pl-4 ${className}`}>
-      <h3 className="min-w-0 shrink truncate font-semibold">{name}</h3>
-      <SiteLink url={url} className="min-w-0 shrink-[2]" />
+    <div
+      className={`flex min-w-0 items-center gap-x-2 gap-y-1 py-2 pr-2 pl-3 sm:pl-4 ${compact ? "max-md:py-1 max-md:pr-1 max-md:pl-2.5" : "flex-wrap sm:flex-nowrap"} ${className}`}
+    >
+      <div className={`flex min-w-0 items-center gap-x-2 ${compact ? "max-md:flex-1 max-md:flex-col max-md:items-start" : "contents"}`}>
+        <h3 className={`min-w-0 shrink truncate font-semibold ${compact ? "max-md:w-full max-md:text-sm" : ""}`}>{name}</h3>
+        <SiteLink url={url} className={`min-w-0 shrink-[2] ${compact ? "max-md:w-full max-md:text-xs" : ""}`} />
+      </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <SocialIcons url={url} name={name} />
+        <div className={compact ? "max-md:hidden @max-lg:hidden" : ""}>
+          <SocialIcons url={url} name={name} />
+        </div>
         <div onClickCapture={onSaved}>
           <LikeButton
             url={url}
@@ -41,7 +50,7 @@ export function NameLine({ name, url, liked, onSaved, className = "" }: { name: 
             variant="action"
             verb="Save"
             initialLiked={liked}
-            className="inline-flex h-11 min-w-24 items-center justify-center gap-2 rounded-lg border-2 border-rose-500/60 bg-card px-4 text-sm font-semibold text-ink transition hover:border-rose-500 hover:bg-rose-500/10 active:scale-[0.97] aria-pressed:bg-rose-500/10 [&_svg]:text-rose-500"
+            className={`inline-flex h-11 min-w-24 items-center justify-center gap-2 rounded-lg border-2 border-rose-500/60 bg-card px-4 text-sm font-semibold text-ink transition hover:border-rose-500 hover:bg-rose-500/10 active:scale-[0.97] aria-pressed:bg-rose-500/10 [&_svg]:text-rose-500 ${compact ? "max-md:w-11 max-md:min-w-11 max-md:border-0 max-md:px-0 max-md:[&>span]:sr-only md:h-10" : ""}`}
           />
         </div>
       </div>
