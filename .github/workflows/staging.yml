@@ -1,4 +1,4 @@
-# Puts the staging site (https://staging.portfoliorank.n8builds.dev,
+# Puts the staging site (https://staging.portfoliorank.dev,
 # wrangler.jsonc env.staging) on main plus every open pull request labeled
 # "staging", merged in pull request order (DEPLOY.md "How a change ships").
 # It runs again whenever main moves, a pull request gets or loses the label,
@@ -150,4 +150,4 @@ jobs:
         if: steps.setup.outputs.ready == 'true'
         env:
           STAGING_GATE_KEY: ${{ secrets.STAGING_GATE_KEY }}
-        run: node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging
+        run: node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev
