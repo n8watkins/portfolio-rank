@@ -156,8 +156,8 @@ test("the sitemap is an index of pages, blog and profile files; profiles are lis
   // Ungraded profiles are left out. (Hidden ones too, tests/sitemap-profiles.test.mjs; the
   // server keeps its hidden set 5 minutes, so it isn't checked against a site hidden just now.)
   assert.ok(!profiles.includes(`${profilePath(ungraded.url)}</loc>`), ungraded.url);
-  // The index carries the newest lastmod of the profiles file.
-  assert.match(xml, /profiles-1\.xml<\/loc><lastmod>\d{4}-\d{2}-\d{2}T/);
+  // The index is prerendered by `next build` and refreshed daily, so here it was made from the
+  // empty database the build saw: its per-part lastmod is checked in tests/sitemaps.test.mjs.
 
   const pages = await (await get("/sitemap/pages.xml")).text();
   assert.match(pages, /\/grading<\/loc>/);
