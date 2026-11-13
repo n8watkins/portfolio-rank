@@ -8,6 +8,7 @@ import { Odometer } from "@/components/ui/Odometer";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Movement, RankBadge, TierBadge } from "@/components/ui/badges";
+import { TIERS } from "@/lib/tiers.mjs";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { Showcase } from "@/components/home/Showcase";
 import { KitSignup, KitIconButtons } from "./parts";
@@ -86,10 +87,14 @@ export default async function UiKit({ searchParams }: { searchParams: Promise<{ 
           <span className={tag}>tag</span>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {["S", "A", "B", "C", "D"].map((t) => (
+          {TIERS.map((t) => (
             <TierBadge key={t} tier={t} />
           ))}
-          <TierBadge tier="A" size="lg" />
+          <TierBadge tier="SSS" size="lg" />
+          <TierBadge tier="S+" size="lg" />
+          <TierBadge tier="S" size="lg" />
+          <TierBadge tier="A-" size="lg" />
+          <TierBadge tier="B+" size="lg" />
           <RankBadge rank={1} />
           <RankBadge rank={2} />
           <RankBadge rank={3} />

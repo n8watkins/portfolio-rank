@@ -19,6 +19,7 @@ import { createLinkToken, openLinkToken, ownerCookieValue, readOwnerCookie } fro
 import { emailState, reportEmail, requestEmail, sendDueEmails } from "../lib/grader/notify.mjs";
 import { DEFAULT_EMAIL_CAPS, addressHash, capReason, createEmailGate, emailCapConditions, emailCaps, emailTransport, isEmailCapAlert, validEmail } from "../lib/email/gate.mjs";
 import { buildReport, compareWithPool, gradedPool, strengthsAndFixes } from "../lib/grader/report.mjs";
+import { gradeKey } from "../lib/grade-score.mjs";
 import { completeJob, recordCapture } from "../lib/grader/finish.mjs";
 import { checkOwnKey, gradeOnOwnKey, validOwnKey } from "../lib/grader/own-key.mjs";
 import { queueFreeGrade } from "../lib/grader/queue.mjs";
@@ -405,7 +406,8 @@ test("report emails: sent once the report is ready, through the gate, with a one
   assert.deepEqual(await requestEmail(db, { jobId: id, email: "three@example.com", secret: SECRET }), { ok: false, error: "too_many" });
 
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test", now: T0 }), { sent: 0, refused: 0, gaveUp: 0 }, "nothing while it waits for Gemini");
-  await setJob(db, id, { status: "done", result: grade({ tier: "A" }), done_at: new Date(T0).toISOString() }, { now: T0 });
+  // The email names the tier by rank the report carries (lib/tiers.mjs), never Gemini's letter (S here).
+  await setJob(db, id, { status: "done", result: grade({ tier: "S" }), report: { rank: { tier: "A", score: 70, top: 15 } }, done_at: new Date(T0).toISOString() }, { now: T0 });
   assert.deepEqual(await sendDueEmails(db, { gate, secret: SECRET, base: "https://pr.test/", now: T0 }), { sent: 2, refused: 0, gaveUp: 0 });
   assert.equal(box.sent.length, 2);
   assert.match(box.sent[0].subject, /jane\.dev is ready/);
@@ -436,10 +438,12 @@ test("report emails: a cap holds them for the next tick; after 3 days the addres
 // ---------------------------------------------------------------------------
 // The report
 // ---------------------------------------------------------------------------
-const poolSite = (i, tier, axes = {}) => ({
+// `tier` is the pool's tier by ELO; `key` its grade key (lib/grade-score.mjs), around `near` (the graded site's own key).
+const poolSite = (i, tier, axes = {}, near = 60000) => ({
   url: `https://site${i}.dev/`,
   name: `Site ${i}`,
   mu: { S: 33, A: 29, B: 25, C: 21, D: 17 }[tier] + (i % 3) * 0.1,
+  key: near + { S: 3000, A: 2000, B: -1 - i, C: -2000, D: -3000 }[tier],
   tier,
   quality: 3,
   axes: { visual_design: 3, five_second_test: 3, storytelling: 3, writing: 3, memorability: 3, ...axes },
@@ -454,16 +458,23 @@ test("report: strengths, fixes, percentile, similar portfolios and who does it b
   // Weighted by how much each costs: two weak AI axes outrank a missing resume link.
   assert.deepEqual(fixes.map((f) => f.criterion), ["storytelling", "writing", "resume"]);
   assert.equal(fixes[2].title, "Link your resume");
+  const near = gradeKey(g);
   const pool = [
-    ...Array.from({ length: 10 }, (_, i) => poolSite(i, "A", i < 2 ? { storytelling: 5 } : {})),
-    ...Array.from({ length: 10 }, (_, i) => poolSite(10 + i, "B")),
-    ...Array.from({ length: 19 }, (_, i) => poolSite(20 + i, "C")),
-    { ...poolSite(99, "S", { writing: 5 }), url: "https://www.jane.dev" },
+    ...Array.from({ length: 10 }, (_, i) => poolSite(i, "A", i < 2 ? { storytelling: 5 } : {}, near)),
+    ...Array.from({ length: 10 }, (_, i) => poolSite(10 + i, "B", {}, near)),
+    ...Array.from({ length: 19 }, (_, i) => poolSite(20 + i, "C", {}, near)),
+    { ...poolSite(99, "S", { writing: 5 }, near), url: "https://www.jane.dev" },
   ];
   const r = compareWithPool(g, pool, { isSelf: (u) => siteKeyOf(u) === "jane.dev" });
   assert.equal(r.percentile.total, 40, "39 others plus this one");
-  assert.ok(r.percentile.rank > 10 && r.percentile.rank <= 21, String(r.percentile.rank));
-  assert.ok(r.percentile.topPct >= 1 && r.percentile.topPct <= 100);
+  // Ten A sites above it by score: the grade is 11th of 40, the top 27%. The tier is a starting rank from
+  // automated checks (no library here, so the middle: B), not "provisional": votes refine it from there.
+  assert.equal(r.percentile.rank, 11);
+  assert.equal(r.percentile.topPct, 27);
+  assert.equal(r.rank.tier, "B");
+  assert.equal(r.rank.seeded, true);
+  assert.equal(r.rank.provisional, false);
+  assert.equal(typeof r.rank.points, "number");
   assert.equal(r.similar.length, 4);
   assert.ok(r.similar.every((s) => s.tier === "B"));
   assert.ok(!JSON.stringify(r).includes("jane.dev"), "the site is never its own neighbour");
@@ -589,7 +600,8 @@ test("free tier: the capture lands, 3.5 grades it as a person's request, and the
   const log = (await db.execute("SELECT job, model FROM gemini_requests")).rows;
   assert.deepEqual(log.map((r) => [r.job, r.model]), [["people-grade", PRIMARY_MODEL]], "counted by the budget accountant as people's work");
   const view = publicJob(job, { mine: true });
-  assert.equal(view.report.tier, "A");
+  // Tiers come from the rank in the library (lib/tiers.mjs), never Gemini's letter: with no graded portfolio to rank against, none.
+  assert.equal(view.report.tier, null);
   assert.equal(view.steps.every((s) => s.state === "done"), true);
   assert.ok(!JSON.stringify(view).includes("Jane builds things"), "page text never leaves the server");
 });

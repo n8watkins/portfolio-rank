@@ -15,7 +15,7 @@ const COLS: { title: string; links: Link[] }[] = [
       { href: ROUTES.faceoff, label: "Face-off" },
       { href: ROUTES.guess, label: "Guess the percentile" },
       { href: ROUTES.browse, label: "Browse" },
-      { href: ROUTES.grade, label: "Grade your portfolio" },
+      { href: ROUTES.add ?? ROUTES.grade, label: ROUTES.add ? "Add your portfolio" : "Grade your portfolio" },
     ],
   },
   {

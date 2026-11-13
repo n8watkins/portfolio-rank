@@ -17,7 +17,7 @@ import { graderEnabled, ownedJobs } from "@/lib/grader/server";
 // POST /api/badges { kind: "share" } | { kind: "visit", url } | { kind: "report", id }
 //   records what only a badge needs (a share; a portfolio opened, on the
 //   list; the level a grade report this browser owns reached, for the
-//   Top 25% to S tier badges) -> { recorded, badges: [ids earned now] }
+//   Top 25% to SSS tier badges) -> { recorded, badges: [ids earned now] }
 //   400 bad_request | unknown_portfolio | not_yours, 403 bad_origin,
 //   429 rate_limited
 export const dynamic = "force-dynamic";
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     if (!graderEnabled() || !(await ownedJobs()).includes(id)) return fail("not_yours", 400);
     const job = await readJob(db(), id);
     if (job?.status !== "done") return fail("not_yours", 400);
-    level = celebrationLevel({ tier: job.result?.tier, percentile: job.report?.percentile });
+    level = celebrationLevel({ tier: job.report?.rank?.tier, percentile: job.report?.percentile });
   }
   const player = (await currentPlayer({ create: true }))!;
   const ip = clientIp(req);

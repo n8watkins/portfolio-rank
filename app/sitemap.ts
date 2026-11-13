@@ -4,6 +4,8 @@ import feed from "@/data/feed.json";
 import type { Portfolio } from "@/app/page";
 import { hiddenUrls } from "@/lib/roster";
 import { graderEnabled } from "@/lib/grader/server";
+import { toolsEnabled } from "@/lib/tools/server";
+import { db, ensureSchema } from "@/lib/db";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
@@ -13,6 +15,16 @@ const BASE = SITE_URL;
 // Rebuilt once a day: sites the health check hides (down, dead or parked)
 // drop out, so search engines aren't sent to pages for sites that are gone.
 export const revalidate = 86400;
+
+/** Listed portfolios with an AI grade that isn't "not a portfolio" (one query). */
+async function gradedUrls(): Promise<Set<string>> {
+  await ensureSchema();
+  const r = await db().execute(
+    `SELECT url FROM portfolios WHERE json_valid(ai_rubric) AND json_extract(ai_rubric, '$.tier') IS NOT NULL
+       AND json_extract(ai_rubric, '$.error') IS NULL AND COALESCE(json_extract(ai_rubric, '$.is_portfolio'), 1) != 0`
+  );
+  return new Set(r.rows.map((x) => String(x.url)));
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
@@ -27,6 +39,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/polls`, changeFrequency: "weekly", priority: 0.6 },
     // Reports (/grade/<id>) and claims are unlisted and never indexed.
     ...(graderEnabled() ? [{ url: `${BASE}/grade`, changeFrequency: "monthly" as const, priority: 0.7 }] : []),
+    // "Add your portfolio".
+    ...(toolsEnabled() ? [{ url: `${BASE}/add`, changeFrequency: "monthly" as const, priority: 0.8 }] : []),
     { url: `${BASE}/how`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/grading`, changeFrequency: "monthly", priority: 0.5 },
     { url: `${BASE}/removed`, changeFrequency: "weekly", priority: 0.3 },
@@ -41,8 +55,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/about-posts`, changeFrequency: "monthly", priority: 0.3 },
   ];
   const hidden = await hiddenUrls().catch(() => new Set<string>());
+  // With profiles as the searchable pages (TOOLS_ENABLED), only graded real
+  // portfolios are listed; the rest say noindex (app/p/[slug]).
+  const graded = toolsEnabled() ? await gradedUrls().catch(() => null) : null;
   const detail: MetadataRoute.Sitemap = (feed as Portfolio[])
-    .filter((p) => !hidden.has(p.url))
+    .filter((p) => !hidden.has(p.url) && (!graded || graded.has(p.url)))
     .map((p) => ({
       url: `${BASE}/p/${encodeURIComponent(p.url)}`,
       changeFrequency: "weekly",

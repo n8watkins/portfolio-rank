@@ -1,83 +1,26 @@
 import { NextResponse } from "next/server";
-import { cached, type CacheMeta } from "@/lib/cache";
+import { cached, peekCached } from "@/lib/cache";
+import { runPsi, type PsiResult, type Strategy } from "@/lib/tools/psi";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 
-// Adapted from site-forge's checkup route. Works keyless at low volume;
-// set PSI_API_KEY (free, no billing) for the 25k/day quota.
-export type PsiResult = CacheMeta & {
-  ok: boolean;
-  error?: string;
-  scores?: Record<string, number | null>; // 0-100
-  metrics?: { id: string; label: string; value: string }[];
-};
+// Lighthouse for a listed portfolio's profile, from lib/tools/psi.ts, which
+// the site checks share: a check there saves under the same keys, so it
+// refreshes this too.
+export type { PsiResult };
 
-const METRIC_AUDITS = [
-  "largest-contentful-paint",
-  "cumulative-layout-shift",
-  "total-blocking-time",
-] as const;
+const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
 
-// The slice of the PageSpeed Insights v5 response this reads.
-type PsiResponse = {
-  lighthouseResult?: {
-    categories?: Record<string, { score?: number | null } | undefined>;
-    audits?: Record<string, { title?: string; displayValue?: string } | undefined>;
-  };
-};
-
-async function runPsi(target: string): Promise<PsiResult> {
-  // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
-  const psiUrl = new URL(
-    process.env.PSI_API_BASE ??
-      "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
-  );
-  psiUrl.searchParams.set("url", target);
-  psiUrl.searchParams.set("strategy", "mobile");
-  if (process.env.PSI_API_KEY) {
-    psiUrl.searchParams.set("key", process.env.PSI_API_KEY);
-  }
-  for (const cat of ["performance", "accessibility", "best-practices", "seo"]) {
-    psiUrl.searchParams.append("category", cat);
-  }
-
-  let data: PsiResponse;
-  try {
-    const res = await fetch(psiUrl.toString(), {
-      signal: AbortSignal.timeout(90_000),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return {
-        ok: false,
-        error: err?.error?.message ?? `psi_${res.status}`,
-      };
-    }
-    data = await res.json();
-  } catch (e) {
-    return { ok: false, error: (e as Error)?.name === "TimeoutError" ? "timeout" : "fetch_error" };
-  }
-
-  const lhr = data.lighthouseResult;
-  if (!lhr) return { ok: false, error: "no_data" };
-
-  const scores: Record<string, number | null> = {};
-  for (const id of ["performance", "accessibility", "best-practices", "seo"]) {
-    const raw = lhr.categories?.[id]?.score;
-    scores[id] = typeof raw === "number" ? Math.round(raw * 100) : null;
-  }
-
-  const metrics = METRIC_AUDITS.flatMap((id) => {
-    const audit = lhr.audits?.[id];
-    return audit?.displayValue
-      ? [{ id, label: audit.title ?? id, value: audit.displayValue }]
-      : [];
-  });
-
-  return { ok: true, scores, metrics };
-}
+/**
+ * PageSpeed strategies: mobile (the default, cached as psi:<url>, as before)
+ * and desktop (the games show both; cached as psi-desktop:<url>, with the
+ * same TTLs and lease).
+ */
+const NAMESPACE: Record<Strategy, string> = { mobile: "psi", desktop: "psi-desktop" };
 
 export async function GET(req: Request) {
-  const url = new URL(req.url).searchParams.get("url");
+  const params = new URL(req.url).searchParams;
+  const url = params.get("url");
+  const strategy: Strategy = params.get("strategy") === "desktop" ? "desktop" : "mobile";
   // Only audit sites on the roster - keeps strangers from burning the PSI
   // quota or pointing our server at arbitrary URLs.
   if (!url || !isKnownPortfolio(url)) {
@@ -88,6 +31,12 @@ export async function GET(req: Request) {
   if (await isHidden(url)) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
+  // ?cached=1: only a result already stored, never a PageSpeed run
+  // ("not_measured" otherwise); Play reads it first and measures on a miss.
+  if (params.get("cached") === "1") {
+    const hit = await peekCached<PsiResult>(NAMESPACE[strategy], url, PSI_TTL_MS);
+    return NextResponse.json(hit ?? ({ ok: false, error: "not_measured" } satisfies PsiResult));
+  }
   // A result stays fresh for 30 days; a failure (quota, timeout, a site that
   // won't load) for an hour, so a broken site can't burn the quota by being
   // asked again and again, and a good result is never replaced by a failure.
@@ -95,15 +44,15 @@ export async function GET(req: Request) {
   // other callers hear "in_progress" and retry. A stale result is served at
   // once and refreshed in the background (lib/cache.ts).
   const data = await cached<PsiResult>(
-    "psi",
+    NAMESPACE[strategy],
     url,
     {
-      ttlMs: 30 * 24 * 3600 * 1000,
+      ttlMs: PSI_TTL_MS,
       isFailure: (d) => !d.ok,
       failureTtlMs: 3600 * 1000,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
     },
-    () => runPsi(url)
+    () => runPsi(url, strategy)
   );
   return NextResponse.json(data);
 }

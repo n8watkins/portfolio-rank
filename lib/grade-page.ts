@@ -8,9 +8,10 @@ import { publicJob } from "@/lib/grader/view.mjs";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
-import { fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
+import { displayName, fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
 import { listedSite, type Job } from "@/lib/me";
 import { reportPath } from "@/lib/home";
+import { atLeast, isPublicTier } from "@/lib/tiers.mjs";
 
 // What the grade report page (app/grade/[id]) reads for one job: the public
 // job (lib/grader/view.mjs, the same answer GET /api/grade/<id> gives), plus
@@ -19,10 +20,13 @@ import { reportPath } from "@/lib/home";
 // the wording from lib/grader/present.mjs. Reports are unlisted: the id is
 // the only key, and nothing here names the visitor.
 
-type PoolSite = { url: string; name: string; mu: number; tier: string };
+type PoolSite = { url: string; name: string; mu: number; key: number | null; tier: string | null; top: number | null; place: number | null; of: number | null };
 export type PageJob = Job & { mine: boolean; checks: (Job["checks"] & { title?: string }) | null };
 
-export type ShownSite = { url: string; name: string; domain: string; tier: string; path: string; hero: string | null; rank: number | null; topPct: number | null };
+export type BrokenLink = { url: string; kind: "broken" | "blocked"; status: number | null; reason: string; text: string | null; section: string | null };
+
+/** `tier` is the site's current tier by ELO (lib/tiers.mjs); shown only when it is a public one. `rank` and `topPct` are its place by ELO, once it has enough face-offs. */
+export type ShownSite = { url: string; name: string; domain: string; tier: string | null; path: string; hero: string | null; rank: number | null; topPct: number | null };
 
 export type GradePage = {
   job: PageJob;
@@ -37,6 +41,14 @@ export type GradePage = {
   at: number;
   /** The free checks in the hiring manager's three groups, for a job with no report (yet). */
   checks: ReturnType<typeof hiringGroups> | null;
+  /**
+   * The project links that failed, from the capture's check (else the free
+   * checks'): each URL, why ("404 Not Found", "timed out after 8 s") and
+   * where it is on the page. Empty for grades from before the details were kept.
+   */
+  brokenLinks: BrokenLink[];
+  /** How many links the checks found broken, for grades from before the details were kept. */
+  brokenCount: number;
   report: null | {
     verdict: string;
     groups: ReturnType<typeof hiringGroups>;
@@ -85,15 +97,18 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   const [owned, emails] = await Promise.all([ownedJobs(), emailState(client, id)]);
   const job = publicJob(raw, { mine: owned.includes(id), emails }) as PageJob;
   const site = listedSite(String(raw.site_key));
-  const title = job.checks?.ok && typeof job.checks.title === "string" ? job.checks.title.replace(/\s+/g, " ").trim() : "";
-  const name = site?.name ?? (title && title.length <= 60 ? title : job.domain);
+  const title = job.checks?.ok && typeof job.checks.title === "string" ? job.checks.title : "";
+  const name = displayName({ listedName: site?.name, title, domain: job.domain });
   let hero = job.shots?.hero ?? null;
   if (!hero && site) {
     const shots = await shotBases([site.url]);
     hero = shots.has(site.url) ? heroOf(shots.get(site.url)!) : null;
   }
   const freeChecks = job.checks?.ok ? hiringGroups((job.checks as { facts?: Parameters<typeof hiringGroups>[0] }).facts ?? []) : null;
-  const base = { job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
+  type LinkCheck = { broken?: number; failures?: BrokenLink[] } | null | undefined;
+  const linkCheck = ((raw.facts as { project_links?: LinkCheck } | null)?.project_links ?? (raw.quick as { facts?: { project_links?: LinkCheck } } | null)?.facts?.project_links) ?? null;
+  const brokenLinks = (linkCheck?.failures ?? []).filter((f) => f && typeof f.url === "string" && f.kind === "broken").slice(0, 10);
+  const base = { brokenLinks, brokenCount: Number(linkCheck?.broken ?? 0), job, name, hero, listed: site ? { url: site.url, path: reportPath(site.url) } : null, games: gamesEnabled(), at: Date.now(), checks: freeChecks?.length ? freeChecks : null };
   if (!job.report || !raw.result) return { ...base, report: null };
 
   const rep = job.report;
@@ -112,12 +127,16 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   const urls = [...similar.map((s) => s.url), ...(betterGroup ? [betterGroup.sites[0].url] : [])];
   const shots = await shotBases([...new Set(urls)]);
   const place = (url: string) => placeIn(pool, url);
+  const tierNow = new Map(pool.map((p) => [p.url, p.tier]));
   const toShown = (s: (typeof similar)[number]): ShownSite => ({
     ...s,
+    // Today's tier, not the one stored with the report (older reports stored Gemini's letter).
+    tier: tierNow.get(s.url) ?? null,
     domain: s.domain || domainOf(s.url),
     hero: shots.has(s.url) ? heroOf(shots.get(s.url)!) : null,
-    rank: place(s.url)?.rank ?? null,
-    topPct: place(s.url)?.topPct ?? null,
+    // Another person's place shows with a public tier only (lib/tiers.mjs PUBLIC_TIERS).
+    rank: isPublicTier(tierNow.get(s.url)) ? (place(s.url)?.rank ?? null) : null,
+    topPct: isPublicTier(tierNow.get(s.url)) ? (place(s.url)?.topPct ?? null) : null,
   });
 
   let better: NonNullable<GradePage["report"]>["better"] = null;
@@ -129,7 +148,8 @@ export async function gradePage(id: string): Promise<GradePage | null> {
   return {
     ...base,
     report: {
-      verdict: verdictOf(rep.tier),
+      // The report card's line follows the grade itself (Gemini's letter), not the tier by ELO.
+      verdict: verdictOf(String((raw.result as { tier?: unknown } | null)?.tier ?? "")),
       groups: hiringGroups(rep.facts),
       fixes: fixEffects(raw.result, rep.fixes, pool, { isSelf }),
       better,
@@ -144,7 +164,10 @@ export async function faceOffPair(): Promise<{ url: string; domain: string; hero
     await ensureSchema();
     const pool = (await gradedPool(db())) as PoolSite[];
     const hidden = await gradeHiddenUrls();
-    const pick = pool.filter((p) => !hidden.has(p.url) && p.tier && ["S", "A"].includes(p.tier));
+    // The A family or better (the top 30% by ELO, lib/tiers.mjs); while few have enough face-offs, the best grades.
+    const shown = pool.filter((p) => !hidden.has(p.url));
+    const strong = shown.filter((p) => atLeast(p.tier, "A"));
+    const pick = strong.length >= 12 ? strong : [...shown].sort((a, b) => b.mu - a.mu).slice(0, 40);
     for (let i = pick.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pick[i], pick[j]] = [pick[j], pick[i]];
