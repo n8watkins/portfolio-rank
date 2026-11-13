@@ -80,10 +80,13 @@ export function FixList({ p }: { p: Profile }) {
         </Group>
       )}
       {passed.length > 0 && (
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-mute">
-          <CircleCheck className="h-4 w-4 text-up" aria-hidden /> Passed: {passed.map((i) => i.label.toLowerCase()).join(", ")}
-          {share?.ok && shareFixes.length === 0 && ", link preview"}
-          {mobile?.ok && weak.length === 0 && `, Lighthouse (${mobile.scores?.performance ?? "-"} on mobile)`}.
+        <p className="flex items-start gap-2 text-sm text-mute">
+          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-up" aria-hidden />
+          <span>
+            Passed: {passed.map((i) => i.label.toLowerCase()).join(", ")}
+            {share?.ok && shareFixes.length === 0 && ", link preview"}
+            {mobile?.ok && weak.length === 0 && `, Lighthouse (${mobile.scores?.performance ?? "-"} on mobile)`}.
+          </span>
         </p>
       )}
     </div>
