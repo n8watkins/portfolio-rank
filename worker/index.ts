@@ -13,7 +13,12 @@ import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
 import { healthCheck } from "./health";
-import { forEdge, mayUseEdgeCache, probeAnswer } from "./edge-cache";
+import { BLOG_TAG, appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag } from "./edge-cache";
+// The build's static-files fingerprint (scripts/assets-fingerprint.mjs, written after
+// the OpenNext build), part of every edge cache key (./edge-cache.ts).
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import assetsFingerprint from "../.open-next/assets-fingerprint.json";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
@@ -22,6 +27,7 @@ import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { NEWSLETTER_CRON, newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
+import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { freshnessTick } from "./freshness";
 import { tiersTick } from "./tiers";
@@ -48,11 +54,46 @@ const app = openNext as Handler;
  */
 export class CachedPages extends WorkerEntrypoint<CloudflareEnv> {
   async fetch(request: Request): Promise<Response> {
-    return forEdge(request, markStaging(await app.fetch(request, this.env, this.ctx), this.env));
+    return forEdge(request, markStaging(await app.fetch(appRequest(request), this.env, this.ctx), this.env));
+  }
+
+  /**
+   * Purges cached pages by tag (./edge-cache.ts tagsFor). An RPC method, so it skips the
+   * cache; it must run here, because a purge only reaches the entries its own entrypoint
+   * stored. Called through lib/edge-purge.ts and the end-of-day Workflow.
+   */
+  async purgeTags(tags: string[]): Promise<boolean> {
+    if (!tags.length) return true;
+    const cache = (this.ctx as unknown as { cache?: { purge(o: { tags: string[] }): Promise<{ success?: boolean }> } }).cache;
+    if (!cache) return false;
+    const out = await cache.purge({ tags: tags.slice(0, 100) });
+    return out?.success !== false;
   }
 }
 
-type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): Promise<Response> } } };
+type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): Promise<Response>; purgeTags(tags: string[]): Promise<boolean> } } };
+
+/**
+ * The hourly purges (./edge-cache.ts keeps profiles and the blog a day): profiles whose
+ * owner's removal took effect, and the blog when a post's scheduled time came in the
+ * last hour. Best effort: a failure only means the page refreshes when its day is up.
+ */
+async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
+  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
+  if (!cached) return;
+  const tags = removed.map(profileTag);
+  try {
+    const r = await database().execute({
+      sql: "SELECT 1 FROM posts WHERE status = 'published' AND publish_at > ? AND publish_at <= ? LIMIT 1",
+      args: [new Date(scheduledTime - 3600_000).toISOString(), new Date(scheduledTime).toISOString()],
+    });
+    if (r.rows.length) tags.push(BLOG_TAG);
+    if (tags.length) await cached.purgeTags(tags);
+  } catch (e) {
+    console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly", error: String((e as Error)?.message ?? e).slice(0, 200) }));
+  }
+}
+const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerprint ?? "dev");
 
 // Screenshots and favicons skip the Next.js app (./assets.ts); scanner probes get
 // a plain 404 and the public pages go through the edge cache (./edge-cache.ts);
@@ -71,7 +112,7 @@ const worker = {
     const probe = probeAnswer(request);
     if (probe) return probe;
     if (mayUseEdgeCache(request, new URL(env.AUTH_URL).hostname)) {
-      return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(request);
+      return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(edgeRequest(request, ASSETS));
     }
     return markStaging((await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx)), env);
   },
@@ -87,10 +128,12 @@ const worker = {
   // the ten-minute one is the newsletter's (./newsletter.ts), which does
   // nothing while NEWSLETTER_ENABLED is off. Every cron is matched by name
   // before the last line, which starts tonight's run.
-  async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
+  async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
     if (controller.cron === PEOPLE_QUEUE_CRON) {
       // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
-      await removalsTick(env as NightEnv, controller.scheduledTime);
+      const removals = await removalsTick(env as NightEnv, controller.scheduledTime);
+      // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
+      await purgeAfterHour(ctx, removals.applied, controller.scheduledTime);
       // An alert at 80% of any email cap (./email-alerts.ts).
       await emailAlertsTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);

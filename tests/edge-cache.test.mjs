@@ -2,7 +2,7 @@
 // answered from Workers Cache, and which responses may be kept there.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { forEdge, mayUseEdgeCache, probeAnswer, ttlFor } from "../worker/edge-cache.ts";
+import { appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag, tagsFor, ttlFor } from "../worker/edge-cache.ts";
 
 const HOST = "portfoliorank.n8builds.dev";
 const BASE = `https://${HOST}`;
@@ -69,4 +69,43 @@ test("scanner probes get a plain 404; real paths and .well-known are left alone"
   for (const path of ["/", "/top", "/.well-known/security.txt", "/healthz", "/p/x"]) {
     assert.equal(probeAnswer(get(path)), null, path);
   }
+});
+
+test("profiles and the blog are kept a day, stale for a week, and tagged for purging", () => {
+  const url = "https://example.com";
+  const profile = forEdge(get(`/p/${encodeURIComponent(url)}`), new Response("x"));
+  assert.equal(profile.headers.get("Cloudflare-CDN-Cache-Control"), "public, max-age=86400, stale-while-revalidate=604800");
+  assert.equal(profile.headers.get("Cache-Tag"), `profiles,${profileTag(url)}`);
+  for (const path of ["/blog", "/blog/a-post", "/blog/tag/react", "/blog/rss.xml"]) {
+    assert.equal(mayUseEdgeCache(get(path), HOST), true, path);
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["blog"], path);
+  }
+  // Blog images cache themselves; deeper paths and the bare /blog/media are not pages.
+  for (const path of ["/blog/media", "/blog/media/abc/hero", "/blog/tag", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
+  // The short-lived pages keep their five minutes and carry no tags.
+  const home = forEdge(get("/"), new Response("x"));
+  assert.equal(home.headers.get("Cache-Tag"), null);
+  // A failed render is never kept, so it carries no tag either.
+  assert.equal(forEdge(get("/p/x"), new Response("x", { status: 500 })).headers.get("Cache-Tag"), null);
+});
+
+test("a profile's tag is stable and differs between sites", () => {
+  assert.match(profileTag("https://example.com"), /^p:[0-9a-f]{8}$/);
+  assert.equal(profileTag("https://example.com"), profileTag("https://example.com"));
+  assert.notEqual(profileTag("https://example.com"), profileTag("https://example.org"));
+  // An undecodable slug still gets the bulk tag.
+  assert.deepEqual(tagsFor("/p/%E0%A4%A"), ["profiles"]);
+});
+
+test("the cache key: profiles and the blog drop their query; every key carries the build's static files", () => {
+  const key = (path) => new URL(edgeRequest(get(path), "abc123").url);
+  assert.equal(key("/p/x?utm_source=hn&a=1").search, "?__a=abc123");
+  assert.equal(key("/blog/a-post?ref=x").search, "?__a=abc123");
+  // Other pages keep theirs: /play?mode=guess is a different page.
+  assert.equal(key("/play?mode=guess").searchParams.get("mode"), "guess");
+  assert.equal(key("/play?mode=guess").searchParams.get("__a"), "abc123");
+  // Inside CachedPages the app sees the address without the fingerprint.
+  assert.equal(appRequest(edgeRequest(get("/play?mode=guess"), "abc123")).url, `${BASE}/play?mode=guess`);
+  assert.equal(appRequest(edgeRequest(get("/p/x?utm=1"), "abc123")).url, `${BASE}/p/x`);
 });
