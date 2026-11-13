@@ -16,7 +16,7 @@ import { budgetPlan } from "../pipeline/budget.mjs";
 import { PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { claimCaptures, readJob } from "../lib/grader/jobs.mjs";
 import { recordCapture } from "../lib/grader/finish.mjs";
-import { queueFreeGrade } from "../lib/grader/queue.mjs";
+import { queueFreeGrade } from "../lib/grader/free-grade.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -337,13 +337,13 @@ test("own key: checked for free, never stored or logged, used once to finish the
   // Switching an own-key grade to the free tier.
   const s = await grade(v, "own2-e2e.dev", { geminiKey: GOOD_KEY });
   await runCaptureJob();
+  const generated = seen.generate;
   const free = await call(v, "POST", `/api/grade/${s.body.id}/finish`, { freeTier: true });
   assert.equal(free.status, 202);
-  for (let i = 0; i < 20; i++) {
-    if ((await call(v, "GET", `/api/grade/${s.body.id}`)).body.status === "queued") break;
-    await sleep(200);
-  }
-  assert.equal((await call(v, "GET", `/api/grade/${s.body.id}`)).body.status, "queued", "no Gemini key on this server: it waits in the people queue");
+  // The request only enqueues, never on our Gemini key; the hourly drain grades it.
+  assert.equal(free.body.status, "queued");
+  assert.equal((await call(v, "GET", `/api/grade/${s.body.id}`)).body.status, "queued", "it waits in the people queue");
+  assert.equal(seen.generate, generated, "no Gemini request from the visitor's request");
 });
 
 test("only the owner deletes a report, screenshots included", { skip: !enabled }, async () => {

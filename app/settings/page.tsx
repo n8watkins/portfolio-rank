@@ -226,7 +226,13 @@ export default function SettingsPage() {
         <div className={`${box} text-sm`}>
           <div className="p-4 sm:p-5">
             <p className="font-semibold">No tracking, so no cookie banner</p>
-            <p className="mt-0.5 text-mute">No ads or analytics cookies. Page views are counted without cookies. Every cookie here is needed for something you do.</p>
+            <p className="mt-0.5 text-mute">
+              No ads or analytics cookies. Page views are counted without cookies. Every cookie here is needed for something you do. The{" "}
+              <a href="/privacy" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                privacy policy
+              </a>{" "}
+              has the details.
+            </p>
           </div>
           <details className="group p-4 sm:p-5">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
@@ -281,7 +287,7 @@ export default function SettingsPage() {
           <Row
             id="remove"
             title="Remove my portfolio"
-            desc="First prove the site is yours: a link to your GitHub profile on it, or a short code you add to the page. Then hide its grade or remove it."
+            desc="First prove the site is yours: a link to your GitHub profile on it, or a short code you add to the page. With the code, you can hide its grade or remove it."
           >
             <a href="/claim" className={smallBtn}>
               Start

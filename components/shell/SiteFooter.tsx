@@ -40,6 +40,13 @@ const COLS: { title: string; links: Link[] }[] = [
   },
 ];
 
+// The policy pages (docs/legal), on every page.
+const POLICIES = [
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: "/removal", label: "Remove or don't name me" },
+];
+
 export function SiteFooter() {
   return (
     <footer className="mt-20 border-t border-edge">
@@ -111,18 +118,31 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="border-t border-edge">
-        <p className="wrap py-5 text-xs text-mute">
-          Built by{" "}
-          <a
-            href={SITE.n8builds}
-            target="_blank"
-            rel="noopener"
-            className="font-medium text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent"
-          >
-            n8builds.dev
-          </a>
-          . Grades are estimates, not a verdict on the developer.
-        </p>
+        <div className="wrap flex flex-col gap-3 py-5 text-xs text-mute sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <p>
+            Built by{" "}
+            <a
+              href={SITE.n8builds}
+              target="_blank"
+              rel="noopener"
+              className="font-medium text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-accent"
+            >
+              n8builds.dev
+            </a>
+            . Grades are estimates, not a verdict on the developer.
+          </p>
+          <nav aria-label="Policies">
+            <ul className="flex flex-wrap gap-x-4 gap-y-1">
+              {POLICIES.map((l) => (
+                <li key={l.href}>
+                  <a href={l.href} className="inline-block py-1 text-ink/80 transition hover:text-ink">
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
       </div>
     </footer>
   );
