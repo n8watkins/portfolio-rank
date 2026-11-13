@@ -96,6 +96,9 @@
     // publish or reject) or "publish"; only the owner sets publish. Draft
     // mode in production since 2026-11-11 (owner); staging stays "off".
     "CONTENT_MODE": "dry-run",
+    // The most drafts a week the owner may choose on /admin/blog
+    // (lib/content/automation.mjs; at most 4). The page can only go lower.
+    "CONTENT_DRAFTS_PER_WEEK": "2",
     // How the content engine writes a post: "staged" (outline, sections, finish;
     // pipeline/content/staged.mjs) or "single" (one request).
     "WRITER_MODE": "staged",
@@ -222,6 +225,7 @@
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         "CONTENT_MODE": "off",
+        "CONTENT_DRAFTS_PER_WEEK": "2",
         // How the content engine writes a post: "staged" (outline, sections, finish;
         // pipeline/content/staged.mjs) or "single" (one request).
         "WRITER_MODE": "staged",

@@ -36,6 +36,7 @@ import { searchUsage } from "../lib/content/pexels-searches.mjs";
 import jpeg from "jpeg-js";
 import crypto from "node:crypto";
 import { contentJob, contentStage, contentSummaryConditions, draftsDue, runDraft, runPick } from "../pipeline/content/engine.mjs";
+import { addTopic, automationBounds, listTopics, nextRun, readAutomation, removeTopic, saveAutomation, validateAutomation } from "../lib/content/automation.mjs";
 import { PUBLISH_CAP, contentMode, contentWeek, listPosts, nextMorning, recordRun, storePost } from "../lib/content/store.mjs";
 import { MANUAL_PER_DAY, cleanNotes, cleanTopic, createJob, getJob, jobsToday } from "../lib/content/jobs.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
@@ -782,9 +783,73 @@ test("the schedule: pick on Sunday, drafts Monday and Wednesday, one a night, a 
   assert.equal((await contentJob(tuesday)).job, null, "Monday's draft is made up; Wednesday is next");
 });
 
+test("automation: the owner's settings live in the database, inside the config's ceiling", async () => {
+  const env = { CONTENT_MODE: "dry-run", CONTENT_DRAFTS_PER_WEEK: "2" };
+  assert.deepEqual(automationBounds(env), { maxMode: "dry-run", maxPerWeek: 2, canPublish: false, canRun: true });
+  assert.equal(automationBounds({ CONTENT_MODE: "publish", CONTENT_DRAFTS_PER_WEEK: "9" }).maxPerWeek, 4, "never above 4");
+  // The page can't raise a cap or turn on what the config keeps off.
+  assert.match(validateAutomation({ enabled: true, mode: "publish", days: [1, 3], perWeek: 2 }, env).error, /CONTENT_MODE/);
+  assert.match(validateAutomation({ enabled: true, mode: "review", days: [1, 3, 5], perWeek: 3 }, env).error, /At most 2/);
+  assert.match(validateAutomation({ enabled: true, mode: "review", days: [1], perWeek: 2 }, env).error, /at least 2 days/);
+  assert.match(validateAutomation({ enabled: true, mode: "review", days: [1], perWeek: 1 }, { CONTENT_MODE: "off" }).error, /off/);
+  assert.match(validateAutomation({ enabled: true, mode: "review", days: [], perWeek: 1 }, env).error, /at least one day/);
+  assert.deepEqual(validateAutomation({ enabled: true, mode: "review", days: [5, 2, 2, 0, 9], perWeek: 1 }, env).settings, { enabled: true, mode: "review", days: [2, 5], perWeek: 1 }, "Sunday and unknown days are dropped");
+
+  const db = await fixture();
+  const read = await readAutomation(db, env);
+  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, engineMode: "dry-run" }, "the config's schedule until the owner saves");
+  assert.equal(read.saved, null);
+  assert.ok((await saveAutomation(db, { enabled: true, mode: "publish", days: [2, 4], perWeek: 2 }, { env: { CONTENT_MODE: "publish" }, by: "owner" })).settings);
+  // A later config lowers what was saved; it never raises it.
+  const lowered = await readAutomation(db, { CONTENT_MODE: "dry-run", CONTENT_DRAFTS_PER_WEEK: "1" });
+  assert.deepEqual(lowered.settings, { enabled: true, mode: "review", days: [2, 4], perWeek: 1, engineMode: "dry-run" });
+  assert.equal((await readAutomation(db, { CONTENT_MODE: "off" })).settings.engineMode, "off");
+});
+
+test("automation: the chosen days drive the schedule, off writes nothing, and unreadable settings fail closed", async () => {
+  const db = await fixture();
+  const sunday = contentCtx(db, { now: SUNDAY }).ctx;
+  const g = fakeGemini({ pick: (n, parts) => ({ ideas: JSON.parse(parts[0].text.split("<ideas>\n")[1].split("\n</ideas>")[0]).map((i, k) => ({ kind: i.kind, interest: 9 - k, topic: "what the AI grader rewards and penalizes", tone: "positive" })) }) });
+  await runPick(sunday, g, { night: "2026-11-15", budget: 20 });
+  // Tuesdays and Thursdays only, one a week.
+  await saveAutomation(db, { enabled: true, mode: "review", days: [2, 4], perWeek: 1 }, { env: { CONTENT_MODE: "dry-run" } });
+  const monday = contentCtx(db, { now: MONDAY }).ctx;
+  assert.equal((await contentJob(monday)).job, null, "Monday isn't a chosen day");
+  const tuesday = contentCtx(db, { now: TUESDAY }).ctx;
+  const t = await contentJob(tuesday);
+  assert.deepEqual(t.job, { step: "draft", kind: "top-grades" });
+  assert.equal(t.mode, "dry-run");
+  // A queued topic is the next draft's angle.
+  const added = await addTopic(db, "  Why a  resume link\nbeats a contact form ", { by: "owner" });
+  assert.equal(added.topic.topic, "Why a resume link beats a contact form");
+  assert.deepEqual((await contentJob(tuesday)).job, { step: "draft", kind: "top-grades", topic: { id: added.topic.id, topic: "Why a resume link beats a contact form" } });
+  assert.equal((await listTopics(db)).queued.length, 1);
+  // Off: nothing.
+  await saveAutomation(db, { enabled: false, mode: "review", days: [2, 4], perWeek: 1 }, { env: { CONTENT_MODE: "dry-run" } });
+  assert.match((await contentJob(tuesday)).reason, /automation is off/);
+  // Settings that can't be read: nothing, whatever the config says.
+  await db.execute("UPDATE content_settings SET v = 'not json' WHERE k = 'automation'");
+  assert.equal((await contentJob(tuesday)).job, null);
+  assert.match((await contentJob(tuesday)).reason, /can't be read/);
+  await db.execute("ALTER TABLE content_settings RENAME TO content_settings_moved");
+  assert.equal((await contentJob(tuesday)).job, null, "a missing table fails closed too");
+  assert.ok(await removeTopic(db, added.topic.id));
+});
+
+test("automation: the next run, in words", () => {
+  const settings = { enabled: true, mode: "review", days: [1, 3], perWeek: 2 };
+  // Monday 2026-11-16 at 20:30 Pacific (04:30 UTC Tuesday).
+  assert.match(nextRun(settings, { now: new Date(MONDAY), doneThisWeek: 0 }).label, /^Tonight \(Nov 16\)/);
+  assert.match(nextRun(settings, { now: new Date(MONDAY), doneThisWeek: 1 }).label, /^Wednesday night \(Nov 18\)/);
+  assert.match(nextRun(settings, { now: new Date(MONDAY), doneThisWeek: 2 }).label, /^Monday night \(Nov 23\)/);
+  assert.equal(nextRun({ ...settings, enabled: false }, { now: new Date(MONDAY) }), null);
+});
+
 test("caps: a draft defers without enough budget; the publish cap holds a third post in 7 days back as a draft", async () => {
   const { db, sheet } = await sheetAndRoster();
-  const { ctx } = contentCtx(db, { mode: "publish" });
+  const { ctx: base } = contentCtx(db, { mode: "publish" });
+  // This test is about the publish cap, not the scorecard gate (tested below).
+  const ctx = { ...base, flags: { ...base.flags, publishGate: "none" } };
   const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK });
   assert.equal((await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 3 })).status, "deferred");
   assert.equal(g.calls.length, 0);
@@ -806,6 +871,17 @@ test("caps: a draft defers without enough budget; the publish cap holds a third 
   const later = Date.parse("2026-12-01T16:00:00Z");
   const both = await Promise.all([storePost(db, post("x1"), { mode: "publish", publishAt: later, now: later }), storePost(db, post("x2"), { mode: "publish", publishAt: later, now: later }), storePost(db, post("x3"), { mode: "publish", publishAt: later, now: later })]);
   assert.equal(both.filter((r) => r.status === "published").length, PUBLISH_CAP);
+});
+
+test("publishing automatically needs a clean scorecard: a flagged post waits for review", async () => {
+  const { db, sheet } = await sheetAndRoster();
+  const { ctx } = contentCtx(db, { mode: "publish" });
+  const g = fakeGemini({ write: goodDraft(sheet), claims: { claims: [] }, review: REVIEW_OK });
+  const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
+  assert.equal(r.status, "ok");
+  assert.equal(r.stored, "draft", "the fixture draft is short, so the scorecard flags it");
+  const [held] = await listPosts(db, { status: "draft" });
+  assert.match(held.checks.publishHeld, /^kept for review: /);
 });
 
 test("the weekly owner summary: Sunday nights only, while the engine is on", async () => {

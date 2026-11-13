@@ -92,12 +92,12 @@ export function DraftNow({ kinds, initialJob, left }: { kinds: { id: string; lab
 
   const at = running ? STEPS.findIndex(([k]) => k === job?.phase) : -1;
   return (
-    <section aria-labelledby="h-draft-now" className="rounded-xl border border-edge bg-card p-4">
+    <section aria-labelledby="h-draft-now" className="@container rounded-xl border border-edge bg-card p-4">
       <h2 id="h-draft-now" className="text-lg font-bold tracking-tight">
         Write a draft now
       </h2>
       <p className="mt-1 text-sm text-mute">The same writer, research, images and checks as the night. It lands in Waiting for you, never on the blog by itself. {left} of 5 left today.</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+      <div className="mt-3 grid gap-2 @xl:grid-cols-[1fr_auto_auto] @xl:items-end">
         <div>
           <label htmlFor="draft-topic" className="block text-sm font-semibold">
             Topic or angle <span className="font-normal text-mute">(optional)</span>
@@ -108,7 +108,7 @@ export function DraftNow({ kinds, initialJob, left }: { kinds: { id: string; lab
           <label htmlFor="draft-kind" className="block text-sm font-semibold">
             From the data on
           </label>
-          <select id="draft-kind" value={kind} onChange={(e) => setKind(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-edge bg-raised px-2 text-sm sm:w-64">
+          <select id="draft-kind" value={kind} onChange={(e) => setKind(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-edge bg-raised px-2 text-sm @xl:w-64">
             <option value="">The best fit (picked for you)</option>
             {kinds.map((k) => (
               <option key={k.id} value={k.id} disabled={!k.ready}>
