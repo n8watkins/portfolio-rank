@@ -7,7 +7,7 @@ import { PollBar } from "@/components/home/PollBar";
 import { Thumb } from "@/components/home/Thumb";
 import { ROUTES } from "@/lib/nav";
 import type { BoardItem, GradedItem, LiveStat, PortfolioOfTheDay as Potd, ShowItem, TopTen as TopTenData } from "@/lib/home";
-import { topPct } from "@/lib/home";
+import { domainOf, topPct } from "@/lib/home";
 import { voteCount } from "@/lib/polls/format";
 import type { PublicPoll } from "@/lib/polls/server";
 
@@ -31,7 +31,7 @@ function BoardRow({ r, tier, elo = false }: { r: BoardItem; tier: boolean; elo?:
         <span className="flex w-9 shrink-0 justify-end">
           <RankBadge rank={r.rank} tied={r.tied} />
         </span>
-        <Thumb src={r.hero} domain={r.line} className="aspect-[16/10] w-[4.5rem] rounded-md transition group-hover:border-edge-strong max-sm:hidden" />
+        <Thumb src={r.hero} domain={domainOf(r.url)} className="aspect-[16/10] w-[4.5rem] rounded-md transition group-hover:border-edge-strong max-sm:hidden" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.line}</span>
