@@ -35,7 +35,7 @@ test("each policy page answers 200 with its canonical and the policy links", asy
     const res = await fetch(BASE + p.path);
     assert.equal(res.status, 200, p.path);
     const html = await res.text();
-    assert.ok(html.includes(`<link rel="canonical" href="https://portfoliorank.n8builds.dev${p.path}"`), `${p.path} canonical`);
+    assert.ok(html.includes(`<link rel="canonical" href="https://portfoliorank.dev${p.path}"`), `${p.path} canonical`);
     for (const href of ["/privacy", "/terms", "/removal"]) assert.ok(html.includes(`href="${href}"`), `${p.path} links ${href}`);
     assert.ok(!html.includes("—"), `${p.path} has no em dash`);
   }
