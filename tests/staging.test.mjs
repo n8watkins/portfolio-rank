@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseJsonc } from "../scripts/check-worker-exports.mjs";
 import { STAGING_ROBOTS_TXT, markStaging, stagingRobots } from "../worker/staging.ts";
+import { STAGING_CRON_ALIASES, jobCron } from "../worker/crons.ts";
 
 const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
 const staging = config.env.staging;
@@ -14,7 +15,15 @@ const PRODUCTION = { SITE_ENV: "production" };
 
 test("staging runs production's schedule, with its Gemini held far below production's day", () => {
   assert.ok(config.triggers.crons.length > 0, "production keeps its crons");
-  assert.deepEqual(staging.triggers.crons, config.triggers.crons);
+  // The same jobs, the hourly and five-minute ones less often (worker/crons.ts).
+  assert.deepEqual(staging.triggers.crons.map(jobCron).sort(), [...config.triggers.crons].sort());
+  for (const [alias, cron] of Object.entries(STAGING_CRON_ALIASES)) {
+    assert.ok(staging.triggers.crons.includes(alias), alias);
+    assert.ok(config.triggers.crons.includes(cron), cron);
+  }
+  assert.match(readFileSync("worker/night.ts", "utf8"), /PEOPLE_QUEUE_CRON = "15 \* \* \* \*"/);
+  assert.match(readFileSync("worker/grader.ts", "utf8"), /GRADER_CRON = "\*\/5 \* \* \* \*"/);
+  assert.match(readFileSync("worker/index.ts", "utf8"), /const cron = jobCron\(controller\.cron\)/);
   const quota = JSON.parse(staging.vars.GEMINI_DAILY_QUOTA);
   for (const n of Object.values(quota)) assert.ok(n <= 50, `staging quota ${n}`);
   const budget = JSON.parse(staging.vars.GEMINI_BUDGET);

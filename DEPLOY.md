@@ -101,7 +101,7 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
 - **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
   It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
-- **Scheduled jobs, low caps:** staging has the same Cron Triggers as production, so the end-of-day run, the people queue, the model watch and the grader's tick run there too.
+- **Scheduled jobs, low caps:** staging runs production's scheduled jobs (the end-of-day run, the people queue, the model watch and the grader's tick), the hourly ones every six hours and the grader's tick every 30 minutes to keep its CPU time low (`worker/crons.ts`).
   It never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs; without a key every Gemini job skips and says so in the log.
   To exercise them, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
   "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).

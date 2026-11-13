@@ -31,6 +31,7 @@ import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
+import { jobCron } from "./crons";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -129,7 +130,9 @@ const worker = {
   // one is model watch (./model-watch.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
-    if (controller.cron === PEOPLE_QUEUE_CRON) {
+    // Staging's less frequent crons run the same jobs (./crons.ts).
+    const cron = jobCron(controller.cron);
+    if (cron === PEOPLE_QUEUE_CRON) {
       // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
       const removals = await removalsTick(env as NightEnv, controller.scheduledTime);
       // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
@@ -142,8 +145,8 @@ const worker = {
       // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }
-    else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
-    else if (controller.cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
+    else if (cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+    else if (cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };

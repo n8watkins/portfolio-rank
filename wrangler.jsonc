@@ -241,7 +241,7 @@
         // until the owner adds theirs.
         "STAGING_EMAIL_TO": ""
       },
-      // The same schedule as production, so staging is a faithful test bed
+      // Production's jobs, so staging is a faithful test bed
       // (docs/audits/release-and-staging.md). Without a GEMINI_API_KEY on the
       // staging Worker every Gemini job skips (the end-of-day run logs why,
       // the people queue drains nothing); with staging's own key (never
@@ -249,7 +249,10 @@
       // GEMINI_BUDGET caps above. The grader's tick starts no captures
       // without GITHUB_DISPATCH_TOKEN, which staging never gets, and email
       // only reaches STAGING_EMAIL_TO (lib/email/gate.mjs).
-      "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * 1", "*/5 * * * *"] },
+      // To keep staging's CPU time low, the hourly jobs run every six hours and
+      // the grader's tick every 30 minutes (worker/crons.ts maps them to the
+      // same jobs); the nightly and weekly crons match production's.
+      "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 */6 * * *", "0 16 * * 1", "*/30 * * * *"] },
       // The same edge cache as production (worker/edge-cache.ts).
       "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {
