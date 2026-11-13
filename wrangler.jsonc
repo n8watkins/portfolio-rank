@@ -223,7 +223,7 @@
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         // Off until the owner approves Gemini spending again after the audits
         // (2026-11-13). The 2026-11-12 walkthrough of automatic publishing used
-        // "publish"; staging has no crons and no Gemini key either way.
+        // "publish". Off, staging's crons write no post whatever key it has.
         "CONTENT_MODE": "off",
         "CONTENT_DRAFTS_PER_WEEK": "2",
         // Staging never spends Workers AI: production's counter can't see
@@ -231,11 +231,29 @@
         "MAX_AI_IMAGES_PER_DAY": "0",
         "AI_NEURON_CEILING": "0",
         "LIBRARY_RUN_HOUR_UTC": "off",
-        "LIBRARY_MODEL": "schnell"
+        "LIBRARY_MODEL": "schnell",
+        // Low caps for staging's own Gemini key, when it has one (DEPLOY.md
+        // "Staging"): a tenth of production's day, most stages off.
+        "GEMINI_DAILY_QUOTA": "{\"gemini-3.5-flash-lite\":50,\"gemini-3.1-flash-lite\":50}",
+        "GEMINI_BUDGET": "{\"reserve\":5,\"batch\":5,\"stages\":{\"grade_new\":{\"cap\":10},\"grade_changed\":{\"cap\":5},\"compare\":{\"cap\":15},\"content\":{\"cap\":5},\"library\":{\"cap\":0},\"regrade\":{\"cap\":0},\"experiment\":{\"cap\":0}}}",
+        // "Write a draft now" on staging (lib/content/jobs.mjs draftNowPolicy).
+        "STAGING_DRAFTS_PER_DAY": "1",
+        // The only addresses staging may email (lib/email/gate.mjs); empty
+        // until the owner adds theirs.
+        "STAGING_EMAIL_TO": ""
       },
-      // No crons at all: the end-of-day run, the people queue and model watch
-      // all call Gemini.
-      "triggers": { "crons": [] },
+      // Production's jobs, so staging is a faithful test bed
+      // (docs/audits/release-and-staging.md). Without a GEMINI_API_KEY on the
+      // staging Worker every Gemini job skips (the end-of-day run logs why,
+      // the people queue drains nothing); with staging's own key (never
+      // production's) they run under the low GEMINI_DAILY_QUOTA and
+      // GEMINI_BUDGET caps above. The grader's tick starts no captures
+      // without GITHUB_DISPATCH_TOKEN, which staging never gets, and email
+      // only reaches STAGING_EMAIL_TO (lib/email/gate.mjs).
+      // To keep staging's CPU time low, the hourly jobs run every six hours and
+      // the grader's tick every 30 minutes (worker/crons.ts maps them to the
+      // same jobs); the nightly and weekly crons match production's.
+      "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 */6 * * *", "0 16 * * 1", "*/30 * * * *"] },
       // The same edge cache as production (worker/edge-cache.ts).
       "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {
