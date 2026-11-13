@@ -32,6 +32,7 @@ Scripts: `pipeline/capture.mjs` before screenshots, and the weekly health check 
   A parking phrase only counts in the page title or on a page with little text, because real portfolios mention phrases like "make an offer".
 - [ ] Renders visible content (text, or a canvas or images for canvas apps such as Flutter web); not blank.
 - [ ] Is actually a portfolio: the Gemini rubric's `is_portfolio`.
+  A "no" against at least 4 of the 6 code signals (name, projects, about, contact, resume, GitHub) is kept as a portfolio and flagged for review instead (`pipeline/portfolio-guard.mjs`).
   A `false` grade keeps the site out of the AI voting pool at once and counts as a failure in the health check.
 - [ ] Not a duplicate of another entry (same normalized URL, or the same address after redirects).
 
