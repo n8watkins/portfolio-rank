@@ -25,7 +25,10 @@ import { assertNotOurs, readFirstScreen, readJson, writeJson } from "./grading-t
 
 
 const PHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-export const CONTENT_WAIT_MS = 15000;
+// Up to 15 s for slow content, and 30 s for the load; the local retry of failed sites
+// (recheck-543-ungraded.mjs) raises both through the environment.
+export const CONTENT_WAIT_MS = Number(process.env.RECHECK_CONTENT_MS) || 15000;
+export const GOTO_MS = Number(process.env.RECHECK_GOTO_MS) || 30000;
 export const RETRY_AFTER_MS = 5000;
 const MIN_WORDS = 30;
 // Owner, 2026-11-13: never grade a gate. A capture that still shows a gate,
@@ -75,7 +78,7 @@ async function attempt(browser, site, dir) {
   let html = "";
   try {
     const page = await ctx.newPage();
-    await page.goto(site.url, { waitUntil: "load", timeout: 30000 });
+    await page.goto(site.url, { waitUntil: "load", timeout: GOTO_MS });
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
     out.desktop_first = await passFirstScreens(page);
@@ -123,7 +126,7 @@ async function attempt(browser, site, dir) {
   const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1, userAgent: PHONE_UA, ignoreHTTPSErrors: true });
   try {
     const m = await mctx.newPage();
-    await m.goto(site.url, { waitUntil: "load", timeout: 30000 });
+    await m.goto(site.url, { waitUntil: "load", timeout: GOTO_MS });
     await m.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
     await m.waitForTimeout(1500);
     out.phone_first = await passFirstScreens(m);
