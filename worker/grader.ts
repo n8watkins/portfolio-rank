@@ -24,6 +24,7 @@ import { pruneEmails, sendDueEmails } from "../lib/grader/notify.mjs";
 import { createEmailGate, emailCaps, emailTransport } from "../lib/email/gate.mjs";
 import { quotaDay } from "../pipeline/quota-day.mjs";
 import type { NightEnv } from "./night";
+import { siteUrl } from "../lib/site";
 
 export const GRADER_CRON = "*/5 * * * *";
 
@@ -36,7 +37,7 @@ export async function graderTick(env: GraderEnv, scheduledTime = Date.now()) {
   const db = database();
   const now = scheduledTime;
   const secret = env.AUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
-  const base = String(env.AUTH_URL || "https://portfoliorank.n8builds.dev").replace(/\/+$/, "");
+  const base = siteUrl({ SITE_URL: env.SITE_URL });
   const out: Record<string, unknown> = {};
 
   const gate = createEmailGate({ db, transport: emailTransport(env, { db }), caps: emailCaps(env.EMAIL_CAPS), secret, log: (line) => log("grader.email", { line }) });

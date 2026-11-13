@@ -2,21 +2,24 @@
 
 ## Cloudflare Workers
 
-The app runs on a Cloudflare Worker built with OpenNext (`@opennextjs/cloudflare`) at https://portfoliorank.n8builds.dev; `wrangler.jsonc` and `open-next.config.ts` hold the config.
-The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps it, and the workers.dev address is off.
+The app runs on a Cloudflare Worker built with OpenNext (`@opennextjs/cloudflare`) at https://portfoliorank.dev; `wrangler.jsonc` and `open-next.config.ts` hold the config.
+The custom domains are `routes` entries in `wrangler.jsonc`, so every deploy keeps them, and the workers.dev address is off.
+The Worker also answers at `www.portfoliorank.dev` and at the old address `portfoliorank.n8builds.dev` (until 2026-11), only to redirect them to the same path on https://portfoliorank.dev (`worker/canonical-host.ts`: 301 for GET and HEAD, 308 for other methods, so an API caller on the old address keeps working while it moves).
+Staging does the same from `staging.portfoliorank.n8builds.dev` to https://staging.portfoliorank.dev.
 
 - **Deploy by hand:** `npm run deploy` (builds, then `wrangler deploy`).
   The build prerenders the home page, so run it with `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `SHOTS_BASE_URL=/shots` in the environment, or the first render after a deploy shows no ranking until ISR refreshes it (5 minutes).
-- **Deploy from GitHub:** `.github/workflows/deploy.yml` ships every push to main, staging first ("How a change ships" below), once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
+- **Deploy from GitHub:** `.github/workflows/deploy.yml` ships every push to main to production, and `.github/workflows/staging.yml` keeps staging on main plus the pull requests labeled `staging` ("How a change ships" below), once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
 - **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
 - **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`, plus two for the end-of-day run ([AUTOMATION.md](AUTOMATION.md#end-of-day-run)):
   `GEMINI_API_KEY` (send it with `pass-env pipe portfolio-rank/GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY`) and `GITHUB_DISPATCH_TOKEN` (a fine-grained token for `n8watkins/portfolio-rank` only with "Actions: Read and write"; `pass-env pipe portfolio-rank/GITHUB_DISPATCH_TOKEN -- npx wrangler secret put GITHUB_DISPATCH_TOKEN`), which also starts "grade my portfolio" captures.
-  Required on both Workers: `TURNSTILE_SECRET_KEY` for Cloudflare Turnstile on poll votes, grade requests and report emails (AUTOMATION.md "Polls", "Grade my portfolio" and "Games, badges, claims, live stats and reports"); without it those requests are refused, and the token's hostname must match the Worker's `AUTH_URL`.
-  Email (grade reports, report links, owner alerts) goes through the `send_email` binding `SEND_EMAIL` from the `EMAIL_FROM` variable; owner alerts need the `OWNER_EMAIL` variable ("Grade my portfolio: owner steps" below).
+  Required on both Workers: `TURNSTILE_SECRET_KEY` for Cloudflare Turnstile on poll votes, grade requests and report emails (AUTOMATION.md "Polls", "Grade my portfolio" and "Games, badges, claims, live stats and reports"); without it those requests are refused, and the token's hostname must match the Worker's `SITE_URL`.
+  Email (grade reports, report links, owner alerts) goes through the `send_email` binding `SEND_EMAIL` from the `EMAIL_FROM` variable; owner alerts need the `OWNER_EMAIL` secret ("Grade my portfolio: owner steps" below).
   Optional: `GITHUB_API_TOKEN` (a fine-grained token with no permissions, public data only) raises the GitHub API rate limit for claims and the live stats.
   Without `GITHUB_DISPATCH_TOKEN` the nightly checks are not started from Cloudflare (one log line says so) and their GitHub schedule runs as the fallback.
-  `SHOTS_BASE_URL` and `AUTH_URL` (the site's address) are plain variables in `wrangler.jsonc`; `lib/site.ts` holds the same address for canonical URLs, share links and the sitemap.
-  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_ID` (the admin's numeric GitHub id), `MIN_GITHUB_ACCOUNT_AGE_DAYS`, `GRADER_ENABLED`, `GAMES_V2` and `EMAIL_FROM`: change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
+  `SHOTS_BASE_URL` and `SITE_URL` (the site's one address setting) are plain variables in `wrangler.jsonc`.
+  `SITE_URL` gives canonical URLs, share links, the sitemap, robots.txt, RSS, email links, the origin and Turnstile checks and Auth.js's callback URL (`auth.ts` copies it to `AUTH_URL`); pages built ahead of time use the same address from `lib/site.ts`, and `tests/site-url.test.mjs` keeps the two equal.
+  So are the end-of-day run's switches (`RANKING_V2`, `RUBRIC_REGRADE`, `GEMINI_RPM`, `NIGHTLY_REFRESH`), `ADMIN_GITHUB_ID` (the admin's numeric GitHub id), `MIN_GITHUB_ACCOUNT_AGE_DAYS`, `GRADER_ENABLED`, `GAMES_V2`, `EMAIL_FROM` and the content engine's ceiling (`CONTENT_MODE`, `CONTENT_DRAFTS_PER_WEEK`; the owner schedules within it on `/admin/blog`): change them in `wrangler.jsonc` through a pull request, since a deploy resets variables to what the file says.
 - **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
   Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
   Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
@@ -27,17 +30,21 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
   Favicons come from Google's favicon service for roster domains only, with a placeholder when a site has none, cached for a week.
   The bucket's public r2.dev address is for the pipeline (the `SHOTS_BASE_URL` repository secret); pages never link it.
 - **Database schema:** `lib/schema.mjs` holds every table, index and added column; the deploy workflow runs `node scripts/migrate.mjs` before it builds.
-  At runtime `ensureSchema()` only checks the recorded version (one query per isolate) and migrates a database that is behind, such as a fresh local file.
-  To change the schema, add the statement or column there and bump `SCHEMA_VERSION`.
+  At runtime `ensureSchema()` only compares the database's recorded schema fingerprint with the code's (one query per isolate) and migrates when they differ, such as a fresh local file.
+  To change the schema, add the statement or column there; the fingerprint (a hash of every statement) changes by itself, so no number has to be picked and parallel branches that add tables combine without a conflict over the version.
+  `SCHEMA_VERSION` stays as a record of what each number added; the database keeps the highest one it has seen.
 - **Sentry source maps:** add the `SENTRY_AUTH_TOKEN` secret (a Sentry auth token with project release access) and the `SENTRY_ORG` and `SENTRY_PROJECT` repository variables.
   The deploy then builds browser source maps, uploads them for the release (the commit SHA) and deletes them before publishing; without those settings it skips the step.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
+  OpenNext keeps each build's entries under `incremental-cache/<build id>/` and a Worker reads only its own build's folder, so after the smoke check the deploy removes every build folder but the newest two (`scripts/prune-build-cache.mjs`; staging does the same in its bucket).
+  It is not an R2 lifecycle rule because the live build's prerendered entries are written once, at deploy, and an age rule would expire them after enough days without a deploy.
+  A rollback with `wrangler rollback` to a version older than the previous one finds no cache, so its first requests render the pages again.
   The deploy log prints "A DurableObjectNamespace in the config referenced the class "DOQueueHandler", but no such Durable Object class is exported from the worker".
   It is a false alarm: `opennextjs-cloudflare deploy` starts a local Miniflare proxy (wrangler's `getPlatformProxy`) only to read the config's variables, and that proxy runs none of our code.
   The uploaded Worker does export the class (`worker/index.ts`), and CI proves it on every change (`scripts/check-worker-exports.mjs` on the dry-run bundle).
-- **GitHub sign-in:** the OAuth app's callback URL is `https://portfoliorank.n8builds.dev/api/auth/callback/github`; staging has its own OAuth app ("Staging" below).
+- **GitHub sign-in:** the OAuth app's homepage is `https://portfoliorank.dev` and its callback URL `https://portfoliorank.dev/api/auth/callback/github`; staging has its own OAuth app ("Staging" below).
 - **Actions:** the pipeline jobs talk to Turso and R2 directly and are unaffected.
-  `prewarm.yml` calls the site's API at the `PROD_BASE_URL` repository variable (`https://portfoliorank.n8builds.dev`).
+  `prewarm.yml` calls the site's API at the `PROD_BASE_URL` repository variable (`https://portfoliorank.dev`).
 
 ## Grade my portfolio: owner steps
 
@@ -46,7 +53,7 @@ These steps can be done any time before it is switched on; each one is safe on i
 
 1. **Turnstile widget** (done 2026-11-10: the widget `PortfolioRank` exists and `TURNSTILE_SECRET_KEY` is on both Workers; the site key `0x4AAAAAAF8GDSY7kmBfRpoD` goes into `wrangler.jsonc` with the redesign).
    An agent couldn't create it: the Cloudflare connection lacks write access to Turnstile.
-   In the Cloudflare dashboard, open Turnstile, Add widget: name `PortfolioRank`, hostnames `portfoliorank.n8builds.dev`, `staging.portfoliorank.n8builds.dev` and `localhost`, widget mode **Managed**, no pre-clearance.
+   In the Cloudflare dashboard, open Turnstile, Add widget: name `PortfolioRank`, hostnames `portfoliorank.dev`, `staging.portfoliorank.dev`, `portfoliorank.n8builds.dev`, `staging.portfoliorank.n8builds.dev` and `localhost`, widget mode **Managed**, no pre-clearance.
    The pages render it with `appearance: "interaction-only"` and execution on page load, so most visitors never see it; the actions are `grade`, `grade-email` and `poll-vote`.
    Keep the secret in pass and send it to both Workers without it ever being shown:
    ```bash
@@ -58,8 +65,8 @@ These steps can be done any time before it is switched on; each one is safe on i
    Put the public site key in `wrangler.jsonc` as the variable `TURNSTILE_SITE_KEY` (production and staging) in the redesign's pull request, where the pages read it.
 2. **Email sender:** nothing to set up for the sender itself: `n8builds.dev` is onboarded for Cloudflare Email Sending (Wren sends from it), and the Worker sends from `portfoliorank@n8builds.dev` through its `send_email` binding `SEND_EMAIL`.
    Check after the first deploy that the domain still shows as onboarded under Email, Email Sending in the dashboard; sending is in beta with a daily limit for new accounts, which the gate's caps (100 a day) stay under.
-3. **Owner alerts by email:** set your verified address as the Worker variable `OWNER_EMAIL` (sends to it are free).
-   Add it to `wrangler.jsonc` `vars` in a pull request, since a deploy resets variables to what the file says.
+3. **Owner alerts by email:** your verified address is the Worker secret `OWNER_EMAIL` (sends to it are free).
+   It is a secret, not a `vars` entry, so a deploy keeps it and the address stays out of the repository: `pass-env pipe portfolio-rank/OWNER_EMAIL -- npx wrangler secret put OWNER_EMAIL` (set on production 2026-11-13).
 4. **Dispatch token:** `GITHUB_DISPATCH_TOKEN` on the production Worker (step "Secrets" above) also starts the grader's captures.
    Without it every grade stops after the free checks with the state `unavailable`.
    Never add it to staging.
@@ -71,32 +78,40 @@ Turning it off again is the same variable: the API answers 404 and the five-minu
 
 ## How a change ships
 
-A merge to main runs `.github/workflows/deploy.yml`, which has two jobs in a row:
+Two workflows, so production and staging never overwrite each other:
 
-1. **Staging:** migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging`.
-2. **Deploy (production):** runs only when staging passed; it migrates, builds and deploys production as before, then runs `node scripts/smoke.mjs https://portfoliorank.n8builds.dev`.
+1. **Production** (`.github/workflows/deploy.yml`, every push to main): migrates the production database, builds, deploys, then runs `node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev`.
+2. **Staging** (`.github/workflows/staging.yml`): staging runs main plus every open pull request labeled `staging`, merged onto main in pull request order.
+   It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
+   It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev`.
+   The run's summary lists exactly what is on staging.
+   When a labeled pull request does not merge cleanly onto main and the ones before it, nothing is deployed: staging keeps what it had, the run fails, and the pull request is named in the summary and told in a comment; merge main into it (or rebase it onto the one it conflicts with) and run the workflow again.
+   A stacked pull request brings its base along, so label the top of a stack; pushes to a stacked pull request start no run by themselves (GitHub runs only main's copy of the workflow for them), so run it by hand after pushing.
 
-A failed staging deploy or smoke check stops the run before production.
+To try a pull request on staging: `gh pr edit <number> --add-label staging`; to take it off: `--remove-label staging`.
+Nobody merges branches into a shared staging branch by hand any more.
 The smoke check is read-only (GET requests and the start of a GitHub sign-in).
-It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, and sign-in redirects to GitHub with a client id and the site's own callback URL.
-To try a branch on staging before it merges, run the Deploy workflow by hand on that branch (`gh workflow run deploy.yml --ref <branch>`): it deploys staging only, and the next merge to main puts main back.
-Pull requests do not deploy on their own: parallel PRs would overwrite each other on the one staging site, and CI (typecheck, lint, the Worker build for both environments, E2E) already runs on every PR.
-Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging job skips with a notice and production deploys without it.
+It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, sign-in redirects to GitHub with a client id and the site's own callback URL, and the old address answers a 301 to the same path.
+CI (typecheck, lint, the Worker build for both environments, E2E) runs on every pull request into main before it can merge.
+Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging workflow skips with a notice.
+The release plan, the order open work lands in and the staging fidelity work are in [docs/audits/release-and-staging.md](docs/audits/release-and-staging.md).
 
 ## Staging
 
-https://staging.portfoliorank.n8builds.dev runs the same code as production on its own Worker, `portfolio-rank-staging` (`env.staging` in `wrangler.jsonc`).
+https://staging.portfoliorank.dev runs the same code as production on its own Worker, `portfolio-rank-staging` (`env.staging` in `wrangler.jsonc`).
 
 - **Database:** its own Turso database, `portfolio-rank-staging`, filled once from a production backup with `scripts/restore-db.mjs`, which only restores into an empty database that is not production.
   The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
 - **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
   It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
-- **No Gemini:** no Cron Triggers, and no `GEMINI_API_KEY` or `GITHUB_DISPATCH_TOKEN` secret, so staging never spends the production quota or starts production's GitHub jobs.
-  Its Workflow is `portfolio-rank-night-staging`; nothing starts it, and a run started by hand skips without the key.
-  Never add those two secrets to staging.
+- **Scheduled jobs, low caps:** staging runs production's scheduled jobs (the end-of-day run, the people queue, the model watch and the grader's tick), the hourly ones every six hours and the grader's tick every 30 minutes to keep its CPU time low (`worker/crons.ts`).
+  It never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs; without a key every Gemini job skips and says so in the log.
+  To exercise them, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
+  "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).
+  Email from staging reaches only the addresses in `STAGING_EMAIL_TO` (empty: none), since its database holds real people's addresses (`lib/email/gate.mjs`).
 - **Launch features on:** `GRADER_ENABLED`, `GAMES_V2` and `RANKING_V2` are `"true"` in `env.staging` (production keeps all three `"false"`), so the launch can be walked through on staging first.
   The build reads all three for the Worker it builds (`next.config.ts` `launchSwitch`; the staging job sets `NEXT_PUBLIC_SITE_ENV=staging`), because the pages prerendered at build time (home, `/top` and its views, the sitemap) depend on them.
-  Without crons, `RANKING_V2` only switches the leaderboard views; fill them with `scripts/recompute-ratings.mjs` run with the `portfolio-rank/STAGING_TURSO_*` pair.
+  The "Staging data" workflow (`.github/workflows/staging-data.yml`) rebuilds staging's leaderboards and tiers every six hours with `scripts/recompute-ratings.mjs`, with no Gemini.
   Without the dispatch token a grade asked for on staging stops after the free checks ("unavailable").
   To finish one by hand, set its job back to `capturing` in the staging database and run `scripts/grade-jobs.mjs` locally with the staging Turso pair and the Gemini key; it keeps the screenshots on disk without `R2_*`, so upload `hero.jpg` and `mobile.jpg` to `private/grades/<id>/` in the `portfolio-rank` bucket.
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
@@ -108,12 +123,14 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
   The key is `portfolio-rank/STAGING_GATE_KEY` in pass, the `STAGING_GATE_KEY` Actions secret (`scripts/smoke.mjs` sends it as the header) and a secret on the staging Worker: `pass-env pipe portfolio-rank/STAGING_GATE_KEY -- npx wrangler secret put STAGING_GATE_KEY --env staging`.
   To open staging in your browser without printing the key: `pass-env run -e STAGING_GATE_KEY=portfolio-rank/STAGING_GATE_KEY -- node scripts/open-staging.mjs`.
   Anything else that calls staging must send the same header.
-- **Sign-in:** a separate GitHub OAuth app, "PortfolioRank (staging)", with the callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, so a staging secret never unlocks the production app.
+- **Sign-in:** a separate GitHub OAuth app, "PortfolioRank (staging)", with the callback `https://staging.portfoliorank.dev/api/auth/callback/github`, so a staging secret never unlocks the production app.
 - **Secrets on the staging Worker:** `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, each kept in pass as `portfolio-rank/STAGING_<NAME>` and sent with `pass-env pipe portfolio-rank/STAGING_<NAME> -- npx wrangler secret put <NAME> --env staging`.
   `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.
 - **Sentry:** events from staging carry the environment `staging`.
 - **Keeping the copy fresh:** the copy holds real votes and rater ids, and the nightly retention jobs do not run on staging.
-  Replace it at least every 30 days, like a backup: the owner deletes the `portfolio-rank-staging` database in Turso, then steps 2, 3 and 5 below run again.
+  The "Staging data" workflow replaces it every Monday with production's newest nightly backup (`scripts/refresh-staging-db.mjs`: it reads the private backups bucket, never production, refuses any database whose address is production's or does not name staging, empties staging, restores and checks every table's count), then redeploys staging and rebuilds the leaderboards.
+  Run it by hand any time: `gh workflow run staging-data.yml -f job=refresh`.
+  Anything made on staging (grades, drafts, votes) is gone after a refresh.
 
 ### Setting staging up (once)
 
@@ -141,7 +158,7 @@ The owner runs the steps that need a Turso login or a new OAuth app; an agent ca
    Passing the production `TURSO_DATABASE_URL` only arms the script's check that refuses to restore into production; nothing connects to it.
    Every table prints `N of N`, and the last line is `restored the snapshot of <time>`.
    Then delete `/tmp/pr-staging.json.gz`: it holds every vote with its rater id.
-4. Create the staging OAuth app at https://github.com/settings/applications/new: name `PortfolioRank (staging)`, homepage `https://staging.portfoliorank.n8builds.dev`, callback `https://staging.portfoliorank.n8builds.dev/api/auth/callback/github`, device flow off.
+4. Create the staging OAuth app at https://github.com/settings/applications/new: name `PortfolioRank (staging)`, homepage `https://staging.portfoliorank.dev`, callback `https://staging.portfoliorank.dev/api/auth/callback/github`, device flow off.
    Then run `pass-env set portfolio-rank/STAGING_AUTH_GITHUB_ID` and paste the Client ID; press "Generate a new client secret", run `pass-env set portfolio-rank/STAGING_AUTH_GITHUB_SECRET` and paste it.
 5. Send the four values to the staging Worker, and the database pair to the repository:
    ```bash
