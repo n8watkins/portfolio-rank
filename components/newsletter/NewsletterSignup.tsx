@@ -7,7 +7,7 @@ import { EmailSignupForm } from "@/components/ui/EmailSignupForm";
 import { Turnstile, prefetchTurnstile, type TurnstileHandle } from "@/components/ui/Turnstile";
 import { eyebrow } from "@/components/ui/styles";
 
-/** Where the form sits; stored with the sign-up as its source (lib/newsletter/store.mjs cleanSource). */
+/** Where the form sits; sent to Kit as the sign-up's referrer (lib/newsletter/store.mjs cleanSource). */
 export type SignupForm = "sidebar" | "after-post" | "blog" | "footer";
 
 const ENABLED = process.env.NEXT_PUBLIC_NEWSLETTER_ENABLED === "true";
@@ -21,7 +21,7 @@ const ERRORS: Record<string, string> = {
 
 /**
  * The blog newsletter's sign-up (AUTOMATION.md "Newsletter"): an address,
- * then POST /api/newsletter/subscribe emails a confirm link; nothing is sent
+ * then POST /api/newsletter/subscribe adds it to Kit, which emails a confirm link; nothing is sent
  * until it is used. Turnstile (action "newsletter") loads on first hover or
  * focus and stays invisible for most people. Two layouts: "stack" (a card
  * for the post's sidebar or the end of a post) and "wide" (text beside the

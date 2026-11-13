@@ -11,6 +11,8 @@ import { editorialChecks } from "./scorecard.mjs";
 
 /** The standard length (POST_TEMPLATE.md; owner, 2026-11-12: 700 to 1,000 words), with 5% slack either side; other lengths are writer.mjs LENGTHS. */
 export const WORDS = { min: 700, max: 1000, slack: 0.05 };
+/** A body may run this far under its minimum before the length check fails. */
+export const SOFT_MIN = 0.85;
 export { LENGTHS, lengthOf } from "./writer.mjs";
 
 // Digits a post may hold outside placeholders: years, the numbers of a
@@ -180,7 +182,8 @@ export function checkTemplate(draft, sheet) {
   }
   const words = wordCount(fill(assembleBody(draft), sheet.facts));
   const L = lengthOf(sheet);
-  const lo = Math.floor(L.min * (1 - WORDS.slack));
+  // A soft gate below (docs/audits/blog-engine.md): only under 85% of the minimum fails.
+  const lo = Math.floor(L.min * SOFT_MIN);
   const hi = Math.ceil(L.max * (1 + WORDS.slack));
   const mid = Math.round((L.min + L.max) / 2);
   if (words < lo) p.push(`body has ${words} words; ${L.min} to ${L.max} wanted: add about ${mid - words} words of substance, for example a concrete example from the facts`);

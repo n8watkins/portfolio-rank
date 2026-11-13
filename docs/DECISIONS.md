@@ -428,7 +428,13 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   A "Try this" step links to a named positive example (an S site strong on that axis) where the naming rule allows.
   Why: each of these was a way the first draft read well and was subtly wrong.
 
-- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90).
+- **Code plans the post, Gemini writes the prose** (owner, 2026-11-13, after the blog engine audit, [audits/blog-engine.md](audits/blog-engine.md); replaces the staged writer). Status: building on #131, tested with a mocked Gemini only (no Gemini spending until the owner approves the experiment).
+  Code builds finished clauses from the fact sheet (pairs worded together, ties never one winner), the sections that fit the post's length, the hook, the TL;DR points, the callout, the Try this examples and the image slots ([pipeline/content/plan.mjs](../pipeline/content/plan.mjs)).
+  Gemini writes plain-text blocks (up to three sections a request); code assembles them, repairs what is safe (paragraph sizes, sentences with stray numbers, missing links or facts, the hero marker) and runs the checks; one fix call rewrites only the failing blocks; one review checks topic, tone, names and voice and lists outside claims, which alone go to Tavily (the owner's gate 2, kept).
+  A post costs 2 requests (standard), 3 (a long post) and up to 2 more for a fix and a claims judgement, against 8 to 12 before; length profiles are short 500 to 750, standard 700 to 1,000, medium 1,200 to 1,600 and long 1,800 to 2,200 words, a soft gate below 85% of the minimum.
+  Posts no longer generate a fresh Workers AI picture (the library job does, for approval); the hero takes a library image only on 2 or more shared tags, else one Pexels search.
+  Why: 0 of 16 staging drafts passed under the staged writer, length failed 17 of 21 check rounds, and whole-post revisions traded one failure for another.
+- **Staged writer is the default (`WRITER_MODE` "staged")** (owner, 2026-11-10; built in #85, #86, #90). Status: superseded on 2026-11-13 by "Code plans the post, Gemini writes the prose"; `staged.mjs` and `WRITER_MODE` are deleted.
   `staged` writes a post as an outline (hook, title, TL;DR, three sections with their facts; structure-checked and retried once before any section is written), two section requests and a finish request, then runs the same code checks: 4 write requests (5 after an outline retry) against 1 for `single`.
   Why: better reading quality for about 1 to 4 more Gemini requests per post.
   `single` stays available by setting `WRITER_MODE` to "single"; unset or unknown values now mean "staged".
@@ -487,10 +493,12 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
 ## Newsletter and email
 
 - **A newsletter: one email per post** (owner, 2026-11-12, replacing "a weekly newsletter" of 2026-11-10). Status: building (staging), `NEWSLETTER_ENABLED` off in production.
-  Sign-up beside every post, on `/blog` and in the footer, confirm by email (double opt-in), one-click unsubscribe, and one email per published post (at most two a week) instead of a weekly digest with the top 5 and the biggest climber; the owner sees every subscriber, where they signed up and every send on `/admin/blog/newsletter` (AUTOMATION.md "Newsletter").
-  It sends through the shared mailroom as its own app (`portfoliorank-news`, 150 a month), so it can't use up sign-in links; caps fail closed and never bill.
-  Cloudflare Email Service is for transactional email only (its FAQ: no marketing email); this is an editorial, double opt-in list that sells nothing, the same as the n8builds.dev blog's, and pausing its mailroom app stops it without touching the other apps. If the list outgrows a few hundred emails a month or Cloudflare objects, it moves to a newsletter service.
+  Sign-up beside every post, on `/blog` and in the footer, confirm by email (double opt-in), one-click unsubscribe, and one email per published post (at most two a week) instead of a weekly digest with the top 5 and the biggest climber; the owner sees the subscriber count and every send on `/admin/blog/newsletter` (AUTOMATION.md "Newsletter").
   Why: a way to bring readers back that doesn't depend on search or social.
+- **The newsletter runs on Kit** (owner, 2026-11-12, replacing sending it through the shared mailroom). Status: building (staging).
+  Kit's free plan (10,000 subscribers, unlimited broadcasts, API access) keeps the list, sends the confirm email (double opt-in on its form), each post's broadcast and the unsubscribe link, and handles bounces; our database keeps no address, only which posts became a broadcast.
+  Our sign-up route keeps Turnstile and the rate limits and adds the address to Kit; each new post becomes a Kit broadcast scheduled 10 minutes ahead, or a draft with a note to the owner if Kit refuses to schedule.
+  Why: Cloudflare Email Service is for transactional email, the mailroom's slice covered only about 18 subscribers, and bulk sends would put the reputation that sign-in and grade emails share at risk.
 - **All email goes through one shared gate with hard caps** (owner, 2026-11-10). Status: building (#81, `lib/email/gate.mjs`; the games' report links use it too).
   Newsletter, queued grade reports, the games' report links and owner updates all pass one module that counts every send and stops at a daily cap.
   The caps (agent): 100 emails a day in all, 80 grade reports, 40 report links, 20 owner alerts and 3 to any one address; a refused or failed send counts too, and the log keeps a keyed hash, never the address (`EMAIL_CAPS` changes them).

@@ -227,7 +227,7 @@ export async function topGrades(db, { now }) {
     } else {
       b.notable([smallId], `The top-graded portfolios lead the rest by the least on ${small.map((x) => x.label).join(" and ")}`);
     }
-    b.notable([leadId, gapId], `the biggest lead of the top-graded portfolios is {{${gapId}}} on {{${leadId}}}${lead.length > 1 ? " (a tie)" : ""}`);
+    b.notable([leadId, gapId], lead.length > 1 ? `{{${leadId}}} tie for the biggest lead of the top-graded portfolios, {{${gapId}}} each` : `the biggest lead of the top-graded portfolios is {{${gapId}}} on {{${leadId}}}`);
   }
   b.chart({
     title: "Average score by axis: portfolios graded A or higher against the rest",

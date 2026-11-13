@@ -120,15 +120,20 @@ async function loadPage(url, fetchImpl) {
  * { supported: [{ sentence, url, title }], cut: [{ sentence, reason }],
  *   requests, searches }.
  */
-export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, names = [] }) {
+export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, names = [], flagged = null }) {
   const out = { supported: [], cut: [], requests: 0, searches: 0 };
-  if (budget.gemini < 1) {
+  // `flagged`: the outside-claim sentences the final review already listed
+  // (compose.mjs), so no list request is spent; Tavily runs only on those.
+  if (!flagged && budget.gemini < 1) {
     out.unchecked = true;
     return out;
   }
-  const list = buildListRequest(draftText);
-  const listed = await generate(list);
-  out.requests++;
+  let listed;
+  if (flagged) listed = { claims: flagged };
+  else {
+    listed = await generate(buildListRequest(draftText));
+    out.requests++;
+  }
   // A sentence built on the sheet's own facts (a {{placeholder}}) or about a
   // site on the names list is PortfolioRank's data, not an outside claim,
   // whatever the lister thought (a staging draft lost three such sentences).

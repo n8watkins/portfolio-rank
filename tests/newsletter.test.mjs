@@ -1,6 +1,7 @@
-// The blog newsletter's store and sender (lib/newsletter) on a throwaway
-// database: double opt-in, unsubscribe links, retention, issues per post,
-// paced batches, the caps (which fail closed) and the emails themselves.
+// The blog newsletter on a throwaway database with Kit mocked
+// (lib/newsletter): the Kit client's calls, one broadcast per published post
+// (scheduled or a draft, never twice), the fallbacks when Kit refuses, and
+// the email itself. Nothing here holds an address.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -8,26 +9,11 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
-import { createEmailGate, emailTransport } from "../lib/email/gate.mjs";
-import {
-  CONFIRM_TTL_MS,
-  PENDING_KEEP_MS,
-  UNSUBSCRIBED_KEEP_MS,
-  cleanSource,
-  confirmSubscription,
-  listSubscribers,
-  newsletterCounts,
-  peekConfirm,
-  pruneNewsletter,
-  recentIssues,
-  subscribe,
-  unsubKey,
-  unsubscribe,
-} from "../lib/newsletter/store.mjs";
-import { newsletterTick, unsubscribeUrl } from "../lib/newsletter/send.mjs";
-import { confirmEmail, postEmail } from "../lib/newsletter/emails.mjs";
+import { KitError, kitClient } from "../lib/newsletter/kit.mjs";
+import { CREATING_STUCK_MS, cleanSource, recentIssues } from "../lib/newsletter/store.mjs";
+import { SEND_DELAY_MS, broadcastMode, newsletterTick } from "../lib/newsletter/send.mjs";
+import { KIT_ADDRESS, KIT_UNSUBSCRIBE, postEmail } from "../lib/newsletter/emails.mjs";
 
-const SECRET = "test-secret";
 const BASE = "https://portfoliorank.example";
 const T0 = Date.UTC(2026, 10, 12, 18);
 const HOUR = 3_600_000;
@@ -39,12 +25,6 @@ async function freshDb() {
   return db;
 }
 
-async function confirmed(db, email, now = T0) {
-  const s = await subscribe(db, { email, source: "/blog (blog)", now, secret: SECRET });
-  await confirmSubscription(db, s.token, { now });
-  return s.id;
-}
-
 async function addPost(db, { id = "p1", publishAt = T0, status = "published", pending = 1 } = {}) {
   await db.execute({
     sql: `INSERT INTO posts (id, slug, kind, status, mode, title, subtitle, newsletter_blurb, ai_line, ai_note, body, facts, checks, images, claims, data_as_of, publish_at, newsletter_pending, created_at, updated_at)
@@ -53,175 +33,217 @@ async function addPost(db, { id = "p1", publishAt = T0, status = "published", pe
   });
 }
 
-/** A gate over a fake mailroom that records what it sent and can refuse. */
-function fakeGate(db, { refuse = () => null, caps } = {}) {
-  const sent = [];
-  const env = {
-    MAILROOM_NEWS: {
-      async send(m) {
-        const code = refuse(m);
-        if (code) return { ok: false, code, retryable: false, message: code };
-        sent.push(m);
-        return { ok: true, messageId: `m${sent.length}` };
-      },
-    },
+/** A mocked Kit API behind fetch: records every call; `answer` can override a response. */
+function mockKit({ answer = () => null } = {}) {
+  const calls = [];
+  let nextId = 100;
+  const fetch = async (url, init = {}) => {
+    const u = new URL(url);
+    const body = init.body ? JSON.parse(init.body) : null;
+    const call = { method: init.method ?? "GET", path: u.pathname.replace(/^\/v4/, ""), query: Object.fromEntries(u.searchParams), body, key: init.headers?.["X-Kit-Api-Key"] };
+    calls.push(call);
+    const over = answer(call);
+    const [status, data] =
+      over ??
+      (call.path === "/subscribers" && call.method === "POST"
+        ? [201, { subscriber: { id: 1, email_address: body.email_address, state: body.state } }]
+        : /^\/forms\/\d+\/subscribers$/.test(call.path)
+          ? [201, { subscriber: { id: 1, state: "inactive" } }]
+          : call.path === "/forms"
+            ? [200, { forms: [{ id: 42, name: "Blog" }], pagination: {} }]
+            : call.path === "/subscribers"
+              ? [200, { subscribers: [], pagination: { has_next_page: false, total_count: 7 } }]
+              : call.path === "/broadcasts"
+                ? [201, { broadcast: { id: nextId++, send_at: body.send_at } }]
+                : [404, { errors: ["Not Found"] }]);
+    return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
   };
-  const gate = createEmailGate({ db, transport: emailTransport(env, { via: "mailroom-news" }), secret: SECRET, now: () => new Date(T0), ...(caps ? { caps } : {}) });
-  return { gate, sent };
+  return { calls, kit: kitClient({ apiKey: "test-key", base: "https://kit.test/v4", fetch }) };
 }
 
-test("double opt-in: pending until the link is used, once, within 3 days", async () => {
-  const db = await freshDb();
-  const a = await subscribe(db, { email: "ada@example.com", source: "/blog/x (sidebar)", now: T0, secret: SECRET });
-  assert.equal(a.action, "confirm");
-  assert.match(a.token, /^[A-Za-z0-9_-]{43}$/);
-  assert.deepEqual(await newsletterCounts(db), { confirmed: 0, pending: 1, unsubscribed: 0 });
-  assert.deepEqual(await peekConfirm(db, a.token, { now: T0 }), { email: "ada@example.com" });
-
-  // Signing up again sends a new link; the old one stops working.
-  const again = await subscribe(db, { email: "ada@example.com", now: T0 + 1000, secret: SECRET });
-  assert.equal(again.id, a.id, "one row per address");
-  assert.deepEqual(await confirmSubscription(db, a.token, { now: T0 + 2000 }), { error: "invalid" });
-  assert.deepEqual(await confirmSubscription(db, again.token, { now: T0 + 2000 }), { ok: true, email: "ada@example.com" });
-  assert.deepEqual(await confirmSubscription(db, again.token, { now: T0 + 3000 }), { error: "invalid" }, "a link works once");
-  assert.deepEqual(await newsletterCounts(db), { confirmed: 1, pending: 0, unsubscribed: 0 });
-
-  // A confirmed address signing up again gets no email and stays confirmed.
-  assert.equal((await subscribe(db, { email: "ada@example.com", now: T0 + 4000, secret: SECRET })).action, "none");
-  const [row] = await listSubscribers(db);
-  assert.equal(row.status, "confirmed");
-  assert.equal(row.source, "/blog/x (sidebar)", "the page it signed up on is kept");
-
-  const late = await subscribe(db, { email: "bob@example.com", now: T0, secret: SECRET });
-  assert.deepEqual(await confirmSubscription(db, late.token, { now: T0 + CONFIRM_TTL_MS + 1 }), { error: "expired" });
-  assert.deepEqual(await confirmSubscription(db, "nope", { now: T0 }), { error: "invalid" });
+test("the Kit client: no key, no client; sign-up is an unconfirmed subscriber added to the double opt-in form", async () => {
+  assert.equal(kitClient({ apiKey: "" }), null);
+  assert.equal(kitClient({}), null);
+  const { calls, kit } = mockKit();
+  await kit.subscribe("ada@example.com", { formId: "42", referrer: `${BASE}/blog/x` });
+  assert.deepEqual(
+    calls.map((c) => [c.method, c.path, c.body]),
+    [
+      ["POST", "/subscribers", { email_address: "ada@example.com", state: "inactive" }],
+      ["POST", "/forms/42/subscribers", { email_address: "ada@example.com", referrer: `${BASE}/blog/x` }],
+    ]
+  );
+  assert.ok(calls.every((c) => c.key === "test-key"));
+  await assert.rejects(kit.subscribe("a@example.com", { formId: "" }), /form id/);
+  assert.equal(await kit.confirmedCount(), 7);
+  assert.deepEqual(calls.at(-1).query, { status: "active", include_total_count: "true", per_page: "1" });
+  assert.equal(await kit.onlyForm(), "42");
 });
 
-test("unsubscribe links work only with their key, and retention deletes what it should", async () => {
+test("the Kit client: errors carry the status and never the address", async () => {
+  const { kit } = mockKit({ answer: (c) => (c.path === "/subscribers" ? [422, { errors: ["Email address bob@example.com is invalid"] }] : null) });
+  const e = await kit.subscribe("bob@example.com", { formId: 1 }).catch((x) => x);
+  assert.ok(e instanceof KitError);
+  assert.equal(e.status, 422);
+  assert.ok(!e.message.includes("bob@example.com"), e.message);
+  const two = mockKit({ answer: (c) => (c.path === "/forms" ? [200, { forms: [{ id: 1 }, { id: 2 }] }] : null) });
+  assert.equal(await two.kit.onlyForm(), null, "several forms: KIT_FORM_ID must say which");
+});
+
+test("a published post becomes one scheduled broadcast in send mode, once", async () => {
   const db = await freshDb();
-  const id = await confirmed(db, "ada@example.com");
-  assert.deepEqual(await unsubscribe(db, { id, key: "x".repeat(32), secret: SECRET, now: T0 }), { error: "invalid" });
-  assert.deepEqual(await unsubscribe(db, { id, key: unsubKey(id, "another-secret"), secret: SECRET, now: T0 }), { error: "invalid" });
-  assert.deepEqual(await unsubscribe(db, { id, key: unsubKey(id, SECRET), secret: SECRET, now: T0 + HOUR }), { ok: true });
-  assert.deepEqual(await unsubscribe(db, { id, key: unsubKey(id, SECRET), secret: SECRET, now: T0 + 2 * HOUR }), { ok: true }, "twice is fine");
-  assert.deepEqual(await newsletterCounts(db), { confirmed: 0, pending: 0, unsubscribed: 1 });
-  assert.equal((await listSubscribers(db))[0].unsubscribedAt, new Date(T0 + HOUR).toISOString(), "the first unsubscribe time is kept");
+  await addPost(db);
+  const { calls, kit } = mockKit();
+  const notes = [];
+  const t1 = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR, notify: async (l) => notes.push(l) });
+  assert.deepEqual(t1, { queued: 1, scheduled: 1, drafts: 0, stopped: 0, waiting: null });
+  const b = calls.find((c) => c.path === "/broadcasts");
+  assert.equal(b.body.send_at, new Date(T0 + HOUR + SEND_DELAY_MS).toISOString());
+  assert.equal(b.body.subject, "Title p1");
+  assert.equal(b.body.public, false);
+  assert.equal(b.body.subscriber_filter, undefined, "no filter: every subscriber");
+  assert.ok(b.body.content.includes(`${BASE}/blog/post-p1`));
+  assert.ok(b.body.content.includes(KIT_UNSUBSCRIBE) && b.body.content.includes(KIT_ADDRESS), "Kit's unsubscribe link and address");
+  assert.equal(b.body.thumbnail_url, `${BASE}/blog/media/p1/hero`);
+  assert.deepEqual(notes, [], "a scheduled send needs no note");
 
-  await subscribe(db, { email: "never@example.com", now: T0, secret: SECRET });
-  await confirmed(db, "stays@example.com");
-  assert.equal(await pruneNewsletter(db, { now: T0 + PENDING_KEEP_MS + 1 }), 1, "the unconfirmed sign-up goes after 7 days");
-  assert.equal(await pruneNewsletter(db, { now: T0 + HOUR + UNSUBSCRIBED_KEEP_MS + 1 }), 1, "the unsubscribed address goes 30 days later");
-  assert.deepEqual((await listSubscribers(db)).map((s) => s.email), ["stays@example.com"]);
+  const t2 = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + 2 * HOUR });
+  assert.deepEqual(t2, { queued: 0, scheduled: 0, drafts: 0, stopped: 0, waiting: null });
+  assert.equal(calls.filter((c) => c.path === "/broadcasts").length, 1, "never twice");
+  const [issue] = await recentIssues(db);
+  assert.equal(issue.status, "scheduled");
+  assert.equal(issue.broadcastId, "100");
+  assert.equal(issue.sendAt, new Date(T0 + HOUR + SEND_DELAY_MS).toISOString());
+  assert.equal(Number((await db.execute("SELECT newsletter_pending FROM posts")).rows[0].newsletter_pending), 0);
+});
 
-  // Signing up again after unsubscribing starts over at pending.
-  const id2 = await confirmed(db, "back@example.com");
-  await unsubscribe(db, { id: id2, key: unsubKey(id2, SECRET), secret: SECRET, now: T0 });
-  const back = await subscribe(db, { email: "back@example.com", now: T0 + HOUR, secret: SECRET });
-  assert.equal(back.action, "confirm");
-  assert.equal((await listSubscribers(db)).find((s) => s.email === "back@example.com").status, "pending");
+test("draft mode (and staging) saves a draft and sends the owner a one-line note", async () => {
+  const db = await freshDb();
+  await addPost(db);
+  const { calls, kit } = mockKit();
+  const notes = [];
+  const t = await newsletterTick({ db, kit, mode: "draft", label: "staging", base: BASE, now: T0 + HOUR, notify: async (l) => notes.push(l) });
+  assert.equal(t.drafts, 1);
+  const b = calls.find((c) => c.path === "/broadcasts");
+  assert.equal(b.body.send_at, null);
+  assert.equal(b.body.subject, "[staging] Title p1");
+  assert.deepEqual(notes, ['[staging] Newsletter: draft ready in Kit for "Title p1".']);
+  assert.equal((await recentIssues(db))[0].status, "draft");
+  assert.equal(broadcastMode("send"), "send");
+  assert.equal(broadcastMode(undefined), "draft");
+  assert.equal(broadcastMode("SEND "), "send");
+  assert.equal(broadcastMode("yes"), "draft");
+});
+
+test("Kit refuses to schedule (403): the same post is saved as a draft instead, with the note", async () => {
+  const db = await freshDb();
+  await addPost(db);
+  const { calls, kit } = mockKit({ answer: (c) => (c.path === "/broadcasts" && c.body.send_at ? [403, { errors: ["Upgrade to schedule"] }] : null) });
+  const notes = [];
+  const t = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR, notify: async (l) => notes.push(l) });
+  assert.equal(t.drafts, 1);
+  assert.equal(t.scheduled, 0);
+  assert.deepEqual(calls.filter((c) => c.path === "/broadcasts").map((c) => c.body.send_at === null), [false, true]);
+  const [issue] = await recentIssues(db);
+  assert.equal(issue.status, "draft");
+  assert.match(issue.reason, /Kit refused to schedule it .*403.*saved as a draft/);
+  assert.equal(notes.length, 1);
+});
+
+test("Kit busy (429) waits for the next tick; any other failure stops the post with a note to check Kit", async () => {
+  const db = await freshDb();
+  await addPost(db, { id: "a" });
+  let busy = true;
+  const { calls, kit } = mockKit({ answer: (c) => (c.path === "/broadcasts" && busy ? [429, { errors: ["Too many requests"] }] : null) });
+  const t1 = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR });
+  assert.equal(t1.scheduled, 0);
+  assert.equal((await recentIssues(db))[0].status, "queued");
+  busy = false;
+  const t2 = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR + 600_000 });
+  assert.equal(t2.scheduled, 1);
+
+  await addPost(db, { id: "b" });
+  const broken = mockKit({ answer: (c) => (c.path === "/broadcasts" ? [500, { errors: ["Internal error"] }] : null) });
+  const t3 = await newsletterTick({ db, kit: broken.kit, mode: "send", base: BASE, now: T0 + 2 * HOUR });
+  assert.equal(t3.stopped, 1);
+  const b = (await recentIssues(db)).find((i) => i.postId === "b");
+  assert.equal(b.status, "stopped");
+  assert.match(b.reason, /500.*check Kit/);
+  await newsletterTick({ db, kit: broken.kit, mode: "send", base: BASE, now: T0 + 3 * HOUR });
+  assert.equal(broken.calls.filter((c) => c.path === "/broadcasts").length, 1, "a stopped post is never retried");
+  assert.equal(calls.filter((c) => c.path === "/broadcasts").length, 2);
+});
+
+test("a Kit call that never reported back is stopped after an hour, never retried", async () => {
+  const db = await freshDb();
+  await addPost(db);
+  await newsletterTick({ db, kit: null, base: BASE, now: T0 + HOUR });
+  // As if a tick claimed the issue and died during the Kit call.
+  await db.execute({ sql: "UPDATE newsletter_issues SET status = 'creating', finished_at = ?", args: [new Date(T0 + HOUR).toISOString()] });
+  const { calls, kit } = mockKit();
+  assert.equal((await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR + 600_000 })).stopped, 0, "not yet");
+  const t = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR + CREATING_STUCK_MS });
+  assert.equal(t.stopped, 1);
+  assert.match((await recentIssues(db))[0].reason, /check Kit/);
+  assert.equal(calls.length, 0);
+});
+
+test("no Kit key, old posts and unpublished posts make no broadcast", async () => {
+  const db = await freshDb();
+  await addPost(db, { id: "old", publishAt: T0 - 5 * 24 * HOUR });
+  await addPost(db, { id: "later", publishAt: T0 + 24 * HOUR });
+  await addPost(db, { id: "now", publishAt: T0 });
+  const t = await newsletterTick({ db, kit: null, base: BASE, now: T0 + HOUR });
+  assert.deepEqual(t, { queued: 2, scheduled: 0, drafts: 0, stopped: 0, waiting: "no_kit_key" });
+  const issues = await recentIssues(db);
+  assert.deepEqual(issues.map((i) => [i.postId, i.status]).sort(), [["now", "queued"], ["old", "skipped"]], "a backlog is never mailed; a future post waits");
+
+  await db.execute("UPDATE posts SET status = 'unpublished' WHERE id = 'now'");
+  const { calls, kit } = mockKit();
+  await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + 2 * HOUR });
+  assert.equal(calls.length, 0);
+  assert.equal((await recentIssues(db)).find((i) => i.postId === "now").status, "stopped");
+});
+
+test("the database keeps no subscriber or address tables", async () => {
+  const db = await freshDb();
+  const tables = (await db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'newsletter%'")).rows.map((r) => String(r.name));
+  assert.deepEqual(tables, ["newsletter_issues"]);
+
+  // A database from the self-sent version (staging): its address tables go, its issues gain Kit's columns.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "newsletter-old-"));
+  const old = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
+  await old.batch(
+    [
+      "CREATE TABLE newsletter_subscribers (id TEXT PRIMARY KEY, email TEXT NOT NULL, email_hash TEXT NOT NULL UNIQUE, status TEXT NOT NULL)",
+      "INSERT INTO newsletter_subscribers VALUES ('s1', 'ada@example.com', 'h', 'confirmed')",
+      "CREATE TABLE newsletter_deliveries (issue_id TEXT NOT NULL, subscriber_id TEXT NOT NULL, status TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (issue_id, subscriber_id))",
+      "CREATE TABLE newsletter_issues (id TEXT PRIMARY KEY, post_id TEXT NOT NULL UNIQUE, status TEXT NOT NULL, reason TEXT, created_at TEXT NOT NULL, finished_at TEXT)",
+      "INSERT INTO newsletter_issues VALUES ('i1', 'p0', 'sent', NULL, '2026-11-10T00:00:00.000Z', '2026-11-10T00:10:00.000Z')",
+    ],
+    "write"
+  );
+  await migrate(old);
+  const left = (await old.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'newsletter%'")).rows.map((r) => String(r.name));
+  assert.deepEqual(left, ["newsletter_issues"]);
+  const [issue] = await recentIssues(old);
+  assert.equal(issue.status, "sent");
+  assert.equal(issue.broadcastId, null);
 });
 
 test("sources are same-site paths and a known form, never a full URL", () => {
   assert.equal(cleanSource("/blog/x?utm=1", "sidebar"), "/blog/x (sidebar)");
-  assert.equal(cleanSource("https://evil.example/", "footer"), "? (footer)");
-  assert.equal(cleanSource("//evil", "nope"), null);
-  assert.equal(cleanSource("/blog", undefined), "/blog");
+  assert.equal(cleanSource("https://evil.example/x", "footer"), "? (footer)");
+  assert.equal(cleanSource("//evil.example", "nope"), null);
 });
 
-test("a published post goes to confirmed subscribers only, in paced batches, once each", async () => {
-  const db = await freshDb();
-  const ids = [];
-  for (let i = 0; i < 13; i++) ids.push(await confirmed(db, `r${i}@example.com`));
-  await subscribe(db, { email: "pending@example.com", now: T0, secret: SECRET });
-  const gone = await confirmed(db, "gone@example.com");
-  await unsubscribe(db, { id: gone, key: unsubKey(gone, SECRET), secret: SECRET, now: T0 });
-  await addPost(db, { publishAt: T0 });
-  const { gate, sent } = fakeGate(db);
-
-  const t1 = await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + HOUR, batch: 10 });
-  assert.deepEqual(t1, { queued: 1, sent: 10, failed: 0, stopped: null });
-  assert.equal(Number((await db.execute("SELECT newsletter_pending FROM posts")).rows[0].newsletter_pending), 0);
-  const t2 = await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + HOUR + 600_000, batch: 10 });
-  assert.deepEqual(t2, { queued: 0, sent: 3, failed: 0, stopped: null });
-  const t3 = await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + HOUR + 1_200_000, batch: 10 });
-  assert.deepEqual(t3, { queued: 0, sent: 0, failed: 0, stopped: null });
-  assert.equal(sent.length, 13);
-  assert.equal(new Set(sent.map((m) => m.to)).size, 13, "nobody twice");
-  assert.ok(!sent.some((m) => m.to === "pending@example.com" || m.to === "gone@example.com"));
-  const [issue] = await recentIssues(db);
-  assert.equal(issue.status, "sent");
-  assert.equal(issue.sent, 13);
-
-  // Each email: the mailroom kind, an idempotency key, one-click unsubscribe headers and link.
-  const m = sent.find((x) => x.to === "r0@example.com");
-  assert.equal(m.kind, "post");
-  assert.match(m.key, /^nl-[0-9a-f]{16}-[A-Za-z0-9_-]{16}$/);
-  const url = unsubscribeUrl(BASE, ids[0], SECRET);
-  assert.equal(m.headers["List-Unsubscribe"], `<${url}>`);
-  assert.equal(m.headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
-  assert.ok(m.text.includes(url) && m.html.includes(url.replace(/&/g, "&amp;")));
-  assert.ok(m.text.includes(`${BASE}/blog/post-p1`));
-  assert.ok(m.html.includes(`${BASE}/blog/media/p1/hero`), "the cover image is an absolute URL");
-});
-
-test("caps fail closed: a full day stops the batch and the rest waits", async () => {
-  const db = await freshDb();
-  for (let i = 0; i < 6; i++) await confirmed(db, `r${i}@example.com`);
-  await addPost(db, { publishAt: T0 });
-  const caps = { day: 100, perRecipient: 3, perRecipientByKind: { newsletter: 3 }, kinds: { newsletter: 4 }, reserve: {} };
-  const { gate, sent } = fakeGate(db, { caps });
-  const t = await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + HOUR, batch: 10 });
-  assert.equal(t.sent, 4);
-  assert.equal(t.stopped, "cap:kind");
-  assert.equal(sent.length, 4);
-  const [issue] = await recentIssues(db);
-  assert.equal(issue.status, "sending");
-  assert.equal(issue.waiting, 2, "the other two wait for a later day");
-});
-
-test("mailroom refusals: one address is skipped, anything else stops the tick", async () => {
-  const db = await freshDb();
-  for (let i = 0; i < 3; i++) await confirmed(db, `r${i}@example.com`);
-  await addPost(db, { publishAt: T0 });
-  let mode = "suppress-one";
-  const { gate, sent } = fakeGate(db, {
-    refuse: (m) => (mode === "suppress-one" && m.to === "r1@example.com" ? "suppressed" : mode === "month" ? "cap_app_month" : null),
-  });
-  mode = "month";
-  const stopped = await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + HOUR });
-  assert.equal(stopped.sent, 0);
-  assert.match(stopped.stopped, /cap_app_month/);
-  mode = "suppress-one";
-  const t = await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + 2 * HOUR });
-  assert.deepEqual({ sent: t.sent, failed: t.failed, stopped: t.stopped }, { sent: 2, failed: 1, stopped: null });
-  assert.deepEqual(sent.map((m) => m.to).sort(), ["r0@example.com", "r2@example.com"]);
-});
-
-test("no transport, old posts and unpublished posts send nothing", async () => {
-  const db = await freshDb();
-  await confirmed(db, "r0@example.com");
-  await addPost(db, { id: "old", publishAt: T0 - 5 * 24 * HOUR });
-  await addPost(db, { id: "later", publishAt: T0 + 24 * HOUR });
-  await addPost(db, { id: "now", publishAt: T0 });
-  const none = createEmailGate({ db, transport: null, secret: SECRET });
-  const t = await newsletterTick({ db, gate: none, base: BASE, secret: SECRET, now: T0 + HOUR });
-  assert.deepEqual(t, { queued: 2, sent: 0, failed: 0, stopped: "no_transport" });
-  const issues = await recentIssues(db);
-  assert.deepEqual(issues.map((i) => [i.postId, i.status]).sort(), [["now", "sending"], ["old", "skipped"]], "a backlog is never mailed; a future post waits");
-
-  await db.execute("UPDATE posts SET status = 'unpublished' WHERE id = 'now'");
-  const { gate, sent } = fakeGate(db);
-  await newsletterTick({ db, gate, base: BASE, secret: SECRET, now: T0 + 2 * HOUR });
-  assert.equal(sent.length, 0);
-  assert.equal((await recentIssues(db)).find((i) => i.postId === "now").status, "stopped");
-});
-
-test("the emails: text and HTML say the same, and everything is escaped", () => {
-  const c = confirmEmail({ link: `${BASE}/newsletter/confirm?t=abc`, site: BASE });
-  assert.ok(c.text.includes(`${BASE}/newsletter/confirm?t=abc`) && c.html.includes(`${BASE}/newsletter/confirm?t=abc`));
-  assert.ok(!c.text.includes("—") && !c.html.includes("—"), "no em dashes");
-  const p = postEmail({ title: "A <b> & c", summary: "x", url: `${BASE}/blog/a`, unsubscribeUrl: `${BASE}/u?s=1&k=2`, site: BASE });
+test("the email: everything is escaped, Kit's tags go in as they are, no em dashes", () => {
+  const p = postEmail({ title: "A <b> & c", summary: "x", url: `${BASE}/blog/a`, site: BASE });
   assert.ok(p.html.includes("A &lt;b&gt; &amp; c") && !p.html.includes("<b>"));
   assert.equal(p.subject, "A <b> & c");
-  assert.equal(postEmail({ title: "T", summary: null, url: "u", unsubscribeUrl: "v", site: BASE, test: true }).subject, "[Test] T");
+  assert.equal(p.previewText, "x");
+  assert.ok(p.html.includes(`href="${KIT_UNSUBSCRIBE}"`));
+  assert.ok(!p.html.includes("—"));
+  const preview = postEmail({ title: "T", summary: null, url: "u", site: BASE, unsubscribeUrl: "#", address: "addr" });
+  assert.ok(!preview.html.includes("{{") && preview.previewText === "T");
 });

@@ -19,6 +19,7 @@
 
 /** The length the owner asked for (2026-11-12, after 500 to 800 on 2026-11-11): 700 to 1,000 words. */
 import { WORDS as TARGET_WORDS } from "./checks.mjs";
+import { lengthOf } from "./writer.mjs";
 export { TARGET_WORDS };
 /** A takeaway must be stated within this many words of the start. */
 export const PAYOFF_WITHIN = 150;
@@ -142,8 +143,9 @@ export function scorecard(post) {
   const devMeta = devMetaHits([post.title, post.subtitle, body].filter(Boolean).join("\n"));
   const payoff = findPayoff([post.subtitle, body].filter(Boolean).join("\n"));
   const flags = [];
-  if (n < TARGET_WORDS.min) flags.push(`Short: ${n} words, about ${TARGET_WORDS.min} to ${TARGET_WORDS.max} wanted`);
-  if (n > TARGET_WORDS.max) flags.push(`Long: ${n} words, about ${TARGET_WORDS.min} to ${TARGET_WORDS.max} wanted unless the data earns more`);
+  const L = lengthOf(post.facts);
+  if (n < L.min) flags.push(`Short: ${n} words, about ${L.min} to ${L.max} wanted`);
+  if (n > L.max) flags.push(`Long: ${n} words, about ${L.min} to ${L.max} wanted unless the data earns more`);
   if (!payoff.ok) flags.push(`No takeaway for the reader in the first ${PAYOFF_WITHIN} words`);
   if (devMeta.length) flags.push(`Dev meta: ${[...new Set(devMeta.map((d) => d.match))].slice(0, 4).join(", ")}`);
   if (grade != null && grade > MAX_GRADE) flags.push(`Hard to read: grade ${grade}`);

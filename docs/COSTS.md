@@ -233,18 +233,10 @@ Expected sign-in volume (email sign-in, added 2026-11-12):
 - Caps on the way: 3 links an hour and 6 a day per address, 10 an hour and 30 a day per network (keyed hashes in `rate_limits`), Turnstile, the gate's 40 sign-in emails a day with 10 kept for them, and the mailroom's priority share for sign-in.
 - Watch: if sign-ins grow past about 4 a day, PortfolioRank's mailroom month share runs out before the month does; raise it in the mailroom (taking from another app, inside the 2,500) or move reports to their own slice.
 
-Newsletter (added 2026-11-12, AUTOMATION.md "Newsletter"): its own mailroom app, `portfoliorank-news`, 40 a day and 150 a month, apart from the 150 above.
-One email per post per confirmed subscriber, at most two posts a week (about 8 a month), plus one confirm email per sign-up.
-
-| Subscribers | Post emails a month | Fits the 150? |
-| ---: | ---: | --- |
-| 10 | about 80 | yes |
-| 18 | about 145 | just |
-| 50 | about 400 | no: from the 19th or so subscriber, later posts reach the rest only after the 32-day window frees room |
-
-- Cost: $0 in every scenario: past the slice, mailroom refuses and the batch waits (fails closed); nothing is billed.
-- Pace: 10 emails a tick, a tick every 10 minutes, and 40 a day, so a post reaches 40 subscribers on its first day and 100 over three days.
-- Watch: past about 15 confirmed subscribers, raise the slice in mailroom (taking from another app, inside the 2,500) or move the list to a newsletter service; the admin page shows "to go" on a send that waits.
+Newsletter (2026-11-12, AUTOMATION.md "Newsletter"): Kit's free plan keeps the list and sends, outside Cloudflare and the mailroom.
+- Cost: $0 up to 10,000 subscribers with unlimited broadcasts; past that Kit asks for a paid plan before it sends again, so nothing bills by surprise.
+- Calls: one Kit call per sign-up pair (create, add to form), one per new post, and the subscriber count once a day (cached); the admin's Newsletter page asks for the count fresh.
+- Watch: Kit's footer badge and open and click tracking come with the free plan.
 
 ## Tavily credits
 
