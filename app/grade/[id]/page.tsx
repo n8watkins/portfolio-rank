@@ -42,8 +42,11 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!page) return { title: "Report not found - PortfolioRank", robots };
   const rep = page.job.report;
   const title = rep ? `${page.job.domain} - grade report - PortfolioRank` : `Grading ${page.job.domain} - PortfolioRank`;
+  // With tiers by ELO the letter and the grade's own standing are told apart: "Tier B. The grade: about top 7% of 60 ...".
   const description = rep
-    ? `${rep.eloTiers ? (rep.tier ? `Tier ${tierLabel(rep.tier)}, graded` : "Graded") : `Tier ${rep.tier}`}${rep.percentile ? `, about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
+    ? rep.eloTiers
+      ? `${rep.tier ? `Tier ${tierLabel(rep.tier)}. ` : ""}${rep.percentile ? `The grade: about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios. ` : ""}What a hiring manager sees, how it looks and reads, and what to fix first.`
+      : `Tier ${rep.tier}${rep.percentile ? `, about top ${rep.percentile.topPct}% of ${rep.percentile.total.toLocaleString("en-US")} graded developer portfolios` : ""}. What a hiring manager sees, how it looks and reads, and what to fix first.`
     : "A PortfolioRank grade on its way.";
   return { title, description, robots, openGraph: { title, description, type: "article" }, twitter: { card: "summary_large_image", title, description } };
 }
