@@ -6,6 +6,7 @@ import { BADGES, checkBadges, listBadges, recordEvent } from "@/lib/games/badges
 import { PRIVATE, currentPlayer, earlyUntil, fail, gamesEnabled, getPool, off, overLimit, rateLimited } from "@/lib/games/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { celebrationLevel } from "@/lib/grader/present.mjs";
+import { tierSettled } from "@/lib/tiers.mjs";
 import { graderEnabled, ownedJobs } from "@/lib/grader/server";
 
 // Badges (GAMES_V2), for the signed-in account or the guest's cookie (a
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     if (!graderEnabled() || !(await ownedJobs()).includes(id)) return fail("not_yours", 400);
     const job = await readJob(db(), id);
     if (job?.status !== "done") return fail("not_yours", 400);
-    level = celebrationLevel({ tier: job.report?.rank?.tier, percentile: job.report?.percentile });
+    level = celebrationLevel({ tier: tierSettled(job.report?.rank) ? job.report?.rank?.tier : null, percentile: job.report?.percentile });
   }
   const player = (await currentPlayer({ create: true }))!;
   const ip = clientIp(req);
