@@ -22,7 +22,7 @@ test("staging's only Cron Trigger is the newsletter's, so nothing there calls Ge
   assert.ok(handler.indexOf("NEWSLETTER_CRON) await") < handler.indexOf("else await startTonight"));
   assert.match(readFileSync("worker/newsletter.ts", "utf8"), /export const NEWSLETTER_CRON = "\*\/10 \* \* \* \*";/);
   assert.equal(staging.vars.NEWSLETTER_ENABLED, "true");
-  assert.equal(config.vars.NEWSLETTER_ENABLED, "false", "off in production until the owner switches it on");
+  assert.equal(config.vars.NEWSLETTER_ENABLED, "true", "on in production: the owner's stored switch (off by default) decides");
   // Staging shares the owner's one Kit account: it only ever makes drafts, whatever the var says (worker/newsletter.ts).
   assert.equal(staging.vars.KIT_BROADCAST_MODE, "draft");
   assert.equal(config.vars.KIT_BROADCAST_MODE, "send");

@@ -1,6 +1,7 @@
 // The blog newsletter end to end against the production build
 // (scripts/test-e2e.sh: NEWSLETTER_ENABLED on, Kit's API replaced by the
-// stand-in this file serves on E2E_KIT_PORT): the sign-up's guards and rate
+// stand-in this file serves on E2E_KIT_PORT): the owner's switch (off by
+// default: no forms, 404; on; off again), the sign-up's guards and rate
 // limits, the address handed to Kit (an unconfirmed subscriber added to the
 // one double opt-in form) and never stored by us, Kit being down, the
 // admin's Newsletter page with Kit's count and the email preview, and the
@@ -92,6 +93,44 @@ before(async () => {
 after(async () => {
   await browser?.close();
   await new Promise((r) => kitServer.close(r));
+});
+
+const setSwitch = async (on, cookie) =>
+  fetch(`${BASE}/api/admin/newsletter/switch`, { method: "POST", headers: { "content-type": "application/json", origin: BASE, ...(cookie ? { cookie } : {}) }, body: JSON.stringify({ on }) });
+
+/** The post page in a browser at desktop width: how many sign-up forms show, once the status answer is in. */
+async function formsOnPost() {
+  const p = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const status = p.waitForResponse((r) => r.url().endsWith("/api/newsletter/status"));
+  await p.goto(`${BASE}/blog/${post.slug}`);
+  const on = (await (await status).json()).on;
+  await p.waitForTimeout(300);
+  const n = await p.locator("[data-newsletter]").count();
+  await p.close();
+  return { on, n };
+}
+
+test("off by default: no forms, the sign-up answers 404; only the admin can turn it on, and that is logged", async () => {
+  assert.deepEqual(await (await fetch(`${BASE}/api/newsletter/status`)).json(), { on: false });
+  assert.equal((await subscribe({ email: `early-${RUN}@example.com` })).status, 404);
+  assert.equal(kitAdds(`early-${RUN}@example.com`).length, 0);
+  assert.deepEqual(await formsOnPost(), { on: false, n: 0 });
+
+  assert.equal((await setSwitch(true)).status, 401, "signed out");
+  assert.equal((await setSwitch(true, await sessionCookie({ id: ADMIN_ID + 1, login: "someone" }))).status, 403, "not the admin");
+  const cookie = await sessionCookie({ id: ADMIN_ID, login: "admin" });
+  const page = await (await fetch(`${BASE}/admin/blog/newsletter`, { headers: { cookie } })).text();
+  assert.match(page, /data-newsletter-switch="off"/);
+  assert.match(page, /Turn newsletter on/);
+
+  const res = await setSwitch(true, cookie);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.on, true);
+  assert.equal(body.live, true);
+  assert.deepEqual(body.log.map((c) => [c.on, c.by]), [[true, "admin"]]);
+  assert.deepEqual(await (await fetch(`${BASE}/api/newsletter/status`)).json(), { on: true });
+  assert.match(await (await fetch(`${BASE}/admin/blog/newsletter`, { headers: { cookie } })).text(), /Turn newsletter off/);
 });
 
 test("sign-up: this site's Origin and a real address only; Kit gets an unconfirmed subscriber on its one form, we keep no address", async () => {
@@ -221,4 +260,20 @@ test("the forms: beside a post on desktop, after it on a phone, on /blog and in 
   assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth), 390, "no sideways scroll");
   await phone.close();
   assert.deepEqual(errors, []);
+});
+
+test("turned off again: the forms disappear, the sign-up answers 404, and nothing reaches Kit", async () => {
+  const cookie = await sessionCookie({ id: ADMIN_ID, login: "admin" });
+  const res = await setSwitch(false, cookie);
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).log.slice(0, 2).map((c) => c.on), [false, true]);
+  assert.deepEqual(await (await fetch(`${BASE}/api/newsletter/status`)).json(), { on: false });
+  const before = kitCalls.length;
+  assert.equal((await subscribe({ email: `late-${RUN}@example.com` })).status, 404);
+  assert.equal(kitCalls.length, before);
+  assert.deepEqual(await formsOnPost(), { on: false, n: 0 });
+  // The admin page still shows Kit and the switch, so the owner can turn it back on.
+  const page = await (await fetch(`${BASE}/admin/blog/newsletter`, { headers: { cookie } })).text();
+  assert.match(page, /Turn newsletter on/);
+  assert.match(page, /Confirmed subscribers/);
 });

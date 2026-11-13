@@ -1,7 +1,7 @@
 import { ensureSchema } from "@/lib/db";
 import { networkOf } from "@/lib/grader/caps.mjs";
 import { clientIp, sameOrigin } from "@/lib/grader/server";
-import { fail, json, keyed, kit, kitFormId, limited, newsletterEnabled, siteBase } from "@/lib/newsletter/server";
+import { fail, json, keyed, kit, kitFormId, limited, newsletterLive, siteBase } from "@/lib/newsletter/server";
 import { cleanSource } from "@/lib/newsletter/store.mjs";
 import { normalizeEmail } from "@/lib/signin/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
@@ -12,7 +12,8 @@ import { verifyTurnstile } from "@/lib/turnstile";
 // opt-in on the KIT_FORM_ID form); we store no address, only rate-limit
 // counters under keyed hashes. Each step refuses before the next costs
 // anything:
-//   1. NEWSLETTER_ENABLED, this site's Origin and a JSON body of at most 4 KB;
+//   1. the newsletter is live (NEWSLETTER_ENABLED and the owner's switch),
+//      this site's Origin and a JSON body of at most 4 KB;
 //   2. a plausible address;
 //   3. attempts per network (keyed hash of the IPv4 address or IPv6 /64):
 //      10 an hour, 30 a day;
@@ -29,7 +30,7 @@ const DAY = 24 * HOUR;
 const LIMITS = { networkHour: 10, networkDay: 30, addressDay: 3 };
 
 export async function POST(req: Request) {
-  if (!newsletterEnabled()) return fail("not_found", 404);
+  if (!(await newsletterLive())) return fail("not_found", 404);
   if (!sameOrigin(req)) return fail("bad_origin", 403);
   const raw = await req.text().catch(() => "");
   if (raw.length > 4096) return fail("bad_request", 400);

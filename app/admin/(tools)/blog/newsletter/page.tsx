@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ExternalLink, Eye, Inbox } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
+import { NewsletterSwitch } from "@/components/admin/NewsletterSwitch";
 import { pacificTime } from "@/components/admin/postStatus";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { btnSecondary } from "@/components/ui/styles";
@@ -9,6 +10,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { broadcastMode } from "@/lib/newsletter/send.mjs";
 import { kit, kitFormId, newsletterEnabled, subscriberCount } from "@/lib/newsletter/server";
 import { recentIssues } from "@/lib/newsletter/store.mjs";
+import { readSwitch, switchLog } from "@/lib/newsletter/switch.mjs";
 import { IS_STAGING } from "@/lib/site";
 
 // The blog newsletter for the owner (AUTOMATION.md "Newsletter"). Kit keeps
@@ -58,8 +60,14 @@ export default async function AdminNewsletterPage() {
   const who = await requireAdmin();
   if ("error" in who) notFound();
   await ensureSchema();
-  const [count, issues] = (await Promise.all([subscriberCount({ fresh: true }), recentIssues(db(), { limit: 10 })])) as [Awaited<ReturnType<typeof subscriberCount>>, Issue[]];
-  const on = newsletterEnabled();
+  const [count, issues, sw, log] = (await Promise.all([subscriberCount({ fresh: true }), recentIssues(db(), { limit: 10 }), readSwitch(db()), switchLog(db(), { limit: 5 })])) as [
+    Awaited<ReturnType<typeof subscriberCount>>,
+    Issue[],
+    { on: boolean },
+    { on: boolean; at: string; by: string | null }[],
+  ];
+  const deployOn = newsletterEnabled();
+  const on = deployOn && sw.on;
   const connected = Boolean(kit());
   const form = Boolean(await kitFormId());
   const mode = IS_STAGING ? "draft" : broadcastMode(process.env.KIT_BROADCAST_MODE);
@@ -74,7 +82,8 @@ export default async function AdminNewsletterPage() {
           </>
         ) : (
           <>
-            <span className="font-semibold text-ink">Off</span> (NEWSLETTER_ENABLED): no sign-up forms and no broadcasts.
+            <span className="font-semibold text-ink">Off</span>
+            {deployOn ? "" : " for this deploy (NEWSLETTER_ENABLED)"}: no sign-up forms and no broadcasts. Kit stays connected, so turning it on needs no deploy.
           </>
         )}
       </AdminHeader>
@@ -137,6 +146,14 @@ export default async function AdminNewsletterPage() {
         </div>
 
         <aside aria-label="Kit" className="grid min-w-0 gap-4">
+          <section aria-labelledby="nl-switch" className="card p-5">
+            <h2 id="nl-switch" className="font-bold tracking-tight">
+              Newsletter on the site
+            </h2>
+            <div className="mt-2">
+              <NewsletterSwitch initial={sw.on} deployOn={deployOn} log={log} />
+            </div>
+          </section>
           <section aria-labelledby="nl-kit" className="card p-5">
             <h2 id="nl-kit" className="font-bold tracking-tight">
               Kit

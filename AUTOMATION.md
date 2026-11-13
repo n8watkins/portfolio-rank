@@ -453,7 +453,9 @@ Owner request of 2026-11-12: besides GitHub, anyone can sign in with an emailed 
 
 Owner request of 2026-11-12: people sign up on the blog and get each new post by email; the owner sees who signs up.
 It replaces the planned weekly digest (docs/DECISIONS.md "A weekly newsletter"): one email per published post, at most two a week (the blog's publish cap).
-Switched by `NEWSLETTER_ENABLED` (wrangler.jsonc: `"false"` in production, `"true"` on staging), which the build also inlines for the forms (`NEXT_PUBLIC_NEWSLETTER_ENABLED`, next.config.ts).
+Two switches, both needed (owner, 2026-11-13): `NEWSLETTER_ENABLED`, the deploy-level kill switch (wrangler.jsonc: `"true"` in production and on staging; the build also inlines it for the forms as `NEXT_PUBLIC_NEWSLETTER_ENABLED`), and the owner's stored switch, "Turn newsletter on/off" on `/admin/blog/newsletter` (off until turned on, no deploy needed).
+The stored switch ([lib/newsletter/switch.mjs](lib/newsletter/switch.mjs), `POST /api/admin/newsletter/switch`, admin only) logs every change with who and when in `newsletter_switch_log`.
+While either is off, no sign-up form shows anywhere (the forms and the settings note ask `GET /api/newsletter/status` once per page load, because the blog's pages are cached at the edge), `POST /api/newsletter/subscribe` answers 404, and the cron queues and creates nothing; Kit stays connected.
 Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12, replacing the self-sent version through mailroom); our database keeps no address.
 
 - **The forms** ([components/newsletter/NewsletterSignup.tsx](components/newsletter/NewsletterSignup.tsx)): beside a post in the right-hand margin on wide screens (1280 px and up, sticky while you read), after the post below that, on `/blog`, and in the site footer on every other page.
@@ -471,6 +473,7 @@ Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12,
   Each email ([lib/newsletter/emails.mjs](lib/newsletter/emails.mjs)): the title, the post's newsletter blurb (else its subtitle), the cover image, "Read the post", Kit's unsubscribe link and Kit's mailing address (`{{ address }}`).
 - **Never twice:** an issue is claimed (`queued` to `creating`) before its one Kit call; a 429 puts it back in the queue, any other failure stops it with "check Kit", and a call that never reported back is stopped after an hour, never retried.
 - **Admin** (`/admin/blog/newsletter`, linked from Blog drafts and the overview with the confirmed count): Kit's confirmed subscribers (asked fresh), whether the key and form are set, each post's broadcast (scheduled with its send time, draft ready, stopped with why), a link to Kit's broadcasts and a preview of the latest post's email (`GET /api/admin/newsletter/preview`).
+  The setup check `GET /api/admin/newsletter/kit` (admin, or on staging the staging gate key in `x-staging-gate`) reads through the Worker: the Kit account and sending address, every form, the templates, the latest broadcasts, the confirmed count and the switches; `?probe=draft` makes a draft broadcast and deletes it at once, to prove the plan allows creating them.
   The overview, the Blog drafts link and the owner goals use the count cached for a day (`subscriberCount`, [lib/newsletter/server.ts](lib/newsletter/server.ts)).
 - **Privacy:** no address is stored here; `newsletter_issues` holds only posts and broadcast ids, and the first version's subscriber tables are dropped by the schema; settings "Cookies and privacy" says Kit keeps the list.
 - **Setup:** the `KIT_API_KEY` secret (V4 key, `pass-env pipe portfolio-rank/KIT_API_KEY -- npx wrangler secret put KIT_API_KEY [--env staging]`); `KIT_FORM_ID` only once the account has more than one form.

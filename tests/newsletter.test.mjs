@@ -13,6 +13,7 @@ import { KitError, kitClient } from "../lib/newsletter/kit.mjs";
 import { CREATING_STUCK_MS, cleanSource, recentIssues } from "../lib/newsletter/store.mjs";
 import { SEND_DELAY_MS, broadcastMode, newsletterTick } from "../lib/newsletter/send.mjs";
 import { KIT_ADDRESS, KIT_UNSUBSCRIBE, postEmail } from "../lib/newsletter/emails.mjs";
+import { readSwitch, setSwitch, switchLog } from "../lib/newsletter/switch.mjs";
 
 const BASE = "https://portfoliorank.example";
 const T0 = Date.UTC(2026, 10, 12, 18);
@@ -22,6 +23,8 @@ async function freshDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "newsletter-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
   await migrate(db);
+  // The owner's switch on, as on a live site; the switch's own tests turn it off.
+  await setSwitch(db, true, { by: "owner" });
   return db;
 }
 
@@ -207,8 +210,8 @@ test("no Kit key, old posts and unpublished posts make no broadcast", async () =
 
 test("the database keeps no subscriber or address tables", async () => {
   const db = await freshDb();
-  const tables = (await db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'newsletter%'")).rows.map((r) => String(r.name));
-  assert.deepEqual(tables, ["newsletter_issues"]);
+  const tables = (await db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'newsletter%'")).rows.map((r) => String(r.name)).sort();
+  assert.deepEqual(tables, ["newsletter_issues", "newsletter_settings", "newsletter_switch_log"]);
 
   // A database from the self-sent version (staging): its address tables go, its issues gain Kit's columns.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "newsletter-old-"));
@@ -224,8 +227,8 @@ test("the database keeps no subscriber or address tables", async () => {
     "write"
   );
   await migrate(old);
-  const left = (await old.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'newsletter%'")).rows.map((r) => String(r.name));
-  assert.deepEqual(left, ["newsletter_issues"]);
+  const left = (await old.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'newsletter%'")).rows.map((r) => String(r.name)).sort();
+  assert.deepEqual(left, ["newsletter_issues", "newsletter_settings", "newsletter_switch_log"]);
   const [issue] = await recentIssues(old);
   assert.equal(issue.status, "sent");
   assert.equal(issue.broadcastId, null);
@@ -246,4 +249,34 @@ test("the email: everything is escaped, Kit's tags go in as they are, no em dash
   assert.ok(!p.html.includes("—"));
   const preview = postEmail({ title: "T", summary: null, url: "u", site: BASE, unsubscribeUrl: "#", address: "addr" });
   assert.ok(!preview.html.includes("{{") && preview.previewText === "T");
+});
+
+test("the owner's switch: off by default, every change logged, and off stops broadcasts", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "newsletter-switch-"));
+  const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
+  await migrate(db);
+  assert.deepEqual(await readSwitch(db), { on: false, at: null, by: null }, "off until the owner turns it on");
+
+  await addPost(db);
+  const { calls, kit } = mockKit();
+  const off = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + HOUR });
+  assert.deepEqual(off, { queued: 0, scheduled: 0, drafts: 0, stopped: 0, waiting: "switched_off" });
+  assert.equal(calls.length, 0, "nothing reaches Kit while off");
+  assert.equal(Number((await db.execute("SELECT newsletter_pending FROM posts")).rows[0].newsletter_pending), 1, "the post waits, still marked");
+
+  await setSwitch(db, true, { by: "owner", now: new Date(T0 + 2 * HOUR) });
+  await setSwitch(db, true, { by: "owner", now: new Date(T0 + 2 * HOUR + 1) });
+  const on = await newsletterTick({ db, kit, mode: "send", base: BASE, now: T0 + 2 * HOUR });
+  assert.equal(on.scheduled, 1, "on: the waiting post goes out");
+
+  await setSwitch(db, false, { by: "owner", now: new Date(T0 + 3 * HOUR) });
+  assert.deepEqual(await readSwitch(db), { on: false, at: new Date(T0 + 3 * HOUR).toISOString(), by: "owner" });
+  assert.deepEqual(
+    (await switchLog(db)).map((c) => [c.on, c.at, c.by]),
+    [
+      [false, new Date(T0 + 3 * HOUR).toISOString(), "owner"],
+      [true, new Date(T0 + 2 * HOUR).toISOString(), "owner"],
+    ],
+    "every change, newest first; turning on twice logs once"
+  );
 });
