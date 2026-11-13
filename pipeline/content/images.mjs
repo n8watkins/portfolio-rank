@@ -34,6 +34,8 @@ export const MAX_IMAGE_CHECKS = 3;
 /** Fresh illustrations a post may generate. */
 export const FRESH_PER_POST = 1;
 export const CANDIDATES = 3;
+/** Shared tags a library image needs to be a post's hero; below it, Pexels is searched first. */
+export const HERO_MIN_SCORE = 2;
 
 export const REVIEW_SCHEMA = {
   type: "OBJECT",
@@ -280,7 +282,8 @@ export async function fillImages(slots, { sheet, body, filledBody, ctx, budget }
         // The close matches are recorded as considered (shown on /admin/images), the best is used.
         // The brief's keywords and the post's own tags: the writer prefers approved images that fit the whole post.
         const ranked = ctx.db ? await rankLibrary(ctx.db, { keywords: [...keywords, ...(ctx.postTags ?? [])], exclude: usedLibrary }) : [];
-        const match = ranked[0]?.img ?? null;
+        // The hero takes a library image only on a strong match (2 or more shared tags; docs/audits/blog-engine.md), else Pexels gets its one search.
+        const match = ranked.find((r) => slot.slot !== "hero" || r.score >= HERO_MIN_SCORE)?.img ?? null;
         for (const { img } of ranked.slice(1)) await recordConsidered(ctx.db, { imageId: img.id, postId: ctx.postId, slot: slot.slot, now: now() });
         if (match) image = await libraryImage(slot, match, "matched by tags");
         const whys = [];
