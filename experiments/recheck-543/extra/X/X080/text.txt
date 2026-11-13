@@ -1,0 +1,167 @@
+[top of the page]
+AZ.
+Home
+About
+Projects
+Skills
+Achievements
+Contact
+Toggle theme
+Resume
+Hello! I'm
+Aathif Zahir
+Full-Stack Developer
+Building elegant solutions to complex problems with modern technologies.
+Contact Me
+View Projects
+developer.js
+// Software Engineer
+const developer = {
+name: 'Aathif Zahir',
+skills: ['React', 'Node.js', 'Python'],
+focuses: ['Full-Stack', 'UI/UX'],
+learning: 'Always'
+};
+About Me
+Bio
+Software engineering student with a passion for creating innovative solutions. Specializing in full-stack development, I combine technical expertise with creative problem-solving to build user-centric applications.
+Education
+BSc in Software Engineering
+SLIIT (Sri Lanka Institute of Information Technology)
+2022 - Present
+Dean's List (2023)
+Experience
+Full Stack Developer Intern
+Twist Digital
+Since March 2025
+Graphic Designer
+SLIIT Media Unit
+Freelance
+3.41 GPA
+Aathif Zahir
+Software Engineering Student
+React
+Node
+UI/UX
+Full Stack
+Download Resume
+[projects section: Projects]
+Projects
+Here are some of the projects I've worked on, showcasing my skills in various technologies and problem domains.
+Py Scrap - Amazon Web Scraper
+A Python-based scraper using Scrapy to extract product details from Amazon, with MongoDB integration for data storage.
+Python
+Scrapy
+MongoDB
+Data Mining
+GitHub
+MSR Tailor Store
+A full-stack application with React and Node.js for order placement and checkout functionality for a tailor store.
+React
+Node.js
+Express
+MongoDB
+GitHub
+Internship Finder - ProIntern
+A React Native and Firebase app for managing internships and applications, helping students find relevant opportunities.
+React Native
+Firebase
+Authentication
+Cloud Functions
+GitHub
+Show More Projects
+[more of the page]
+Skills
+I've worked with a range of technologies in the web development world, from frontend to backend and everything in between.
+Programming Languages
+JavaScript
+Java
+Python
+TypeScript
+HTML/CSS
+Frontend Development
+React
+React Native
+Next.js
+Tailwind CSS
+Flutter
+Backend Development
+Node.js
+Express.js
+NestJS
+Spring Boot
+REST APIs
+Databases
+MongoDB
+MySQL
+Firebase
+PostgreSQL
+Redis
+Tools & Technologies
+Git
+Vercel
+Agile/Scrum
+Design
+Figma
+Adobe AI
+UI/UX Design
+Wireframing
+Prototyping
+Achievements
+A collection of my professional accomplishments, awards, and certifications earned throughout my journey.
+Drag to explore
+2024
+2nd Place - Algothon Codefest
+Secured second place in the competitive programming event.
+Competition
+2024
+3rd Place - INTELLECT 1.0 Hackathon
+Won third place for developing an innovative solution during the 24-hour hackathon.
+Competition
+2023
+Dean's List
+Recognized for academic excellence with placement on the Dean's List.
+Academic
+2025
+ClickUp Novice Certificate
+Completed ClickUp Novice certification demonstrating proficiency in project management tools.
+Certification
+View Certificate
+2025
+ChatGPT Prompt Engineering Basics
+Specialized in AI prompt engineering, productivity improvement, and AI-driven content creation.
+Certification
+View Certificate
+2025
+Software Engineer Intern - HackerRank
+Demonstrated proficiency in MySQL, problem solving, and code refactoring.
+Certification
+View Certificate
+2024
+Explore Core Data Concepts - Microsoft
+Earned Microsoft certification in data structures and data analysis fundamentals.
+Certification
+View Certificate
+2024
+Python for Beginners - University of Moratuwa
+Comprehensive Python certification covering OOP, data structures, algorithms, and debugging.
+Certification
+View Certificate
+2024
+SQL (Basic) - HackerRank
+Earned HackerRank SQL certification demonstrating database management skills.
+Certification
+View Certificate
+2024
+SLIITXtreme 3.0 Participant
+Participated in competitive programming hackathon focusing on problem-solving skills.
+Competition
+Get In Touch
+Have a question or want to work together? Feel free to drop me a message. I'd love to hear from you!
+Contact Information
+Fill up the form and I'll get back to you as soon as possible.
+Email
+[email]
+Phone
+[phone]
+Location …

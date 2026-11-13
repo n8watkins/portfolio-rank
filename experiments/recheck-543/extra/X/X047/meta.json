@@ -1,0 +1,44 @@
+{
+ "id": "X047",
+ "url": "https://akshaysanthoshkumar.vercel.app",
+ "group": "broken",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:18:37.160Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://akshaysanthoshkumar.vercel.app/",
+ "words": 638,
+ "outbound_links": 10,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 133,
+  "phone": 22
+ },
+ "text_chars": 4014,
+ "page_text": "Resume\nW\nE\nL\nC\nO\nM\nE\nT\nO\nM\nY\nP\nO\nR\nT\nF\nO\nL\nI\nO\n!\n\nScroll\n\nABOUT ME\n\nFull-Stack Agentic AI Engineer\n\nAkshay\nSanthoshkumar\n[email]\n[phone]\nResume\nAkshay Santhoshkumar\nI'm flexible across all time zones\nMy tech stack\nAgentic AI\nMicroservices\nSystem Design\nLLM\nNextJS\nAWS\nFull-Stack Agentic AI Software\nWith 3 Years of Experience\nHackerrank\nGithub\nLeetcode\nPortfolio\nCodeForces\nLinkedIn\n\nI \ndon't \njust \nbuild \nwebsites. \nI \nbuild \nexperiences \nfront \nto \nback, \nWell \nain't \nthis \nsite \na \nliving \nproof.\n\nesc\nF1\nF2\nF3\nF4\nF5\nF6\nF7\nF8\nF8\nF10\nF11\nF12\n~\n`\n!\n1\n@\n2\n#\n3\n$\n4\n%\n5\n^\n6\n&\n7\n*\n8\n(\n9\n)\n0\n—\n_\n+\n=\ndelete\ntab\nQ\nW\nE\nR\nT\nY\nU\nI\nO\nP\n{\n[\n}\n]\n|\n\\\ncaps lock\nA\nS\nD\nF\nG\nH\nJ\nK\nL\n:\n;\n\"\n'\nreturn\nshift\nZ\nX\nC\nV\nB\nN\nM\n<\n,\n>\n.\n?\n/\nshift\nfn\ncontrol\noption\ncommand\ncommand\noption\nEXPERIENCE\n\n2025\nChannelCore\nAI Engineer Intern\nBuilt a production full stack AI MVP in 6 weeks, using Next.js and LLM pipelines, at a 4-person startup.\nScaled LLM APIs to handle 2x concurrent load, reducing latency by 45% and costs by 30% via request batching, caching, and token optimization.\nImplemented agentic AI workflows with Claude Code to decrease manual effort by 60% and increase complex task accuracy 40% through autonomous execution.\nVisit\n2024-2025\nUniversity at Buffalo - SUNY\nMaster's degree in Computer Science\nMachine Learning\nAlgorithms\nObject Oriented Programming\nDeep Learning\nVisit\n2022-2024\nMcAfee\nFull-Stack Software developer\nReplaced a legacy monolith with an event-driven AWS microservices architecture, scaling beyond 10K users to process 10M+ events/day using Kafka and Redis.\nOptimized database performance by analyzing logs and refining schemas, reducing latency by 75% (2s to 0.5s) and lowering CPU costs by $2K/month.\nTransitioned to horizontal scaling via geographic database sharding, supporting 500+ RPS with 99.9% uptime while saving $15K/year in EC2 costs.\nVisit\n2022-2022\nMcAfee\nSoftware developer Intern\nImplemented JWT/bcrypt authentication to support 1,000+ concurrent sessions, cutting login issues by 35% via optimized token handling.\nAutomated CI/CD pipelines to cut release time from 2 weeks to 5 days.\nBuilt React.js dashboards saving 20 hours/week in manual reporting.\nVisit\n2018-2022\nAnna Univeristy\nBachelor's in Computer Science\nData Structures\nOperating Systems\nCloud Computing\nComputer Networking\nVisit\nTESTIMONIALS\n\nRatnesh Dubey\n\nSoftware Architect at McAfee\n\nI had the pleasure of working closely with Akshay when he was assigned to our project at McAfee. During that time, Akshay demonstrated not only exceptional technical expertise but also a remarkable attitude that made him a true asset to the team. As a Node.js developer, his deep understanding of backend technologies, asynchronous programming, and API integrations was evident. \n\nLinkedIn\n\nTECH STACK\n\nFront-end to Back-end -- Now in 3D\n\nExplore with your mouse\nIt's interactive\nMY PROJECTS\n\nClean. Functional. Purposeful.\n\nHotel Tonight - Perfect Stay\n\nFind your perfect stay — fast, easy, and beautifully designed.\n\nPreview\n\nhttps://hotel-tonight-client.onrender.com/\nSocials - New ways to connect\n\nConnect, share, and build communities — a modern social app built for today’s conversations.\n\nPreview\n\nhttps://socials-nine-lyart.vercel.app/\nPortFolio - Next-gen 3D Site\n\nA 3D web-powered portfolio blending immersive visuals with clean, functional design — built to showcase my skills, story, and standout projects.\n\nPreview\n\nhttps://akshaysanthoshkumar.vercel.app/\nZoom - Video Conferencing App\n\nSimplify your video conferencing experience with Zoom. Seamlessly connect with colleagues and friends.\n\nNext Up\n\n/\nSaveIt - Store, Sync & Share Smarter\n\nA modern cloud platform built for secure storage, smart collaboration, and instant access anywhere.\n\nNext Up\n\n/\nEcommerce\n\nReimagine your online shopping experience with Ecommerce. Effortlessly browse, buy, and manage products in one place.\n\nSource code\n\nhttps://github.com/Trevor-akshay/E-Commerce-app\nCONTACT ME\n\nLets talk.\n\nName\nEmail address\nSubject\nMessage\nSend Message\n\n2026 © All rights reserved.",
+ "signals": {
+  "projects": true,
+  "about": true,
+  "contact": true,
+  "resume": true,
+  "github": true,
+  "name": true,
+  "score": 6,
+  "needsReview": false
+ }
+}

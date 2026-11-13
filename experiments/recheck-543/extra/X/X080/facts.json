@@ -1,0 +1,53 @@
+{
+ "url": "https://az-dev.vercel.app",
+ "name": "Aathif Zahir",
+ "name_in_page_title": "full name",
+ "name_in_top_heading": "full name",
+ "page_title": "Aathif Zahir | Software Engineering Student",
+ "top_heading": "Aathif Zahir",
+ "first_screen_links": {
+  "desktop": {
+   "work": true,
+   "resume": true,
+   "contact": true,
+   "examples": [
+    "work: Projects",
+    "contact: Contact",
+    "resume: Resume",
+    "contact: Contact Me",
+    "work: View Projects",
+    "work: GitHub",
+    "contact: LinkedIn",
+    "contact: Email"
+   ]
+  },
+  "phone": {
+   "work": true,
+   "resume": false,
+   "contact": true,
+   "examples": [
+    "contact: Contact Me",
+    "work: View Projects",
+    "work: GitHub",
+    "contact: LinkedIn",
+    "contact: Email"
+   ]
+  }
+ },
+ "resume_link_anywhere": true,
+ "project_links": {
+  "checked": 6,
+  "loaded": 6,
+  "broken": 0,
+  "blocked": 0
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "top of the page",
+   "projects section",
+   "more of the page"
+  ],
+  "full_length": 4183
+ }
+}

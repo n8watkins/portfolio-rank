@@ -1,0 +1,44 @@
+{
+ "url": "https://kodr.pro",
+ "name": "Brad Myrick",
+ "name_in_page_title": null,
+ "name_in_top_heading": null,
+ "page_title": "kodr.pro | High-Performance Systems & Web3 Studio",
+ "top_heading": "Unbreakable Unbreakable backend infrastructure.",
+ "first_screen_links": {
+  "desktop": {
+   "work": true,
+   "resume": false,
+   "contact": true,
+   "examples": [
+    "work: Proof of Work",
+    "contact: [ Book Architecture Call ]",
+    "contact: [ Book Architecture Review ]",
+    "work: Explore Proof of Work ↓"
+   ]
+  },
+  "phone": {
+   "work": true,
+   "resume": false,
+   "contact": true,
+   "examples": [
+    "contact: [ Book Architecture Review ]",
+    "work: Explore Proof of Work ↓"
+   ]
+  }
+ },
+ "resume_link_anywhere": false,
+ "project_links": {
+  "checked": 4,
+  "loaded": 3,
+  "broken": 0,
+  "blocked": 1
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "whole page"
+  ],
+  "full_length": 3131
+ }
+}

@@ -1,0 +1,44 @@
+{
+ "id": "X198",
+ "url": "https://ilkeozs.info",
+ "group": "broken",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:22:15.292Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://ilkeozs.info/?i=2",
+ "words": 12,
+ "outbound_links": 4,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 3,
+  "phone": 5
+ },
+ "text_chars": 72,
+ "page_text": "HOME\nABOUT\nBLOG\nPORTFOLIO\nCONTACT\nİlke Özşekerli\nI'm a Community Manag |",
+ "signals": {
+  "projects": true,
+  "about": true,
+  "contact": true,
+  "resume": false,
+  "github": true,
+  "name": true,
+  "score": 5,
+  "needsReview": false
+ }
+}

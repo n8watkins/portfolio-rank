@@ -1,0 +1,36 @@
+{
+ "url": "https://amiralirashidi.github.io",
+ "name": "Amirali Rashidi",
+ "name_in_page_title": null,
+ "name_in_top_heading": null,
+ "page_title": "amiralirashidi.me",
+ "top_heading": "",
+ "first_screen_links": {
+  "desktop": {
+   "work": false,
+   "resume": false,
+   "contact": false,
+   "examples": []
+  },
+  "phone": {
+   "work": false,
+   "resume": false,
+   "contact": false,
+   "examples": []
+  }
+ },
+ "resume_link_anywhere": false,
+ "project_links": {
+  "checked": 1,
+  "loaded": 1,
+  "broken": 0,
+  "blocked": 0
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "whole page"
+  ],
+  "full_length": 73
+ }
+}

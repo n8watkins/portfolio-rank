@@ -1,0 +1,44 @@
+{
+ "id": "X080",
+ "url": "https://az-dev.vercel.app",
+ "group": "delisted_ungraded",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:19:30.240Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://az-dev.vercel.app/#home",
+ "words": 572,
+ "outbound_links": 8,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 3,
+  "phone": 11
+ },
+ "text_chars": 4017,
+ "page_text": "AZ.\nHome\nAbout\nProjects\nSkills\nAchievements\nContact\nToggle theme\nResume\nHello! I'm\nAathif Zahir\n\nFull-Stack Developer\n\nBuilding elegant solutions to complex problems with modern technologies.\n\nContact Me\nView Projects\ndeveloper.js\n// Software Engineer\nconst developer = {\nname: 'Aathif Zahir',\nskills: ['React', 'Node.js', 'Python'],\nfocuses: ['Full-Stack', 'UI/UX'],\nlearning: 'Always'\n};\nAbout Me\nBio\n\nSoftware engineering student with a passion for creating innovative solutions. Specializing in full-stack development, I combine technical expertise with creative problem-solving to build user-centric applications.\n\nEducation\n\nBSc in Software Engineering\n\nSLIIT (Sri Lanka Institute of Information Technology)\n\n2022 - Present\n\nDean's List (2023)\n\nExperience\n\nFull Stack Developer Intern\n\nTwist Digital\n\nSince March 2025\n\nGraphic Designer\n\nSLIIT Media Unit\n\nFreelance\n\n3.41 GPA\nAathif Zahir\n\nSoftware Engineering Student\n\nReact\nNode\nUI/UX\nFull Stack\nDownload Resume\nProjects\n\nHere are some of the projects I've worked on, showcasing my skills in various technologies and problem domains.\n\nPy Scrap - Amazon Web Scraper\n\nA Python-based scraper using Scrapy to extract product details from Amazon, with MongoDB integration for data storage.\n\nPython\nScrapy\nMongoDB\nData Mining\nGitHub\nMSR Tailor Store\n\nA full-stack application with React and Node.js for order placement and checkout functionality for a tailor store.\n\nReact\nNode.js\nExpress\nMongoDB\nGitHub\nInternship Finder - ProIntern\n\nA React Native and Firebase app for managing internships and applications, helping students find relevant opportunities.\n\nReact Native\nFirebase\nAuthentication\nCloud Functions\nGitHub\nShow More Projects\nSkills\n\nI've worked with a range of technologies in the web development world, from frontend to backend and everything in between.\n\nProgramming Languages\nJavaScript\nJava\nPython\nTypeScript\nHTML/CSS\nFrontend Development\nReact\nReact Native\nNext.js\nTailwind CSS\nFlutter\nBackend Development\nNode.js\nExpress.js\nNestJS\nSpring Boot\nREST APIs\nDatabases\nMongoDB\nMySQL\nFirebase\nPostgreSQL\nRedis\nTools & Technologies\nGit\nVercel\nAgile/Scrum\nDesign\nFigma\nAdobe AI\nUI/UX Design\nWireframing\nPrototyping\nAchievements\n\nA collection of my professional accomplishments, awards, and certifications earned throughout my journey.\n\nDrag to explore\n\n2024\n\n2nd Place - Algothon Codefest\n\nSecured second place in the competitive programming event.\n\nCompetition\n\n2024\n\n3rd Place - INTELLECT 1.0 Hackathon\n\nWon third place for developing an innovative solution during the 24-hour hackathon.\n\nCompetition\n\n2023\n\nDean's List\n\nRecognized for academic excellence with placement on the Dean's List.\n\nAcademic\n\n2025\n\nClickUp Novice Certificate\n\nCompleted ClickUp Novice certification demonstrating proficiency in project management tools.\n\nCertification\nView Certificate\n\n2025\n\nChatGPT Prompt Engineering Basics\n\nSpecialized in AI prompt engineering, productivity improvement, and AI-driven content creation.\n\nCertification\nView Certificate\n\n2025\n\nSoftware Engineer Intern - HackerRank\n\nDemonstrated proficiency in MySQL, problem solving, and code refactoring.\n\nCertification\nView Certificate\n\n2024\n\nExplore Core Data Concepts - Microsoft\n\nEarned Microsoft certification in data structures and data analysis fundamentals.\n\nCertification\nView Certificate\n\n2024\n\nPython for Beginners - University of Moratuwa\n\nComprehensive Python certification covering OOP, data structures, algorithms, and debugging.\n\nCertification\nView Certificate\n\n2024\n\nSQL (Basic) - HackerRank\n\nEarned HackerRank SQL certification demonstrating database management skills.\n\nCertification\nView Certificate\n\n2024\n\nSLIITXtreme 3.0 Participant\n\nParticipated in competitive programming hackathon focusing on problem-solving skills.\n\nCompetition\nGet In Touch\n\nHave a question or want to work together? Feel free to drop me a message. I'd love to hear from you!\n\nContact Information\n\nFill up the form and I'll get back to you as soon as possible.\n\nEmail\n\n[email]\n\nPhone\n\n[phone]\n\nLocation\n\nColombo, Sri Lanka\n\nConnect with me\nYour Name\nYour Email\nSubject\nMessage\nSend Message\nAZ.\n\nBuilding elegant digital solutions with a focus on user experience and technical excellence.\n\n© 2026 Aathif Zahir | Built with React and Tailwind",
+ "signals": {
+  "projects": true,
+  "about": true,
+  "contact": true,
+  "resume": true,
+  "github": true,
+  "name": true,
+  "score": 6,
+  "needsReview": false
+ }
+}

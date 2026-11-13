@@ -1,0 +1,44 @@
+{
+ "id": "X232",
+ "url": "https://kodr.pro",
+ "group": "broken",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:22:32.095Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://www.kodr.pro/",
+ "words": 467,
+ "outbound_links": 8,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 4,
+  "phone": 10
+ },
+ "text_chars": 3131,
+ "page_text": "kodr.pro\nProof of Work\nArchitecture\n[ Book Architecture Call ]\nHIGH-PERFORMANCE SYSTEMS & WEB3 STUDIO\nUnbreakable backend infrastructure.\n\nBespoke backend systems and Web3 protocols for startups that need senior engineering firepower.\n\n[ Book Architecture Review ]\nExplore Proof of Work ↓\n▲\nRUST · SOLIDITY · TYPESCRIPT\n▲\nZERO-TRUST ARCHITECTURE\n▲\nPRODUCTION CODE, NOT SLIDE DECKS\n\n// THE HARD PART\n\nAnyone can rapid-prototype now. Taking it to production is the real work.\n\nAI made working prototypes cheap. What it didn't change is everything after: architecture that scales, security that holds under adversaries, and systems that run unattended.\n\nkodr.pro is a new type of studio, AI-enabled and streamlined by a senior Systems Engineer.\n\nPROTOTYPE\n→\nPRODUCTION\n→\nBEYOND\n\n// PROOF OF WORK\n\nA few kodr.pro products.\n\nSHIPPED, AUDITED, AND RUNNING UNATTENDED\n\nPeekPeak\n· AUTONOMOUS KEEPER NETWORK\n\nContracts that execute themselves. A decentralized keeper network that monitors state, simulates off-chain execution, and fires performJob the instant conditions are met to eliminate reverted gas costs.\n\npeekpeak.app\n↗\nLIVE IN PROD\nMAINNET\nREQUIRED TOKENS\n0\nTRIGGER LATENCY\n<1s\nBitVanes\n· AST CODE WALKTHROUGH ENGINE\n\nVS Code extension that converts complex Git diffs and pull requests into step-through guided tours. Snapped to Tree-sitter ASTs across 5 languages with zero-trust local key privacy.\n\nbitvanes.com\n↗\nAST GENERATION\n<1s\nUNIQUE DOWNLOADS\n1K+\nLOCAL PRIVACY\n100%\nDiveChain\n· ERC-8260 · SOVEREIGN DIVE LOGS\n\nAn Ethereum standard for sovereign dive logs. Zero admin keys, zero PII on-chain, byte-verified EIP-712 attestations, and a 17-finding security review fully resolved.\n\ndivechain.pro\n↗\nSTANDARD AUTHORED\nERC-8260\nFINDINGS CLOSED\n17\nREFERENCE IMPL\nCC0\nAiWrangler\n· AGENT GUARDRAILS · OPEN SOURCE\n\nGround-truth guardrails for coding agents. Judges agent plans and diffs against your spec, review rules, and rulings: deterministic checks offline, a calibrated semantic judge for the rest, and human-only sign-off on secrets and one-way doors. Fail-closed — a missing key is never a silent pass. Install with npm i @kodr/aiwrangler.\n\nnpm · @kodr/aiwrangler\n↗\nSEEDED CATCHES\n9/9\nFALSE POSITIVES\n0\nOPEN SOURCE\nApache-2.0\n\n// HOW I WORK\n\nThree stages. No account managers. No bloat.\n01\nDAYS 1–3\nSprint Audit\n\nI inspect your technical bottleneck, audit existing code, and deliver an actionable architecture blueprint.\n\n→\n02\nWEEKS 1–3\nHardened Build\n\nI engineer, test, and stress-proof your custom backend, smart contract protocol, or developer tooling.\n\n→\n03\nHANDOVER\nTurnkey Handover\n\nYou receive sovereign, fully documented, production-tested software engineered to run unattended.\n\n// START HERE\n\nReady to eliminate your technical bottlenecks?\n\nBook a 30-minute architecture review to discuss your stack, timeline, and infrastructure goals.\n\nEMAIL\n[email]\n↗\nTELEGRAM\n@kodr_pro\n↗\nCALENDAR\nBook 30-Min Call\n↗\n\nTypical response time: within one business day.\n\nNAME *\nEMAIL *\nCOMPANY / PROJECT\nWHAT ARE YOU BUILDING? *\n[Book Architecture Review]\nkodr.pro\nProof of Work\nArchitecture\nGitHub ↗\nX ↗\n\n© 2026 kodr.pro: systems engineered to run unattended.",
+ "signals": {
+  "projects": true,
+  "about": false,
+  "contact": true,
+  "resume": false,
+  "github": true,
+  "name": false,
+  "score": 3,
+  "needsReview": false
+ }
+}

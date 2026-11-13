@@ -1,0 +1,38 @@
+{
+ "extra": true,
+ "sites": 9,
+ "batches": 2,
+ "solo": 0,
+ "requests": [
+  {
+   "key": "batch/e01",
+   "step": "batch",
+   "set": "X",
+   "kind": "batch",
+   "ids": [
+    "X047",
+    "X057",
+    "X080",
+    "X136",
+    "X192"
+   ],
+   "pad": []
+  },
+  {
+   "key": "batch/e02",
+   "step": "batch",
+   "set": "X",
+   "kind": "batch",
+   "ids": [
+    "X198",
+    "X232",
+    "X255",
+    "X457",
+    "X231"
+   ],
+   "pad": [
+    "X231"
+   ]
+  }
+ ]
+}

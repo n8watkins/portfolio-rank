@@ -1,0 +1,238 @@
+[top of the page]
+Resume
+W
+E
+L
+C
+O
+M
+E
+T
+O
+M
+Y
+P
+O
+R
+T
+F
+O
+L
+I
+O
+!
+Scroll
+[projects section: Portfolio]
+ABOUT ME
+Full-Stack Agentic AI Engineer
+Akshay
+Santhoshkumar
+[email]
+[phone]
+Resume
+Akshay Santhoshkumar
+I'm flexible across all time zones
+My tech stack
+Agentic AI
+Microservices
+System Design
+LLM
+NextJS
+AWS
+Full-Stack Agentic AI Software
+With 3 Years of Experience
+Hackerrank
+Github
+Leetcode
+Portfolio
+CodeForces
+LinkedIn
+I
+don't
+just
+build
+websites.
+I
+build
+experiences
+front
+to
+back,
+Well
+ain't
+this
+site
+a
+living
+proof.
+esc
+F1
+F2
+F3
+F4
+F5
+F6
+F7
+F8
+F8
+F10
+F11
+F12
+~
+`
+!
+1
+@
+2
+#
+3
+$
+4
+%
+5
+^
+6
+&
+7
+*
+8
+(
+9
+)
+0
+—
+_
++
+=
+delete
+tab
+Q
+W
+E
+R
+T
+Y
+U
+I
+O
+P
+{
+[
+}
+]
+|
+\
+caps lock
+A
+S
+D
+F
+G
+H
+J
+K
+L
+:
+;
+"
+'
+return
+shift
+Z
+X
+C
+V
+B
+N
+M
+<
+,
+>
+.
+?
+/
+shift
+fn
+control
+option
+command
+command
+option
+[more of the page]
+EXPERIENCE
+2025
+ChannelCore
+AI Engineer Intern
+Built a production full stack AI MVP in 6 weeks, using Next.js and LLM pipelines, at a 4-person startup.
+Scaled LLM APIs to handle 2x concurrent load, reducing latency by 45% and costs by 30% via request batching, caching, and token optimization.
+Implemented agentic AI workflows with Claude Code to decrease manual effort by 60% and increase complex task accuracy 40% through autonomous execution.
+Visit
+2024-2025
+University at Buffalo - SUNY
+Master's degree in Computer Science
+Machine Learning
+Algorithms
+Object Oriented Programming
+Deep Learning
+Visit
+2022-2024
+McAfee
+Full-Stack Software developer
+Replaced a legacy monolith with an event-driven AWS microservices architecture, scaling beyond 10K users to process 10M+ events/day using Kafka and Redis.
+Optimized database performance by analyzing logs and refining schemas, reducing latency by 75% (2s to 0.5s) and lowering CPU costs by $2K/month.
+Transitioned to horizontal scaling via geographic database sharding, supporting 500+ RPS with 99.9% uptime while saving $15K/year in EC2 costs.
+Visit
+2022-2022
+McAfee
+Software developer Intern
+Implemented JWT/bcrypt authentication to support 1,000+ concurrent sessions, cutting login issues by 35% via optimized token handling.
+Automated CI/CD pipelines to cut release time from 2 weeks to 5 days.
+Built React.js dashboards saving 20 hours/week in manual reporting.
+Visit
+2018-2022
+Anna Univeristy
+Bachelor's in Computer Science
+Data Structures
+Operating Systems
+Cloud Computing
+Computer Networking
+Visit
+TESTIMONIALS
+Ratnesh Dubey
+Software Architect at McAfee
+I had the pleasure of working closely with Akshay when he was assigned to our project at McAfee. During that time, Akshay demonstrated not only exceptional technical expertise but also a remarkable attitude that made him a true asset to the team. As a Node.js developer, his deep understanding of backend technologies, asynchronous programming, and API integrations was evident.
+LinkedIn
+TECH STACK
+Front-end to Back-end -- Now in 3D
+Explore with your mouse
+It's interactive
+MY PROJECTS
+Clean. Functional. Purposeful.
+Hotel Tonight - Perfect Stay
+Find your perfect stay — fast, easy, and beautifully designed.
+Preview
+https://hotel-tonight-client.onrender.com/
+Socials - New ways to connect
+Connect, share, and build communities — a modern social app built for today’s conversations.
+Preview
+https://socials-nine-lyart.vercel.app/
+PortFolio - Next-gen 3D Site
+A 3D web-powered portfolio blending immersive visuals with clean, functional design — built to showcase my skills, story, and standout projects.
+Preview
+https://akshaysanthoshkumar.vercel.app/
+Zoom - Video Conferencing App
+Simplify your video conferencing experience with Zoom. Seamlessly connect with colleagues and friends.
+Next Up
+/
+SaveIt - Store, Sync & Share Smarter
+A modern cloud platform built for secure storage, smart collaboration, and instant access anywhere.
+Next Up
+/
+Ecommerce
+Reimagine your online shopping experience with Ecommerce. Effortlessly browse, buy, and manage products in one place.
+Source code
+https://github.com/Trevor-akshay/E-Commerce-app
+CONTACT ME
+Lets talk.
+Name
+Email address …

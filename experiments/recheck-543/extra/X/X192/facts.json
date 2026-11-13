@@ -1,0 +1,36 @@
+{
+ "url": "https://hyperautomation.substack.com",
+ "name": "Evangelos Pappas",
+ "name_in_page_title": "full name",
+ "name_in_top_heading": null,
+ "page_title": "Hyperautomation - Emerging Tech | Evangelos Pappas | Substack",
+ "top_heading": "Hyperautomation - Emerging Tech",
+ "first_screen_links": {
+  "desktop": {
+   "work": false,
+   "resume": false,
+   "contact": false,
+   "examples": []
+  },
+  "phone": {
+   "work": false,
+   "resume": false,
+   "contact": false,
+   "examples": []
+  }
+ },
+ "resume_link_anywhere": false,
+ "project_links": {
+  "checked": 8,
+  "loaded": 8,
+  "broken": 0,
+  "blocked": 0
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "whole page"
+  ],
+  "full_length": 401
+ }
+}

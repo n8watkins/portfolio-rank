@@ -1,0 +1,54 @@
+{
+ "url": "https://manixh.vercel.app",
+ "name": "Manish Kumar",
+ "name_in_page_title": "full name",
+ "name_in_top_heading": "full name",
+ "page_title": "Manish Kumar | Full Stack Developer | MERN & Java Full Stack",
+ "top_heading": "Manish Kumar My heart when I saw you",
+ "first_screen_links": {
+  "desktop": {
+   "work": true,
+   "resume": true,
+   "contact": true,
+   "examples": [
+    "work: Projects",
+    "resume: Resume",
+    "work: Open-source",
+    "contact: @manixh02",
+    "contact: Manish Kumar @Manixh02 Follow",
+    "contact+work: Email Me",
+    "contact: Email Me",
+    "contact: https://linkedin.com/in/imanish02"
+   ]
+  },
+  "phone": {
+   "work": true,
+   "resume": true,
+   "contact": true,
+   "examples": [
+    "work: Projects",
+    "resume: Resume",
+    "work: Star this portfolio on GitHub",
+    "contact: @manixh02",
+    "contact: Manish Kumar @Manixh02 Follow",
+    "contact+work: Email Me",
+    "contact: Email Me",
+    "contact: https://linkedin.com/in/imanish02"
+   ]
+  }
+ },
+ "resume_link_anywhere": true,
+ "project_links": {
+  "checked": 8,
+  "loaded": 8,
+  "broken": 0,
+  "blocked": 0
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "whole page"
+  ],
+  "full_length": 3315
+ }
+}

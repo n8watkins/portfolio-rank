@@ -1,0 +1,44 @@
+{
+ "url": "https://ilkeozs.info",
+ "name": "Ilke Ozsekerli",
+ "name_in_page_title": "full name",
+ "name_in_top_heading": null,
+ "page_title": "İlke Özşekerli | Backend & Governance",
+ "top_heading": "",
+ "first_screen_links": {
+  "desktop": {
+   "work": true,
+   "resume": false,
+   "contact": true,
+   "examples": [
+    "contact: İlke Özşekerli LinkedIn Profile",
+    "work: İlke Özşekerli GitHub Profile",
+    "contact: email-pic"
+   ]
+  },
+  "phone": {
+   "work": true,
+   "resume": false,
+   "contact": true,
+   "examples": [
+    "contact: İlke Özşekerli LinkedIn Profile",
+    "work: İlke Özşekerli GitHub Profile",
+    "contact: email-pic"
+   ]
+  }
+ },
+ "resume_link_anywhere": false,
+ "project_links": {
+  "checked": 5,
+  "loaded": 5,
+  "broken": 0,
+  "blocked": 0
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "whole page"
+  ],
+  "full_length": 72
+ }
+}

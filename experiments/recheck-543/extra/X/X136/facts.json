@@ -1,0 +1,47 @@
+{
+ "url": "https://dub.sh/ankitdey",
+ "name": "Ankit Dey",
+ "name_in_page_title": "full name",
+ "name_in_top_heading": "first name",
+ "page_title": "Ankit Dey - Portfolio",
+ "top_heading": "Ankit",
+ "first_screen_links": {
+  "desktop": {
+   "work": true,
+   "resume": true,
+   "contact": true,
+   "examples": [
+    "contact: /contact",
+    "contact: https://www.twitter.com/marshdit",
+    "contact: https://www.linkedin.com/in/ankit-dey-kiit",
+    "resume: View Resume",
+    "work: Github"
+   ]
+  },
+  "phone": {
+   "work": true,
+   "resume": true,
+   "contact": true,
+   "examples": [
+    "contact: https://www.twitter.com/marshdit",
+    "contact: https://www.linkedin.com/in/ankit-dey-kiit",
+    "resume: View Resume",
+    "work: Github"
+   ]
+  }
+ },
+ "resume_link_anywhere": true,
+ "project_links": {
+  "checked": 0,
+  "loaded": 0,
+  "broken": 0,
+  "blocked": 0
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "whole page"
+  ],
+  "full_length": 66
+ }
+}

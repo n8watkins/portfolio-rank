@@ -1,0 +1,44 @@
+{
+ "id": "X136",
+ "url": "https://dub.sh/ankitdey",
+ "group": "broken",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:21:17.629Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://ankitdey.vercel.app/",
+ "words": 11,
+ "outbound_links": 6,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 4,
+  "phone": 20317
+ },
+ "text_chars": 66,
+ "page_text": "\n\nAnkit\nDey\nI am a Passionate Software\nDeveloper.\nView Resume\nGithub",
+ "signals": {
+  "projects": true,
+  "about": true,
+  "contact": true,
+  "resume": true,
+  "github": true,
+  "name": true,
+  "score": 6,
+  "needsReview": false
+ }
+}

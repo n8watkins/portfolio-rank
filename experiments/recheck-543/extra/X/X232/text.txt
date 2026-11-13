@@ -1,0 +1,111 @@
+kodr.pro
+Proof of Work
+Architecture
+[ Book Architecture Call ]
+HIGH-PERFORMANCE SYSTEMS & WEB3 STUDIO
+Unbreakable backend infrastructure.
+Bespoke backend systems and Web3 protocols for startups that need senior engineering firepower.
+[ Book Architecture Review ]
+Explore Proof of Work ↓
+▲
+RUST · SOLIDITY · TYPESCRIPT
+▲
+ZERO-TRUST ARCHITECTURE
+▲
+PRODUCTION CODE, NOT SLIDE DECKS
+// THE HARD PART
+Anyone can rapid-prototype now. Taking it to production is the real work.
+AI made working prototypes cheap. What it didn't change is everything after: architecture that scales, security that holds under adversaries, and systems that run unattended.
+kodr.pro is a new type of studio, AI-enabled and streamlined by a senior Systems Engineer.
+PROTOTYPE
+→
+PRODUCTION
+→
+BEYOND
+// PROOF OF WORK
+A few kodr.pro products.
+SHIPPED, AUDITED, AND RUNNING UNATTENDED
+PeekPeak
+· AUTONOMOUS KEEPER NETWORK
+Contracts that execute themselves. A decentralized keeper network that monitors state, simulates off-chain execution, and fires performJob the instant conditions are met to eliminate reverted gas costs.
+peekpeak.app
+↗
+LIVE IN PROD
+MAINNET
+REQUIRED TOKENS
+0
+TRIGGER LATENCY
+<1s
+BitVanes
+· AST CODE WALKTHROUGH ENGINE
+VS Code extension that converts complex Git diffs and pull requests into step-through guided tours. Snapped to Tree-sitter ASTs across 5 languages with zero-trust local key privacy.
+bitvanes.com
+↗
+AST GENERATION
+<1s
+UNIQUE DOWNLOADS
+1K+
+LOCAL PRIVACY
+100%
+DiveChain
+· ERC-8260 · SOVEREIGN DIVE LOGS
+An Ethereum standard for sovereign dive logs. Zero admin keys, zero PII on-chain, byte-verified EIP-712 attestations, and a 17-finding security review fully resolved.
+divechain.pro
+↗
+STANDARD AUTHORED
+ERC-8260
+FINDINGS CLOSED
+17
+REFERENCE IMPL
+CC0
+AiWrangler
+· AGENT GUARDRAILS · OPEN SOURCE
+Ground-truth guardrails for coding agents. Judges agent plans and diffs against your spec, review rules, and rulings: deterministic checks offline, a calibrated semantic judge for the rest, and human-only sign-off on secrets and one-way doors. Fail-closed — a missing key is never a silent pass. Install with npm i @kodr/aiwrangler.
+npm · @kodr/aiwrangler
+↗
+SEEDED CATCHES
+9/9
+FALSE POSITIVES
+0
+OPEN SOURCE
+Apache-2.0
+// HOW I WORK
+Three stages. No account managers. No bloat.
+01
+DAYS 1–3
+Sprint Audit
+I inspect your technical bottleneck, audit existing code, and deliver an actionable architecture blueprint.
+→
+02
+WEEKS 1–3
+Hardened Build
+I engineer, test, and stress-proof your custom backend, smart contract protocol, or developer tooling.
+→
+03
+HANDOVER
+Turnkey Handover
+You receive sovereign, fully documented, production-tested software engineered to run unattended.
+// START HERE
+Ready to eliminate your technical bottlenecks?
+Book a 30-minute architecture review to discuss your stack, timeline, and infrastructure goals.
+EMAIL
+[email]
+↗
+TELEGRAM
+@kodr_pro
+↗
+CALENDAR
+Book 30-Min Call
+↗
+Typical response time: within one business day.
+NAME *
+EMAIL *
+COMPANY / PROJECT
+WHAT ARE YOU BUILDING? *
+[Book Architecture Review]
+kodr.pro
+Proof of Work
+Architecture
+GitHub ↗
+X ↗
+© 2026 kodr.pro: systems engineered to run unattended.

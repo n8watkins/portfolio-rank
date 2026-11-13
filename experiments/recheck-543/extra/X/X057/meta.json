@@ -1,0 +1,44 @@
+{
+ "id": "X057",
+ "url": "https://amiralirashidi.github.io",
+ "group": "not_portfolio",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T22:07:12.538Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://ww38.amiralirashidi.me/",
+ "words": 12,
+ "outbound_links": 1,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 20099,
+  "phone": 20088
+ },
+ "text_chars": 73,
+ "page_text": "___\nBuy this domain.\nPrivacy Policy\n\n2026 Copyright | All Rights Reserved.",
+ "signals": {
+  "projects": false,
+  "about": false,
+  "contact": false,
+  "resume": false,
+  "github": false,
+  "name": true,
+  "score": 1,
+  "needsReview": true
+ }
+}

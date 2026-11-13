@@ -1,0 +1,44 @@
+{
+ "id": "X192",
+ "url": "https://hyperautomation.substack.com",
+ "group": "not_portfolio",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:21:59.567Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://hyperautomation.substack.com/",
+ "words": 58,
+ "outbound_links": 4,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 19,
+  "phone": 7
+ },
+ "text_chars": 401,
+ "page_text": "Hyperautomation - Emerging Tech\n\nHyperautomation is harnessing the new wave of AI technology to completely automate and orchestrate complex processes. Here, we write how Hyperautomation can be practically achieved securely and for scale.\n\nLaunched 3 years ago\nSubscribe\nBy subscribing, you agree to Substack's Terms of Use, and acknowledge its Information Collection Notice and Privacy Policy.\nNo thanks",
+ "signals": {
+  "projects": true,
+  "about": true,
+  "contact": true,
+  "resume": false,
+  "github": true,
+  "name": true,
+  "score": 5,
+  "needsReview": false
+ }
+}

@@ -1,0 +1,44 @@
+{
+ "id": "X255",
+ "url": "https://manixh.vercel.app",
+ "group": "broken",
+ "attempts": [
+  {
+   "ok": true
+  }
+ ],
+ "at": "2026-11-13T23:22:51.397Z",
+ "retried": false,
+ "blocked": null,
+ "final_url": "https://manixh.vercel.app/",
+ "words": 511,
+ "outbound_links": 13,
+ "gate": {
+  "desktop": null,
+  "phone": null
+ },
+ "modal": {
+  "desktop": null,
+  "phone": null
+ },
+ "mode_pick": {
+  "desktop": null,
+  "phone": null
+ },
+ "content_wait_ms": {
+  "desktop": 11,
+  "phone": 10
+ },
+ "text_chars": 3315,
+ "page_text": "Home\nProjects\nResume\nAnalytics\nSupport\nOpen-source\nGive A Star Please\nManish Kumar\nMy heart when I saw you\n@manixh02\nBuilding ossium.in\nA platform for open source contributors to discover and collaborate on projects\nIndia\n•\n03:23:03\nPM\nHi, I am a Full Stack Developer\nDeveloper of Ossium, helping 1,500+ developers discover and contribute to open source.\nAlways shipping, learning, and turning ideas into products people actually use.\nManish Kumar\n@Manixh02\nFollow\nTech Nerds ( discord )\nFor Developers\nJoin :)\nEmail Me\n24x7 available for your emails\n|\nLinkedIn\nGitHub\nInstagram\nMedium\nResume\nMy Skills\nJava\nHTML\nCSS\nJavaScript\nTypeScript\nReact\nNodeJS\nExpress\nSpring Security\nSpring Jpa\nSpring MVC\nThymeleaf\nSpring Boot\nMySQL\nMongoDB\nJava\nHTML\nCSS\nJavaScript\nTypeScript\nReact\nNodeJS\nExpress\nSpring Security\nSpring Jpa\nSpring MVC\nThymeleaf\nSpring Boot\nMySQL\nMongoDB\nJava\nHTML\nCSS\nJavaScript\nTypeScript\nReact\nNodeJS\nExpress\nSpring Security\nSpring Jpa\nSpring MVC\nThymeleaf\nSpring Boot\nMySQL\nMongoDB\nGit\nGitHub\nPostman\nSwagger\nVsCode\nLinux\nWindows\nDocker\nMaven\nFirebase\nSupabase\nVercel\nNetlify\nRender\nNotion\nGit\nGitHub\nPostman\nSwagger\nVsCode\nLinux\nWindows\nDocker\nMaven\nFirebase\nSupabase\nVercel\nNetlify\nRender\nNotion\nGit\nGitHub\nPostman\nSwagger\nVsCode\nLinux\nWindows\nDocker\nMaven\nFirebase\nSupabase\nVercel\nNetlify\nRender\nNotion\nWork Experience\nmx corp.\n●\nActive\nDeveloper\nDec 2025 - Now\nProducts owned by mx corp. - Ossium, mx-icons, Repolyze ...more.\nAchieved 1200+ Users on our Products\nSharing journey on X (@Manixh02) with 5,500+ followers\nJabszGaming\n●\nDone\nFull Stack Dev Intern\nMay 2025 - Sep 2025\nBuilt a Project where users can solve Coding Problems\nCompete with other users and shine on the leaderboard\nCollaborated with the team remotely\nNov\nDec\nJan\nFeb\nMar\nApr\nMay\nJun\nJul\nAug\nSep\nOct\nThis year, I achieved 2101 contributions\nLess\nMore\nMy Projects\n1200+ signups\nSPONSORED BY\nOssium\nLive\nGitHub\nSearch for OSS projects with unmatched speed and precision. Eliminate noise to find the best open-source solutions. Manage your PRs/Issues in one place.\nTechnologies Used:\nTypeScript\nNextjs\nPostgreSQL\nDrizzle\nTailwind\nGithub APIs\n4k+ downloads | 110+ Stars\nSPONSORED BY\nMx Icons\nLive\nGitHub\nOpen source | Beautiful icons For React project. A modern, lightweight React icon library with beautiful SVG icons Built with React • Optimized for Production\nTechnologies Used:\nJavaScript\nReact\nSvg\nRollup.js\nVite\nNPM\nSecure2FA\nLive\nGitHub\nA robust two-factor authentication system implementing Time-based One-Time Password (TOTP) for enhanced application security.\nTechnologies Used:\nJavaScript\nReact\nNode.js\nMongoDB\nJava\nSpringBoot\nSpring Security\nBlogZone\nLive\nGitHub\nAbout Blog Zone Blog Zone is a modern platform designed to empower writers, bloggers, and content creators to share their stories with the world.\nTechnologies Used:\nHtml\nCSS\nJavaScript\nNode.js\nMongoDB\nExpress\nMore Projects\n/uses\nCurious about my setup? Check out the tools, gear, and software I use daily.\nSee my setup\n/analytics\nVisitors\n114\n↓ 30.5%\nPage Views\n309\n↓ 4.0%\n~/analytics.tsx\n24H\n7D\n30D\nVisitors\nPage Views\nLet's Connect\n\nFeel free to reach out through any of these platforms\n\nTwitter\nLinkedIn\nGitHub\nInstagram\nMedium\nEmail\nResume\n\"Nothing Is Perfect – But You Can Make It Better.\"\nDesigned & Made with ❤️\n2026. All rights reserved\n04:53:03 IST",
+ "signals": {
+  "projects": true,
+  "about": true,
+  "contact": true,
+  "resume": true,
+  "github": true,
+  "name": true,
+  "score": 6,
+  "needsReview": false
+ }
+}

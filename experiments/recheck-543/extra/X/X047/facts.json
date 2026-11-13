@@ -1,0 +1,40 @@
+{
+ "url": "https://akshaysanthoshkumar.vercel.app",
+ "name": "Akshay Santhoshkumar",
+ "name_in_page_title": "full name",
+ "name_in_top_heading": null,
+ "page_title": "Akshay Santhoshkumar | Full-Stack Agentic AI Developer",
+ "top_heading": "W E L C O M E T O M Y P O R T F O L I O !",
+ "first_screen_links": {
+  "desktop": {
+   "work": false,
+   "resume": true,
+   "contact": false,
+   "examples": [
+    "resume: Resume"
+   ]
+  },
+  "phone": {
+   "work": false,
+   "resume": false,
+   "contact": false,
+   "examples": []
+  }
+ },
+ "resume_link_anywhere": true,
+ "project_links": {
+  "checked": 6,
+  "loaded": 3,
+  "broken": 2,
+  "blocked": 1
+ },
+ "template_match": null,
+ "page_text": {
+  "parts": [
+   "top of the page",
+   "projects section",
+   "more of the page"
+  ],
+  "full_length": 4002
+ }
+}
