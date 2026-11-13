@@ -23,6 +23,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dailyTotals } from "../../pipeline/gemini-log.mjs";
+import { HEADING_MAX_WORDS, NOT_PROJECTS_RX, PROJECTS_RX } from "../../pipeline/excerpt.mjs";
 import { redactContacts } from "../../pipeline/redact.mjs";
 import { captureOne, clean, factsFor } from "./grading-two-sets.mjs";
 import { mulberry32, readJson, sha256, shuffled, writeJson } from "./grading-two-sets-lib.mjs";
@@ -74,7 +75,18 @@ async function select() {
 async function cutProjects(sharp, tallPath, meta, dir) {
   const H = meta.height;
   const vh = 900;
-  const head = (meta.outline ?? []).find((h) => /project/i.test(h.text));
+  // The projects heading, by the same rule as the page-text excerpt
+  // (pipeline/excerpt.mjs): projects, work, builds, case studies, showcase,
+  // and not experience or contact; a short title, not a sentence; below the
+  // top heading (level 2 or 3).
+  const title = (t) => t.trim().split(/\s+/).length <= HEADING_MAX_WORDS && t.length <= 48;
+  // In page order (by position); a heading that ends in "projects" or "work"
+  // first, as the excerpt does, else the first that names the projects.
+  // Plus "what I build" (the excerpt rule only counts "builds"), found on luispeche.vercel.app.
+  const names = (t) => PROJECTS_RX.test(t) || /\bwhat i build\b/i.test(t);
+  const fits = [...(meta.outline ?? [])].filter((h) => h.level > 1 && title(h.text) && names(h.text) && !NOT_PROJECTS_RX.test(h.text)).sort((a, b) => a.y - b.y);
+  const ends = /^\W*(?:[\w&'’]+\s+){0,2}(?:projects?|works?)\W*$/i;
+  const head = fits.find((h) => ends.test(h.text)) ?? fits[0];
   let y0;
   let what;
   if (head) {
@@ -164,6 +176,19 @@ async function capture() {
     await browser.close();
   }
   writeJson(path.join(ROOT, "capture-log.json"), { at: new Date().toISOString(), pinned: PINNED_COMMIT, log });
+}
+
+/** B's screens again from the saved tall images (no page loads), after a change to the heading rule. */
+async function recut() {
+  const sharp = (await import("sharp")).default;
+  for (const d of fs.readdirSync(path.join(ROOT, "sites")).sort()) {
+    const dir = path.join(ROOT, "sites", d);
+    const cap = readJson(path.join(dir, "capture.json"));
+    for (const f of fs.readdirSync(dir).filter((x) => /^projects-\d\.jpg$/.test(x))) fs.rmSync(path.join(dir, f));
+    cap.projects = await cutProjects(sharp, path.join(dir, "tall-desktop.avif"), cap.desktop, dir);
+    writeJson(path.join(dir, "capture.json"), cap);
+    console.log(`${cap.url}: B ${cap.projects.screens.length} screens, ${cap.projects.note}`);
+  }
 }
 
 // ---------------------------------------------------------------- bundles, groupings, lock
@@ -275,9 +300,9 @@ async function haiku() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const step = process.argv[2];
-  const steps = { select, capture, bundle, gemini, haiku };
+  const steps = { select, capture, recut, bundle, gemini, haiku };
   if (!steps[step]) {
-    console.error("usage: mini8.mjs <select|capture|bundle|gemini|haiku>");
+    console.error("usage: mini8.mjs <select|capture|recut|bundle|gemini|haiku>");
     process.exit(1);
   }
   try {
