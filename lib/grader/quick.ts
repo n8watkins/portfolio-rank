@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Client } from "@libsql/client";
 import { safeFetch, readCapped } from "@/lib/safefetch";
-import { checkLinks, extractLinks, linkContext, measureFacts, projectLinkCandidates } from "@/pipeline/facts.mjs";
+import { checkLinks, extractLinks, measureFacts, projectLinkCandidates } from "@/pipeline/facts.mjs";
 import { parkingPhrase, titleOf, visibleText } from "@/pipeline/gate.mjs";
 import { codeChecks } from "@/pipeline/rubric.mjs";
 
@@ -88,10 +88,8 @@ export async function measureQuick(url: string, { fetcher = publicFetcher, now =
   }
   // measureFacts is plain JavaScript; its inferred parameter type is narrower than what it reads.
   const facts = measureFacts({ html, text, url, finalUrl, source: "http", now } as never) as Record<string, unknown>;
-  const links = extractLinks(html, finalUrl);
-  const urls = projectLinkCandidates(links, finalUrl);
-  // Which links failed, why, and where on the page (the report lists them).
-  facts.project_links = await checkLinks(urls, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS, context: linkContext(links) });
+  const urls = projectLinkCandidates(extractLinks(html, finalUrl), finalUrl);
+  facts.project_links = await checkLinks(urls, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS });
   // Client-rendered pages send little HTML: the capture measures them properly.
   return {
     ok: true,

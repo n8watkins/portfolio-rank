@@ -1,5 +1,5 @@
 # Builds PortfolioRank with OpenNext and ships every push to main to
-# production (https://portfoliorank.n8builds.dev), then smoke checks it
+# production (https://portfoliorank.dev), then smoke checks it
 # (scripts/smoke.mjs). Staging is its own workflow (staging.yml): main plus
 # the pull requests labeled "staging", so a merge here never replaces what is
 # being tried there (DEPLOY.md "How a change ships").
@@ -62,11 +62,6 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
         run: node scripts/migrate.mjs
 
-      # Tiers by rank (lib/tiers.mjs) placed before the new code serves; the hourly cron keeps them current.
-      - name: Place the tiers
-        if: env.CLOUDFLARE_API_TOKEN != '' && env.TURSO_DATABASE_URL != ''
-        run: node scripts/refresh-tiers.mjs
-
       - name: Build
         run: |
           if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ]; then
@@ -94,4 +89,12 @@ jobs:
 
       - name: Smoke check production
         if: env.CLOUDFLARE_API_TOKEN != ''
-        run: node scripts/smoke.mjs https://portfoliorank.n8builds.dev
+        run: node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev
+
+      # Each build keeps its ISR cache in its own folder of the R2 cache bucket,
+      # and only the live build's is read; this removes all but the newest two
+      # (scripts/prune-build-cache.mjs). A failure here never fails the deploy.
+      - name: Remove old builds' ISR cache
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        run: node scripts/prune-build-cache.mjs

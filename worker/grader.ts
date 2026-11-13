@@ -24,6 +24,7 @@ import { pruneEmails, sendDueEmails } from "../lib/grader/notify.mjs";
 import { createEmailGate, emailCaps, emailTransport } from "../lib/email/gate.mjs";
 import { quotaDay } from "../pipeline/quota-day.mjs";
 import type { NightEnv } from "./night";
+import { siteUrl } from "../lib/site";
 
 export const GRADER_CRON = "*/5 * * * *";
 
@@ -36,11 +37,13 @@ export async function graderTick(env: GraderEnv, scheduledTime = Date.now()) {
   const db = database();
   const now = scheduledTime;
   const secret = env.AUTH_SECRET ?? process.env.AUTH_SECRET ?? "";
-  const base = String(env.AUTH_URL || "https://portfoliorank.n8builds.dev").replace(/\/+$/, "");
+  const base = siteUrl({ SITE_URL: env.SITE_URL });
   const out: Record<string, unknown> = {};
 
   const gate = createEmailGate({ db, transport: emailTransport(env, { db }), caps: emailCaps(env.EMAIL_CAPS), secret, log: (line) => log("grader.email", { line }) });
-  out.emails = await sendDueEmails(db, { gate, secret, base, now, log: (line: string) => log("grader.email", { line }) });
+  // With tiers by ELO (RANKING_V2) the email names the tier by ELO, as the report shows it.
+  const eloTiers = /^true$/i.test(String((env as { RANKING_V2?: string }).RANKING_V2 ?? ""));
+  out.emails = await sendDueEmails(db, { gate, secret, base, now, eloTiers, log: (line: string) => log("grader.email", { line }) });
 
   const token = env.GITHUB_DISPATCH_TOKEN;
   out.stalled = await retryStalled(db, { token, now, log: (line: string) => log("grader.dispatch", { line }) });

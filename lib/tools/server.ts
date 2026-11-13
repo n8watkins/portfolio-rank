@@ -6,7 +6,6 @@ import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
 import { fail, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
 import { reserveTool, toolCaps } from "./caps.mjs";
 import { addPending } from "@/lib/discovery/sites.mjs";
-import { profilePath } from "@/lib/profile-url.mjs";
 
 // Request-side helpers for the free tools (app/api/tools/*, docs/TOOLS.md).
 // Every tool request goes through gate(): the switch, same origin, a sane
@@ -110,7 +109,7 @@ export async function remember(g: Gate, loaded: boolean): Promise<{ status: stri
 }
 
 /** The answer's common part: the address, whether it's listed, and the profile to see the saved results on. */
-export const answerHead = (g: Gate) => ({ url: g.url, listed: Boolean(g.listed), ...(g.listed ? { profile: profilePath(g.listed) } : {}) });
+export const answerHead = (g: Gate) => ({ url: g.url, listed: Boolean(g.listed), ...(g.listed ? { profile: `/p/${encodeURIComponent(g.listed)}` } : {}) });
 
 /** Saves a result under its cache key (the same keys the profile reads). */
 export async function store(key: string, value: object, at = Date.now()): Promise<void> {

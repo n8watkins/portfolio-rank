@@ -266,8 +266,7 @@ test("a row captured before v2 gets its page text and facts measured at grade ti
   assert.equal(facts.source, "http");
   assert.equal(facts.github, true);
   assert.equal(facts.footer_year, 2026);
-  // A working link leaves no failure to name (the report lists broken and blocked ones).
-  assert.deepEqual(facts.project_links, { checked: 1, ok: 1, broken: 0, blocked: 0, failures: [] });
+  assert.deepEqual(facts.project_links, { checked: 1, ok: 1, broken: 0, blocked: 0 });
   assert.ok(row.facts_at);
 });
 
@@ -295,6 +294,9 @@ test("a model that rejects the thinking level is asked again without it", async 
   assert.equal((await gradeOf(db, a.url)).rubric_version, RUBRIC_VERSION);
 });
 
+// Re-grades are off by default until rubric v3 (pipeline/budget.mjs DEFAULT_PLAN).
+const REGRADE_ON = JSON.stringify({ stages: { regrade: { cap: 300 } } });
+
 test("grades from an older rubric version are re-graded last, and only with RUBRIC_REGRADE", async () => {
   const [a, b, c] = feed;
   const v1 = (model, judged_at) => ({ ...rubric(), motion: { score: 2, note: "static" }, model, judged_at });
@@ -306,13 +308,18 @@ test("grades from an older rubric version are re-graded last, and only with RUBR
   const answer = JSON.stringify([{ json: rubric({ tier: "A" }) }]);
 
   let t = await setup(rows);
-  let r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer });
+  let r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, GEMINI_BUDGET: REGRADE_ON });
   assert.equal(r.code, 0, r.out);
   assert.deepEqual(r.requests.map(urlOf), [a.url, b.url], "without RUBRIC_REGRADE the 3.5 v1 grade stays");
   assert.equal((await gradeOf(t.db, c.url)).rubric_version, undefined);
 
   t = await setup(rows);
   r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, RUBRIC_REGRADE: "true" });
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(r.requests.map(urlOf), [a.url], "re-grades are off by default (regrade cap 0), even with RUBRIC_REGRADE");
+
+  t = await setup(rows);
+  r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, RUBRIC_REGRADE: "true", GEMINI_BUDGET: REGRADE_ON });
   assert.equal(r.code, 0, r.out);
   assert.deepEqual(r.requests.map(urlOf), [a.url, b.url, c.url], "new first, then 3.1 -> 3.5, then the older rubric");
   assert.equal((await gradeOf(t.db, c.url)).rubric_version, RUBRIC_VERSION);

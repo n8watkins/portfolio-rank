@@ -33,31 +33,11 @@ import { createGemini, createLimiter, GeminiAuthError, GeminiUnavailableError, P
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { gradeFromEvidence } from "./night.mjs";
 import { syncFromPeople } from "../lib/grader/finish.mjs";
+import { ensurePeopleSchema, enqueueRequest, readRequest } from "./people-store.mjs";
+
+export { ensurePeopleSchema, enqueueRequest, readRequest };
 
 export const MAX_ATTEMPTS = 3;
-
-export async function ensurePeopleSchema(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS people_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL,
-    url TEXT NOT NULL,
-    name TEXT,
-    email TEXT,
-    shot_key TEXT,
-    page_text TEXT,
-    facts TEXT,
-    meta TEXT,
-    status TEXT NOT NULL,
-    reason TEXT,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    done_at TEXT,
-    result TEXT,
-    notified_at TEXT
-  )`);
-  await db.execute("CREATE INDEX IF NOT EXISTS people_requests_status_idx ON people_requests (status, created_at)");
-}
 
 const iso = (ms) => new Date(ms).toISOString();
 const msg = (e) => String(e?.message ?? e).slice(0, 200);
@@ -66,23 +46,11 @@ const msg = (e) => String(e?.message ?? e).slice(0, 200);
  * Queues a request and tries it at once (unless `tryNow` is false: then the
  * hourly drain does). Returns the request row as stored.
  */
-export async function requestGrade(ctx, { kind = "grade", url, name = "", email = null, shot_key, page_text, facts, meta = null }, { tryNow = true } = {}) {
-  await ensurePeopleSchema(ctx.db);
+export async function requestGrade(ctx, input, { tryNow = true } = {}) {
   await ensureGeminiLog(ctx.db);
-  const at = iso(ctx.now());
-  const res = await ctx.db.execute({
-    sql: `INSERT INTO people_requests (kind, url, name, email, shot_key, page_text, facts, meta, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?) RETURNING id`,
-    args: [kind, url, name, email, shot_key, page_text, typeof facts === "string" ? facts : JSON.stringify(facts ?? null), meta == null ? null : typeof meta === "string" ? meta : JSON.stringify(meta), at, at],
-  });
-  const id = Number(res.rows[0].id);
+  const id = await enqueueRequest(ctx.db, input, { now: ctx.now() });
   if (tryNow) await processRequest(ctx, id);
   return readRequest(ctx.db, id);
-}
-
-export async function readRequest(db, id) {
-  const r = (await db.execute({ sql: "SELECT * FROM people_requests WHERE id = ?", args: [id] })).rows[0];
-  return r ? { ...r, result: r.result ? JSON.parse(String(r.result)) : null } : null;
 }
 
 async function setStatus(db, id, fields, now) {
@@ -177,8 +145,7 @@ async function notifyPerson(ctx, id) {
   await ctx.email.send({
     to: String(req.email),
     subject: `Your PortfolioRank ${req.kind === "regrade" ? "re-grade" : "grade"} is ready`,
-    // No tier here: the tier comes from the portfolio's rank in the library (lib/tiers.mjs), which the report shows.
-    text: `Your portfolio (${req.url}) was graded. Open your report to see your tier and where you rank.`,
+    text: `Your portfolio (${req.url}) was graded: tier ${req.result?.tier ?? "?"}.`,
   });
   await setStatus(ctx.db, id, { notified_at: iso(ctx.now()) }, ctx.now());
 }

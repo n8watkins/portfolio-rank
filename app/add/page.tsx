@@ -7,7 +7,7 @@ import { AddForm } from "@/components/add/AddForm";
 
 // "Add your portfolio" (ROUTES.add, owner 2026-11-12): the one way in. Every
 // check runs at once and the portfolio gets its profile, where its rank, AI
-// report card and fix list live (app/p/[...slug], docs/TOOLS.md).
+// report card and fix list live (app/p/[slug], docs/TOOLS.md).
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

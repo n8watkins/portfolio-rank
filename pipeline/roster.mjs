@@ -15,6 +15,7 @@
 
 import { createClient } from "@libsql/client";
 import path from "path";
+import { HIDDEN_INDEX } from "../lib/hidden.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -51,8 +52,8 @@ const COLUMNS = [
   "retry_at TEXT",
   "signals TEXT",
   "needs_review INTEGER NOT NULL DEFAULT 0",
-  // Pipeline-only (the app never reads them, so lib/db.ts does not add
-  // them): the page's visible text (capped, pipeline/rubric.mjs
+  // Pipeline-only (the app never reads them; lib/schema.mjs adds them too,
+  // from lib/pipeline-schema.mjs): the page's visible text (capped, pipeline/rubric.mjs
   // PAGE_TEXT_MAX) and the facts measured by code (pipeline/facts.mjs),
   // both input to the AI grade.
   "page_text TEXT",
@@ -89,6 +90,8 @@ export async function ensureRosterSchema(db) {
       if (!/duplicate column/i.test(String(e?.message))) throw e;
     }
   }
+  // Needs the health column above (lib/hidden.mjs).
+  await db.execute(HIDDEN_INDEX);
 }
 
 /**
@@ -183,7 +186,7 @@ export async function purgeDelisted(
       await db.batch(
         [
           { sql: "DELETE FROM portfolios WHERE url = ? AND delisted_at IS NOT NULL", args: [row.url] },
-          { sql: "DELETE FROM cache WHERE k IN (?, ?, ?)", args: [`psi:${row.url}`, `psi-desktop:${row.url}`, `inspect:${row.url}`] },
+          { sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi:${row.url}`, `inspect:${row.url}`] },
         ],
         "write"
       );

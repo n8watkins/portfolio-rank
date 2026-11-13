@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { ShareButton } from "@/components/ShareButton";
 import { listDeletedToast, useUndoToast } from "@/components/UndoToast";
 import { faviconOf } from "@/lib/shot-url";
-import { profilePath } from "@/lib/profile-url.mjs";
 
 export type ListItem = { url: string; name: string; domain: string };
 
@@ -221,7 +220,7 @@ export function ListView({
               className="group relative flex items-center gap-2.5 rounded-xl border border-edge bg-card p-4 transition hover:border-mute"
             >
               <a
-                href={profilePath(p.url)}
+                href={`/p/${encodeURIComponent(p.url)}`}
                 className="flex min-w-0 flex-1 items-center gap-2.5"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}

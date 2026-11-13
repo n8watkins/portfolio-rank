@@ -33,3 +33,10 @@ test("the CSP lets Cloudflare Web Analytics and Sentry through", async () => {
   assert.match(csp, /connect-src [^;]*https:\/\/cloudflareinsights\.com/);
   assert.match(csp, /connect-src [^;]*\.ingest\.us\.sentry\.io/);
 });
+
+test("the CSP refuses inline event handlers and plugins", async () => {
+  const res = await fetch(`${BASE}/zz-no-such-page`, { redirect: "manual" });
+  const csp = res.headers.get("content-security-policy") ?? "";
+  assert.match(csp, /(^|; )script-src-attr 'none'(;|$)/);
+  assert.match(csp, /(^|; )object-src 'none'(;|$)/);
+});

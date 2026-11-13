@@ -33,7 +33,7 @@ export function buildListRequest(draftText) {
     draftText,
     "</draft>",
   ].join("\n");
-  return { parts: [{ text }], schema: LIST_SCHEMA, options: { systemInstruction: "You are a fact-checking assistant.", thinkingLevel: "minimal", maxOutputTokens: 1024, temperature: 0 } };
+  return { parts: [{ text }], schema: LIST_SCHEMA, options: { prompt: "content-claims-list-v1", systemInstruction: "You are a fact-checking assistant.", thinkingLevel: "minimal", maxOutputTokens: 1024, temperature: 0 } };
 }
 
 export const JUDGE_SCHEMA = {
@@ -72,7 +72,7 @@ export function buildJudgeRequest(claims) {
     JSON.stringify(claims.map((c, i) => ({ claim: i, results: c.results.map((r) => ({ url: r.url, title: r.title, text: String(r.content ?? "").slice(0, 1200) })) }))),
     "</untrusted_search_results>",
   ].join("\n");
-  return { parts: [{ text }], schema: JUDGE_SCHEMA, options: { systemInstruction: JUDGE_SYSTEM, thinkingLevel: "low", maxOutputTokens: 2048, temperature: 0 } };
+  return { parts: [{ text }], schema: JUDGE_SCHEMA, options: { prompt: "content-claims-judge-v1", systemInstruction: JUDGE_SYSTEM, thinkingLevel: "low", maxOutputTokens: 2048, temperature: 0 } };
 }
 
 /** A Tavily search; returns [{ title, url, content }] with denied results dropped. */
@@ -120,16 +120,25 @@ async function loadPage(url, fetchImpl) {
  * { supported: [{ sentence, url, title }], cut: [{ sentence, reason }],
  *   requests, searches }.
  */
-export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits }) {
+export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, names = [], flagged = null }) {
   const out = { supported: [], cut: [], requests: 0, searches: 0 };
-  if (budget.gemini < 1) {
+  // `flagged`: the outside-claim sentences the final review already listed
+  // (compose.mjs), so no list request is spent; Tavily runs only on those.
+  if (!flagged && budget.gemini < 1) {
     out.unchecked = true;
     return out;
   }
-  const list = buildListRequest(draftText);
-  const listed = await generate(list);
-  out.requests++;
-  const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))];
+  let listed;
+  if (flagged) listed = { claims: flagged };
+  else {
+    listed = await generate(buildListRequest(draftText));
+    out.requests++;
+  }
+  // A sentence built on the sheet's own facts (a {{placeholder}}) or about a
+  // site on the names list is PortfolioRank's data, not an outside claim,
+  // whatever the lister thought (a staging draft lost three such sentences).
+  const ours = (s) => /\{\{f\d+\}\}/.test(s) || names.some((n) => n && s.includes(n));
+  const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))].filter((s) => !ours(s));
   const present = sentences.filter((s) => draftText.includes(s));
   for (const s of sentences) if (!present.includes(s)) out.listedNotFound = [...(out.listedNotFound ?? []), s];
   if (!present.length) return out;

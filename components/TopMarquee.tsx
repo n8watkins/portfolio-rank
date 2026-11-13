@@ -4,7 +4,6 @@ import type { Portfolio } from "@/app/page";
 import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { hiddenUrls } from "@/lib/roster";
-import { profilePath } from "@/lib/profile-url.mjs";
 
 // Auto-scrolling gallery of the top-ranked portfolios' hero shots - the homepage
 // payoff: "static list in, browsable ranked gallery out." Pure CSS animation
@@ -60,7 +59,7 @@ export async function TopMarquee() {
             return (
               <a
                 key={`${it.url}-${i}`}
-                href={profilePath(it.url)}
+                href={`/p/${encodeURIComponent(it.url)}`}
                 aria-hidden={dup}
                 tabIndex={dup ? -1 : undefined}
                 className="group mr-3 w-56 shrink-0 overflow-hidden rounded-xl border border-edge bg-card transition hover:border-accent"

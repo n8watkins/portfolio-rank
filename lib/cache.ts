@@ -56,6 +56,22 @@ export type CacheOptions<T> = {
 };
 
 /**
+ * A cached result as stored, with when it was measured, or null. Never
+ * computes or refreshes: for a page's first paint (the profile's checks and
+ * social links), which the client then asks for as usual.
+ */
+export async function peekCached<T extends object>(namespace: string, key: string): Promise<(T & CacheMeta) | null> {
+  await ensureSchema();
+  const row = (await db().execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [`${namespace}:${key}`] })).rows[0];
+  if (!row?.v) return null;
+  try {
+    return { ...(JSON.parse(String(row.v)) as T), measuredAt: new Date(Number(row.at)).toISOString() };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Read-through cache in the `cache` table (`<namespace>:<key>` → JSON, `at` =
  * when it was measured).
  *
@@ -121,19 +137,4 @@ export async function cached<T extends object>(
 
   if (!inflight.has(k)) runInBackground(once(k, () => refresh(isFailure(data))));
   return { ...data, measuredAt, stale: true };
-}
-
-/**
- * Only what is already stored for `<namespace>:<key>`, never computed: for
- * views that must not spend a quota (the games show PageSpeed scores only
- * when a portfolio page already measured them). Null on a miss; a result past
- * `ttlMs` comes back with `stale: true` and no refresh.
- */
-export async function peekCached<T extends object>(namespace: string, key: string, ttlMs: number): Promise<(T & CacheMeta) | null> {
-  await ensureSchema();
-  const row = (await db().execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [`${namespace}:${key}`] })).rows[0];
-  if (!row || !row.v) return null;
-  const at = Number(row.at);
-  const data = JSON.parse(String(row.v)) as T;
-  return { ...data, measuredAt: new Date(at).toISOString(), ...(Date.now() - at >= ttlMs ? { stale: true } : {}) };
 }

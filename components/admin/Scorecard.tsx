@@ -32,7 +32,28 @@ function Row({ label, value, ok }: { label: string; value: React.ReactNode; ok: 
 export function Scorecard({ card, compact = false }: { card: Card; compact?: boolean }) {
   return (
     <div className={`card mt-3 p-4 text-sm ${compact ? "" : ""}`} data-scorecard>
-      <p className="font-semibold">Scorecard{card.flags.length ? <span className="text-down"> · {card.flags.length} to look at</span> : <span className="text-up"> · nothing flagged</span>}</p>
+      {/* "3 things to look at", not "· 3": the owner read the old "Scorecard · 3" as a score of minus 3 (2026-11-12). */}
+      <p className="font-semibold">
+        Scorecard:{" "}
+        {card.flags.length ? (
+          <span className="text-down">
+            {card.flags.length} {card.flags.length === 1 ? "thing" : "things"} to look at
+          </span>
+        ) : (
+          <span className="text-up">nothing flagged</span>
+        )}
+      </p>
+      {!compact && <p className="mt-1 text-mute">Counted by code, not AI. Not a grade: each flag is something a reader might notice, for you to judge.</p>}
+      {card.flags.length > 0 && (
+        <ul className="mt-2 grid gap-1 text-down">
+          {card.flags.map((f) => (
+            <li key={f} className="flex gap-2">
+              <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              {f}
+            </li>
+          ))}
+        </ul>
+      )}
       <dl className="mt-2">
         <Row label="Words" value={`${card.words} (${TARGET_WORDS.min} to ${TARGET_WORDS.max})`} ok={card.words >= TARGET_WORDS.min && card.words <= TARGET_WORDS.max} />
         <Row label="Takeaway in the first 150 words" value={card.payoff.ok ? "yes" : "no"} ok={card.payoff.ok} />

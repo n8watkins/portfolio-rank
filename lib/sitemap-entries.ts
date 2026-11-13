@@ -5,10 +5,9 @@ import { db, ensureSchema } from "@/lib/db";
 import { gradedProfiles, sitemapProfiles } from "@/lib/sitemap-profiles.mjs";
 import { graderEnabled } from "@/lib/grader/server";
 import { toolsEnabled } from "@/lib/tools/server";
-import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf, tagSlug } from "@/lib/content/blog.mjs";
-import { profilePath } from "@/lib/profile-url.mjs";
+import { profilePath } from "@/lib/profile";
 import { latest, type Entry } from "@/lib/sitemaps.mjs";
 
 // What each part of the sitemap lists (lib/sitemaps.mjs builds the XML,
@@ -22,8 +21,8 @@ export function pageEntries(): Entry[] {
   return [
     BASE,
     `${BASE}/top`,
-    // The AI and People views exist only while the ranking views are on.
-    ...(rankingViewsEnabled() ? [`${BASE}/top/ai`, `${BASE}/top/people`] : []),
+    // The old AI and People views lead to the ranked board while the ranking views (tiers by ELO) are on, and
+    // don't exist while they are off: neither is listed.
     `${BASE}/browse`,
     `${BASE}/play`,
     `${BASE}/polls`,

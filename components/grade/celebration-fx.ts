@@ -6,7 +6,7 @@
 //   2 top 25%    a confetti pop from the tier badge
 //   3 top 10%    two confetti cannons from the bottom corners, and the pop
 //   4 top 5%     fireworks over the page, with the cannons
-//   5 SSS tier   a gold shower from the top, gold fireworks and the pop
+//   5 S tier     a gold shower from the top, gold fireworks and the pop
 // The canvas ignores the pointer and removes itself when the last particle
 // is gone. Callers never start it under prefers-reduced-motion.
 

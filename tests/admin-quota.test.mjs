@@ -105,3 +105,40 @@ test("admin quota API: the latest model watch report, recorded even while email 
   assert.equal(body.modelWatch.latest.ranAt, "2026-11-16T16:00:00.000Z");
   assert.match(body.modelWatch.latest.text, /Could not read the changelog source: HTTP 503/);
 });
+
+test("admin usage page: plain-language meters for the admin, a 404 for everyone else", async () => {
+  const { chromium } = await import("playwright");
+  const anon = await fetch(`${BASE}/admin/usage`);
+  assert.equal(anon.status, 404);
+  const other = await fetch(`${BASE}/admin/usage`, { headers: { cookie: await cookieFor("someone-else", 990000001) } });
+  assert.equal(other.status, 404);
+
+  const cookie = await cookieFor("e2e-admin", ADMIN_ID);
+  const browser = await chromium.launch();
+  try {
+    for (const [width, height] of [
+      [1440, 900],
+      [390, 844],
+    ]) {
+      const context = await browser.newContext({ viewport: { width, height }, extraHTTPHeaders: { cookie } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      await page.goto(`${BASE}/admin/usage`);
+      await page.getByRole("heading", { level: 1, name: "Usage" }).waitFor();
+      const gemini = page.getByRole("meter", { name: /^Gemini 3\.5 Flash-Lite today$/ });
+      assert.match(await gemini.getAttribute("aria-valuetext"), /^\d[\d,]* of \d[\d,]* requests$/);
+      await page.getByRole("meter", { name: "Grade new sites" }).waitFor();
+      await page.getByRole("meter", { name: "AI images today" }).or(page.getByText("No AI images yet.")).first().waitFor();
+      await page.getByRole("meter", { name: "Tavily credits" }).waitFor();
+      await page.getByRole("heading", { name: "Grades on their way" }).waitFor();
+      await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Images" }).waitFor();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      assert.equal(overflow, 0, `no sideways scroll at ${width}px`);
+      assert.deepEqual(errors, []);
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});

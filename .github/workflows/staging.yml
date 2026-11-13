@@ -1,13 +1,15 @@
-# Puts the staging site (https://staging.portfoliorank.n8builds.dev,
+# Puts the staging site (https://staging.portfoliorank.dev,
 # wrangler.jsonc env.staging) on main plus every open pull request labeled
 # "staging", merged in pull request order (DEPLOY.md "How a change ships").
 # It runs again whenever main moves, a pull request gets or loses the label,
 # or a labeled pull request gets new commits, so a merge to main never wipes
 # what is being tried on staging, and nobody merges branches into a shared
 # staging branch by hand.
-# A labeled pull request that does not merge cleanly onto the others is left
-# out, named in the run's summary and told in a comment; rebase it onto the
-# pull request it conflicts with (or onto main) to bring it back.
+# When a labeled pull request does not merge cleanly onto main and the ones
+# before it, nothing is deployed: staging keeps what it had, the run fails,
+# and the pull request is named in the summary and told in a comment. Rebase
+# it onto the one it conflicts with (or merge main into it) to unblock.
+# Deploying without it would silently take its work off staging.
 # A stacked pull request (based on another branch) brings its base along:
 # label the top of the stack. Runs for a stacked pull request's own pushes
 # start only from main's copy of this file, so after pushing to one, run this
@@ -29,11 +31,6 @@ permissions:
   contents: read
   pull-requests: write # the comment on a pull request that was left out
 
-# The newest composition wins; an older one still building is cancelled.
-concurrency:
-  group: staging
-  cancel-in-progress: true
-
 jobs:
   staging:
     name: Staging
@@ -43,6 +40,12 @@ jobs:
         || github.event.label.name == 'staging'
         || contains(github.event.pull_request.labels.*.name, 'staging')
       )
+    # The newest composition wins; an older one still building is cancelled.
+    # Set on the job, not the workflow: a run whose job is skipped (a pull
+    # request without the label closing, say) must not cancel a real one.
+    concurrency:
+      group: staging
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -107,8 +110,12 @@ jobs:
         run: |
           while IFS=$'\t' read -r number files; do
             [ -n "$number" ] || continue
-            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "Left out of staging at $(git rev-parse --short HEAD): it conflicts with main or a pull request merged before it (in $files). Rebase it onto the one it conflicts with, then run the Staging workflow ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)." || true
+            gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "Staging was not updated at $(git rev-parse --short HEAD): this pull request conflicts with main or a labeled pull request merged before it (in $files). Staging keeps what it had. Merge main into it (or rebase it onto the one it conflicts with), then run the Staging workflow ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)." || true
           done < "$RUNNER_TEMP/left-out.tsv"
+          if [ -s "$RUNNER_TEMP/left-out.tsv" ]; then
+            echo "::error::A labeled pull request conflicts (run summary); staging keeps what it had instead of deploying without it."
+            exit 1
+          fi
 
       - uses: actions/setup-node@v7
         if: steps.setup.outputs.ready == 'true'
@@ -123,6 +130,18 @@ jobs:
       - name: Migrate the staging database
         if: steps.setup.outputs.ready == 'true'
         run: node scripts/migrate.mjs
+
+      # Tiers by rank (lib/tiers.mjs), placed at each staging deploy, since
+      # staging runs its scheduled jobs rarely. Only when what is on staging
+      # has tiers (the tiers pull requests, until they land on main).
+      - name: Place the staging tiers
+        if: steps.setup.outputs.ready == 'true'
+        run: |
+          if [ -f scripts/refresh-tiers.mjs ]; then
+            node scripts/refresh-tiers.mjs --daily
+          else
+            echo "No tiers on staging yet (scripts/refresh-tiers.mjs is not in this tree)."
+          fi
 
       - name: Build
         if: steps.setup.outputs.ready == 'true'
@@ -143,4 +162,11 @@ jobs:
         if: steps.setup.outputs.ready == 'true'
         env:
           STAGING_GATE_KEY: ${{ secrets.STAGING_GATE_KEY }}
-        run: node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging
+        run: node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev
+
+      # As in deploy.yml: all but the newest two builds' ISR cache goes
+      # (scripts/prune-build-cache.mjs). A failure here never fails staging.
+      - name: Remove old builds' ISR cache
+        if: steps.setup.outputs.ready == 'true'
+        continue-on-error: true
+        run: node scripts/prune-build-cache.mjs --env staging

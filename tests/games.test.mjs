@@ -548,10 +548,9 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   const old = new Date(T0.getTime() - 30 * 86400000).toISOString();
   await db.batch(
     [
-      // Tiers by rank (lib/tiers.mjs) as refreshTiers stores them: the average uses these, not Gemini's letters.
-      ["https://a.dev", grade("S", 5, { ...facts(true, true), judged_at: recent, rank: { tier: "A" } })],
-      ["https://b.dev", grade("B", 3, { ...facts(false, true), judged_at: old, rank: { tier: "B" } })],
-      ["https://c.dev", grade("C", 2, { ...facts(true, false), judged_at: old, rank: { tier: "C" } })],
+      ["https://a.dev", grade("S", 5, { ...facts(true, true), judged_at: recent })],
+      ["https://b.dev", grade("B", 3, { ...facts(false, true), judged_at: old })],
+      ["https://c.dev", grade("C", 2, { ...facts(true, false), judged_at: old })],
       ["https://d.dev", null],
     ].map(([url, g]) => ({ sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: [url, g] })),
     "write"
@@ -571,8 +570,7 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   assert.equal(s.ownDomainPct, 67);
   assert.equal(s.resumePct, 67);
   assert.deepEqual(s.commonRole, { key: "fullstack", label: "Full stack", pct: 67 });
-  // A 9, B 6, C 3 on the D 1 to SSS 14 scale.
-  assert.deepEqual(s.averageTier, { value: 6, tier: "B" });
+  assert.deepEqual(s.averageTier, { value: 3.33, tier: "B" });
   assert.equal(s.changedThisMonth, 1);
   assert.deepEqual(s.newest, { url: "https://d.dev", name: "D" });
   assert.equal(pacificMonthStart(T0).toISOString(), "2026-11-01T07:00:00.000Z");
@@ -619,7 +617,7 @@ test("the print report escapes what it shows and keeps the tier letter for the t
   const g = printView(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "<b>busy</b>" }, writing: 3, checks: { resume: true, github: false } }));
   assert.equal(g.showTier, false);
   assert.deepEqual(g.judgments.map((j) => [j.id, j.score]), [["visual_design", 2], ["writing", 3]], "older bare scores count too");
-  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.n8builds.dev", now: T0 });
+  const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: null }, hero: null, siteUrl: "https://portfoliorank.dev", now: T0 });
   assert.ok(html.includes("Zoë &lt;script&gt;"));
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&lt;b&gt;busy&lt;/b&gt;"));
@@ -627,4 +625,7 @@ test("the print report escapes what it shows and keeps the tier letter for the t
   assert.ok(!html.includes(">D<"), "no public D");
   assert.ok(html.includes("@media print"));
   assert.ok(html.includes("✓ Resume link") && html.includes("✗ GitHub link"));
+  // The CSP allows no inline event handlers: the print button's script is a file.
+  assert.doesNotMatch(html, /\son[a-z]+=/i);
+  assert.ok(html.includes('<script src="/report-print.js" defer></script>'));
 });

@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
-import { profilePath } from "../lib/profile-url.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const db = createClient({ url: process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/e2e.db`, timeout: 10000 });
@@ -204,7 +203,7 @@ test("a listed portfolio is refreshed in place: its profile's Lighthouse, no dis
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.listed, true);
   assert.equal(r.body.url, listed);
-  assert.equal(r.body.profile, profilePath(listed));
+  assert.equal(r.body.profile, `/p/${encodeURIComponent(listed)}`);
   assert.equal(r.body.discovery, null);
   const profile = await (await fetch(`${BASE}/api/psi?url=${encodeURIComponent(listed)}`)).json();
   assert.equal(profile.scores.performance, 42, "the profile reads what the tool saved");

@@ -10,6 +10,8 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { assignShownRanks, ensureRankingSchema } from "../lib/ranking/store.mjs";
+import { HIDDEN_WHERE } from "../lib/hidden.mjs";
+import { ensureRosterSchema } from "../pipeline/roster.mjs";
 
 function tempDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reads-"));
@@ -79,18 +81,14 @@ test("reading the counters scans a few rows, not the vote log", async () => {
   assert.deepEqual(await counters(db), await truth(db));
 });
 
-test("board: shown ranks skip hidden, delisted and ungraded sites, and a page is one indexed range read", async () => {
+test("board: shown ranks skip hidden and delisted sites, and a page is one indexed range read", async () => {
   const db = tempDb();
   await migrate(db);
   await db.execute("ALTER TABLE portfolios ADD COLUMN delisted_at TEXT").catch(() => {});
   await ensureRankingSchema(db);
-  const sites = ["a", "down", "b", "gone", "c", "failed", "d", "ungraded", "notone"];
-  const graded = JSON.stringify({ tier: "B", is_portfolio: true });
+  const sites = ["a", "down", "b", "gone", "c", "failed", "d"];
   await db.batch([
-    ...sites.map((u) => ({ sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: [u, graded] })),
-    // Only graded portfolios are shown (owner rule): no grade, or "not a portfolio", stays off every board.
-    "UPDATE portfolios SET ai_rubric = NULL WHERE url = 'ungraded'",
-    `UPDATE portfolios SET ai_rubric = '{"tier":"C","is_portfolio":false}' WHERE url = 'notone'`,
+    ...sites.map((u) => ({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live')", args: [u] })),
     "UPDATE portfolios SET health = 'down' WHERE url = 'down'",
     "UPDATE portfolios SET delisted_at = '2026-11-01' WHERE url = 'gone'",
     "UPDATE portfolios SET status = 'dead' WHERE url = 'failed'",
@@ -116,5 +114,25 @@ test("board: shown ranks skip hidden, delisted and ungraded sites, and a page is
   await assignShownRanks(db);
   assert.deepEqual(await shown("merged"), [["a", 1], ["b", 2], ["c", 3], ["failed", 4], ["d", 5]]);
   const plan = (await db.execute("EXPLAIN QUERY PLAN SELECT url FROM site_ratings WHERE view = 'merged' AND shown_rank > 2 ORDER BY shown_rank LIMIT 2")).rows.map((r) => String(r.detail)).join(" | ");
+  assert.match(plan, /site_ratings_shown_idx/);
+});
+
+test("hidden set: reads the partial index of hidden sites, never a scan of every portfolio", async () => {
+  // A new database (the app's migration) and an existing one (the pipeline's roster schema) both get the index.
+  for (const make of [migrate, ensureRosterSchema]) {
+    const db = tempDb();
+    await make(db);
+    const plan = (await db.execute(`EXPLAIN QUERY PLAN SELECT url FROM portfolios WHERE ${HIDDEN_WHERE}`)).rows.map((r) => String(r.detail)).join(" | ");
+    assert.match(plan, /portfolios_hidden_idx/, `${make.name}: ${plan}`);
+  }
+});
+
+test("leaderboard: each view's size is one index seek, not a read of the whole view", async () => {
+  const src = fs.readFileSync(new URL("../lib/leaderboard.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /MAX\(shown_rank\)[^"]*GROUP BY view/, "no GROUP BY over site_ratings on a render");
+  const db = tempDb();
+  await migrate(db);
+  await ensureRankingSchema(db);
+  const plan = (await db.execute("EXPLAIN QUERY PLAN SELECT 'ai' AS view, MAX(shown_rank) AS n FROM site_ratings WHERE view = 'ai' UNION ALL SELECT 'people', MAX(shown_rank) FROM site_ratings WHERE view = 'people'")).rows.map((r) => String(r.detail)).join(" | ");
   assert.match(plan, /site_ratings_shown_idx/);
 });

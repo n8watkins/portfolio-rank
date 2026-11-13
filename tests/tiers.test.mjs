@@ -36,8 +36,8 @@ import {
 } from "../lib/tiers.mjs";
 import { rateFaceoffs } from "../lib/tiers-rating.mjs";
 import { CHECKS_WHEN_UNKNOWN, gradeKey, gradeScore, standing } from "../lib/grade-score.mjs";
-import { LIBRARY_KEY, cachedLibrary, cachedLibraryState, placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
-import { compareWithPool, printView } from "../lib/grader/report.mjs";
+import { placeGrade, rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
+import { readSiteRow, readTierMeta } from "../lib/tiers-db.mjs";
 import { drawCandidates } from "../lib/play/draw.mjs";
 import { CHECK_POINTS, checkPoints, checkShares, libraryMedians, pointFixes, unpackCheck } from "../lib/check-points.mjs";
 import { compareSeed, seedRating } from "../lib/tiers.mjs";
@@ -275,31 +275,16 @@ test("tierOf reads the stored rank, never Gemini's letter", () => {
   assert.equal(tierOf(grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S+" } })), null);
 });
 
-test("a visitor's report without a library: a starting rank from its own points (a listed site keeps its own ELO), and the grade's top N% by score", () => {
-  const pool = Array.from({ length: 200 }, (_, i) => ({ url: `https://s${i}.example/`, name: `s${i}`, mu: 25, key: gradeKey(grade(1 + (i % 5), i % 100)), tier: null, axes: {}, roles: [] }));
-  const best = compareWithPool(grade(5, 100, "S"), pool);
-  assert.equal(best.rank.tier, "B");
-  assert.equal(best.rank.provisional, false);
-  assert.equal(best.rank.seeded, true);
-  assert.ok(best.rank.points > 0);
-  assert.equal(best.percentile.total, 201);
-  assert.equal(best.percentile.topPct, 1);
-  // A listed site with enough face-offs keeps the tier its ELO earns.
-  const order = lib(200);
-  const library = { order, others: [] };
-  const listed = compareWithPool(grade(2, 40, "D"), pool, { library, url: "https://s00000.dev" });
-  assert.equal(listed.rank.tier, "SSS");
-  assert.equal(listed.rank.provisional, false);
-  assert.equal(placeGrade(grade(5, 100, "S", { is_portfolio: false }), library), null);
-});
-
-test("the printable report shows public tiers only, and the note below them", () => {
-  const ss = printView(JSON.stringify(grade(5, 100, "S", { rank: { tier: "A-", elo: 1500, top: 25 } })));
-  assert.equal(ss.tier, "A-");
-  assert.equal(ss.showTier, true);
-  const c = printView(JSON.stringify(grade(2, 40, "A", { rank: { tier: "C+", elo: 1000, top: 72 } })));
-  assert.equal(c.showTier, false);
-  assert.equal(printView(JSON.stringify(grade(5, 100, "S"))).showTier, false);
+test("a visitor's grade gets a starting rank from its own points; a listed site keeps its own rank", () => {
+  const visitor = placeGrade(grade(5, 100, "S"), { meta: null, row: null });
+  assert.equal(visitor.seeded, true);
+  assert.equal(visitor.provisional, false);
+  assert.ok(visitor.points > 0);
+  // A listed site keeps the tier its own rating earns against the daily cutoffs.
+  const meta = { n: 200, cutoffs: [{ tier: "SSS", min: 20 }, { tier: "A", min: 10 }, { tier: "D", min: null }], hist: [], perPoint: 4 };
+  const row = { url: "https://s00000.dev", mu: 40, sigma: 5, faceoffs: 12, votes: 12, member: 1, seeded: 1, points: 80, gkey: null, first: null, tier: null, fresh: false };
+  assert.equal(placeGrade(grade(2, 40, "D"), { meta, row }).tier, "SSS");
+  assert.equal(placeGrade(grade(5, 100, "S", { is_portfolio: false }), { meta, row }), null);
 });
 
 test("Play draws mostly from portfolios that still need face-offs", () => {
@@ -429,7 +414,7 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
 
   // The cached library places a new grade at once: its points among the members', or a member's own rank.
   const now = Date.parse("2026-11-12T01:30:00Z");
-  assert.equal((await cachedLibrary(client, { now })).length, 120);
+  assert.equal((await readTierMeta(client)).n, 120);
   const fresh = await rankForWrite(client, grade(5, 100, "S"), { url: "https://brand-new.example/", now });
   assert.equal(fresh.rank.seeded, true);
   assert.equal(fresh.rank.check.length, 14);
@@ -437,7 +422,10 @@ test("refreshTiers replays the votes, writes each grade's rank only when it chan
   assert.equal(regraded.rank.tier, top.rank.tier, "a new grade doesn't change a member's tier until the refresh");
   const not = await rankForWrite(client, grade(5, 100, "S", { is_portfolio: false, rank: { tier: "S" } }));
   assert.equal(not.rank, undefined);
-  const state = await cachedLibraryState(client, { now });
-  assert.ok(state.medians && typeof state.medians.perfMobile === "number");
-  assert.ok((await client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [LIBRARY_KEY] })).rows[0]);
+  const meta = await readTierMeta(client);
+  assert.ok(meta.medians && typeof meta.medians.perfMobile === "number");
+  // The new grade's site joined the library as a member with its starting rank.
+  const joined = await readSiteRow(client, "https://brand-new.example/");
+  assert.equal(joined.member, 1);
+  assert.equal(joined.seeded, 1);
 });

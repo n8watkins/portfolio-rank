@@ -1,26 +1,26 @@
-# Legal pages (drafts)
+# Legal pages
 
-**DRAFT, not legal advice.**
-These are first drafts of PortfolioRank's public policy pages, written in plain words from how the site works on 2026-11-10 and from what is planned in [../ROADMAP.md](../ROADMAP.md).
-They are not linked from the site yet.
-A lawyer has not reviewed them, and nothing here is legal advice; have them checked before relying on them, especially before the newsletter or "grade my portfolio" launch.
+**Not legal advice.**
+These are PortfolioRank's public policy pages, written in plain words from how the site works.
+A lawyer has not reviewed them; have them checked before relying on them, especially before the newsletter or "grade my portfolio" launch in production.
 
-| Draft | Becomes | Needed before |
+| Source | Page | Status |
 | --- | --- | --- |
-| [privacy.md](privacy.md) | `/privacy` | now (the site has no privacy page), and updated before grading and the newsletter open |
-| [removal.md](removal.md) | `/removal`, linked from `/removed` and every portfolio page | the first automatic blog post |
-| [newsletter.md](newsletter.md) | the newsletter sign-up box and `/newsletter` | the first newsletter email |
-| [ai-content.md](ai-content.md) | `/about-posts`, linked from the label on every post (built with the blog pages, 2026-11-11) | the first blog post |
+| [privacy.md](privacy.md) | `/privacy` (`app/privacy/page.tsx`) | live since 2026-11-12; add the newsletter and email sign-in sections when they launch |
+| [terms.md](terms.md) | `/terms` (`app/terms/page.tsx`) | live since 2026-11-12 |
+| [removal.md](removal.md) | `/removal` (`app/removal/page.tsx`) | live since 2026-11-12 |
+| [newsletter.md](newsletter.md) | the newsletter sign-up box and `/newsletter` | draft, needed before the first newsletter email |
+| [ai-content.md](ai-content.md) | `/about-posts` | live with the blog pages (2026-11-11) |
 
-Every place that needs the owner's input is marked `[owner: ...]`.
-The owner's answers of 2026-11-10 are filled in: the contact email (nate@n8builds.dev), governing law (California, United States), the minimum age (16, which covers the strictest EU default and the US under-13 rule), how long each kind of data is kept, and how fast requests are handled (removals and reported mistakes within 14 days, data requests within 30).
+Each live page links the other two and the contact email, and every page's footer links all three (`components/shell/SiteFooter.tsx`).
+When a page changes, change its Markdown source in the same pull request and update `LEGAL_UPDATED` in `components/legal/Legal.tsx`.
+`tests/legal-pages.test.mjs` checks the promises the owner approved (strategy decisions 12 and 13): checking a site adds it, removal at any time including sites waiting to be graded, and backups that expire in 35 days.
+
+The owner's answers of 2026-11-10 are in: the contact email (nate@n8builds.dev), governing law (California, United States), the minimum age (16), how long each kind of data is kept, and how fast requests are handled (removals and reported mistakes within 14 days, data requests within 30).
+On 2026-11-13 the owner decided the pages name "n8builds" as the operator, with https://x.com/n8watkins as a contact beside the email.
 Still open:
 
-- the date each page goes live;
-- the legal or business name the pages and the newsletter are sent under, and the newsletter's sender address;
-- for "grade my portfolio": whether reports are unlisted and deletable, and how long a report stays;
-- whether a signed-in person's votes are deleted on request or kept without the account;
+- the newsletter's sender address;
 - whether big policy changes are also announced in the newsletter.
-Parts that describe features not built yet are marked "(when ... launches)", so a page can go live before them with those parts left out.
 
-The pages appear in Nathan's name, so they are written in the first person and in his voice (`~/.claude/skills/writing/VOICE.md`): plain, short, no hype.
+The pages are written in the first person, in the owner's voice (`~/.claude/skills/writing/VOICE.md`): plain, short, no hype.
