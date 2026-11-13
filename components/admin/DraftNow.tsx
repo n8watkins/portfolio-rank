@@ -22,8 +22,9 @@ const STEPS: [string, string][] = [
 ];
 const LABEL: Record<string, string> = { queued: "Queued", starting: "Starting", revising: "Revising", ...Object.fromEntries(STEPS) };
 const ERRORS: Record<string, string> = {
-  daily_cap: "Today's 5 drafts are used. More tomorrow (Pacific time).",
+  daily_cap: "Today's drafts are all used. More tomorrow (Pacific time).",
   production_only: "Drafts are written only on the live site.",
+  no_gemini: "Staging has no Gemini key of its own yet, so it can't write drafts (DEPLOY.md, Staging).",
   no_workflow: "The draft writer isn't set up on this site.",
   workflow_failed: "The draft didn't start. Try again in a minute.",
   signin_required: "Your session ended. Sign in again.",
