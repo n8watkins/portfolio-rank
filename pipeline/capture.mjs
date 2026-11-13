@@ -33,6 +33,7 @@ import path from "path";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
+import { passSplashGate } from "./splash.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -186,6 +187,11 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
 
+    // A splash gate ("CLICK TO CONTINUE", "Press any key", a loader at
+    // 100%) is clicked through first, at most twice (./splash.mjs), so the
+    // capture and the grade see the portfolio, not the gate.
+    const splash = await passSplashGate(page).catch(() => null);
+
     // Blank-page gate: needs visible text within the rendered page.
     // Blank-page gate: visible text, or visual content (canvas apps such as
     // Flutter web have no text in the DOM).
@@ -270,6 +276,8 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     await mpage.setViewportSize({ width: 390, height: 844 });
     await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
     await mpage.waitForTimeout(1500);
+    // The phone view starts at the gate too.
+    const mobileSplash = await passSplashGate(mpage).catch(() => null);
     const overflow390 = await mpage.evaluate(
       () => document.documentElement.scrollWidth > 395
     );
@@ -292,6 +300,8 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       heroSettled,
       domHash,
       classHash,
+      // The splash gate passed on the way in (./splash.mjs), when there was one.
+      ...(splash ? { splash: { ...splash, mobile: mobileSplash ? mobileSplash.passed : null } } : {}),
     };
 
     await uploadDir(key, dir);
