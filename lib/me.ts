@@ -56,6 +56,8 @@ export type Job = {
     tier: string | null;
     /** Too few face-offs yet: the tier is the starting B. */
     provisional: boolean;
+    /** Its starting rank came from automated checks. */
+    seeded: boolean;
     faceoffs: number | null;
     isPortfolio: boolean | number | null;
     roles: string[];

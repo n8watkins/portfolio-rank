@@ -294,7 +294,7 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
  * which never changes a tier. From the last refresh's library: one cached row
  * plus the rows shown.
  */
-type LibEntry = { url: string; rating: number; faceoffs: number; key: number | null; first: number; elo: number };
+type LibEntry = { url: string; rating: number; faceoffs: number; key: number | null; first: number; elo: number; votes: number };
 type Placed = { tier: string; provisional: boolean; top: number | null; place: number | null };
 
 /** One portfolio in the ranked order: its library entry and its tier placement. */
@@ -359,7 +359,7 @@ async function loadRanked(limit: number): Promise<Leaderboard> {
       faceoffs: Math.floor(e.faceoffs * 100) / 100,
       provisional: p.provisional,
       disagree: null,
-      votes: null,
+      votes: e.votes,
       why: why.get(e.url) ?? null,
     };
   });

@@ -132,19 +132,40 @@ Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and a
 <!-- rubric:end -->
 
 **Tiers by ELO** (`lib/tiers.mjs`, owner decisions 2026-11-12, replacing tiers by grade score): the tier a portfolio shows comes from its rating from face-off votes, not from the AI grade, written into its grade as `rank` = { tier, elo, faceoffs, top, place, of, provisional }.
-Every portfolio starts at the same rating, which shows as tier B and ELO 1200.
+Every graded portfolio gets a starting rank from automated checks (owner decision 2026-11-12, `lib/check-points.mjs`): up to 100 points from saved data, with the weights in one settings object, `CHECK_POINTS`.
+
+| Item | Points | Source |
+| --- | ---: | --- |
+| Lighthouse performance, mobile | 15 | cache `psi:<url>` |
+| Lighthouse performance, desktop | 10 | cache `psi-desktop:<url>` |
+| Accessibility | 10 | Lighthouse, mobile |
+| SEO and best practices | 10 | Lighthouse, mobile |
+| Share card title and description | 5 | the polish fetch (`inspect:<url>`) |
+| Share card image | 5 | the polish fetch |
+| Working project links, at least 3 projects | 15 | the grade's facts (rubric v2) |
+| Resume | 5 | the grade's checks, else the polish fetch |
+| GitHub | 5 | the grade's checks, else the polish fetch |
+| Contact or LinkedIn | 5 | the grade's checks, else the polish fetch |
+| Own domain and HTTPS | 5 | the polish fetch |
+| Fits a phone, no console errors | 7 | the capture (`portfolios.meta`) |
+| Current footer year | 3 | the polish fetch (no year counts as current) |
+| Known template | -15 | the grade's facts |
+
+A missing measurement is never scored as zero: the item gets the library's median for it and is marked "not measured yet"; an item nobody has gets the same neutral value for everyone.
+Graded portfolios are sorted by points (ties: the Gemini score, then the date first graded, then the address), and each one's starting OpenSkill rating comes from its place, evenly from mean 33 (the first) down to 17 (the last), with the fresh uncertainty 25/3, so real votes move it fast.
+No vote is invented: the replay of the real face-offs simply starts there; profiles say "Starting rank from automated checks" and "N real votes".
 The rating is OpenSkill (`lib/tiers-rating.mjs`, the engine in `lib/ranking/engine.mjs`), replayed from every face-off with no AI-grade seed: a person's vote counts fully (a Superstar vote twice), an AI head-to-head comparison counts `AI_VOTE_WEIGHT` (0.25) of one, in the rating and in the face-off count.
-A portfolio stays B until it has `MIN_FACEOFFS` (10) face-offs, so a few lucky votes can't make an S.
-Portfolios with 10 or more are put in order by a cautious rating, the mean minus `RATING_CAUTION` (2) uncertainties, so a short record needs to be better to rank as high; that cautious rating on a chess-like scale (`ELO_START` 1200, `ELO_PER_POINT` 30) is the ELO shown everywhere.
+A portfolio without a starting rank (no grade) stays B until it has `MIN_FACEOFFS` (10) face-offs.
+Ranked portfolios are put in order by a cautious rating, the mean minus `RATING_CAUTION` (2) uncertainties, so a short record needs to be better to rank as high; that cautious rating on a chess-like scale (`ELO_START` 1200, `ELO_PER_POINT` 30) is the ELO shown everywhere.
 The S band is the top 1% of that order by exact place: SSS the first 3, then S+, S and S- split the rest in thirds.
 The other tiers go by share of the ranked portfolios; equal ratings share a place and a tier.
 
-| Tier | Place among portfolios with 10 face-offs |
+| Tier | Place among ranked portfolios |
 | --- | --- |
 | SSS | the top 3 |
 | S+, S, S- | the rest of the top 1%, in thirds by place |
 | A+, A, A- | 1% to 30%, in thirds |
-| B+, B, B- | 30% to 70%, in thirds (shown publicly down to B-); also every portfolio with fewer than 10 face-offs |
+| B+, B, B- | 30% to 70%, in thirds (shown publicly down to B-) |
 | C+, C, C- | 70% to 85%, in thirds |
 | D | the bottom 15% |
 
@@ -152,7 +173,8 @@ The S band needs at least 100 ranked portfolios; a share tier is only given when
 Boards and filters group by the letter family (S, A, B, C, D; SSS counts as S); the badge shows the plus or minus, and the A family is drawn with a strong gold ring (the top 30%, meant to be shared).
 The Gemini grade is the report card: per-axis scores and notes on the portfolio's page ("how to improve"), the report's "top N%" of the grade itself (`lib/grade-score.mjs`: 80% the AI quality score, 20% `checks_score`), and the "not a portfolio" filter.
 It never sets the tier.
-Play draws most face-offs from portfolios with fewer than 10 (`lib/play/draw.mjs`), so everyone gets there.
+Play draws most face-offs from portfolios with fewer than 10 people's votes (`lib/play/draw.mjs`), so every starting rank gets checked by people.
+The portfolio page shows the points breakdown and the quickest points to gain ("+5 if you add a share image").
 The public page `/grading` explains all of this with today's counts.
 `refreshTiers` replays the votes and places every grade again hourly (`worker/tiers.ts`) and at each deploy (`scripts/refresh-tiers.mjs`); a new grade is placed with its site's current rating as it is written.
 

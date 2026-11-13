@@ -6,9 +6,10 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
-import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, ELO_START, FAMILIES, MIN_FACEOFFS, STARTING_TIER, TIER_LADDER, distribution, familyOf, rankedCount } from "@/lib/tiers.mjs";
+import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, FAMILIES, TIER_LADDER, distribution, familyOf, rankedCount } from "@/lib/tiers.mjs";
 import { cachedLibrary } from "@/lib/tiers-store.mjs";
 import { db, ensureSchema } from "@/lib/db";
+import { CHECK_ITEMS, CHECK_POINTS } from "@/lib/check-points.mjs";
 
 // How grading works, kept short and public: tiers by ELO from face-offs (the
 // ladder with today's counts), the fine print, how to climb, the grade as the
@@ -84,22 +85,16 @@ export default async function GradingPage() {
           <SectionHeader id="tiers" eyebrow="Your tier" title="Your tier is your place by ELO" className="mb-3" />
           <ol className="grid max-w-2xl list-decimal gap-1.5 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
             <li>
-              Every portfolio starts at tier {STARTING_TIER}, with an ELO of {ELO_START.toLocaleString("en-US")}.
+              Every graded portfolio gets a starting rank from automated checks: up to 100 points for speed, accessibility, a share card,
+              working project links and the basics a hiring manager looks for (below). No votes are made up: it is only where the ELO starts.
             </li>
             <li>
-              Each face-off moves the ELO: win and it goes up, lose and it goes down. A person&apos;s vote counts fully, an AI
-              comparison counts {share(AI_VOTE_WEIGHT)} as much.
+              Real face-offs move the ELO from there: win and it goes up, lose and it goes down. A person&apos;s vote counts fully, an AI
+              comparison counts {share(AI_VOTE_WEIGHT)} as much. The starting rank is held loosely, so votes move it fast.
             </li>
-            <li>
-              After {MIN_FACEOFFS} face-offs, your place among the portfolios that also have {MIN_FACEOFFS} sets your tier. Before that you
-              stay at {STARTING_TIER}, so a few lucky votes can&apos;t make an S.
-            </li>
+            <li>Your place by ELO among all graded portfolios sets your tier.</li>
           </ol>
-          {live && (
-            <p className="mt-3 text-sm text-mute">
-              Today: {live.ranked.toLocaleString("en-US")} of {live.total.toLocaleString("en-US")} portfolios have {MIN_FACEOFFS} face-offs.
-            </p>
-          )}
+          {live && <p className="mt-3 text-sm text-mute">Ranked against {live.total.toLocaleString("en-US")} graded portfolios today.</p>}
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[30rem] text-sm">
               <thead>
@@ -137,6 +132,27 @@ export default async function GradingPage() {
           </p>
         </section>
 
+        {/* The starting points, from the settings (lib/check-points.mjs) */}
+        <section aria-labelledby="points" className="mt-14">
+          <SectionHeader id="points" eyebrow="The start" title="Points from automated checks" className="mb-3" />
+          <p className="max-w-2xl text-[15px] text-mute text-pretty">
+            Measured by code from data we already saved: Lighthouse, the page&apos;s share card and links, and the capture. Something not
+            measured yet (say, no Lighthouse run) gets the library&apos;s typical value and is marked, never a zero. Your portfolio&apos;s
+            page shows its own breakdown and the quickest points to gain.
+          </p>
+          <ul className="mt-4 grid grid-cols-1 gap-x-8 text-sm sm:grid-cols-2">
+            {CHECK_ITEMS.map((i) => (
+              <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-1.5">
+                <span>{i.name}</span>
+                <span className={`shrink-0 font-semibold tabular-nums ${CHECK_POINTS[i.id as keyof typeof CHECK_POINTS] < 0 ? "text-down" : ""}`}>
+                  {CHECK_POINTS[i.id as keyof typeof CHECK_POINTS] < 0 ? CHECK_POINTS[i.id as keyof typeof CHECK_POINTS] : `+${CHECK_POINTS[i.id as keyof typeof CHECK_POINTS]}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-mute">Equal points are split by the AI grade, then by who was graded first.</p>
+        </section>
+
         {/* Caution, updates, grade and tier */}
         <section aria-labelledby="rules" className="mt-14">
           <SectionHeader id="rules" eyebrow="The fine print" title="A careful ELO, updates and the grade" className="mb-5" />
@@ -169,7 +185,7 @@ export default async function GradingPage() {
         <section aria-labelledby="improve" className="mt-14">
           <SectionHeader id="improve" eyebrow="Climbing" title="How to improve your tier" className="mb-5" />
           <ol className="grid max-w-2xl list-decimal gap-2 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
-            <li>Get into face-offs: share your page so people vote, and vote yourself. {MIN_FACEOFFS} face-offs earn your own tier.</li>
+            <li>Collect the quick points from automated checks (your page lists them), then get into face-offs: share your page so people vote.</li>
             <li>Read your report card on your portfolio&apos;s page and fix the weakest part first.</li>
             <li>Pass every code check: link a resume, your GitHub and a way to reach you; fix broken project links; use your own domain and a current footer year.</li>
             <li>Show each project with the problem, your part and the outcome, not just a list of tools.</li>
@@ -182,7 +198,7 @@ export default async function GradingPage() {
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
           <p className="text-[15px] text-mute">
-            On the leaderboard, only 1 in 10 portfolios with {MIN_FACEOFFS} face-offs rank higher. On a grade report, it is where the
+            On the leaderboard, only 1 in 10 graded portfolios rank higher. On a grade report, it is where the
             grade itself stands among graded portfolios.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -242,9 +258,9 @@ export default async function GradingPage() {
           <SectionHeader id="votes" eyebrow="The ranking" title="How face-offs make a tier" className="mb-5" />
           <ol className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
             {[
-              { Icon: Flag, title: `Start at ${STARTING_TIER}`, body: `ELO ${ELO_START.toLocaleString("en-US")}, the same for all` },
+              { Icon: Flag, title: "Start from checks", body: "Points set where the ELO starts" },
               { Icon: Swords, title: "Face-offs", body: "Move the ELO up or down" },
-              { Icon: Crown, title: `${MIN_FACEOFFS} face-offs`, body: "Your place sets your tier" },
+              { Icon: Crown, title: "Your place", body: "Sets your tier, every hour" },
             ].map(({ Icon, title, body }, i) => (
               <li key={title} className="contents">
                 {i > 0 && <ChevronRight className="mx-auto h-5 w-5 self-center text-mute max-md:rotate-90" aria-hidden />}
