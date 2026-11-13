@@ -2,8 +2,9 @@
 // The Claude Haiku 5.5 pass of "recheck-543" (scripts/experiments/
 // recheck-543.mjs), run by the owner on their machine: every gradable site
 // in the same batches of 5 as Gemini 3.1 (the plan's seed and order), then
-// every gradable site one at a time. Exactly the locked grading-two-sets
-// prompts, inputs and answer shapes, through the Claude API request of the
+// every gradable site one at a time. The prompts of PROMPT_VERSION
+// (portfolio-definition-v2: the locked two-sets prompts with the owner's
+// portfolio definition), the two-sets inputs and answer shapes, through the Claude API request of the
 // two-sets test (claudeBodyFor: raw fetch, default effort and thinking).
 //
 // Safety:
@@ -29,7 +30,7 @@ import { fileURLToPath } from "url";
 import { HAIKU, claudeBodyFor } from "./grading-two-sets-claude.mjs";
 import { readJson, sha256, writeJson } from "./grading-two-sets-lib.mjs";
 import { loadBundle, loadPrompts, parseResult } from "./grading-two-sets-run.mjs";
-import { DIR, PROMPT_VERSION, capturedIds, makePlan, promptReady } from "./recheck-543.mjs";
+import { DIR, PROMPT_DIR, PROMPT_VERSION, capturedIds, makePlan, promptReady } from "./recheck-543.mjs";
 
 export const SETTINGS = { ...HAIKU, folder: "haiku", hard_stop_usd: 3.0, first_output_estimate: { solo: 6000, batch: 30000 } };
 const SPEND = /spend|usage limit|credit|billing|quota|limit.*(reached|exceeded)/i;
@@ -62,7 +63,7 @@ export async function runHaiku({
   if (!promptReady()) throw new Error(`The prompts are not ${PROMPT_VERSION} yet (experiments/grading-two-sets/prompt-log.md doesn't name it); nothing was sent.`);
   const sel = readJson(path.join(dir, "selection.json"));
   const requests = haikuRequests(sel.sites, capturedIds(path.join(dir, "bundles")));
-  const prompts = loadPrompts();
+  const prompts = loadPrompts(PROMPT_DIR);
   const out = path.join(dir, settings.folder);
   const rawDir = path.join(dir, "raw", settings.folder);
   const statePath = path.join(out, "state.json");

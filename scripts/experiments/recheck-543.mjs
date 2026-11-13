@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Re-check of non-ranked sites, "recheck-543" (owner spec, 2026-11-13).
 // Every site not in tier membership is captured fresh and graded again with
-// the locked grading-two-sets prompts (experiments/grading-two-sets/prompts,
-// unchanged), so the answers compare with the two-set test. Nothing here
+// prompt version "portfolio-definition-v2" (experiments/portfolio-definition-
+// v2: the locked grading-two-sets prompts with only the owner's portfolio
+// definition in STEP 3 changed), so the answers still compare with the
+// two-set test. Nothing here
 // writes a grade, rating, tier or listing: the only production writes are
 // the request log (gemini_requests, job "recheck-543") and, at the end, the
 // review queue rows (status_reviews), which change nothing until the owner
@@ -51,8 +53,11 @@ export const SET = "X";
 // that version is in the prompt log, and every review row records it.
 export const PROMPT_VERSION = "portfolio-definition-v2";
 const PROMPT_LOG = path.join(import.meta.dirname, "..", "..", "experiments", "grading-two-sets", "prompt-log.md");
-/** Whether the prompts on disk are PROMPT_VERSION (the grading lane logs it in prompt-log.md). */
-export const promptReady = () => fs.existsSync(PROMPT_LOG) && fs.readFileSync(PROMPT_LOG, "utf8").includes(PROMPT_VERSION);
+/** The prompt files of PROMPT_VERSION (solo.txt, batch.txt, schema.json), as the grading lane committed them (da14252). */
+export const PROMPT_DIR = path.join(import.meta.dirname, "..", "..", "experiments", PROMPT_VERSION);
+/** Whether PROMPT_VERSION is on disk and logged in prompt-log.md. */
+export const promptReady = () =>
+  ["solo.txt", "batch.txt", "schema.json"].every((f) => fs.existsSync(path.join(PROMPT_DIR, f))) && fs.existsSync(PROMPT_LOG) && fs.readFileSync(PROMPT_LOG, "utf8").includes(PROMPT_VERSION);
 
 // The five groups, in the order a site is put in the first that fits.
 export const GROUPS = ["not_portfolio", "delisted_graded", "delisted_ungraded", "broken", "live_ungraded"];
@@ -176,8 +181,11 @@ export const GEMINI31 = {
   max_tries: 5,
   broken_answer_retries: 1,
   day_cap: 480,
-  prompt_ids: { solo: "grade-two-sets-solo", solo_freetext: "grade-two-sets-solo-freetext", batch: "grade-two-sets-batch" },
-  amendments: ["2026-11-13: recheck-543 on gemini-3.1-flash-lite with the locked two-sets prompts and settings"],
+  prompt_ids: { solo: "portfolio-definition-v2-solo", solo_freetext: "portfolio-definition-v2-solo-freetext", batch: "portfolio-definition-v2-batch" },
+  amendments: [
+    "2026-11-13: recheck-543 on gemini-3.1-flash-lite with the two-sets settings",
+    "2026-11-13 (owner): prompts portfolio-definition-v2 (experiments/portfolio-definition-v2, da14252): the locked prompts with only STEP 3, the portfolio definition, replaced",
+  ],
   job: JOB,
 };
 
@@ -207,10 +215,11 @@ async function gemini({ dryRun }) {
     console.log(`hard stop reached (${GEMINI31.hard_stop})`);
     return 3;
   }
-  const { run } = await import("./grading-two-sets-run.mjs");
+  const { loadPrompts, run } = await import("./grading-two-sets-run.mjs");
   const { exit } = await run({
     db,
     plan,
+    prompts: loadPrompts(PROMPT_DIR),
     settings: GEMINI31,
     out: path.join(DIR, "gemini31"),
     rawDir: path.join(DIR, "raw", "gemini31"),
