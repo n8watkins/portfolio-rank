@@ -36,10 +36,20 @@ export function tractionLevels(raw = globalThis.process?.env?.ALERT_TRACTION) {
 }
 
 /**
+ * The line at the foot of every owner alert, so it is plain which system
+ * sent it: site alerts go through Cloudflare Email Service, the newsletter
+ * through Kit.
+ * @param {string | null | undefined} from EMAIL_FROM
+ */
+export function alertFooter(from) {
+  return `Site alert from PortfolioRank, sent through Cloudflare Email Service from ${from || "EMAIL_FROM"}. Newsletters go through Kit.`;
+}
+
+/**
  * The owner-alert sender: the shared email gate over the Worker's send_email
  * binding, or null while the binding, EMAIL_FROM or OWNER_EMAIL is missing.
  * `send` throws when the gate refused or the provider failed, so the alert
- * stays unsent for the day.
+ * stays unsent for the day. Every email ends with alertFooter.
  * @param {any} env
  * @param {{ db?: { execute: Function, transaction: Function } }} [options]
  * @returns {null | { send(m: { to: string, subject: string, text: string }): Promise<void> }}
@@ -49,9 +59,10 @@ export function emailSender(env, { db } = {}) {
   const transport = emailTransport(env, { db });
   if (!transport) return null;
   const gate = createEmailGate({ db, transport, caps: emailCaps(env.EMAIL_CAPS), secret: env.AUTH_SECRET ?? globalThis.process?.env?.AUTH_SECRET });
+  const footer = alertFooter(env.EMAIL_FROM);
   return {
     async send({ to, subject, text }) {
-      const r = await gate.send({ kind: "owner-alert", to, subject, text });
+      const r = await gate.send({ kind: "owner-alert", to, subject, text: `${text}\n\n--\n${footer}\n` });
       if (!r.sent) throw new Error(`owner alert email not sent (${r.reason})`);
     },
   };
