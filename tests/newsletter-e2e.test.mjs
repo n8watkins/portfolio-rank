@@ -48,6 +48,10 @@ const kitServer = http.createServer((req, res) => {
     if (req.method === "POST" && /^\/forms\/\d+\/subscribers$/.test(path)) return send(201, { subscriber: { id: 1, state: "inactive" } });
     if (req.method === "GET" && path === "/forms") return send(200, { forms: [{ id: 4242, name: "Blog" }], pagination: {} });
     if (req.method === "GET" && path === "/subscribers") return send(200, { subscribers: [], pagination: { has_next_page: false, total_count: 37 } });
+    if (req.method === "GET" && path === "/account") return send(200, { user: { email: "owner@example.com" }, account: { name: "PortfolioRank", plan_type: "creator_free", primary_email_address: "hello@portfoliorank.dev" } });
+    if (req.method === "GET" && path === "/email_templates") return send(200, { email_templates: [{ id: 1, name: "Text only", is_default: true }] });
+    if (req.method === "GET" && path === "/broadcasts") return send(200, { broadcasts: [] });
+    if (req.method === "POST" && path === "/broadcasts") return send(201, { broadcast: { id: 9001, subject: body.subject, send_at: body.send_at } });
     send(404, { errors: ["Not Found"] });
   });
 });
@@ -219,6 +223,38 @@ test("admin: the Newsletter page shows Kit's count and setup, and previews the e
   // (an earlier test file may have opened /admin before the Kit stand-in was up).
   const overview = await (await fetch(`${BASE}/admin`, { headers: { cookie } })).text();
   assert.match(overview, /37 subscribers/);
+});
+
+test("admin: Test the newsletter (Kit) shows the setup check, says which system sends what, and makes a [test] draft sent to nobody", async () => {
+  const cookie = await sessionCookie({ id: ADMIN_ID, login: "admin" });
+  const html = await (await fetch(`${BASE}/admin/blog/newsletter`, { headers: { cookie } })).text();
+  assert.match(html, /Test the newsletter \(Kit\)/);
+  assert.match(html, /Newsletters go through Kit/);
+  assert.match(html, /Site alerts go through Cloudflare Email Service/);
+  assert.match(html, /hello@portfoliorank\.dev/, "the sender from Kit's account");
+  assert.match(html, /portfoliorank\.dev \(check Verified in Kit\)/);
+  assert.match(html, /Blog \(4242\)/, "the sign-up form, by name and id");
+  assert.match(html, /Create a test draft in Kit/);
+
+  const draft = (cookie, origin = BASE) =>
+    fetch(`${BASE}/api/admin/newsletter/test-draft`, { method: "POST", headers: { "content-type": "application/json", ...(origin ? { origin } : {}), ...(cookie ? { cookie } : {}) }, body: "{}" });
+  assert.equal((await draft()).status, 401);
+  assert.equal((await draft(await sessionCookie({ id: ADMIN_ID + 1, login: "someone" }))).status, 403);
+  assert.equal((await draft(cookie, "https://evil.example")).status, 403);
+  const before = kitCalls.filter((c) => c.method === "POST" && c.path === "/broadcasts").length;
+  const res = await draft(cookie);
+  assert.equal(res.status, 200, await res.clone().text());
+  const body = await res.json();
+  assert.equal(body.id, "9001");
+  assert.equal(body.url, "https://app.kit.com/campaigns/9001/draft");
+  assert.match(body.subject, /^\[test\] /);
+  const made = kitCalls.filter((c) => c.method === "POST" && c.path === "/broadcasts");
+  assert.equal(made.length, before + 1);
+  const b = made.at(-1).body;
+  assert.equal(b.send_at, null, "a draft: never scheduled, sent to nobody");
+  assert.match(b.subject, /^\[test\] /);
+  assert.match(b.description, /test draft .*sent to nobody/);
+  assert.ok(b.content.includes("{{ unsubscribe_url }}"));
 });
 
 test("the forms: beside a post on desktop, after it on a phone, on /blog and in the footer elsewhere", async () => {
