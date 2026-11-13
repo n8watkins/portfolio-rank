@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Images, Inbox, ListChecks } from "lucide-react";
+import { ArrowRight, Bell, Images, Inbox, ListChecks } from "lucide-react";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { recentJobs } from "@/lib/content/jobs.mjs";
 import { BUILDERS, KIND_LABELS } from "@/pipeline/content/facts.mjs";
@@ -130,6 +130,9 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
           </Link>
           <Link href="/admin/images" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
             <Images className="h-4 w-4" aria-hidden /> Image library
+          </Link>
+          <Link href="/admin/alerts" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
+            <Bell className="h-4 w-4" aria-hidden /> Alerts
           </Link>
         </div>
       </div>
