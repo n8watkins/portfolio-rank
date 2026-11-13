@@ -3,6 +3,7 @@ import { readPublicFile } from "@/lib/publicFile";
 import { db, ensureSchema } from "@/lib/db";
 import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
 import { graderEnabled, readGradeShot } from "@/lib/grader/server";
+import { SITE_HOST } from "@/lib/site";
 
 // A grade report's share card: the site, its tier and "top N%", beside its
 // own screenshot. Like the report it is reached only through the report's
@@ -69,7 +70,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     ],
     logo: dataUrl(mark, "image/svg+xml"),
     n8Icon: dataUrl(n8, "image/png"),
-    host: "portfoliorank.n8builds.dev",
+    host: SITE_HOST,
     name,
     nameSize: name.length > 22 ? 46 : name.length > 14 ? 58 : 72,
     nameTracking: -1.6,

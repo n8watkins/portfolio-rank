@@ -54,7 +54,8 @@ For "remove me" and "fix my listing", I check the request comes from the site's 
   I read every post before it's published, and a draft that names you doesn't go out.
   (There is no automatic do-not-name check in the content pipeline yet; the owner's review is the check.)
 - Already published: any post that names you is edited to remove your name, link and screenshot within the same 14 days.
-- The removed-portfolios page (`/removed`) counts owner requests but never says whose they were.
+  Emails that were already sent can't be recalled.
+- The [removed page](https://portfoliorank.dev/removed) counts removal requests but never says whose they were.
 
 ## How people are written about anyway
 

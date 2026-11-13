@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag, tagsFor, ttlFor } from "../worker/edge-cache.ts";
 
-const HOST = "portfoliorank.n8builds.dev";
+const HOST = "portfoliorank.dev";
 const BASE = `https://${HOST}`;
 
 const get = (path, headers = {}) => new Request(`${BASE}${path}`, { headers });
@@ -37,7 +37,7 @@ test("a visitor with any of PortfolioRank's cookies always reaches the app", () 
 test("only GET and HEAD on the site's own host, without auth or RSC headers", () => {
   assert.equal(mayUseEdgeCache(new Request(`${BASE}/`, { method: "POST" }), HOST), false);
   assert.equal(mayUseEdgeCache(new Request(`${BASE}/`, { method: "HEAD" }), HOST), true);
-  assert.equal(mayUseEdgeCache(new Request("https://staging.portfoliorank.n8builds.dev/"), HOST), false);
+  assert.equal(mayUseEdgeCache(new Request("https://staging.portfoliorank.dev/"), HOST), false);
   assert.equal(mayUseEdgeCache(get("/", { authorization: "Bearer x" }), HOST), false);
   assert.equal(mayUseEdgeCache(get("/", { rsc: "1" }), HOST), false);
   assert.equal(mayUseEdgeCache(get("/", { "next-router-prefetch": "1" }), HOST), false);
