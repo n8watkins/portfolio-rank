@@ -18,6 +18,9 @@ import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { ProfileV2, profileMetadata } from "./profile-v2";
+import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
+import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
+import { jsonLdHtml } from "@/lib/json-ld";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -50,6 +53,11 @@ async function shotFor(url: string): Promise<string> {
   return base ? heroOf(base) : mshotsUrl(url, 1200);
 }
 
+/** What search engines read about a listed site (lib/profile-seo.ts), read once per request. */
+async function seoFacts(p: Portfolio): Promise<SeoFacts> {
+  return { name: p.name, url: p.url, domain: domainOf(p.url), tagline: p.tagline ?? null, ...(await loadSeoExtras(p.url)) };
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -60,15 +68,21 @@ export async function generateMetadata({
   const url = decodeURIComponent(slug);
   const p = (feed as Portfolio[]).find((x) => x.url === url);
   if (!p) return {};
-  const img = await shotFor(url);
+  const [img, facts] = await Promise.all([shotFor(url), seoFacts(p)]);
   const title = `${p.name} - PortfolioRank`;
-  const description = p.tagline
-    ? `${p.tagline} · ${domainOf(url)}`
-    : `Developer portfolio · ${domainOf(url)}`;
+  // Indexed: a description from the grade (lib/profile-seo.ts). Ungraded,
+  // "not a portfolio", a hidden grade or a site the health check hides: noindex.
+  const index = indexable(facts);
+  const description = index
+    ? profileDescription(facts)
+    : p.tagline
+      ? `${p.tagline} · ${domainOf(url)}`
+      : `Developer portfolio · ${domainOf(url)}`;
   const canonical = `${SITE_URL}/p/${encodeURIComponent(url)}`;
   return {
     title,
     description,
+    ...(index ? {} : { robots: { index: false, follow: true } }),
     alternates: { canonical },
     openGraph: {
       title,
@@ -179,10 +193,13 @@ export default async function PortfolioPage({
   // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise, and the page stays as it was.
   const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
 
-  const shot = await shotFor(url);
+  const [shot, facts] = await Promise.all([shotFor(url), seoFacts(portfolio)]);
+  // A ProfilePage about the person and its breadcrumb trail, indexable profiles only.
+  const jsonLd = profileJsonLd(facts, { canonical: `${SITE_URL}/p/${encodeURIComponent(url)}`, title: `${portfolio.name} - PortfolioRank` });
 
   return (
     <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />}
       <div>
         <div className="mb-4 rounded-xl border border-edge bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
