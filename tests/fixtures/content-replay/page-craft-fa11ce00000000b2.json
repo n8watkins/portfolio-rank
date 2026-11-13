@@ -1,0 +1,123 @@
+{
+ "kind": "page-craft",
+ "ready": true,
+ "dataAsOf": "2026-11-11T02:33:10.791Z",
+ "dataLink": "https://portfoliorank.n8builds.dev/top",
+ "facts": [
+  {
+   "id": "f1",
+   "label": "Portfolios measured and graded",
+   "display": "1,287",
+   "value": 1287,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f2",
+   "label": "Of them, graded S or A",
+   "display": "301",
+   "value": 301,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f3",
+   "label": "Share of S and A portfolios with dark mode by default",
+   "display": "28%",
+   "value": 28,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f4",
+   "label": "Share of other portfolios with dark mode by default",
+   "display": "19%",
+   "value": 19,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f5",
+   "label": "Share of S and A portfolios with motion on the page",
+   "display": "28%",
+   "value": 28,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f6",
+   "label": "Share of other portfolios with motion on the page",
+   "display": "18%",
+   "value": 18,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f7",
+   "label": "Share of S and A portfolios with fits a phone screen without sideways scrolling",
+   "display": "95%",
+   "value": 95,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f8",
+   "label": "Share of other portfolios with fits a phone screen without sideways scrolling",
+   "display": "88%",
+   "value": 88,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f9",
+   "label": "Share of S and A portfolios with no console errors",
+   "display": "82%",
+   "value": 82,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f10",
+   "label": "Share of other portfolios with no console errors",
+   "display": "82%",
+   "value": 82,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f11",
+   "label": "Median page weight of S and A portfolios, first load",
+   "display": "0.9 MB",
+   "value": 0.9,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f12",
+   "label": "Median page weight of other portfolios, first load",
+   "display": "1.1 MB",
+   "value": 1.1,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f13",
+   "label": "Median number of network requests of S and A portfolios",
+   "display": "32",
+   "value": 32,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  },
+  {
+   "id": "f14",
+   "label": "Median number of network requests of other portfolios",
+   "display": "28",
+   "value": 28,
+   "tone": "neutral",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios"
+  }
+ ],
+ "names": [],
+ "charts": [],
+ "screenshots": []
+}

@@ -1,0 +1,260 @@
+{
+ "kind": "leaderboard-movement",
+ "ready": true,
+ "headline": "Who climbed the PortfolioRank leaderboard this week",
+ "angle": "The week's biggest climbers and the top of the board, with what their portfolios do well; drops only as a count.",
+ "dataAsOf": "2026-11-12T16:33:56.524Z",
+ "dataLink": "https://portfoliorank.n8builds.dev/top",
+ "facts": [
+  {
+   "id": "f1",
+   "label": "Portfolios on the board this week",
+   "value": 2135,
+   "display": "2,135",
+   "tone": "neutral",
+   "about": null,
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f2",
+   "label": "Portfolios that moved up",
+   "value": 329,
+   "display": "329",
+   "tone": "neutral",
+   "about": null,
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f3",
+   "label": "Portfolios that moved down",
+   "value": 1028,
+   "display": "1,028",
+   "tone": "negative",
+   "about": null,
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f4",
+   "label": "New entries in the top 10",
+   "value": 0,
+   "display": "0",
+   "tone": "neutral",
+   "about": null,
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f5",
+   "label": "Param Chaudhari (paramsc.dev) is at number",
+   "value": 1,
+   "display": "#1",
+   "tone": "positive",
+   "about": "https://paramsc.dev",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f6",
+   "label": "Marcus Sánchez (marcuss.pro) is at number",
+   "value": 2,
+   "display": "#2",
+   "tone": "positive",
+   "about": "https://marcuss.pro",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f7",
+   "label": "Aayush Bharti (aaabaa-aayush.vercel.app) is at number",
+   "value": 3,
+   "display": "#3",
+   "tone": "positive",
+   "about": "https://aaabaa-aayush.vercel.app",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f8",
+   "label": "Marin Takanov (takanov.com) climbed, in places",
+   "value": 1086,
+   "display": "1,086",
+   "tone": "positive",
+   "about": "https://www.takanov.com",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f9",
+   "label": "Marin Takanov's rank this week",
+   "value": 308,
+   "display": "#308",
+   "tone": "positive",
+   "about": "https://www.takanov.com",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f10",
+   "label": "Cole Emeruche (coleruche.com) climbed, in places",
+   "value": 1020,
+   "display": "1,020",
+   "tone": "positive",
+   "about": "https://coleruche.com",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f11",
+   "label": "Cole Emeruche's rank this week",
+   "value": 531,
+   "display": "#531",
+   "tone": "positive",
+   "about": "https://coleruche.com",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f12",
+   "label": "Anandhu Sajan (anandhusajan.com) climbed, in places",
+   "value": 70,
+   "display": "70",
+   "tone": "positive",
+   "about": "https://anandhusajan.com",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f13",
+   "label": "Anandhu Sajan's rank this week",
+   "value": 310,
+   "display": "#310",
+   "tone": "positive",
+   "about": "https://anandhusajan.com",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f14",
+   "label": "Marcus Sánchez (marcuss.pro) climbed, in places",
+   "value": 4,
+   "display": "4",
+   "tone": "positive",
+   "about": "https://marcuss.pro",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  },
+  {
+   "id": "f15",
+   "label": "Marcus Sánchez's rank this week",
+   "value": 2,
+   "display": "#2",
+   "tone": "positive",
+   "about": "https://marcuss.pro",
+   "query": "rank_history (view merged): weeks 2026-06-15 and 2026-10-19, ranks among visible portfolios",
+   "at": "2026-11-12T16:33:56.524Z"
+  }
+ ],
+ "charts": [
+  {
+   "id": "c1",
+   "title": "This week's biggest climbers, places gained",
+   "unit": "",
+   "categories": [
+    "Marin Takanov",
+    "Cole Emeruche",
+    "Anandhu Sajan",
+    "Marcus Sánchez"
+   ],
+   "series": [
+    {
+     "name": "Places gained",
+     "facts": [
+      "f8",
+      "f10",
+      "f12",
+      "f14"
+     ]
+    }
+   ],
+   "alt": "Bar chart of the places each of this week's biggest climbers gained."
+  }
+ ],
+ "names": [
+  {
+   "name": "Param Chaudhari",
+   "url": "https://paramsc.dev",
+   "domain": "paramsc.dev",
+   "reason": "number 1 on the leaderboard"
+  },
+  {
+   "name": "Marcus Sánchez",
+   "url": "https://marcuss.pro",
+   "domain": "marcuss.pro",
+   "reason": "number 2 on the leaderboard"
+  },
+  {
+   "name": "Aayush Bharti",
+   "url": "https://aaabaa-aayush.vercel.app",
+   "domain": "aaabaa-aayush.vercel.app",
+   "reason": "number 3 on the leaderboard"
+  },
+  {
+   "name": "Marin Takanov",
+   "url": "https://www.takanov.com",
+   "domain": "takanov.com",
+   "reason": "climbed 1086 places this week"
+  },
+  {
+   "name": "Cole Emeruche",
+   "url": "https://coleruche.com",
+   "domain": "coleruche.com",
+   "reason": "climbed 1020 places this week"
+  },
+  {
+   "name": "Anandhu Sajan",
+   "url": "https://anandhusajan.com",
+   "domain": "anandhusajan.com",
+   "reason": "climbed 70 places this week"
+  }
+ ],
+ "screenshots": [
+  {
+   "url": "https://paramsc.dev",
+   "name": "Param Chaudhari",
+   "shotKey": "50beb3dc67a0a512"
+  },
+  {
+   "url": "https://marcuss.pro",
+   "name": "Marcus Sánchez",
+   "shotKey": "16062680d9cb3208"
+  },
+  {
+   "url": "https://aaabaa-aayush.vercel.app",
+   "name": "Aayush Bharti",
+   "shotKey": "1fef5ea23ebe8cb5"
+  },
+  {
+   "url": "https://www.takanov.com",
+   "name": "Marin Takanov",
+   "shotKey": "50727a2f97e9fc63"
+  },
+  {
+   "url": "https://coleruche.com",
+   "name": "Cole Emeruche",
+   "shotKey": "4956d40e2aee89d7"
+  },
+  {
+   "url": "https://anandhusajan.com",
+   "name": "Anandhu Sajan",
+   "shotKey": "6c418e14c3f781f8"
+  }
+ ],
+ "notable": [],
+ "superlatives": [],
+ "examples": [],
+ "focus": "Dark mode, motion and page weight: what the best portfolios choose",
+ "guidelines": []
+}

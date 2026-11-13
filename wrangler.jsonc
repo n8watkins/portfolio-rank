@@ -10,9 +10,16 @@
   // the server's own fetches (GitHub, PageSpeed, inspected sites) on the public
   // internet.
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  // Served only at its custom domain; deploys keep the domain attached.
+  // Served only at its custom domains; deploys keep them attached. The site is
+  // portfoliorank.dev (SITE_URL below); www and the old address
+  // portfoliorank.n8builds.dev stay attached only to redirect to it
+  // (worker/canonical-host.ts).
   "workers_dev": false,
-  "routes": [{ "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }],
+  "routes": [
+    { "pattern": "portfoliorank.dev", "custom_domain": true },
+    { "pattern": "www.portfoliorank.dev", "custom_domain": true },
+    { "pattern": "portfoliorank.n8builds.dev", "custom_domain": true }
+  ],
   "preview_urls": false,
   "assets": {
     "directory": ".open-next/assets",
@@ -51,8 +58,10 @@
     // bucket's r2.dev address is rate-limited, uncached and for the pipeline
     // only (its SHOTS_BASE_URL repository secret).
     "SHOTS_BASE_URL": "/shots",
-    // Auth.js builds its callback URL (/api/auth/callback/github) from this.
-    "AUTH_URL": "https://portfoliorank.n8builds.dev",
+    // The site's address (lib/site.ts): canonical URLs, the sitemap, email
+    // links, the origin and Turnstile checks, and Auth.js's callback URL
+    // (/api/auth/callback/github, auth.ts). Other hosts redirect here.
+    "SITE_URL": "https://portfoliorank.dev",
     // Server errors go to Sentry (worker/sentry.ts). A DSN is public by design:
     // it only lets a sender add events to this one project.
     "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
@@ -87,9 +96,9 @@
     // publish or reject) or "publish"; only the owner sets publish. Draft
     // mode in production since 2026-11-11 (owner); staging stays "off".
     "CONTENT_MODE": "dry-run",
-    // How the content engine writes a post: "staged" (outline, sections, finish;
-    // pipeline/content/staged.mjs) or "single" (one request).
-    "WRITER_MODE": "staged",
+    // The most drafts a week the owner may choose on /admin/blog
+    // (lib/content/automation.mjs; at most 4). The page can only go lower.
+    "CONTENT_DRAFTS_PER_WEEK": "2",
     // Never pay for Workers AI (lib/content/neurons.mjs, docs/COSTS.md "Workers
     // AI"): at most 40 AI images a UTC day, and behind it at most 2,500
     // neurons (40 Schnell images are about 2,320) of PortfolioRank's 5,000
@@ -110,8 +119,7 @@
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
     // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
-    // Optional: OWNER_EMAIL (owner alerts go there, the owner's verified
-    // address), TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
+    // Optional: TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
     // pages render; the secret is TURNSTILE_SECRET_KEY).
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
@@ -121,7 +129,8 @@
   // grader's captures on GitHub Actions; a fine-grained token for
   // n8watkins/portfolio-rank with Actions read and write only) and
   // TURNSTILE_SECRET_KEY (poll votes and grade requests; both Workers
-  // refuse them without it). See DEPLOY.md.
+  // refuse them without it) and OWNER_EMAIL (owner alerts go there, the
+  // owner's verified address). See DEPLOY.md.
   // The end-of-day run: Cloudflare's clock instead of GitHub's schedule,
   // which starts jobs hours late. Cron Triggers run in UTC; 03:30 is 20:30
   // in Los Angeles under daylight time and 04:30 under standard time, and
@@ -150,7 +159,9 @@
   // CachedPages entrypoint, so the public pages, sitemap, robots.txt and share image
   // cost no CPU time once cached, for visitors without PortfolioRank's own cookies.
   // The default entrypoint runs on every request and sends only those to CachedPages.
-  "cache": { "enabled": false },
+  // cross_version_cache: a deploy keeps the cached pages; the key carries a fingerprint
+  // of the static files instead, so new CSS or JavaScript still starts fresh.
+  "cache": { "enabled": false, "cross_version_cache": true },
   "exports": {
     "default": { "type": "worker", "cache": { "enabled": false } },
     "CachedPages": { "type": "worker", "cache": { "enabled": true } }
@@ -167,7 +178,12 @@
   "env": {
     "staging": {
       "workers_dev": false,
-      "routes": [{ "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }],
+      // The old staging address stays attached only to redirect to SITE_URL
+      // (worker/canonical-host.ts).
+      "routes": [
+        { "pattern": "staging.portfoliorank.dev", "custom_domain": true },
+        { "pattern": "staging.portfoliorank.n8builds.dev", "custom_domain": true }
+      ],
       "preview_urls": false,
       "r2_buckets": [
         { "binding": "SHOTS", "bucket_name": "portfolio-rank" },
@@ -187,8 +203,8 @@
         "TAVILY_MONTHLY_CREDITS": "200",
         "SHOTS_BASE_URL": "/shots",
         // The staging GitHub OAuth app's callback is
-        // https://staging.portfoliorank.n8builds.dev/api/auth/callback/github.
-        "AUTH_URL": "https://staging.portfoliorank.n8builds.dev",
+        // https://staging.portfoliorank.dev/api/auth/callback/github.
+        "SITE_URL": "https://staging.portfoliorank.dev",
         "SENTRY_DSN": "https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136",
         // Staging runs the launch features ahead of production (the launch
         // walkthrough, 2026-11-11). It has no crons, so RANKING_V2 only
@@ -205,22 +221,46 @@
         "GRADER_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
+        // Staging's own, lower email caps (lib/email/gate.mjs): it sends from the
+        // same address and account as production, so a day of testing here can
+        // never use up production's day. Kinds left out keep their defaults,
+        // capped by the day's total.
+        "EMAIL_CAPS": "{\"day\":20,\"perRecipient\":3,\"kinds\":{\"grade-report\":12,\"report-link\":8,\"owner-alert\":5},\"reserve\":{\"grade-report\":5,\"owner-alert\":3}}",
+        // Off until the owner approves Gemini spending again after the audits
+        // (2026-11-13). The 2026-11-12 walkthrough of automatic publishing used
+        // "publish". Off, staging's crons write no post whatever key it has.
         "CONTENT_MODE": "off",
-        // How the content engine writes a post: "staged" (outline, sections, finish;
-        // pipeline/content/staged.mjs) or "single" (one request).
-        "WRITER_MODE": "staged",
+        "CONTENT_DRAFTS_PER_WEEK": "2",
         // Staging never spends Workers AI: production's counter can't see
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
         "AI_NEURON_CEILING": "0",
         "LIBRARY_RUN_HOUR_UTC": "off",
-        "LIBRARY_MODEL": "schnell"
+        "LIBRARY_MODEL": "schnell",
+        // Low caps for staging's own Gemini key, when it has one (DEPLOY.md
+        // "Staging"): a tenth of production's day, most stages off.
+        "GEMINI_DAILY_QUOTA": "{\"gemini-3.5-flash-lite\":50,\"gemini-3.1-flash-lite\":50}",
+        "GEMINI_BUDGET": "{\"reserve\":5,\"batch\":5,\"stages\":{\"grade_new\":{\"cap\":10},\"grade_changed\":{\"cap\":5},\"compare\":{\"cap\":15},\"content\":{\"cap\":5},\"library\":{\"cap\":0},\"regrade\":{\"cap\":0},\"experiment\":{\"cap\":0}}}",
+        // "Write a draft now" on staging (lib/content/jobs.mjs draftNowPolicy).
+        "STAGING_DRAFTS_PER_DAY": "1",
+        // The only addresses staging may email (lib/email/gate.mjs); empty
+        // until the owner adds theirs.
+        "STAGING_EMAIL_TO": ""
       },
-      // No crons at all: the end-of-day run, the people queue and model watch
-      // all call Gemini.
-      "triggers": { "crons": [] },
+      // Production's jobs, so staging is a faithful test bed
+      // (docs/audits/release-and-staging.md). Without a GEMINI_API_KEY on the
+      // staging Worker every Gemini job skips (the end-of-day run logs why,
+      // the people queue drains nothing); with staging's own key (never
+      // production's) they run under the low GEMINI_DAILY_QUOTA and
+      // GEMINI_BUDGET caps above. The grader's tick starts no captures
+      // without GITHUB_DISPATCH_TOKEN, which staging never gets, and email
+      // only reaches STAGING_EMAIL_TO (lib/email/gate.mjs).
+      // To keep staging's CPU time low, the hourly jobs run every six hours and
+      // the grader's tick every 30 minutes (worker/crons.ts maps them to the
+      // same jobs); the nightly and weekly crons match production's.
+      "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 */6 * * *", "0 16 * * 1", "*/30 * * * *"] },
       // The same edge cache as production (worker/edge-cache.ts).
-      "cache": { "enabled": false },
+      "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {
         "default": { "type": "worker", "cache": { "enabled": false } },
         "CachedPages": { "type": "worker", "cache": { "enabled": true } }

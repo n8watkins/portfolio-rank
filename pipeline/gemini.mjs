@@ -32,6 +32,9 @@
 // call that still fails after the retries goes once to the next model, and
 // a spent daily quota moves the rest of the run to it (onDailyQuota
 // "fallback") or stops it ("stop").
+// The content engine (posts, not grades) also passes the chain, with
+// fallbackAfter 1, when 3.5 is busy (owner, 2026-11-12;
+// pipeline/content/busy.mjs).
 // Every HTTP request waits its turn on one shared limiter (createLimiter), so
 // retries count against the rate too, and is reported to onRequest for the
 // request log (pipeline/gemini-log.mjs), thinking tokens included.
@@ -40,7 +43,10 @@
 // GeminiRetryBudgetError instead of retrying.
 //
 // generate(parts, schema, options) takes an optional systemInstruction,
-// thinkingLevel, maxOutputTokens and temperature. A model that rejects the
+// thinkingLevel, maxOutputTokens and temperature, and `prompt`: the prompt's
+// id and version ("grade-v2", "content-claims-judge-v1"), which every
+// request of the call reports to onRequest for gemini_requests.prompt. Every
+// request builder sets it. A model that rejects the
 // thinking level (HTTP 400 naming thinking) is asked again once without it,
 // and is not sent one again for the rest of the run, so a level one model
 // lacks never fails a grade.
@@ -183,6 +189,16 @@ export function createGemini({
   retryDelaysMs = [10000, 30000, 60000],
   // Per-minute 429s: how many times to slow down before giving up on a call.
   maxSlowdowns = 5,
+  // With a chain only: after this many busy answers (5xx, timeout, network)
+  // in a row from a model, the call moves to the next model and spends the
+  // rest of retryDelaysMs there. The default (all of them) keeps the old
+  // rule: the backup gets one try after the last retry. The content engine
+  // moves after 1, since a different model is rarely busy at the same time.
+  fallbackAfter = retryDelaysMs.length,
+  // The thinking level to send a model, given the one the call asked for.
+  // The content engine sends the backup "minimal": 3.1 Flash-Lite spent a
+  // whole 4,096-token budget thinking at "low" and cut the answer off.
+  thinkingFor = (model, level) => level,
   // With a chain only: "fallback" moves the run to the next model when a
   // daily quota is spent, "stop" ends it instead (GeminiQuotaError). With
   // one model a spent quota always ends the run.
@@ -222,11 +238,11 @@ export function createGemini({
 
   // One HTTP request. Returns { kind: "ok", result } | { kind: "transient" |
   // "daily" | "slow", reason, body }; throws for auth and other 4xx errors.
-  async function attempt(model, body, { retry, fallback, thinking = false }) {
+  async function attempt(model, body, { retry, fallback, thinking = false, plain = false, prompt = null }) {
     await pace.take();
     requests[model]++;
     const started = now();
-    const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null, finishReason: null, detail: null };
+    const rec = { at: new Date(started).toISOString(), model, prompt, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null, finishReason: null, detail: null };
     let res;
     try {
       res = await fetchImpl(`${apiBase}/models/${model}:generateContent`, {
@@ -291,13 +307,15 @@ export function createGemini({
     const parts = (data.candidates?.[0]?.content?.parts ?? []).filter((p) => typeof p.text === "string" && !p.thought);
     const text = parts.at(-1)?.text;
     if (!text) throw new Error(`gemini ${model} empty response: ${JSON.stringify(data).slice(0, 300)}`);
-    return { kind: "ok", result: JSON.parse(text), usage };
+    return { kind: "ok", result: plain ? text : JSON.parse(text), usage };
   }
 
   // Models that rejected a thinking level this run; they get none.
   const noThinking = new Set();
-  function bodyFor(model, parts, schema, { systemInstruction, thinkingLevel, maxOutputTokens, temperature = 0.2 }) {
-    const generationConfig = { temperature, responseMimeType: "application/json", responseSchema: schema };
+  function bodyFor(model, parts, schema, { systemInstruction, thinkingLevel: asked, maxOutputTokens, temperature = 0.2 }) {
+    const thinkingLevel = asked ? thinkingFor(model, asked) : asked;
+    // No schema: a plain-text answer (the content writer, pipeline/content/compose.mjs).
+    const generationConfig = schema ? { temperature, responseMimeType: "application/json", responseSchema: schema } : { temperature };
     if (maxOutputTokens) generationConfig.maxOutputTokens = maxOutputTokens;
     const thinking = Boolean(thinkingLevel) && !noThinking.has(model);
     if (thinking) generationConfig.thinkingConfig = { thinkingLevel };
@@ -331,7 +349,7 @@ export function createGemini({
     for (let n = 0; ; n++) {
       const model = models[idx];
       const { body, thinking } = bodyFor(model, parts, schema, options);
-      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking });
+      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking, plain: !schema, prompt: options.prompt ?? null });
       if (out.kind === "ok") {
         answered[model]++;
         return { result: out.result, model, fallback: idx > 0, usage: out.usage };
@@ -372,6 +390,13 @@ export function createGemini({
         continue;
       }
       // transient: 5xx, timeout, network
+      if (!options.noRetry && !oneOff && idx + 1 < models.length && transient >= fallbackAfter) {
+        log(`  gemini ${model} ${out.reason} after ${transient} retr${transient === 1 ? "y" : "ies"}; this call goes to ${models[idx + 1]}`);
+        counts.fallbacks++;
+        oneOff = true;
+        idx++;
+        continue;
+      }
       if (transient < retryDelaysMs.length) {
         const wait = Math.round(retryDelaysMs[transient] * jitter());
         spendRetry(model, out.reason);
@@ -381,14 +406,6 @@ export function createGemini({
         continue;
       }
       if (options.noRetry) throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason}; no retry for this call`);
-      if (!oneOff && idx + 1 < models.length) {
-        log(`  gemini ${model} ${out.reason} after ${retryDelaysMs.length} retries; this call goes to ${models[idx + 1]}`);
-        counts.fallbacks++;
-        oneOff = true;
-        idx++;
-        transient = retryDelaysMs.length; // one attempt on the backup, no further retries
-        continue;
-      }
       throw new GeminiUnavailableError(`gemini unavailable: ${model} ${out.reason} after ${retryDelaysMs.length} retries`);
     }
   }

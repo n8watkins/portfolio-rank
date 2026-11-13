@@ -13,15 +13,28 @@ import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
 import { healthCheck } from "./health";
-import { forEdge, mayUseEdgeCache, probeAnswer } from "./edge-cache";
+import { anonymousSession } from "./anonymous-session";
+import { BLOG_TAG, appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag } from "./edge-cache";
+// The build's static-files fingerprint (scripts/assets-fingerprint.mjs, written after
+// the OpenNext build), part of every edge cache key (./edge-cache.ts).
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import assetsFingerprint from "../.open-next/assets-fingerprint.json";
+import { canonicalRedirect } from "./canonical-host";
+import { OLD_SITE_HOSTS } from "../lib/site";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
+import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
+import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
+import { nightWatchTick } from "./night-watch";
+import { runEach } from "../pipeline/hourly.mjs";
+import { jobCron } from "./crons";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
 export { EndOfDayWorkflow } from "./night";
@@ -45,19 +58,59 @@ const app = openNext as Handler;
  */
 export class CachedPages extends WorkerEntrypoint<CloudflareEnv> {
   async fetch(request: Request): Promise<Response> {
-    return forEdge(request, markStaging(await app.fetch(request, this.env, this.ctx), this.env));
+    return forEdge(request, markStaging(await app.fetch(appRequest(request), this.env, this.ctx), this.env));
+  }
+
+  /**
+   * Purges cached pages by tag (./edge-cache.ts tagsFor). An RPC method, so it skips the
+   * cache; it must run here, because a purge only reaches the entries its own entrypoint
+   * stored. Called through lib/edge-purge.ts and the end-of-day Workflow.
+   */
+  async purgeTags(tags: string[]): Promise<boolean> {
+    if (!tags.length) return true;
+    const cache = (this.ctx as unknown as { cache?: { purge(o: { tags: string[] }): Promise<{ success?: boolean }> } }).cache;
+    if (!cache) return false;
+    const out = await cache.purge({ tags: tags.slice(0, 100) });
+    return out?.success !== false;
   }
 }
 
-type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): Promise<Response> } } };
+type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): Promise<Response>; purgeTags(tags: string[]): Promise<boolean> } } };
 
-// Screenshots and favicons skip the Next.js app (./assets.ts); scanner probes get
-// a plain 404 and the public pages go through the edge cache (./edge-cache.ts);
+/**
+ * The hourly purges (./edge-cache.ts keeps profiles and the blog a day): profiles whose
+ * owner's removal took effect, and the blog when a post's scheduled time came in the
+ * last hour. Best effort: a failure only means the page refreshes when its day is up.
+ */
+async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
+  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
+  if (!cached) return;
+  const tags = removed.map(profileTag);
+  try {
+    const r = await database().execute({
+      sql: "SELECT 1 FROM posts WHERE status = 'published' AND publish_at > ? AND publish_at <= ? LIMIT 1",
+      args: [new Date(scheduledTime - 3600_000).toISOString(), new Date(scheduledTime).toISOString()],
+    });
+    if (r.rows.length) tags.push(BLOG_TAG);
+    if (tags.length) await cached.purgeTags(tags);
+  } catch (e) {
+    console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly", error: String((e as Error)?.message ?? e).slice(0, 200) }));
+  }
+}
+const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerprint ?? "dev");
+
+// Requests on the old address or www go to the same path on SITE_URL first
+// (./canonical-host.ts). Screenshots and favicons skip the Next.js app
+// (./assets.ts); scanner probes get a plain 404, a signed-out session read
+// gets `null` (./anonymous-session.ts), and the public pages go through the
+// edge cache (./edge-cache.ts);
 // the rest is the app. On staging, robots.txt disallows everything and every
 // response says noindex (./staging.ts).
 const worker = {
   ...app,
   async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
+    const moved = canonicalRedirect(request, env.SITE_URL, OLD_SITE_HOSTS);
+    if (moved) return moved;
     const health = healthCheck(request);
     if (health) return health;
     // The staging lock: off unless SITE_ENV is "staging" (./staging-gate.ts).
@@ -67,30 +120,60 @@ const worker = {
     if (robots) return robots;
     const probe = probeAnswer(request);
     if (probe) return probe;
-    if (mayUseEdgeCache(request, new URL(env.AUTH_URL).hostname)) {
-      return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(request);
+    // A signed-out visitor's session read is `null` without starting Next (./anonymous-session.ts).
+    const anonymous = anonymousSession(request);
+    if (anonymous) return anonymous;
+    if (mayUseEdgeCache(request, new URL(env.SITE_URL).hostname)) {
+      return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(edgeRequest(request, ASSETS));
     }
     return markStaging((await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx)), env);
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
-  // applies owners' held removals (./owner-removals.ts),
+  // applies owners' held removals (./owner-removals.ts), checks that last
+  // night's run started and finished (./night-watch.ts),
   // finishes people's grade requests that waited for Gemini 3.5 and makes the
   // image library's hourly batch (./library.ts); the weekly
-  // one is model watch (./model-watch.ts); the five-minute one is the
+  // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
-  async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv) {
-    if (controller.cron === PEOPLE_QUEUE_CRON) {
-      // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
-      await removalsTick(env as NightEnv, controller.scheduledTime);
-      // An alert at 80% of any email cap (./email-alerts.ts).
-      await emailAlertsTick(env as NightEnv, controller.scheduledTime);
-      await drainPeople(env as NightEnv);
-      // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
-      await libraryTick(env as NightEnv, controller.scheduledTime);
+  async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
+    // Staging's less frequent crons run the same jobs (./crons.ts).
+    const cron = jobCron(controller.cron);
+    if (cron === PEOPLE_QUEUE_CRON) {
+      // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
+      // Sentry and the log, and the rest still run this hour.
+      const at = controller.scheduledTime;
+      let removed: string[] = [];
+      await runEach(
+        [
+          // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
+          ["owner removals", async () => {
+            removed = (await removalsTick(env as NightEnv, at)).applied;
+          }],
+          // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
+          ["edge purge", () => purgeAfterHour(ctx, removed, at)],
+          // An alert at 80% of any email cap (./email-alerts.ts).
+          ["email caps", () => emailAlertsTick(env as NightEnv, at)],
+          // An alert when last night's run never started or died (./night-watch.ts).
+          ["night watch", () => nightWatchTick(env as NightEnv, at)],
+          // People's grade requests that waited for Gemini 3.5 (./night.ts).
+          ["people queue", () => drainPeople(env as NightEnv)],
+          // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
+          ["image library", () => libraryTick(env as NightEnv, at)],
+        ],
+        {
+          report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),
+          log: (line) => console.log(JSON.stringify(line)),
+        }
+      );
     }
-    else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
-    else if (controller.cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
+    else if (cron === MODEL_WATCH_CRON) {
+      // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).
+      // First, since it never throws, so a model-watch failure can't skip it.
+      await goalsTick(env as NightEnv, controller.scheduledTime);
+      await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+    }
+    else if (cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };

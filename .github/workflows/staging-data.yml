@@ -1,0 +1,88 @@
+# Keeps staging's data like production's (docs/audits/release-and-staging.md,
+# DEPLOY.md "Staging"):
+#   refresh  replaces the staging database with production's newest nightly
+#            backup (scripts/refresh-staging-db.mjs; it reads the private
+#            backups bucket and never connects to production), weekly and by
+#            hand, then rebuilds the leaderboards.
+#   ratings  rebuilds staging's leaderboards and tiers from its votes
+#            (scripts/recompute-ratings.mjs) every six hours, as production's
+#            end-of-day run does nightly; it calls no Gemini.
+# Both write only to staging's database (the STAGING_TURSO_* secrets).
+name: Staging data
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "refresh (replace staging's data with production's newest backup) or ratings"
+        type: choice
+        options: [ratings, refresh]
+        default: ratings
+  schedule:
+    - cron: "0 */6 * * *" # ratings
+    - cron: "0 18 * * 1" # refresh, Mondays (the 05:00 UTC backup has landed by then)
+
+permissions:
+  contents: read
+  actions: write # start the Staging workflow after a refresh
+
+concurrency:
+  group: staging-data
+  cancel-in-progress: false
+
+jobs:
+  staging-data:
+    name: Staging data
+    if: github.repository == 'n8watkins/portfolio-rank'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      STAGING_TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
+      STAGING_TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
+      REFRESH: ${{ (github.event_name == 'workflow_dispatch' && inputs.job == 'refresh') || github.event.schedule == '0 18 * * 1' }}
+    steps:
+      - name: Check the staging secrets
+        id: setup
+        run: |
+          if [ -n "$STAGING_TURSO_DATABASE_URL" ] && [ -n "$STAGING_TURSO_AUTH_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping until the STAGING_TURSO_DATABASE_URL and STAGING_TURSO_AUTH_TOKEN secrets exist (DEPLOY.md \"Staging\")."
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.setup.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v7
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - if: steps.setup.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Replace staging's data with production's newest backup
+        if: steps.setup.outputs.ready == 'true' && env.REFRESH == 'true'
+        env:
+          # Production's address only arms the refusal to write to it.
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BACKUP_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          R2_BACKUP_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+        run: node scripts/refresh-staging-db.mjs
+
+      # main's schema came with the restore; the Staging workflow adds what
+      # the labeled pull requests on staging need.
+      - name: Redeploy staging on the new data
+        if: steps.setup.outputs.ready == 'true' && env.REFRESH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run staging.yml --repo "$GITHUB_REPOSITORY" --ref main || echo "::notice::Run the Staging workflow by hand to migrate for the labeled pull requests."
+
+      - name: Rebuild the leaderboards
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
+        run: node scripts/recompute-ratings.mjs

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Check, ChevronRight, History, LogOut, Monitor, Moon, Settings, Sparkles, Sun, User } from "lucide-react";
+import { Check, ChevronRight, History, LogOut, Monitor, Moon, Settings, ShieldCheck, Sparkles, Sun, User } from "lucide-react";
 import { useSignIn, type SignInPrompt } from "@/components/SignInModal";
 import { ROUTES, type PrimaryAction } from "@/lib/nav";
 import { useClientSession, type ClientSession } from "@/lib/session-client";
@@ -293,6 +293,11 @@ export function AccountMenu({ action }: { action: PrimaryAction | null }) {
           {ROUTES.votes && (
             <a role="menuitem" href={ROUTES.votes} className={item}>
               <History className="h-4 w-4 text-mute" aria-hidden /> My votes
+            </a>
+          )}
+          {session.isAdmin && (
+            <a role="menuitem" href="/admin" className={item}>
+              <ShieldCheck className="h-4 w-4 text-mute" aria-hidden /> Admin
             </a>
           )}
           {rule}
