@@ -13,6 +13,7 @@ import openNext from "../.open-next/worker.js";
 import { sentryOptions } from "./sentry";
 import { serveImage } from "./assets";
 import { healthCheck } from "./health";
+import { anonymousSession } from "./anonymous-session";
 import { forEdge, mayUseEdgeCache, probeAnswer } from "./edge-cache";
 import { markStaging, stagingRobots } from "./staging";
 import { stagingGate, type GateEnv } from "./staging-gate";
@@ -52,7 +53,8 @@ export class CachedPages extends WorkerEntrypoint<CloudflareEnv> {
 type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): Promise<Response> } } };
 
 // Screenshots and favicons skip the Next.js app (./assets.ts); scanner probes get
-// a plain 404 and the public pages go through the edge cache (./edge-cache.ts);
+// a plain 404, a signed-out session read gets `null` (./anonymous-session.ts),
+// and the public pages go through the edge cache (./edge-cache.ts);
 // the rest is the app. On staging, robots.txt disallows everything and every
 // response says noindex (./staging.ts).
 const worker = {
@@ -67,6 +69,9 @@ const worker = {
     if (robots) return robots;
     const probe = probeAnswer(request);
     if (probe) return probe;
+    // A signed-out visitor's session read is `null` without starting Next (./anonymous-session.ts).
+    const anonymous = anonymousSession(request);
+    if (anonymous) return anonymous;
     if (mayUseEdgeCache(request, new URL(env.AUTH_URL).hostname)) {
       return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(request);
     }
