@@ -270,15 +270,16 @@ Staging's limits are 0.
 
 | Model | Size and steps | Neurons an image (tiles rounded up) | Use |
 | --- | --- | ---: | --- |
-| Flux Schnell | 1024 x 1024, 4 steps | 58 | the library (the hourly tick and "Make now") and 1 per post, 40 a day in all |
+| Flux Schnell | 1024 x 1024, 4 steps | 58 | the library ("Make now" any time, then the once-a-day run at 23:15 UTC takes what is left) and 1 per post, 40 a day in all |
 | Lucid Origin | 768 x 432, 20 steps | 1,512 | only when Schnell errors, if the day has room |
 | Flux 2 Dev | 1024 x 576, 16 steps | 2,400 | off; `LIBRARY_MODEL` "flux2dev" (one a day at most) |
 
-The library runs on the hourly tick (up to `LIBRARY_PER_HOUR`, 40, every hour from midnight to 19:15 Pacific, within 40 a day), and not from 20:00 to midnight Pacific.
-When the library has used the day's 40, the night's post gets no fresh illustration and fills its slots from the library, Pexels or a chart.
+Automatic library images run once a day near the end of the image day: the hourly cron does library work only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter and 4:15 pm in summer; owner, 2026-11-11), and that one run makes whatever is left of the day's 40 images and 2,500 neurons.
+It starts no image after 23:55 UTC, so nothing it makes counts against the next day, and it stops cleanly when a reservation is refused.
+The night's post comes after the 00:00 UTC reset (the end-of-day run starts at 20:30 Pacific), so it has a fresh day's 40 to draw its one illustration from.
 A Lucid fallback only runs while it fits the hour and the 2,500 neurons; otherwise the slot falls back to the library or a chart.
 The owner's "Make now" and "Make your own" on `/admin/images` may use what is left of the same 40 a day.
-Every Workers AI call path (the hourly tick, "Make now", "Make your own" and a post's fresh illustration) goes through `generateIllustration` ([pipeline/content/workers-ai.mjs](../pipeline/content/workers-ai.mjs)), which reserves the image and its neurons before calling the model; the tests prove each path is refused once 40 images or 2,500 neurons are reserved for the UTC day.
+Every Workers AI call path (the daily run, "Make now", "Make your own" and a post's fresh illustration) goes through `generateIllustration` ([pipeline/content/workers-ai.mjs](../pipeline/content/workers-ai.mjs)), which reserves the image and its neurons before calling the model; the tests prove each path is refused once 40 images or 2,500 neurons are reserved for the UTC day.
 A 429 from the gateway means stop: no retry, the next tick tries again, and the page says how many the gateway allows an hour.
 Each library image also takes one Gemini check (job `library`, at most 40 a day, inside the free Gemini quota and the reserve for people).
 "How images are made" on `/admin/images` and `GET /api/admin/quota` (`aiImages`) show today's images, the hour's and the neurons.

@@ -371,6 +371,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
 - **The image library** (owner, 2026-11-10). Status: built (#94).
   26 tech-first themes (the 13 of the style sample plus AI and agents, open source, remote work, interviews, side projects, accessibility, mobile, security, deployment and cloud, learning and growth, the job market, frontend frameworks, backend and data, freelancing) x 5 subjects = 130 images in the house style.
   The Worker's hourly tick makes up to 2 an hour (the AI Gateway's sliding limit), never from 20:00 to midnight Pacific so the night's post gets the hour, within the 40 AI images a day, one Gemini check each on the 16:9 crop; a pass is pending for the owner, a fail is rejected-auto and kept for the owner to see.
+  Owner, 2026-11-11: no more hourly batches; one automatic run a day at 23:15 UTC (`LIBRARY_RUN_HOUR_UTC`) takes whatever Make now left of the day's 40.
   The owner keeps or drops each on `/admin/images` (server-checked admin, CSRF-protected POSTs), which also lists the library with usage counts and a retire button; only approved images are used.
   Images live in the `SHOTS` bucket under `private/library/<SITE_ENV>/` and in `image_library` (schema version 9).
   The round-1 and round-2 samples were not imported (agent): the night makes the same subjects in the final style.
@@ -445,6 +446,8 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Why: the owner's existing removal flow, with no wait for the person asking.
   Superseded 2026-11-11 (security review M4, owner-approved): a removal needs the meta tag or a reviewed claim, is held 24 hours with an owner alert, can be cancelled by the claimant and undone by the admin.
   Why: a link to someone's GitHub profile or repository is common on portfolios, so a link alone let collaborators remove a site for good with no one told.
+  Tightened 2026-11-12 (owner's question: could a fork or a collaborator take over a listing?): hiding or showing the grade needs the same proof as removal (meta tag, a reviewed claim, or `github_pages`, the site being `<login>.github.io`); a profile link proves only enough to ask for a re-grade, and counts for nothing on another account's github.io site.
+  Why: a collaborator, designer or template author linked from someone's page could otherwise hide their grade; a fork lives at the forker's own address, and proofs are only ever checked on the listed address, so a fork never could.
 - **Live stats in one cached endpoint** (owner, 2026-11-10). Status: building.
   Portfolios listed, graded, graded this week, votes today, quizzes played, % own domain, % resume link, most common role, average tier, sites changed this month, newest entry, community list contributors and the repository's stars (GitHub API, cached daily).
   Why: one request for the home page's numbers, cheap on Turso (an hour's cache for the list, a day's for GitHub).

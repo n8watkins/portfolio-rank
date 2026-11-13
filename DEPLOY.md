@@ -7,7 +7,7 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
 
 - **Deploy by hand:** `npm run deploy` (builds, then `wrangler deploy`).
   The build prerenders the home page, so run it with `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` and `SHOTS_BASE_URL=/shots` in the environment, or the first render after a deploy shows no ranking until ISR refreshes it (5 minutes).
-- **Deploy from GitHub:** `.github/workflows/deploy.yml` ships every push to main, staging first ("How a change ships" below), once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
+- **Deploy from GitHub:** `.github/workflows/deploy.yml` ships every push to main to production, and `.github/workflows/staging.yml` keeps staging on main plus the pull requests labeled `staging` ("How a change ships" below), once the repository has a `CLOUDFLARE_API_TOKEN` secret (an API token with the "Edit Cloudflare Workers" permission); until then it skips the deploy with a notice.
 - **Preview locally:** `npm run preview` runs the built Worker on workerd, reading secrets from `.dev.vars`.
 - **Secrets** (`npx wrangler secret put <NAME>`, never in a file): `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PSI_API_KEY`, plus two for the end-of-day run ([AUTOMATION.md](AUTOMATION.md#end-of-day-run)):
   `GEMINI_API_KEY` (send it with `pass-env pipe portfolio-rank/GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY`) and `GITHUB_DISPATCH_TOKEN` (a fine-grained token for `n8watkins/portfolio-rank` only with "Actions: Read and write"; `pass-env pipe portfolio-rank/GITHUB_DISPATCH_TOKEN -- npx wrangler secret put GITHUB_DISPATCH_TOKEN`), which also starts "grade my portfolio" captures.
@@ -28,8 +28,9 @@ The custom domain is a `routes` entry in `wrangler.jsonc`, so every deploy keeps
   Favicons come from Google's favicon service for roster domains only, with a placeholder when a site has none, cached for a week.
   The bucket's public r2.dev address is for the pipeline (the `SHOTS_BASE_URL` repository secret); pages never link it.
 - **Database schema:** `lib/schema.mjs` holds every table, index and added column; the deploy workflow runs `node scripts/migrate.mjs` before it builds.
-  At runtime `ensureSchema()` only checks the recorded version (one query per isolate) and migrates a database that is behind, such as a fresh local file.
-  To change the schema, add the statement or column there and bump `SCHEMA_VERSION`.
+  At runtime `ensureSchema()` only compares the database's recorded schema fingerprint with the code's (one query per isolate) and migrates when they differ, such as a fresh local file.
+  To change the schema, add the statement or column there; the fingerprint (a hash of every statement) changes by itself, so no number has to be picked and parallel branches that add tables combine without a conflict over the version.
+  `SCHEMA_VERSION` stays as a record of what each number added; the database keeps the highest one it has seen.
 - **Sentry source maps:** add the `SENTRY_AUTH_TOKEN` secret (a Sentry auth token with project release access) and the `SENTRY_ORG` and `SENTRY_PROJECT` repository variables.
   The deploy then builds browser source maps, uploads them for the release (the commit SHA) and deletes them before publishing; without those settings it skips the step.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
@@ -72,17 +73,23 @@ Turning it off again is the same variable: the API answers 404 and the five-minu
 
 ## How a change ships
 
-A merge to main runs `.github/workflows/deploy.yml`, which has two jobs in a row:
+Two workflows, so production and staging never overwrite each other:
 
-1. **Staging:** migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging`.
-2. **Deploy (production):** runs only when staging passed; it migrates, builds and deploys production as before, then runs `node scripts/smoke.mjs https://portfoliorank.n8builds.dev`.
+1. **Production** (`.github/workflows/deploy.yml`, every push to main): migrates the production database, builds, deploys, then runs `node scripts/smoke.mjs https://portfoliorank.n8builds.dev`.
+2. **Staging** (`.github/workflows/staging.yml`): staging runs main plus every open pull request labeled `staging`, merged onto main in pull request order.
+   It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
+   It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.n8builds.dev --staging`.
+   The run's summary lists exactly what is on staging.
+   A labeled pull request that does not merge cleanly onto main and the ones before it is left out, named in the summary and told in a comment; rebase it onto the one it conflicts with to bring it back.
+   A stacked pull request brings its base along, so label the top of a stack; pushes to a stacked pull request start no run by themselves (GitHub runs only main's copy of the workflow for them), so run it by hand after pushing.
 
-A failed staging deploy or smoke check stops the run before production.
+To try a pull request on staging: `gh pr edit <number> --add-label staging`; to take it off: `--remove-label staging`.
+Nobody merges branches into a shared staging branch by hand any more.
 The smoke check is read-only (GET requests and the start of a GitHub sign-in).
 It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, and sign-in redirects to GitHub with a client id and the site's own callback URL.
-To try a branch on staging before it merges, run the Deploy workflow by hand on that branch (`gh workflow run deploy.yml --ref <branch>`): it deploys staging only, and the next merge to main puts main back.
-Pull requests do not deploy on their own: parallel PRs would overwrite each other on the one staging site, and CI (typecheck, lint, the Worker build for both environments, E2E) already runs on every PR.
-Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging job skips with a notice and production deploys without it.
+CI (typecheck, lint, the Worker build for both environments, E2E) runs on every pull request into main before it can merge.
+Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging workflow skips with a notice.
+The release plan, the order open work lands in and the staging fidelity work are in [docs/audits/release-and-staging.md](docs/audits/release-and-staging.md).
 
 ## Staging
 
@@ -103,7 +110,7 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
   The staging build adds a robots meta tag and a red "Staging" ribbon in the bottom-left corner (`components/StagingRibbon.tsx`).
 - **Locked:** the Worker locks staging itself, ahead of Next.js (`worker/staging-gate.ts`, only when `SITE_ENV` is `staging`; production never runs it).
-  It lets through `/healthz`, a request with the header `X-Staging-Gate` equal to the `STAGING_GATE_KEY` secret, and a request with the `__Host-staging_gate` cookie (an HMAC of an expiry, 30 days).
+  It lets through `/healthz`, the web app manifest and its icons (browsers fetch the manifest without cookies; they are the same public files production serves), a request with the header `X-Staging-Gate` equal to the `STAGING_GATE_KEY` secret, and a request with the `__Host-staging_gate` cookie (an HMAC of an expiry, 30 days).
   `GET /__gate?key=<secret>` sets that cookie and redirects to `/`; every other request gets a plain 404 `not found`.
   Wrong keys count against 10 a day per address in the `rate_limits` table; a missing secret or database failure keeps the site locked.
   The key is `portfolio-rank/STAGING_GATE_KEY` in pass, the `STAGING_GATE_KEY` Actions secret (`scripts/smoke.mjs` sends it as the header) and a secret on the staging Worker: `pass-env pipe portfolio-rank/STAGING_GATE_KEY -- npx wrangler secret put STAGING_GATE_KEY --env staging`.

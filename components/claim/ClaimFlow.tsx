@@ -43,6 +43,7 @@ const ERRORS: Record<string, string> = {
   not_owner: "This account isn't the verified owner of this portfolio.",
   account_too_new: "Owner actions need a GitHub account at least 30 days old. Ask through GitHub if this can't wait.",
   remove_needs_meta: "Removing your portfolio needs the meta tag on your site first.",
+  hide_needs_meta: "Hiding the grade needs the meta tag on your site first.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };
 const errorText = (b: Record<string, unknown>) => ERRORS[String(b.error)] ?? "That didn't work. Try again in a moment.";
@@ -322,7 +323,9 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
                   <span id="hide-label" className="block font-semibold">
                     Hide the grade
                   </span>
-                  <span className="block text-mute">Your site stays listed and in face-offs; the tier and report are hidden from others.</span>
+                  <span className="block text-mute">
+                    {claim.removable ? "Your site stays listed and in face-offs; the tier and report are hidden from others." : "Your site stays listed and in face-offs; the tier and report are hidden from others. First, add a meta tag to your site."}
+                  </span>
                 </span>
                 <button
                   type="button"
@@ -330,7 +333,14 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
                   aria-checked={claim.state.hideGrade}
                   aria-labelledby="hide-label"
                   disabled={busy}
-                  onClick={() => act(claim.state.hideGrade ? "show_grade" : "hide_grade")}
+                  onClick={() => {
+                    if (!claim.removable) {
+                      setError("");
+                      setStep("remove-proof");
+                      return;
+                    }
+                    void act(claim.state.hideGrade ? "show_grade" : "hide_grade");
+                  }}
                   className={`relative grid h-11 w-14 shrink-0 place-items-center disabled:opacity-60`}
                 >
                   <span className={`relative h-6 w-11 rounded-full transition ${claim.state.hideGrade ? "bg-up" : "bg-edge-strong"}`}>
@@ -373,10 +383,10 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
               <Code2 className="h-6 w-6" aria-hidden />
             </span>
             <h1 id="claim-t" className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
-              One more check before removing {domain}
+              One more check: prove {domain} is yours
             </h1>
             <p className="mt-2 text-mute">
-              A link to your GitHub profile is enough to manage the grade. Removing the site asks for proof only its owner can add: put this line inside the &lt;head&gt; of {domain}&apos;s home page, deploy, then check.
+              A link to your GitHub profile is enough to ask for a re-grade, but sites link collaborators&apos; and template authors&apos; profiles too. Hiding the grade or removing the site asks for proof only its owner can add: put this line inside the &lt;head&gt; of {domain}&apos;s home page, deploy, then check.
             </p>
             <pre className="mt-4 overflow-x-auto rounded-lg bg-raised p-3 font-mono text-[12.5px]">{claim.meta.tag}</pre>
             <div className="mt-4 flex flex-wrap gap-2">

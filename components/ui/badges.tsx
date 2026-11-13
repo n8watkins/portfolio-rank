@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Minus, Trophy } from "lucide-react";
+import { medalFor } from "@/lib/ranking/places.mjs";
 
 // Small marks shared by the leaderboard, reports, cards and Play.
 
@@ -20,15 +21,21 @@ export function TierBadge({ tier, size = "md" }: { tier: string; size?: "md" | "
   );
 }
 
-const MEDAL: Record<number, { name: string; ring: string; fill: string }> = {
-  1: { name: "Gold", ring: "#e9b949", fill: "linear-gradient(145deg, #fde68a, #e9b949 55%, #b7861c)" },
-  2: { name: "Silver", ring: "#b9bec8", fill: "linear-gradient(145deg, #f4f5f7, #c3c8d1 55%, #8d94a1)" },
-  3: { name: "Bronze", ring: "#c48a5c", fill: "linear-gradient(145deg, #f3c9a4, #c48a5c 55%, #8f5a33)" },
+const MEDAL: Record<string, { name: string; ring: string; fill: string }> = {
+  gold: { name: "Gold", ring: "#e9b949", fill: "linear-gradient(145deg, #fde68a, #e9b949 55%, #b7861c)" },
+  silver: { name: "Silver", ring: "#b9bec8", fill: "linear-gradient(145deg, #f4f5f7, #c3c8d1 55%, #8d94a1)" },
+  bronze: { name: "Bronze", ring: "#c48a5c", fill: "linear-gradient(145deg, #f3c9a4, #c48a5c 55%, #8f5a33)" },
 };
 
-/** Ranks 1-3 get a gold, silver or bronze medal; the rest a plain number ("=4" when tied). */
-export function RankBadge({ rank, tied, size = "md" }: { rank: number; tied?: boolean; size?: "md" | "lg" }) {
-  const m = MEDAL[rank];
+/**
+ * The first three places get a gold, silver or bronze medal, one each; the
+ * rest a plain number ("=4" when tied). `place` is the row's position in the
+ * board's order (lib/ranking/places.mjs) and defaults to `rank` where ranks
+ * are never shared; `rank` is the number shown, which tied rows share.
+ */
+export function RankBadge({ rank, place = rank, tied, size = "md" }: { rank: number; place?: number; tied?: boolean; size?: "md" | "lg" }) {
+  const medal = medalFor(place);
+  const m = medal ? MEDAL[medal] : null;
   if (!m) return <span className="text-sm font-bold tabular-nums text-mute">{tied ? `=${rank}` : rank}</span>;
   const s = size === "lg" ? "h-10 w-10" : "h-8 w-8";
   return (

@@ -297,12 +297,12 @@ test("claims: sign-in required, review by the site owner, then owner actions; st
   assert.equal((await call(admin, "POST", "/api/admin/removals", { url: OWNED, action: "undo" })).status, 404);
 });
 
-test("claims: a repository link proves nothing, and a link alone can't remove a site", async () => {
+test("claims: a repository link proves nothing, and a link alone can't hide the grade or remove a site", async () => {
   // Bob's repository is linked from Jane's page: no claim for Bob.
   const site = feed[152].url;
   const page = { html: `<a href="https://github.com/bob/shared-app">Code</a>`, finalUrl: site };
   assert.equal(autoProof({ url: site, page, login: "bob" }), null);
-  // A claim verified by a profile link may hide the grade but not remove the site.
+  // A claim verified by a profile link (a collaborator's, say) may ask for a re-grade, but neither hide the grade nor remove the site.
   const bob = await account({ login: "bob" });
   const j = jar(bob.cookie);
   await call(j, "GET", "/api/owner/claims");
@@ -313,9 +313,12 @@ test("claims: a repository link proves nothing, and a link alone can't remove a 
   const res = await call(j, "POST", "/api/owner/actions", { url: site, action: "remove", confirm: true });
   assert.equal(res.status, 403);
   assert.equal(res.body.error, "remove_needs_meta");
-  assert.equal((await call(j, "POST", "/api/owner/actions", { url: site, action: "hide_grade" })).status, 200);
-  assert.equal((await call(j, "POST", "/api/owner/actions", { url: site, action: "show_grade" })).status, 200);
-  assert.deepEqual((await db.execute({ sql: "SELECT removed_at, remove_after FROM portfolio_owner WHERE url = ?", args: [site] })).rows.map((r) => [r.removed_at, r.remove_after]), [[null, null]]);
+  for (const action of ["hide_grade", "show_grade"]) {
+    const r = await call(j, "POST", "/api/owner/actions", { url: site, action });
+    assert.equal(r.status, 403);
+    assert.equal(r.body.error, "hide_needs_meta");
+  }
+  assert.deepEqual((await db.execute({ sql: "SELECT removed_at, remove_after FROM portfolio_owner WHERE url = ?", args: [site] })).rows.map((r) => [r.removed_at, r.remove_after]), [], "nothing changed for the site");
 });
 
 test("claims: a GitHub account younger than 30 days can't act as an owner, even once verified", async () => {
