@@ -6,7 +6,7 @@ import { MAX_MANUAL, runLibraryBatch } from "@/pipeline/content/library-stage.mj
 import { withGateway } from "@/lib/ai-gateway.mjs";
 
 // One manual batch of library images, for when the owner doesn't want to
-// wait for the next hourly tick (docs/CONTENT-ENGINE.md, "The image
+// wait for the daily run at 23:15 UTC (docs/CONTENT-ENGINE.md, "The image
 // library"): the same work for queue items (within what is left of the
 // day), or one image from the owner's own subject, through the AI Gateway,
 // with the same limits (pipeline/content/library-stage.mjs runLibraryBatch:

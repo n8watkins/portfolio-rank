@@ -1,18 +1,21 @@
-// The image library's hourly batch (docs/CONTENT-ENGINE.md, "The image
-// library"), run by the hourly Cron Trigger ("15 * * * *", worker/index.ts)
-// after people's queued grades: up to LIBRARY_PER_HOUR (40) images, never
-// between 20:00 and midnight Pacific, every Workers AI call through the
-// portfoliorank-ai AI Gateway (lib/ai-gateway.mjs) and the never-pay limits
-// (lib/content/neurons.mjs: 40 a UTC day, 2,500 neurons).
-// A failure or the gateway's 429 stops the batch; the next tick tries again.
+// The image library's daily automatic run (docs/CONTENT-ENGINE.md, "The
+// image library"), on the hourly Cron Trigger ("15 * * * *", worker/index.ts)
+// after people's queued grades, but only in the UTC hour LIBRARY_RUN_HOUR_UTC
+// (23, so 23:15 UTC, near the end of the image day): whatever is left of the
+// day's 40 images and 2,500 neurons, every Workers AI call through the
+// portfoliorank-ai AI Gateway (lib/ai-gateway.mjs) and reserved first
+// (lib/content/neurons.mjs), and no image started within 5 minutes of 00:00
+// UTC. A failure, a refused reservation or the gateway's 429 stops the run;
+// tomorrow's run tries again. Every other hour does nothing.
 import { db as database } from "../lib/db";
 import { withGateway } from "../lib/ai-gateway.mjs";
-import { runLibraryBatch } from "../pipeline/content/library-stage.mjs";
+import { libraryRunDue, runLibraryBatch } from "../pipeline/content/library-stage.mjs";
 import type { NightEnv } from "./night";
 
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 
 export async function libraryTick(env: NightEnv, scheduledTime: number) {
+  if (!libraryRunDue(scheduledTime, env as unknown as Record<string, unknown>)) return { made: [], skipped: "not the daily run's hour" };
   const ai = withGateway(env.AI);
   if (!ai) return { made: [], error: "off", stopped: "no Workers AI binding" };
   try {
@@ -25,7 +28,7 @@ export async function libraryTick(env: NightEnv, scheduledTime: number) {
         return key;
       },
       apiKey: env.GEMINI_API_KEY,
-      runId: `library-tick-${new Date(scheduledTime).toISOString()}`,
+      runId: `library-daily-${new Date(scheduledTime).toISOString()}`,
       now: () => Date.now(),
       log: (line: string) => log("library.log", { line }),
     });
