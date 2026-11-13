@@ -253,7 +253,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
         <p className="flex items-start gap-2 rounded-xl border border-edge bg-card p-3.5 text-sm">
           <Clock className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
           <span>
-            Added to PortfolioRank. This page is private until the site is graded: only people with the link can see it, and search engines don&apos;t list it.
+            Added to PortfolioRank. Until the site is graded, this page isn&apos;t listed on PortfolioRank or indexed by search engines, but it isn&apos;t private: anyone who has or guesses its address can open it.
           </span>
         </p>
       )}
