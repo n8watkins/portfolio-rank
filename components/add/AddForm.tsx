@@ -36,7 +36,7 @@ function Running({ since }: { since: number }) {
       </div>
       <ol className="mt-4 space-y-2.5">
         {STEPS.map((s, i) => (
-          <li key={s} className={`flex items-center gap-2.5 text-sm transition ${i <= at ? "text-ink" : "text-mute/70"}`}>
+          <li key={s} className={`flex items-center gap-2.5 text-sm transition ${i <= at ? "text-ink" : "text-mute"}`}>
             {i < at ? <CircleCheck className="h-4 w-4 text-up" aria-hidden /> : <span className={`mx-1 h-2 w-2 rounded-full ${i === at ? "attn-dot bg-accent" : "bg-edge-strong"}`} aria-hidden />}
             {s}
           </li>
