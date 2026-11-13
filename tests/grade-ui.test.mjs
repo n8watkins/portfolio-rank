@@ -331,7 +331,8 @@ test("how grading works: tiers by ELO, the fine print, how to improve, the bands
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
     for (const t of ["SSS", "S plus", "S minus", "A plus", "A minus", "B minus", "C plus", "D"]) await p.getByRole("img", { name: `Tier ${t}`, exact: true }).first().waitFor();
     for (const name of ["Your tier is your place by ELO", "A careful ELO, updates and the grade", "How to improve your tier", "Facts by code, quality by AI", "How face-offs make a tier"]) await p.getByRole("heading", { name }).waitFor();
-    await p.getByText(/Every portfolio starts at tier B, with an ELO of 1,200/).waitFor();
+    await p.getByRole("heading", { name: "Points from automated checks" }).waitFor();
+    await p.getByText(/Every graded portfolio gets a starting rank from automated checks/).waitFor();
     assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
