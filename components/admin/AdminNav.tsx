@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 /** The admin pages, in one place, so every admin page links to the others the same way. */
 export const ADMIN_PAGES = [
   { href: "/admin/usage", label: "Usage" },
+  { href: "/admin/limits", label: "Limits" },
   { href: "/admin/images", label: "Images" },
   { href: "/admin/blog", label: "Blog drafts" },
   { href: "/admin/polls", label: "Polls" },

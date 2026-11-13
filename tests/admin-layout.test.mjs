@@ -14,7 +14,7 @@ import { insertImage } from "../lib/content/library.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
-const PAGES = ["/admin", "/admin/usage", "/admin/images", "/admin/blog", "/admin/blog/guidelines", "/admin/polls"];
+const PAGES = ["/admin", "/admin/usage", "/admin/limits", "/admin/images", "/admin/blog", "/admin/blog/guidelines", "/admin/polls"];
 const IMAGE = "e2e00000000000a7";
 
 let cookie;
