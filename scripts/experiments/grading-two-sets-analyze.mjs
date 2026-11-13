@@ -225,20 +225,35 @@ export function analyze({ res = RES, exp = EXP } = {}) {
   // Amendment: Claude Sonnet 5.5 through the API, Set A one at a time only,
   // with Gemini's solo prompt. The same model as the expert, so its agreement
   // with the key is partly the same model agreeing with itself under another prompt.
-  const claudeApi = loadAnswers(path.join(res, "claude-sonnet-api"));
-  if (claudeApi.answers.solo) {
-    // Second run (owner-approved): Set B solo, pass 1 for both sets and the solo repeats.
-    out.models["claude-sonnet-api"] = Object.fromEntries(
+  // Claude through the API (amendments): Sonnet 5.5 and Haiku 5.5, the same
+  // 58 requests (A and B solo, pass 1, the solo repeats) with Gemini's prompts.
+  out.requests_claude_api = {};
+  for (const folder of ["claude-sonnet-api", "claude-haiku-api"]) {
+    const m = loadAnswers(path.join(res, folder));
+    if (!m.answers.solo) continue;
+    out.models[folder] = Object.fromEntries(
       ["A", "B"].map((set) => {
-        const r = setReport(claudeApi, key, set, plan, sites);
-        r.vs_gemini_solo = compare(claudeApi.answers.solo, gemini.answers.solo ?? {}, sites.sets[set].map((s) => s.id));
+        const r = setReport(m, key, set, plan, sites);
+        r.vs_gemini_solo = compare(m.answers.solo, gemini.answers.solo ?? {}, sites.sets[set].map((s) => s.id));
         return [set, r];
       })
     );
-    const cs = path.join(res, "claude-sonnet-api", "state.json");
+    const cs = path.join(res, folder, "state.json");
     if (fs.existsSync(cs)) {
       const st = readJson(cs);
-      out.requests_claude_api = { http_requests: st.http_requests, retries: (st.attempts ?? []).filter((a) => a.retry).length, non_200: (st.attempts ?? []).filter((a) => a.status !== 200), cost_usd: r2(st.cost_usd), stopped: st.stopped ?? null };
+      const items = Object.values(st.items ?? {});
+      out.requests_claude_api[folder] = {
+        http_requests: st.http_requests,
+        answered: items.length,
+        retries: (st.attempts ?? []).filter((a) => a.retry).length,
+        non_200: (st.attempts ?? []).filter((a) => a.status !== 200),
+        input_tokens: items.reduce((n, i) => n + (i.usage?.input_tokens ?? 0) + (i.usage?.cache_creation_input_tokens ?? 0) + (i.usage?.cache_read_input_tokens ?? 0), 0),
+        output_tokens: items.reduce((n, i) => n + (i.usage?.output_tokens ?? 0), 0),
+        cost_usd: Math.round(st.cost_usd * 10000) / 10000,
+        first_at: items.map((i) => i.at).sort()[0] ?? null,
+        last_at: items.map((i) => i.at).sort().at(-1) ?? null,
+        stopped: st.stopped ?? null,
+      };
     }
   }
   out.verdicts_gemini = verdicts(out.models.gemini, rules);
@@ -249,8 +264,15 @@ export function analyze({ res = RES, exp = EXP } = {}) {
   for (const set of ["A", "B"]) {
     const g = out.models.gemini[set];
     const e = out.models.expert[set];
-    const c = out.models["claude-sonnet-api"]?.[set];
-    const row = (f) => ({ gemini: f(g), expert: f(e), ...(c ? { "claude-sonnet-api": (() => { try { return f(c) ?? null; } catch { return null; } })() } : {}) });
+    const safe = (f, r) => {
+      try {
+        return f(r) ?? null;
+      } catch {
+        return null;
+      }
+    };
+    const extra = (f) => Object.fromEntries(["claude-sonnet-api", "claude-haiku-api"].filter((m) => out.models[m]?.[set]).map((m) => [m, safe(f, out.models[m][set])]));
+    const row = (f) => ({ gemini: f(g), expert: f(e), ...extra(f) });
     out.side_by_side[set] = Object.fromEntries(
       PARTS.map((p) => [
         p,

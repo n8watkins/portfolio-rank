@@ -82,12 +82,32 @@ async function select({ db, junkB }) {
 }
 
 // ---------------------------------------------------------------- capture
+/**
+ * A screenshot that survives pages whose animation loop never lets
+ * Playwright's screenshot finish (seen behind a "click to continue" splash):
+ * after 20 s it falls back to a raw DevTools capture of the viewport.
+ */
+export async function shot(page, { type = "png", quality } = {}) {
+  try {
+    return await page.screenshot({ type, ...(quality ? { quality } : {}), timeout: 20000 });
+  } catch (e) {
+    if (!/Timeout/i.test(String(e?.message))) throw e;
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      const r = await cdp.send("Page.captureScreenshot", { format: type === "jpeg" ? "jpeg" : "png", ...(quality ? { quality } : {}) });
+      return Buffer.from(r.data, "base64");
+    } finally {
+      await cdp.detach().catch(() => {});
+    }
+  }
+}
+
 async function settle(page) {
-  let prev = await page.screenshot({ type: "png" });
+  let prev = await shot(page);
   let quiet = 0;
   for (let i = 0; i < 6 && quiet < 2; i++) {
     await page.waitForTimeout(2000);
-    const cur = await page.screenshot({ type: "png" });
+    const cur = await shot(page);
     quiet = pngDiff(prev, cur) < 0.01 ? quiet + 1 : 0;
     prev = cur;
   }
@@ -97,7 +117,36 @@ async function settle(page) {
  * One desktop load and one phone load. `shots` saves the screenshots and the
  * outline (Set B); without it only the facts are measured (Set A).
  */
-async function captureOne(browser, site, dir, { shots }) {
+/**
+ * Click through a splash screen ("click to continue", "enter", "press any
+ * key"): its text when there is one, else the centre of the screen, then
+ * wait for the content. Returns what was clicked.
+ */
+export async function clickThrough(page) {
+  const text = page.getByText(/click\s+to\s+(continue|enter)|tap\s+to\s+(continue|enter)|press\s+(any\s+key|enter)|^enter$/i).first();
+  // A splash often shows its prompt only once its loader finishes: wait for it.
+  const shown = await text.waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false);
+  const v = page.viewportSize();
+  const centre = () => page.mouse.click(Math.round(v.width / 2), Math.round(v.height / 2));
+  let how;
+  if (shown) {
+    await page.waitForTimeout(800);
+    how = await text.click({ timeout: 3000 }).then(() => "the splash text").catch(async () => (await centre(), "the centre of the screen"));
+  } else {
+    await centre();
+    how = "the centre of the screen";
+  }
+  await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(3000);
+  if (await text.isVisible().catch(() => false)) {
+    await centre();
+    how += ", then the centre again";
+    await page.waitForTimeout(3000);
+  }
+  return how;
+}
+
+export async function captureOne(browser, site, dir, { shots, click = false }) {
   assertNotOurs(site.url);
   fs.mkdirSync(dir, { recursive: true });
   const out = { url: site.url, at: new Date().toISOString() };
@@ -107,10 +156,11 @@ async function captureOne(browser, site, dir, { shots }) {
     await page.goto(site.url, { waitUntil: "load", timeout: 30000 });
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
+    if (click) out.clicked_desktop = await clickThrough(page);
     const first = await page.evaluate(readRenderedPage);
     if (first.text.trim().length < 30 && !first.media) throw new Error("renders blank");
     await settle(page);
-    if (shots) fs.writeFileSync(path.join(dir, "desktop.jpg"), await page.screenshot({ type: "jpeg", quality: 75 }));
+    if (shots) fs.writeFileSync(path.join(dir, "desktop.jpg"), await shot(page, { type: "jpeg", quality: 75 }));
     out.desktop = await page.evaluate(readFirstScreen);
     out.final_url = page.url();
     const rendered = await page.evaluate(readRenderedPage);
@@ -137,7 +187,8 @@ async function captureOne(browser, site, dir, { shots }) {
     await m.goto(site.url, { waitUntil: "load", timeout: 30000 });
     await m.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
     await m.waitForTimeout(3000);
-    if (shots) fs.writeFileSync(path.join(dir, "phone.jpg"), await m.screenshot({ type: "jpeg", quality: 75 }));
+    if (click) out.clicked_phone = await clickThrough(m);
+    if (shots) fs.writeFileSync(path.join(dir, "phone.jpg"), await shot(m, { type: "jpeg", quality: 75 }));
     out.phone = await m.evaluate(readFirstScreen);
   } finally {
     await mctx.close().catch(() => {});
@@ -209,7 +260,7 @@ async function capture({ only }) {
 }
 
 // ---------------------------------------------------------------- bundle
-const clean = (s, max) =>
+export const clean = (s, max) =>
   stripSiteDataMarkers(String(s ?? ""))
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
     .slice(0, max);

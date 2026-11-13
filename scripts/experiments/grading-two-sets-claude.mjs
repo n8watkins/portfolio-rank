@@ -40,6 +40,7 @@ import { buildRequest, loadBundle, loadPrompts, parseResult } from "./grading-tw
 
 export const CLAUDE = {
   model: "claude-sonnet-5-5",
+  folder: "claude-sonnet-api",
   api: "https://api.anthropic.com/v1",
   version: "2026-10-21",
   max_tokens: { solo: 16000, batch: 32000 },
@@ -51,6 +52,18 @@ export const CLAUDE = {
   retry_delays_ms: [30000, 60000, 120000, 300000],
   retry_statuses: [429, 529],
 };
+
+// Amendment (owner-approved, 2026-11-13): Claude Haiku 5.5 runs the same 58
+// requests in the same order, with its own folders, state, prices and stop.
+export const HAIKU = {
+  ...CLAUDE,
+  model: "claude-haiku-5-5",
+  folder: "claude-haiku-api",
+  price_per_mtok: { input: 0.1, output: 0.5 },
+  hard_stop_usd: 0.5,
+};
+
+export const MODELS = { [CLAUDE.model]: CLAUDE, [HAIKU.model]: HAIKU };
 
 const SPEND = /spend|usage limit|credit|billing|quota|limit.*(reached|exceeded)/i;
 
@@ -69,7 +82,7 @@ export function toJsonSchema(s) {
   return out;
 }
 
-const cost = (input, output) => (input * CLAUDE.price_per_mtok.input + output * CLAUDE.price_per_mtok.output) / 1e6;
+const costWith = (settings) => (input, output) => (input * settings.price_per_mtok.input + output * settings.price_per_mtok.output) / 1e6;
 const inputOf = (u) => (u?.input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0);
 
 /** The Claude request body for Gemini's request: the same system text, the same parts in order, the same schema. */
@@ -115,16 +128,17 @@ export async function runClaude({
   apiKey = process.env.ANTHROPIC_API_KEY,
   fetchImpl = globalThis.fetch,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  out = path.join(RES, "claude-sonnet-api"),
-  rawDir = path.join(RES, "raw", "claude-sonnet-api"),
+  settings = CLAUDE,
+  out = path.join(RES, settings.folder),
+  rawDir = path.join(RES, "raw", settings.folder),
   bundleRoot = path.join(RES, "bundles"),
   plan = readJson(path.join(EXP, "groupings.json")),
   prompts = loadPrompts(),
-  settings = CLAUDE,
   timelinePath = path.join(EXP, "timeline.json"),
   log = console.log,
 } = {}) {
   if (!apiKey) throw new Error("Needs ANTHROPIC_API_KEY (run through pass-env).");
+  const cost = costWith(settings);
   const statePath = path.join(out, "state.json");
   const state = fs.existsSync(statePath) ? readJson(statePath) : { model: settings.model, cost_usd: 0, http_requests: 0, attempts: [], items: {} };
   state.settings = settings;
@@ -142,7 +156,7 @@ export async function runClaude({
     writeJson(timelinePath, timeline);
   };
   const fileOf = (r) => path.join(out, r.step, `${r.key.split("/")[1]}.json`);
-  const phaseOf = (r) => `claude-sonnet-api:${r.step} (Set ${r.set})`;
+  const phaseOf = (r) => `${settings.folder}:${r.step} (Set ${r.set})`;
   let exit = "done";
   try {
     for (const req of requests) {
@@ -228,7 +242,7 @@ export async function runClaude({
     if (e.outcome === "spend_limit") {
       log(`SPEND LIMIT: ${e.message}`);
       log(`running total at that moment: $${state.cost_usd.toFixed(4)}`);
-      mark(`event: Claude API spend-limit stop (${e.message.slice(0, 200)}) at a running total of $${state.cost_usd.toFixed(4)}`, "start");
+      mark(`event: ${settings.model} spend-limit stop (${e.message.slice(0, 200)}) at a running total of $${state.cost_usd.toFixed(4)}`, "start");
     } else log(`STOPPED: ${e.message}`);
   }
   const done = requests.filter((r) => fs.existsSync(fileOf(r))).length;
@@ -237,6 +251,13 @@ export async function runClaude({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { exit } = await runClaude();
+  const i = process.argv.indexOf("--model");
+  const model = i > 0 ? process.argv[i + 1] : CLAUDE.model;
+  if (!MODELS[model]) {
+    console.error(`--model must be one of ${Object.keys(MODELS).join(", ")}`);
+    process.exit(1);
+  }
+  console.log(`${model}: answers in ${path.join(RES, MODELS[model].folder)}, hard stop $${MODELS[model].hard_stop_usd.toFixed(2)}`);
+  const { exit } = await runClaude({ settings: MODELS[model] });
   process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
 }

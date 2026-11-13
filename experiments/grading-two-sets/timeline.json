@@ -131,6 +131,19 @@
   },
   {
    "phase": "analysis and report"
+  },
+  {
+   "phase": "claude-sonnet-api:solo (Set B)",
+   "start": "2026-11-13T19:03:26.809Z",
+   "end": "2026-11-13T19:05:56.160Z"
+  },
+  {
+   "phase": "claude-sonnet-api:pass1 (Set A)",
+   "start": "2026-11-13T19:05:56.160Z"
+  },
+  {
+   "phase": "event: Claude API spend-limit stop (count_tokens HTTP 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.\"},\"reques) at a running total of $1.1563",
+   "start": "2026-11-13T19:06:53.642Z"
   }
  ]
 }

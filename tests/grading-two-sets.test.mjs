@@ -12,7 +12,7 @@ import { makePlan, requestList } from "../scripts/experiments/grading-two-sets.m
 import { CHECKS, PARTS, SETTINGS, loadPrompts, run } from "../scripts/experiments/grading-two-sets-run.mjs";
 import { analyze } from "../scripts/experiments/grading-two-sets-analyze.mjs";
 import { linkKinds, makePasses, mulberry32, nameMatch } from "../scripts/experiments/grading-two-sets-lib.mjs";
-import { CLAUDE, runClaude, toJsonSchema } from "../scripts/experiments/grading-two-sets-claude.mjs";
+import { CLAUDE, HAIKU, runClaude, toJsonSchema } from "../scripts/experiments/grading-two-sets-claude.mjs";
 
 const prompts = loadPrompts();
 
@@ -325,6 +325,31 @@ test("claude: the cumulative $2.00 hard stop counts earlier runs and holds acros
   const b = await runClaude(claudeOpts(f, fetchImpl));
   assert.equal(b.exit, "stopped");
   assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 33, "nothing sent after the stop");
+});
+
+test("claude: --model claude-haiku-5-5 runs the same 58 requests with its own folders, prices and stop", async () => {
+  const f = fixture();
+  const sonnet = mockClaude(() => null, { input: 3000, output: 1500 });
+  await runClaude(claudeOpts(f, sonnet.fetchImpl));
+  const haiku = mockClaude(() => null, { input: 3000, output: 1500 });
+  const { exit, state } = await runClaude(claudeOpts(f, haiku.fetchImpl, { settings: HAIKU, out: path.join(f.root, "claude-haiku-api"), rawDir: path.join(f.root, "raw", "claude-haiku-api") }));
+  assert.equal(exit, "done");
+  const sent = haiku.calls.filter((c) => c.url.endsWith("/messages")).map((c) => c.body);
+  assert.equal(sent.length, 58);
+  assert.ok(sent.every((b) => b.model === "claude-haiku-5-5"));
+  // The same requests, in the same order, as Sonnet's (only the model differs).
+  const sonnetBodies = sonnet.calls.filter((c) => c.url.endsWith("/messages")).map((c) => JSON.stringify({ ...c.body, model: null }));
+  assert.deepEqual(sent.map((b) => JSON.stringify({ ...b, model: null })), sonnetBodies);
+  // $0.10 and $0.50 per million: 58 x (3,000 x 0.1 + 1,500 x 0.5) / 1e6.
+  assert.ok(Math.abs(state.cost_usd - 58 * 0.00105) < 1e-9, `cost ${state.cost_usd}`);
+  assert.equal(HAIKU.hard_stop_usd, 0.5);
+  assert.ok(fs.existsSync(path.join(f.root, "claude-haiku-api", "pass1", "B-b4.json")));
+  assert.ok(fs.existsSync(path.join(f.root, "claude-haiku-api", "state.json")));
+  // The analysis reads both Claude columns.
+  fs.cpSync(path.join(f.root, "claude-sonnet-api"), path.join(f.root, "expert"), { recursive: true, filter: (s) => !s.endsWith("state.json") });
+  const a = analyze({ res: f.root, exp: f.exp });
+  assert.ok(a.models["claude-haiku-api"].B.batch_vs_solo.pass1);
+  assert.ok(a.models["claude-sonnet-api"].A.consistency_identical_solo);
 });
 
 test("claude: a spend-limit 4xx is a distinct outcome with the status, type, message and total", async () => {
