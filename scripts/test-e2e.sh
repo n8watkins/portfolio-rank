@@ -49,6 +49,8 @@ export GRADER_ENABLED=true
 export E2E_GRADER_MOCK_PORT="${E2E_GRADER_MOCK_PORT:-$FREE_GRADER}"
 # The free tools (tests/tools-api.test.mjs), with PageSpeed from the stand-in above.
 export TOOLS_ENABLED=true
+# "When checks re-run" (lib/freshness-flag.ts), off in production: its profile lines and the hourly fingerprints.
+export FRESHNESS_ENABLED=true
 # Email sign-in (tests/signin-email.test.mjs), off in production (lib/signin/flag.ts).
 export EMAIL_SIGNIN_ENABLED=true
 # The blog newsletter (tests/newsletter-e2e.test.mjs): on, with a local
