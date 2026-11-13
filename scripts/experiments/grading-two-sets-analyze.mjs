@@ -162,7 +162,7 @@ export function verdicts(g, rules) {
 }
 
 /** Requests, retries and timing from the Gemini run state. */
-export function requestReport(state) {
+export function requestReport(state, rawDir = null) {
   if (!state) return null;
   const a = state.attempts ?? [];
   const items = Object.values(state.items ?? {});
@@ -184,19 +184,29 @@ export function requestReport(state) {
     broken_answers: items.flatMap((i) => (i.broken ?? []).map((b) => ({ key: i.key, ...b }))),
     pauses: state.pauses ?? [],
     level_score_mismatches: items.flatMap((i) => Object.entries(i.answers ?? {}).flatMap(([id, x]) => (x.notes ?? []).map((n) => `${i.key} ${id}: ${n}`))),
-    identical_repeats: identicalRepeats(state),
+    identical_repeats: identicalRepeats(state, rawDir),
     steps,
   };
 }
 
-/** The repeat requests must be byte-identical to the first ones (same body hash). */
-function identicalRepeats(state) {
+/**
+ * The repeat requests must be byte-identical to the first ones. The hash is
+ * taken from the raw log of the last HTTP attempt of each request (the one
+ * that was answered), so a request re-sent after the amendment is compared as
+ * it was answered, not as first tried.
+ */
+function identicalRepeats(state, rawDir) {
   const items = state.items ?? {};
+  const answeredSha = (key) => {
+    if (!rawDir || !fs.existsSync(rawDir)) return items[key]?.body_sha256;
+    const files = fs.readdirSync(rawDir).filter((f) => f.startsWith(`${key.replace("/", "__")}__http`) && f.endsWith(".request.json")).sort();
+    return files.length ? readJson(path.join(rawDir, files.at(-1))).body_sha256 : items[key]?.body_sha256;
+  };
   const out = [];
   for (const [k, i] of Object.entries(items)) {
     if (i.step !== "solo-repeat" && i.step !== "pass1-repeat") continue;
     const orig = i.step === "solo-repeat" ? `solo/${i.ids[0]}` : k.replace("pass1-repeat/", "pass1/");
-    out.push({ repeat: k, original: orig, identical: items[orig]?.body_sha256 === i.body_sha256 });
+    out.push({ repeat: k, original: orig, identical: answeredSha(orig) === answeredSha(k) });
   }
   return out;
 }
@@ -217,10 +227,14 @@ export function analyze({ res = RES, exp = EXP } = {}) {
   // with the key is partly the same model agreeing with itself under another prompt.
   const claudeApi = loadAnswers(path.join(res, "claude-sonnet-api"));
   if (claudeApi.answers.solo) {
-    const r = setReport(claudeApi, key, "A", plan, sites);
-    out.models["claude-sonnet-api"] = {
-      A: { set: "A", agreement_with_key: { solo: r.agreement_with_key.solo }, share_of_fives: { solo: r.share_of_fives.solo }, checklist_vs_key: r.checklist_vs_key, junk: { id: r.junk.id, flagged: { solo: r.junk.flagged.solo } }, is_portfolio_false: { solo: r.is_portfolio_false.solo }, vs_gemini_solo: compare(claudeApi.answers.solo, gemini.answers.solo ?? {}, sites.sets.A.map((s) => s.id)) },
-    };
+    // Second run (owner-approved): Set B solo, pass 1 for both sets and the solo repeats.
+    out.models["claude-sonnet-api"] = Object.fromEntries(
+      ["A", "B"].map((set) => {
+        const r = setReport(claudeApi, key, set, plan, sites);
+        r.vs_gemini_solo = compare(claudeApi.answers.solo, gemini.answers.solo ?? {}, sites.sets[set].map((s) => s.id));
+        return [set, r];
+      })
+    );
     const cs = path.join(res, "claude-sonnet-api", "state.json");
     if (fs.existsSync(cs)) {
       const st = readJson(cs);
@@ -229,7 +243,7 @@ export function analyze({ res = RES, exp = EXP } = {}) {
   }
   out.verdicts_gemini = verdicts(out.models.gemini, rules);
   const statePath = path.join(res, "gemini", "state.json");
-  out.requests = requestReport(fs.existsSync(statePath) ? readJson(statePath) : null);
+  out.requests = requestReport(fs.existsSync(statePath) ? readJson(statePath) : null, path.join(res, "raw"));
   // Direct comparison: the same measures side by side.
   out.side_by_side = {};
   for (const set of ["A", "B"]) {

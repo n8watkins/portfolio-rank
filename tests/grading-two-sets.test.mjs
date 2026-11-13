@@ -228,8 +228,10 @@ function mockClaude(script = () => null, { input = 5000, output = 3000 } = {}) {
     if (url.endsWith("/count_tokens")) return new Response(JSON.stringify({ input_tokens: input }), { status: 200 });
     const n = calls.filter((c) => c.url.endsWith("/messages")).length;
     const s = script(n, body);
-    if (s?.status) return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: s.status });
-    const content = [{ type: "thinking", thinking: "", signature: "x" }, { type: "text", text: JSON.stringify(answer(n)) }];
+    if (s?.status) return new Response(JSON.stringify({ type: "error", error: { type: s.type ?? "overloaded_error", message: s.message ?? "Overloaded" } }), { status: s.status });
+    const sites = body.messages[0].content.filter((c) => c.type === "text" && c.text.startsWith("<site_data")).length;
+    const reply = sites === 1 ? answer(n) : { sites: Array.from({ length: sites }, (_, i) => ({ id: `site_${i + 1}`, ...answer(n + i) })) };
+    const content = [{ type: "thinking", thinking: "", signature: "x" }, { type: "text", text: JSON.stringify(reply) }];
     return new Response(JSON.stringify({ model: CLAUDE.model, content, stop_reason: "end_turn", usage: { input_tokens: input, output_tokens: output } }), { status: 200 });
   };
   return { calls, fetchImpl };
@@ -259,13 +261,32 @@ test("claude: the schema converts to closed JSON Schema without numeric limits",
   assert.deepEqual(s.properties.writing.properties.level_line.enum, prompts.schema.levels.writing);
 });
 
-test("claude: Set A solo in order, 529 retried, raw log without images or key, cost total", async () => {
+test("claude: all 58 requests in order, 529 retried, identical repeats, raw log without images or key, cost total", async () => {
   const f = fixture();
   const { calls, fetchImpl } = mockClaude((n) => (n === 2 ? { status: 529 } : null), { input: 3000, output: 1500 });
   const { exit, state } = await runClaude(claudeOpts(f, fetchImpl));
   assert.equal(exit, "done");
   const sent = calls.filter((c) => c.url.endsWith("/messages"));
-  assert.equal(sent.length, 21);
+  assert.equal(sent.length, 59);
+  // Order: solo A, solo B, pass1 A and B (batches), then the solo repeats.
+  const label = (b) => {
+    const ids = b.messages[0].content.filter((c) => c.type === "text" && c.text.startsWith("<site_data")).map((c) => c.text.match(/"url": "https:\/\/([AB]\d\d)/)[1]);
+    return ids.length === 1 ? ids[0] : ids.join(",");
+  };
+  const answered = sent.filter((_, i) => i !== 1).map((c) => label(c.body));
+  const P = f.plan.sets;
+  assert.deepEqual(answered, [...P.A.solo_order, ...P.B.solo_order, ...P.A.passes.pass1.map((b) => b.join(",")), ...P.B.passes.pass1.map((b) => b.join(",")), ...P.A.solo_repeat, ...P.B.solo_repeat]);
+  // Batches: the batch prompt and the free-text batch schema, 5 sites labelled site_1..site_5.
+  const batch = sent.find((c) => c.body.system === prompts.batch).body;
+  assert.equal(JSON.stringify(batch.output_config.format.schema).includes('"enum":["Distinctive'), false);
+  assert.equal(batch.messages[0].content.filter((c) => c.type === "image").length, 10);
+  assert.match(batch.messages[0].content[0].text, /^site_1: desktop screenshot/);
+  // Each repeat is byte-identical to this model's own first solo request.
+  for (const id of [...P.A.solo_repeat, ...P.B.solo_repeat]) {
+    const bodies = sent.filter((c) => label(c.body) === id).map((c) => JSON.stringify(c.body));
+    assert.ok(bodies.length >= 2 && bodies.every((b) => b === bodies[0]), `repeat of ${id}`);
+  }
+  for (const k of ["pass1/A-b1.json", "pass1/B-b4.json", `solo-repeat/${P.B.solo_repeat[0]}.json`, `solo/${P.B.solo_order[0]}.json`]) assert.ok(fs.existsSync(path.join(f.root, "claude-sonnet-api", k)), k);
   assert.equal(state.attempts.filter((a) => a.retry).length, 1);
   const first = sent[0].body;
   assert.equal(first.model, "claude-sonnet-5-5");
@@ -275,32 +296,48 @@ test("claude: Set A solo in order, 529 retried, raw log without images or key, c
   assert.deepEqual(first.messages[0].content.map((c) => c.type), ["text", "image", "text", "image", "text"]);
   assert.match(first.messages[0].content[4].text, /^<site_data>/);
   assert.equal(sent[0].headers["x-api-key"], "sk-test-secret");
-  // The answers follow the Set A solo order.
-  const order = sent.map((c) => c.body.messages[0].content[4].text.match(/"url": "https:\/\/(A\d\d)/)[1]);
-  assert.deepEqual([...new Set(order)], f.plan.sets.A.solo_order);
   for (const id of f.plan.sets.A.solo_order) assert.ok(fs.existsSync(path.join(f.root, "claude-sonnet-api", "solo", `${id}.json`)));
   const rawFiles = fs.readdirSync(path.join(f.root, "raw", "claude-sonnet-api"));
-  assert.equal(rawFiles.filter((x) => x.endsWith(".request.json")).length, 21);
+  assert.equal(rawFiles.filter((x) => x.endsWith(".request.json")).length, 59);
   const raw = rawFiles.map((x) => fs.readFileSync(path.join(f.root, "raw", "claude-sonnet-api", x), "utf8")).join("\n");
   assert.ok(!raw.includes("sk-test-secret"));
   assert.ok(!raw.includes(Buffer.from("desktop-A01").toString("base64")));
   assert.match(raw, /bundles\/A\/A01\/desktop\.jpg/);
-  // 20 answered requests at 3,000 in and 1,500 out: 20 x $0.021 (the 529 is not billed).
-  assert.ok(Math.abs(state.cost_usd - 0.42) < 1e-9, `cost ${state.cost_usd}`);
+  // 58 answered requests at 3,000 in and 1,500 out: 58 x $0.021 (the 529 is not billed).
+  assert.ok(Math.abs(state.cost_usd - 58 * 0.021) < 1e-9, `cost ${state.cost_usd}`);
 });
 
-test("claude: the $0.75 hard stop is checked before each request and holds across restarts", async () => {
+test("claude: the cumulative $2.00 hard stop counts earlier runs and holds across restarts", async () => {
   const f = fixture();
-  const { calls, fetchImpl } = mockClaude(() => null, { input: 5000, output: 3000 });
+  // The first run is already done: Set A solo answered at $0.4980.
+  const out = path.join(f.root, "claude-sonnet-api");
+  for (const id of f.plan.sets.A.solo_order) fs.mkdirSync(path.join(out, "solo"), { recursive: true }), fs.writeFileSync(path.join(out, "solo", `${id}.json`), JSON.stringify({ answers: {} }));
+  fs.writeFileSync(path.join(out, "state.json"), JSON.stringify({ model: CLAUDE.model, cost_usd: 0.498, http_requests: 20, attempts: [], items: Object.fromEntries(f.plan.sets.A.solo_order.map((id) => [id, { id, usage: { input_tokens: 8000, output_tokens: 900 } }])) }));
+  const { calls, fetchImpl } = mockClaude(() => null, { input: 5000, output: 3500 });
   const a = await runClaude(claudeOpts(f, fetchImpl));
   assert.equal(a.exit, "stopped");
-  // $0.04 a request: 18 fit under $0.75 ($0.72), the 19th would pass it.
-  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 18);
+  const first = calls.find((c) => c.url.endsWith("/messages")).body;
+  assert.match(first.messages[0].content.at(-1).text, new RegExp(`https://${f.plan.sets.B.solo_order[0]}\\.`), "resumes at Set B");
+  // $0.045 a request on top of $0.498: 33 fit under $2.00 ($1.983), the next would pass it.
+  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 33);
   assert.ok(a.state.cost_usd <= CLAUDE.hard_stop_usd);
   assert.match(a.state.stopped.why, /hard stop/);
   const b = await runClaude(claudeOpts(f, fetchImpl));
   assert.equal(b.exit, "stopped");
-  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 18, "nothing sent after the stop");
+  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 33, "nothing sent after the stop");
+});
+
+test("claude: a spend-limit 4xx is a distinct outcome with the status, type, message and total", async () => {
+  const f = fixture();
+  const lines = [];
+  const msg = "You have reached your specified API usage limits. You will regain access on 2026-12-01.";
+  const { calls, fetchImpl } = mockClaude((n) => (n === 4 ? { status: 400, type: "invalid_request_error", message: msg } : null), { input: 3000, output: 1500 });
+  const a = await runClaude(claudeOpts(f, fetchImpl, { log: (l) => lines.push(l) }));
+  assert.equal(a.exit, "spend_limit");
+  assert.equal(calls.filter((c) => c.url.endsWith("/messages")).length, 4);
+  assert.equal(a.state.stopped.outcome, "spend_limit");
+  assert.ok(lines.some((l) => l.includes("HTTP 400") && l.includes("invalid_request_error") && l.includes(msg)));
+  assert.ok(lines.some((l) => l.includes("running total at that moment: $0.0630")));
 });
 
 test("claude: a 400 stops at once and a resumed run continues at the same site", async () => {
@@ -313,7 +350,7 @@ test("claude: a 400 stops at once and a resumed run continues at the same site",
   const good = mockClaude(() => null, { input: 3000, output: 1500 });
   const b = await runClaude(claudeOpts(f, good.fetchImpl));
   assert.equal(b.exit, "done");
-  assert.equal(good.calls.filter((c) => c.url.endsWith("/messages")).length, 18);
+  assert.equal(good.calls.filter((c) => c.url.endsWith("/messages")).length, 56);
 });
 
 test("first-screen helpers", () => {

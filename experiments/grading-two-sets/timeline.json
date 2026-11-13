@@ -87,7 +87,8 @@
   },
   {
    "phase": "gemini:pass2",
-   "start": "2026-11-13T18:41:52.338Z"
+   "start": "2026-11-13T18:41:52.338Z",
+   "end": "2026-11-13T18:49:07.061Z"
   },
   {
    "phase": "event: paused at pass2/A-b3 by the day cap: gemini-3.5-flash-lite had 430 requests this Pacific quota day (376 from exp-grading-v3, 54 from this run; free quota 500); 50 of 92 requests answered, 54 HTTP requests used",
@@ -102,19 +103,31 @@
   },
   {
    "phase": "claude-sonnet-api:solo (Set A)",
-   "start": "2026-11-13T18:45:50.734Z"
+   "start": "2026-11-13T18:45:50.734Z",
+   "end": "2026-11-13T18:48:31.577Z"
   },
   {
-   "phase": "gemini:pass3"
+   "phase": "amendment: second Claude Sonnet 5.5 API run (Set B solo, pass1 A and B, solo repeats), cumulative \\$2.00 stop, spend-limit outcome recorded; run by the owner"
   },
   {
-   "phase": "gemini:solo-repeat"
+   "phase": "gemini:pass3",
+   "start": "2026-11-13T18:49:07.072Z",
+   "end": "2026-11-13T18:52:12.129Z"
   },
   {
-   "phase": "gemini:pass1-repeat"
+   "phase": "gemini:solo-repeat",
+   "start": "2026-11-13T18:52:12.131Z",
+   "end": "2026-11-13T18:53:24.451Z"
   },
   {
-   "phase": "gemini:solo-freetext"
+   "phase": "gemini:pass1-repeat",
+   "start": "2026-11-13T18:53:24.468Z",
+   "end": "2026-11-13T18:55:35.333Z"
+  },
+  {
+   "phase": "gemini:solo-freetext",
+   "start": "2026-11-13T18:55:35.334Z",
+   "end": "2026-11-13T18:56:53.738Z"
   },
   {
    "phase": "analysis and report"

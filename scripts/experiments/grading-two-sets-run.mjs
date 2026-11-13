@@ -322,6 +322,9 @@ export async function run({
       break;
     }
     item.answers = answers;
+    // The hash of the request as answered (a request re-sent after an amendment differs from its first try).
+    if (item.body_sha256 !== bodySha) item.first_body_sha256 ??= item.body_sha256;
+    item.body_sha256 = bodySha;
     item.finished = new Date().toISOString();
     item.http_tries = (item.http_tries ?? 0) + current.tries;
     writeJson(path.join(out, req.step, `${req.key.split("/")[1]}.json`), { step: req.step, set: req.set, kind: req.kind, ids: req.ids, answers, body_sha256: bodySha });

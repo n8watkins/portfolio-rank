@@ -99,6 +99,14 @@ No refusal fallback is enabled, so every answer comes from Sonnet 5.5 itself; a 
 A hard stop at $0.75, checked before each request with the exact input from `count_tokens`, keeps the cost bounded.
 Because the expert is also Sonnet, this column separates the prompt and setting from the model: same model, Gemini's prompt, structured output, a fresh request per site.
 
+## Amendment, 2026-11-13: a second Claude Sonnet 5.5 API run
+
+Owner-approved, about $1.40 more: the Sonnet API column extends to Set B one at a time (20), pass 1 of both sets (8 batches of 5, `prompts/batch.txt` with the free-text batch schema) and the 10 solo-repeat sites, in that order.
+Each repeat is byte-identical to this model's own first solo request for that site (checked against the first run's raw requests for the 5 Set A sites).
+The request content is built from Gemini's request part for part, so both models get the same text and images in the same order.
+The hard stop is a cumulative $2.00 across both runs, counting the first run's $0.4980.
+A 4xx that mentions a spend or usage limit or credit stops the run as a separate outcome, with its status, error type, message and the running total recorded; this run also tests whether the owner's $1 monthly spend limit counts promotional-credit use.
+
 ## Amendment, 2026-11-13: the day cap
 
 The run paused at pass2/A-b3 because the model's requests this Pacific quota day reached the harness's day cap of 430 (376 from the first grading test, 54 from this run; the free quota is 500).
