@@ -90,7 +90,7 @@ export function siteBlock(b, label = null) {
 const jpeg = (img) => ({ inline_data: { mime_type: "image/jpeg", data: img.data } });
 
 /** Request parts, schema and options for one request, plus the image references for the raw log. */
-export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey = kind) {
+export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey = kind, settings = SETTINGS) {
   const parts = [];
   const refs = new Map();
   const labels = batchLabels(bundles.length);
@@ -107,11 +107,11 @@ export function buildRequest(kind, bundles, prompts = loadPrompts(), schemaKey =
     refs,
     schema: prompts.schema[schemaKey],
     options: {
-      prompt: SETTINGS.prompt_ids[schemaKey],
+      prompt: settings.prompt_ids[schemaKey],
       systemInstruction: prompts[kind],
-      thinkingLevel: SETTINGS.thinkingLevel,
-      temperature: SETTINGS.temperature,
-      maxOutputTokens: SETTINGS.maxOutputTokens[kind],
+      thinkingLevel: settings.thinkingLevel,
+      temperature: settings.temperature,
+      maxOutputTokens: settings.maxOutputTokens[kind],
     },
   };
 }
@@ -278,7 +278,7 @@ export async function run({
   let exit = "done";
   for (const req of todo) {
     const bundles = req.ids.map((id) => loadBundle(id, bundleRoot));
-    const built = buildRequest(req.kind, bundles, prompts, req.schema ?? req.kind);
+    const built = buildRequest(req.kind, bundles, prompts, req.schema ?? req.kind, settings);
     // The request body without the API key, for "identical request" checks.
     const bodySha = sha256(JSON.stringify({ s: built.options.systemInstruction, p: built.parts, schema: built.schema, t: built.options.temperature, k: built.options.thinkingLevel, m: built.options.maxOutputTokens }));
     current = { req, refs: built.refs, tries: 0, bodySha };

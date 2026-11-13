@@ -22,6 +22,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import { buildExcerpt, OUTLINE_ARGS, readPageOutline } from "../../pipeline/excerpt.mjs";
 import { measurePage } from "../../pipeline/facts.mjs";
 import { UA, readRenderedPage } from "../../pipeline/gate.mjs";
@@ -34,7 +35,7 @@ import { SETTINGS, run } from "./grading-two-sets-run.mjs";
 import { HAIKU, runClaude } from "./grading-two-sets-claude.mjs";
 
 // The full-page helpers live on the feat/fullpage-shots branch (not on main yet).
-const FULLPAGE = path.join(os.homedir(), "worktrees", "portfolio-rank-feat-fullpage-shots", "pipeline", "fullpage.mjs");
+export const FULLPAGE = path.join(os.homedir(), "worktrees", "portfolio-rank-feat-fullpage-shots", "pipeline", "fullpage.mjs");
 const ROOT = path.join(os.homedir(), "research", "portfoliorank-experiments", "mini5");
 const SEED = 20261113;
 const JOB = "exp-mini5";
@@ -65,7 +66,7 @@ async function select() {
 }
 
 /** One site: both views with the new rules, kept open for the tall images. */
-async function captureSite(browser, site, dir, fp) {
+export async function captureSite(browser, site, dir, fp) {
   assertNotOurs(site.url);
   fs.mkdirSync(dir, { recursive: true });
   const t0 = Date.now();
@@ -179,10 +180,12 @@ async function haiku() {
   process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
 }
 
-const step = process.argv[2];
-const steps = { select, capture, gemini, haiku };
-if (!steps[step]) {
-  console.error("usage: mini5.mjs <select|capture|gemini|haiku>");
-  process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const step = process.argv[2];
+  const steps = { select, capture, gemini, haiku };
+  if (!steps[step]) {
+    console.error("usage: mini5.mjs <select|capture|gemini|haiku>");
+    process.exit(1);
+  }
+  await steps[step]();
 }
-await steps[step]();

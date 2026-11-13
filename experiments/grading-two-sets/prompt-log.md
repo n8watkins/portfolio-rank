@@ -107,6 +107,19 @@ The request content is built from Gemini's request part for part, so both models
 The hard stop is a cumulative $2.00 across both runs, counting the first run's $0.4980.
 A 4xx that mentions a spend or usage limit or credit stops the run as a separate outcome, with its status, error type, message and the running total recorded; this run also tests whether the owner's $1 monthly spend limit counts promotional-credit use.
 
+## Owner amendment, 2026-11-13: prompt version "portfolio-definition-v2"
+
+A new prompt version for the mini tests and re-checks, not for the locked two-sets comparison, whose prompts stay as they are.
+`experiments/portfolio-definition-v2/solo.txt` and `batch.txt` are the locked prompts with only the is_portfolio section (STEP 3) replaced by the owner's definition, word for word.
+The closing instruction "Give the reason first, then the answer." is kept, because the answer shape still puts the reason first.
+`schema.json` there is a copy of the locked one: the batch schema with the free-text level line, the solo schema with the enum, and the same answer shape.
+Prompt ids for the request log: `portfolio-definition-v2-solo` and `portfolio-definition-v2-batch`.
+The new section:
+
+> A portfolio is a page that introduces a person and points to their work. It is a portfolio if it shows (1) who they are, a name or clear personal identity (stylized or spaced-out letters count), (2) what they do (developer, engineer, designer, and so on), and (3) a way to their work: a Projects button or link, a GitHub link, project links or a resume. A weak portfolio is still a portfolio: no projects shown on the page, a blog-first homepage, or projects only behind a link are low scores and tips, not a reason to say false. is_portfolio is false ONLY for: parked or for-sale domains; unedited placeholders (demo names like 'Aaaaby', 'John Doe', or someone else's content); pages that are not about a person (a company or studio site, a bare code repository, a link-in-bio page like Linktree); broken, blank or error pages.
+
+What I expect: far fewer "not a portfolio" answers on thin but real pages (one-screen menus, blog-first homes), and the junk check now rests on the named exclusions, so a template demo persona other than the examples may still pass.
+
 ## Amendment, 2026-11-13: the day cap
 
 The run paused at pass2/A-b3 because the model's requests this Pacific quota day reached the harness's day cap of 430 (376 from the first grading test, 54 from this run; the free quota is 500).
