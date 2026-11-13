@@ -301,11 +301,13 @@ export async function checkPage(row, { fetchPage, fetchText = async () => null }
     html = await readCapped(res, MAX_BYTES);
   } catch (e) {
     const msg = String(e?.cause?.code ?? e?.name ?? e?.message ?? e);
-    // guardedFetch's own refusals say "blocked: <why>": a private address or an odd port is final, a redirect loop is not.
+    // guardedFetch's own refusals say "blocked: <why>": a private address, a local name or an odd port is final;
+    // a failed DNS lookup or a redirect loop is a dead site, looked at again later.
     const refused = String(e?.message ?? "").match(/^blocked: (.*)$/)?.[1];
     if (refused) {
-      const loop = /redirect/.test(refused);
-      return { status: "dropped", reason: loop ? "dead" : "not_portfolio", detail: loop ? "too_many_redirects" : `refused:${refused.replace(/\s+/g, "_").slice(0, 30)}` };
+      if (/redirect/.test(refused)) return { status: "dropped", reason: "dead", detail: "too_many_redirects" };
+      if (/private|local|port|not a public|no host/i.test(refused)) return { status: "dropped", reason: "not_portfolio", detail: `refused:${refused.replace(/\s+/g, "_").slice(0, 30)}` };
+      return { status: "dropped", reason: "dead", detail: "dns_not_found" };
     }
     const detail = /timeout/i.test(msg) ? "timeout" : /ENOTFOUND|EAI_AGAIN/.test(msg) ? "dns_not_found" : "fetch_error";
     return { status: "dropped", reason: "dead", detail };
