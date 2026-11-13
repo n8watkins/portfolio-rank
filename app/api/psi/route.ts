@@ -1,80 +1,12 @@
 import { NextResponse } from "next/server";
-import { cached, type CacheMeta } from "@/lib/cache";
+import { cached } from "@/lib/cache";
+import { runPsi, type PsiResult } from "@/lib/tools/psi";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 
-// Adapted from site-forge's checkup route. Works keyless at low volume;
-// set PSI_API_KEY (free, no billing) for the 25k/day quota.
-export type PsiResult = CacheMeta & {
-  ok: boolean;
-  error?: string;
-  scores?: Record<string, number | null>; // 0-100
-  metrics?: { id: string; label: string; value: string }[];
-};
-
-const METRIC_AUDITS = [
-  "largest-contentful-paint",
-  "cumulative-layout-shift",
-  "total-blocking-time",
-] as const;
-
-// The slice of the PageSpeed Insights v5 response this reads.
-type PsiResponse = {
-  lighthouseResult?: {
-    categories?: Record<string, { score?: number | null } | undefined>;
-    audits?: Record<string, { title?: string; displayValue?: string } | undefined>;
-  };
-};
-
-async function runPsi(target: string): Promise<PsiResult> {
-  // PSI_API_BASE points the end-to-end tests at a local stand-in for Google.
-  const psiUrl = new URL(
-    process.env.PSI_API_BASE ??
-      "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
-  );
-  psiUrl.searchParams.set("url", target);
-  psiUrl.searchParams.set("strategy", "mobile");
-  if (process.env.PSI_API_KEY) {
-    psiUrl.searchParams.set("key", process.env.PSI_API_KEY);
-  }
-  for (const cat of ["performance", "accessibility", "best-practices", "seo"]) {
-    psiUrl.searchParams.append("category", cat);
-  }
-
-  let data: PsiResponse;
-  try {
-    const res = await fetch(psiUrl.toString(), {
-      signal: AbortSignal.timeout(90_000),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return {
-        ok: false,
-        error: err?.error?.message ?? `psi_${res.status}`,
-      };
-    }
-    data = await res.json();
-  } catch (e) {
-    return { ok: false, error: (e as Error)?.name === "TimeoutError" ? "timeout" : "fetch_error" };
-  }
-
-  const lhr = data.lighthouseResult;
-  if (!lhr) return { ok: false, error: "no_data" };
-
-  const scores: Record<string, number | null> = {};
-  for (const id of ["performance", "accessibility", "best-practices", "seo"]) {
-    const raw = lhr.categories?.[id]?.score;
-    scores[id] = typeof raw === "number" ? Math.round(raw * 100) : null;
-  }
-
-  const metrics = METRIC_AUDITS.flatMap((id) => {
-    const audit = lhr.audits?.[id];
-    return audit?.displayValue
-      ? [{ id, label: audit.title ?? id, value: audit.displayValue }]
-      : [];
-  });
-
-  return { ok: true, scores, metrics };
-}
+// Lighthouse for a listed portfolio's profile (mobile), from lib/tools/psi.ts,
+// which the free speed check (app/api/tools/speed) shares: a check there
+// saves under the same "psi:<url>" key, so it refreshes this too.
+export type { PsiResult };
 
 export async function GET(req: Request) {
   const url = new URL(req.url).searchParams.get("url");
@@ -103,7 +35,7 @@ export async function GET(req: Request) {
       failureTtlMs: 3600 * 1000,
       leaseOnMiss: { busy: () => ({ ok: false, error: "in_progress" }) },
     },
-    () => runPsi(url)
+    () => runPsi(url, "mobile")
   );
   return NextResponse.json(data);
 }

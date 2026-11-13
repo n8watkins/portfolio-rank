@@ -41,8 +41,23 @@ export function closedReason(p: BlogPost): string | null {
   return null;
 }
 
-/** What Publish does for this draft: at once, or at its scheduled 08:00 Pacific. */
-export function publishLabel(p: BlogPost, now = Date.now()): string {
+/** The post's publish slot ("Fri 8:00 AM PT") while it is still ahead, else null. */
+export function scheduledFor(p: BlogPost, now = Date.now()): string | null {
   const at = p.publishAt ? Date.parse(p.publishAt) : NaN;
-  return Number.isFinite(at) && at > now ? `Publish ${pacificTime(p.publishAt!)}` : "Publish now";
+  if (!Number.isFinite(at) || at <= now) return null;
+  // Short enough for one button on a phone: "Fri 8:00 AM PT" (the slot is always within a week).
+  return `${new Date(at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" })} PT`;
+}
+
+/**
+ * How a draft did against its checks, in plain words. A round is one pass
+ * of the writer followed by every check (facts and numbers, names and links,
+ * outside claims, the template, the editorial rules, the final review); a
+ * failed round sends the draft back with the problems for a revision, at
+ * most twice. So "1 round" means it passed on the first try.
+ */
+export function checksLine(p: BlogPost): string {
+  if (!p.checks?.passed) return "Did not pass its checks";
+  const rounds = p.checks.rounds ?? 1;
+  return rounds <= 1 ? "Passed every check on the first try" : `Passed every check after ${rounds - 1} revision${rounds - 1 === 1 ? "" : "s"}`;
 }

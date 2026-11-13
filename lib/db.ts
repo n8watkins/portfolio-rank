@@ -1,14 +1,26 @@
 import { createClient, type Client } from "@libsql/client";
 import path from "path";
-import { SCHEMA_VERSION, migrate, schemaVersion } from "./schema.mjs";
+import { migrate, schemaIsCurrent } from "./schema.mjs";
 
 // Turso in production (TURSO_DATABASE_URL + TURSO_AUTH_TOKEN), a local
 // libSQL file in dev - same client, same SQL.
 let client: Client | null = null;
 let ready: Promise<void> | null = null;
 
+/** True on Cloudflare Workers (production, staging, `wrangler dev`), where there is no local file to fall back to. */
+export function onWorkers(): boolean {
+  return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+}
+
+export const MISSING_DATABASE_URL =
+  "TURSO_DATABASE_URL is not set on this Worker: it has no database (add the secret with wrangler secret put TURSO_DATABASE_URL)";
+
 export function db(): Client {
   if (!client) {
+    // A Worker without the secret used to fall back to a local file and fail
+    // later with libSQL's "got file:" (Sentry PORTFOLIORANK-2); say what is
+    // missing instead, on the first query.
+    if (!process.env.TURSO_DATABASE_URL && onWorkers()) throw new Error(MISSING_DATABASE_URL);
     client = process.env.TURSO_DATABASE_URL
       ? createClient({
           url: process.env.TURSO_DATABASE_URL,
@@ -36,7 +48,7 @@ export function db(): Client {
 export function ensureSchema(): Promise<void> {
   if (!ready) {
     const attempt = (async () => {
-      if ((await schemaVersion(db())) >= SCHEMA_VERSION) return;
+      if (await schemaIsCurrent(db())) return;
       await migrate(db());
     })();
     ready = attempt;

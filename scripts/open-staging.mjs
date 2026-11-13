@@ -9,7 +9,7 @@ if (!key) {
   console.error("STAGING_GATE_KEY is not set; run this through pass-env (see the comment at the top).");
   process.exit(1);
 }
-const url = `https://staging.portfoliorank.n8builds.dev/__gate?key=${encodeURIComponent(key)}`;
+const url = `https://staging.portfoliorank.dev/__gate?key=${encodeURIComponent(key)}`;
 // cmd.exe treats & % ^ specially; the key is URL-encoded, so only % could appear.
 const result = spawnSync("cmd.exe", ["/c", "start", "", url.replace(/%/g, "^%")], { stdio: "ignore" });
 if (result.error || result.status !== 0) {

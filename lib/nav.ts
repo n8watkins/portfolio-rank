@@ -14,6 +14,7 @@ export const ROUTES: Record<
   | "about"
   | "grading"
   | "grade"
+  | "add"
   | "me"
   | "removed"
   | "profile"
@@ -38,6 +39,10 @@ export const ROUTES: Record<
   // The grade pages, while "grade my portfolio" is on (GRADER_ENABLED, read
   // at build time by next.config.ts so server and browser agree).
   grade: process.env.NEXT_PUBLIC_GRADER_ENABLED === "true" ? "/grade" : null,
+  // "Add your portfolio": every check at once, then the profile; while
+  // TOOLS_ENABLED is on (inlined the same way). It replaces "Grade yours" and
+  // the free tools in the shell (owner, 2026-11-12).
+  add: process.env.NEXT_PUBLIC_TOOLS_ENABLED === "true" ? "/add" : null,
   me: "/me",
   removed: "/removed",
   profile: "/profile",
@@ -61,6 +66,7 @@ export function navKeyFor(pathname: string): NavKey {
       return "browse";
     case "/blog":
       return "blog";
+    case "/add":
     case "/grade":
     case "/me":
       return "grade";
@@ -75,12 +81,22 @@ const only = <T extends { href: string | null }>(items: T[]) =>
   items.filter((i): i is T & { href: string } => i.href !== null);
 
 /** The desktop header's destinations (owner, redesign preview). */
-export const NAV: NavItem[] = only([
-  { key: "top" as const, href: ROUTES.top, label: "Leaderboard" },
-  { key: "play" as const, href: ROUTES.play, label: "Play" },
-  { key: "browse" as const, href: ROUTES.browse, label: "Browse" },
-  { key: "blog" as const, href: ROUTES.blog, label: "Blog" },
-]);
+// With "Add your portfolio" on: Play, Top and Blog, and the add button
+// beside them (owner, 2026-11-12); Browse moves to the footer and More.
+export const NAV: NavItem[] = only(
+  ROUTES.add
+    ? [
+        { key: "play" as const, href: ROUTES.play, label: "Play" },
+        { key: "top" as const, href: ROUTES.top, label: "Top" },
+        { key: "blog" as const, href: ROUTES.blog, label: "Blog" },
+      ]
+    : [
+        { key: "top" as const, href: ROUTES.top, label: "Leaderboard" },
+        { key: "play" as const, href: ROUTES.play, label: "Play" },
+        { key: "browse" as const, href: ROUTES.browse, label: "Browse" },
+        { key: "blog" as const, href: ROUTES.blog, label: "Blog" },
+      ]
+);
 
 /** What the visitor has done, as far as the shell needs to know. */
 export type VisitorState = {
@@ -100,6 +116,7 @@ export type PrimaryAction = { href: string; label: string; done: boolean };
 export function primaryAction(v: VisitorState = {}): PrimaryAction | null {
   if (v.queued && ROUTES.me) return { href: ROUTES.me, label: "Your report", done: true };
   if (v.graded && ROUTES.me) return { href: ROUTES.me, label: "Your portfolio", done: true };
+  if (ROUTES.add) return { href: ROUTES.add, label: "Add your portfolio", done: false };
   if (ROUTES.grade) return { href: ROUTES.grade, label: "Grade yours", done: false };
   return null;
 }

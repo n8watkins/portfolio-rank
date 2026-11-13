@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { cloudflareContext } from "@/lib/cloudflare-context";
 import { imageFor } from "@/worker/assets";
 
 // Our Playwright captures (<shot_key>/<file>) from the SHOTS R2 bucket. In
@@ -8,7 +8,7 @@ import { imageFor } from "@/worker/assets";
 // `next dev`, where the binding is a simulated bucket.
 export async function GET(req: Request) {
   try {
-    const { env } = await getCloudflareContext({ async: true });
+    const { env } = await cloudflareContext();
     const make = imageFor(new URL(req.url), env);
     if (make) return await make();
   } catch {
