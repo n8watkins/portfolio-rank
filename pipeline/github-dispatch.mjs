@@ -22,10 +22,26 @@ const headers = (token) => ({
 export const MISSING_TOKEN = "GITHUB_DISPATCH_TOKEN is not set";
 
 /**
+ * When the token expires, from GitHub's GitHub-Authentication-Token-Expiration
+ * header ("2026-12-01 00:00:00 UTC" or "2026-12-01 00:00:00 -0800"), as an
+ * ISO string; null when GitHub doesn't say (a token without an expiry).
+ * @param {Headers} headers
+ */
+export function tokenExpiry(headers) {
+  const raw = headers?.get?.("github-authentication-token-expiration");
+  const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})\s*(UTC|Z|[+-]\d{2}:?\d{2})?$/.exec(String(raw ?? "").trim());
+  if (!m) return null;
+  const zone = !m[3] || m[3] === "UTC" || m[3] === "Z" ? "Z" : m[3].replace(/^([+-]\d{2}):?(\d{2})$/, "$1:$2");
+  const at = new Date(`${m[1]}T${m[2]}${zone}`);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
+
+/**
  * Starts `workflow` (a file name in .github/workflows) on `ref`. Returns
- * { runId, url } (runId null when GitHub doesn't say), or { skipped } when
- * there is no token. Throws on any other failure. `apiBase` is GitHub's API
- * (a local stand-in in the tests).
+ * { runId, url, tokenExpires } (runId null when GitHub doesn't say;
+ * tokenExpires from tokenExpiry), or { skipped } when there is no token.
+ * Throws on any other failure. `apiBase` is GitHub's API (a local stand-in
+ * in the tests).
  */
 export async function dispatchWorkflow({ token, workflow, inputs = {}, ref = "main", repo = REPO, fetchImpl = fetch, log = console.log, apiBase = API }) {
   if (!token) {
@@ -38,10 +54,11 @@ export async function dispatchWorkflow({ token, workflow, inputs = {}, ref = "ma
     headers: headers(token),
     body: JSON.stringify({ ref, inputs, return_run_details: true }),
   });
-  if (res.status === 204) return { runId: null, url: null };
+  const tokenExpires = tokenExpiry(res.headers);
+  if (res.status === 204) return { runId: null, url: null, tokenExpires };
   if (res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { runId: body.workflow_run_id ?? null, url: body.html_url ?? null };
+    return { runId: body.workflow_run_id ?? null, url: body.html_url ?? null, tokenExpires };
   }
   const text = (await res.text().catch(() => "")).slice(0, 200);
   throw new Error(`starting ${workflow} on GitHub failed: HTTP ${res.status} ${text}`);
