@@ -366,7 +366,7 @@ test("how grading works: the five tiers, the bands, what's checked, how votes co
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
     for (const t of ["S", "A", "B", "C", "D"]) await p.getByRole("img", { name: `Tier ${t}` }).first().waitFor();
     for (const name of ["Five tiers, S to D", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
-    assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
+    assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 11, "6 code checks (no template) and 5 AI axes");
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
     await context.close();
