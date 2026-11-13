@@ -55,6 +55,8 @@ async function select() {
 
 async function capture() {
   const sel = readJson(path.join(ROOT, "selection.json"));
+  // A manifest from an earlier, unfinished run must never be graded.
+  fs.rmSync(path.join(ROOT, "manifest.json"), { force: true });
   const fp = await import(FULLPAGE);
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
@@ -98,8 +100,34 @@ async function capture() {
   writeJson(path.join(ROOT, "manifest.json"), { created_at: new Date().toISOString(), seed: SEED, sites, tries });
 }
 
+export const BUNDLE_FILES = ["desktop.jpg", "phone.jpg", "text.txt", "facts.json"];
+
+/**
+ * Refuses to grade until all 7 bundles exist: 5 new sites in batch 1 and the
+ * 2 mini5 sites in batch 2, each with non-empty images, text and facts.
+ * Throws "captures not ready" with what is missing.
+ */
+export function assertReady(root = ROOT) {
+  const missing = [];
+  const manPath = path.join(root, "manifest.json");
+  const sites = fs.existsSync(manPath) ? readJson(manPath).sites ?? [] : [];
+  if (!fs.existsSync(manPath)) missing.push("manifest.json (the capture has not finished)");
+  const b1 = sites.filter((s) => s.batch === 1).length;
+  const b2 = sites.filter((s) => s.batch === 2).length;
+  if (b1 !== 5) missing.push(`batch 1 has ${b1} of 5 new sites`);
+  if (b2 !== 2) missing.push(`batch 2 has ${b2} of 2 mini5 sites`);
+  for (const s of sites) {
+    for (const f of BUNDLE_FILES) {
+      const p = path.join(root, "bundles", "N", s.id, f);
+      if (!fs.existsSync(p) || fs.statSync(p).size === 0) missing.push(`${s.id} ${f}`);
+    }
+  }
+  if (missing.length) throw new Error(`captures not ready: ${missing.join("; ")}. Wait for "node scripts/experiments/mini7.mjs capture" to finish, then run this again. Nothing was sent.`);
+  return sites;
+}
+
 const requests = () => {
-  const s = readJson(path.join(ROOT, "manifest.json")).sites;
+  const s = assertReady();
   return [1, 2].map((b) => ({ key: `mini7/batch${b}`, step: "mini7", set: "N", kind: "batch", ids: s.filter((x) => x.batch === b).map((x) => x.id) }));
 };
 
@@ -172,5 +200,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error("usage: mini7.mjs <select|capture|gemini|haiku|code>");
     process.exit(1);
   }
-  await steps[step]();
+  try {
+    await steps[step]();
+  } catch (e) {
+    if (!/^captures not ready/.test(String(e?.message))) throw e;
+    console.error(e.message);
+    process.exit(2);
+  }
 }
