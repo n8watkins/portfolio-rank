@@ -685,8 +685,8 @@ test("config: the grader is off in production and on in staging, the tick is sch
 
 test("Turnstile: a deployed Worker without a usable secret refuses; local runs and test keys pass; hostname and action are checked", async () => {
   const { verifyTurnstile, turnstileRequired, isDeployed } = await import("../lib/turnstile.ts");
-  const PROD = { NODE_ENV: "production", SITE_ENV: "production", AUTH_URL: "https://portfoliorank.n8builds.dev" };
-  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", AUTH_URL: "https://staging.portfoliorank.n8builds.dev" };
+  const PROD = { NODE_ENV: "production", SITE_ENV: "production", SITE_URL: "https://portfoliorank.dev" };
+  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", SITE_URL: "https://staging.portfoliorank.dev" };
   const LOCAL = { NODE_ENV: "production", SITE_ENV: "test" };
   const TEST_SECRET = "1x0000000000000000000000000000000AA";
   const answer = (body, secret = "turnstile-test-secret") => async (url, init) => {
@@ -714,7 +714,7 @@ test("Turnstile: a deployed Worker without a usable secret refuses; local runs a
     assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: true, hostname: "example.com" }, TEST_SECRET) }), "ok");
     assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: false }, TEST_SECRET) }), "failed");
     // A real secret: token, action and hostname must all fit, in production and in staging.
-    for (const [env, host] of [[PROD, "portfoliorank.n8builds.dev"], [STAGING, "staging.portfoliorank.n8builds.dev"]]) {
+    for (const [env, host] of [[PROD, "portfoliorank.dev"], [STAGING, "staging.portfoliorank.dev"]]) {
       const e = { ...env, TURNSTILE_SECRET_KEY: "turnstile-test-secret" };
       const run = (token, body, fetchImpl = answer(body)) => verifyTurnstile(token, "203.0.113.1", { action: "grade", env: e, fetchImpl });
       assert.equal(await run(undefined, { success: true }), "failed", "a missing token");
@@ -728,7 +728,7 @@ test("Turnstile: a deployed Worker without a usable secret refuses; local runs a
     }
     // The staging Worker's token does not pass on production.
     assert.equal(
-      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.n8builds.dev" }) }),
+      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.dev" }) }),
       "failed"
     );
   } finally {

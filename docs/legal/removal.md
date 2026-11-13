@@ -38,7 +38,7 @@ For "fix my listing", I check the request comes from the site's owner, for examp
 - **Don't name me:** your site is added to a do-not-name list that every post and newsletter is checked against before it goes out; a draft that names you is dropped.
 - **Already published:** any post or newsletter archive page that names you is edited to remove your name, link and screenshot within the same 14 days.
   Emails that were already sent can't be recalled.
-- The [removed page](https://portfoliorank.n8builds.dev/removed) counts removal requests but never says whose they were.
+- The [removed page](https://portfoliorank.dev/removed) counts removal requests but never says whose they were.
 
 ## How people are written about anyway
 
