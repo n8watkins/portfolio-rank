@@ -10,7 +10,8 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { PUBLISH_CAP, storePost } from "../lib/content/store.mjs";
-import { getPost, getPublished, hasPublished, listPublished, publishTime, readingMinutes, review, reviewQueue, tagSlug, tagsOf } from "../lib/content/blog.mjs";
+import { portfolioHref, portfolioIndex } from "../lib/content/portfolio-links.mjs";
+import { getPost, getPublished, hasPublished, listPublished, morePosts, publishTime, readingMinutes, review, reviewQueue, tagSlug, tagsOf } from "../lib/content/blog.mjs";
 
 async function freshDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "blog-"));
@@ -146,4 +147,48 @@ test("hasPublished: only a live post counts", async () => {
   await review(db, d.id, { action: "publish", by: "owner", now: NOW });
   assert.equal(await hasPublished(db, { now: NOW }), false, "scheduled, not yet live");
   assert.equal(await hasPublished(db, { now: NOW + 7200000 }), true);
+});
+
+test("publish now: a draft whose slot is ahead goes live at once; so does a post scheduled for later; a live post stays as it is", async () => {
+  const db = await freshDb();
+  const ahead = post();
+  await put(db, ahead, { publishAt: NOW + 86400000 });
+  const a = await review(db, ahead.id, { action: "publish_now", by: "owner", now: NOW });
+  assert.deepEqual(a, { ok: true, status: "published", publishAt: new Date(NOW).toISOString() });
+  assert.equal((await getPublished(db, ahead.slug, { now: NOW })).id, ahead.id);
+  assert.equal((await getPost(db, ahead.id)).checks.owner.action, "publish_now");
+
+  // Scheduled with Publish (its 08:00 slot), then Publish now before the slot.
+  const scheduled = post();
+  await put(db, scheduled, { publishAt: NOW + 86400000 });
+  assert.equal((await review(db, scheduled.id, { action: "publish", by: "owner", now: NOW })).publishAt, new Date(NOW + 86400000).toISOString());
+  assert.equal(await getPublished(db, scheduled.slug, { now: NOW }), null);
+  const later = NOW + 60000;
+  assert.deepEqual(await review(db, scheduled.id, { action: "publish_now", by: "owner", now: later }), { ok: true, status: "published", publishAt: new Date(later).toISOString() });
+  assert.equal((await getPublished(db, scheduled.slug, { now: later })).id, scheduled.id);
+  // Already live: nothing to do.
+  assert.deepEqual(await review(db, scheduled.id, { action: "publish_now", by: "owner", now: later + 1 }), { ok: false, error: "wrong_status", status: "published" });
+  // The weekly cap still holds.
+  const third = post();
+  await put(db, third, { publishAt: NOW + 86400000 });
+  assert.deepEqual(await review(db, third.id, { action: "publish_now", by: "owner", now: later }), { ok: false, error: "weekly_cap" });
+});
+
+test("more articles: posts sharing the most tags first, then the newest; never the post itself", () => {
+  const p = (id, tags, publishAt) => ({ id, tags, publishAt });
+  const posts = [p("a", ["Design"], "2026-11-10"), p("b", ["Portfolios", "Hiring"], "2026-11-09"), p("c", ["Portfolios"], "2026-11-08"), p("self", ["Portfolios", "Hiring"], "2026-11-07"), p("d", [], "2026-11-06")];
+  assert.deepEqual(morePosts({ id: "self", tags: ["Portfolios", "Hiring"] }, posts).map((x) => x.id), ["b", "c", "a"]);
+  assert.deepEqual(morePosts({ id: "self", tags: [] }, posts, { limit: 2 }).map((x) => x.id), ["a", "b"]);
+  assert.deepEqual(morePosts({ id: "a", tags: ["design"] }, [posts[0]]), []);
+});
+
+test("post links: a listed portfolio's site opens its PortfolioRank page; a /p/ link to one no longer listed opens the site", () => {
+  const index = portfolioIndex(["https://top-1.dev", "https://jane.github.io/folio/"]);
+  assert.equal(portfolioHref("https://top-1.dev", index), "/p/https%3A%2F%2Ftop-1.dev");
+  assert.equal(portfolioHref("http://www.TOP-1.dev/", index), "/p/https%3A%2F%2Ftop-1.dev");
+  assert.equal(portfolioHref("https://jane.github.io/folio", index), "/p/https%3A%2F%2Fjane.github.io%2Ffolio%2F");
+  assert.equal(portfolioHref("https://portfoliorank.dev/p/https%3A%2F%2Ftop-1.dev", index), "/p/https%3A%2F%2Ftop-1.dev");
+  assert.equal(portfolioHref("https://portfoliorank.dev/p/https%3A%2F%2Fgone.dev", index), "https://gone.dev");
+  assert.equal(portfolioHref("https://example.com/article", index), "https://example.com/article");
+  assert.equal(portfolioHref("https://jane.github.io/other", index), "https://jane.github.io/other");
 });

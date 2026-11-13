@@ -5,6 +5,8 @@ import { hiddenUrls } from "@/lib/roster";
 import { ownedJobs } from "@/lib/grader/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
+import { withEloLetters } from "@/lib/tiers-letters.mjs";
+import { tiersShown } from "@/lib/tiers-view";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
@@ -51,7 +53,10 @@ export type Job = {
   email: { requested: boolean; sent: boolean };
   checks: { ok: boolean; message?: string } | null;
   report: null | {
+    /** Gemini's letter; with tiers by ELO (`eloTiers`, RANKING_V2) the tier by ELO, or null when there is none. */
     tier: string;
+    /** The letters are tiers by ELO (lib/tiers-letters.mjs withEloLetters). */
+    eloTiers?: boolean;
     isPortfolio: boolean | number | null;
     roles: string[];
     facts: Line[];
@@ -174,7 +179,9 @@ export async function myPortfolio(): Promise<Mine | null> {
   for (const id of [...ids].reverse()) {
     const raw = await readJob(client, id);
     if (!raw) continue;
-    const job = publicJob(raw, { mine: true, emails: await emailState(client, id) }) as Job;
+    const plain = publicJob(raw, { mine: true, emails: await emailState(client, id) }) as Job;
+    // The letter shown is the tier by ELO while RANKING_V2 is on (lib/tiers-letters.mjs); Gemini's letter otherwise.
+    const job = (tiersShown() ? await withEloLetters(client, plain, raw) : plain) as Job;
     const site = listedSite(String(raw.site_key));
     let hero = job.shots?.hero ?? null;
     if (!hero && site) {

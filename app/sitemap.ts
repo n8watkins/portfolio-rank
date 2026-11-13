@@ -7,7 +7,6 @@ import { db, ensureSchema } from "@/lib/db";
 import { gradedUrls, sitemapProfiles } from "@/lib/sitemap-profiles.mjs";
 import { graderEnabled } from "@/lib/grader/server";
 import { toolsEnabled } from "@/lib/tools/server";
-import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { publishedPosts } from "@/lib/blog-server";
 import { tagsOf } from "@/lib/content/blog.mjs";
 
@@ -22,10 +21,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: BASE, changeFrequency: "daily", priority: 1 },
     { url: `${BASE}/top`, changeFrequency: "daily", priority: 0.8 },
-    // The AI and People views exist only while the ranking views are on.
-    ...(rankingViewsEnabled()
-      ? (["ai", "people"] as const).map((v) => ({ url: `${BASE}/top/${v}`, changeFrequency: "daily" as const, priority: 0.6 }))
-      : []),
+    // The old AI and People views lead to the ranked board while the ranking views (tiers by ELO) are on, and
+    // don't exist while they are off: neither is listed.
     { url: `${BASE}/browse`, changeFrequency: "daily", priority: 0.7 },
     { url: `${BASE}/play`, changeFrequency: "daily", priority: 0.6 },
     { url: `${BASE}/polls`, changeFrequency: "weekly", priority: 0.6 },

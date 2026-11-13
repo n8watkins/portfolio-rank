@@ -7,7 +7,8 @@ import { Regrade } from "@/components/me/Regrade";
 import { Thumb } from "@/components/home/Thumb";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
-import { TierBadge } from "@/components/ui/badges";
+import { LetterBadge } from "@/components/ui/badges";
+import { tierLabel } from "@/lib/tiers.mjs";
 import { btnPrimary, btnSecondary, sectionTitle } from "@/components/ui/styles";
 import { BADGES } from "@/lib/games/badges.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
@@ -140,10 +141,10 @@ function Report({ mine }: { mine: Mine }) {
             <span className="sr-only">(opens in a new tab)</span>
           </a>
           <div className="mt-5 flex items-center gap-4">
-            <TierBadge tier={rep.tier} size="lg" />
+            <LetterBadge tier={rep.tier} elo={rep.eloTiers} size="lg" />
             <div className="min-w-0">
               <p className="text-lg font-bold">
-                Tier {rep.tier}
+                {rep.eloTiers ? (rep.tier ? `Tier ${tierLabel(rep.tier)}` : "Graded") : <>Tier {rep.tier}</>}
                 {pct ? `, about top ${pct.topPct}%` : ""}
               </p>
               {pct && (
@@ -326,7 +327,7 @@ function Report({ mine }: { mine: Mine }) {
                         {"why" in s ? ` · 5/5 for ${String(s.why).toLowerCase()}` : ""}
                       </span>
                     </span>
-                    <TierBadge tier={s.tier} />
+                    <LetterBadge tier={s.tier} elo={rep.eloTiers} />
                   </a>
                 </li>
               ))}
