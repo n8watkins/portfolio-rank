@@ -1,4 +1,4 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { cloudflareContext } from "@/lib/cloudflare-context";
 import { BLOG_TAG, PROFILES_TAG, profileTag } from "@/worker/edge-cache";
 
 // Purging the edge cache from the app (worker/edge-cache.ts): profiles and the blog are
@@ -13,7 +13,7 @@ type Exports = { exports?: { CachedPages?: { purgeTags(tags: string[]): Promise<
 export async function purgeEdge(tags: string[]): Promise<boolean> {
   if (!tags.length) return true;
   try {
-    const { ctx } = await getCloudflareContext({ async: true });
+    const { ctx } = await cloudflareContext();
     const cached = (ctx as unknown as Exports).exports?.CachedPages;
     if (!cached) return false;
     return await cached.purgeTags(tags);
