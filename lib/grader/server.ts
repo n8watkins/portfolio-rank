@@ -149,9 +149,9 @@ export async function workerEnv(): Promise<Env> {
 }
 
 /** The shared email gate for this request (lib/email/gate.mjs), with whatever transport the environment has. */
-export async function emailGate(db: unknown) {
+export async function emailGate(db: unknown, { via = "send_email" }: { via?: "send_email" | "mailroom" } = {}) {
   const env = await workerEnv();
-  const transport = emailTransport(env, { db });
+  const transport = emailTransport(env, { db, via });
   return createEmailGate({ db, transport, caps: emailCaps(String(env.EMAIL_CAPS ?? "") || undefined), secret: secret() });
 }
 

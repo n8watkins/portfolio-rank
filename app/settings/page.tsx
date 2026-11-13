@@ -10,6 +10,7 @@ import { useStoredFlag } from "@/lib/client-state";
 import { ROUTES } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { setTheme } from "@/lib/theme";
+import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
 
 // Settings: the account, the theme and voting, then what this site keeps in
 // your browser, in plain words. Nothing here tracks you, so there is no
@@ -18,7 +19,7 @@ import { setTheme } from "@/lib/theme";
 
 /** Cookies: needed for what you do on the site, never for tracking. */
 const COOKIES = [
-  { what: "Sign-in session", why: "Keeps you signed in. Only after you sign in with GitHub, with two short-lived helpers for the sign-in itself." },
+  { what: "Sign-in session", why: `Keeps you signed in. Only after you sign in with GitHub${EMAIL_SIGNIN_ENABLED ? " or an email link" : ""}, with two short-lived helpers for the sign-in itself.` },
   { what: "Browser id", why: "A random, signed id so a vote, poll answer or quiz counts once. Set the first time you vote, play or grade." },
   { what: "Your reports", why: "Which grade reports this browser asked for, so only you see the owner's tools." },
   { what: "Print pass", why: "A one-hour pass to print a portfolio's report." },
@@ -34,9 +35,9 @@ const LOCAL = [
 ];
 
 /**
- * Delete my account: type the GitHub username, then everything stored
- * about the account is deleted at once (DELETE /api/account) and you are
- * signed out.
+ * Delete my account: type the GitHub username (or, for an email account,
+ * the address), then everything stored about the account is deleted at once
+ * (DELETE /api/account) and you are signed out.
  */
 function DeleteAccount({ login }: { login: string }) {
   const [open, setOpen] = useState(false);
@@ -199,7 +200,11 @@ export default function SettingsPage() {
             <div className="h-[4.5rem] sm:h-20" aria-hidden />
           ) : session ? (
             <>
-              <Row id="gh" title="GitHub" desc={`Signed in as @${session.login}. Your votes, likes and lists follow you.`}>
+              <Row
+                id="gh"
+                title={session.provider === "email" ? "Email" : "GitHub"}
+                desc={`Signed in as ${session.provider === "email" ? session.login : `@${session.login}`}. Your votes, likes and lists follow you.`}
+              >
                 <div className="flex gap-2">
                   {ROUTES.profile && (
                     <a href={ROUTES.profile} className={smallBtn}>
@@ -214,7 +219,7 @@ export default function SettingsPage() {
               <SignOutEverywhere />
             </>
           ) : (
-            <Row id="gh" title="Not signed in" desc="Sign in with GitHub to make your votes count and keep likes, lists and badges on every device.">
+            <Row id="gh" title="Not signed in" desc={`Sign in with GitHub${EMAIL_SIGNIN_ENABLED ? " or your email" : ""} to make your votes count and keep likes, lists and badges on every device.`}>
               <button type="button" onClick={() => openSignIn(SHELL_SIGN_IN)} className={smallBtn}>
                 Sign in
               </button>

@@ -39,7 +39,13 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
   // The revalidation queue renders pages again by calling the worker itself.
-  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" }],
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank" },
+    // Sign-in links go through the shared mailroom (n8watkins/mailroom), app
+    // "portfoliorank": its caps there are 60 a day, 150 a month and 6 per
+    // address a day, with sign-in links kept a share of the day.
+    { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank" } }
+  ],
   // Email (grade reports, owner alerts) goes through Cloudflare Email Service
   // from EMAIL_FROM, an address on n8builds.dev, which is onboarded for
   // sending; every send passes the shared gate's caps (lib/email/gate.mjs).
@@ -88,6 +94,9 @@
     // The free tools (/tools, lib/tools, docs/TOOLS.md): their pages and
     // APIs answer 404 until this is "true"; staging tries them first.
     "TOOLS_ENABLED": "false",
+    // Email sign-in (a one-time link beside GitHub, lib/signin): the option in
+    // the sign-in dialog and its routes are off until this is "true" (decision D3).
+    "EMAIL_SIGNIN_ENABLED": "false",
     // Games, badges, claims, live stats and report downloads (lib/games):
     // every one of their routes answers 404 until this is "true", which
     // happens with the redesign.
@@ -196,7 +205,11 @@
         "bindings": [{ "name": "NEXT_CACHE_DO_QUEUE", "class_name": "DOQueueHandler" }]
       },
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DOQueueHandler"] }],
-      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" }],
+      "services": [
+        { "binding": "WORKER_SELF_REFERENCE", "service": "portfolio-rank-staging" },
+        // Staging's own small mailroom app (n8watkins/mailroom), so testing here never spends production's sign-in links.
+        { "binding": "MAILROOM", "service": "mailroom", "entrypoint": "Mailroom", "props": { "app": "portfoliorank-staging" } }
+      ],
       "send_email": [{ "name": "SEND_EMAIL" }],
       "ai": { "binding": "AI" },
       "vars": {
@@ -223,13 +236,14 @@
         // ("unavailable"); DEPLOY.md "Staging" says how prep grades finish.
         "GRADER_ENABLED": "true",
         "TOOLS_ENABLED": "true",
+        "EMAIL_SIGNIN_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         // Staging's own, lower email caps (lib/email/gate.mjs): it sends from the
         // same address and account as production, so a day of testing here can
         // never use up production's day. Kinds left out keep their defaults,
         // capped by the day's total.
-        "EMAIL_CAPS": "{\"day\":20,\"perRecipient\":3,\"kinds\":{\"grade-report\":12,\"report-link\":8,\"owner-alert\":5},\"reserve\":{\"grade-report\":5,\"owner-alert\":3}}",
+        "EMAIL_CAPS": "{\"day\":20,\"perRecipient\":3,\"kinds\":{\"grade-report\":12,\"report-link\":8,\"owner-alert\":5,\"signin\":10},\"reserve\":{\"grade-report\":5,\"owner-alert\":3,\"signin\":3}}",
         // Off until the owner approves Gemini spending again after the audits
         // (2026-11-13). The 2026-11-12 walkthrough of automatic publishing used
         // "publish". Off, staging's crons write no post whatever key it has.
