@@ -11,9 +11,12 @@ import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { insertImage } from "../lib/content/library.mjs";
+import { readFileSync } from "node:fs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
+// Every admin page in the nav (components/admin/AdminNav.tsx ADMIN_PAGES), plus the overview link.
+const NAV_LINKS = (readFileSync("components/admin/AdminNav.tsx", "utf8").match(/\{ href: "\/admin\//g) ?? []).length + 1;
 const PAGES = ["/admin", "/admin/usage", "/admin/images", "/admin/blog", "/admin/blog/guidelines", "/admin/polls"];
 const IMAGE = "e2e00000000000a7";
 
@@ -49,7 +52,7 @@ test("admin layout: one nav, container width and header on every tool page, no s
         await page.goto(`${BASE}${path}`);
         await page.locator("[data-admin-header] h1").waitFor();
         const nav = page.getByRole("navigation", { name: "Admin" });
-        assert.equal(await nav.getByRole("link").count(), 5, `${path}: the admin nav`);
+        assert.equal(await nav.getByRole("link").count(), NAV_LINKS, `${path}: the admin nav`);
         const section = path === "/admin" ? "Admin overview" : path.startsWith("/admin/blog") ? "Blog drafts" : path.split("/")[2].replace(/^./, (c) => c.toUpperCase());
         assert.ok(await nav.getByRole("link", { name: section }).getAttribute("aria-current"), `${path}: ${section} is marked current`);
         const box = await page.evaluate(() => {
