@@ -350,3 +350,23 @@ export async function passModal(page, { waitMs = MODAL_WAIT_MS } = {}) {
   }
   return { kind: first.kind, button: first.button, how, passed: !found };
 }
+
+/**
+ * One line for the capture's meta and the review page: what was done to
+ * reach the screenshots (owner, 2026-11-13: only the screen after the
+ * default click is stored and graded; the click is recorded, not shown),
+ * or null when nothing was. "(still blocked)" when a pass did not get
+ * through: then the stored screenshot is the blocked screen.
+ * @param {{ splash?: any, modal?: any, mode?: any }} passes
+ */
+export function actionNote({ splash = null, modal = null, mode = null } = {}) {
+  const parts = [];
+  const tail = (r) => (r?.left ? " (it left the site, so it was undone)" : r?.passed === false ? " (still blocked)" : "");
+  if (splash && !splash.error) {
+    const what = splash.phrase ? `clicked "${splash.phrase}"` : "clicked the centre of a loader screen";
+    parts.push(`${what}${splash.how?.includes("key") ? " and pressed Enter" : ""}${tail(splash)}`);
+  }
+  if (modal && !modal.error) parts.push(`${modal.how?.[0] === "button" && modal.button ? `clicked "${modal.button}"` : "pressed Escape on a dialog"}${tail(modal)}`);
+  if (mode && !mode.error && mode.picked) parts.push(`picked "${mode.picked}"${tail(mode)}`);
+  return parts.length ? parts.join(", then ") : null;
+}

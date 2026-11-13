@@ -104,6 +104,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Grade what a visitor sees by default: pass splash gates and opening dialogs** (owner, 2026-11-13). Status: building (splash gates built in #208; dialogs in this PR).
   Before the screenshots, the capture clicks through a splash gate ("CLICK TO CONTINUE", a loader at 100%), then closes a dialog that sits on top of the page after load (role=dialog, aria-modal or an open dialog covering at least 20% of the screen, or a fixed overlay covering more than half of it): its primary button (Continue, Enter, Start, Get started, else Close), or Escape when it has none, then checks once more.
   It never picks the richest option a dialog offers: the default view is what a visitor gets.
+  Only the screens after the click are stored (R2, bundles) and graded; the screen before it is never written, and `meta.action` records the click in one line (for example `clicked "Continue with ChatGPT"`) for the review page.
+  A page still blocked after the click is never graded; where a review queue exists (the recheck-543 re-check), its blocked screenshot is kept there, marked "capture blocked".
   Why: a "Choose a Theme" dialog over a full page (about.ashutoshcodes.in) hid the portfolio from the screenshots while the gate check, which only looks at nearly empty screens, never fired.
 - **Page text is untrusted data** (agent, 2026-11-10). Status: built (#57).
   It travels in a `<site_data>` block the instructions mark as data, never instructions.
