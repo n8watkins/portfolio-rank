@@ -3,9 +3,9 @@ import { AdminHeader } from "@/components/admin/AdminHeader";
 import { notFound } from "next/navigation";
 import { ArrowRight, Inbox, ListChecks } from "lucide-react";
 import { contentCosts } from "@/lib/content/costs.mjs";
-import { recentJobs } from "@/lib/content/jobs.mjs";
+import { jobCalls, recentJobs } from "@/lib/content/jobs.mjs";
 import { BUILDERS, KIND_LABELS } from "@/pipeline/content/facts.mjs";
-import { DraftNow, type Job } from "@/components/admin/DraftNow";
+import { DraftInProgress, DraftNow, type Job } from "@/components/admin/DraftNow";
 import { AutomationPanel, type AutomationView } from "@/components/admin/AutomationPanel";
 import { automationView } from "@/lib/content/automation.mjs";
 import { requireAdmin } from "@/lib/admin";
@@ -14,7 +14,7 @@ import { publishedAround, reviewQueue } from "@/lib/content/blog.mjs";
 import { PUBLISH_CAP, contentMode } from "@/lib/content/store.mjs";
 import { type BlogPost, coverOf, imageSrc } from "@/lib/blog";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { StatusPill, closedReason, pacificTime } from "@/components/admin/postStatus";
+import { StatusPill, checksLine, closedReason, pacificTime } from "@/components/admin/postStatus";
 
 // The blog's drafts (docs/CONTENT-ENGINE.md, "Review and publish",
 // "Write a draft now" and "Automation"): "Write a draft now" with its live
@@ -47,7 +47,7 @@ function Row({ post, now }: { post: BlogPost; now: number }) {
           <span className="mt-1 block text-sm text-mute">
             {post.status === "draft" && (
               <>
-                Written {pacificTime(post.createdAt)} · {post.checks?.passed ? `passed every check in ${post.checks.rounds ?? 1} round(s)` : "checks not passed"} · {post.requests} Gemini requests
+                Written {pacificTime(post.createdAt)} · {checksLine(post).toLowerCase()} · {post.requests} Gemini requests
                 {post.checks && "publishCap" in post.checks ? " · held back by the weekly cap" : ""}
               </>
             )}
@@ -61,15 +61,16 @@ function Row({ post, now }: { post: BlogPost; now: number }) {
   );
 }
 
-function Group({ title, posts, now, empty }: { title: string; posts: BlogPost[]; now: number; empty?: string }) {
-  if (!posts.length && !empty) return null;
+function Group({ title, posts, now, empty, lead }: { title: string; posts: BlogPost[]; now: number; empty?: string; lead?: React.ReactNode }) {
+  if (!posts.length && !empty && !lead) return null;
   return (
     <section className="mt-10 first:mt-0" aria-label={title}>
       <h2 className="text-lg font-bold tracking-tight">
         {title} <span className="text-mute tabular-nums">{posts.length}</span>
       </h2>
-      {posts.length ? (
+      {posts.length || lead ? (
         <ul className="mt-4 grid gap-3">
+          {lead}
           {posts.map((p) => (
             <Row key={p.id} post={p} now={now} />
           ))}
@@ -94,7 +95,8 @@ async function load(jobId: string | null) {
       return { id, label: KIND_LABELS[id] ?? id, ready: Boolean(s.ready), reason: s.ready ? null : (s.reason ?? null) };
     })),
   ]);
-  const job = (jobId ? jobs.find((j) => j.id === jobId) : null) ?? jobs.find((j) => j.status === "queued" || j.status === "running") ?? null;
+  const found = (jobId ? jobs.find((j) => j.id === jobId) : null) ?? jobs.find((j) => j.status === "queued" || j.status === "running") ?? null;
+  const job = found ? { ...found, calls: (await jobCalls(client, [found.id]))[found.id] } : null;
   return { queue, thisWeek, now, costs, job, kinds };
 }
 
@@ -134,12 +136,18 @@ export default async function AdminBlogPage({ searchParams }: { searchParams: Pr
       {/* The drafts are the page; writing one now, what is left to spend and the automation sit beside them (below on phones and tablets). */}
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_30rem] xl:items-start">
         <div className="min-w-0">
-          <Group title="Waiting for you" posts={queue.drafts as BlogPost[]} now={now} empty="No drafts waiting. The engine writes them on Monday and Wednesday nights while it is on." />
+          <Group
+            title="Waiting for you"
+            posts={queue.drafts as BlogPost[]}
+            now={now}
+            empty="No drafts waiting. The engine writes them on its drafting nights while it is on."
+            lead={job && (job.status === "queued" || job.status === "running") ? <DraftInProgress key={job.id} initialJob={job as Job} kindLabel={job.kind ? (KIND_LABELS[job.kind] ?? job.kind) : null} serverNow={now} /> : null}
+          />
           <Group title="Published" posts={queue.published as BlogPost[]} now={now} />
           <Group title="Rejected, dropped or unpublished" posts={queue.closed as BlogPost[]} now={now} />
         </div>
         <aside aria-label="Write and automate" className="grid min-w-0 gap-4">
-          <DraftNow kinds={kinds} initialJob={job as Job | null} left={Math.max(0, costs.drafts.cap - costs.drafts.today)} />
+          <DraftNow key={job ? `${job.id}:${job.status}` : "none"} kinds={kinds} initialJob={job as Job | null} left={Math.max(0, costs.drafts.cap - costs.drafts.today)} />
           <section aria-label="What the blog may still spend">
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2" data-cost-panel>
               <Cost label="Gemini today" value={`${n(g.used)} used, ${n(g.left)} left`} hint={`${n(g.reserve)} kept for people; a draft may take ${g.draftNow} now`} />

@@ -11,7 +11,10 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 // when the next and last scheduled runs are. The Worker's config is the
 // ceiling: what it keeps off shows as off here, with the reason.
 
-export type AutomationSettings = { enabled: boolean; mode: "review" | "publish"; days: number[]; perWeek: number; engineMode?: string };
+export type AutomationSettings = { enabled: boolean; mode: "review" | "publish"; days: number[]; perWeek: number; keepReady: number; engineMode?: string };
+
+/** "Drafts to keep ready": 0 to this many (lib/content/automation.mjs MAX_KEEP_READY). */
+const MAX_KEEP_READY = 5;
 export type AutomationView = {
   settings: AutomationSettings | null;
   bounds: { maxMode: string; maxPerWeek: number; canPublish: boolean; canRun: boolean };
@@ -60,8 +63,8 @@ function lastLine(last: AutomationView["last"], kindLabel: (k: string) => string
 export function AutomationPanel({ initial, kindLabels }: { initial: AutomationView; kindLabels: Record<string, string> }) {
   const id = useId();
   const [view, setView] = useState(initial);
-  const start = view.settings ?? { enabled: false, mode: "review" as const, days: [1, 3], perWeek: 1 };
-  const [form, setForm] = useState<AutomationSettings>({ enabled: start.enabled, mode: start.mode, days: start.days, perWeek: Math.max(1, start.perWeek) });
+  const start = view.settings ?? { enabled: false, mode: "review" as const, days: [1, 3], perWeek: 1, keepReady: 0 };
+  const [form, setForm] = useState<AutomationSettings>({ enabled: start.enabled, mode: start.mode, days: start.days, perWeek: Math.max(1, start.perWeek), keepReady: start.keepReady ?? 0 });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -73,7 +76,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
   const dirty = useMemo(() => {
     const s = view.settings;
     if (!s) return true;
-    return s.enabled !== form.enabled || s.mode !== form.mode || s.perWeek !== form.perWeek || s.days.join() !== form.days.join();
+    return s.enabled !== form.enabled || s.mode !== form.mode || s.perWeek !== form.perWeek || (s.keepReady ?? 0) !== form.keepReady || s.days.join() !== form.days.join();
   }, [view.settings, form]);
   const maxPerWeek = Math.max(1, Math.min(b.maxPerWeek, Math.max(1, form.days.length)));
 
@@ -91,7 +94,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
     setSaved(false);
     try {
       const v = await post({ op: "save", settings: { ...form, perWeek: Math.min(form.perWeek, maxPerWeek) } });
-      if (v.settings) setForm({ enabled: v.settings.enabled, mode: v.settings.mode, days: v.settings.days, perWeek: Math.max(1, v.settings.perWeek) });
+      if (v.settings) setForm({ enabled: v.settings.enabled, mode: v.settings.mode, days: v.settings.days, perWeek: Math.max(1, v.settings.perWeek), keepReady: v.settings.keepReady ?? 0 });
       setSaved(true);
     } catch (e) {
       setError((e as Error).message);
@@ -104,7 +107,7 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
     : !view.settings
       ? "Paused: the settings can't be read"
       : view.settings.enabled
-        ? `On: ${view.settings.perWeek} ${view.settings.perWeek === 1 ? "draft" : "drafts"} a week on ${dayList(view.settings.days)} nights, ${view.settings.mode === "publish" ? "published automatically" : "for your review"}`
+        ? `On: ${view.settings.perWeek} ${view.settings.perWeek === 1 ? "draft" : "drafts"} a week on ${dayList(view.settings.days)} nights${view.settings.keepReady ? `, ${view.settings.keepReady} kept ready` : ""}, ${view.settings.mode === "publish" ? "published automatically" : "for your review"}`
         : "Off";
 
   return (
@@ -190,6 +193,31 @@ export function AutomationPanel({ initial, kindLabels }: { initial: AutomationVi
                   setForm((f) => ({ ...f, perWeek: n }));
                 }}
                 className={`h-9 min-w-11 rounded-md px-3 text-sm font-semibold transition disabled:opacity-40 ${form.perWeek === n ? "bg-card text-ink shadow-sm" : "text-mute"}`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p id={`${id}-kr`} className="text-sm font-semibold">
+            Drafts to keep ready
+          </p>
+          <p className="text-xs text-mute">While fewer drafts than this wait for you, any night but Sunday writes one more, beyond the drafts a week. 0 is off.</p>
+          <div className="mt-2 inline-flex rounded-lg border border-edge bg-raised p-1" role="radiogroup" aria-labelledby={`${id}-kr`}>
+            {Array.from({ length: MAX_KEEP_READY + 1 }, (_, n) => n).map((n) => (
+              <button
+                key={n}
+                type="button"
+                role="radio"
+                aria-checked={form.keepReady === n}
+                aria-label={n === 0 ? "Keep none ready" : `Keep ${n} ready`}
+                onClick={() => {
+                  setSaved(false);
+                  setForm((f) => ({ ...f, keepReady: n }));
+                }}
+                className={`h-9 min-w-11 rounded-md px-3 text-sm font-semibold transition ${form.keepReady === n ? "bg-card text-ink shadow-sm" : "text-mute"}`}
               >
                 {n}
               </button>
