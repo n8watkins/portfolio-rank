@@ -307,14 +307,15 @@ export function createGemini({
     const parts = (data.candidates?.[0]?.content?.parts ?? []).filter((p) => typeof p.text === "string" && !p.thought);
     const text = parts.at(-1)?.text;
     if (!text) throw new Error(`gemini ${model} empty response: ${JSON.stringify(data).slice(0, 300)}`);
-    return { kind: "ok", result: JSON.parse(text), usage };
+    return { kind: "ok", result: plain ? text : JSON.parse(text), usage };
   }
 
   // Models that rejected a thinking level this run; they get none.
   const noThinking = new Set();
   function bodyFor(model, parts, schema, { systemInstruction, thinkingLevel: asked, maxOutputTokens, temperature = 0.2 }) {
     const thinkingLevel = asked ? thinkingFor(model, asked) : asked;
-    const generationConfig = { temperature, responseMimeType: "application/json", responseSchema: schema };
+    // No schema: a plain-text answer (the content writer, pipeline/content/compose.mjs).
+    const generationConfig = schema ? { temperature, responseMimeType: "application/json", responseSchema: schema } : { temperature };
     if (maxOutputTokens) generationConfig.maxOutputTokens = maxOutputTokens;
     const thinking = Boolean(thinkingLevel) && !noThinking.has(model);
     if (thinking) generationConfig.thinkingConfig = { thinkingLevel };
