@@ -91,12 +91,14 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
   The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
 - **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
   It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
-- **No Gemini:** no Cron Triggers, and no `GEMINI_API_KEY` or `GITHUB_DISPATCH_TOKEN` secret, so staging never spends the production quota or starts production's GitHub jobs.
-  Its Workflow is `portfolio-rank-night-staging`; nothing starts it, and a run started by hand skips without the key.
-  Never add those two secrets to staging.
+- **Scheduled jobs, low caps:** staging has the same Cron Triggers as production, so the end-of-day run, the people queue, the model watch and the grader's tick run there too.
+  It never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs; without a key every Gemini job skips and says so in the log.
+  To exercise them, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
+  "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).
+  Email from staging reaches only the addresses in `STAGING_EMAIL_TO` (empty: none), since its database holds real people's addresses (`lib/email/gate.mjs`).
 - **Launch features on:** `GRADER_ENABLED`, `GAMES_V2` and `RANKING_V2` are `"true"` in `env.staging` (production keeps all three `"false"`), so the launch can be walked through on staging first.
   The build reads all three for the Worker it builds (`next.config.ts` `launchSwitch`; the staging job sets `NEXT_PUBLIC_SITE_ENV=staging`), because the pages prerendered at build time (home, `/top` and its views, the sitemap) depend on them.
-  Without crons, `RANKING_V2` only switches the leaderboard views; fill them with `scripts/recompute-ratings.mjs` run with the `portfolio-rank/STAGING_TURSO_*` pair.
+  The "Staging data" workflow (`.github/workflows/staging-data.yml`) rebuilds staging's leaderboards and tiers every six hours with `scripts/recompute-ratings.mjs`, with no Gemini.
   Without the dispatch token a grade asked for on staging stops after the free checks ("unavailable").
   To finish one by hand, set its job back to `capturing` in the staging database and run `scripts/grade-jobs.mjs` locally with the staging Turso pair and the Gemini key; it keeps the screenshots on disk without `R2_*`, so upload `hero.jpg` and `mobile.jpg` to `private/grades/<id>/` in the `portfolio-rank` bucket.
 - **Not indexed:** the Worker answers robots.txt with `Disallow: /` and adds `X-Robots-Tag: noindex, nofollow` to every response (`worker/staging.ts`).
@@ -113,7 +115,9 @@ https://staging.portfoliorank.n8builds.dev runs the same code as production on i
   `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.
 - **Sentry:** events from staging carry the environment `staging`.
 - **Keeping the copy fresh:** the copy holds real votes and rater ids, and the nightly retention jobs do not run on staging.
-  Replace it at least every 30 days, like a backup: the owner deletes the `portfolio-rank-staging` database in Turso, then steps 2, 3 and 5 below run again.
+  The "Staging data" workflow replaces it every Monday with production's newest nightly backup (`scripts/refresh-staging-db.mjs`: it reads the private backups bucket, never production, refuses any database whose address is production's or does not name staging, empties staging, restores and checks every table's count), then redeploys staging and rebuilds the leaderboards.
+  Run it by hand any time: `gh workflow run staging-data.yml -f job=refresh`.
+  Anything made on staging (grades, drafts, votes) is gone after a refresh.
 
 ### Setting staging up (once)
 
