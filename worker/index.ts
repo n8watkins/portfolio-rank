@@ -86,7 +86,7 @@ const worker = {
       // An alert at 80% of any email cap (./email-alerts.ts).
       await emailAlertsTick(env as NightEnv, controller.scheduledTime);
       await drainPeople(env as NightEnv);
-      // The image library's hourly batch (./library.ts): up to LIBRARY_PER_HOUR images within the day's 40, never in the evening.
+      // The image library's daily run (./library.ts): only in the UTC hour LIBRARY_RUN_HOUR_UTC (23), what is left of the day's 40.
       await libraryTick(env as NightEnv, controller.scheduledTime);
     }
     else if (controller.cron === MODEL_WATCH_CRON) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
