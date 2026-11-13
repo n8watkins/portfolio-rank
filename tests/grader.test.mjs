@@ -21,7 +21,8 @@ import { DEFAULT_EMAIL_CAPS, addressHash, capReason, createEmailGate, emailCapCo
 import { buildReport, compareWithPool, gradedPool, strengthsAndFixes } from "../lib/grader/report.mjs";
 import { completeJob, recordCapture } from "../lib/grader/finish.mjs";
 import { checkOwnKey, gradeOnOwnKey, validOwnKey } from "../lib/grader/own-key.mjs";
-import { queueFreeGrade } from "../lib/grader/queue.mjs";
+import { queueFreeGrade } from "../lib/grader/free-grade.mjs";
+import { enqueueFreeGrade } from "../lib/grader/queue.mjs";
 import { publicJob } from "../lib/grader/view.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
@@ -618,6 +619,35 @@ test("free tier: a spent quota queues the grade (no 3.1), and the hourly drain f
   assert.equal(noKey.calls.length, 0);
 });
 
+test("free tier from a visitor only enqueues: no Gemini call, the job is queued, and the hourly drain grades it", async () => {
+  const db = await tempDb();
+  const { id } = await capturedJob(db);
+  const realFetch = globalThis.fetch;
+  let fetched = 0;
+  globalThis.fetch = async () => {
+    fetched++;
+    throw new Error("a visitor's request must not fetch");
+  };
+  let out;
+  try {
+    out = await enqueueFreeGrade(db, await readJob(db, id), { now: T0 });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(fetched, 0);
+  assert.equal(out.status, "queued");
+  let job = await readJob(db, id);
+  assert.equal(job.status, "queued");
+  assert.equal(Number(job.people_request_id), out.requestId);
+  const drain = peopleCtx(db, { respond: () => gemini200(answer({ tier: "B" })) });
+  drain.clock.t = T0 + 3600000;
+  assert.deepEqual(await drainPeopleQueue(drain.ctx), { done: 1, queued: 0, failed: 0 });
+  assert.equal(drain.calls.length, 1, "the drain, not the visitor, makes the one Gemini request");
+  job = await readJob(db, id);
+  assert.equal(job.status, "done");
+  assert.equal(job.result.facts.motion, true, "motion from the capture reaches the grade");
+});
+
 test("own-key jobs wait for the visitor's key after the capture; completing one writes no request log row", async () => {
   const db = await tempDb();
   const { id, status } = await capturedJob(db, { ownKey: true });
@@ -655,8 +685,8 @@ test("config: the grader is off in production and on in staging, the tick is sch
 
 test("Turnstile: a deployed Worker without a usable secret refuses; local runs and test keys pass; hostname and action are checked", async () => {
   const { verifyTurnstile, turnstileRequired, isDeployed } = await import("../lib/turnstile.ts");
-  const PROD = { NODE_ENV: "production", SITE_ENV: "production", AUTH_URL: "https://portfoliorank.n8builds.dev" };
-  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", AUTH_URL: "https://staging.portfoliorank.n8builds.dev" };
+  const PROD = { NODE_ENV: "production", SITE_ENV: "production", SITE_URL: "https://portfoliorank.dev" };
+  const STAGING = { NODE_ENV: "production", SITE_ENV: "staging", SITE_URL: "https://staging.portfoliorank.dev" };
   const LOCAL = { NODE_ENV: "production", SITE_ENV: "test" };
   const TEST_SECRET = "1x0000000000000000000000000000000AA";
   const answer = (body, secret = "turnstile-test-secret") => async (url, init) => {
@@ -684,7 +714,7 @@ test("Turnstile: a deployed Worker without a usable secret refuses; local runs a
     assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: true, hostname: "example.com" }, TEST_SECRET) }), "ok");
     assert.equal(await verifyTurnstile("XXXX.DUMMY.TOKEN.XXXX", "", { action: "grade", env: local, fetchImpl: answer({ success: false }, TEST_SECRET) }), "failed");
     // A real secret: token, action and hostname must all fit, in production and in staging.
-    for (const [env, host] of [[PROD, "portfoliorank.n8builds.dev"], [STAGING, "staging.portfoliorank.n8builds.dev"]]) {
+    for (const [env, host] of [[PROD, "portfoliorank.dev"], [STAGING, "staging.portfoliorank.dev"]]) {
       const e = { ...env, TURNSTILE_SECRET_KEY: "turnstile-test-secret" };
       const run = (token, body, fetchImpl = answer(body)) => verifyTurnstile(token, "203.0.113.1", { action: "grade", env: e, fetchImpl });
       assert.equal(await run(undefined, { success: true }), "failed", "a missing token");
@@ -698,7 +728,7 @@ test("Turnstile: a deployed Worker without a usable secret refuses; local runs a
     }
     // The staging Worker's token does not pass on production.
     assert.equal(
-      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.n8builds.dev" }) }),
+      await verifyTurnstile("tok", "", { action: "grade", env: { ...PROD, TURNSTILE_SECRET_KEY: "turnstile-test-secret" }, fetchImpl: answer({ success: true, action: "grade", hostname: "staging.portfoliorank.dev" }) }),
       "failed"
     );
   } finally {

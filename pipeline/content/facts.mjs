@@ -24,7 +24,8 @@ import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { AXES, TIER } from "../grade-pairs.mjs";
 
-export const SITE_URL = "https://portfoliorank.n8builds.dev";
+// The production address (lib/site.ts PRODUCTION_SITE_URL; tests/site-url.test.mjs keeps them equal).
+export const SITE_URL = "https://portfoliorank.dev";
 /** The smallest group a share or average is computed over. */
 export const MIN_GROUP = 20;
 /** Places a site must climb to be named as a climber. */

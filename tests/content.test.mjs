@@ -461,7 +461,7 @@ test("writer: a passing draft is stored privately in dry-run, with its fact shee
   assert.ok(post.images.every((i) => i.licence));
   assert.ok([...stored.keys()].every((k) => k.startsWith(`content/test/${post.id}/`)));
   // At least three named sites are linked, and the writer never saw a raw value or a query.
-  assert.ok((post.body.match(/\]\(https:\/\/portfoliorank\.n8builds\.dev\/p\//g) ?? []).length >= 3 || (post.body.match(/\]\(https:\/\/top-/g) ?? []).length >= 3);
+  assert.ok((post.body.match(/\]\(https:\/\/portfoliorank\.dev\/p\//g) ?? []).length >= 3 || (post.body.match(/\]\(https:\/\/top-/g) ?? []).length >= 3);
   const sent = g.calls[0].parts[0].text;
   assert.ok(!sent.includes('"query"') && !sent.includes('"value"'));
 });
@@ -1075,14 +1075,14 @@ test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences
 test("length profiles: a long post wants LENGTHS.long words, its sections and inline images; the writer sees its length and related posts", async () => {
   const L = LENGTHS.long;
   const { sheet, roster } = await sheetAndRoster();
-  const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.n8builds.dev/blog/older-post-abc123", tags: ["data"] }] };
+  const long = { ...sheet, length: "long", relatedPosts: [{ title: "An older post", url: "https://portfoliorank.dev/blog/older-post-abc123", tags: ["data"] }] };
   const t = checkOf(goodDraft(long), long, roster, "template");
   assert.match(t.problems.join("; "), new RegExp(`words; ${L.min} to ${L.max} wanted: add`));
   assert.match(t.problems.join("; "), new RegExp(`inline image slots, ${L.inline[0]} to ${L.inline[1]} needed`));
   const view = sheetForWriter(long);
-  assert.ok(buildWriteRequests(long, planPost(long))[0].parts[0].text.includes("https://portfoliorank.n8builds.dev/blog/older-post-abc123"), "the writer is offered the related post");
+  assert.ok(buildWriteRequests(long, planPost(long))[0].parts[0].text.includes("https://portfoliorank.dev/blog/older-post-abc123"), "the writer is offered the related post");
   assert.deepEqual(view.length, { words: `${L.min} to ${L.max}`, sections: L.sections, inline_images: `${L.inline[0]} to ${L.inline[1]}` });
-  assert.equal(view.related_posts[0].url, "https://portfoliorank.n8builds.dev/blog/older-post-abc123");
+  assert.equal(view.related_posts[0].url, "https://portfoliorank.dev/blog/older-post-abc123");
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true, "a standard post passes at the standard length");
 });
 
@@ -1337,7 +1337,7 @@ function manualCtx(db, { answers, prompts, mode = "publish", apiKey = "k", quota
     now: () => MONDAY,
     log: () => {},
     fetchImpl: manualFetch(answers, prompts),
-    flags: { contentMode: mode, writerMode: "single" },
+    flags: { contentMode: mode },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     env: { GEMINI_DAILY_QUOTA: JSON.stringify(quota) },
   };
@@ -1572,12 +1572,12 @@ test("busy Google at night: the Content stage pauses and drafts again later the 
 });
 
 test("portfolio links: the writer points a named portfolio at its PortfolioRank page; sources and other links stay", () => {
-  const body = "See [Top Person 1](https://top-1.dev) and [their site](https://www.top-1.dev/).\nA claim ([source](https://top-1.dev)).\nOur [leaderboard](https://portfoliorank.n8builds.dev/top) and [elsewhere](https://example.com).";
+  const body = "See [Top Person 1](https://top-1.dev) and [their site](https://www.top-1.dev/).\nA claim ([source](https://top-1.dev)).\nOur [leaderboard](https://portfoliorank.dev/top) and [elsewhere](https://example.com).";
   const out = linkPortfoliosToPages(body, ["https://top-1.dev"]);
-  assert.ok(out.includes("[Top Person 1](https://portfoliorank.n8builds.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
-  assert.ok(out.includes("[their site](https://portfoliorank.n8builds.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
+  assert.ok(out.includes("[Top Person 1](https://portfoliorank.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
+  assert.ok(out.includes("[their site](https://portfoliorank.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
   assert.ok(out.includes("([source](https://top-1.dev))"), out);
-  assert.ok(out.includes("[leaderboard](https://portfoliorank.n8builds.dev/top)"), out);
+  assert.ok(out.includes("[leaderboard](https://portfoliorank.dev/top)"), out);
   assert.ok(out.includes("[elsewhere](https://example.com)"), out);
 });
 

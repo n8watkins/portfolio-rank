@@ -11,7 +11,7 @@ if (existsSync(".env.local")) {
   }
 }
 
-const PROD = process.env.PROD_BASE_URL || "https://portfoliorank.n8builds.dev";
+const PROD = process.env.PROD_BASE_URL || "https://portfoliorank.dev";
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN,

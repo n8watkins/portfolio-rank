@@ -2,7 +2,8 @@
 // app/admin/(tools)/layout.tsx), end to end against the running production
 // build (scripts/test-e2e.sh): the same admin nav, container width and page
 // header on every tool page, at desktop and phone widths, with no sideways
-// scroll; and the image library shows images first: its tabs and grid are on
+// scroll; the overview at /admin links every tool page with its headline
+// numbers; and the image library shows images first: its tabs and grid are on
 // the first screen and a thumbnail opens the large view, which Back closes.
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,10 +11,13 @@ import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { insertImage } from "../lib/content/library.mjs";
+import { readFileSync } from "node:fs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
-const PAGES = ["/admin/usage", "/admin/images", "/admin/blog", "/admin/blog/guidelines", "/admin/polls"];
+// Every admin page in the nav (components/admin/AdminNav.tsx ADMIN_PAGES), plus the overview link.
+const NAV_LINKS = (readFileSync("components/admin/AdminNav.tsx", "utf8").match(/\{ href: "\/admin\//g) ?? []).length + 1;
+const PAGES = ["/admin", "/admin/usage", "/admin/limits", "/admin/images", "/admin/blog", "/admin/blog/guidelines", "/admin/polls"];
 const IMAGE = "e2e00000000000a7";
 
 let cookie;
@@ -48,8 +52,8 @@ test("admin layout: one nav, container width and header on every tool page, no s
         await page.goto(`${BASE}${path}`);
         await page.locator("[data-admin-header] h1").waitFor();
         const nav = page.getByRole("navigation", { name: "Admin" });
-        assert.equal(await nav.getByRole("link").count(), 4, `${path}: the admin nav`);
-        const section = path.startsWith("/admin/blog") ? "Blog drafts" : path.split("/")[2].replace(/^./, (c) => c.toUpperCase());
+        assert.equal(await nav.getByRole("link").count(), NAV_LINKS, `${path}: the admin nav`);
+        const section = path === "/admin" ? "Admin overview" : path.startsWith("/admin/blog") ? "Blog drafts" : path.split("/")[2].replace(/^./, (c) => c.toUpperCase());
         assert.ok(await nav.getByRole("link", { name: section }).getAttribute("aria-current"), `${path}: ${section} is marked current`);
         const box = await page.evaluate(() => {
           const r = (s) => document.querySelector(s)?.getBoundingClientRect();
@@ -61,6 +65,32 @@ test("admin layout: one nav, container width and header on every tool page, no s
       }
       assert.equal(seen.size, 1, `every admin page has the same container and header position at ${width}px: ${[...seen].join(", ")}`);
       assert.deepEqual(errors, []);
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("admin overview: a card for every tool page with its numbers; a card opens its page", async () => {
+  const browser = await chromium.launch();
+  try {
+    for (const [width, height] of [
+      [1440, 900],
+      [390, 844],
+    ]) {
+      const context = await browser.newContext({ viewport: { width, height }, extraHTTPHeaders: { cookie } });
+      const page = await context.newPage();
+      await page.goto(`${BASE}/admin`);
+      const cards = page.locator("[data-admin-card]");
+      assert.deepEqual(await cards.evaluateAll((els) => els.map((e) => e.getAttribute("data-admin-card"))), ["/admin/usage", "/admin/images", "/admin/blog", "/admin/polls"]);
+      const images = page.locator('[data-admin-card="/admin/images"]');
+      const approved = Number(await images.locator("dt", { hasText: "approved" }).locator("xpath=following-sibling::dd").textContent());
+      assert.ok(approved >= 1, `the approved count includes the test image (${approved})`);
+      await page.locator('[data-admin-card="/admin/blog"]').getByRole("link", { name: "Editor's guidelines" }).waitFor();
+      // The card itself is the link: a click anywhere on it opens the page.
+      await images.click();
+      await page.waitForURL(`${BASE}/admin/images`);
       await context.close();
     }
   } finally {

@@ -10,6 +10,7 @@ import { Card } from "@/components/blog/BlogIndex";
 import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
 import { postLinkFor } from "@/lib/portfolio-links";
+import { sitePath } from "@/lib/site";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
@@ -103,7 +104,7 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
           <a href="/about-posts" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
             How posts are made
           </a>
-          <a href={dataLink.replace(/^https:\/\/portfoliorank\.n8builds\.dev/, "") || "/"} className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+          <a href={sitePath(dataLink) || "/"} className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
             The data
           </a>
         </p>
@@ -191,7 +192,7 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
               <BarChart3 className="mt-1.5 h-4 w-5 shrink-0 text-accent" aria-hidden />
               <span className="min-w-0">
                 Every number: PortfolioRank&apos;s own data, as of {postDate(post.dataAsOf)}.{" "}
-                <a href={dataLink.replace(/^https:\/\/portfoliorank\.n8builds\.dev/, "") || "/"} className="font-medium underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+                <a href={sitePath(dataLink) || "/"} className="font-medium underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
                   See the data
                 </a>
               </span>
