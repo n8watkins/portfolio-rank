@@ -76,6 +76,10 @@ test("the account menu and the phone menu show Admin to the admin only", async (
     await phone.page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "More" }).click();
     const sheet = phone.page.getByRole("dialog");
     await sheet.getByRole("link", { name: "Settings" }).waitFor();
+    // The sheet opens before the session (and its isAdmin) has loaded: wait
+    // for the signed-in links before counting, or the count races the session.
+    await sheet.getByRole("link", { name: "Account" }).waitFor();
+    if (shown) await sheet.getByRole("link", { name: "Admin" }).waitFor();
     assert.equal(await sheet.getByRole("link", { name: "Admin" }).count(), shown ? 1 : 0, `${who}, phone`);
     await phone.context.close();
   }
