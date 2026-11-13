@@ -88,11 +88,16 @@ async function attempt(browser, site, dir) {
     out.desktop = await page.evaluate(readFirstScreen);
     out.final_url = page.url();
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    // The scroll position is set directly: some sites define their own global scrollTo
+    // (adpandey.com: a jQuery helper), which replaces window.scrollTo and throws.
+    const scrollY = (v) => {
+      (document.scrollingElement ?? document.documentElement).scrollTop = v;
+    };
     for (let y = 0; y < Math.min(height, 20000); y += 700) {
-      await page.evaluate((v) => window.scrollTo(0, v), y);
+      await page.evaluate(scrollY, y);
       await page.waitForTimeout(120);
     }
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(scrollY, 0);
     await page.waitForTimeout(800);
     out.outline = await page.evaluate(readPageOutline, OUTLINE_ARGS);
     out.outbound_links = await page.evaluate(() => {
