@@ -10,6 +10,7 @@
 // every marker in it removed first (pipeline/site-data.mjs), as in grading.
 import { redactContacts } from "./redact.mjs";
 import { stripSiteDataMarkers } from "./site-data.mjs";
+import { PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
 
 /** Characters of page text sent per site (one-on-one; batched sends half, it shows more sites). */
 export const PAGE_TEXT_ONE_ON_ONE = 1200;
@@ -62,7 +63,7 @@ export function buildPairRequest([a, b]) {
       { text: siteBlock("B", b, PAGE_TEXT_ONE_ON_ONE) },
       { text: 'Answer with the better one, "A" or "B", and one short reason. Use "skip" only if a screenshot is unusable.' },
     ],
-    options: { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+    options: { prompt: PROMPT_VERSION_ONE_ON_ONE, systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
   };
 }
 
@@ -101,7 +102,7 @@ export function buildBatchRequest(sites) {
   return {
     parts,
     schema: batchSchema(sites.length),
-    options: { systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+    options: { prompt: PROMPT_VERSION_BATCHED, systemInstruction: SYSTEM_INSTRUCTION, thinkingLevel: THINKING_LEVEL, maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
   };
 }
 
