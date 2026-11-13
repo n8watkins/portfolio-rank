@@ -21,6 +21,7 @@
 // use (PRIMARY_MODEL for grades and comparisons, BACKUP_MODEL for labelled
 // experiments). It goes to the owner through the owner alerts
 // (pipeline/alerts.mjs), keys "model-watch:*", and to the admin quota API.
+import { MODEL_WATCH_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { BACKUP_MODEL, GEMINI_API_BASE, PRIMARY_MODEL } from "./gemini.mjs";
 
 export const MODELS_URL = `${GEMINI_API_BASE}/models`;
@@ -43,14 +44,7 @@ const FETCH_TIMEOUT_MS = 30_000;
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
 export async function ensureModelWatchSchema(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS model_watch_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ran_at TEXT NOT NULL,
-    status TEXT NOT NULL,
-    changes INTEGER NOT NULL DEFAULT 0,
-    snapshot TEXT NOT NULL,
-    report TEXT NOT NULL
-  )`);
+  await applyTables(db, MODEL_WATCH_TABLES);
 }
 
 /** "November 17, 2026" -> "2026-11-17"; anything else -> null. */
