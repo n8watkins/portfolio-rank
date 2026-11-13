@@ -60,8 +60,28 @@ test("the Worker answers every old form with one 301 to the readable address, ke
   assert.equal(legacyProfileRedirect(req("/p/https%3A%2F%2Fexample.com", { method: "HEAD" }))?.status, 301);
 });
 
-test("the Worker leaves readable addresses, other pages and writes alone", () => {
-  for (const path of ["/p/janedoe.dev", "/p/httpbin.org", "/p/jane.github.io/Portfolio", "/", "/top", "/og/p/janedoe.dev", "/p/%E0%A4%A"]) {
+test("the Worker tidies a readable address: www, an upper-case host and a trailing slash, each in one 301", () => {
+  const cases = {
+    "/p/www.janedoe.dev": "/p/janedoe.dev",
+    "/p/JaneDoe.DEV/Portfolio": "/p/janedoe.dev/Portfolio",
+    "/p/janedoe.dev/work/": "/p/janedoe.dev/work",
+    "/p/WWW.Example.com/caf%C3%A9?x=1": "/p/example.com/caf%C3%A9?x=1",
+  };
+  for (const [from, to] of Object.entries(cases)) {
+    const r = legacyProfileRedirect(req(from));
+    assert.equal(r?.status, 301, from);
+    assert.equal(r.headers.get("Location"), to, from);
+  }
+});
+
+test("a /p/ path that doesn't decode is a plain 404 from the Worker, not Next.js's 500", () => {
+  const r = legacyProfileRedirect(req("/p/%E0%A4%A"));
+  assert.equal(r?.status, 404);
+  assert.match(r.headers.get("Cache-Control"), /max-age=86400/);
+});
+
+test("the Worker leaves readable addresses, a path's case, other pages and writes alone", () => {
+  for (const path of ["/p/janedoe.dev", "/p/httpbin.org", "/p/jane.github.io/Portfolio", "/p/jane.github.io/portfolio", "/p/example.com/caf%C3%A9", "/", "/top", "/og/p/janedoe.dev", "/play"]) {
     assert.equal(legacyProfileRedirect(req(path)), null, path);
   }
   assert.equal(legacyProfileRedirect(req("/p/https%3A%2F%2Fexample.com", { method: "POST" })), null);
