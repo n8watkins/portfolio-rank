@@ -57,6 +57,7 @@ export function AddForm({ initialUrl = "" }: { initialUrl?: string }) {
   const router = useRouter();
   const [url, setUrl] = useState(initialUrl);
   const [error, setError] = useState("");
+  const [already, setAlready] = useState<{ kind: "listed" | "added"; path: string } | null>(null);
   const [since, setSince] = useState<number | null>(null);
   const { arm, post, turnstile, needsTick } = useToolRequest("add");
   const busy = since !== null;
@@ -75,7 +76,13 @@ export function AddForm({ initialUrl = "" }: { initialUrl?: string }) {
         }
         setError("");
         setSince(Date.now());
-        const r = await post<{ path: string }>("/api/add", { url: v });
+        setAlready(null);
+        const r = await post<{ path: string; already?: "listed" | "added" }>("/api/add", { url: v });
+        if (r.ok && r.data.already) {
+          // On PortfolioRank already: nothing ran, so say so with its profile.
+          setSince(null);
+          return setAlready({ kind: r.data.already, path: r.data.path });
+        }
         if (r.ok) return router.push(r.data.path);
         setSince(null);
         setError(r.message);
@@ -101,6 +108,7 @@ export function AddForm({ initialUrl = "" }: { initialUrl?: string }) {
             onChange={(e) => {
               setUrl(e.target.value);
               setError("");
+              setAlready(null);
             }}
             aria-invalid={!!error}
             aria-describedby={`${id}-note${error ? ` ${id}-error` : ""}`}
@@ -115,6 +123,17 @@ export function AddForm({ initialUrl = "" }: { initialUrl?: string }) {
       {error && (
         <p id={`${id}-error`} role="alert" className="mt-2 text-sm text-down">
           {error}
+        </p>
+      )}
+      {already && (
+        <p role="status" className="mt-2 flex items-center gap-2 text-sm">
+          <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden />
+          <span>
+            {already.kind === "listed" ? "That portfolio is already listed." : "That portfolio was already added."}{" "}
+            <a href={already.path} className="font-semibold text-accent underline-offset-4 hover:underline">
+              See its profile
+            </a>
+          </span>
         </p>
       )}
       <p id={`${id}-note`} className="mt-2.5 text-xs text-mute">

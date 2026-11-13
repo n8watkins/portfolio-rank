@@ -3,7 +3,9 @@ import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
-import { ownerAction } from "@/lib/games/claims.mjs";
+import { controlProof, ownerAction } from "@/lib/games/claims.mjs";
+import { toolsEnabled } from "@/lib/tools/server";
+import { loadProfile } from "@/lib/profile";
 import { purgeProfile } from "@/lib/edge-purge";
 import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } from "@/lib/games/server";
 import { accountTooNew, guardConfig } from "@/lib/rater";
@@ -47,10 +49,16 @@ export async function POST(req: Request) {
   const url = typeof body?.url === "string" ? body.url : "";
   const action = typeof body?.action === "string" ? body.action : "";
   if (!url || !action) return fail("bad_request", 400);
-  if (!isKnownPortfolio(url)) return fail("not_owner", 403);
+  // With "Add your portfolio" on, a site added through /add has an owner too.
+  const tools = toolsEnabled();
+  if (!isKnownPortfolio(url) && !(tools && (await loadProfile(url)))) return fail("not_owner", 403);
   if (action === "regrade" && !gamesEnabled()) return off();
   if (action === "remove" && body.confirm !== true) return fail("confirm_required", 400);
   await ensureSchema();
+  // With it on, every owner action needs proof only the site's owner can give
+  // (the verification file, the meta tag, GitHub Pages or a review;
+  // lib/ownership/verify.mjs), not a link from the page to a GitHub profile.
+  if (tools && !(await controlProof(db(), { url, owner: s.raterId }))) return fail("not_owner", 403);
   const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);
   if (over) return rateLimited(over);
   const out = await ownerAction(db(), { url, owner: s.raterId, action, now: new Date() });
