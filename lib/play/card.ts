@@ -1,7 +1,8 @@
 import { db, ensureSchema } from "@/lib/db";
 import { factLines, gradedPool } from "@/lib/grader/report.mjs";
 import { hiringGroups, placeIn } from "@/lib/grader/present.mjs";
-import { isPublicTier, tierOf } from "@/lib/tiers.mjs";
+import { isPublicTier, isRanked, placeNew, tierOf } from "@/lib/tiers.mjs";
+import { cachedLibraryState, entryIn } from "@/lib/tiers-store.mjs";
 
 // A listed portfolio's public summary: the public grade (only the top tiers
 // get a letter and a "top N%", as on the portfolio page, so no one gets a
@@ -31,13 +32,13 @@ export type PlayCard = {
 };
 export type PlayDetails = PlayCard & EloStanding;
 
-/** A site's place on the ELO board (the face-off's votes; /top when the ranking views are off). */
+/** A site's ELO from face-offs and its place among the ranked portfolios (lib/tiers.mjs). */
 export type EloStanding = {
   /** Its ELO, or null before its first face-off. */
   elo: number | null;
-  /** 1 is the best; null before its first face-off. */
+  /** 1 is the best, among portfolios with enough face-offs for a tier; null before that. */
   eloRank: number | null;
-  /** Sites on the ELO board (at least one face-off). */
+  /** Portfolios with enough face-offs for a tier. */
   eloTotal: number;
 };
 
@@ -83,7 +84,7 @@ const projectCount = (g: Record<string, unknown> | null): number | null => {
 
 function cardOf(row: Row, pool: { url: string; mu: number; key: number | null }[]): PlayCard {
   const g = row.hidden ? null : row.grade;
-  // Graded: Gemini answered. The tier shown is the one by rank in the library, never Gemini's letter.
+  // Graded: Gemini answered. The tier shown is the one by ELO from face-offs, never Gemini's letter.
   const graded = typeof g?.tier === "string" && g.tier !== "";
   const ranked = tierOf(g);
   const tier = isPublicTier(ranked) ? ranked : null;
@@ -119,24 +120,16 @@ export async function playDetails(url: string): Promise<PlayDetails> {
 }
 
 /**
- * Its ELO and place among the sites with at least one face-off, as the ELO
- * board counts them (lib/leaderboard.ts loadElo: votes >= 1, best first).
- * Two indexed reads (ratings_elo_idx).
+ * Its ELO from face-offs (lib/tiers.mjs) and, once it has enough face-offs
+ * for its own tier, its place among the ranked portfolios, from the last
+ * refresh's library (lib/tiers-store.mjs: one cached row).
  */
 export async function eloStanding(url: string): Promise<EloStanding> {
   await ensureSchema();
-  const [me, all] = await db().batch(
-    [
-      {
-        sql: "SELECT r.elo, r.votes, (SELECT COUNT(*) FROM ratings o WHERE o.votes >= 1 AND o.elo > r.elo) AS above FROM ratings r WHERE r.url = ?",
-        args: [url],
-      },
-      "SELECT COUNT(*) AS n FROM ratings WHERE votes >= 1",
-    ],
-    "read",
-  );
-  const row = me.rows[0];
-  const eloTotal = Number(all.rows[0]?.n ?? 0);
-  if (!row || Number(row.votes) < 1) return { elo: null, eloRank: null, eloTotal };
-  return { elo: Math.round(Number(row.elo)), eloRank: Number(row.above) + 1, eloTotal };
+  const library = await cachedLibraryState(db());
+  const e = entryIn(library, url);
+  const eloTotal = library.order.filter(isRanked).length;
+  if (!(e.faceoffs > 0)) return { elo: null, eloRank: null, eloTotal };
+  const p = placeNew(library.order.filter((x: { url: string }) => x.url !== url), e);
+  return { elo: e.elo, eloRank: p.place ?? null, eloTotal: p.ranked ?? eloTotal };
 }

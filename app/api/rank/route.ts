@@ -20,6 +20,8 @@ import { sameOrigin } from "@/lib/polls/server";
 import { shotBases } from "@/lib/shots";
 import { siteDetails } from "@/lib/play/details";
 import { gradedPool } from "@/lib/grader/report.mjs";
+import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
+import { drawCandidates } from "@/lib/play/draw.mjs";
 import type { Portfolio } from "@/app/page";
 
 type Rating = { elo: number; votes: number };
@@ -44,6 +46,12 @@ async function countVotes(raterId: string): Promise<number> {
     args: [raterId],
   });
   return Number(res.rows[0].n);
+}
+
+/** Portfolios with MIN_FACEOFFS or more people's face-offs (ratings.votes): drawn less, so the rest catch up. */
+async function settledUrls(): Promise<Set<string>> {
+  const res = await db().execute({ sql: "SELECT url FROM ratings WHERE votes >= ?", args: [MIN_FACEOFFS] });
+  return new Set(res.rows.map((r) => String(r.url)));
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -79,14 +87,11 @@ export async function GET(req: Request) {
   const fresh = listed.filter((p) => !seen.has(FEED_INDEX.get(p.url)!));
   const pool = fresh.length >= 8 ? fresh : listed;
 
-  // Sample a handful of distinct entries, then face off the two least-voted
-  // so every vote goes where the rating is most uncertain.
-  const picked = new Map<number, Portfolio>();
-  while (picked.size < Math.min(8, pool.length)) {
-    const i = Math.floor(Math.random() * pool.length);
-    picked.set(i, pool[i]);
-  }
-  const candidates = [...picked.values()];
+  // Sample a handful of distinct entries, mostly from portfolios that still
+  // need face-offs for their own tier (lib/tiers.mjs MIN_FACEOFFS), then face
+  // off the two least-voted, so every portfolio reaches its tier and every
+  // vote goes where the rating is most uncertain.
+  const candidates = drawCandidates(pool, await settledUrls()) as Portfolio[];
   const ratings = await getRatings(candidates.map((p) => p.url));
   candidates.sort(
     (a, b) => (ratings.get(a.url)?.votes ?? 0) - (ratings.get(b.url)?.votes ?? 0)

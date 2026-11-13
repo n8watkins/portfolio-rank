@@ -41,7 +41,7 @@ type PoolSite = {
   url: string;
   name: string;
   mu: number;
-  /** The rank key and tier by rank in the library (lib/tiers.mjs). */
+  /** The grade key (lib/grade-score.mjs) and the tier by ELO from face-offs (lib/tiers.mjs). */
   key: number | null;
   tier: string | null;
   quality: number | null;
@@ -208,7 +208,8 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     }),
   ]);
   // The S family: the top 1% (SSS to S-, lib/tiers.mjs).
-  const sGrades = pool.filter((p) => atLeast(p.tier, "S")).length;
+  // Tiers come from face-offs and start at B, so the count that is never 0 is the graded library.
+  const graded = pool.length;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
@@ -222,10 +223,10 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     // A quiet week would read as a dead site: then a number that is never 0.
     week.n > 0
       ? { key: "votesWeek", label: "Votes this week", value: n(week.n), tone: 3 }
-      : { key: "sGrades", label: "Graded S or higher", value: n(sGrades), tone: 3 },
+      : { key: "graded", label: "Portfolios graded", value: n(graded), tone: 3 },
     counts.votes > 0 ? { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 } : null,
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
-    // No "Average tier": tiers by rank (lib/tiers.mjs) make it B by design.
+    // No "Average tier": tiers by ELO (lib/tiers.mjs) make it B by design.
     site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
     site.changedThisMonth > 0 ? { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 } : null,
     gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
@@ -249,8 +250,11 @@ export type PortfolioOfTheDay = {
 
 /** One strong portfolio a day, the same for everyone, never one the hero shows. */
 async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  // The A family or better: the top 15% (SSS to A-, lib/tiers.mjs).
-  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && atLeast(p.tier, "A")).slice(0, 100);
+  // The A family or better: the top 30% by ELO (SSS to A-, lib/tiers.mjs); while few have enough
+  // face-offs for a tier, the best AI grades (the pool is in grade order).
+  const open = pool.filter((p) => strongCapture(p) && !skip.has(p.url));
+  const strong = open.filter((p) => atLeast(p.tier, "A"));
+  const candidates = (strong.length >= 10 ? strong : open).slice(0, 100);
   if (candidates.length === 0) return null;
   const day = Math.floor(now.getTime() / 86_400_000);
   // Walk from today's pick to the first one with a capture.

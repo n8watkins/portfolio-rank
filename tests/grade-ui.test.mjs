@@ -320,13 +320,14 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   await owner.context.close();
 });
 
-test("how grading works: the tier ladder, ties, ELO, how to improve, the bands, what's checked, how votes combine; in the sitemap", async () => {
+test("how grading works: tiers by ELO, the fine print, how to improve, the bands, what's checked, how face-offs make a tier; in the sitemap", async () => {
   for (const width of [1440, 390]) {
     const { page: p, context, errors } = await freshPage(width);
     await p.goto(`${BASE}/grading`);
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
     for (const t of ["SSS", "S plus", "S minus", "A plus", "A minus", "B minus", "C plus", "D"]) await p.getByRole("img", { name: `Tier ${t}`, exact: true }).first().waitFor();
-    for (const name of ["Your tier is your place in the library", "Ties, updates and ELO", "How to improve your tier", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
+    for (const name of ["Your tier is your place by ELO", "A careful ELO, updates and the grade", "How to improve your tier", "Facts by code, quality by AI", "How face-offs make a tier"]) await p.getByRole("heading", { name }).waitFor();
+    await p.getByText(/Every portfolio starts at tier B, with an ELO of 1,200/).waitFor();
     assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);

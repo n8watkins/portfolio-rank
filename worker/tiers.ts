@@ -1,7 +1,7 @@
-// Tiers by rank (lib/tiers.mjs), on the hourly Cron Trigger ("15 * * * *",
-// worker/index.ts): every graded portfolio's tier is placed again in the
-// library from the stored grades (lib/tiers-store.mjs refreshTiers). No AI
-// request: a read of the grades and a write of the ranks that changed.
+// Tiers by ELO (lib/tiers.mjs), on the hourly Cron Trigger ("15 * * * *",
+// worker/index.ts): every face-off is replayed and every graded portfolio's
+// tier placed again (lib/tiers-store.mjs refreshTiers). No AI request: a read
+// of the grades and the votes, and a write of the ranks that changed.
 import { db as database } from "../lib/db";
 import { refreshTiers } from "../lib/tiers-store.mjs";
 

@@ -19,7 +19,6 @@
 // positive and about portfolios and the developer job market; Gemini never
 // sees or names a person or a site, and code picks the screenshots (only
 // sites graded S or A, so a low scorer is never shown).
-import { TIERS } from "../lib/tiers.mjs";
 import { ensurePollsSchema } from "../lib/polls/schema.mjs";
 import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
 import { prunePolls } from "../lib/polls/store.mjs";
@@ -39,8 +38,12 @@ export const ACCEPT_MAX = 3;
 export const SITE_COOLDOWN_WEEKS = 12;
 /** Polls are scheduled at most this many weeks ahead. */
 export const MAX_WEEKS_AHEAD = 8;
-/** Only sites graded this well are ever shown in a poll: the top 15%, tiers by rank (lib/tiers.mjs). */
-export const SHOWN_TIERS = TIERS.slice(0, TIERS.indexOf("A-") + 1);
+/**
+ * Only sites the AI graded this well are ever shown in a poll: Gemini's own
+ * letter S or A (the report card's grade). Not the tier: that comes from
+ * face-offs (lib/tiers.mjs) and starts at B for everyone.
+ */
+export const SHOWN_GRADES = ["S", "A"];
 
 export const TOPICS = [
   "hero section",
@@ -180,7 +183,7 @@ export async function heroCandidates(db, { known, now }) {
     await db.execute(
       `SELECT url, shot_key FROM portfolios p
        WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")} AND NOT ${NOT_PORTFOLIO("p")}
-         AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.rank.tier') IN (${SHOWN_TIERS.map((t) => `'${t}'`).join(",")})
+         AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IN (${SHOWN_GRADES.map((t) => `'${t}'`).join(",")})
        ORDER BY p.url`
     )
   ).rows;
@@ -257,7 +260,7 @@ export async function dataDigest(db) {
   const r = (
     await db.execute(
       `SELECT COUNT(*) AS graded,
-              SUM(json_extract(ai_rubric, '$.rank.tier') IN (${SHOWN_TIERS.map((t) => `'${t}'`).join(",")})) AS top,
+              SUM(json_extract(ai_rubric, '$.tier') IN (${SHOWN_GRADES.map((t) => `'${t}'`).join(",")})) AS top,
               SUM(COALESCE(json_extract(facts, '$.signals.resume'), 0) = 1) AS resume,
               SUM(COALESCE(json_extract(facts, '$.signals.github'), 0) = 1) AS github,
               SUM(COALESCE(json_extract(facts, '$.signals.about'), 0) = 1) AS about,

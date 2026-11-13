@@ -8,6 +8,7 @@ import type { GradePage } from "@/lib/grade-page";
 import { ROUTES } from "@/lib/nav";
 import { SITE, SITE_URL } from "@/lib/site";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
+import { MIN_FACEOFFS } from "@/lib/tiers.mjs";
 
 // The grade report (owner direction, 2026-11-12: "a report, not a sales
 // page"): a small header (name, address, tier, Top N%, a thumbnail), then
@@ -81,9 +82,17 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
               </span>
             )}
           </span>
+          {rep.tier && rep.provisional && (
+            <p className="max-w-[7.5rem] text-[11px] leading-snug text-mute sm:max-w-none">
+              Starting tier, until {MIN_FACEOFFS} face-offs
+            </p>
+          )}
           {pct ? (
             <>
-              <p className="text-xl font-bold leading-none tabular-nums">Top {pct.topPct}%</p>
+              <p className="mt-1 text-xl font-bold leading-none tabular-nums">
+                <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-mute">Grade</span>
+                Top {pct.topPct}%
+              </p>
               <p className="max-w-[7.5rem] text-[11px] leading-snug text-mute tabular-nums sm:max-w-none">Graded against {(pct.total - 1).toLocaleString("en-US")} portfolios</p>
               <a href="/grading#tiers" className="text-[11px] font-medium text-accent hover:underline print:hidden">
                 How tiers work
