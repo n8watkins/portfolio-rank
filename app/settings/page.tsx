@@ -11,6 +11,7 @@ import { ROUTES } from "@/lib/nav";
 import { useClientSession } from "@/lib/session-client";
 import { setTheme } from "@/lib/theme";
 import { EMAIL_SIGNIN_ENABLED } from "@/lib/signin/flag";
+import { useNewsletterOn } from "@/components/newsletter/useNewsletterOn";
 
 // Settings: the account, the theme and voting, then what this site keeps in
 // your browser, in plain words. Nothing here tracks you, so there is no
@@ -172,6 +173,7 @@ const smallBtn = "inline-flex h-10 items-center gap-2 rounded-lg border border-e
 export default function SettingsPage() {
   const [autoOpen, setAutoOpen] = useStoredFlag("pr_autoopen");
   const session = useClientSession();
+  const newsletterOn = useNewsletterOn();
   const openSignIn = useSignIn();
   const [forgot, setForgot] = useState(false);
 
@@ -294,6 +296,17 @@ export default function SettingsPage() {
             <p className="mt-2 text-mute">A few notes last only while the tab is open: whether the sign-in reminder was shown, and your own Gemini key if you grade with one, until the grade is done.</p>
             <p className="mt-2 text-mute">The bot check on some forms (Cloudflare Turnstile) sets no cookies on this site.</p>
           </details>
+          {/* Only while the newsletter is live (useNewsletterOn). */}
+          {newsletterOn && (
+            <div className="p-4 sm:p-5" id="newsletter">
+              <p className="font-semibold">The blog newsletter</p>
+              <p className="mt-0.5 text-mute">
+                If you sign up for new posts by email, your address goes to Kit (kit.com), the service that keeps the list and sends the emails; this site keeps no copy. Kit
+                sends one confirm email, and nothing else comes until you confirm. The address is used for the newsletter alone, never shared or sold. Every email has an
+                Unsubscribe link that works in one click. Kit counts opens and clicks of the emails.
+              </p>
+            </div>
+          )}
           <Row id="forget" inline title="Forget my preferences" desc="Clears the choices saved in this browser. Your votes and sign-in stay.">
             <button type="button" onClick={forget} className={smallBtn} aria-describedby="forget-desc">
               {forgot ? "Forgotten" : "Forget"}

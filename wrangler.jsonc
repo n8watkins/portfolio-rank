@@ -101,6 +101,15 @@
     // change fingerprints and the profile's "site unchanged since" lines are
     // off until this is "true".
     "FRESHNESS_ENABLED": "false",
+    // The blog newsletter on Kit (AUTOMATION.md "Newsletter"): the deploy-level
+    // switch for the sign-up forms, their API and the newsletter's tick (on the
+    // five-minute cron, no trigger of its own). Off in production: no form, no
+    // status request from pages and no database read. Launching takes this set
+    // to "true", the KIT_API_KEY secret and the owner's switch on
+    // /admin/blog/newsletter (stored, off until turned on). KIT_BROADCAST_MODE:
+    // a new post becomes a broadcast "send" (scheduled 10 minutes ahead) or a "draft".
+    "NEWSLETTER_ENABLED": "false",
+    "KIT_BROADCAST_MODE": "send",
     // Games, badges, claims, live stats and report downloads (lib/games):
     // every one of their routes answers 404 until this is "true", which
     // happens with the redesign.
@@ -242,6 +251,11 @@
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
         "FRESHNESS_ENABLED": "true",
+        // The newsletter runs on staging first, against the owner's one Kit
+        // account: sign-ups land on the real list (Kit's double opt-in), and new
+        // posts only ever become drafts marked [staging] (worker/newsletter.ts).
+        "NEWSLETTER_ENABLED": "true",
+        "KIT_BROADCAST_MODE": "draft",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         // Staging's own, lower email caps (lib/email/gate.mjs): it sends from the

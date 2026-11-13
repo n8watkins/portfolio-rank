@@ -29,6 +29,7 @@ import { tiersTick } from "./tiers";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
 import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
+import { newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
@@ -186,7 +187,19 @@ const worker = {
       await goalsTick(env as NightEnv, controller.scheduledTime);
       await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     }
-    else if (cron === GRADER_CRON) await graderTick(env as GraderEnv, controller.scheduledTime);
+    else if (cron === GRADER_CRON) {
+      // The grader's tick, then the blog newsletter's (./newsletter.ts) on the same
+      // five-minute cron, so the newsletter adds no trigger of its own; it returns
+      // at once without NEWSLETTER_ENABLED or KIT_API_KEY.
+      const at = controller.scheduledTime;
+      await runEach(
+        [
+          ["grader", () => graderTick(env as GraderEnv, at)],
+          ["newsletter", () => newsletterTick(env as unknown as NewsletterEnv, at)],
+        ],
+        { report: (e, task) => Sentry.captureException(e, { tags: { cron: "five-minute", task } }), log: (line) => console.log(JSON.stringify(line)) }
+      );
+    }
     else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };
