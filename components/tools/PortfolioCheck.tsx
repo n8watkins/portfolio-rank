@@ -105,7 +105,7 @@ export function PortfolioCheck({ tools, initialUrl = "", cta = "Check my portfol
   const [answers, setAnswers] = useState<Answers | null>(null);
   const [checked, setChecked] = useState("");
   const results = useRef<HTMLDivElement>(null);
-  const { arm, post, turnstile } = useToolRequest();
+  const { arm, post, turnstile, needsTick } = useToolRequest();
   const busy = since !== null;
 
   const run = async (raw: string) => {
@@ -203,10 +203,15 @@ export function PortfolioCheck({ tools, initialUrl = "", cta = "Check my portfol
           </span>
         </label>
         {turnstile}
+        {needsTick && (
+          <p role="status" className="mt-2 text-sm font-medium">
+            Cloudflare wants a quick check first: tick the box{busy ? " and the check starts" : ""}.
+          </p>
+        )}
       </form>
 
       <div ref={results} className="scroll-mt-24">
-        {busy && since !== null && (
+        {busy && since !== null && !needsTick && (
           <div className="mt-8">
             <Running tools={tools} since={since} />
           </div>
