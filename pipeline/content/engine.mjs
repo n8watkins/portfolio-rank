@@ -250,7 +250,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
         break;
       }
       await phase(round === 0 ? "writing" : "revising", round === 0 ? null : `round ${round} of ${MAX_REVISIONS}`);
-      if (round === 0 && staged) draft = normalizeDraft((await stagedWrite(sheet, g.generate, { onOutlineFail: (p) => log(`outline retry: ${p.slice(0, 2).join("; ")}`) })).draft);
+      if (round === 0 && staged) draft = normalizeDraft((await stagedWrite(sheet, g.generate, { onOutlineFail: (p) => log(`outline retry: ${p.slice(0, 2).join("; ")}`), log })).draft);
       else draft = normalizeDraft(await g.generate(round === 0 ? buildWriteRequest(sheet) : buildReviseRequest(sheet, draft, failures)));
       // Gate 2: outside claims, on the unfilled draft.
       await phase("researching");

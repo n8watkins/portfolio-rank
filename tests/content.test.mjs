@@ -110,15 +110,15 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "graded S by the AI judge" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason === "has the AI judge's highest grade" && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
-  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are graded S or A").display, "50%");
+  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);
   const pc = await pageCraft(db, { now: MONDAY });
   assert.equal(pc.ready, true);
   assertNoBadNames(pc);
   // Named only as positive examples: graded S, fits a phone, no console errors, light.
-  assert.ok(pc.names.every((n) => /graded S, fits a phone screen/.test(n.reason)));
+  assert.ok(pc.names.every((n) => /highest grade, fits a phone screen/.test(n.reason)));
   assert.equal(pc.facts.find((f) => f.label === "Median page weight of other portfolios, first load").display, "4.0 MB");
 });
 
@@ -239,11 +239,11 @@ export const ph = (sheet, label) => {
 function goodDraft(sheet, over = {}) {
   const named = sheet.names[0];
   const shot = sheet.screenshots[0];
-  const lowTop = ph(sheet, "Average motion score (1 to 5) of S and A portfolios");
+  const lowTop = ph(sheet, "Average motion score (1 to 5) of the top-graded portfolios");
   const lowRest = ph(sheet, "Average motion score (1 to 5) of all other graded portfolios");
-  const share = ph(sheet, "Share of all graded portfolios that are graded S or A");
+  const share = ph(sheet, "Share of all graded portfolios that are top-graded");
   const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where S and A portfolios lead the rest by the most (tied)");
+  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
   const nLead = ph(sheet, "Number of axes sharing the biggest lead");
   const total = ph(sheet, "Portfolios graded by the AI judge");
   const example = sheet.examples[0];
@@ -1124,7 +1124,7 @@ test("quality: ties are computed as facts and a superlative a tie contradicts is
   const { sheet, roster } = await sheetAndRoster();
   const nLead = sheet.facts.find((f) => f.label === "Number of axes sharing the biggest lead");
   assert.equal(nLead.value, 5, "five axes share the lead; motion is the exception");
-  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where S and A portfolios lead the rest by the most"));
+  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where the top-graded portfolios lead the rest by the most"));
   assert.match(lead.display, /^visual design, .* and memorability$|storytelling/);
   assert.equal(sheet.superlatives.find((x) => x.term === "biggest lead").tied, true);
   const leadPh = `{{${lead.id}}}`;
@@ -1171,9 +1171,9 @@ test("quality: Try this points to a named positive example with a link", async (
 
 test("quality: the callout restates exactly one numeric fact with its full scope", async () => {
   const { sheet, roster } = await sheetAndRoster();
-  const share = ph(sheet, "Share of all graded portfolios that are graded S or A");
+  const share = ph(sheet, "Share of all graded portfolios that are top-graded");
   const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where S and A portfolios lead the rest by the most (tied)");
+  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
   const body = goodDraft(sheet).body;
   const withCallout = (l1, l2) => body.replace(/^> \*\*.*\n> .*$/m, `> **${l1}**\n> ${l2}`);
   const run = (l1, l2) => checkOf(goodDraft(sheet, { body: withCallout(l1, l2) }), sheet, roster, "callout");
@@ -1232,15 +1232,15 @@ function stagedGemini(sheet, { outline, finish } = {}) {
       {
         subhead: "Top portfolios lead on most axes",
         intent: "the gap",
-        fact_ids: [f("The biggest lead, in points on a 1 to 5 scale"), f("The axes where S and A portfolios lead the rest by the most (tied)")],
+        fact_ids: [f("The biggest lead, in points on a 1 to 5 scale"), f("The axes where the top-graded portfolios lead the rest by the most (tied)")],
       },
       {
         subhead: "The first screen carries the most weight",
         intent: "first screen",
         // Three named sites, each through one of its positive facts (the outline check asks for three).
-        fact_ids: [f("Portfolios graded S, the top tier"), ...sheet.names.slice(0, 3).map((n) => sheet.facts.find((x) => x.tone === "positive" && x.about === n.url).id)],
+        fact_ids: [f("Portfolios with the judge's highest grade, a small part of the top-graded group"), ...sheet.names.slice(0, 3).map((n) => sheet.facts.find((x) => x.tone === "positive" && x.about === n.url).id)],
       },
-      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge"), f("Share of all graded portfolios that are graded S or A")] },
+      { subhead: "Clear stories beat long lists", intent: "stories", fact_ids: [f("Portfolios graded by the AI judge"), f("Share of all graded portfolios that are top-graded")] },
     ],
     callout_fact_id: f("The biggest lead, in points on a 1 to 5 scale"),
     actions: ["a", "b", "c"],
@@ -1259,7 +1259,7 @@ function stagedGemini(sheet, { outline, finish } = {}) {
       const n = calls.filter((c) => c.kind === kind).length;
       const result =
         kind === "outline" ? (typeof outline === "function" ? outline(n, good) : outline ?? good)
-        : kind === "sections" ? sectionsOut(n === 1 ? 2 : 1)
+        : kind === "sections" ? sectionsOut(1)
         : kind === "write" ? finish ?? goodDraft(sheet)
         : kind === "claims" ? { claims: [] }
         : REVIEW_OK;
@@ -1268,20 +1268,20 @@ function stagedGemini(sheet, { outline, finish } = {}) {
   };
 }
 
-test("staged writer: outline, two section requests, finish; then the same code checks (4 write requests)", async () => {
+test("staged writer: outline, one request per section, finish; then the same code checks (5 write requests)", async () => {
   const { db, sheet } = await sheetAndRoster();
   const g = stagedGemini(sheet);
   const { ctx } = contentCtx(db);
   ctx.flags.writerMode = "staged";
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
   assert.equal(r.status, "ok");
-  assert.deepEqual(g.calls.map((c) => c.kind), ["outline", "sections", "sections", "write", "claims", "review"]);
+  assert.deepEqual(g.calls.map((c) => c.kind), ["outline", "sections", "sections", "sections", "write", "claims", "review"]);
   assert.equal(r.requests, STAGED_REQUESTS + 2);
-  // A section sees only its own facts, never another section's.
-  const first = g.calls[1].text;
-  assert.ok(first.includes("Portfolios graded S, the top tier") && !first.includes("graded by the AI judge\""), "section 1 and 2 facts only");
-  const second = g.calls[2].text;
-  assert.ok(second.includes("Portfolios graded by the AI judge") && !second.includes("Portfolios graded S, the top tier"));
+  // Each section sees only its own facts, never another section's.
+  const [s1, s2, s3] = g.calls.filter((c) => c.kind === "sections").map((c) => c.text);
+  assert.ok(s1.includes("The biggest lead, in points on a 1 to 5 scale") && !s1.includes("Portfolios graded by the AI judge\""));
+  assert.ok(s2.includes("Portfolios with the judge's highest grade, a small part of the top-graded group") && !s2.includes("The biggest lead, in points"));
+  assert.ok(s3.includes("Portfolios graded by the AI judge") && !s3.includes("Portfolios with the judge's highest grade"));
   const [post] = await listPosts(db, { status: "draft" });
   assert.equal(post.checks.passed, true);
 });

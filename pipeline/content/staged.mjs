@@ -6,11 +6,11 @@
 //      the callout fact, the three actions and the images. Code checks its
 //      structure and asks again (once) before any section is written.
 //   2. sections: each written from only its facts as paragraphs of 2 to 4
-//      sentences; two sections per request.
+//      sentences; one section per request.
 //   3. finish: one request assembles the opener, callout, Try this and
 //      closing around the sections, smooths transitions, removes repetition
 //      and finalises the titles.
-// 4 requests when the outline passes (5 after a retry); facts stay
+// 5 requests when the outline passes (6 after a retry); facts stay
 // {{placeholders}} throughout, and every code check runs on the result.
 import { OPTIONS, RESPONSE_SCHEMA, sheetForWriter, PLACEHOLDER } from "./writer.mjs";
 
@@ -20,7 +20,16 @@ export const WRITER_MODES = ["single", "staged"];
 export const DEFAULT_WRITER_MODE = "staged";
 export class OutlineError extends Error {}
 export const SECTIONS = 3;
-export const SECTIONS_PER_REQUEST = 2;
+// One section per request (owner, 2026-11-12): asked for two at once,
+// Flash-Lite wrote each far shorter than asked and drafts came back at
+// about 400 words.
+export const SECTIONS_PER_REQUEST = 1;
+
+/** Words in some prose (placeholders count as one word each). */
+const countWords = (t) =>
+  String(t ?? "")
+    .split(/\s+/)
+    .filter((w) => /[\p{L}\p{N}{]/u.test(w)).length;
 /** Requests the staged write takes when the outline passes first time. */
 export const STAGED_REQUESTS = 1 + Math.ceil(SECTIONS / SECTIONS_PER_REQUEST) + 1;
 
@@ -172,7 +181,7 @@ export function buildFinishRequest(sheet, outline, sections) {
  * Returns { draft, outline, requests }; throws if the outline still fails
  * its structure checks after one retry (before any section is written).
  */
-export async function stagedWrite(sheet, generate, { onOutlineFail = () => {} } = {}) {
+export async function stagedWrite(sheet, generate, { onOutlineFail = () => {}, log = () => {} } = {}) {
   let requests = 0;
   const call = async (req) => (requests++, generate(req));
   let outline = await call(buildOutlineRequest(sheet));
@@ -189,6 +198,9 @@ export async function stagedWrite(sheet, generate, { onOutlineFail = () => {} } 
     const out = await call(buildSectionsRequest(sheet, outline, idx));
     idx.forEach((n, k) => written.push(out.sections?.[k] ?? { subhead: outline.sections[n].subhead, paragraphs: [] }));
   }
+  // Word counts per stage, so a short draft shows where the words went.
+  const sectionWords = written.map((s) => countWords((s.paragraphs ?? []).join(" ")));
   const draft = await call(buildFinishRequest(sheet, outline, written));
-  return { draft, outline, requests };
+  log(`words: sections ${sectionWords.join(" + ")} = ${sectionWords.reduce((a, b) => a + b, 0)}; finished body ${countWords(draft?.body)}`);
+  return { draft, outline, requests, words: { sections: sectionWords, body: countWords(draft?.body) } };
 }
