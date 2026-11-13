@@ -8,12 +8,12 @@ The source is the hosted audit page (https://claude.ai/artifact/UEyvwv9e2dW31ZrP
 
 | # | Recommendation | Status |
 | ---: | --- | --- |
-| 1 | Pause the re-grade stage until v3 | Done in code (PR #142): `DEFAULT_PLAN.stages.regrade.cap` is 0, so re-grades are off unless `GEMINI_BUDGET` turns them on. Production: all background Gemini work is paused by owner decision (below). |
-| 2 | Stop gating Lighthouse prewarm on Gemini's letter | Done on `main`'s prewarm (PR #142): every graded portfolio that is not "not a portfolio", up to 400 a day. Still open in `lib/freshness.mjs` `lighthouseDue` (PR #130), which keeps `tiers = ["S", "A", "B"]` and needs the same change. |
-| 3 | Close the injection gaps in comparisons and the screen | Partly done (PR #142): comparisons and the legacy pairwise vote strip every `<site_data>` marker through `pipeline/site-data.mjs`, with tests. Open: the screenshot line in image prompts, and `screen.py` (outside this repository). |
+| 1 | Pause the re-grade stage until v3 | Done in code (PR #148): `DEFAULT_PLAN.stages.regrade.cap` is 0, so re-grades are off unless `GEMINI_BUDGET` turns them on. Production: all background Gemini work is paused by owner decision (below). |
+| 2 | Stop gating Lighthouse prewarm on Gemini's letter | Done on `main`'s prewarm (PR #148): every graded portfolio that is not "not a portfolio", up to 400 a day. Still open in `lib/freshness.mjs` `lighthouseDue` (PR #130), which keeps `tiers = ["S", "A", "B"]` and needs the same change. |
+| 3 | Close the injection gaps in comparisons and the screen | Partly done (PR #148): comparisons and the legacy pairwise vote strip every `<site_data>` marker through `pipeline/site-data.mjs`, with tests. Open: the screenshot line in image prompts, and `screen.py` (outside this repository). |
 | 4 | Stop the discovery screen from retrying a spent daily quota | Not started (`screen.py` lives in `~/research`, outside this repository). |
-| 5 | Find out whether Google counts 503s | Done (PR #142): Google's billing docs say failed requests count against the quota, so the accountant keeps counting every request, now with the source cited and a test. |
-| 6 | Label every prompt in the request log | Done (PR #142): `gemini_requests.prompt` holds the prompt id and version (`grade-v2`, `compare-v1`, `content-claims-judge-v1`, `library-check-v1`, `polls-v1`, ...). |
+| 5 | Find out whether Google counts 503s | Done (PR #148): Google's billing docs say failed requests count against the quota, so the accountant keeps counting every request, now with the source cited and a test. |
+| 6 | Label every prompt in the request log | Done (PR #148): `gemini_requests.prompt` holds the prompt id and version (`grade-v2`, `compare-v1`, `content-claims-judge-v1`, `library-check-v1`, `polls-v1`, ...). |
 | 7 | Build a small gold set and eval harness first | Not started; the round-1 batch experiment (PR #141) is the seed. |
 | 8 | Rubric v3 prompt: reason first, anchors, no letter | Not started. |
 | 9 | Projects-aware evidence, built by code | Not started. |
@@ -50,7 +50,7 @@ How to undo it, when the owner says so:
 
 1. `npx wrangler secret delete GEMINI_BUDGET` (production Worker, run in the repository).
 2. `gh variable delete GEMINI_BUDGET -R n8watkins/portfolio-rank`.
-3. To keep only re-grades off instead (recommendation 1, until rubric v3), set both to `{"stages":{"regrade":{"cap":0}}}` with `wrangler secret put GEMINI_BUDGET` and `gh variable set GEMINI_BUDGET`; once PR #142 is deployed the default already does that, so deleting is enough.
+3. To keep only re-grades off instead (recommendation 1, until rubric v3), set both to `{"stages":{"regrade":{"cap":0}}}` with `wrangler secret put GEMINI_BUDGET` and `gh variable set GEMINI_BUDGET`; once PR #148 is deployed the default already does that, so deleting is enough.
 4. Resume `night-2026-11-12` only if the owner asks: `npx wrangler workflows instances resume portfolio-rank-night night-2026-11-12`.
    Its hard stop was 07:30 UTC on 2026-11-13, so after that a resumed instance only writes its summary.
 
