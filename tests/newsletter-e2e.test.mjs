@@ -257,22 +257,24 @@ test("admin: Test the newsletter (Kit) shows the setup check, says which system 
   assert.ok(b.content.includes("{{ unsubscribe_url }}"));
 });
 
-test("the forms: after a post, on /blog and in the footer elsewhere", async () => {
+test("the forms: beside a post (after it on phones), on /blog and in the footer elsewhere", async () => {
   const desk = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
   desk.on("pageerror", (e) => errors.push(String(e)));
   await desk.goto(`${BASE}/blog/${post.slug}`);
-  const after = desk.locator('[data-newsletter="after-post"]');
-  await after.waitFor();
-  assert.ok(await after.isVisible());
+  // Wide screens: the form sits in the post's right-hand column; the one after the post is for narrower screens.
+  const side = desk.locator('[data-newsletter="sidebar"]');
+  await side.waitFor();
+  assert.ok(await side.isVisible());
+  assert.equal(await desk.locator('[data-newsletter="after-post"]').isVisible(), false, "one visible form on a wide screen");
   assert.equal(await desk.locator('[data-newsletter="footer"]').count(), 0, "no second form in the footer of a post");
   assert.equal(await desk.evaluate(() => document.documentElement.scrollWidth), 1440, "no sideways scroll");
 
-  // Signing up from the form after the post.
+  // Signing up from the form beside the post.
   const email = `after-${RUN}@example.com`;
-  await after.getByLabel("Email for new posts").fill(email);
-  await after.getByRole("button", { name: "Subscribe" }).click();
-  await after.getByText("check your inbox and press Confirm").waitFor();
+  await side.getByLabel("Email for new posts").fill(email);
+  await side.getByRole("button", { name: "Subscribe" }).click();
+  await side.getByText("check your inbox and press Confirm").waitFor();
   assert.equal(kitAdds(email).find((c) => c.path.startsWith("/forms/"))?.body.referrer, `${BASE}/blog/${post.slug}`);
 
   await desk.goto(`${BASE}/blog`);
@@ -285,6 +287,7 @@ test("the forms: after a post, on /blog and in the footer elsewhere", async () =
   await phone.goto(`${BASE}/blog/${post.slug}`);
   await phone.locator('[data-newsletter="after-post"]').waitFor();
   assert.ok(await phone.locator('[data-newsletter="after-post"]').isVisible());
+  assert.equal(await phone.locator('[data-newsletter="sidebar"]').isVisible(), false, "the right-hand column is hidden on a phone");
   assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth), 390, "no sideways scroll");
   await phone.close();
   assert.deepEqual(errors, []);

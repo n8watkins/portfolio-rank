@@ -50,7 +50,12 @@ test("a published post: the article, its AI note, sources, JSON-LD and images; t
   assert.equal(res.status, 200);
   const html = await res.text();
   assert.ok(html.includes(p.title.replace(/&/g, "&amp;")));
-  assert.ok(html.includes("Written with AI from PortfolioRank data."));
+  assert.match(html, /By(?:<!-- -->)? <a [^>]*href="https:\/\/n8builds.dev"[^>]*>Nathan Watkins<\/a>, with AI assistance/, "the byline names the person who publishes it");
+  assert.ok(html.includes("Drafted with AI, checked and published by Nathan."), "one quiet line on how it was made");
+  assert.ok(!html.includes("How this post was made"), "no AI box at the bottom");
+  for (const where of ["X", "LinkedIn", "Bluesky"]) assert.ok(html.includes(`aria-label="Share on ${where} (opens in a new tab)"`), `a ${where} share link with its icon`);
+  assert.ok(html.includes('aria-label="Copy the link to this post"'));
+  assert.ok(!html.includes("data-newsletter"), "the sign-up is never in the server HTML: it appears only once the newsletter switch says on");
   assert.ok(html.includes('href="/about-posts"'));
   assert.ok(html.includes("Portfolios in this post"));
   assert.ok(html.includes('"@type":"BlogPosting"'));

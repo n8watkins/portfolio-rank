@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { btnPrimary } from "@/components/ui/styles";
 import { sitePath } from "@/lib/site";
@@ -19,6 +19,36 @@ export type Block =
   | { type: "callout"; lead: string; rest: string[] }
   | { type: "list"; ordered: boolean; items: string[] }
   | { type: "image"; slot: string };
+
+/** The plain words of a heading (no Markdown marks or link addresses). */
+export const plainText = (t: string) =>
+  t
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*`]/g, "")
+    .trim();
+
+/**
+ * The body's subheads with stable, unique ids ("section-" and a slug), in
+ * order: the anchors the headings carry and what the table of contents lists.
+ */
+export function headingsOf(body: string): { id: string; text: string }[] {
+  const seen = new Map<string, number>();
+  return parseBlocks(body)
+    .filter((b): b is Extract<Block, { type: "heading" }> => b.type === "heading")
+    .map((b) => {
+      const text = plainText(b.text);
+      const slug = text
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60);
+      const base = `section-${slug || "part"}`;
+      const n = (seen.get(base) ?? 0) + 1;
+      seen.set(base, n);
+      return { id: n > 1 ? `${base}-${n}` : base, text };
+    });
+}
 
 /** The body as blocks. Pure, so the tests can check it. */
 export function parseBlocks(body: string): Block[] {
@@ -78,8 +108,11 @@ export function linkHref(url: string): string {
 
 const external = (href: string) => /^https?:/.test(href);
 
+/** Where a link should go, before linkHref: a portfolio's site becomes its PortfolioRank page (lib/portfolio-links.ts). */
+export type LinkFor = (url: string) => string;
+
 /** Inline marks: **bold**, `code`, [text](https://...) and bare https addresses. */
-export function Inline({ text, sources = [] }: { text: string; sources?: string[] }) {
+export function Inline({ text, sources = [], linkFor }: { text: string; sources?: string[]; linkFor?: LinkFor }) {
   const parts: ReactNode[] = [];
   const re = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
   let last = 0;
@@ -101,7 +134,7 @@ export function Inline({ text, sources = [] }: { text: string; sources?: string[
           </a>
         );
       } else {
-        const href = linkHref(url);
+        const href = linkHref(linkFor ? linkFor(url) : url);
         parts.push(
           <a
             key={k++}
@@ -121,22 +154,31 @@ export function Inline({ text, sources = [] }: { text: string; sources?: string[
 }
 
 /** A post body. `figure(slot)` renders an image slot (or null when the slot has no image). */
-export function Markdown({ body, figure, sources = [] }: { body: string; figure: (slot: string) => ReactNode; sources?: string[] }) {
+export function Markdown({ body, figure, sources = [], linkFor }: { body: string; figure: (slot: string) => ReactNode; sources?: string[]; linkFor?: LinkFor }) {
   const blocks = parseBlocks(body);
+  // Block index -> its heading's id, in the same order headingsOf gives them.
+  const ids = headingsOf(body);
+  const idAt = new Map(blocks.flatMap((b, i) => (b.type === "heading" ? [i] : [])).map((i, n) => [i, ids[n]?.id]));
   return (
     <div className="article-body">
       {blocks.map((b, i) => {
         switch (b.type) {
-          case "heading":
+          case "heading": {
+            const id = idAt.get(i);
             return (
-              <h2 key={i} className="mt-11 text-[1.45rem] font-bold leading-tight tracking-tight text-balance sm:text-2xl">
+              <h2 key={i} id={id} className="post-heading relative mt-11 text-[1.45rem] font-bold leading-tight tracking-tight text-balance sm:text-2xl">
+                {/* A quiet "#" to link the section, shown on hover with a pointer (globals.css). */}
+                <a href={`#${id}`} aria-label={`Link to “${plainText(b.text)}”`} className="heading-anchor absolute -left-6 top-0 hidden font-semibold text-accent no-underline sm:block">
+                  #
+                </a>
                 <Inline text={b.text} />
               </h2>
             );
+          }
           case "para":
             return (
               <p key={i} className="mt-5 text-pretty">
-                <Inline text={b.text} sources={sources} />
+                <Inline text={b.text} sources={sources} linkFor={linkFor} />
               </p>
             );
           case "cta":
@@ -149,14 +191,14 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
             );
           case "tldr":
             return (
-              <aside key={i} aria-label="TL;DR" className="card mt-2 p-5 sm:p-6">
+              <aside key={i} aria-label="TL;DR" className="tldr card mt-2 p-5 sm:p-6">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">TL;DR</p>
                 <ul className="mt-3 grid gap-2.5 text-[15px] leading-relaxed sm:text-base">
                   {b.items.map((item, j) => (
-                    <li key={j} className="flex gap-3">
-                      <span aria-hidden className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-fill" />
+                    <li key={j} className="tldr-item flex gap-3" style={{ "--i": j } as CSSProperties}>
+                      <span aria-hidden className="tldr-dot mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-fill" />
                       <span>
-                        <Inline text={item} sources={sources} />
+                        <Inline text={item} sources={sources} linkFor={linkFor} />
                       </span>
                     </li>
                   ))}
@@ -169,7 +211,7 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
                 <p className={`font-bold tracking-tight text-ink ${b.lead.length <= 12 ? "text-4xl tabular-nums sm:text-5xl" : "text-xl sm:text-2xl"}`}>{b.lead}</p>
                 {b.rest.map((r, j) => (
                   <p key={j} className="mt-2 text-[15px] text-mute">
-                    <Inline text={r} sources={sources} />
+                    <Inline text={r} sources={sources} linkFor={linkFor} />
                   </p>
                 ))}
               </aside>
@@ -180,7 +222,7 @@ export function Markdown({ body, figure, sources = [] }: { body: string; figure:
               <L key={i} className={`mt-5 grid gap-2.5 pl-6 ${b.ordered ? "list-decimal marker:font-semibold marker:text-accent" : "list-disc marker:text-accent"}`}>
                 {b.items.map((item, j) => (
                   <li key={j} className="pl-1.5">
-                    <Inline text={item} sources={sources} />
+                    <Inline text={item} sources={sources} linkFor={linkFor} />
                   </li>
                 ))}
               </L>

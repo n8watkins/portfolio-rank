@@ -9,6 +9,7 @@ import { Markdown } from "@/components/blog/Markdown";
 import { StatusPill } from "@/components/admin/postStatus";
 import { Scorecard } from "@/components/admin/Scorecard";
 import { scorecard } from "@/pipeline/content/scorecard.mjs";
+import { postLinkFor } from "@/lib/portfolio-links";
 
 // Two drafts on one story side by side (docs/CONTENT-ENGINE.md, "Quality
 // tools"): title, subtitle, the scorecard and the text, so the owner can
@@ -31,7 +32,7 @@ function Column({ post }: { post: BlogPost }) {
       {post.subtitle && <p className="mt-1 text-mute">{post.subtitle}</p>}
       <Scorecard card={scorecard(post)} compact />
       <div className="prose-sm mt-4 max-h-[70vh] overflow-auto rounded-xl border border-edge bg-card p-4 text-sm">
-        <Markdown body={post.body} figure={(slot) => <p className="my-2 text-xs text-mute">[image: {slot}]</p>} sources={post.claims.map((c) => c.url)} />
+        <Markdown body={post.body} figure={(slot) => <p className="my-2 text-xs text-mute">[image: {slot}]</p>} sources={post.claims.map((c) => c.url)} linkFor={postLinkFor} />
       </div>
     </article>
   );
