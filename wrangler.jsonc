@@ -119,8 +119,7 @@
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
     // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
-    // Optional: OWNER_EMAIL (owner alerts go there, the owner's verified
-    // address), TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
+    // Optional: TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
     // pages render; the secret is TURNSTILE_SECRET_KEY).
   },
   // Secrets (`wrangler secret put <NAME>`, never in this file): AUTH_SECRET,
@@ -130,7 +129,8 @@
   // grader's captures on GitHub Actions; a fine-grained token for
   // n8watkins/portfolio-rank with Actions read and write only) and
   // TURNSTILE_SECRET_KEY (poll votes and grade requests; both Workers
-  // refuse them without it). See DEPLOY.md.
+  // refuse them without it) and OWNER_EMAIL (owner alerts go there, the
+  // owner's verified address). See DEPLOY.md.
   // The end-of-day run: Cloudflare's clock instead of GitHub's schedule,
   // which starts jobs hours late. Cron Triggers run in UTC; 03:30 is 20:30
   // in Los Angeles under daylight time and 04:30 under standard time, and
@@ -159,7 +159,9 @@
   // CachedPages entrypoint, so the public pages, sitemap, robots.txt and share image
   // cost no CPU time once cached, for visitors without PortfolioRank's own cookies.
   // The default entrypoint runs on every request and sends only those to CachedPages.
-  "cache": { "enabled": false },
+  // cross_version_cache: a deploy keeps the cached pages; the key carries a fingerprint
+  // of the static files instead, so new CSS or JavaScript still starts fresh.
+  "cache": { "enabled": false, "cross_version_cache": true },
   "exports": {
     "default": { "type": "worker", "cache": { "enabled": false } },
     "CachedPages": { "type": "worker", "cache": { "enabled": true } }
@@ -234,7 +236,7 @@
       // all call Gemini.
       "triggers": { "crons": [] },
       // The same edge cache as production (worker/edge-cache.ts).
-      "cache": { "enabled": false },
+      "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {
         "default": { "type": "worker", "cache": { "enabled": false } },
         "CachedPages": { "type": "worker", "cache": { "enabled": true } }
