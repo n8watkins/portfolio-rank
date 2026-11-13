@@ -1,6 +1,6 @@
 import { createClient, type Client } from "@libsql/client";
 import path from "path";
-import { SCHEMA_VERSION, migrate, schemaVersion } from "./schema.mjs";
+import { migrate, schemaIsCurrent } from "./schema.mjs";
 
 // Turso in production (TURSO_DATABASE_URL + TURSO_AUTH_TOKEN), a local
 // libSQL file in dev - same client, same SQL.
@@ -36,7 +36,7 @@ export function db(): Client {
 export function ensureSchema(): Promise<void> {
   if (!ready) {
     const attempt = (async () => {
-      if ((await schemaVersion(db())) >= SCHEMA_VERSION) return;
+      if (await schemaIsCurrent(db())) return;
       await migrate(db());
     })();
     ready = attempt;
