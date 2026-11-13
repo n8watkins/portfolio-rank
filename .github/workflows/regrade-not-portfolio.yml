@@ -10,6 +10,10 @@ name: Re-check non-ranked sites (recheck-543)
 #                    (no AI, no database writes); bundles are kept as
 #                    workflow artifacts, the screenshots go to R2 under
 #                    their own keys for the review page.
+#   recapture        capture again only the ids in `only` (comma-separated),
+#                    with the selection of capture_run, so ids stay the same;
+#                    kept as the artifact recheck-bundles-fix (pass the run as
+#                    fix_run to the gemini steps; it replaces those sites).
 #   gemini-dry-run   the request plan and today's gemini-3.1-flash-lite count.
 #   gemini           the plan on gemini-3.1-flash-lite: a hard stop at 230
 #                    HTTP requests and never past 480 on the model's quota
@@ -23,13 +27,21 @@ on:
   workflow_dispatch:
     inputs:
       step:
-        description: "capture, gemini-dry-run, gemini, queue-dry-run or queue"
+        description: "capture, recapture, gemini-dry-run, gemini, queue-dry-run or queue"
         required: true
         default: "gemini-dry-run"
         type: choice
-        options: ["capture", "gemini-dry-run", "gemini", "queue-dry-run", "queue"]
+        options: ["capture", "recapture", "gemini-dry-run", "gemini", "queue-dry-run", "queue"]
       capture_run:
-        description: "gemini steps: the run id of the capture"
+        description: "recapture and gemini steps: the run id of the capture"
+        required: false
+        default: ""
+      only:
+        description: "recapture: the site ids to capture again (X003,X023,...)"
+        required: false
+        default: ""
+      fix_run:
+        description: "gemini steps: the run id of a recapture, whose sites replace the capture's"
         required: false
         default: ""
       resume_run:
@@ -106,6 +118,40 @@ jobs:
           path: ${{ env.RECHECK_DIR }}/bundles/
           retention-days: 30
 
+  recapture:
+    if: inputs.step == 'recapture'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - if: inputs.capture_run == '' || inputs.only == ''
+        run: echo "capture_run and only are required" && exit 1
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v6
+        with:
+          name: recheck-selection
+          path: ${{ env.RECHECK_DIR }}
+          run-id: ${{ inputs.capture_run }}
+          github-token: ${{ github.token }}
+      - run: node scripts/experiments/recheck-543.mjs capture --only "${{ inputs.only }}"
+      - run: node scripts/experiments/recheck-543.mjs upload
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: recheck-bundles-fix
+          path: ${{ env.RECHECK_DIR }}/bundles/
+          retention-days: 30
+
   gemini:
     if: startsWith(inputs.step, 'gemini')
     runs-on: ubuntu-24.04
@@ -135,6 +181,13 @@ jobs:
           merge-multiple: true
           path: ${{ env.RECHECK_DIR }}/bundles
           run-id: ${{ inputs.capture_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v6
+        if: inputs.fix_run != ''
+        with:
+          name: recheck-bundles-fix
+          path: ${{ env.RECHECK_DIR }}/bundles
+          run-id: ${{ inputs.fix_run }}
           github-token: ${{ github.token }}
       - uses: actions/download-artifact@v6
         if: inputs.resume_run != ''

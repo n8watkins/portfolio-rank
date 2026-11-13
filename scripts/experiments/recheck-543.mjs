@@ -284,19 +284,30 @@ async function main() {
     const { execFileSync } = await import("child_process");
     const gh = (...a) => execFileSync("gh", ["run", "download", ...a], { stdio: "inherit" });
     const cap = opt("--capture-run");
+    const fix = opt("--fix-run");
     const gem = opt("--gemini-run");
-    if (!cap && !gem) throw new Error("fetch needs --capture-run N and/or --gemini-run N");
+    if (!cap && !gem && !fix) throw new Error("fetch needs --capture-run N, --fix-run N and/or --gemini-run N");
     if (cap) {
       gh(cap, "-n", "recheck-selection", "-D", DIR);
       gh(cap, "-p", "recheck-bundles-*", "-D", path.join(DIR, "dl"));
       for (const d of fs.readdirSync(path.join(DIR, "dl"))) fs.cpSync(path.join(DIR, "dl", d), path.join(DIR, "bundles"), { recursive: true });
       fs.rmSync(path.join(DIR, "dl"), { recursive: true, force: true });
-      console.log(`${capturedIds().length} gradable bundles in ${path.join(DIR, "bundles")}`);
     }
+    // A recapture replaces those sites' bundles (the whole folder, so no file of the old capture stays).
+    if (fix) {
+      gh(fix, "-n", "recheck-bundles-fix", "-D", path.join(DIR, "dl-fix"));
+      const root = path.join(DIR, "dl-fix", SET);
+      for (const id of fs.existsSync(root) ? fs.readdirSync(root) : []) {
+        fs.rmSync(path.join(DIR, "bundles", SET, id), { recursive: true, force: true });
+        fs.cpSync(path.join(root, id), path.join(DIR, "bundles", SET, id), { recursive: true });
+      }
+      fs.rmSync(path.join(DIR, "dl-fix"), { recursive: true, force: true });
+    }
+    if (cap || fix) console.log(`${capturedIds().length} gradable bundles in ${path.join(DIR, "bundles")}`);
     if (gem) gh(gem, "-n", "recheck-gemini31", "-D", DIR);
     return 0;
   }
-  console.error("usage: recheck-543.mjs <select|capture [--shard k/n]|upload|plan|gemini [--dry-run]|fetch --capture-run N [--gemini-run N]>");
+  console.error("usage: recheck-543.mjs <select|capture [--shard k/n]|upload|plan|gemini [--dry-run]|fetch [--capture-run N] [--fix-run N] [--gemini-run N]>");
   return 1;
 }
 
