@@ -9,7 +9,9 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
 import { eyebrow } from "@/components/ui/styles";
-import { loadProfile, type Profile } from "@/lib/profile";
+import { loadProfile, loadSeoExtras, profileJsonLd, type Profile } from "@/lib/profile";
+import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
+import { jsonLdHtml } from "@/lib/json-ld";
 import { FixList } from "@/components/profile/FixList";
 import { RecheckButton } from "@/components/profile/RecheckButton";
 
@@ -35,24 +37,28 @@ function seoTitle(p: Profile) {
   return `${p.name}${role ? `, ${cap(role)}` : ""} Portfolio | PortfolioRank`;
 }
 
-/** Graded and a real portfolio: the only profiles search engines are asked to index. */
-const indexable = (p: Profile) => Boolean(p.report?.isPortfolio);
+/** What search engines read about this profile: its own grade (an added site's too), plus the health check and social links. */
+async function seoFactsOf(p: Profile): Promise<SeoFacts> {
+  const { hidden, socials } = await loadSeoExtras(p.url);
+  return { name: p.name, url: p.url, domain: p.domain, tagline: p.tagline, report: p.report, hidden, socials };
+}
 
 export async function profileMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const p = await loadProfile(decodeURIComponent(slug));
   if (!p) return {};
   const canonical = `${SITE_URL}${p.path}`;
-  if (!indexable(p)) {
+  const facts = await seoFactsOf(p);
+  // Graded, a real portfolio and not hidden by the health check: the only profiles search engines are asked to index.
+  if (!indexable(facts)) {
     return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical } };
   }
   const title = seoTitle(p);
-  const roles = p.report?.roles ?? [];
-  const kind = roles.length ? `${roles.join(", ")} portfolio` : "developer portfolio";
-  const description = `${p.name}'s ${kind} at ${p.domain}${p.tagline ? `: ${p.tagline.replace(/\.$/, "")}` : ""}. On PortfolioRank.`;
+  // From the grade (lib/profile-seo.ts).
+  const description = profileDescription(facts);
   return {
     title,
-    description: description.slice(0, 300),
+    description,
     alternates: { canonical },
     openGraph: { title, description, url: canonical, type: "profile" },
     twitter: { card: "summary_large_image", title, description },
@@ -157,25 +163,12 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
   const p = await loadProfile(decodeURIComponent(slug));
   if (!p) notFound();
   const shot = await shotFor(p);
-  const jsonLd = indexable(p)
-    ? {
-        "@context": "https://schema.org",
-        "@type": "ProfilePage",
-        url: `${SITE_URL}${p.path}`,
-        name: seoTitle(p),
-        mainEntity: {
-          "@type": "Person",
-          name: p.name,
-          ...(p.report?.roles.length ? { jobTitle: p.report.roles[0] } : {}),
-          url: p.url,
-          sameAs: [p.url],
-        },
-      }
-    : null;
+  // A ProfilePage about the person and its breadcrumb trail, indexable profiles only (lib/profile-seo.ts).
+  const jsonLd = profileJsonLd(await seoFactsOf(p), { canonical: `${SITE_URL}${p.path}`, title: seoTitle(p) });
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 pb-12 pt-6 sm:px-6">
-      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />}
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />}
       <header className="card overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
           <div className="min-w-0">
