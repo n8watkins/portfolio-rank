@@ -1574,8 +1574,8 @@ test("busy Google at night: the Content stage pauses and drafts again later the 
 test("portfolio links: the writer points a named portfolio at its PortfolioRank page; sources and other links stay", () => {
   const body = "See [Top Person 1](https://top-1.dev) and [their site](https://www.top-1.dev/).\nA claim ([source](https://top-1.dev)).\nOur [leaderboard](https://portfoliorank.dev/top) and [elsewhere](https://example.com).";
   const out = linkPortfoliosToPages(body, ["https://top-1.dev"]);
-  assert.ok(out.includes("[Top Person 1](https://portfoliorank.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
-  assert.ok(out.includes("[their site](https://portfoliorank.dev/p/https%3A%2F%2Ftop-1.dev)"), out);
+  assert.ok(out.includes("[Top Person 1](https://portfoliorank.dev/p/top-1.dev)"), out);
+  assert.ok(out.includes("[their site](https://portfoliorank.dev/p/top-1.dev)"), out);
   assert.ok(out.includes("([source](https://top-1.dev))"), out);
   assert.ok(out.includes("[leaderboard](https://portfoliorank.dev/top)"), out);
   assert.ok(out.includes("[elsewhere](https://example.com)"), out);
