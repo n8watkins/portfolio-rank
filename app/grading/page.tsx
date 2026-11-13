@@ -104,16 +104,16 @@ export default async function GradingPage() {
             <table className="w-full min-w-[30rem] text-sm">
               <thead>
                 <tr className="border-b border-edge text-left text-xs uppercase tracking-wider text-mute">
-                  <th className="py-2 pr-3 font-medium">Tier</th>
+                  <th className="py-2 pl-2 pr-3 font-medium">Tier</th>
                   <th className="py-2 pr-3 font-medium">Who gets it</th>
-                  <th className="py-2 text-right font-medium">Today</th>
+                  <th className="py-2 pr-2 text-right font-medium">Today</th>
                 </tr>
               </thead>
               {FAMILIES.map((f) => (
                 <tbody key={f.family} className="border-b border-edge last:border-b-0">
                   {TIER_LADDER.filter((t) => familyOf(t.tier) === f.family).map((t, i) => (
                     <tr key={t.tier} className={f.family === "A" ? "bg-accent-soft" : undefined}>
-                      <td className={`py-1.5 pr-3 ${f.family === "A" ? "pl-2" : ""}`}>
+                      <td className="py-1.5 pl-2 pr-3">
                         <span className="flex items-center gap-3">
                           <TierBadge tier={t.tier} />
                           {(t.tier === "SSS" || i === (f.family === "S" ? 1 : 0)) && (
@@ -122,7 +122,7 @@ export default async function GradingPage() {
                         </span>
                       </td>
                       <td className="py-1.5 pr-3 text-mute">{t.note}</td>
-                      <td className={`py-1.5 text-right tabular-nums ${f.family === "A" ? "pr-2" : ""}`}>{live ? live.counts[t.tier].toLocaleString("en-US") : "-"}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{live ? live.counts[t.tier].toLocaleString("en-US") : "-"}</td>
                     </tr>
                   ))}
                 </tbody>

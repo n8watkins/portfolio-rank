@@ -212,7 +212,7 @@ function Row({ r, kind, hasMoves }: { r: Entry; kind: BoardKind; hasMoves: boole
             {r.elo ?? "-"}
           </span>
         )}
-        <span className="w-[4.75rem] shrink-0 text-right md:w-16">
+        <span className={`shrink-0 text-right md:w-16 ${kind === "rank" ? "w-[6.5rem]" : "w-[4.75rem]"}`}>
           <span className="block text-sm font-bold tabular-nums">
             <span className="sr-only">{scoreLabel(kind)} </span>
             {r.score}
