@@ -54,7 +54,8 @@ test("with RANKING_V2 off, no page shows tiers by ELO, though the tier data is t
   // The profile: the plain ELO, the AI review with Gemini's own letter (B), no tier card.
   const profile = await get(`/p/${encodeURIComponent(SITE)}`);
   assert.equal(profile.status, 200);
-  assert.match(profile.html, /ELO · \d+ votes?/);
+  // The profile in production (ELO · votes), or the new profile the test run turns on with TOOLS_ENABLED (#191).
+  assert.match(profile.html, /ELO · \d+ votes?|ELO <span[^>]*>\d+<\/span> from \d+ face-offs?/);
   assert.match(profile.html, /AI design review/);
   for (const m of TIER_MARKERS) assert.ok(!profile.html.includes(m), `profile shows "${m}"`);
 
