@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Gauge, ImageIcon, ListChecks, Mail, Newspaper, Vote } from "lucide-react";
+import { ArrowRight, Gauge, ImageIcon, ListChecks, Mail, Newspaper, ShieldCheck, Vote } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { requireAdmin } from "@/lib/admin";
 import { adminOverview } from "@/lib/admin/overview";
@@ -102,6 +102,7 @@ export default async function AdminIndex() {
             { value: n(o.gemini.used), label: "Gemini requests today" },
             { value: o.gemini.quota > 0 ? n(o.gemini.quota) : dash, label: "daily allowance" },
           ]}
+          links={[{ href: "/admin/limits", label: "Every free limit", icon: <ShieldCheck aria-hidden />, note: "Turso, R2, Workers and more" }]}
         />
         <Card
           href="/admin/images"
