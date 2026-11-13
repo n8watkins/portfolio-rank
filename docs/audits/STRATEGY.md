@@ -135,3 +135,6 @@ Each has a recommendation; "go with the picks" approves all of them.
 ### Now
 21. Resume the paused nightly run for its free work only (grading and all Gemini stay at 0). Pick: yes.
 22. Build the owner answer-key page. Pick: yes.
+
+### Domain
+23. Make the site address one setting now (links, sitemap, share cards, email sender), and move PortfolioRank to its own domain at go-live, before profiles are indexed, with portfoliorank.n8builds.dev redirecting and a "built by n8builds" link kept. Costs about $10 to $15 a year through Cloudflare Registrar. Pick: yes.
