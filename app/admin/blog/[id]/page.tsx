@@ -6,7 +6,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { getPost } from "@/lib/content/blog.mjs";
 import { Article } from "@/components/blog/Article";
 import { ReviewActions } from "@/components/admin/ReviewActions";
-import { StatusPill, closedReason, pacificTime, publishLabel } from "@/components/admin/postStatus";
+import { StatusPill, checksLine, closedReason, pacificTime, scheduledFor } from "@/components/admin/postStatus";
 import { relatedPortfolios } from "@/lib/blog-server";
 import type { BlogPost } from "@/lib/blog";
 import { scorecard } from "@/pipeline/content/scorecard.mjs";
@@ -59,14 +59,14 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
 
   const banner = (
     <div className="border-b border-edge bg-card/80 backdrop-blur">
-      <div className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-4 sm:px-6">
         <div className="min-w-0">
           <Link href="/admin/blog" className="inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
             <ArrowLeft className="h-4 w-4" aria-hidden /> Review queue
           </Link>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-mute">
             <StatusPill status={post.status} live={live} />
-            {post.status === "draft" && <span>{post.checks?.passed ? `Passed every check in ${post.checks.rounds ?? 1} round(s)` : "Did not pass its checks"} · {post.requests} Gemini requests</span>}
+            {post.status === "draft" && <span>{checksLine(post)} · {post.requests} Gemini requests</span>}
             {post.status === "published" && (
               <span>
                 {live ? "Live since" : "Goes live"} {pacificTime(post.publishAt!)} ·{" "}
@@ -78,7 +78,7 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
             {reason && post.status !== "draft" && post.status !== "published" && <span>{reason}</span>}
           </p>
         </div>
-        {["draft", "published", "rejected", "dropped"].includes(post.status) && <ReviewActions id={post.id} status={post.status} publishLabel={publishLabel(post, now)} />}
+        {["draft", "published", "rejected", "dropped"].includes(post.status) && <ReviewActions id={post.id} status={post.status} scheduledFor={scheduledFor(post, now)} />}
       </div>
     </div>
   );

@@ -3,6 +3,10 @@ import { readPublicFile } from "@/lib/publicFile";
 import { db, ensureSchema } from "@/lib/db";
 import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
 import { graderEnabled, readGradeShot } from "@/lib/grader/server";
+import { SITE_HOST } from "@/lib/site";
+import { reportTier } from "@/lib/tiers-letters.mjs";
+import { tiersShown } from "@/lib/tiers-view";
+import { familyOf, tierLabel } from "@/lib/tiers.mjs";
 
 // A grade report's share card: the site, its tier and "top N%", beside its
 // own screenshot. Like the report it is reached only through the report's
@@ -33,7 +37,12 @@ async function report(id: string) {
   if (!job || job.status !== "done" || !job.result?.tier) return null;
   const shot = job.shot_key ? await readGradeShot(String(job.shot_key), "hero.jpg").catch(() => null) : null;
   const pct = job.report?.percentile ?? null;
-  return { domain: domainOf(String(job.url)), tier: String(job.result.tier), pct: pct as { topPct: number; total: number } | null, shot };
+  // With tiers by ELO (RANKING_V2) the letter is the site's tier by ELO, or none (lib/tiers-letters.mjs); else Gemini's.
+  const tier = tiersShown() ? await reportTier(db(), { url: String(job.url), result: job.result }) : String(job.result.tier);
+  // What the tile draws: the letter as read (a real minus sign) and the family that colours it.
+  const letter = tier && tiersShown() ? tierLabel(tier) : tier;
+  const family = tier && tiersShown() ? (familyOf(tier) ?? "C") : tier;
+  return { domain: domainOf(String(job.url)), tier, letter, family, pct: pct as { topPct: number; total: number } | null, shot };
 }
 
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
@@ -48,9 +57,11 @@ export default async function Image({ params }: { params: Promise<{ id: string }
 
   const name = r ? r.domain : "Grade report";
   const tagline = r
-    ? r.pct
-      ? `Tier ${r.tier}, top ${r.pct.topPct}% of ${r.pct.total.toLocaleString("en-US")} graded developer portfolios.`
-      : `Tier ${r.tier} on PortfolioRank's grade for developer portfolios.`
+    ? !r.tier
+      ? "Graded on PortfolioRank: what a hiring manager sees and what to fix first."
+      : r.pct
+        ? `Tier ${r.letter}, top ${r.pct.topPct}% of ${r.pct.total.toLocaleString("en-US")} graded developer portfolios.`
+        : `Tier ${r.letter} on PortfolioRank's grade for developer portfolios.`
     : "How good is your portfolio? A grade, your rank and what to fix first.";
 
   const card = shareCard({
@@ -69,7 +80,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     ],
     logo: dataUrl(mark, "image/svg+xml"),
     n8Icon: dataUrl(n8, "image/png"),
-    host: "portfoliorank.n8builds.dev",
+    host: SITE_HOST,
     name,
     nameSize: name.length > 22 ? 46 : name.length > 14 ? 58 : 72,
     nameTracking: -1.6,
@@ -87,7 +98,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         ) : (
           <div style={{ display: "flex", width: 640, height: 400, borderRadius: 18, border: "1.5px solid #26262b", background: "#121215" }} />
         )}
-        {r && (
+        {r?.tier && (
           <div
             style={{
               display: "flex",
@@ -99,15 +110,15 @@ export default async function Image({ params }: { params: Promise<{ id: string }
               borderRadius: 30,
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 76,
+              fontSize: (r.letter ?? "").length > 2 ? 46 : (r.letter ?? "").length > 1 ? 62 : 76,
               fontWeight: 800,
-              background: TIER_BG[r.tier] ?? TIER_BG.C,
-              color: TIER_INK[r.tier] ?? TIER_INK.C,
-              border: `3px solid ${r.tier === "S" ? "#0a0a0b" : amber}`,
+              background: TIER_BG[r.family ?? ""] ?? TIER_BG.C,
+              color: TIER_INK[r.family ?? ""] ?? TIER_INK.C,
+              border: `3px solid ${r.family === "S" ? "#0a0a0b" : amber}`,
               boxShadow: "0 18px 40px rgba(0,0,0,0.5)",
             }}
           >
-            {r.tier}
+            {r.letter}
           </div>
         )}
       </div>

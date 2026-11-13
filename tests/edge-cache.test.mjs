@@ -2,9 +2,9 @@
 // answered from Workers Cache, and which responses may be kept there.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { forEdge, mayUseEdgeCache, probeAnswer, ttlFor } from "../worker/edge-cache.ts";
+import { appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswer, profileTag, tagsFor, ttlFor } from "../worker/edge-cache.ts";
 
-const HOST = "portfoliorank.n8builds.dev";
+const HOST = "portfoliorank.dev";
 const BASE = `https://${HOST}`;
 
 const get = (path, headers = {}) => new Request(`${BASE}${path}`, { headers });
@@ -16,7 +16,7 @@ test("public pages, sitemap, robots.txt and the share image may be cached", () =
 });
 
 test("the API, grade reports, personal pages and the admin never are", () => {
-  for (const path of ["/api/polls", "/api/polls/mine", "/api/leaderboard", "/grade", "/grade/abc", "/me", "/profile", "/settings", "/votes", "/claim", "/admin/images", "/report/print", "/p/a/b"]) {
+  for (const path of ["/api/polls", "/api/polls/mine", "/api/leaderboard", "/grade", "/grade/abc", "/me", "/profile", "/settings", "/votes", "/claim", "/admin/images", "/report/print", "/og/x"]) {
     assert.equal(mayUseEdgeCache(get(path), HOST), false, path);
   }
 });
@@ -37,7 +37,7 @@ test("a visitor with any of PortfolioRank's cookies always reaches the app", () 
 test("only GET and HEAD on the site's own host, without auth or RSC headers", () => {
   assert.equal(mayUseEdgeCache(new Request(`${BASE}/`, { method: "POST" }), HOST), false);
   assert.equal(mayUseEdgeCache(new Request(`${BASE}/`, { method: "HEAD" }), HOST), true);
-  assert.equal(mayUseEdgeCache(new Request("https://staging.portfoliorank.n8builds.dev/"), HOST), false);
+  assert.equal(mayUseEdgeCache(new Request("https://staging.portfoliorank.dev/"), HOST), false);
   assert.equal(mayUseEdgeCache(get("/", { authorization: "Bearer x" }), HOST), false);
   assert.equal(mayUseEdgeCache(get("/", { rsc: "1" }), HOST), false);
   assert.equal(mayUseEdgeCache(get("/", { "next-router-prefetch": "1" }), HOST), false);
@@ -69,4 +69,87 @@ test("scanner probes get a plain 404; real paths and .well-known are left alone"
   for (const path of ["/", "/top", "/.well-known/security.txt", "/healthz", "/p/x"]) {
     assert.equal(probeAnswer(get(path)), null, path);
   }
+});
+
+test("profiles and the blog are kept a day, stale for a week, and tagged for purging", () => {
+  const url = "https://example.com";
+  const profile = forEdge(get(`/p/${encodeURIComponent(url)}`), new Response("x"));
+  assert.equal(profile.headers.get("Cloudflare-CDN-Cache-Control"), "public, max-age=86400, stale-while-revalidate=604800");
+  assert.equal(profile.headers.get("Cache-Tag"), `profiles,${profileTag(url)}`);
+  for (const path of ["/blog", "/blog/a-post", "/blog/tag/react", "/blog/rss.xml"]) {
+    assert.equal(mayUseEdgeCache(get(path), HOST), true, path);
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["blog"], path);
+  }
+  // Blog images cache themselves; deeper paths and the bare /blog/media are not pages.
+  for (const path of ["/blog/media", "/blog/media/abc/hero", "/blog/tag", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
+  // The short-lived pages keep their five minutes and carry no tags.
+  const home = forEdge(get("/"), new Response("x"));
+  assert.equal(home.headers.get("Cache-Tag"), null);
+  // A failed render is never kept, so it carries no tag either.
+  assert.equal(forEdge(get("/p/x"), new Response("x", { status: 500 })).headers.get("Cache-Tag"), null);
+});
+
+test("a profile's tag is stable and differs between sites", () => {
+  assert.match(profileTag("https://example.com"), /^p:[0-9a-f]{8}$/);
+  assert.equal(profileTag("https://example.com"), profileTag("https://example.com"));
+  assert.notEqual(profileTag("https://example.com"), profileTag("https://example.org"));
+  // An undecodable slug still gets the bulk tag.
+  assert.deepEqual(tagsFor("/p/%E0%A4%A"), ["profiles"]);
+});
+
+test("the cache key: profiles and the blog drop their query; every key carries the build's static files", () => {
+  const key = (path) => new URL(edgeRequest(get(path), "abc123").url);
+  assert.equal(key("/p/x?utm_source=hn&a=1").search, "?__a=abc123");
+  assert.equal(key("/blog/a-post?ref=x").search, "?__a=abc123");
+  // Other pages keep theirs: /play?mode=guess is a different page.
+  assert.equal(key("/play?mode=guess").searchParams.get("mode"), "guess");
+  assert.equal(key("/play?mode=guess").searchParams.get("__a"), "abc123");
+  // Inside CachedPages the app sees the address without the fingerprint.
+  assert.equal(appRequest(edgeRequest(get("/play?mode=guess"), "abc123")).url, `${BASE}/play?mode=guess`);
+  assert.equal(appRequest(edgeRequest(get("/p/x?utm=1"), "abc123")).url, `${BASE}/p/x`);
+});
+
+test("share images are made once per change: kept like their page, tagged with it, their ?hash ignored", () => {
+  const url = "https://example.com";
+  const slug = encodeURIComponent(url);
+  for (const path of [`/p/${slug}/opengraph-image`, `/p/${slug}/twitter-image`]) {
+    assert.equal(mayUseEdgeCache(get(`${path}?c399de7409d3d8cb`), HOST), true, path);
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["profiles", profileTag(url)], path);
+    assert.equal(new URL(edgeRequest(get(`${path}?c399de7409d3d8cb`), "abc").url).search, "?__a=abc");
+  }
+  for (const path of ["/blog/a-post/opengraph-image", "/blog/a-post/twitter-image"]) {
+    assert.equal(ttlFor(path), 86400, path);
+    assert.deepEqual(tagsFor(path), ["blog"], path);
+  }
+  assert.equal(ttlFor("/twitter-image"), 86400);
+  // Grade reports' images stay private and uncached; other deeper paths are not pages.
+  for (const path of ["/grade/abc/opengraph-image", "/og/p", "/og/x", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
+});
+
+test("a profile's encoded and readable addresses, and its share image, carry one tag: the one its purge sends", () => {
+  const forms = {
+    "https://janedoe.dev": ["/p/https%3A%2F%2Fjanedoe.dev", "/p/janedoe.dev", "/og/p/janedoe.dev", "/p/https%3A%2F%2Fjanedoe.dev/opengraph-image"],
+    "https://www.Jane.github.io/Portfolio/": ["/p/https%3A%2F%2Fwww.Jane.github.io%2FPortfolio%2F", "/p/jane.github.io/Portfolio", "/og/p/jane.github.io/Portfolio"],
+    "http://caf%C3%A9.example/caf%C3%A9": ["/p/http%3A%2F%2Fcaf%25C3%25A9.example%2Fcaf%25C3%25A9", "/p/caf%C3%A9.example/caf%C3%A9"],
+  };
+  for (const [url, paths] of Object.entries(forms)) {
+    for (const path of paths) {
+      assert.equal(ttlFor(path), 86400, path);
+      assert.equal(mayUseEdgeCache(get(path), HOST), true, path);
+      assert.deepEqual(tagsFor(path), ["profiles", profileTag(url)], path);
+    }
+  }
+  // The scheme, www, the case and a trailing slash don't make a different site.
+  assert.equal(profileTag("http://www.example.com/"), profileTag("https://example.com"));
+  assert.notEqual(profileTag("https://example.com/a"), profileTag("https://example.com"));
+  // The sitemap index's parts are kept like the index, an hour; nothing else under /sitemap is.
+  for (const path of ["/sitemap/pages.xml", "/sitemap/blog.xml", "/sitemap/profiles-12.xml"]) {
+    assert.equal(ttlFor(path), 3600, path);
+    assert.deepEqual(tagsFor(path), [], path);
+  }
+  for (const path of ["/sitemap", "/sitemap/a/b.xml", "/sitemap/x.txt"]) assert.equal(ttlFor(path), 0, path);
+  // A readable address keeps its query out of the key like any profile.
+  assert.equal(new URL(edgeRequest(get("/p/jane.github.io/portfolio?ref=x"), "abc").url).search, "?__a=abc");
 });

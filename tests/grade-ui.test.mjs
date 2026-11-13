@@ -15,6 +15,7 @@ import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
 import { CELEBRATIONS, celebrationLevel } from "../lib/grader/present.mjs";
 import { NO_TOKEN_REASON } from "../lib/grader/dispatch.mjs";
+import { listen } from "./helpers/listen.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -45,7 +46,7 @@ before(async () => {
       res.writeHead(404).end();
     });
   });
-  await new Promise((r) => mock.listen(MOCK_PORT, "127.0.0.1", r));
+  await listen(mock, MOCK_PORT);
   for (let i = 0; i < 60; i++) {
     try {
       if ((await fetch(BASE + "/api/rank")).ok) break;
@@ -183,6 +184,45 @@ test("grade yours: the form, the progress page, then the report as approved", { 
   assert.equal(og.headers()["content-type"], "image/png");
   assert.match(og.headers()["cache-control"], /^private/);
 
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test("Cloudflare's checkbox: the grade waits for the tick, says so, then sends its token", { skip: !grading }, async () => {
+  const { page: p, context, errors } = await freshPage(1280);
+  // A stand-in for Turnstile that asks for a tick (before-interactive-callback)
+  // and gives its token only when the test ticks; Turnstile.tsx uses an
+  // existing window.turnstile instead of loading Cloudflare's script.
+  await p.addInitScript(() => {
+    window.turnstile = {
+      render(el, opts) {
+        el.textContent = "Verify you are human";
+        setTimeout(() => opts["before-interactive-callback"]?.(), 50);
+        window.__tick = () => opts.callback("ticked-token");
+        return "w1";
+      },
+      reset() {},
+      remove() {},
+    };
+  });
+  const posts = [];
+  await p.route("**/api/grade", (route) => {
+    posts.push(route.request().postDataJSON());
+    return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "bad_request", message: "Stopped by the test." }) });
+  });
+  await p.goto(BASE + "/grade");
+  const form = p.locator("#grade form");
+  await form.getByLabel("Your portfolio address").fill(`tick-${RUN}.example.dev`);
+  await form.getByRole("button", { name: "Grade it" }).click();
+  await form.getByText(/tick the box and your grade starts/).waitFor();
+  // Past the few seconds an invisible check gets, nothing was sent without a token.
+  await p.waitForTimeout(6000);
+  assert.equal(posts.length, 0);
+  await p.evaluate(() => window.__tick());
+  await form.getByText("Stopped by the test.").waitFor();
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].turnstileToken, "ticked-token");
+  assert.equal(await form.getByText(/tick the box/).count(), 0);
   assert.deepEqual(errors, []);
   await context.close();
 });

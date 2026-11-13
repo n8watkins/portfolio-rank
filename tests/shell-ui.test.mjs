@@ -9,6 +9,8 @@ import { sessionToken } from "./helpers/session.mjs";
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 // "Grade yours" is in the shell only while grading is on (lib/nav.ts ROUTES.grade).
 const grading = process.env.GRADER_ENABLED === "true";
+// "Add your portfolio" (TOOLS_ENABLED): the header is Play, Top and Blog, the phone bar Play, Top, Add and More.
+const adding = process.env.TOOLS_ENABLED === "true";
 let browser;
 
 before(async () => {
@@ -54,8 +56,8 @@ test("desktop header: one Main nav, the current page marked, the maker link name
   const nav = banner.getByRole("navigation", { name: "Main" });
   await nav.waitFor();
   // Blog joins at the end once a post is published (components/shell/useBlogLive.tsx), which depends on what other tests stored.
-  assert.deepEqual((await nav.getByRole("link").allTextContents()).filter((t) => t !== "Blog"), ["Leaderboard", "Play", "Browse"]);
-  assert.equal(await nav.getByRole("link", { name: "Leaderboard" }).getAttribute("aria-current"), "page");
+  assert.deepEqual((await nav.getByRole("link").allTextContents()).filter((t) => t !== "Blog"), adding ? ["Play", "Top"] : ["Leaderboard", "Play", "Browse"]);
+  assert.equal(await nav.getByRole("link", { name: adding ? "Top" : "Leaderboard" }).getAttribute("aria-current"), "page");
   assert.equal(await nav.getByRole("link", { name: "Play" }).getAttribute("aria-current"), null);
   // Every link in the shell goes somewhere that exists.
   for (const href of await page.locator("header a[href^='/'], footer a[href^='/'], nav a[href^='/']").evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute("href")))])) {
@@ -151,9 +153,10 @@ test("phones: a bottom tab bar with More, which holds settings and sign-in; the 
   await tabs.waitFor();
   assert.deepEqual(
     (await tabs.locator("a, button").allTextContents()).map((t) => t.trim()),
-    grading ? ["Top", "Play", "Grade", "Browse", "More"] : ["Top", "Play", "Browse", "More"]
+    adding ? ["Play", "Top", "Add", "More"] : grading ? ["Top", "Play", "Grade", "Browse", "More"] : ["Top", "Play", "Browse", "More"]
   );
-  if (grading) assert.equal(await tabs.getByRole("link", { name: "Grade" }).getAttribute("href"), "/grade");
+  if (adding) assert.equal(await tabs.getByRole("link", { name: "Add" }).getAttribute("href"), "/add");
+  else if (grading) assert.equal(await tabs.getByRole("link", { name: "Grade" }).getAttribute("href"), "/grade");
   assert.equal(await tabs.getByRole("link", { name: "Top" }).getAttribute("aria-current"), "page");
   // Every tab is a 44px-plus target, and the bar sits at the bottom edge.
   const boxes = await tabs.locator("a, button").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
@@ -269,7 +272,8 @@ test("email sign-up: input and button are separate, side by side when wide, stac
       assert.equal(nested, false, `button sits in a bordered wrapper at ${width}px`);
       const i = await input.boundingBox();
       const b = await button.boundingBox();
-      assert.ok(i.height >= 44 && b.height >= 44, `44px targets at ${width}px: ${JSON.stringify({ i, b })}`);
+      // Rounded: layout can put a 44px box at 43.9998px (subpixel positions).
+      assert.ok(Math.round(i.height) >= 44 && Math.round(b.height) >= 44, `44px targets at ${width}px: ${JSON.stringify({ i, b })}`);
       const formWidth = (await form.boundingBox()).width;
       if (formWidth >= 384) {
         // Within a pixel: layout lands on half pixels.

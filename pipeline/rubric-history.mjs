@@ -9,21 +9,11 @@
 //                        version (pipeline/rubric.mjs RUBRIC_VERSION); lowest
 //                        priority, and only when RUBRIC_REGRADE is "true"
 
+import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { ACTIVE } from "./roster.mjs";
 
 export async function ensureRubricHistory(db) {
-  await db.execute(`CREATE TABLE IF NOT EXISTS rubric_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    url TEXT NOT NULL,
-    model TEXT,
-    tier TEXT,
-    is_portfolio INTEGER,
-    rubric TEXT NOT NULL,
-    judged_at TEXT,
-    replaced_at TEXT NOT NULL,
-    replaced_by_model TEXT
-  )`);
-  await db.execute("CREATE INDEX IF NOT EXISTS rubric_history_url_idx ON rubric_history (url)");
+  await applyTables(db, RUBRIC_HISTORY_TABLES);
 }
 
 /** Parse a stored rubric; null for missing, unparseable or error sentinels. */
