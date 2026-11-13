@@ -220,3 +220,35 @@ test("the daily run purges exactly the profiles whose letter changed, by their t
   assert.equal(await purgeProfilesOf([url(1)], async () => { throw new Error("down"); }, profileTag), 0);
   assert.equal(await purgeProfilesOf([url(1)], undefined, profileTag), 0);
 });
+
+test("the daily run promotes to S on 3 wins in the top 1%, and takes it away when the site falls out", async () => {
+  const client = await db();
+  await library(client, 300);
+  const tierOfUrl = async (u) => String((await client.execute({ sql: "SELECT tier FROM tier_ratings WHERE url = ?", args: [u] })).rows[0].tier);
+  await dailyTiers(client);
+  assert.equal(await tierOfUrl(url(0)), "A+", "no S at the start");
+  // Three wins over sites near the bottom: still in the top 1% (3 places of 300), now S.
+  for (let k = 0; k < 3; k++) await applyFaceoff(client, { winner: url(0), loser: url(290 + k) });
+  assert.equal(Number((await readSiteRow(client, url(0))).wins), 3);
+  await dailyTiers(client);
+  const meta = await readTierMeta(client);
+  assert.deepEqual(meta.sBand.holders, [url(0)]);
+  assert.equal(await tierOfUrl(url(0)), "SSS");
+  assert.equal(standingOf(await readSiteRow(client, url(0)), meta).tier, "SSS");
+  // AI wins count a quarter: eleven are not enough for place 1.
+  for (let k = 0; k < 11; k++) await applyFaceoff(client, { winner: url(1), loser: url(280 + k), rater: "ai" });
+  await dailyTiers(client);
+  assert.equal(await tierOfUrl(url(1)), "A+");
+  // Losses push site 0 out of the top 1%: it loses S at the next daily run.
+  for (let k = 0; k < 12; k++) await applyFaceoff(client, { winner: url(250 + k), loser: url(0) });
+  await dailyTiers(client);
+  const row = await readSiteRow(client, url(0));
+  assert.equal(row.wins, 3);
+  assert.notEqual(await tierOfUrl(url(0)), "SSS");
+  assert.ok(!(await readTierMeta(client)).sBand?.holders?.includes(url(0)));
+  // Undo takes a win back.
+  await applyFaceoff(client, { winner: url(5), loser: url(6), voteId: 77 });
+  assert.equal((await readSiteRow(client, url(5))).wins, 1);
+  await undoFaceoff(client, { voteId: 77, winner: url(5), loser: url(6) });
+  assert.equal((await readSiteRow(client, url(5))).wins, 0);
+});
