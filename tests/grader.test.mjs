@@ -21,7 +21,8 @@ import { DEFAULT_EMAIL_CAPS, addressHash, capReason, createEmailGate, emailCapCo
 import { buildReport, compareWithPool, gradedPool, strengthsAndFixes } from "../lib/grader/report.mjs";
 import { completeJob, recordCapture } from "../lib/grader/finish.mjs";
 import { checkOwnKey, gradeOnOwnKey, validOwnKey } from "../lib/grader/own-key.mjs";
-import { queueFreeGrade } from "../lib/grader/queue.mjs";
+import { queueFreeGrade } from "../lib/grader/free-grade.mjs";
+import { enqueueFreeGrade } from "../lib/grader/queue.mjs";
 import { publicJob } from "../lib/grader/view.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
@@ -385,7 +386,10 @@ test("email transport: the send_email binding from EMAIL_FROM; the test outbox i
   assert.deepEqual(sent[0].from, { email: "portfoliorank@n8builds.dev", name: "PortfolioRank" });
   assert.equal(emailTransport({ SEND_EMAIL: { send() {} } }), null, "no sender address, no transport");
   assert.equal(emailTransport({}), null);
-  assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "production" }, { db: {} }), /test runs only/);
+  for (const SITE_ENV of ["production", "staging", undefined, "Production", "prod"]) {
+    assert.throws(() => emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV }, { db: {} }), /test runs only/, String(SITE_ENV));
+  }
+  assert.equal(emailTransport({ EMAIL_TRANSPORT: "outbox", SITE_ENV: "test" }, { db: {} }).name, "outbox");
   for (const bad of ["a@b", "a b@example.com", "a@example.com\nBcc: x@example.com", "<a@example.com>", "a@example.com, b@example.com"]) assert.equal(validEmail(bad), null, bad);
   assert.equal(validEmail(" jane.doe+pr@example.co.uk "), "jane.doe+pr@example.co.uk");
 });
@@ -618,6 +622,35 @@ test("free tier: a spent quota queues the grade (no 3.1), and the hourly drain f
   assert.equal(noKey.calls.length, 0);
 });
 
+test("free tier from a visitor only enqueues: no Gemini call, the job is queued, and the hourly drain grades it", async () => {
+  const db = await tempDb();
+  const { id } = await capturedJob(db);
+  const realFetch = globalThis.fetch;
+  let fetched = 0;
+  globalThis.fetch = async () => {
+    fetched++;
+    throw new Error("a visitor's request must not fetch");
+  };
+  let out;
+  try {
+    out = await enqueueFreeGrade(db, await readJob(db, id), { now: T0 });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(fetched, 0);
+  assert.equal(out.status, "queued");
+  let job = await readJob(db, id);
+  assert.equal(job.status, "queued");
+  assert.equal(Number(job.people_request_id), out.requestId);
+  const drain = peopleCtx(db, { respond: () => gemini200(answer({ tier: "B" })) });
+  drain.clock.t = T0 + 3600000;
+  assert.deepEqual(await drainPeopleQueue(drain.ctx), { done: 1, queued: 0, failed: 0 });
+  assert.equal(drain.calls.length, 1, "the drain, not the visitor, makes the one Gemini request");
+  job = await readJob(db, id);
+  assert.equal(job.status, "done");
+  assert.equal(job.result.facts.motion, true, "motion from the capture reaches the grade");
+});
+
 test("own-key jobs wait for the visitor's key after the capture; completing one writes no request log row", async () => {
   const db = await tempDb();
   const { id, status } = await capturedJob(db, { ownKey: true });
@@ -636,7 +669,7 @@ test("own-key jobs wait for the visitor's key after the capture; completing one 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-test("config: the grader is off in production and on in staging, the tick is scheduled in production only, email has its binding and sender", async () => {
+test("config: the grader is off in production and on in staging, the tick is scheduled on both, email has its binding and sender", async () => {
   const { parseJsonc } = await import("../scripts/check-worker-exports.mjs");
   const config = parseJsonc(fs.readFileSync("wrangler.jsonc", "utf8"));
   assert.equal(config.vars.GRADER_ENABLED, "false");
@@ -646,7 +679,7 @@ test("config: the grader is off in production and on in staging, the tick is sch
     assert.deepEqual(env.send_email, [{ name: "SEND_EMAIL" }]);
   }
   assert.ok(config.triggers.crons.includes("*/5 * * * *"));
-  assert.deepEqual(config.env.staging.triggers.crons, []);
+  assert.ok(config.env.staging.triggers.crons.includes("*/30 * * * *"), "staging ticks every 30 minutes (worker/crons.ts)");
   const workflow = fs.readFileSync(".github/workflows/grade.yml", "utf8");
   assert.match(workflow, /on:\n  workflow_dispatch:\n\n/, "no inputs: the run's page is public");
   assert.doesNotMatch(workflow, /schedule:|inputs\./);

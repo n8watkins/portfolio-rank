@@ -80,7 +80,7 @@ export function buildOutlineRequest(sheet, problems = [], previous = null) {
     json(sheetForWriter(sheet)),
     "</fact_sheet>",
   ].join("\n");
-  return { parts: [{ text }], schema: OUTLINE_SCHEMA, options: STAGE_OPTIONS };
+  return { parts: [{ text }], schema: OUTLINE_SCHEMA, options: { ...STAGE_OPTIONS, prompt: "content-outline-v1" } };
 }
 
 /** Structure checks on an outline: problems as strings (empty means fine). */
@@ -138,7 +138,7 @@ export function buildSectionsRequest(sheet, outline, indexes) {
       return ["", `<section n="${i + 1}">`, `subhead: ${s.subhead}`, `intent: ${s.intent}`, "facts:", json(factsFor(sheet, s.fact_ids)), "</section>"];
     }),
   ].join("\n");
-  return { parts: [{ text }], schema: SECTIONS_SCHEMA, options: STAGE_OPTIONS };
+  return { parts: [{ text }], schema: SECTIONS_SCHEMA, options: { ...STAGE_OPTIONS, prompt: "content-sections-v1" } };
 }
 
 export function buildFinishRequest(sheet, outline, sections) {
@@ -153,7 +153,7 @@ export function buildFinishRequest(sheet, outline, sections) {
     json(sheetForWriter(sheet)),
     "</fact_sheet>",
   ].join("\n");
-  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: { ...OPTIONS, maxOutputTokens: 4096 } };
+  return { parts: [{ text }], schema: RESPONSE_SCHEMA, options: { ...OPTIONS, maxOutputTokens: 4096, prompt: "content-finish-v1" } };
 }
 
 /**

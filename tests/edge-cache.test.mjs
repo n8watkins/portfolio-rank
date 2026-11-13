@@ -16,7 +16,7 @@ test("public pages, sitemap, robots.txt and the share image may be cached", () =
 });
 
 test("the API, grade reports, personal pages and the admin never are", () => {
-  for (const path of ["/api/polls", "/api/polls/mine", "/api/leaderboard", "/grade", "/grade/abc", "/me", "/profile", "/settings", "/votes", "/claim", "/admin/images", "/report/print", "/p/a/b"]) {
+  for (const path of ["/api/polls", "/api/polls/mine", "/api/leaderboard", "/grade", "/grade/abc", "/me", "/profile", "/settings", "/votes", "/claim", "/admin/images", "/report/print", "/og/x"]) {
     assert.equal(mayUseEdgeCache(get(path), HOST), false, path);
   }
 });
@@ -125,5 +125,31 @@ test("share images are made once per change: kept like their page, tagged with i
   }
   assert.equal(ttlFor("/twitter-image"), 86400);
   // Grade reports' images stay private and uncached; other deeper paths are not pages.
-  for (const path of ["/grade/abc/opengraph-image", "/p/x/other", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
+  for (const path of ["/grade/abc/opengraph-image", "/og/p", "/og/x", "/blog/a/b"]) assert.equal(ttlFor(path), 0, path);
+});
+
+test("a profile's encoded and readable addresses, and its share image, carry one tag: the one its purge sends", () => {
+  const forms = {
+    "https://janedoe.dev": ["/p/https%3A%2F%2Fjanedoe.dev", "/p/janedoe.dev", "/og/p/janedoe.dev", "/p/https%3A%2F%2Fjanedoe.dev/opengraph-image"],
+    "https://www.Jane.github.io/Portfolio/": ["/p/https%3A%2F%2Fwww.Jane.github.io%2FPortfolio%2F", "/p/jane.github.io/Portfolio", "/og/p/jane.github.io/Portfolio"],
+    "http://caf%C3%A9.example/caf%C3%A9": ["/p/http%3A%2F%2Fcaf%25C3%25A9.example%2Fcaf%25C3%25A9", "/p/caf%C3%A9.example/caf%C3%A9"],
+  };
+  for (const [url, paths] of Object.entries(forms)) {
+    for (const path of paths) {
+      assert.equal(ttlFor(path), 86400, path);
+      assert.equal(mayUseEdgeCache(get(path), HOST), true, path);
+      assert.deepEqual(tagsFor(path), ["profiles", profileTag(url)], path);
+    }
+  }
+  // The scheme, www, the case and a trailing slash don't make a different site.
+  assert.equal(profileTag("http://www.example.com/"), profileTag("https://example.com"));
+  assert.notEqual(profileTag("https://example.com/a"), profileTag("https://example.com"));
+  // The sitemap index's parts are kept like the index, an hour; nothing else under /sitemap is.
+  for (const path of ["/sitemap/pages.xml", "/sitemap/blog.xml", "/sitemap/profiles-12.xml"]) {
+    assert.equal(ttlFor(path), 3600, path);
+    assert.deepEqual(tagsFor(path), [], path);
+  }
+  for (const path of ["/sitemap", "/sitemap/a/b.xml", "/sitemap/x.txt"]) assert.equal(ttlFor(path), 0, path);
+  // A readable address keeps its query out of the key like any profile.
+  assert.equal(new URL(edgeRequest(get("/p/jane.github.io/portfolio?ref=x"), "abc").url).search, "?__a=abc");
 });

@@ -2,7 +2,7 @@
 // against the running production build (scripts/test-e2e.sh, which sets
 // ADMIN_GITHUB_ID): only that account may read it, and it lists
 // drafts with their fact sheet, checks and images, plus the content runs
-// and the current CONTENT_MODE ("off" unless set).
+// and the current CONTENT_MODE ("dry-run" in the test run, as in production).
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
@@ -67,7 +67,7 @@ test("admin content API: drafts with their fact sheet, checks and images; droppe
   const res = await get(cookie);
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.equal(body.mode, "off");
+  assert.equal(body.mode, "dry-run", "scripts/test-e2e.sh runs with production's CONTENT_MODE");
   const mine = body.posts.find((p) => p.id === id);
   assert.ok(mine, "the draft is listed");
   assert.equal(mine.status, "draft");

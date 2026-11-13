@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { AdminHeader } from "@/components/admin/AdminHeader";
 import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { getPost } from "@/lib/content/blog.mjs";
@@ -47,18 +47,14 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
   const [pa, pb] = (await Promise.all([getPost(client, a!), getPost(client, b!)])) as (BlogPost | null)[];
   if (!pa || !pb) notFound();
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-      <div className="py-6">
-        <Link href="/admin/blog" className="inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-mute hover:text-ink">
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Blog drafts
-        </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Compare drafts</h1>
-        <p className="mt-1 text-sm text-mute">{pa.kind === pb.kind ? `Both on ${pa.kind}.` : `Different stories: ${pa.kind} and ${pb.kind}.`}</p>
-      </div>
+    <>
+      <AdminHeader title="Compare drafts" back={{ href: "/admin/blog", label: "Blog drafts" }}>
+        {pa.kind === pb.kind ? `Both on ${pa.kind}.` : `Different stories: ${pa.kind} and ${pb.kind}.`}
+      </AdminHeader>
       <div className="grid gap-8 lg:grid-cols-2">
         <Column post={pa} />
         <Column post={pb} />
       </div>
-    </div>
+    </>
   );
 }
