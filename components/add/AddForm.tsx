@@ -118,7 +118,7 @@ export function AddForm({ initialUrl = "" }: { initialUrl?: string }) {
         </p>
       )}
       <p id={`${id}-note`} className="mt-2.5 text-xs text-mute">
-        Free, no account. Your site is added to PortfolioRank and stays private until it&apos;s graded.
+        Free, no account. Your site is added to PortfolioRank; its page stays unlisted and out of search engines until it&apos;s graded.
       </p>
       {turnstile}
       {needsTick && (
