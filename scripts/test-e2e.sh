@@ -77,9 +77,13 @@ rm -rf "$GRADER_TEST_SHOTS_DIR"
 export LOCAL_DB_FILE="$DB" E2E_DB_URL="file:$DB"
 export E2E_SERVER_LOG="${E2E_SERVER_LOG:-${TMPDIR:-/tmp}/portfolio-rank-e2e-$PORT.log}"
 [ "${E2E_SKIP_BUILD:-}" = 1 ] || npx next build
-node node_modules/next/dist/bin/next start -p "$PORT" > "$E2E_SERVER_LOG" 2>&1 &
+# Its own process group (setsid), so the cleanup below also stops what it
+# started, such as the local workerd behind the Cloudflare context, which
+# otherwise outlives the run holding ports 9229 to 9232.
+own_group=$(command -v setsid || true)
+$own_group node node_modules/next/dist/bin/next start -p "$PORT" > "$E2E_SERVER_LOG" 2>&1 &
 server=$!
-trap 'kill $server 2>/dev/null || true; rm -f "$DB"*; rm -rf "$GRADER_TEST_SHOTS_DIR"' EXIT
+trap 'kill -- -$server 2>/dev/null || kill $server 2>/dev/null || true; rm -f "$DB"*; rm -rf "$GRADER_TEST_SHOTS_DIR"' EXIT
 # Wait for our own server. If it exited (say the port was taken between the
 # pick and the start), stop rather than test whatever else listens there.
 for _ in $(seq 1 120); do
@@ -92,4 +96,6 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 echo "e2e: app on port $PORT, stand-ins on $E2E_PSI_PORT, $E2E_GRADER_MOCK_PORT and $E2E_GAMES_GH_PORT; server log $E2E_SERVER_LOG"
-node --test --test-concurrency=1 "tests/*.test.mjs"
+# A test or hook that never settles (a stand-in port taken by another run,
+# say) fails after five minutes instead of stalling the whole run.
+node --test --test-concurrency=1 --test-timeout=300000 "tests/*.test.mjs"

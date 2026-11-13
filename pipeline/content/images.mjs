@@ -75,7 +75,7 @@ export function buildReviewRequest(slot, paragraph, candidates, source) {
   return {
     parts: [{ text }, ...candidates.map((c) => ({ inline_data: { mime_type: c.mime, data: c.base64 } }))],
     schema: REVIEW_SCHEMA,
-    options: { systemInstruction: "You are a careful photo editor.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0, noRetry: true },
+    options: { prompt: "content-photo-review-v1", systemInstruction: "You are a careful photo editor.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0, noRetry: true },
   };
 }
 

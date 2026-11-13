@@ -43,7 +43,10 @@
 // GeminiRetryBudgetError instead of retrying.
 //
 // generate(parts, schema, options) takes an optional systemInstruction,
-// thinkingLevel, maxOutputTokens and temperature. A model that rejects the
+// thinkingLevel, maxOutputTokens and temperature, and `prompt`: the prompt's
+// id and version ("grade-v2", "content-claims-judge-v1"), which every
+// request of the call reports to onRequest for gemini_requests.prompt. Every
+// request builder sets it. A model that rejects the
 // thinking level (HTTP 400 naming thinking) is asked again once without it,
 // and is not sent one again for the rest of the run, so a level one model
 // lacks never fails a grade.
@@ -235,11 +238,11 @@ export function createGemini({
 
   // One HTTP request. Returns { kind: "ok", result } | { kind: "transient" |
   // "daily" | "slow", reason, body }; throws for auth and other 4xx errors.
-  async function attempt(model, body, { retry, fallback, thinking = false, plain = false }) {
+  async function attempt(model, body, { retry, fallback, thinking = false, plain = false, prompt = null }) {
     await pace.take();
     requests[model]++;
     const started = now();
-    const rec = { at: new Date(started).toISOString(), model, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null, finishReason: null, detail: null };
+    const rec = { at: new Date(started).toISOString(), model, prompt, retry, fallback, status: 0, reason: "", latencyMs: 0, inputTokens: null, outputTokens: null, thoughtsTokens: null, finishReason: null, detail: null };
     let res;
     try {
       res = await fetchImpl(`${apiBase}/models/${model}:generateContent`, {
@@ -346,7 +349,7 @@ export function createGemini({
     for (let n = 0; ; n++) {
       const model = models[idx];
       const { body, thinking } = bodyFor(model, parts, schema, options);
-      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking, plain: !schema });
+      const out = await attempt(model, body, { retry: n > 0, fallback: idx > 0, thinking, plain: !schema, prompt: options.prompt ?? null });
       if (out.kind === "ok") {
         answered[model]++;
         return { result: out.result, model, fallback: idx > 0, usage: out.usage };

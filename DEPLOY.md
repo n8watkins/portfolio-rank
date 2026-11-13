@@ -36,6 +36,9 @@ Staging does the same from `staging.portfoliorank.n8builds.dev` to https://stagi
 - **Sentry source maps:** add the `SENTRY_AUTH_TOKEN` secret (a Sentry auth token with project release access) and the `SENTRY_ORG` and `SENTRY_PROJECT` repository variables.
   The deploy then builds browser source maps, uploads them for the release (the commit SHA) and deletes them before publishing; without those settings it skips the step.
 - **ISR:** the home page (`revalidate = 300`) is cached in the `portfolio-rank-opennext-cache` R2 bucket, and a Durable Object queue deduplicates its background re-renders.
+  OpenNext keeps each build's entries under `incremental-cache/<build id>/` and a Worker reads only its own build's folder, so after the smoke check the deploy removes every build folder but the newest two (`scripts/prune-build-cache.mjs`; staging does the same in its bucket).
+  It is not an R2 lifecycle rule because the live build's prerendered entries are written once, at deploy, and an age rule would expire them after enough days without a deploy.
+  A rollback with `wrangler rollback` to a version older than the previous one finds no cache, so its first requests render the pages again.
   The deploy log prints "A DurableObjectNamespace in the config referenced the class "DOQueueHandler", but no such Durable Object class is exported from the worker".
   It is a false alarm: `opennextjs-cloudflare deploy` starts a local Miniflare proxy (wrangler's `getPlatformProxy`) only to read the config's variables, and that proxy runs none of our code.
   The uploaded Worker does export the class (`worker/index.ts`), and CI proves it on every change (`scripts/check-worker-exports.mjs` on the dry-run bundle).
@@ -82,7 +85,7 @@ Two workflows, so production and staging never overwrite each other:
    It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
    It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev`.
    The run's summary lists exactly what is on staging.
-   A labeled pull request that does not merge cleanly onto main and the ones before it is left out, named in the summary and told in a comment; rebase it onto the one it conflicts with to bring it back.
+   When a labeled pull request does not merge cleanly onto main and the ones before it, nothing is deployed: staging keeps what it had, the run fails, and the pull request is named in the summary and told in a comment; merge main into it (or rebase it onto the one it conflicts with) and run the workflow again.
    A stacked pull request brings its base along, so label the top of a stack; pushes to a stacked pull request start no run by themselves (GitHub runs only main's copy of the workflow for them), so run it by hand after pushing.
 
 To try a pull request on staging: `gh pr edit <number> --add-label staging`; to take it off: `--remove-label staging`.

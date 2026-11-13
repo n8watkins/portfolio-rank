@@ -64,8 +64,9 @@ test("error classes", () => {
   assert.equal(classify("fetch failed"), "unreachable");
 });
 
-// Roster sites that must never be prewarmed, and one with an old PSI result.
-const [tierC, fresh, down, old] = feed.slice(4, 8).map((p) => p.url);
+// A tier-C site (prewarmed: Gemini's letter no longer gates Lighthouse),
+// roster sites that must never be prewarmed, and one with an old PSI result.
+const [tierC, fresh, down, old, notPortfolio, failedGrade] = feed.slice(4, 10).map((p) => p.url);
 const DAY = 86400000;
 
 async function runScript(handler, { limit = 4 } = {}) {
@@ -82,13 +83,15 @@ async function runScript(handler, { limit = 4 } = {}) {
   const add = (url, tier, extra = {}) =>
     db.execute({
       sql: "INSERT INTO portfolios (url, status, ai_rubric, health) VALUES (?, ?, ?, ?)",
-      args: [url, extra.status ?? "live", JSON.stringify({ tier }), extra.health ?? null],
+      args: [url, extra.status ?? "live", JSON.stringify(extra.rubric ?? { tier }), extra.health ?? null],
     });
   for (const [i, u] of urls.entries()) await add(u, ["S", "A", "B", "A"][i]);
   await add(tierC, "C");
   await add(fresh, "A");
   await add(down, "A", { health: "down" });
   await add(old, "S");
+  await add(notPortfolio, "D", { rubric: { tier: "D", is_portfolio: false } });
+  await add(failedGrade, null, { rubric: { error: "no_usable_captures" } });
   // Gone from the roster (delisted on start), or a variant of a roster URL.
   for (const u of ["https://left-upstream.example", `${urls[0]}/`]) await add(u, "S");
   const now = Date.now();
@@ -144,13 +147,14 @@ test("the script exits 0 when lookups succeed", async () => {
   assert.match(r.summary, /OK: 8 of 8 lookups succeeded/);
 });
 
-test("the script picks listed S/A/B sites without a fresh PSI result, never-measured first, then the oldest", async () => {
+test("the script picks every listed graded portfolio without a fresh PSI result, whatever its letter, never-measured first, then the oldest", async () => {
   const r = await runScript((req, res) => {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ok: true }));
   }, { limit: 50 });
   assert.equal(r.code, 0);
-  // Never measured (by URL), then the 40-day-old result. Not: tier C, fresh,
-  // confirmed down, delisted, or not on the roster.
-  assert.deepEqual(r.psi, [...[...urls].sort(), old]);
+  // Never measured (by URL, tier C included), then the 40-day-old result.
+  // Not: fresh, confirmed down, "not a portfolio", a failed grade, delisted,
+  // or not on the roster.
+  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), old]);
 });

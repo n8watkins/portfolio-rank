@@ -1,4 +1,4 @@
-// Upload the serve-frames (hero/mobile/full) for ONE capture key to R2.
+// Upload the serve-frames (hero/mobile) for ONE capture key to R2.
 // Used to verify the R2 pipeline end-to-end before the full backfill.
 //   node scripts/r2-upload-one.mjs <shot_key>
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -26,7 +26,7 @@ const s3 = new S3Client({
 });
 
 const dir = path.join("captures", key);
-for (const f of ["hero.jpg", "mobile.jpg", "full.jpg"]) {
+for (const f of ["hero.jpg", "mobile.jpg"]) {
   const fp = path.join(dir, f);
   if (!existsSync(fp)) {
     console.log(`skip ${f} (not found)`);
