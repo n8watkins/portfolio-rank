@@ -1,0 +1,802 @@
+[
+ {
+  "id": 1,
+  "url": "https://jerryhirsch.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c88a9a30fb73a5e1",
+  "has_text": false
+ },
+ {
+  "id": 2,
+  "url": "https://vauth.github.io/hueco",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "0b015d9fc7cdf709",
+  "has_text": true
+ },
+ {
+  "id": 3,
+  "url": "https://pepalonso.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "5d33b224659924a6",
+  "has_text": false
+ },
+ {
+  "id": 4,
+  "url": "https://damianmarkowski.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "5a6a0178821b9e64",
+  "has_text": true
+ },
+ {
+  "id": 5,
+  "url": "https://yogeshpaliyal.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "cfaec497863961e2",
+  "has_text": true
+ },
+ {
+  "id": 6,
+  "url": "https://majd-portfolio.framer.website",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "844d3b95b1e148ea",
+  "has_text": false
+ },
+ {
+  "id": 7,
+  "url": "https://jeremiahhaastrup.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "a0e582cd813b7fe9",
+  "has_text": false
+ },
+ {
+  "id": 8,
+  "url": "http://vaibhavsingh97.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "8417659423370ec1",
+  "has_text": false
+ },
+ {
+  "id": 9,
+  "url": "https://devrimmehmet.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "90cb9c79a125295f",
+  "has_text": false
+ },
+ {
+  "id": 10,
+  "url": "https://palmeida.netlify.app",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "a5b9dec5b614d94a",
+  "has_text": false
+ },
+ {
+  "id": 11,
+  "url": "https://dorlugasigal.netlify.app",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "3dbe7c9c2ea3084f",
+  "has_text": false
+ },
+ {
+  "id": 12,
+  "url": "https://maggioni.dev",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "45c30929f05d8775",
+  "has_text": false
+ },
+ {
+  "id": 13,
+  "url": "https://sauravmh.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "0eed32e08cb0b506",
+  "has_text": false
+ },
+ {
+  "id": 14,
+  "url": "https://git.id.au",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "66598ff998acbfce",
+  "has_text": false
+ },
+ {
+  "id": 15,
+  "url": "https://enesehs.github.io",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "ece6e2044c4c0924",
+  "has_text": false
+ },
+ {
+  "id": 16,
+  "url": "https://ericc.vercel.app",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "653bffcab05cc55a",
+  "has_text": false
+ },
+ {
+  "id": 17,
+  "url": "https://vidu.sh/an",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c220059d00a98244",
+  "has_text": true
+ },
+ {
+  "id": 18,
+  "url": "https://linktr.ee/drepin",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "b29b00ad946978b7",
+  "has_text": false
+ },
+ {
+  "id": 19,
+  "url": "https://kidus.ca",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "89e98cd3455313c4",
+  "has_text": false
+ },
+ {
+  "id": 20,
+  "url": "https://ccm.securityops.com.br",
+  "group": "not_portfolio",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "1d4c6d21d06b04bf",
+  "has_text": false
+ },
+ {
+  "id": 21,
+  "url": "https://ashifek.in",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "88c069b30ee67a2d",
+  "has_text": true
+ },
+ {
+  "id": 22,
+  "url": "https://github.com/AnamuddinAhmad/Portfolio_1",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "3d58e961c7b6d241",
+  "has_text": true
+ },
+ {
+  "id": 23,
+  "url": "https://www.hungrybearstudios.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "302828d57864b3d3",
+  "has_text": true
+ },
+ {
+  "id": 24,
+  "url": "https://wltweerasinghe.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "0afd8bd64295d5cc",
+  "has_text": true
+ },
+ {
+  "id": 25,
+  "url": "https://deepsaha.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "4814b9ca5385e7e6",
+  "has_text": true
+ },
+ {
+  "id": 26,
+  "url": "https://akhshyganesh.github.io",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "eb6ab2389ae13b7d",
+  "has_text": true
+ },
+ {
+  "id": 27,
+  "url": "https://www.adamalston.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "3c9900273037bd0b",
+  "has_text": true
+ },
+ {
+  "id": 28,
+  "url": "https://ashwinhariharan.com/software-engineering",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "e28104d6982f38f7",
+  "has_text": true
+ },
+ {
+  "id": 29,
+  "url": "https://www.beterbekend.nl",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "e7de7e64eb4dd6f4",
+  "has_text": true
+ },
+ {
+  "id": 30,
+  "url": "https://cschad.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "8b4aa0063d4db7b2",
+  "has_text": true
+ },
+ {
+  "id": 31,
+  "url": "https://expensive.toys",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "1547a4d64b917e74",
+  "has_text": true
+ },
+ {
+  "id": 32,
+  "url": "https://www.patrickhyatt.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "ea8602d95a284081",
+  "has_text": true
+ },
+ {
+  "id": 33,
+  "url": "https://github.com/AnshulGora/portfolio_template_v1",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "531c57e072bcb17c",
+  "has_text": true
+ },
+ {
+  "id": 34,
+  "url": "https://adittya.site",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "1752993147c81a1a",
+  "has_text": true
+ },
+ {
+  "id": 35,
+  "url": "https://www.trixum.net",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "80525def7951d198",
+  "has_text": true
+ },
+ {
+  "id": 36,
+  "url": "https://abbasraza.dev",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "08075a0117d6d501",
+  "has_text": true
+ },
+ {
+  "id": 37,
+  "url": "https://andy-bell.design",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "ce186860fe8a64bc",
+  "has_text": true
+ },
+ {
+  "id": 38,
+  "url": "https://armujahid.me",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "c623edb9ef69dba9",
+  "has_text": true
+ },
+ {
+  "id": 39,
+  "url": "https://calzye.com",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "1ea121f04e3f5199",
+  "has_text": true
+ },
+ {
+  "id": 40,
+  "url": "https://andrianaivo-ismael.vercel.app/admin",
+  "group": "not_portfolio",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "dd760cbf88e53cb9",
+  "has_text": true
+ },
+ {
+  "id": 41,
+  "url": "https://manojmandal.com",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "6da66d016a9796cd",
+  "has_text": false
+ },
+ {
+  "id": 42,
+  "url": "https://dangor220.github.io/developer-portfolio",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "eff0fe44d9828dd1",
+  "has_text": false
+ },
+ {
+  "id": 43,
+  "url": "https://red1-for-hek.vercel.app",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "405e263ea49c0972",
+  "has_text": false
+ },
+ {
+  "id": 44,
+  "url": "http://www.bluexguardian.com",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "fcb5b9da3332fa2f",
+  "has_text": false
+ },
+ {
+  "id": 45,
+  "url": "https://missaelr.com/en",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "e8fb9e215679af9f",
+  "has_text": false
+ },
+ {
+  "id": 46,
+  "url": "https://aboutzahin.pages.dev",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "498c8fe7a03e3e43",
+  "has_text": false
+ },
+ {
+  "id": 47,
+  "url": "https://devlucas.website",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "ba3b9d1624f67c2a",
+  "has_text": false
+ },
+ {
+  "id": 48,
+  "url": "https://naveenkumarm.space",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c107f74db5dac96d",
+  "has_text": false
+ },
+ {
+  "id": 49,
+  "url": "https://www.borcarazvan.tech/",
+  "group": "delisted",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "f0094c7d5a5b9c34",
+  "has_text": false
+ },
+ {
+  "id": 50,
+  "url": "https://mouraocode.com.br",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "edfa1b9498a905d3",
+  "has_text": false
+ },
+ {
+  "id": 51,
+  "url": "https://mushfiq.xyz",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "7579dbf6f1a835bd",
+  "has_text": false
+ },
+ {
+  "id": 52,
+  "url": "http://iamreliq.com",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "7aafc5a854479788",
+  "has_text": false
+ },
+ {
+  "id": 53,
+  "url": "https://iamridoydey.com",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "401a48ce92c0a584",
+  "has_text": false
+ },
+ {
+  "id": 54,
+  "url": "https://aliahtisham.pro",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "66c4aa4b89e8e6ef",
+  "has_text": false
+ },
+ {
+  "id": 55,
+  "url": "https://crackedontiti.github.io",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "d39b7d2c1c31edbe",
+  "has_text": false
+ },
+ {
+  "id": 56,
+  "url": "https://clixmods.github.io",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "63061bab72afdcd6",
+  "has_text": false
+ },
+ {
+  "id": 57,
+  "url": "https://www.hitaarthh.com/",
+  "group": "delisted",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "294fb4c6a0ca726d",
+  "has_text": false
+ },
+ {
+  "id": 58,
+  "url": "https://kwamehdhegbo.com",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "81a170849126b153",
+  "has_text": false
+ },
+ {
+  "id": 59,
+  "url": "https://vallarasuk.com",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "ebde797544e30025",
+  "has_text": false
+ },
+ {
+  "id": 60,
+  "url": "https://pabloramon.com.br",
+  "group": "delisted",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "d2c549b781a5b2fe",
+  "has_text": false
+ },
+ {
+  "id": 61,
+  "url": "https://iamrashy.netlify.app",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c2b8b150dd219e96",
+  "has_text": false
+ },
+ {
+  "id": 62,
+  "url": "https://aravinthvr.github.io/portfolio/?utm_source=github&utm_medium=developer-portfolios&utm_campaign=personal_branding&utm_content=v1_27_07_25",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "d4569c36379a2df5",
+  "has_text": true
+ },
+ {
+  "id": 63,
+  "url": "https://abhijitmondal.info",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "8e84dffad5d14988",
+  "has_text": true
+ },
+ {
+  "id": 64,
+  "url": "https://sanketchaudhari.in",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "e1c7417cb958d1d3",
+  "has_text": true
+ },
+ {
+  "id": 65,
+  "url": "https://macios.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "08ef63d3332d51ae",
+  "has_text": true
+ },
+ {
+  "id": 66,
+  "url": "https://divij.tech",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "3a431064a2162b28",
+  "has_text": false
+ },
+ {
+  "id": 67,
+  "url": "https://sabbirahmed.net",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "e292b7fb4e6bbb3e",
+  "has_text": false
+ },
+ {
+  "id": 68,
+  "url": "https://react-portfolio-fawn-three.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "b77fdd3cbb7e6755",
+  "has_text": true
+ },
+ {
+  "id": 69,
+  "url": "https://www.shubhamgupta.dev",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "061173d4a03269bb",
+  "has_text": true
+ },
+ {
+  "id": 70,
+  "url": "https://isub.dev",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "0da52a4a80873d81",
+  "has_text": false
+ },
+ {
+  "id": 71,
+  "url": "https://aahil-khan.xyz",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "8bde1f9392090147",
+  "has_text": true
+ },
+ {
+  "id": 72,
+  "url": "https://www.saikiransomanagoudar.com",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "2321beb1fafd9c1a",
+  "has_text": true
+ },
+ {
+  "id": 73,
+  "url": "https://djayanth.site",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "e87996d69c551567",
+  "has_text": true
+ },
+ {
+  "id": 74,
+  "url": "https://cadenchau.com",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "f2fceb6d4143e850",
+  "has_text": true
+ },
+ {
+  "id": 75,
+  "url": "https://chriscoyier.net",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "186b0a911f71ace6",
+  "has_text": true
+ },
+ {
+  "id": 76,
+  "url": "https://codewithstu.tv",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c6ddc862da313dc5",
+  "has_text": true
+ },
+ {
+  "id": 77,
+  "url": "https://ali-wordpress-developer.com",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "3aee3f098b3cd5c4",
+  "has_text": true
+ },
+ {
+  "id": 78,
+  "url": "https://purnankjadhav-portfolio.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c8da8781e76e670a",
+  "has_text": false
+ },
+ {
+  "id": 79,
+  "url": "https://eric4048.framer.website",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "c1c4a9c32b6dcbc3",
+  "has_text": false
+ },
+ {
+  "id": 80,
+  "url": "https://portfolio-fayed.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "cf52a4855a7f37da",
+  "has_text": false
+ },
+ {
+  "id": 81,
+  "url": "https://saini-yogesh.github.io/Portfolio",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "780b5d3cb9511b8f",
+  "has_text": true
+ },
+ {
+  "id": 82,
+  "url": "https://www.abdusamad.uz",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "71e6ac23c18a629c",
+  "has_text": true
+ },
+ {
+  "id": 83,
+  "url": "https://chandradithya.dev",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "032d553801b8f5ee",
+  "has_text": true
+ },
+ {
+  "id": 84,
+  "url": "https://felipeschmidt.me",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "87dfffa5255386b2",
+  "has_text": false
+ },
+ {
+  "id": 85,
+  "url": "https://www.tajmirul.site",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "b1d4d2228e0e3367",
+  "has_text": true
+ },
+ {
+  "id": 86,
+  "url": "https://ezekielekunola.com",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "15a68cf2696cac00",
+  "has_text": false
+ },
+ {
+  "id": 87,
+  "url": "https://port-folio-nine-lemon-27.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "0717926a73a4c0fa",
+  "has_text": false
+ },
+ {
+  "id": 88,
+  "url": "https://kavy-sachaniya.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "0c986a57a9b39765",
+  "has_text": true
+ },
+ {
+  "id": 89,
+  "url": "https://barquero.dev",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "ae357d4671fd65f2",
+  "has_text": false
+ },
+ {
+  "id": 90,
+  "url": "https://devravik.github.io",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "db524b30ca293d16",
+  "has_text": true
+ },
+ {
+  "id": 91,
+  "url": "https://www.lexnguyen.dev",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "68dee69b15a01811",
+  "has_text": true
+ },
+ {
+  "id": 92,
+  "url": "https://cuierd.github.io",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "448f5d1e2e85efcf",
+  "has_text": true
+ },
+ {
+  "id": 93,
+  "url": "https://itsmebravo.dev",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "cdb9dcd1a51f8d99",
+  "has_text": false
+ },
+ {
+  "id": 94,
+  "url": "https://forbrig.github.io",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "a94a24851dfbcd90",
+  "has_text": true
+ },
+ {
+  "id": 95,
+  "url": "https://vishvaas.dev",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "3090964941470d64",
+  "has_text": true
+ },
+ {
+  "id": 96,
+  "url": "https://ilyaglebov.dev",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "57047d85c2055b1e",
+  "has_text": false
+ },
+ {
+  "id": 97,
+  "url": "https://vineetcodes.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "d3706c9b1474289a",
+  "has_text": true
+ },
+ {
+  "id": 98,
+  "url": "https://prashanth-kumar-g.github.io",
+  "group": "ranked",
+  "model": "gemini-3.5-flash-lite",
+  "shot_key": "5752b0f99fbe1c0f",
+  "has_text": true
+ },
+ {
+  "id": 99,
+  "url": "https://hasan-ashab.vercel.app",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "5a4dbbc79808c553",
+  "has_text": false
+ },
+ {
+  "id": 100,
+  "url": "https://avisek.codeltix.com",
+  "group": "ranked",
+  "model": "gemini-3.1-flash-lite",
+  "shot_key": "32d08f2cdc8bbbe6",
+  "has_text": true
+ }
+]
