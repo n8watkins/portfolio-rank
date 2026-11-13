@@ -71,6 +71,6 @@ test("owner alerts: a missing token, and one that expires within the warning day
   assert.deepEqual(soon.map((c) => c.key), ["dispatch-token:expiring"]);
   assert.match(soon[0].title, /expires on 2026-11-18 \(5 day\(s\) left\)/);
   const gone = dispatchTokenConditions({ runId: 1, url: null, tokenExpires: inDays(-2) }, { now });
-  assert.match(gone[0].title, /expired on 2026-11-11/);
+  assert.match(gone[0].title, /expired on 2026-11-10/, "the Pacific day");
   for (const c of [...missing, ...soon, ...gone]) assert.ok(!JSON.stringify(c).includes(SECRET));
 });

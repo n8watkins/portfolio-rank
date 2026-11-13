@@ -132,7 +132,8 @@ export function dispatchTokenConditions(nightly, { now = new Date(), warnDays = 
   if (Number.isNaN(expires)) return [];
   const days = Math.floor((expires - now.getTime()) / DAY_MS);
   if (days >= warnDays) return [];
-  const when = new Date(expires).toISOString().slice(0, 10);
+  // The day as the site counts days (Pacific, ./quota-day.mjs).
+  const when = quotaDay(new Date(expires)).day;
   return [
     {
       key: "dispatch-token:expiring",
