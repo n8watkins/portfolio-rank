@@ -192,3 +192,31 @@ test("a site delisted, marked down or graded 'not a portfolio' leaves the cutoff
   const d = await dailyTiers(client);
   assert.equal(d.voted, 4);
 });
+
+test("the daily run purges exactly the profiles whose letter changed, by their tag, 100 at a time", async () => {
+  const { purgeProfilesOf } = await import("../worker/tier-purge.ts");
+  const { profileTag } = await import("../worker/edge-cache.ts");
+  const client = await db();
+  await library(client, 3000);
+  await dailyTiers(client);
+  const before = new Map((await client.execute("SELECT url, tier FROM tier_ratings")).rows.map((r) => [String(r.url), String(r.tier)]));
+  // Enough votes that well over 100 letters change.
+  for (let k = 0; k < 400; k++) await applyFaceoff(client, { winner: url(2999 - k), loser: url(k) });
+  const calls = [];
+  const fake = async (tags) => (calls.push(tags), true);
+  let changedUrls = [];
+  const d = await dailyTiers(client, { purge: async (urls) => ((changedUrls = urls), purgeProfilesOf(urls, fake, profileTag)) });
+  const after = new Map((await client.execute("SELECT url, tier FROM tier_ratings")).rows.map((r) => [String(r.url), String(r.tier)]));
+  const changed = [...after].filter(([u, t]) => before.get(u) !== t).map(([u]) => u).sort();
+  assert.ok(changed.length > 100, `${changed.length} changed`);
+  assert.equal(d.changed, changed.length);
+  assert.deepEqual([...changedUrls].sort(), changed);
+  assert.deepEqual(calls.flat().sort(), changed.map(profileTag).sort());
+  assert.ok(calls.every((c) => c.length <= 100));
+  // Nothing changed: no purge at all; a failing purge never fails the run.
+  calls.length = 0;
+  await dailyTiers(client, { purge: async (urls) => purgeProfilesOf(urls, fake) });
+  assert.equal(calls.length, 0);
+  assert.equal(await purgeProfilesOf([url(1)], async () => { throw new Error("down"); }, profileTag), 0);
+  assert.equal(await purgeProfilesOf([url(1)], undefined, profileTag), 0);
+});
