@@ -85,6 +85,9 @@
     // "Grade my portfolio" (lib/grader, AUTOMATION.md): its API and crons do
     // nothing until this is "true", which waits for the redesign's UI.
     "GRADER_ENABLED": "false",
+    // The free tools (/tools, lib/tools, docs/TOOLS.md): their pages and
+    // APIs answer 404 until this is "true"; staging tries them first.
+    "TOOLS_ENABLED": "false",
     // Games, badges, claims, live stats and report downloads (lib/games):
     // every one of their routes answers 404 until this is "true", which
     // happens with the redesign.
@@ -121,7 +124,7 @@
     "LIBRARY_MODEL": "schnell"
     // Optional, JSON: GEMINI_BUDGET (caps, reserve, batch; pipeline/budget.mjs),
     // GEMINI_DAILY_QUOTA, RANKING_BUDGET, RANKING_BATCHED_COUNTS, RANKING_AI_WEIGHT,
-    // GRADER_CAPS (lib/grader/caps.mjs), EMAIL_CAPS (lib/email/gate.mjs).
+    // GRADER_CAPS (lib/grader/caps.mjs), TOOLS_CAPS (lib/tools/caps.mjs, can only lower them), EMAIL_CAPS (lib/email/gate.mjs).
     // Optional: TURNSTILE_SITE_KEY (the public key of the Turnstile widget the
     // pages render; the secret is TURNSTILE_SECRET_KEY).
   },
@@ -222,6 +225,7 @@
         // Without GITHUB_DISPATCH_TOKEN a grade stops after the free checks
         // ("unavailable"); DEPLOY.md "Staging" says how prep grades finish.
         "GRADER_ENABLED": "true",
+        "TOOLS_ENABLED": "true",
         "GAMES_V2": "true",
         "EMAIL_FROM": "portfoliorank@n8builds.dev",
         "CONTENT_MODE": "off",

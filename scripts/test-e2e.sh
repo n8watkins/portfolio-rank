@@ -47,6 +47,8 @@ unset PSI_API_KEY
 # lib/grader/server.ts ignores the stand-ins on the deployed Workers.
 export GRADER_ENABLED=true
 export E2E_GRADER_MOCK_PORT="${E2E_GRADER_MOCK_PORT:-$FREE_GRADER}"
+# The free tools (tests/tools-api.test.mjs), with PageSpeed from the stand-in above.
+export TOOLS_ENABLED=true
 export GRADER_TEST_SITE="http://127.0.0.1:$E2E_GRADER_MOCK_PORT"
 export GRADER_TEST_GITHUB_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/github"
 export GRADER_TEST_GEMINI_API="http://127.0.0.1:$E2E_GRADER_MOCK_PORT/gemini"
