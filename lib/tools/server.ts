@@ -5,6 +5,7 @@ import { verifyTurnstile } from "@/lib/turnstile";
 import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
 import { fail, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
 import { reserveTool, toolCaps } from "./caps.mjs";
+import { addPending } from "@/lib/discovery/sites.mjs";
 
 // Request-side helpers for the free tools (app/api/tools/*, docs/TOOLS.md).
 // Every tool request goes through gate(): the switch, same origin, a sane
@@ -90,6 +91,24 @@ export async function readFresh<T>(key: string, ttlMs = RESULT_TTL_MS, now = Dat
     return null;
   }
 }
+
+/** True when the visitor asked to measure again now ("Check again" after a fix): the day's cached result is skipped, and the run counts against the caps. */
+export const wantsFresh = (g: Gate) => g.body.fresh === true;
+
+/**
+ * Every site a tool checked and could load is added to PortfolioRank: a
+ * listed one is refreshed in place, any other joins the discovery seen-set
+ * as pending (private until graded; lib/discovery/sites.mjs). Owner
+ * decision 2026-11-12: no opt-in box, said under the button and in the
+ * privacy policy.
+ */
+export async function remember(g: Gate, loaded: boolean): Promise<{ status: string; added: boolean } | null> {
+  if (g.listed || !loaded) return null;
+  return addPending(db(), { url: g.url, source: "tools" });
+}
+
+/** The answer's common part: the address, whether it's listed, and the profile to see the saved results on. */
+export const answerHead = (g: Gate) => ({ url: g.url, listed: Boolean(g.listed), ...(g.listed ? { profile: `/p/${encodeURIComponent(g.listed)}` } : {}) });
 
 /** Saves a result under its cache key (the same keys the profile reads). */
 export async function store(key: string, value: object, at = Date.now()): Promise<void> {

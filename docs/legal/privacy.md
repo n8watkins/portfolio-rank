@@ -109,6 +109,20 @@ To stay listed but never be named in posts, see [removal.md](removal.md).
 - If the day's capacity is used up and you ask for an email, I store your email address only to send that report, and delete it 30 days after it's sent, along with the grade request.
 - A graded site is never added to the leaderboard unless you ask.
 
+## If you check a site with the free tools (when the tools launch)
+
+The free tools (speed check, share preview checker, portfolio checklist) work without an account.
+
+- I store the address you check and what the tools measured: Lighthouse scores and timings, the page's title, description and share image address, and the checklist results (resume, GitHub and contact links found, project links that load, own domain, HTTPS, footer year, template).
+  The same results are reused for a day, so checking again costs nothing.
+- Every site the tools can load is added to PortfolioRank.
+  A site that's already listed gets its saved results refreshed on its page.
+  Any other site waits, privately, to be graded; it's shown on PortfolioRank only once it's graded, and never if it turns out not to be a portfolio.
+- To stop abuse, I count checks per browser and per network; network addresses are stored only as a one-way hash, kept for at most 30 days.
+- The tools use Google PageSpeed Insights, which loads the page you checked; nothing about you is sent to Google.
+- To take a site off PortfolioRank: if it's listed, use "Remove my portfolio" (see "Your choices"); if it's still waiting to be graded, email me at nate@n8builds.dev from any address and I'll remove it within 14 days.
+  [owner: confirm this flow, and whether a waiting site gets a self-serve removal too]
+
 ## If you subscribe to the newsletter (when it launches)
 
 - I store your email address, when you signed up and when you confirmed.
@@ -161,6 +175,8 @@ None of them get your data to sell, and neither do I.
 | Claims and the claims audit log | As long as the site runs [owner: confirm] |
 | One-time report links (a hash, never the email address) | Until they expire (a day), deleted that night |
 | Listed site data | While listed, then deleted 30 days after it leaves the list |
+| Free tool results for a site | Until the site is checked again (each check replaces the last) [owner: confirm, or set a limit] |
+| A site waiting to be graded (from the free tools) | Its address until it's graded or turned down; a site turned down for good keeps only a one-way hash, the reason and the date |
 | Hashed network addresses (rate limits) | At most 30 days |
 | Gemini request log (which job asked, when, tokens used; no visitor data) | 90 days, then only daily totals |
 | Nightly database backups | 30 days |
