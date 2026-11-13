@@ -12,7 +12,7 @@
 //      and finalises the titles.
 // 5 requests when the outline passes (6 after a retry); facts stay
 // {{placeholders}} throughout, and every code check runs on the result.
-import { OPTIONS, RESPONSE_SCHEMA, sheetForWriter, PLACEHOLDER } from "./writer.mjs";
+import { OPTIONS, RESPONSE_SCHEMA, lengthOf, sheetForWriter, PLACEHOLDER } from "./writer.mjs";
 
 /** Writer modes (the Worker variable WRITER_MODE). */
 export const WRITER_MODES = ["single", "staged"];
@@ -84,7 +84,7 @@ const json = (x) => JSON.stringify(x, null, 1);
 export function buildOutlineRequest(sheet, problems = [], previous = null) {
   const text = [
     "Plan one post from this fact sheet. Do not write the body yet.",
-    `Plan: hook_fact_ids are the placeholder ids (like f3, without braces) of ONE notable fact to lead with; title and alt titles; subtitle; tags (2 to 4); share_line and newsletter_blurb; tldr with exactly three bullets, each containing at least one {{placeholder}}, the first built on the hook, every bullet a point one of the sections makes with the same placeholders; exactly ${SECTIONS} sections, each with a subhead that says what it proves, a one-line intent that matches the subhead and the ids of 4 to 6 facts it will use (every section needs enough to say: a comparison, the named sites that show it and what they do well; every fact id exists in the sheet, no fact in two sections; spread the named sites' positive facts over the sections so at least three named sites are each linked in a section when the sheet names three or more); callout_fact_id: the id of ONE numeric fact for the pull quote; actions: three concrete steps a reader can do today (where example_sites lists a site strong on the step's axis, say which site to point to); images: a hero and 2 or 3 inline images as described in the rules.`,
+    `Plan: hook_fact_ids are the placeholder ids (like f3, without braces) of ONE notable fact to lead with; title and alt titles; subtitle; tags (2 to 4); share_line and newsletter_blurb; tldr with exactly three bullets, each containing at least one {{placeholder}}, the first built on the hook, every bullet a point one of the sections makes with the same placeholders; exactly ${lengthOf(sheet).sections} sections, each with a subhead that says what it proves, a one-line intent that matches the subhead and the ids of 4 to 6 facts it will use (every section needs enough to say: a comparison, the named sites that show it and what they do well; every fact id exists in the sheet, no fact in two sections; spread the named sites' positive facts over the sections so at least three named sites are each linked in a section when the sheet names three or more); callout_fact_id: the id of ONE numeric fact for the pull quote; actions: three concrete steps a reader can do today (where example_sites lists a site strong on the step's axis, say which site to point to); images: a hero and ${lengthOf(sheet).inline[0]} to ${lengthOf(sheet).inline[1]} inline images as described in the rules (a screenshot of a named example where one fits, a chart where the data has one).`,
     ...(problems.length ? ["", "Your earlier plan failed these checks:", ...problems.map((p) => `- ${p}`), "<earlier_plan>", json(previous), "</earlier_plan>"] : []),
     "",
     "<fact_sheet>",
@@ -109,7 +109,7 @@ export function checkOutline(o, sheet) {
     for (const m of ph) if (!ids.has(m[1])) p.push(`tldr bullet ${i + 1}: unknown placeholder ${m[0]}`);
   });
   const secs = o?.sections ?? [];
-  if (secs.length !== SECTIONS) p.push(`${secs.length} sections, exactly ${SECTIONS} needed`);
+  if (secs.length !== lengthOf(sheet).sections) p.push(`${secs.length} sections, exactly ${lengthOf(sheet).sections} needed`);
   const used = new Map();
   secs.forEach((s, i) => {
     if (!String(s.subhead ?? "").trim()) p.push(`section ${i + 1} has no subhead`);
@@ -139,7 +139,7 @@ export function checkOutline(o, sheet) {
   if (!c || typeof c.value !== "number") p.push("callout_fact_id must be a numeric fact in the sheet");
   if ((o?.actions ?? []).length !== 3) p.push(`${(o?.actions ?? []).length} actions, exactly 3 needed`);
   const slots = (o?.images ?? []).map((i) => i.slot);
-  if (!slots.includes("hero") || slots.filter((s) => s !== "hero").length < 2) p.push("images need a hero and 2 or 3 inline slots");
+  if (!slots.includes("hero") || slots.filter((s) => s !== "hero").length < lengthOf(sheet).inline[0]) p.push(`images need a hero and ${lengthOf(sheet).inline[0]} to ${lengthOf(sheet).inline[1]} inline slots`);
   return p;
 }
 
@@ -152,7 +152,7 @@ function factsFor(sheet, ids) {
 
 export function buildSectionsRequest(sheet, outline, indexes) {
   const text = [
-    "Write these sections of a blog post. Each section is two or three paragraphs; every paragraph has two to four sentences, with each sentence on its own line and no paragraph of one sentence. Use the facts listed for that section, written as their {{placeholders}}; never type a digit. Beyond the facts you may, and should, explain what each measure means for a portfolio, why a reader should care and how a named site does it (from its facts); never add outside claims about hiring, recruiters or the job market. Where a tie is listed, say the items tie. Be concrete, no filler, nothing about how PortfolioRank is built or run. Each section is at least 200 and at most 260 words (three paragraphs is usual),  written like a person (never copy a fact label, never \"a share of\", call the top group \"the top-graded portfolios\", no tier letters, no sizes in words); where the section has named example sites, link each as [Name](site_url) and say what it does well; the whole post must stay under 1,000 words.",
+    `Write these sections of a blog post. Each section is two or three paragraphs; every paragraph has two to four sentences, with each sentence on its own line and no paragraph of one sentence. Use the facts listed for that section, written as their {{placeholders}}; never type a digit. Beyond the facts you may, and should, explain what each measure means for a portfolio, why a reader should care and how a named site does it (from its facts); never add outside claims about hiring, recruiters or the job market. Where a tie is listed, say the items tie. Be concrete, no filler, nothing about how PortfolioRank is built or run. Each section is at least 200 and at most 260 words (three paragraphs is usual),  written like a person (never copy a fact label, never \"a share of\", call the top group \"the top-graded portfolios\", no tier letters, no sizes in words); where the section has named example sites, link each as [Name](site_url) and say what it does well; the whole post must stay under ${lengthOf(sheet).max} words.`,
     "",
     `Post title: ${outline.title}`,
     ...indexes.flatMap((i) => {
@@ -165,7 +165,7 @@ export function buildSectionsRequest(sheet, outline, indexes) {
 
 export function buildFinishRequest(sheet, outline, sections) {
   const text = [
-    "Finish this post. Write the body in Markdown from the plan and the sections below: an opener paragraph that starts with the hook and ends with the one takeaway the reader can use on their own portfolio, addressed to them: its last sentence says \"you\" and asks them to do one thing on their portfolio, within the first 150 words (two to four sentences), then the three sections exactly as written below, at their full length. Paragraphs: every paragraph is 2, 3 or 4 sentences, never 1 and never 5 (merge a lone sentence into its neighbour, split a long paragraph); the opener is one paragraph of 2 to 4 sentences; do not put [[image:hero]] in the body (keep every paragraph; only smooth the transitions and drop a sentence that repeats another word for word; keep each paragraph two to four sentences and keep their {{placeholders}}; never summarise or shorten a section), the callout of two quote lines, \"### Try this\" with the three numbered steps, and a closing takeaway paragraph of two or three sentences. Put [[image:inline-1]], [[image:inline-2]] (and inline-3 if planned) after the paragraph each supports. Finalise the title and alt titles. Return the whole post in the response shape; tldr, tags, share_line, newsletter_blurb and images may stay as planned. Total body: 700 to 1,000 words; under 665 or over 1,050 fails, count the words of the sections below: they already make most of the length, so keep them whole. Check before returning: every TL;DR bullet is covered in the body with the same placeholder, each subhead matches its section, at least three named example sites are linked when the sheet has three, and no two sentences in a row start with the same word.",
+    `Finish this post. Write the body in Markdown from the plan and the sections below: an opener paragraph that starts with the hook and ends with the one takeaway the reader can use on their own portfolio, addressed to them: its last sentence says \"you\" and asks them to do one thing on their portfolio, within the first 150 words (two to four sentences), then the three sections exactly as written below, at their full length. Paragraphs: every paragraph is 2, 3 or 4 sentences, never 1 and never 5 (merge a lone sentence into its neighbour, split a long paragraph); the opener is one paragraph of 2 to 4 sentences; do not put [[image:hero]] in the body (keep every paragraph; only smooth the transitions and drop a sentence that repeats another word for word; keep each paragraph two to four sentences and keep their {{placeholders}}; never summarise or shorten a section), the callout of two quote lines, \"### Try this\" with the three numbered steps, and a closing takeaway paragraph of two or three sentences. Put [[image:inline-1]], [[image:inline-2]] (and inline-3 if planned) after the paragraph each supports. Finalise the title and alt titles. Return the whole post in the response shape; tldr, tags, share_line, newsletter_blurb and images may stay as planned. Total body: ${lengthOf(sheet).min} to ${lengthOf(sheet).max} words; 5% under or over fails, count the words of the sections below: they already make most of the length, so keep them whole. Check before returning: every TL;DR bullet is covered in the body with the same placeholder, each subhead matches its section, at least three named example sites are linked when the sheet has three, and no two sentences in a row start with the same word.`,
     "",
     "<plan>",
     json({ ...outline, sections: outline.sections.map((s, i) => ({ ...s, written: sections[i] })) }),
@@ -195,8 +195,8 @@ export async function stagedWrite(sheet, generate, { onOutlineFail = () => {}, l
     if (problems.length) throw new OutlineError(`outline failed its checks after a retry: ${problems.slice(0, 4).join("; ")}`);
   }
   const written = [];
-  for (let i = 0; i < SECTIONS; i += SECTIONS_PER_REQUEST) {
-    const idx = Array.from({ length: Math.min(SECTIONS_PER_REQUEST, SECTIONS - i) }, (_, k) => i + k);
+  for (let i = 0; i < outline.sections.length; i += SECTIONS_PER_REQUEST) {
+    const idx = Array.from({ length: Math.min(SECTIONS_PER_REQUEST, outline.sections.length - i) }, (_, k) => i + k);
     const out = await call(buildSectionsRequest(sheet, outline, idx));
     idx.forEach((n, k) => written.push(out.sections?.[k] ?? { subhead: outline.sections[n].subhead, paragraphs: [] }));
   }

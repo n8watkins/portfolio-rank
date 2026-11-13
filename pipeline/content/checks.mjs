@@ -4,13 +4,14 @@
 // draft passes only when every one is ok. They run on the draft before its
 // placeholders are filled (numbers) and after (names and links), so a
 // figure in a post can only have come from the fact sheet.
-import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, fill, oneSentencePerLine } from "./writer.mjs";
+import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, fill, lengthOf, oneSentencePerLine } from "./writer.mjs";
 import { checkActions, checkCallout, checkHook, checkParagraphs, checkSubstance, checkSuperlatives } from "./quality.mjs";
 import { SITE_URL, domainOf } from "./facts.mjs";
 import { editorialChecks } from "./scorecard.mjs";
 
-/** The template's word range (POST_TEMPLATE.md; owner, 2026-11-11: 700 to 1,000 words (2026-11-12)), with 5% slack either side. */
+/** The standard length (POST_TEMPLATE.md; owner, 2026-11-12: 700 to 1,000 words), with 5% slack either side; other lengths are writer.mjs LENGTHS. */
 export const WORDS = { min: 700, max: 1000, slack: 0.05 };
+export { LENGTHS, lengthOf } from "./writer.mjs";
 
 // Digits a post may hold outside placeholders: years, the numbers of a
 // numbered list, the Gemini model names and the rubric's 1 to 5 scale.
@@ -167,7 +168,8 @@ export function checkTemplate(draft, sheet) {
   const slots = images.map((i) => i.slot);
   if (!slots.includes("hero")) p.push("a hero image slot is needed");
   const inline = slots.filter((s) => s !== "hero");
-  if (inline.length < 2 || inline.length > 3) p.push(`${inline.length} inline image slots, 2 or 3 needed`);
+  const [iMin, iMax] = lengthOf(sheet).inline;
+  if (inline.length < iMin || inline.length > iMax) p.push(`${inline.length} inline image slots, ${iMin} to ${iMax} needed`);
   if (new Set(slots).size !== slots.length) p.push("an image slot is listed twice");
   for (const s of inline) if (!body.includes(`[[image:${s}]]`)) p.push(`image ${s} is not placed in the body`);
   for (const m of body.matchAll(/\[\[image:([a-z0-9-]+)\]\]/g)) if (!SLOTS.includes(m[1]) || !slots.includes(m[1]) || m[1] === "hero") p.push(`body places unknown image ${m[1]}`);
@@ -177,10 +179,12 @@ export function checkTemplate(draft, sheet) {
     if (im.kind === "screenshot" && !sheet.screenshots.some((s) => s.url === im.site_url)) p.push(`image ${im.slot}: screenshot of ${im.site_url ?? "(none)"} is not allowed`);
   }
   const words = wordCount(fill(assembleBody(draft), sheet.facts));
-  const lo = Math.floor(WORDS.min * (1 - WORDS.slack));
-  const hi = Math.ceil(WORDS.max * (1 + WORDS.slack));
-  if (words < lo) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: add about ${850 - words} words of substance, for example a concrete example from the facts`);
-  if (words > hi) p.push(`body has ${words} words; ${WORDS.min} to ${WORDS.max} wanted: cut about ${words - 900} words, starting with throat-clearing and repetition`);
+  const L = lengthOf(sheet);
+  const lo = Math.floor(L.min * (1 - WORDS.slack));
+  const hi = Math.ceil(L.max * (1 + WORDS.slack));
+  const mid = Math.round((L.min + L.max) / 2);
+  if (words < lo) p.push(`body has ${words} words; ${L.min} to ${L.max} wanted: add about ${mid - words} words of substance, for example a concrete example from the facts`);
+  if (words > hi) p.push(`body has ${words} words; ${L.min} to ${L.max} wanted: cut about ${words - mid} words, starting with throat-clearing and repetition`);
   return result("template", p);
 }
 

@@ -33,7 +33,8 @@ import { pollsContent } from "../polls.mjs";
 import { CONTENT_MODELS, isBusy } from "./busy.mjs";
 import { pacificParts } from "../quota-day.mjs";
 import { AI_LINE, aiNote, contentWeek, nextMorning, recordRun, runsOfWeek, slugify, storePost, tavilyThisWeek } from "../../lib/content/store.mjs";
-import { BUILDERS, findIdeas } from "./facts.mjs";
+import { BUILDERS, SITE_URL, findIdeas } from "./facts.mjs";
+import { listPublished } from "../../lib/content/blog.mjs";
 import { assembleBody, buildReviseRequest, buildWriteRequest, cutSentences, draftTexts, fill, normalizeDraft } from "./writer.mjs";
 import { checkLinksLoad, codeChecks, urlsIn } from "./checks.mjs";
 import { creditsFor, monthlyCap } from "../../lib/content/tavily-credits.mjs";
@@ -206,7 +207,7 @@ export function linkSources(markdown, supported) {
  * `onPhase(phase, detail)` reports progress (PHASES) for the live status.
  * Returns also `searches` (Tavily) and `aiImages` (Workers AI) spent.
  */
-export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft", focus = null, extras = {}, onPhase = async () => {} }) {
+export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft", focus = null, length = null, extras = {}, onPhase = async () => {} }) {
   const now = ctx.now();
   const mode = ctx.flags.contentMode;
   const db = ctx.db;
@@ -226,7 +227,9 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
   }
   await phase("facts");
   const built = await BUILDERS[kind](db, { now });
-  const sheet = built.ready ? { ...built, ...(focus ? { focus } : {}), ...extras } : built;
+  // Published posts the draft may link to (interlinks, owner 2026-11-12), newest first.
+  const relatedPosts = built.ready ? (await listPublished(db, { now, limit: 12 }).catch(() => [])).map((p) => ({ title: p.title, url: `${SITE_URL}/blog/${p.slug}`, tags: p.tags })) : [];
+  const sheet = built.ready ? { ...built, ...(focus ? { focus } : {}), ...(length ? { length } : {}), ...(relatedPosts.length ? { relatedPosts } : {}), ...extras } : built;
   if (!sheet.ready) {
     await recordRun(db, { night, now, step, mode, status: "skipped", kind, detail: { reason: sheet.reason } });
     log(`not ready: ${sheet.reason}`);
