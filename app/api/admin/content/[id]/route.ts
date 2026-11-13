@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { purgeBlog } from "@/lib/edge-purge";
 import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdminPost } from "@/lib/admin";
 import { REVIEW_ACTIONS, review } from "@/lib/content/blog.mjs";
@@ -26,5 +27,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   await ensureSchema();
   const result = await review(db(), id, { action, by: who.login, note, now: new Date() });
   if (!result.ok) return NextResponse.json(result, { status: STATUS[result.error] ?? 400, headers: PRIVATE });
+  // A published or unpublished post shows at once (worker/edge-cache.ts keeps the blog a day);
+  // one scheduled for later is purged by the hourly cron when its time comes (worker/index.ts).
+  if (action !== "reject") await purgeBlog();
   return NextResponse.json(result, { headers: PRIVATE });
 }
