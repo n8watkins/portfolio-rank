@@ -23,6 +23,7 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import { FULL_DESKTOP, FULL_PHONE } from "./shot-files.mjs";
+import { pngDiff } from "./png-diff.mjs";
 
 export const WEBP_QUALITY = 75;
 
@@ -44,7 +45,7 @@ const IMAGES_WAIT_MS = 4000;
 const SETTLE_MS = 600;
 // Each tile: a beat for scroll-triggered effects driven by script (CSS ones
 // are finished by the screenshot), and its images, bounded.
-const TILE_SETTLE_MS = 450;
+const TILE_SETTLE_MS = 700;
 const TILE_IMAGES_WAIT_MS = 1500;
 const SHOT_TIMEOUT_MS = 30000;
 
@@ -108,6 +109,25 @@ async function imagesLoaded(page, maxHeight, timeoutMs = IMAGES_WAIT_MS) {
       { maxHeight, timeoutMs }
     )
     .catch(() => {});
+}
+
+/**
+ * Waits for a freshly loaded page's first screen to hold still (preloaders,
+ * typing and intro animations), the way the capture waits for its hero:
+ * two quiet polls in a row, at most `polls` polls. An animated background
+ * that never holds still just uses up the polls. The backfill needs this;
+ * the capture's pages have settled already. Returns whether it settled.
+ */
+export async function settleFirstScreen(page, { intervalMs = 1500, polls = 8 } = {}) {
+  let prev = await page.screenshot({ type: "png" });
+  let quiet = 0;
+  for (let i = 0; i < polls && quiet < 2; i++) {
+    await page.waitForTimeout(intervalMs);
+    const cur = await page.screenshot({ type: "png" });
+    quiet = pngDiff(prev, cur) < 0.01 ? quiet + 1 : 0;
+    prev = cur;
+  }
+  return quiet >= 2;
 }
 
 /** The rendered page's height in CSS pixels. */
