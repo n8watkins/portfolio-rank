@@ -21,7 +21,7 @@ const db = url
   ? createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN })
   : createClient({ url: `file:${process.env.LOCAL_DB_FILE ?? path.join(process.cwd(), "data", "portfoliorank.db")}` });
 
-const r = await checkGoals({ db, email: null, to: "OWNER_EMAIL", siteUrl: process.env.AUTH_URL ?? "https://portfoliorank.n8builds.dev", kitApiKey: process.env.KIT_API_KEY ?? null }, { now, dryRun: true });
+const r = await checkGoals({ db, email: null, to: "OWNER_EMAIL", siteUrl: process.env.SITE_URL ?? "https://portfoliorank.dev", kitApiKey: process.env.KIT_API_KEY ?? null }, { now, dryRun: true });
 
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify(r, null, 2));
