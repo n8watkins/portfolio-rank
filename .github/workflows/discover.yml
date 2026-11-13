@@ -1,0 +1,93 @@
+name: Discover portfolios
+
+# The discovery pipeline (docs/DISCOVERY.md, pipeline/discovery/run.mjs):
+# reads each source that is due from its watermark (GitHub topics and Hacker
+# News weekly, the "Share your personal site" threads monthly,
+# personalsit.es and uses.tech when they change), checks the new sites for
+# free, and, when switched on, screens them with Gemini 3.1 Flash-Lite and
+# hands the ones that pass to the grader's queue at a capped pace.
+#
+# Daily, so the AI screen and the hand-off keep an even pace inside their
+# daily caps; each source is still read only when its interval is due.
+# 22:00 UTC is the Pacific afternoon, clear of the 20:30 to 21:15 Pacific
+# nightly window.
+#
+# Target: the staging database unless the repository variable
+# DISCOVERY_TARGET is "production". Switches (repository variables, all off
+# until the owner turns them on): DISCOVERY_SCREEN=on (the AI screen; owner
+# 2026-11-12: no Gemini spending until the prompt audits are done) and
+# DISCOVERY_HANDOFF=on (grading). DISCOVERY_CAPS (JSON) lowers or raises the
+# caps in pipeline/discovery/run.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Sources to read: all, none, or a comma list (github:portfolio,hn:hired,uses,...)"
+        required: false
+        default: "all"
+      caps:
+        description: "Caps for this run as JSON, over DISCOVERY_CAPS (for example {\"found\":50})"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 22 * * *"
+
+# One discovery run at a time: two would read the same sources and queues.
+concurrency:
+  group: discovery
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write # file an issue if a scheduled run fails
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      TARGET: ${{ vars.DISCOVERY_TARGET == 'production' && 'production' || 'staging' }}
+      TURSO_DATABASE_URL: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_DATABASE_URL || secrets.STAGING_TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_AUTH_TOKEN || secrets.STAGING_TURSO_AUTH_TOKEN }}
+      # GitHub search (30 a minute) and the owners' profiles (GraphQL).
+      GITHUB_TOKEN: ${{ github.token }}
+      GEMINI_API_KEY: ${{ vars.DISCOVERY_SCREEN == 'on' && secrets.GEMINI_API_KEY || '' }}
+      DISCOVERY_SCREEN: ${{ vars.DISCOVERY_SCREEN || 'off' }}
+      DISCOVERY_HANDOFF: ${{ vars.DISCOVERY_HANDOFF || 'off' }}
+      DISCOVERY_CAPS: ${{ inputs.caps || vars.DISCOVERY_CAPS }}
+      GRADER_CAPS: ${{ vars.GRADER_CAPS }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Discover (${{ env.TARGET }})
+        env:
+          SOURCES: ${{ inputs.sources || 'all' }}
+        run: node pipeline/discovery/run.mjs --sources "$SOURCES" --summary "$RUNNER_TEMP/discovery.json"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: discovery-summary
+          path: ${{ runner.temp }}/discovery.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Notify on failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again: $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+          fi

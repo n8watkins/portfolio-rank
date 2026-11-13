@@ -56,6 +56,8 @@ export const canonicalJob = (job) => JOB_ALIASES[job] ?? String(job ?? "unknown"
 const LABELS = {
   ...Object.fromEntries(STAGES.map((s) => [s.job, s.label])),
   ...PEOPLE_JOBS,
+  // The discovery pipeline's AI screen, on 3.1 Flash-Lite's own allowance (pipeline/discovery/screen.mjs).
+  "discovery-screen": "Discovery screen (3.1)",
 };
 export const jobLabel = (job) => LABELS[canonicalJob(job)] ?? canonicalJob(job);
 
