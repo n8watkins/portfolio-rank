@@ -298,9 +298,26 @@ async function haiku() {
   process.exit(exit === "done" ? 0 : exit === "spend_limit" ? 4 : 3);
 }
 
+/** The code-only verdict of definition v2.1 (mini7's check) on each site's version-A bundle. */
+async function code() {
+  const { codeVerdict } = await import("./mini7.mjs");
+  const { parkingPhrase } = await import("../../pipeline/gate.mjs");
+  const man = readJson(path.join(ROOT, "manifest.json"));
+  const out = {};
+  for (const s of man.sites) {
+    const dir = path.join(ROOT, "bundles-A", "P", s.id);
+    const facts = readJson(path.join(dir, "facts.json"));
+    const text = fs.readFileSync(path.join(dir, "text.txt"), "utf8");
+    const mp = path.join(s.dir, "facts-load", "measured.json");
+    out[s.id] = codeVerdict({ facts, text, measured: fs.existsSync(mp) ? readJson(mp) : null, parked: parkingPhrase({ text, title: facts.page_title ?? "" }) ?? null });
+    console.log(`${s.id} ${s.url}: ${out[s.id].is_portfolio ? "portfolio" : "not a portfolio"} (${out[s.id].reason.slice(0, 120)})`);
+  }
+  writeJson(path.join(ROOT, "code-verdicts.json"), out);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const step = process.argv[2];
-  const steps = { select, capture, recut, bundle, gemini, haiku };
+  const steps = { select, capture, recut, bundle, gemini, haiku, code };
   if (!steps[step]) {
     console.error("usage: mini8.mjs <select|capture|recut|bundle|gemini|haiku>");
     process.exit(1);
