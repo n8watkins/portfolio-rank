@@ -22,6 +22,10 @@ name: Re-check non-ranked sites (recheck-543)
 #                    HTTP requests (pilot included) and never past 480 on the
 #                    model's quota day. Resumable: pass the last gemini run as
 #                    resume_run.
+#   gemini-extra     the extra batch: the sites that loaded only when retried
+#                    from the owner's machine, committed in
+#                    experiments/recheck-543/extra/ (their screenshots go to
+#                    R2 too); at most 6 HTTP requests.
 #   queue-dry-run,   the review rows committed in experiments/recheck-543/
 #   queue            queue.json into status_reviews (INSERT OR IGNORE), for the
 #                    owner to confirm on /admin/review; nothing else changes.
@@ -35,7 +39,7 @@ on:
         required: true
         default: "gemini-dry-run"
         type: choice
-        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "queue-dry-run", "queue"]
+        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "gemini-extra", "queue-dry-run", "queue"]
       capture_run:
         description: "recapture and gemini steps: the run id of the capture"
         required: false
@@ -151,7 +155,11 @@ jobs:
     env:
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      GEMINI_API_KEY: ${{ (inputs.step == 'gemini' || inputs.step == 'gemini-pilot') && secrets.GEMINI_API_KEY || '' }}
+      GEMINI_API_KEY: ${{ (inputs.step == 'gemini' || inputs.step == 'gemini-pilot' || inputs.step == 'gemini-extra') && secrets.GEMINI_API_KEY || '' }}
+      R2_ACCOUNT_ID: ${{ inputs.step == 'gemini-extra' && secrets.R2_ACCOUNT_ID || '' }}
+      R2_ACCESS_KEY_ID: ${{ inputs.step == 'gemini-extra' && secrets.R2_ACCESS_KEY_ID || '' }}
+      R2_SECRET_ACCESS_KEY: ${{ inputs.step == 'gemini-extra' && secrets.R2_SECRET_ACCESS_KEY || '' }}
+      R2_BUCKET: ${{ inputs.step == 'gemini-extra' && secrets.R2_BUCKET || '' }}
     steps:
       - if: inputs.capture_run == '' || (inputs.step == 'gemini-pilot' && inputs.only == '')
         run: echo "capture_run (and only, for a pilot) is required" && exit 1
@@ -198,20 +206,27 @@ jobs:
           path: ${{ env.RECHECK_DIR }}
           run-id: ${{ inputs.resume_run }}
           github-token: ${{ github.token }}
+      - name: The extra sites' bundles and screenshots
+        if: inputs.step == 'gemini-extra'
+        run: |
+          node scripts/experiments/recheck-543.mjs extra-copy
+          node scripts/experiments/recheck-543.mjs upload --only "$(ls experiments/recheck-543/extra/X | paste -sd, -)"
       - name: Gemini 3.1
         run: |
           case "${{ inputs.step }}" in
             gemini) node scripts/experiments/recheck-543.mjs gemini ;;
+            gemini-extra) node scripts/experiments/recheck-543.mjs gemini --extra ;;
             gemini-pilot) node scripts/experiments/recheck-543.mjs gemini --pilot "${{ inputs.only }}" ;;
             *) node scripts/experiments/recheck-543.mjs gemini --dry-run ;;
           esac
       - uses: actions/upload-artifact@v6
         if: always() && inputs.step != 'gemini-dry-run'
         with:
-          name: ${{ inputs.step == 'gemini-pilot' && 'recheck-gemini31-pilot' || 'recheck-gemini31' }}
+          name: ${{ inputs.step == 'gemini-pilot' && 'recheck-gemini31-pilot' || inputs.step == 'gemini-extra' && 'recheck-gemini31-extra' || 'recheck-gemini31' }}
           path: |
             ${{ env.RECHECK_DIR }}/gemini31/
             ${{ env.RECHECK_DIR }}/gemini31-pilot/
+            ${{ env.RECHECK_DIR }}/gemini31-extra/
             ${{ env.RECHECK_DIR }}/raw/
             ${{ env.RECHECK_DIR }}/timeline.json
           if-no-files-found: ignore

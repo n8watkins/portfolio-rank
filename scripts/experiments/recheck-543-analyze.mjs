@@ -26,7 +26,7 @@ import { buildDupIndex, junkCheck } from "../../pipeline/junk-rules.mjs";
 import { guardVerdict } from "../../pipeline/portfolio-guard.mjs";
 import { actionNote } from "../../pipeline/splash.mjs";
 import { readJson, writeJson } from "./grading-two-sets-lib.mjs";
-import { BOT_CHECK, DIR, GROUPS, JOB, PROMPT_VERSION, SET } from "./recheck-543.mjs";
+import { BOT_CHECK, DIR, EXTRA, GROUPS, JOB, PROMPT_VERSION, SET } from "./recheck-543.mjs";
 
 const PARTS = ["visual_design", "project_presentation", "writing"];
 
@@ -150,15 +150,36 @@ export function analyze(dir = DIR) {
   // Gemini's batch files don't list padding: take each padded id's answer from its first (unpadded) batch only.
   if (plan) {
     g31.batch = new Map();
-    const files = path.join(dir, "gemini31", "batch");
-    for (const r of plan.requests.filter((x) => x.kind === "batch")) {
-      const f = path.join(files, `${r.key.split("/")[1]}.json`);
-      if (!fs.existsSync(f)) continue;
-      const answers = readJson(f).answers;
-      for (const id of r.ids) if (!(r.pad ?? []).includes(id) && !g31.batch.has(id) && answers[id]) g31.batch.set(id, answers[id]);
+    // The full run, then the extra batch (sites that loaded only from the owner's machine).
+    const extraPlanPath = path.join(EXTRA, "plan.json");
+    // The extra batch first: a site in it was re-captured, so its answer there replaces any
+    // answer the full run gave on the failed or bot-check capture.
+    const runs = [...(fs.existsSync(extraPlanPath) ? [[readJson(extraPlanPath), path.join(dir, "gemini31-extra", "batch")]] : []), [plan, path.join(dir, "gemini31", "batch")]];
+    for (const [p, files] of runs) {
+      for (const r of p.requests.filter((x) => x.kind === "batch")) {
+        const f = path.join(files, `${r.key.split("/")[1]}.json`);
+        if (!fs.existsSync(f)) continue;
+        const answers = readJson(f).answers;
+        for (const id of r.ids) if (!(r.pad ?? []).includes(id) && !g31.batch.has(id) && answers[id]) g31.batch.set(id, answers[id]);
+      }
     }
   }
   const hk = readAnswers(path.join(dir, "haiku"));
+  // Haiku's extra batch (e01...) and its solo-extra answers replace answers given on the old capture.
+  const extraIds = new Set(fs.existsSync(path.join(EXTRA, "plan.json")) ? readJson(path.join(EXTRA, "plan.json")).requests.flatMap((r) => r.ids.filter((id) => !(r.pad ?? []).includes(id))) : []);
+  const hkDir = path.join(dir, "haiku");
+  for (const id of extraIds) {
+    hk.batch.delete(id);
+    hk.solo.delete(id);
+  }
+  for (const f of fs.existsSync(path.join(hkDir, "batch")) ? fs.readdirSync(path.join(hkDir, "batch")).filter((x) => x.startsWith("e")) : []) {
+    const r = readJson(path.join(hkDir, "batch", f));
+    for (const [id, a] of Object.entries(r.answers)) if (extraIds.has(id) && !(r.pad ?? []).includes(id)) hk.batch.set(id, a);
+  }
+  for (const f of fs.existsSync(path.join(hkDir, "solo-extra")) ? fs.readdirSync(path.join(hkDir, "solo-extra")) : []) {
+    const r = readJson(path.join(hkDir, "solo-extra", f));
+    for (const [id, a] of Object.entries(r.answers)) if (extraIds.has(id)) hk.solo.set(id, a);
+  }
   const results = [];
   const queue = [];
   for (const s of sel.sites) {

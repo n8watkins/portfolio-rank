@@ -213,6 +213,49 @@ export function pilotPlan(ids) {
   return { pilot: true, sites: ids.length, batches: requests.length, solo: 0, requests };
 }
 
+// The extra batch (owner, 2026-11-13): sites that failed on the GitHub capture but loaded
+// when retried from the owner's machine (recheck-543-ungraded.mjs retry). Their bundles
+// are committed under experiments/recheck-543/extra/X/<id>/ so the GitHub gemini step can
+// read them, with the batch plan in experiments/recheck-543/extra/plan.json.
+export const EXTRA = path.join(import.meta.dirname, "..", "..", "experiments", "recheck-543", "extra");
+const BUNDLE_FILES = ["desktop.jpg", "phone.jpg", "text.txt", "facts.json", "meta.json"];
+
+/** The extra plan: the ids in batches of 5, the last one filled up from `padPool` (answers for padding are ignored). */
+export function extraPlan(ids, padPool) {
+  if (!ids.length) throw new Error("no extra sites");
+  const requests = [];
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const b = ids.slice(i, i + BATCH);
+    const pad = padPool.filter((id) => !b.includes(id)).slice(0, BATCH - b.length);
+    requests.push({ key: `batch/e${String(i / BATCH + 1).padStart(2, "0")}`, step: "batch", set: SET, kind: "batch", ids: [...b, ...pad], pad });
+  }
+  return { extra: true, sites: ids.length, batches: requests.length, solo: 0, requests };
+}
+
+/** Local, no AI: takes the retried sites that now load and are gradable into the run and the branch. */
+function extraPrepare() {
+  const retry = readJson(path.join(DIR, "retry.json"));
+  const ids = [];
+  for (const [id, x] of Object.entries(retry)) {
+    if (x.result !== "loads now") continue;
+    const from = path.join(DIR, "retry", SET, id);
+    const meta = fs.existsSync(path.join(from, "meta.json")) ? readJson(path.join(from, "meta.json")) : null;
+    if (!meta || meta.failed || meta.blocked || !BUNDLE_FILES.every((f) => fs.existsSync(path.join(from, f)))) continue;
+    for (const to of [path.join(EXTRA, SET, id), path.join(DIR, "bundles", SET, id)]) {
+      fs.rmSync(to, { recursive: true, force: true });
+      fs.mkdirSync(to, { recursive: true });
+      for (const f of BUNDLE_FILES) fs.copyFileSync(path.join(from, f), path.join(to, f));
+    }
+    ids.push(id);
+  }
+  ids.sort();
+  const main = readJson(path.join(DIR, "gemini31", "plan.json"));
+  const padPool = main.requests.find((r) => r.kind === "batch").ids;
+  const plan = extraPlan(ids, padPool);
+  writeJson(path.join(EXTRA, "plan.json"), plan);
+  console.log(`extra: ${ids.length} sites (${ids.join(", ")}) in ${plan.batches} batch(es), padded with ${plan.requests.flatMap((r) => r.pad).join(", ") || "nothing"}`);
+}
+
 /** HTTP requests already logged for this job (pilot and full run together). */
 async function jobUsed(db) {
   try {
@@ -223,15 +266,16 @@ async function jobUsed(db) {
   }
 }
 
-async function gemini({ dryRun, pilot = null }) {
+async function gemini({ dryRun, pilot = null, extra = false }) {
   const { pipelineDb } = await import("../../pipeline/roster.mjs");
   const { dailyTotals } = await import("../../pipeline/gemini-log.mjs");
   const db = pipelineDb(path.join(import.meta.dirname, "..", ".."));
   const sel = readJson(path.join(DIR, "selection.json"));
-  const folder = pilot ? "gemini31-pilot" : "gemini31";
+  const folder = pilot ? "gemini31-pilot" : extra ? "gemini31-extra" : "gemini31";
   const planPath = path.join(DIR, folder, "plan.json");
   let plan;
   if (fs.existsSync(planPath)) plan = readJson(planPath);
+  else if (extra) plan = readJson(path.join(EXTRA, "plan.json"));
   else if (pilot) {
     const ids = pilot.split(",").map((x) => x.trim()).filter(Boolean);
     const gradable = new Set(capturedIds());
@@ -246,9 +290,9 @@ async function gemini({ dryRun, pilot = null }) {
   const used = (await dailyTotals(db)).used.get(GEMINI31.model)?.n ?? 0;
   const job = await jobUsed(db);
   // This run may send what the job has left of its cap (a pilot at most PILOT_MAX_HTTP).
-  const budget = Math.max(0, Math.min(JOB_CAP - job, pilot ? PILOT_MAX_HTTP - state.http_requests : Infinity));
+  const budget = Math.max(0, Math.min(JOB_CAP - job, pilot || extra ? PILOT_MAX_HTTP - state.http_requests : Infinity));
   const settings = { ...GEMINI31, hard_stop: state.http_requests + budget };
-  console.log(`${pilot ? "PILOT: " : ""}${plan.sites} sites: ${plan.batches} batches of ${BATCH} + ${plan.solo} one at a time = ${plan.requests.length} requests`);
+  console.log(`${pilot ? "PILOT: " : extra ? "EXTRA: " : ""}${plan.sites} sites: ${plan.batches} batches of ${BATCH} + ${plan.solo} one at a time = ${plan.requests.length} requests`);
   console.log(`${left} requests left; job ${JOB} has used ${job} of its ${JOB_CAP} HTTP requests; this run may send ${budget}`);
   console.log(`${GEMINI31.model}: ${used} requests this Pacific quota day (cap ${GEMINI31.day_cap})`);
   if (used + Math.min(left, budget) > GEMINI31.day_cap) console.log(`note: the day cap stops the run at ${GEMINI31.day_cap}; run it again after the quota day turns`);
@@ -278,7 +322,7 @@ async function gemini({ dryRun, pilot = null }) {
 
 // ---------------------------------------------------------------- upload
 
-async function upload() {
+async function upload(only = null) {
   if (!process.env.R2_ACCOUNT_ID) throw new Error("upload needs the R2_* variables");
   const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
   const s3 = new S3Client({
@@ -289,6 +333,7 @@ async function upload() {
   const sel = readJson(path.join(DIR, "selection.json"));
   let n = 0;
   for (const s of sel.sites) {
+    if (only && !only.includes(s.id)) continue;
     const dir = path.join(DIR, "bundles", SET, s.id);
     for (const [from, to] of [["desktop.jpg", "hero.jpg"], ["phone.jpg", "mobile.jpg"]]) {
       if (!fs.existsSync(path.join(dir, from))) continue;
@@ -332,14 +377,26 @@ async function main() {
     console.log(JSON.stringify(Array.from({ length: shardCount(n) }, (_, i) => i)));
     return 0;
   }
-  if (step === "upload") return (await upload(), 0);
+  if (step === "upload") return (await upload(opt("--only")?.split(",") ?? null), 0);
   if (step === "plan") {
     const sel = readJson(path.join(DIR, "selection.json"));
     const plan = makePlan(sel.sites, capturedIds());
     console.log(`${plan.sites} captured: ${plan.batches} batches + ${plan.solo} solo = ${plan.requests.length} requests`);
     return 0;
   }
-  if (step === "gemini") return gemini({ dryRun: flag("--dry-run"), pilot: opt("--pilot") });
+  if (step === "gemini") return gemini({ dryRun: flag("--dry-run"), pilot: opt("--pilot"), extra: flag("--extra") });
+  if (step === "extra-prepare") return (extraPrepare(), 0);
+  if (step === "extra-copy") {
+    // GitHub: the committed extra bundles over the downloaded capture.
+    const ids = fs.existsSync(path.join(EXTRA, SET)) ? fs.readdirSync(path.join(EXTRA, SET)) : [];
+    for (const id of ids) {
+      const to = path.join(DIR, "bundles", SET, id);
+      fs.rmSync(to, { recursive: true, force: true });
+      fs.cpSync(path.join(EXTRA, SET, id), to, { recursive: true });
+    }
+    console.log(`extra bundles in place: ${ids.join(", ") || "none"}`);
+    return 0;
+  }
   if (step === "queue") {
     // The review rows (experiments/recheck-543/queue.json, written by recheck-543-analyze.mjs and
     // committed for the record) into status_reviews. Never updates a row the owner has decided:

@@ -30,7 +30,7 @@ import { fileURLToPath } from "url";
 import { HAIKU, claudeBodyFor } from "./grading-two-sets-claude.mjs";
 import { readJson, sha256, writeJson } from "./grading-two-sets-lib.mjs";
 import { loadBundle, loadPrompts, parseResult } from "./grading-two-sets-run.mjs";
-import { DIR, PROMPT_DIR, PROMPT_VERSION, capturedIds, makePlan, promptReady } from "./recheck-543.mjs";
+import { DIR, EXTRA, PROMPT_DIR, PROMPT_VERSION, capturedIds, makePlan, promptReady } from "./recheck-543.mjs";
 
 // Owner, 2026-11-13: about $1.40 expected and accepted; the $5 stop is only a guard against a bug.
 export const SETTINGS = { ...HAIKU, folder: "haiku", hard_stop_usd: 5.0, first_output_estimate: { solo: 6000, batch: 30000 } };
@@ -41,11 +41,17 @@ const SPEND = /spend|usage limit|credit|billing|quota|limit.*(reached|exceeded)/
  * (gemini31/plan.json, as it ran) when that file is here, so both models
  * see the same groups in the same positions; else the same seeded plan.
  */
-export function haikuRequests(sites, ids, geminiPlan = null) {
+export function haikuRequests(sites, ids, geminiPlan = null, extra = fs.existsSync(path.join(EXTRA, "plan.json")) ? readJson(path.join(EXTRA, "plan.json")) : null) {
   const plan = geminiPlan ?? makePlan(sites, ids);
+  const extraIds = new Set((extra?.requests ?? []).flatMap((r) => r.ids.filter((id) => !(r.pad ?? []).includes(id))));
   return [
     ...plan.requests.filter((r) => r.kind === "batch"),
-    ...ids.map((id) => ({ key: `solo/${id}`, step: "solo", set: id[0], kind: "solo", ids: [id] })),
+    // The extra batch, the same as Gemini's (sites that loaded only from the owner's machine),
+    // and each of those sites alone again under its own key: an earlier solo answer, if any,
+    // was on the old (failed or bot-check) capture.
+    ...(extra?.requests ?? []).filter((r) => r.kind === "batch"),
+    ...(extra?.requests ?? []).flatMap((r) => r.ids.filter((id) => !(r.pad ?? []).includes(id))).map((id) => ({ key: `solo-extra/${id}`, step: "solo-extra", set: id[0], kind: "solo", ids: [id] })),
+    ...ids.filter((id) => !extraIds.has(id)).map((id) => ({ key: `solo/${id}`, step: "solo", set: id[0], kind: "solo", ids: [id] })),
   ];
 }
 
