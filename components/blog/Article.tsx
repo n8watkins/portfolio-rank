@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BarChart3, Bot, ExternalLink, Trophy } from "lucide-react";
-import { Markdown } from "@/components/blog/Markdown";
+import { Markdown, headingsOf } from "@/components/blog/Markdown";
+import { type TocItem, TocRail, TocToggle } from "@/components/blog/Toc";
 import { ShareLinks } from "@/components/blog/ShareLinks";
 import { tag as tagClass } from "@/components/ui/Chip";
 import { btnSecondary, eyebrow } from "@/components/ui/styles";
@@ -22,8 +23,9 @@ function Figure({ postId, image, cover = false }: { postId: string; image: PostI
   const chart = image.kind === "chart";
   const href = image.kind === "screenshot" && credit.href ? postLinkFor(credit.href) : credit.href;
   return (
-    <figure className={cover ? "" : "my-9"}>
-      <div className={`overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
+    <figure className={`post-figure ${cover ? "" : "my-9"}`}>
+      {/* .post-frame lifts and its image zooms a touch on hover (globals.css, never with reduced motion). */}
+      <div className={`post-frame overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
         {/* eslint-disable-next-line @next/next/no-img-element -- our own media route and Pexels hotlinks, sized by CSS */}
         <img
           src={imageSrc(postId, image)}
@@ -74,6 +76,8 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
   const dataLink = post.facts?.dataLink ?? "/top";
   const date = post.publishAt ?? post.createdAt;
   const blog = ROUTES.blog ?? "/blog";
+  // The contents: the body's subheads, then the post's own Sources section.
+  const toc: TocItem[] = [...headingsOf(post.body), { id: "sources", text: "Sources" }];
   return (
     <article className="pb-20">
       {banner}
@@ -111,7 +115,22 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
         </div>
       )}
 
-      <div className="mx-auto max-w-[42rem] px-4 pt-8 text-[17px] leading-[1.75] sm:px-6 sm:text-lg sm:leading-[1.75]">
+      {/* The reading column stays centred under the header; on wide screens the
+          contents rail sits in the left gutter (the right one stays empty). */}
+      <div className="mx-auto max-w-[78rem] px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_39rem_minmax(0,1fr)] xl:gap-12">
+        {toc.length > 1 && (
+          <aside className="hidden pt-8 xl:block xl:justify-self-end">
+            <div className="h-full w-56">
+              <TocRail items={toc} />
+            </div>
+          </aside>
+        )}
+      <div className="mx-auto w-full max-w-[39rem] pt-8 text-[17px] leading-[1.75] sm:text-lg sm:leading-[1.75] xl:col-start-2 xl:mx-0">
+        {toc.length > 1 && (
+          <div className="xl:hidden">
+            <TocToggle items={toc} />
+          </div>
+        )}
         <Markdown
           body={post.body}
           sources={sources}
@@ -127,11 +146,11 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {related.map((r) => (
                 <li key={r.url}>
-                  <a href={postLinkFor(r.url)} className="card card-hover flex items-center gap-3 p-3">
+                  <a href={postLinkFor(r.url)} className="post-related card card-hover flex items-center gap-3 p-3">
                     <span className="h-12 w-20 shrink-0 overflow-hidden rounded-md border border-edge bg-raised">
                       {r.shot && (
                         // eslint-disable-next-line @next/next/no-img-element -- a small screenshot thumbnail
-                        <img src={r.shot} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
+                        <img src={r.shot} alt="" loading="lazy" className="post-thumb h-full w-full object-cover object-top" />
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -209,6 +228,7 @@ export function Article({ post, related, banner, more = [] }: { post: BlogPost; 
           <p className="mb-3 text-sm font-semibold">Share this post</p>
           <ShareLinks url={postUrl(post.slug)} text={post.shareLine || post.title} />
         </div>
+      </div>
       </div>
 
       {more.length > 0 && (
