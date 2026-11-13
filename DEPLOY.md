@@ -82,7 +82,7 @@ Two workflows, so production and staging never overwrite each other:
    It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
    It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev`.
    The run's summary lists exactly what is on staging.
-   A labeled pull request that does not merge cleanly onto main and the ones before it is left out, named in the summary and told in a comment; rebase it onto the one it conflicts with to bring it back.
+   When a labeled pull request does not merge cleanly onto main and the ones before it, nothing is deployed: staging keeps what it had, the run fails, and the pull request is named in the summary and told in a comment; merge main into it (or rebase it onto the one it conflicts with) and run the workflow again.
    A stacked pull request brings its base along, so label the top of a stack; pushes to a stacked pull request start no run by themselves (GitHub runs only main's copy of the workflow for them), so run it by hand after pushing.
 
 To try a pull request on staging: `gh pr edit <number> --add-label staging`; to take it off: `--remove-label staging`.
