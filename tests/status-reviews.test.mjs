@@ -235,8 +235,8 @@ test("the weekly data pull request adds confirmed relists; owner requests and du
     feed: [{ name: "Listed", url: "https://listed.dev" }],
   });
   assert.deepEqual(plan.added, [
-    { name: "Back", url: "https://back.dev" },
-    { name: "Down", url: "https://down.dev/" },
+    { name: "Back", url: "https://back.dev", source: "review" },
+    { name: "Down", url: "https://down.dev/", source: "review" },
   ]);
   assert.deepEqual(plan.unexcluded, ["https://down.dev"]);
   assert.deepEqual(plan.blocked, [{ url: "https://owner.dev", kind: "owner_request" }]);
