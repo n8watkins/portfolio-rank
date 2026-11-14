@@ -4,6 +4,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, ExternalLink, X } from "lucide-react";
 import { btnGhost, btnIcon, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
+import { ConfirmButton } from "./ConfirmButton";
+import { REJECT_QUESTION, ifConfirmed } from "./review-labels";
 
 // The large screenshot viewer of the owner's review queue
 // (components/admin/StatusReviewQueue.tsx): a thumbnail opens it on that view.
@@ -40,6 +42,7 @@ export function ShotViewer({
   onClose,
   returnFocus,
   prompt = null,
+  outcome,
 }: {
   domain: string;
   url: string;
@@ -57,6 +60,8 @@ export function ShotViewer({
   returnFocus: HTMLElement | null;
   /** The grading prompt's version, when the row recorded it. */
   prompt?: string | null;
+  /** What Confirm does and when it shows (./review-labels.ts outcomeOf). */
+  outcome: { label: string; question: string; when: string };
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -95,8 +100,7 @@ export function ShotViewer({
     tabs.current[next]?.focus();
   }
 
-  const confirmLabel = proposed === "review" ? "Mark checked" : "Confirm";
-  const doneText = done === "confirm" ? (proposed === "review" ? "Marked checked." : "Confirmed: the change is applied.") : done === "reject" ? "Rejected: nothing changed." : null;
+  const doneText = done === "confirm" ? (proposed === "review" ? "Marked checked. It is under Decided, with Undo." : `Confirmed. ${outcome.when} It is under Decided, with Undo.`) : done === "reject" ? "Rejected: nothing changed. It is under Decided, with Undo." : null;
 
   return (
     <dialog
@@ -197,12 +201,25 @@ export function ShotViewer({
             </p>
           ) : (
             <>
-              <button type="button" className={btnSecondary} disabled={busy} onClick={() => onDecide("confirm")} data-review-viewer-confirm>
-                <Check className="h-4 w-4" aria-hidden /> {busy ? "Working..." : confirmLabel}
-              </button>
-              <button type="button" className={btnGhost} disabled={busy} onClick={() => onDecide("reject")} data-review-viewer-reject>
-                <X className="h-4 w-4" aria-hidden /> Reject
-              </button>
+              <ConfirmButton
+                className={btnSecondary}
+                disabled={busy}
+                icon={<Check className="h-4 w-4" aria-hidden />}
+                label={busy ? "Working..." : outcome.label}
+                question={outcome.question}
+                onConfirm={() => onDecide("confirm")}
+                data-review-viewer-confirm
+              />
+              <ConfirmButton
+                className={btnGhost}
+                disabled={busy}
+                icon={<X className="h-4 w-4" aria-hidden />}
+                label="Reject"
+                question={REJECT_QUESTION}
+                onConfirm={() => onDecide("reject")}
+                data-review-viewer-reject
+              />
+              <p className="text-xs text-mute">{ifConfirmed(outcome.when)}</p>
               {error && (
                 <p className="text-sm text-down" role="alert">
                   {error}
