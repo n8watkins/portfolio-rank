@@ -1,0 +1,195 @@
+{
+ "note": "UTC. Times come from the step outputs (selection.json, capture-state.json, manifest.json, groupings.json, lock.json) or, where marked approximate, from file times. The Gemini phases are filled in by grading-two-sets-run.mjs; the expert phases by the coordinator.",
+ "phases": [
+  {
+   "phase": "setup: read the plan, make the worktree, read exp/grading-v3",
+   "start": "2026-11-13T18:03:50Z",
+   "end": "2026-11-13T18:10:00Z",
+   "approximate": true
+  },
+  {
+   "phase": "event: dcg blocked a read-only junk-site query ('<' in quoted SQL read as a redirect); stopped and reported; the coordinator ruled it a method block and the query was rewritten with BETWEEN",
+   "start": "2026-11-13T18:06:00Z",
+   "approximate": true
+  },
+  {
+   "phase": "select: Set A and Set B candidates (read-only DB)",
+   "start": "2026-11-13T18:10:00Z",
+   "end": "2026-11-13T18:11:30Z",
+   "approximate_start": true
+  },
+  {
+   "phase": "capture: Set A first-screen facts, Set B full capture (local Playwright)",
+   "start": "2026-11-13T18:11:58Z",
+   "end": "2026-11-13T18:25:44Z"
+  },
+  {
+   "phase": "prompts, harness, analysis and mocked tests (during the capture)",
+   "start": "2026-11-13T18:12:00Z",
+   "end": "2026-11-13T18:24:00Z",
+   "approximate": true
+  },
+  {
+   "phase": "bundles, groupings, expert-runs.md",
+   "start": "2026-11-13T18:25:47Z",
+   "end": "2026-11-13T18:25:52Z"
+  },
+  {
+   "phase": "lock",
+   "start": "2026-11-13T18:26:18Z",
+   "end": "2026-11-13T18:26:18Z"
+  },
+  {
+   "phase": "expert:solo (the answer key)"
+  },
+  {
+   "phase": "expert:pass1"
+  },
+  {
+   "phase": "expert:pass2"
+  },
+  {
+   "phase": "expert:pass3"
+  },
+  {
+   "phase": "expert:solo-repeat"
+  },
+  {
+   "phase": "expert:pass1-repeat"
+  },
+  {
+   "phase": "gemini:solo",
+   "start": "2026-11-13T18:28:32.980Z",
+   "end": "2026-11-13T18:34:09.214Z"
+  },
+  {
+   "phase": "gemini:pass1",
+   "start": "2026-11-13T18:34:09.235Z",
+   "end": "2026-11-13T18:41:52.329Z"
+  },
+  {
+   "phase": "event: one HTTP 503 on solo/B12, retried after 30 s, answered",
+   "start": "2026-11-13T18:32:08Z"
+  },
+  {
+   "phase": "event: paused at pass1/A-b1 (the first 5-at-a-time request) on HTTP 400 INVALID_ARGUMENT; 42 HTTP requests used, solo step complete; waiting for a decision before any change to the locked batch request",
+   "start": "2026-11-13T18:34:13Z"
+  },
+  {
+   "phase": "amendment: batch level_line free text, 10 solo-freetext controls added, expert as 12 sessions (one per step per set); recorded in lock.json amendments",
+   "start": "2026-11-13T18:35:00Z",
+   "end": "2026-11-13T18:37:51Z",
+   "approximate_start": true
+  },
+  {
+   "phase": "event: two HTTP 503s on pass1/B-b1, retried after 30 s and 60 s, answered",
+   "start": "2026-11-13T18:39:16Z"
+  },
+  {
+   "phase": "gemini:pass2",
+   "start": "2026-11-13T18:41:52.338Z",
+   "end": "2026-11-13T18:49:07.061Z"
+  },
+  {
+   "phase": "event: paused at pass2/A-b3 by the day cap: gemini-3.5-flash-lite had 430 requests this Pacific quota day (376 from exp-grading-v3, 54 from this run; free quota 500); 50 of 92 requests answered, 54 HTTP requests used",
+   "start": "2026-11-13T18:42:11Z"
+  },
+  {
+   "phase": "amendment: claude-sonnet-api, Set A's 20 solo requests to claude-sonnet-5-5 with Gemini's solo prompt (owner-approved; run by the owner); recorded in lock.json amendments",
+   "end": "2026-11-13T18:44:50Z"
+  },
+  {
+   "phase": "amendment: day cap raised from 430 to 485 for this run (production frozen since 2026-11-12T23:18Z, checked at query time; 15 of 500 left); the 120 hard stop unchanged; resumed"
+  },
+  {
+   "phase": "claude-sonnet-api:solo (Set A)",
+   "start": "2026-11-13T18:45:50.734Z",
+   "end": "2026-11-13T18:48:31.577Z"
+  },
+  {
+   "phase": "amendment: second Claude Sonnet 5.5 API run (Set B solo, pass1 A and B, solo repeats), cumulative $2.00 stop, spend-limit outcome recorded; run by the owner"
+  },
+  {
+   "phase": "gemini:pass3",
+   "start": "2026-11-13T18:49:07.072Z",
+   "end": "2026-11-13T18:52:12.129Z"
+  },
+  {
+   "phase": "gemini:solo-repeat",
+   "start": "2026-11-13T18:52:12.131Z",
+   "end": "2026-11-13T18:53:24.451Z"
+  },
+  {
+   "phase": "gemini:pass1-repeat",
+   "start": "2026-11-13T18:53:24.468Z",
+   "end": "2026-11-13T18:55:35.333Z"
+  },
+  {
+   "phase": "gemini:solo-freetext",
+   "start": "2026-11-13T18:55:35.334Z",
+   "end": "2026-11-13T18:56:53.738Z"
+  },
+  {
+   "phase": "analysis and report"
+  },
+  {
+   "phase": "claude-sonnet-api:solo (Set B)",
+   "start": "2026-11-13T19:03:26.809Z",
+   "end": "2026-11-13T19:05:56.160Z"
+  },
+  {
+   "phase": "claude-sonnet-api:pass1 (Set A)",
+   "start": "2026-11-13T19:05:56.160Z",
+   "end": "2026-11-13T19:26:58.829Z"
+  },
+  {
+   "phase": "event: Claude API spend-limit stop (count_tokens HTTP 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.\"},\"reques) at a running total of $1.1563",
+   "start": "2026-11-13T19:06:53.642Z"
+  },
+  {
+   "phase": "claude-sonnet-api:pass1 (Set B)",
+   "start": "2026-11-13T19:26:58.831Z",
+   "end": "2026-11-13T19:28:40.094Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo (Set A)",
+   "start": "2026-11-13T19:28:10.101Z",
+   "end": "2026-11-13T19:30:23.276Z"
+  },
+  {
+   "phase": "claude-sonnet-api:solo-repeat (Set A)",
+   "start": "2026-11-13T19:28:40.094Z",
+   "end": "2026-11-13T19:29:17.458Z"
+  },
+  {
+   "phase": "claude-sonnet-api:solo-repeat (Set B)",
+   "start": "2026-11-13T19:29:17.458Z",
+   "end": "2026-11-13T19:29:54.880Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo (Set B)",
+   "start": "2026-11-13T19:30:23.277Z",
+   "end": "2026-11-13T19:32:35.523Z"
+  },
+  {
+   "phase": "claude-haiku-api:pass1 (Set A)",
+   "start": "2026-11-13T19:32:35.524Z",
+   "end": "2026-11-13T19:34:44.745Z"
+  },
+  {
+   "phase": "claude-haiku-api:pass1 (Set B)",
+   "start": "2026-11-13T19:34:44.745Z",
+   "end": "2026-11-13T19:36:27.077Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo-repeat (Set A)",
+   "start": "2026-11-13T19:36:27.078Z",
+   "end": "2026-11-13T19:36:58.246Z"
+  },
+  {
+   "phase": "claude-haiku-api:solo-repeat (Set B)",
+   "start": "2026-11-13T19:36:58.247Z",
+   "end": "2026-11-13T19:37:27.789Z"
+  }
+ ]
+}

@@ -1,0 +1,258 @@
+{
+ "locked_at": "2026-11-13T22:45:58.042Z",
+ "seed": 20261115,
+ "capture": "captureOnce, feat/fullpage-shots at f378754 (pinned worktree)",
+ "sites": [
+  {
+   "id": "P01",
+   "url": "https://shashikantportfolio.web.app",
+   "name": "Shashi Kant",
+   "why": "owner list",
+   "b_screens": 0,
+   "b_note": "the whole page is 900 px tall, so there is no further screen to add"
+  },
+  {
+   "id": "P02",
+   "url": "https://d2yap.github.io",
+   "name": "Donnie Yap",
+   "why": "inner-scroll site (the <main> element scrolls), tested by the full-page lane",
+   "b_screens": 2,
+   "b_note": "projects section (heading \"PROJECTS\"), from 1776 px"
+  },
+  {
+   "id": "P03",
+   "url": "https://anish7.me",
+   "name": "Anish Biswas",
+   "why": "543 set: typical mid-quality portfolio, projects well below the first screen",
+   "b_screens": 1,
+   "b_note": "the second screen of the page (no projects heading found), from 900 px"
+  },
+  {
+   "id": "P04",
+   "url": "https://luispeche.vercel.app/",
+   "name": "Luis Peche Aparcana",
+   "why": "owner list",
+   "b_screens": 2,
+   "b_note": "projects section (heading \"What I Build\"), from 995 px"
+  },
+  {
+   "id": "P05",
+   "url": "https://vallarasuk.com",
+   "name": "Vallarasu",
+   "why": "543 set: a clear negative (hijacked, now a gambling site)",
+   "b_screens": 1,
+   "b_note": "the second screen of the page (no projects heading found), from 900 px"
+  },
+  {
+   "id": "P06",
+   "url": "https://shubhadeepsec.github.io",
+   "name": "Shubhadeep Mahapatra",
+   "why": "543 set: behind an intro screen (CLICK TO ENTER)",
+   "b_screens": 2,
+   "b_note": "projects section (heading \"MY WORK\"), from 2127 px"
+  },
+  {
+   "id": "P07",
+   "url": "https://www.abhisheksharma.codes/",
+   "name": "Abhishek Sharma",
+   "why": "owner list (no role)",
+   "b_screens": 0,
+   "b_note": "the whole page is 900 px tall, so there is no further screen to add"
+  },
+  {
+   "id": "P08",
+   "url": "https://agney.dev",
+   "name": "Agney Menon",
+   "why": "owner list",
+   "b_screens": 0,
+   "b_note": "the whole page is 900 px tall, so there is no further screen to add"
+  },
+  {
+   "id": "P09",
+   "url": "https://www.shubhamgupta.dev/",
+   "name": "Shubham Gupta",
+   "why": "543 set: the whole site sits in a full-screen fixed container",
+   "b_screens": 0,
+   "b_note": "the whole page is 900 px tall, so there is no further screen to add"
+  },
+  {
+   "id": "P10",
+   "url": "https://heysai.dev/",
+   "name": "Sairithik Komuravelly",
+   "why": "owner list",
+   "b_screens": 1,
+   "b_note": "the second screen of the page (no projects heading found), from 900 px"
+  }
+ ],
+ "groupings": {
+  "batches": [
+   [
+    "P10",
+    "P02",
+    "P05",
+    "P08",
+    "P01"
+   ],
+   [
+    "P06",
+    "P04",
+    "P07",
+    "P09",
+    "P03"
+   ]
+  ],
+  "solo_order": [
+   "P02",
+   "P03",
+   "P04",
+   "P06",
+   "P09",
+   "P10",
+   "P01",
+   "P08",
+   "P05",
+   "P07"
+  ]
+ },
+ "versions": {
+  "A": {
+   "prompts": "experiments/portfolio-definition-v2.1",
+   "prompt_ids": {
+    "solo": "portfolio-definition-v2.1-solo",
+    "solo_freetext": "portfolio-definition-v2.1-solo-freetext",
+    "batch": "portfolio-definition-v2.1-batch"
+   }
+  },
+  "B": {
+   "prompts": "experiments/portfolio-definition-v2.1-projects",
+   "prompt_ids": {
+    "solo": "portfolio-definition-v2.1-projects-solo",
+    "solo_freetext": "portfolio-definition-v2.1-projects-solo-freetext",
+    "batch": "portfolio-definition-v2.1-projects-batch"
+   }
+  }
+ },
+ "settings": {
+  "gemini": {
+   "model": "gemini-3.1-flash-lite",
+   "temperature": 0.2,
+   "thinkingLevel": "low",
+   "hard_stop": 32,
+   "day_cap": 480
+  },
+  "haiku": {
+   "model": "claude-haiku-5-5",
+   "hard_stop_usd": 1
+  },
+  "job": "exp-mini8"
+ },
+ "prompts": {
+  "A/experiments/portfolio-definition-v2.1/solo.txt": "a916a657a70874c75f7b5789f05d2a3b1370eda62f72aaf4cbfc500c4a15f79b",
+  "A/experiments/portfolio-definition-v2.1/batch.txt": "a1db7c99a7852ac23808dccde4e5a7bf9883b58043c86478a510e70df8a561e0",
+  "A/experiments/portfolio-definition-v2.1/schema.json": "0a4bdb8dfd679de42120a96d0808889b97fcea99ad29e5856e634781681c17a8",
+  "B/experiments/portfolio-definition-v2.1-projects/solo.txt": "78cf21443209c1fb02b16c9feeb17cc3c0ad2f9277ebc189e6435d04ec49bfcf",
+  "B/experiments/portfolio-definition-v2.1-projects/batch.txt": "2742f55e5b944927257e8539fefbc9cd48c001e890ecc3342774dba2c1e1b601",
+  "B/experiments/portfolio-definition-v2.1-projects/schema.json": "0a4bdb8dfd679de42120a96d0808889b97fcea99ad29e5856e634781681c17a8"
+ },
+ "bundles": {
+  "A/P01/desktop.jpg": "10f7a575255b74939b82f36b366981245899308d73c45e6a7445d9a1da90e05a",
+  "A/P01/facts.json": "bbd1a1bc186f4d327f89292079dbc14682d71c090c851f0db7eadb1ccffc56ab",
+  "A/P01/phone.jpg": "330f37d6260c9dcfdc56e086e9a1aeabdc18eee65eb1e8f4840d3ee527bcec03",
+  "A/P01/text.txt": "ea613385e2f70bf3589e629db621310fd41bdc93a75ccf58722b58c5039abd0d",
+  "A/P02/desktop.jpg": "b750bc1ae36423c00228f596f094e904df06e6b5419f1d13f0f259305281de00",
+  "A/P02/facts.json": "cefb48abb4737d0484c023377dcb0a1beda14c5df41ce380e664bd4225f07704",
+  "A/P02/phone.jpg": "79014676792e8eba9fc1a03b45c9569926801aacc4b99d5026bfbc6889135517",
+  "A/P02/text.txt": "73473d524d6c6955430ba66e086225746f13486313c653786f1375804904d774",
+  "A/P03/desktop.jpg": "a4669c4a65bcffd514c004f5c90232ba0431d52d7b5f0fa11d5899630d0a18bf",
+  "A/P03/facts.json": "ec15e7c5a9bc0cbd121e0659282f372e5a39c79a644e37c008d752a002121ecf",
+  "A/P03/phone.jpg": "520cb92a2fd202431097425778ce5237e7cc147c1c878ee20f2624b0217a6910",
+  "A/P03/text.txt": "f19dd23d18fca834c90c7fa3094b0175ae0d90ef34691cc39b54bda109c0c7ee",
+  "A/P04/desktop.jpg": "2de4fecd584cdae678e84986c68330bd6ea4fb2390d4f33fd5e02837c158fa6f",
+  "A/P04/facts.json": "68249f1e4ffbab17f763b9417c4cfe42578212c029324857d5daba1aaeb5bbc6",
+  "A/P04/phone.jpg": "3f6877691ac037d8833e877d4271d30671c571b2fe840d87edf651ca0205e6e4",
+  "A/P04/text.txt": "0cb31b1db982105dc26a45bc5e3e115e6bc5511f84f3b012e8e36f52f20c7716",
+  "A/P05/desktop.jpg": "38e7147213fe5d7a073441d03a22dbf2fedfc44ce2b0a80245686a62a9a54997",
+  "A/P05/facts.json": "95141e9df20b88edaed531cd7484bab90c3c54b9ac2eaf39d18697738a2f12cd",
+  "A/P05/phone.jpg": "ec0b855768bfec2441dd5419f532999f06ce321d07139c810d28b5ef12695c02",
+  "A/P05/text.txt": "25bd03635e9f4f21009d70af885d3b2e54cff3a565527e958ac7ac56ffbe4583",
+  "A/P06/desktop.jpg": "ec54bda6da271f7ef218cc3d8ca51ae9657f560c260b43ab001f61ce2e2d5ae1",
+  "A/P06/facts.json": "4fca1fb1e8b9725ae7d756de16771e713efd7c6713a94bad1d868425c0fa8c5c",
+  "A/P06/phone.jpg": "e94891573a05c09f44855e6bce6602ac1482bbf0f3c5071efb886a3b4b3d2ffe",
+  "A/P06/text.txt": "587781437166842f7d86de46cb80a8dcb296f2037486bb30642b29c254eb94a3",
+  "A/P07/desktop.jpg": "a646178eb77cb8dc35eff1aa97631e0ab3683be08dc6312563630a1d497a9969",
+  "A/P07/facts.json": "9955fc2e5cfb141023138456661e81decb4ecf89445a32087f79b52f47d392f9",
+  "A/P07/phone.jpg": "e670118caec1438d719bf647dd44550cfa4ce484e52a3bfc75aa36648379033f",
+  "A/P07/text.txt": "06ed4d6f9b40e1421a6b039e5645cb6e8e638562d16cd6f578aefa3575fe133a",
+  "A/P08/desktop.jpg": "690ac67dde97d9ee30edf5ecb0c6eeb9762d4ed6917a6fcb8834606be00f8565",
+  "A/P08/facts.json": "6c85d88f9937896a8b58358640eda06cc6ea51f4c47d6293b715b2b0743450ac",
+  "A/P08/phone.jpg": "ef9e7b6f7b3eaa75e8e629ac92e3d2fec7b34d8d3b10c5b522f02a8d1a236d74",
+  "A/P08/text.txt": "a70cd35fa7ad9a714aa1be696c756fb68b61977b35b715f93059da1f2c31f0d5",
+  "A/P09/desktop.jpg": "261aa3da831c8e2497458997e0efd1b3cefd8078fafaa6947f1841c293235cea",
+  "A/P09/facts.json": "76db03b31f98c0cd8ae79787bb5b5becc22cac5e66543a7c558f0f2a8f70a2b7",
+  "A/P09/phone.jpg": "15abc010aa98cbde565cec0f633ffb5b9634a672bfc412393b89fe4a0e03176a",
+  "A/P09/text.txt": "2e18658b155b2ed09f09f9d4e63d272313bbbd76fed4d2630cf646e11f45dba9",
+  "A/P10/desktop.jpg": "e0b053782a16e1c7564852ec8352af882b516e227512d9180416e9a0a4db9c18",
+  "A/P10/facts.json": "289b57bf262ec4ac4c73e723c39c39d3a660a4af6b44efc62297471b2ee754ec",
+  "A/P10/phone.jpg": "c9e92da4c51395d9e93ab24f53611ed3c2ec5a3cf31ee3ea18a09e3b9d18bf2e",
+  "A/P10/text.txt": "cc196d24731210b9730fcc700f8e439f5c9e844ee753ec71ffee3547079ecc78",
+  "B/P01/desktop.jpg": "10f7a575255b74939b82f36b366981245899308d73c45e6a7445d9a1da90e05a",
+  "B/P01/extra.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "B/P01/facts.json": "bbd1a1bc186f4d327f89292079dbc14682d71c090c851f0db7eadb1ccffc56ab",
+  "B/P01/phone.jpg": "330f37d6260c9dcfdc56e086e9a1aeabdc18eee65eb1e8f4840d3ee527bcec03",
+  "B/P01/text.txt": "ea613385e2f70bf3589e629db621310fd41bdc93a75ccf58722b58c5039abd0d",
+  "B/P02/desktop.jpg": "b750bc1ae36423c00228f596f094e904df06e6b5419f1d13f0f259305281de00",
+  "B/P02/extra.json": "2eac8b94496ba6b440a514d4ae1501091e9439493614f3558cd6766ba2889e1e",
+  "B/P02/facts.json": "cefb48abb4737d0484c023377dcb0a1beda14c5df41ce380e664bd4225f07704",
+  "B/P02/phone.jpg": "79014676792e8eba9fc1a03b45c9569926801aacc4b99d5026bfbc6889135517",
+  "B/P02/projects-1.jpg": "9a3e1ed1f26e0c0f9dae8ddaadd36d577fb58205aa21f9fc71e4736ee65454a9",
+  "B/P02/projects-2.jpg": "8dfa7cec854addfb785f312c0c13cdb5dd98b8996c540c37f17cf3d9f907106d",
+  "B/P02/text.txt": "73473d524d6c6955430ba66e086225746f13486313c653786f1375804904d774",
+  "B/P03/desktop.jpg": "a4669c4a65bcffd514c004f5c90232ba0431d52d7b5f0fa11d5899630d0a18bf",
+  "B/P03/extra.json": "07f2e8bccb8e276ab314d2c1bf1403b7c86e83e09b74c7639f76dc85ee514208",
+  "B/P03/facts.json": "ec15e7c5a9bc0cbd121e0659282f372e5a39c79a644e37c008d752a002121ecf",
+  "B/P03/phone.jpg": "520cb92a2fd202431097425778ce5237e7cc147c1c878ee20f2624b0217a6910",
+  "B/P03/projects-1.jpg": "44a73a5a6ae12cc69162c5855b937016c75d47b00df9f2df680fb67bf016194e",
+  "B/P03/text.txt": "f19dd23d18fca834c90c7fa3094b0175ae0d90ef34691cc39b54bda109c0c7ee",
+  "B/P04/desktop.jpg": "2de4fecd584cdae678e84986c68330bd6ea4fb2390d4f33fd5e02837c158fa6f",
+  "B/P04/extra.json": "2eac8b94496ba6b440a514d4ae1501091e9439493614f3558cd6766ba2889e1e",
+  "B/P04/facts.json": "68249f1e4ffbab17f763b9417c4cfe42578212c029324857d5daba1aaeb5bbc6",
+  "B/P04/phone.jpg": "3f6877691ac037d8833e877d4271d30671c571b2fe840d87edf651ca0205e6e4",
+  "B/P04/projects-1.jpg": "23422d0d099053480937d6f37ef3ef66a7431bed8a575180f2add287734e673e",
+  "B/P04/projects-2.jpg": "5ae312597f0c798de9dc1ee974278eccb5564615de6ec652d55c59c4965183f5",
+  "B/P04/text.txt": "0cb31b1db982105dc26a45bc5e3e115e6bc5511f84f3b012e8e36f52f20c7716",
+  "B/P05/desktop.jpg": "38e7147213fe5d7a073441d03a22dbf2fedfc44ce2b0a80245686a62a9a54997",
+  "B/P05/extra.json": "07f2e8bccb8e276ab314d2c1bf1403b7c86e83e09b74c7639f76dc85ee514208",
+  "B/P05/facts.json": "95141e9df20b88edaed531cd7484bab90c3c54b9ac2eaf39d18697738a2f12cd",
+  "B/P05/phone.jpg": "ec0b855768bfec2441dd5419f532999f06ce321d07139c810d28b5ef12695c02",
+  "B/P05/projects-1.jpg": "094fd2b8970594057d2b7648ca9dce396442275d337da6fbfdf68e1c12d68ffa",
+  "B/P05/text.txt": "25bd03635e9f4f21009d70af885d3b2e54cff3a565527e958ac7ac56ffbe4583",
+  "B/P06/desktop.jpg": "ec54bda6da271f7ef218cc3d8ca51ae9657f560c260b43ab001f61ce2e2d5ae1",
+  "B/P06/extra.json": "2eac8b94496ba6b440a514d4ae1501091e9439493614f3558cd6766ba2889e1e",
+  "B/P06/facts.json": "4fca1fb1e8b9725ae7d756de16771e713efd7c6713a94bad1d868425c0fa8c5c",
+  "B/P06/phone.jpg": "e94891573a05c09f44855e6bce6602ac1482bbf0f3c5071efb886a3b4b3d2ffe",
+  "B/P06/projects-1.jpg": "b2a235b44ede513bb6f56e2f5ae513c4c8223b4079e5162f2998083fd9569bb3",
+  "B/P06/projects-2.jpg": "f6b6bee7417f27b3fbbc90114edab3faca87bdc41db79f9b5281b8fd56f25445",
+  "B/P06/text.txt": "587781437166842f7d86de46cb80a8dcb296f2037486bb30642b29c254eb94a3",
+  "B/P07/desktop.jpg": "a646178eb77cb8dc35eff1aa97631e0ab3683be08dc6312563630a1d497a9969",
+  "B/P07/extra.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "B/P07/facts.json": "9955fc2e5cfb141023138456661e81decb4ecf89445a32087f79b52f47d392f9",
+  "B/P07/phone.jpg": "e670118caec1438d719bf647dd44550cfa4ce484e52a3bfc75aa36648379033f",
+  "B/P07/text.txt": "06ed4d6f9b40e1421a6b039e5645cb6e8e638562d16cd6f578aefa3575fe133a",
+  "B/P08/desktop.jpg": "690ac67dde97d9ee30edf5ecb0c6eeb9762d4ed6917a6fcb8834606be00f8565",
+  "B/P08/extra.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "B/P08/facts.json": "6c85d88f9937896a8b58358640eda06cc6ea51f4c47d6293b715b2b0743450ac",
+  "B/P08/phone.jpg": "ef9e7b6f7b3eaa75e8e629ac92e3d2fec7b34d8d3b10c5b522f02a8d1a236d74",
+  "B/P08/text.txt": "a70cd35fa7ad9a714aa1be696c756fb68b61977b35b715f93059da1f2c31f0d5",
+  "B/P09/desktop.jpg": "261aa3da831c8e2497458997e0efd1b3cefd8078fafaa6947f1841c293235cea",
+  "B/P09/extra.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "B/P09/facts.json": "76db03b31f98c0cd8ae79787bb5b5becc22cac5e66543a7c558f0f2a8f70a2b7",
+  "B/P09/phone.jpg": "15abc010aa98cbde565cec0f633ffb5b9634a672bfc412393b89fe4a0e03176a",
+  "B/P09/text.txt": "2e18658b155b2ed09f09f9d4e63d272313bbbd76fed4d2630cf646e11f45dba9",
+  "B/P10/desktop.jpg": "e0b053782a16e1c7564852ec8352af882b516e227512d9180416e9a0a4db9c18",
+  "B/P10/extra.json": "07f2e8bccb8e276ab314d2c1bf1403b7c86e83e09b74c7639f76dc85ee514208",
+  "B/P10/facts.json": "289b57bf262ec4ac4c73e723c39c39d3a660a4af6b44efc62297471b2ee754ec",
+  "B/P10/phone.jpg": "c9e92da4c51395d9e93ab24f53611ed3c2ec5a3cf31ee3ea18a09e3b9d18bf2e",
+  "B/P10/projects-1.jpg": "0f337698796993b33b5b635ad0dfb1407ac661b5be197490373a572f9d13b81a",
+  "B/P10/text.txt": "cc196d24731210b9730fcc700f8e439f5c9e844ee753ec71ffee3547079ecc78"
+ }
+}
