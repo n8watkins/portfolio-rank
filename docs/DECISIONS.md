@@ -88,6 +88,10 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Upstream is report-only** (owner, 2026-11-10). Status: built (#53).
   A monthly report lists only what the community list's own Saturday link checker misses; opening a PR there is off.
   Why: their checker already removes broken and parked links, so our PRs would duplicate it.
+- **Re-check verdicts kept on file** (owner, 2026-11-13). Status: building (this PR).
+  The "not a portfolio" verdicts of the 543 re-check go into `data/excluded.json`, so those sites are never captured or graded again: kind `not_portfolio` for what both AI graders called not a portfolio, what a code rule settled, and what the owner decided on review; kind `dead` for names that no longer resolve and broken deploys, checked again every few months (`recheck_after`, about 3 months; one that answers then leaves the list); kind `duplicate` with `duplicate_of` for another address of a kept site.
+  Each entry keeps who decided (`decided_by`) and what they said (`evidence`); `/removed` shows only the kind, a short reason and the date.
+  Why: the owner wants a verdict to stand, not to be re-earned on every capture, while a dead site gets a way back.
 - **Feed shrink guard** (agent, 2026-11-10). Status: built (#53).
   The sync fails rather than write a list more than 5% smaller.
   Why: a broken upstream file should never wipe the site.

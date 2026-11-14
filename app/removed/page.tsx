@@ -1,4 +1,5 @@
 import excluded from "@/data/excluded.json";
+import { REMOVED_KINDS } from "@/lib/removed-kinds.mjs";
 import { SITE } from "@/lib/site";
 
 export const metadata = {
@@ -11,15 +12,12 @@ type Removal = {
   url: string;
   name?: string;
   reason?: string;
-  kind?: "down" | "duplicate" | "not_portfolio" | "owner_request";
+  kind?: "down" | "dead" | "duplicate" | "not_portfolio" | "owner_request";
   removed?: string;
+  duplicate_of?: string;
 };
 
-const KIND_LABEL: Record<string, string> = {
-  down: "Site down",
-  duplicate: "Duplicate",
-  not_portfolio: "Not a portfolio",
-};
+const KIND_LABEL: Record<string, string> = REMOVED_KINDS;
 
 function domainOf(url: string): string {
   try {
@@ -52,6 +50,10 @@ export default function RemovedPage() {
               removed after it fails three checks in a row spanning at least two
               weeks, so a short outage never takes anyone off. Bot checks that block
               automated visitors don&apos;t count as failures.
+            </p>
+            <p>
+              A site whose domain is gone, or that only shows an error page, is
+              checked again every few months and comes back when it works.
             </p>
             <p>
               Is your site back up, or was it removed by mistake?{" "}

@@ -1,1 +1,2063 @@
-[]
+[
+  {
+    "url": "http://sparshkamat.me",
+    "name": "Sparsh Kamat",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is currently inaccessible due to a DNS error.",
+      "haiku": "The page is an error page from Cloudflare, so no name, role or work can be seen."
+    }
+  },
+  {
+    "url": "https://aalahyan3.tech",
+    "name": "Ayoub Alahyane",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://abdullahbozdag.com",
+    "name": "Abdullah Bozdağ",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://abu-bakar-portfolio-mauve.vercel.app",
+    "name": "Abu Bakar Butt",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a broken deployment error, not a portfolio.",
+      "haiku": "The page is a deployment error with no name, role, or work shown, so it is a broken page and is excluded."
+    }
+  },
+  {
+    "url": "https://adityacodes.in",
+    "name": "Aditya Dubey",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://aj7.is-a.dev",
+    "name": "Abdul Jaber",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://aliahtisham.pro",
+    "name": "Ali Ahtisham",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://almarzancom.vercel.app",
+    "name": "Al Marzan",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a 404 error page with no name, role or way to work, so it is a broken page and not a portfolio."
+    }
+  },
+  {
+    "url": "https://amreshsinha.vercel.app",
+    "name": "Amresh Prasad Sinha",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page.",
+      "haiku": "The page is a 404 error page with no name, role or work, so it is a broken page and not a portfolio."
+    }
+  },
+  {
+    "url": "https://arbazansari.dev",
+    "name": "Arbaz Ansari",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://atanu-portfolio-devsecops-production.up.railway.app",
+    "name": "Atanu Biswas",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a 404 error page with no content about a person, so it is excluded as a broken page."
+    }
+  },
+  {
+    "url": "https://balakekarbon.github.io",
+    "name": "Blake Karbon",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 error page.",
+      "haiku": "The page is a GitHub Pages error page with no name, role or personal content, so it is a broken page."
+    }
+  },
+  {
+    "url": "https://beno-portofolio-v2.onrender.com",
+    "name": "Benjamin Cyubahiro",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a loading screen for a web hosting service, not a personal portfolio.",
+      "haiku": "The page is a Render app-loading screen, an error or blank state, not a portfolio; no name or work is shown."
+    }
+  },
+  {
+    "url": "https://breakerino.me",
+    "name": "Breakerino",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://cheovermeyer.com",
+    "name": "Che Overmeyer",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://cyrilaguvasu.tech",
+    "name": "Cyril Aguvasu Kedeng'E",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://dangor220.github.io/developer-portfolio",
+    "name": "Danil Gordeev",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a GitHub Pages 404 error with no person, name, role or work shown."
+    }
+  },
+  {
+    "url": "https://darawsha.github.io",
+    "name": "Ameed Darawsha",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 page.",
+      "haiku": "This is a 404 error page with no name, role or work. It fails the exclusion for a broken or blank page."
+    }
+  },
+  {
+    "url": "https://datasciencefolio.streamlit.app",
+    "name": "Aftab Alam",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is currently broken and displays an error message instead of content.",
+      "haiku": "The page is a broken error screen with no name, role or work visible, so it fails the exclusion for a broken or error page."
+    }
+  },
+  {
+    "url": "https://datpham.dev",
+    "name": "Dat Pham",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://delwer.live",
+    "name": "Delwer Hossain",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://devlucas.website",
+    "name": "Lucas De Moraes",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://dinogomez.vercel.app",
+    "name": "Dino Gomez",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a 404 error and does not contain any portfolio content.",
+      "haiku": "The page is a 404 error with no name, role or work, so it is a broken page and not a portfolio."
+    }
+  },
+  {
+    "url": "https://eharshit.cfd",
+    "name": "Harshit Singh",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://ehsanrafee.ir",
+    "name": "Ehsan Rafee",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://faisalsaifi.tech",
+    "name": "Faisal Saifi",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://furki.vercel.app",
+    "name": "Furkan Cengiz",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a broken 404 error, not a functional portfolio.",
+      "haiku": "The page is a broken 404 deployment error with no content about a person, so it is excluded."
+    }
+  },
+  {
+    "url": "https://garvnanwani.netlify.app",
+    "name": "Garv Nanwani",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a 404 error page, not a portfolio.",
+      "haiku": "This is a Netlify 404 error page with no person, role or work shown, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://gaspavar.dev",
+    "name": "Gaspare Tortora",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://grazziotti-portfolio.vercel.app",
+    "name": "Daniel Grazziotti",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken/paused deployment and does not contain portfolio content.",
+      "haiku": "The page is an error page from a paused deployment, with no name, role or work visible, so it is a broken page."
+    }
+  },
+  {
+    "url": "https://hanumantjain.tech",
+    "name": "Hanumant Jain",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://hassanx.tech",
+    "name": "Hassan Tech",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://hosamaadem-portfolio-6ujt.vercel.app",
+    "name": "Hosama Adem",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a 404 deployment error with no content about a person, so it is an error page."
+    }
+  },
+  {
+    "url": "https://hozi-web3.site",
+    "name": "Hozaifa Ali",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://hsumeet.site",
+    "name": "Sumeet Haldar",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://iamridoydey.com",
+    "name": "Ridoy Dey",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://ifeoluwa-portfolio-five.vercel.app",
+    "name": "Paul Agbogun",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a 404 deployment error with no name, role, or way to work. It is a broken page, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://itsmeabdur.in",
+    "name": "Abdur Rahman",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://jayanth.site",
+    "name": "Jayanth Donavalli",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://jayvegad.vercel.app",
+    "name": "Jay Vegad",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a 404 error page, not a portfolio.",
+      "haiku": "The page is a broken 404 deployment error page with no content about a person, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://jenulferdinand.dev",
+    "name": "Jenul Ferdinand",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://kamipresents.com",
+    "name": "Kamran Mushtaq",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The domain is expired and shows a parked page, not a personal portfolio.",
+      "haiku": "This is an expired-domain error page from a hosting provider, with no person's content on it. It falls under the broken or error page exclusion."
+    }
+  },
+  {
+    "url": "https://kenfack-me.vercel.app",
+    "name": "Kevin Kenfack",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a functional portfolio.",
+      "haiku": "The page is a broken 404 error page, with no name, role or way to work shown, so it is excluded."
+    }
+  },
+  {
+    "url": "https://kidus.ca",
+    "name": "Kidus Bewket",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://kritan560.github.io/portfolio",
+    "name": "Kritan Shrestha",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a broken 404 error.",
+      "haiku": "This is a broken page: the address returns GitHub's 404 error with no content about a person, so it is excluded."
+    }
+  },
+  {
+    "url": "https://krushna.gridly.xyz",
+    "name": "Krushna Rathod",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://kuldeepjadeja.dev",
+    "name": "Kuldeepsinh Jadeja",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://kwamehdhegbo.com",
+    "name": "Kwameh Dhegbo",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://lalith-d-portfolio.netlify.app",
+    "name": "Lalith Kumar",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 error page.",
+      "haiku": "The page is a broken Netlify error page with no name, role or work visible, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://lukecele-research.vercel.app",
+    "name": "Luca Celebrano",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page.",
+      "haiku": "The page is a broken 404 deployment error page with no content about a person, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://main.dodjas56cfa3.amplifyapp.com",
+    "name": "Amine Rebbouh",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://marstruong.com",
+    "name": "Tien Truong Mars Truong",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://mdkhalidmahmud.com",
+    "name": "Khalid Mahmud",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://missaelr.com/en",
+    "name": "Missael Rangel",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://mohitjoe.vercel.app",
+    "name": "Mohit Joe",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken deployment/error page.",
+      "haiku": "The page is a 404 deployment error with no content about a person, so it falls under the broken or error page exclusion."
+    }
+  },
+  {
+    "url": "https://mouraocode.com.br",
+    "name": "Felipe Mourão",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://n-cv.vercel.app",
+    "name": "Niko Soriano",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 error page.",
+      "haiku": "The page is an error page with no name, role or way to work, so it is a broken page."
+    }
+  },
+  {
+    "url": "https://n4ryn.com",
+    "name": "Vinay Kumar",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://naveenkumarm.space",
+    "name": "NaveenKumar",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://nja-systems.vercel.app",
+    "name": "Nestor Jr Agnis",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a broken page, not a portfolio.",
+      "haiku": "This is a 404 error page with no name, role or work shown, so it is an error page rather than a portfolio."
+    }
+  },
+  {
+    "url": "https://notesc.netlify.app",
+    "name": "Rishhi Duetheesh",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a broken Netlify error page, not a portfolio. No name, role or work link is shown."
+    }
+  },
+  {
+    "url": "https://pabloramon.com.br",
+    "name": "Pablo Ramon",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://parinithmavurapu.vercel.app",
+    "name": "Parinith Mavurapu",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "This is a broken deployment error page with no name, role or way to reach work, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://portfolio-nu-lovat-90.vercel.app/project",
+    "name": "Meet Vipul Gandhi",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a 404 error page, not a personal portfolio.",
+      "haiku": "This is an error page with no name, role or work visible, so it is not a portfolio that can be judged."
+    }
+  },
+  {
+    "url": "https://portfoliojuanfranciscocisneros.web.app",
+    "name": "Juan Cisneros",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a broken deployment error, not a portfolio.",
+      "haiku": "The page is a Firebase hosting error with no name, role or work shown, so it is a broken page and is excluded."
+    }
+  },
+  {
+    "url": "https://raggiodev.vercel.app",
+    "name": "Fernando Andres Raggio",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 page.",
+      "haiku": "The page is a broken 404 error page with no content about a person, so it is not a working portfolio."
+    }
+  },
+  {
+    "url": "https://rathodram.is-a.dev",
+    "name": "Rathod Ramraj",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 error page.",
+      "haiku": "The page is a 404 error page with no content about a person, so it is a broken page."
+    }
+  },
+  {
+    "url": "https://rathodramraj.vercel.app",
+    "name": "Rathod Ramraj",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a 404 error page, not a personal portfolio.",
+      "haiku": "This is a deployment error page with no name, role or work visible, so it is not a portfolio that can be judged."
+    }
+  },
+  {
+    "url": "https://rohitsoni007.github.io/portfolio",
+    "name": "Rohit Soni",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a portfolio.",
+      "haiku": "The page is a broken error page with no content about a person, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://rsakib.com",
+    "name": "Sakib Rahman",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://saswatamondal.me",
+    "name": "Saswata Mondal",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://sebilune.dev",
+    "name": "Sebi",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://setrathex.com.tr",
+    "name": "Tuncay Ölmez",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://sitham.dev",
+    "name": "Mathis Zeghouani",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://subratdwivedi.dev",
+    "name": "Subrat Dwivedi",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://suraj-yadav0.github.io/terminal-portfolio",
+    "name": "Suraj Yadav",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page and does not contain portfolio content.",
+      "haiku": "The address shows a GitHub Pages error page, 'Site not found', so it is a broken page with no name, role or work."
+    }
+  },
+  {
+    "url": "https://swaroop.codes",
+    "name": "Swaroop Vyawahare",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://syedomer.me",
+    "name": "Syed Omer Ali",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://talhakilic.com.tr",
+    "name": "Talha Kılıç",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://tejafolio.dev",
+    "name": "Guna Teja",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://thesimpanze.github.io/Portofolio-Rasyid",
+    "name": "Rasyid Nuruddin",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a 404 error page, not a functional portfolio.",
+      "haiku": "This is a broken error page (GitHub Pages 404) with no content about a person, so an exclusion applies."
+    }
+  },
+  {
+    "url": "https://vikasdev-in.vercel.app",
+    "name": "Vikas Uniyal",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 error page.",
+      "haiku": "The page is a broken error page with no content about a person, so it is excluded."
+    }
+  },
+  {
+    "url": "https://vivekchudasama-2004.github.io/portfolio",
+    "name": "Vivek Chudasama",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The page is a 404 error page, not a personal portfolio.",
+      "haiku": "This is a GitHub Pages error page with no name, role or work visible, so it is not a portfolio that can be judged."
+    }
+  },
+  {
+    "url": "https://www.arsh.dev",
+    "name": "Arsh Sahzad",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.bechirlahoueg.tech",
+    "name": "Bechir Lahoueg",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.caiovisuals.com",
+    "name": "Caiovisuals",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken 404 error page.",
+      "haiku": "The page is a broken error page (404 deployment not found), with no name, role or work link, so it is excluded."
+    }
+  },
+  {
+    "url": "https://www.daljeetsingh.me",
+    "name": "Daljeet Singh",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.kumar-nishant.me",
+    "name": "Kumar Nishant",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.mohsinraz.me",
+    "name": "Mohsin Raz",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.mritunjoy.online",
+    "name": "Cid Kageno",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.nyambogahezron.dev",
+    "name": "Nyamboga Hezron",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.saakethj.in",
+    "name": "Saaketh Jella",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://www.seniordevelopermnelisi.com",
+    "name": "Mnelisi Mthuli",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "A broken page (a 404 or a failed deploy) on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a broken server error page, not a personal portfolio.",
+      "haiku": "This is an HTTP 500.35 error page, not a page about a person, with no name, role or way to work."
+    }
+  },
+  {
+    "url": "https://xamarth.pp.ua",
+    "name": "Samarth Kosta",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://yogiveloper.com",
+    "name": "Yogi Arif Widodo",
+    "removed": "2026-11-13",
+    "kind": "dead",
+    "reason": "The domain no longer resolves",
+    "decided_by": "health:dns",
+    "recheck_after": "2027-02-13",
+    "evidence": {
+      "error": "ERR_NAME_NOT_RESOLVED from GitHub Actions and from the owner's machine"
+    }
+  },
+  {
+    "url": "https://pavithran26.vercel.app",
+    "name": "Pavithran S",
+    "removed": "2026-11-13",
+    "kind": "duplicate",
+    "reason": "Duplicate of https://pavithran26.net",
+    "duplicate_of": "https://pavithran26.net",
+    "decided_by": "rule:duplicate",
+    "evidence": {
+      "why": "its own domain, not a platform address"
+    }
+  },
+  {
+    "url": "https://sak03.github.io/sartaj.dev",
+    "name": "Sartaj Alam",
+    "removed": "2026-11-13",
+    "kind": "duplicate",
+    "reason": "Duplicate of https://sartajalam.in",
+    "duplicate_of": "https://sartajalam.in",
+    "decided_by": "rule:duplicate",
+    "evidence": {
+      "why": "the others redirect to it"
+    }
+  },
+  {
+    "url": "http://aelarassi.com",
+    "name": "Abdelaziz El Arassi",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 1 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "http://valentinpotie.github.io/portfolio",
+    "name": "Zzlly Potie",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a product landing page for a portfolio builder, not a personal portfolio.",
+      "haiku": "This is a marketing landing page for a portfolio-building product, not a page about a person; the demo shows a different persona."
+    }
+  },
+  {
+    "url": "https://aarus2709.me",
+    "name": "Aarav Gupta",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 21 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://abdenassar-portfolio-4smfcqph6-abdenassaramimi99-gmailcom.vercel.app",
+    "name": "Abdenassar Amimi",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 23 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://adittya.site",
+    "name": "Aditya Domle",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: parked or for sale",
+    "decided_by": "code:parked or for sale",
+    "evidence": {
+      "rule": "parked or for sale"
+    }
+  },
+  {
+    "url": "https://aditya113141.github.io",
+    "name": "Adityakumar Sinha",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is a farewell message stating all content has been removed.",
+      "haiku": "The page is a removal and farewell notice with no working portfolio content, so it is an error-like page rather than a portfolio."
+    }
+  },
+  {
+    "url": "https://ahmad-netflix-portfolio-ujir.vercel.app",
+    "name": "Mohammad Ahmad",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 6 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://akhshyganesh.github.io",
+    "name": "Akhshy Ganesh",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a redirect page, not a portfolio.",
+      "haiku": "This is a moved-notice page that only points to another domain. It shows no name, role or work of its own, so it is not a portfolio page."
+    }
+  },
+  {
+    "url": "https://amiralirashidi.github.io",
+    "name": "Amirali Rashidi",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: parked or for sale",
+    "decided_by": "code:parked or for sale",
+    "evidence": {
+      "rule": "parked or for sale"
+    }
+  },
+  {
+    "url": "https://andrianaivo-ismael.vercel.app/admin",
+    "name": "Andrianaivo Blaise Ismael",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 9 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://andy-bell.design",
+    "name": "Andy Bell",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a professional site showcasing the work and educational offerings of a developer.",
+      "haiku": "This is a publisher's education site (Piccalilli, from set.studio) with courses and articles by several authors, not a personal portfolio of one person.",
+      "review": "Owner verdict: not a portfolio (owner, 13 Nov). The graders disagree: Gemini 3.1 says a portfolio, Haiku says not a portfolio."
+    }
+  },
+  {
+    "url": "https://args.tech",
+    "name": "Shakhzhakhan Maxudbek",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is blocked by a security gate and does not show any portfolio content.",
+      "haiku": "The page is a Cloudflare bot-check screen with no name, role or work visible, so it fails the exclusion for a broken or blank page.",
+      "review": "Capture blocked, needs review: a bot or security check stood in for the site. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://armujahid.me",
+    "name": "Abdul Rauf",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a blog, not a portfolio; it lacks a clear professional role and a way to view projects.",
+      "haiku": "This is a personal blog by Abdul Rauf, so it identifies a person through his name and writing. It shows no developer role and no project links, but a missing sign is not grounds for false.",
+      "review": "Owner verdict: not a portfolio (owner, 13 Nov). The graders disagree: Gemini 3.1 says not a portfolio, Haiku says a portfolio."
+    }
+  },
+  {
+    "url": "https://blanke.lol",
+    "name": "Benjamin Blanke",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 6 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://calzye.com",
+    "name": "Calzye",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a tool/calculator website, not a personal portfolio.",
+      "haiku": "This is a calculator product site for the brand Calzye, not a page about a person, so it is a company or product site."
+    }
+  },
+  {
+    "url": "https://collinskoechportfolio.web.app",
+    "name": "Collins Koech",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 0 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://damianmarkowski.com",
+    "name": "Damian Markowski",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "It identifies the person and their role, but lacks a portfolio of work.",
+      "haiku": "This reads as a link-in-bio card of social profiles and an email button, with no work shown, so it is not a portfolio.",
+      "review": "Owner verdict: not a portfolio (owner, 13 Nov). The graders disagree: Gemini 3.1 says a portfolio, Haiku says not a portfolio."
+    }
+  },
+  {
+    "url": "https://devlato.com",
+    "name": "Denis Tokarev",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a bare contact page with no projects, role, or professional context.",
+      "haiku": "This is a link-in-bio style page: a handle and a list of social links. It shows no name, no role and no project content, so it is not a real portfolio."
+    }
+  },
+  {
+    "url": "https://dheerajgupta.netlify.app",
+    "name": "Dheeraj Gupta",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 0 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://gii-de.onrender.com",
+    "name": "Gii-DE",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 2 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://github.com/1hanzla100/developer-portfolio",
+    "name": "Hanzla Tauqeer",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/AnamuddinAhmad/Portfolio_1",
+    "name": "Anamuddin Ahmad",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/AnshulGora/portfolio_template_v1",
+    "name": "Anshul Dev",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/bdallard/ai-resume-portfolio",
+    "name": "Benjamin Dallard",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/bhagawatadhikari",
+    "name": "Bhagawat Adhikari",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/QMS85/MyPortfolio",
+    "name": "Jonathan Peters",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/rohit-wadhwa",
+    "name": "Rohit Wadhwa",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/saisudhir14",
+    "name": "Sai Sudheer Dontha",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://github.com/Taiizor",
+    "name": "Taiizor",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://iamharshdoshi.com",
+    "name": "Harsh Doshi",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 22 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://indrajeet.me",
+    "name": "Indrajeet Nikam",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a gambling website, not a personal portfolio.",
+      "haiku": "Gambling promotion page about a company brand, not a person; no personal identity, role or work, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://iodev.io",
+    "name": "Ike Ofoegbu",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a login page for LinkedIn, not a personal portfolio website.",
+      "haiku": "The page is a LinkedIn sign-up page, not a portfolio about a person. It shows no name, role or work, so it fails the exclusion for a page that is not about a person."
+    }
+  },
+  {
+    "url": "https://jerryhirsch.com",
+    "name": "Jerry Hirsch",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 7 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://karrarnazim.space",
+    "name": "Karrar Nazim",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a domain parking page for sale, not a personal portfolio.",
+      "haiku": "This is a parked-for-sale domain listing with no person's name, role or work. It fails the exclusion for a for-sale domain."
+    }
+  },
+  {
+    "url": "https://linktr.ee/abdullahahsan",
+    "name": "Syed Muhammad Abdullah Ahsan",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://linktr.ee/drepin",
+    "name": "Dzmitry Drepin",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://linktr.ee/syedsyab",
+    "name": "Syed Syab Ahmad Link Tree",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio: not a portfolio address",
+    "decided_by": "code:not a portfolio address",
+    "evidence": {
+      "rule": "not a portfolio address"
+    }
+  },
+  {
+    "url": "https://maggioni.dev",
+    "name": "Gabriel Maggioni",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a personal blog, not a portfolio. It lacks a clear professional role and a way to view work.",
+      "haiku": "This is a personal blog by a named author with post list; no role stated and no work or project links, so it reads as a blog rather than a developer portfolio.",
+      "review": "Owner verdict: not a portfolio (owner, 13 Nov). The graders disagree: Gemini 3.1 says not a portfolio, Haiku says a portfolio."
+    }
+  },
+  {
+    "url": "https://matvey.codes",
+    "name": "Matvey Kottsov",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "It lacks a personal identity, a role, and a way to view work.",
+      "haiku": "The domain and page show a personal identity, matvey.codes, but no role or work link is visible; the page is about hobbies, so it is a weak but real personal page.",
+      "review": "Owner verdict: not a portfolio (owner, 13 Nov). The graders disagree: Gemini 3.1 says not a portfolio, Haiku says a portfolio."
+    }
+  },
+  {
+    "url": "https://md-afjal-ansari.onrender.com",
+    "name": "Afjal Ansari",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 2 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://mokhele.pythonanywhere.com",
+    "name": "Katleho Mokhele",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a parked domain page, not a personal portfolio.",
+      "haiku": "This is the default PythonAnywhere placeholder page; it shows no person, role or work, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://muse.ai/s/neel-patel-portfolio-tomas-style-xzxx6m5xtl3huxh/44rs8uC9gN1nl-HjxoLSA9T-gfn27ZKRX8RhxAimXuw",
+    "name": "Neel Patel",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 3 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://mushfiq.xyz",
+    "name": "Mushfiqur Rahman",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a login page for an application, not a personal portfolio.",
+      "haiku": "The page is a login and download page for a time-tracking app. It has no personal identity, no role and no way to the person's work, and it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://nicobachner.com",
+    "name": "Nico Bachner",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 4 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://pixeldania.netlify.app",
+    "name": "Dania Al-Hakim",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 0 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://portfolio-website-bc28.vercel.app",
+    "name": "Abu Jafor",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 6 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://rafalazar.github.io",
+    "name": "Rafael Salazar",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a redirect page, not a portfolio.",
+      "haiku": "The page is only a moved-address notice with no portfolio content, and its title names a different person from the facts."
+    }
+  },
+  {
+    "url": "https://rahnoxa.antideploy.com",
+    "name": "Rahul Kumar",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a company/agency website, not a personal developer portfolio.",
+      "haiku": "This is a company services site for Rahnoxa with no personal identity or personal project work, so it is not a personal portfolio."
+    }
+  },
+  {
+    "url": "https://shalon.vercel.app",
+    "name": "Shalon Fernando",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a commercial product information site, not a personal developer portfolio.",
+      "haiku": "This is a product information and purchase guide for a Japanese patch brand, with no person named and no developer identity, so it is not a portfolio."
+    }
+  },
+  {
+    "url": "https://shivamgarg82.github.io/Portfolio",
+    "name": "Shivam Garg",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 38 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://sohailkhan0525.github.io/MyPortfolio",
+    "name": "Mohd Zaheer Uddin",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a GitHub repository README file, not a personal portfolio website.",
+      "haiku": "The page is a README describing a code repository for the site, with no visible projects or work links, so it reads as a bare code repository rather than a portfolio about the person."
+    }
+  },
+  {
+    "url": "https://techfolios.github.io",
+    "name": "Techfolios",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a landing page for a software tool, not a personal portfolio.",
+      "haiku": "The page is a company or project site for a template tool, not about a person; no personal name or role."
+    }
+  },
+  {
+    "url": "https://thomas-david-portfolio.netlify.app",
+    "name": "Thomas David",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "The site is an unedited template containing placeholder text and demo names.",
+      "haiku": "The page is an unedited template: lorem ipsum runs through the work, services and testimonials, and John Doe appears as a testimonial name."
+    }
+  },
+  {
+    "url": "https://vallarasuk.com",
+    "name": "Vallarasu",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a gambling/slot machine site, not a personal developer portfolio.",
+      "haiku": "This is a promotional gambling page for PIKA77, not a page about a person, so it is excluded."
+    }
+  },
+  {
+    "url": "https://www.abhishekg.com.np",
+    "name": "Abhishek Ghimire",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 6 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://www.abhisheksah.dev",
+    "name": "Abhishek Sah",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a gambling/slot machine site, not a developer portfolio.",
+      "haiku": "The page is a gambling promotion site about togel and slots, not a portfolio about a person, so it is excluded."
+    }
+  },
+  {
+    "url": "https://www.beterbekend.nl",
+    "name": "Jens Van Wijhe",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a company website, not a personal portfolio.",
+      "haiku": "This is a company agency site (Beter Bekend) with no named person; the 'Jens Van Wijhe' fact is not visible on the page; excluded as not about a person."
+    }
+  },
+  {
+    "url": "https://www.dilipmaurya.in",
+    "name": "Dilip Kumar Maurya",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 15 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://www.hungrybearstudios.com",
+    "name": "Hungry Bear Studio",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a company/studio site, not a personal portfolio.",
+      "haiku": "This is a studio site for Hungry Bear Studios, with no personal name or personal identity in the header, so it is not a person's portfolio."
+    }
+  },
+  {
+    "url": "https://www.nareshkhatri.site",
+    "name": "Naresh Khatri",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 13 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://www.saurabhdaware.in",
+    "name": "Saurabh Daware",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": null,
+      "haiku": null,
+      "review": "Capture blocked, needs review: 4 words and no outbound links. Not sent to any model."
+    }
+  },
+  {
+    "url": "https://www.tiagocreator.com",
+    "name": "Tiago Leite",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "This is a personal blog, not a professional portfolio; it lacks projects and a clear professional role.",
+      "haiku": "Personal identity (Tiago Creator) and a contact link exist, but no role or projects are shown; it reads as a personal blog, so it is a weak portfolio rather than a non-person page.",
+      "review": "Owner verdict: not a portfolio (owner, 13 Nov). The graders disagree: Gemini 3.1 says not a portfolio, Haiku says a portfolio."
+    }
+  },
+  {
+    "url": "https://xqyet.dev",
+    "name": "Xqyet",
+    "removed": "2026-11-13",
+    "kind": "not_portfolio",
+    "reason": "Two AI graders agreed it is not a portfolio on the re-check",
+    "decided_by": "ai:gemini-3.1+haiku-5.5",
+    "evidence": {
+      "prompt": "portfolio-definition-v2.1",
+      "gemini31": "It lacks a clear role, projects, and contact information, functioning more as a gimmick than a portfolio.",
+      "haiku": "This is a fake BIOS boot screen with no person's name, role or way to any work, so it is not a portfolio."
+    }
+  }
+]
