@@ -1,0 +1,14 @@
+{
+ "note": "The owner's verdicts on the recheck-543 disagreements, 2026-11-13 (via the coordinator). They decide these sites over both graders: the analysis writes each as an owner-decided review row, and the queue step confirms it through the review store (decideReviews), so the change applies the normal way and later grades keep it (withOwnerVerdict).",
+ "decided_at": "2026-11-13T23:45:00.000Z",
+ "decided_by": "owner:2026-11-13",
+ "verdicts": {
+  "https://www.techinz.dev": { "portfolio": true, "reason": "a portfolio, a weak one (owner, 13 Nov)" },
+  "https://andy-bell.design": { "portfolio": false, "reason": "not a portfolio (owner, 13 Nov)" },
+  "https://armujahid.me": { "portfolio": false, "reason": "not a portfolio (owner, 13 Nov)" },
+  "https://damianmarkowski.com": { "portfolio": false, "reason": "not a portfolio (owner, 13 Nov)" },
+  "https://maggioni.dev": { "portfolio": false, "reason": "not a portfolio (owner, 13 Nov)" },
+  "https://matvey.codes": { "portfolio": false, "reason": "not a portfolio (owner, 13 Nov)" },
+  "https://www.tiagocreator.com": { "portfolio": false, "reason": "not a portfolio (owner, 13 Nov)" }
+ }
+}

@@ -117,6 +117,17 @@ export function decide(site, meta, { g, h, dupIndex }) {
 }
 
 /** The status_reviews row of a decision, or null when nothing would change. */
+/**
+ * The review row of a site the owner has decided (experiments/recheck-543/owner-verdicts.json):
+ * relist for a portfolio, remove for not a portfolio, whatever the graders said. `owner`
+ * on the row tells the queue step to confirm it through the review store (decideReviews),
+ * so the change applies the normal way and later grades keep the verdict.
+ */
+export function ownerRow(d, verdicts, owner, file) {
+  const base = queueRow({ ...d, proposed: owner.portfolio ? "relist" : "remove", agreed: true }, verdicts);
+  return { ...base, reason: `Owner verdict: ${owner.reason}. ${d.reason}`, owner: { action: "confirm", by: file.decided_by, at: file.decided_at } };
+}
+
 export function queueRow(d, verdicts, now = new Date().toISOString()) {
   if (!d.proposed) return null;
   return {
@@ -190,6 +201,8 @@ export function analyze(dir = DIR) {
     const r = readJson(path.join(hkDir, "solo-extra", f));
     for (const [id, a] of Object.entries(r.answers)) if (extraIds.has(id)) hk.solo.set(id, a);
   }
+  const ownerFile = path.join(import.meta.dirname, "..", "..", "experiments", "recheck-543", "owner-verdicts.json");
+  const ownerVerdicts = fs.existsSync(ownerFile) ? readJson(ownerFile) : { verdicts: {} };
   const results = [];
   const queue = [];
   for (const s of sel.sites) {
@@ -201,7 +214,9 @@ export function analyze(dir = DIR) {
       haiku: { batch: verdictOf(hk.batch.get(s.id)), solo: verdictOf(hk.solo.get(s.id)) },
     };
     results.push({ ...d, name: s.name, verdicts });
-    const row = queueRow(d, verdicts);
+    const owner = ownerVerdicts.verdicts?.[s.url];
+    const row = owner ? ownerRow(d, verdicts, owner, ownerVerdicts) : queueRow(d, verdicts);
+    if (owner) results.at(-1).owner = { portfolio: owner.portfolio, reason: owner.reason };
     if (row) queue.push(row);
   }
   return { results, queue, groups: GROUPS };

@@ -320,6 +320,42 @@ async function gemini({ dryRun, pilot = null, extra = false }) {
   return exit === "done" ? 0 : 3;
 }
 
+// ---------------------------------------------------------------- queue
+
+const QUEUE_COLS = ["batch", "url", "grp", "current", "proposed", "agreed", "reason", "off_list", "shot_key", "verdicts", "signals", "status", "created_at"];
+
+/**
+ * The review rows into status_reviews (INSERT OR IGNORE on batch and url, so a row the
+ * owner has decided is never touched again), then the owner's own verdicts (rows with
+ * `owner`, from experiments/recheck-543/owner-verdicts.json) confirmed through the review
+ * store, the same path as Confirm on /admin/review: the change applies the normal way, the
+ * row shows as decided, and later grades keep the verdict (withOwnerVerdict).
+ */
+export async function queueRows(db, rows, { onFeed, log = console.log }) {
+  let added = 0;
+  for (const r of rows) {
+    const res = await db.execute({ sql: `INSERT OR IGNORE INTO status_reviews (${QUEUE_COLS.join(", ")}) VALUES (${QUEUE_COLS.map(() => "?").join(", ")})`, args: QUEUE_COLS.map((c) => r[c] ?? null) });
+    added += res.rowsAffected;
+  }
+  log(`${added} rows added, ${rows.length - added} already there`);
+  const decided = rows.filter((r) => r.owner?.action === "confirm");
+  const out = [];
+  if (!decided.length) return { added, decided: out };
+  const { decideReviews } = await import("../../lib/reviews/store.mjs");
+  for (const r of decided) {
+    const id = (await db.execute({ sql: "SELECT id FROM status_reviews WHERE batch = ? AND url = ? AND status = 'pending'", args: [r.batch, r.url] })).rows[0]?.id;
+    if (id == null) {
+      log(`owner verdict ${r.url}: already decided, left as it is`);
+      out.push({ url: r.url, ok: false, error: "already decided" });
+      continue;
+    }
+    const [res] = await decideReviews(db, { ids: [Number(id)], action: "confirm", actor: r.owner.by, onFeed, now: new Date(r.owner.at) });
+    log(`owner verdict ${r.url}: ${r.proposed} ${res?.ok ? "confirmed" : `not applied (${res?.error})`}`);
+    out.push({ url: r.url, ok: Boolean(res?.ok), error: res?.error });
+  }
+  return { added, decided: out };
+}
+
 // ---------------------------------------------------------------- upload
 
 async function upload(only = null) {
@@ -406,15 +442,11 @@ async function main() {
     const db = pipelineDb(path.join(import.meta.dirname, "..", ".."));
     const has = (await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'status_reviews'")).rows.length;
     if (!has) throw new Error("status_reviews does not exist yet: the review queue PR must be deployed first");
-    const cols = ["batch", "url", "grp", "current", "proposed", "agreed", "reason", "off_list", "shot_key", "verdicts", "signals", "status", "created_at"];
     console.log(`${rows.length} rows${flag("--dry-run") ? " (dry run: nothing written)" : ""}`);
     if (flag("--dry-run")) return 0;
-    let added = 0;
-    for (const r of rows) {
-      const res = await db.execute({ sql: `INSERT OR IGNORE INTO status_reviews (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, args: cols.map((c) => r[c] ?? null) });
-      added += res.rowsAffected;
-    }
-    console.log(`${added} rows added, ${rows.length - added} already there`);
+    const feedPath = path.join(import.meta.dirname, "..", "..", "data", "feed.json");
+    const onFeedSet = new Set(fs.existsSync(feedPath) ? readJson(feedPath).map((p) => p.url) : []);
+    await queueRows(db, rows, { onFeed: (u) => onFeedSet.has(u) });
     return 0;
   }
   if (step === "fetch") {

@@ -178,7 +178,7 @@ function sections(d) {
     lines: [
       `All ${N.sites} sites that are not ranked were captured fresh, and the ${N.graded} that could be graded went to Gemini 3.1 Flash-Lite and Claude Haiku 5.5 with the owner's definition (prompt ${PROMPT_VERSION}).`,
       `Both say portfolio for ${N.bothPortfolio} sites and both say not a portfolio for ${N.bothNot}; they disagree on ${d.disagree.length}.`,
-      `${N.relist} sites would come back (both agree, pre-ticked), ${N.remove} listed sites would leave, ${N.flagged} disagreements are flagged, and ${N.review} need a person (a blocked capture or the same text on another domain).`,
+      `${N.relist} sites would come back (both agree, pre-ticked), ${N.remove} listed sites would leave, ${N.flagged} disagreements were flagged (the owner decided ${d.results.filter((r) => r.owner).length} of them on 13 November: ${d.results.filter((r) => r.owner?.portfolio).length} relist, ${d.results.filter((r) => r.owner && !r.owner.portfolio).length} not portfolios), and ${N.review} need a person (a blocked capture or the same text on another domain).`,
       `${N.failed} sites failed to load and ${N.blocked} captures stayed blocked, so they were never graded; most failed loads are names that no longer resolve.`,
       `${d.results.filter((r) => r.proposed === "relist" && r.agreed && r.off_list).length} of the agreed relists are sites that left the community list (delisted on 2026-11-10); bringing those back is a policy decision for the owner, separate from the grades.`,
       `Gemini said no on grounds v2.1 does not allow (a blog, a missing role) for ${d.geminiDisallowed.length} sites; Haiku for ${d.haikuDisallowed.length}.`,
@@ -261,7 +261,7 @@ function sections(d) {
   out.push({
     id: "disagree",
     title: `(b) Where they disagree (${d.disagree.length})`,
-    lines: ["Each site with both answers and its screenshots. These are flagged, unticked, on the Review page."],
+    lines: ["Each site with both answers and its screenshots.", "The owner decided all seven on 13 November: one relist (a weak portfolio) and six not portfolios; those verdicts hold over later grades. The five personal blogs among them went Gemini's way, against Haiku: a possible v2.2 wording is noted in the prompt log."],
     cards: null,
     sites: d.disagree,
     means: ["A disagreement is where a person adds the most: one model is wrong on each of these."],
@@ -410,7 +410,7 @@ export function markdown(d, secs = sections(d)) {
     if (s.list) L.push(...(s.list.length ? s.list : ["None."]), "");
     if (s.sites) {
       if (!s.sites.length) L.push("None.", "");
-      for (const r of s.sites) L.push(`- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]}, signals ${r.signals?.score ?? "-"})`, `  - ${verdictLine("Gemini 3.1", r.verdicts.gemini31.batch)}`, `  - ${verdictLine("Haiku 5.5", r.verdicts.haiku.batch)}`);
+      for (const r of s.sites) L.push(`- [${bare(r.url)}](${r.url}) (${GROUP_LABELS[r.group]}, signals ${r.signals?.score ?? "-"})`, `  - ${verdictLine("Gemini 3.1", r.verdicts.gemini31.batch)}`, `  - ${verdictLine("Haiku 5.5", r.verdicts.haiku.batch)}`, ...(r.owner ? [`  - Owner (13 Nov): ${r.owner.portfolio ? "a portfolio" : "not a portfolio"}, ${r.owner.reason}`] : []));
       if (s.sites.length) L.push("");
     }
     if (s.means) L.push("**What this means**", "", ...s.means.map((m) => `- ${m}`), "");
@@ -424,7 +424,7 @@ function siteCard(r, imgs) {
   const full = (file, label) => (imgs?.[file] ? `<figure><a href="${esc(imgs[file])}" target="_blank" rel="noopener"><div class="scrollbox"><img src="${esc(imgs[file])}" alt="${esc(label)}" loading="lazy"></div></a><figcaption>${esc(label)}: scroll inside the box, or click for full size</figcaption></figure>` : "");
   const v = (label, x) => `<tr><th>${label}</th><td>${x ? `<strong>${esc(yesNo(x))}</strong> (${PARTS.map((p) => x.scores[p]).join("/")})<div class="seen">${esc(x.reason)}</div>` : "no answer"}</td></tr>`;
   return `<article class="site"><h3><a href="${esc(r.url)}">${esc(bare(r.url))}</a> <span class="tag">${esc(GROUP_LABELS[r.group])}</span> <span class="tag">signals ${esc(r.signals?.score ?? "-")}</span></h3>
-<div class="table"><table><tbody>${v("Gemini 3.1", r.verdicts.gemini31.batch)}${v("Haiku 5.5", r.verdicts.haiku.batch)}</tbody></table></div>
+<div class="table"><table><tbody>${v("Gemini 3.1", r.verdicts.gemini31.batch)}${v("Haiku 5.5", r.verdicts.haiku.batch)}${r.owner ? `<tr><th>Owner</th><td><strong>${r.owner.portfolio ? "portfolio" : "not a portfolio"}</strong><div class="seen">${esc(r.owner.reason)}; decided, it holds over later grades</div></td></tr>` : ""}</tbody></table></div>
 ${r.capture.action ? `<p class="meta">Before the screenshot: ${esc(r.capture.action)}</p>` : ""}
 <div class="shots">${shot("desktop", "Desktop first screen", "")}${shot("phone", "Phone first screen", "phone")}</div>
 <div class="shots">${full("full-desktop", "Desktop, whole page")}${full("full-phone", "Phone, whole page")}</div></article>`;

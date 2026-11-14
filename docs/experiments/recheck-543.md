@@ -1,6 +1,6 @@
 # Re-check of non-ranked sites (recheck-543)
 
-PortfolioRank experiment, 2026-11-13.
+PortfolioRank experiment, 2026-11-14.
 Branch `exp/recheck-543`; prompt portfolio-definition-v2.1.
 Nothing here changed a grade, listing or rank.
 
@@ -8,7 +8,7 @@ Nothing here changed a grade, listing or rank.
 
 > All 543 sites that are not ranked were captured fresh, and the 385 that could be graded went to Gemini 3.1 Flash-Lite and Claude Haiku 5.5 with the owner's definition (prompt portfolio-definition-v2.1).
 > Both say portfolio for 316 sites and both say not a portfolio for 62; they disagree on 7.
-> 287 sites would come back (both agree, pre-ticked), 0 listed sites would leave, 7 disagreements are flagged, and 61 need a person (a blocked capture or the same text on another domain).
+> 287 sites would come back (both agree, pre-ticked), 0 listed sites would leave, 7 disagreements were flagged (the owner decided 7 of them on 13 November: 1 relist, 6 not portfolios), and 61 need a person (a blocked capture or the same text on another domain).
 > 75 sites failed to load and 56 captures stayed blocked, so they were never graded; most failed loads are names that no longer resolve.
 > 146 of the agreed relists are sites that left the community list (delisted on 2026-11-10); bringing those back is a policy decision for the owner, separate from the grades.
 > Gemini said no on grounds v2.1 does not allow (a blog, a missing role) for 13 sites; Haiku for 0.
@@ -85,29 +85,37 @@ writing: the same score on 127 of 406 (31%), within one point on 85%, mean diffe
 
 ## (b) Where they disagree (7)
 
-Each site with both answers and its screenshots. These are flagged, unticked, on the Review page.
+Each site with both answers and its screenshots.
+The owner decided all seven on 13 November: one relist (a weak portfolio) and six not portfolios; those verdicts hold over later grades. The five personal blogs among them went Gemini's way, against Haiku: a possible v2.2 wording is noted in the prompt log.
 
 - [andy-bell.design](https://andy-bell.design) (Graded not a portfolio, signals 3)
   - Gemini 3.1: portfolio (5/5/5), "This is a professional site showcasing the work and educational offerings of a developer."
   - Haiku 5.5: not a portfolio (4/3/4), "This is a publisher's education site (Piccalilli, from set.studio) with courses and articles by several authors, not a personal portfolio of one person."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [armujahid.me](https://armujahid.me) (Graded not a portfolio, signals 3)
   - Gemini 3.1: not a portfolio (4/1/5), "This is a blog, not a portfolio; it lacks a clear professional role and a way to view projects."
   - Haiku 5.5: portfolio (4/1/4), "This is a personal blog by Abdul Rauf, so it identifies a person through his name and writing. It shows no developer role and no project links, but a missing sign is not grounds for false."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [damianmarkowski.com](https://damianmarkowski.com) (Graded not a portfolio, signals 2)
   - Gemini 3.1: portfolio (4/1/2), "It identifies the person and their role, but lacks a portfolio of work."
   - Haiku 5.5: not a portfolio (3/1/2), "This reads as a link-in-bio card of social profiles and an email button, with no work shown, so it is not a portfolio."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [maggioni.dev](https://maggioni.dev) (Graded not a portfolio, signals 3)
   - Gemini 3.1: not a portfolio (3/1/2), "This is a personal blog, not a portfolio. It lacks a clear professional role and a way to view work."
   - Haiku 5.5: portfolio (3/2/3), "This is a personal blog by a named author with post list; no role stated and no work or project links, so it reads as a blog rather than a developer portfolio."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [matvey.codes](https://matvey.codes) (Broken or dead, never graded, signals 1)
   - Gemini 3.1: not a portfolio (3/1/1), "It lacks a personal identity, a role, and a way to view work."
   - Haiku 5.5: portfolio (4/1/1), "The domain and page show a personal identity, matvey.codes, but no role or work link is visible; the page is about hobbies, so it is a weak but real personal page."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [www.techinz.dev](https://www.techinz.dev) (Graded not a portfolio, signals 3)
   - Gemini 3.1: not a portfolio (3/1/1), "This is a single project page, not a portfolio of work."
   - Haiku 5.5: portfolio (4/1/1), "The page title reads 'Galaxy portfolio | Full Stack Developer' and it links to a GitHub repository, so it is presented as a developer's portfolio. The visible screen shows no name or role, which weakens the five-second test but is not an exclusion."
+  - Owner (13 Nov): a portfolio, a portfolio, a weak one (owner, 13 Nov)
 - [www.tiagocreator.com](https://www.tiagocreator.com) (Graded not a portfolio, signals 1)
   - Gemini 3.1: not a portfolio (3/1/2), "This is a personal blog, not a professional portfolio; it lacks projects and a clear professional role."
   - Haiku 5.5: portfolio (3/1/2), "Personal identity (Tiago Creator) and a contact link exist, but no role or projects are shown; it reads as a personal blog, so it is a weak portfolio rather than a non-person page."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 
 **What this means**
 
@@ -221,6 +229,7 @@ Gemini 3.1 still said no on such grounds for these sites; Haiku did for 0.
 - [armujahid.me](https://armujahid.me) (Graded not a portfolio, signals 3)
   - Gemini 3.1: not a portfolio (4/1/5), "This is a blog, not a portfolio; it lacks a clear professional role and a way to view projects."
   - Haiku 5.5: portfolio (4/1/4), "This is a personal blog by Abdul Rauf, so it identifies a person through his name and writing. It shows no developer role and no project links, but a missing sign is not grounds for false."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [ashwinhariharan.com/software-engineering](https://ashwinhariharan.com/software-engineering) (Graded not a portfolio, signals 4)
   - Gemini 3.1: not a portfolio (4/2/4), "This is a personal blog and content site, not a portfolio of software projects."
   - Haiku 5.5: portfolio (3/2/3), "A named person (Ashwin Hariharan) with a clear personal identity; the role is not stated on the page and there is no project showcase, but no exclusion applies."
@@ -233,9 +242,11 @@ Gemini 3.1 still said no on such grounds for these sites; Haiku did for 0.
 - [maggioni.dev](https://maggioni.dev) (Graded not a portfolio, signals 3)
   - Gemini 3.1: not a portfolio (3/1/2), "This is a personal blog, not a portfolio. It lacks a clear professional role and a way to view work."
   - Haiku 5.5: portfolio (3/2/3), "This is a personal blog by a named author with post list; no role stated and no work or project links, so it reads as a blog rather than a developer portfolio."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [matvey.codes](https://matvey.codes) (Broken or dead, never graded, signals 1)
   - Gemini 3.1: not a portfolio (3/1/1), "It lacks a personal identity, a role, and a way to view work."
   - Haiku 5.5: portfolio (4/1/1), "The domain and page show a personal identity, matvey.codes, but no role or work link is visible; the page is about hobbies, so it is a weak but real personal page."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [rknastenka.com](https://rknastenka.com) (Graded not a portfolio, signals 5)
   - Gemini 3.1: not a portfolio (3/1/3), "The site is a personal blog/manifesto and lacks a professional role or any project content."
   - Haiku 5.5: portfolio (3/1/3), "A name and a Projects link are visible, so the page is a personal portfolio. The missing role does not disqualify it."
@@ -251,9 +262,11 @@ Gemini 3.1 still said no on such grounds for these sites; Haiku did for 0.
 - [www.techinz.dev](https://www.techinz.dev) (Graded not a portfolio, signals 3)
   - Gemini 3.1: not a portfolio (3/1/1), "This is a single project page, not a portfolio of work."
   - Haiku 5.5: portfolio (4/1/1), "The page title reads 'Galaxy portfolio | Full Stack Developer' and it links to a GitHub repository, so it is presented as a developer's portfolio. The visible screen shows no name or role, which weakens the five-second test but is not an exclusion."
+  - Owner (13 Nov): a portfolio, a portfolio, a weak one (owner, 13 Nov)
 - [www.tiagocreator.com](https://www.tiagocreator.com) (Graded not a portfolio, signals 1)
   - Gemini 3.1: not a portfolio (3/1/2), "This is a personal blog, not a professional portfolio; it lacks projects and a clear professional role."
   - Haiku 5.5: portfolio (3/1/2), "Personal identity (Tiago Creator) and a contact link exist, but no role or projects are shown; it reads as a personal blog, so it is a weak portfolio rather than a non-person page."
+  - Owner (13 Nov): not a portfolio, not a portfolio (owner, 13 Nov)
 - [xqyet.dev](https://xqyet.dev) (Graded not a portfolio, signals 0)
   - Gemini 3.1: not a portfolio (2/1/1), "It lacks a clear role, projects, and contact information, functioning more as a gimmick than a portfolio."
   - Haiku 5.5: not a portfolio (1/1/1), "This is a fake BIOS boot screen with no person's name, role or way to any work, so it is not a portfolio."
