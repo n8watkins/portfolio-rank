@@ -32,6 +32,7 @@ name: Re-check non-ranked sites (recheck-543)
 #   queue-dry-run,   the review rows committed in experiments/recheck-543/
 #   queue            queue.json into status_reviews (INSERT OR IGNORE), for the
 #                    owner to confirm on /admin/review; nothing else changes.
+#   queue-count      read-only: this batch's rows by status and kind.
 # The Haiku pass runs on the owner's machine from the same bundles
 # (scripts/experiments/recheck-543-haiku.mjs).
 on:
@@ -42,7 +43,7 @@ on:
         required: true
         default: "gemini-dry-run"
         type: choice
-        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "gemini-extra", "gemini-screen", "queue-dry-run", "queue"]
+        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "gemini-extra", "gemini-screen", "queue-dry-run", "queue", "queue-count"]
       capture_run:
         description: "recapture and gemini steps: the run id of the capture"
         required: false
@@ -251,4 +252,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node scripts/experiments/recheck-543.mjs queue ${{ inputs.step == 'queue-dry-run' && '--dry-run' || '' }}
+      - run: |
+          case "${{ inputs.step }}" in
+            queue-count) node scripts/experiments/recheck-543.mjs queue-count ;;
+            queue-dry-run) node scripts/experiments/recheck-543.mjs queue --dry-run ;;
+            *) node scripts/experiments/recheck-543.mjs queue ;;
+          esac

@@ -449,6 +449,20 @@ async function main() {
     await queueRows(db, rows, { onFeed: (u) => onFeedSet.has(u) });
     return 0;
   }
+  if (step === "queue-count") {
+    // Read-only: what /admin/review shows for this batch, by status and kind (no writes).
+    const { pipelineDb } = await import("../../pipeline/roster.mjs");
+    const db = pipelineDb(path.join(import.meta.dirname, "..", ".."));
+    const rows = (await db.execute({ sql: "SELECT status, proposed, agreed, decided_by FROM status_reviews WHERE batch = ?", args: [JOB] })).rows;
+    const by = {};
+    for (const r of rows) {
+      const k = r.status === "pending" ? `pending ${r.proposed}${Number(r.agreed) ? " (agreed, pre-ticked)" : " (flagged)"}` : `${r.status} by ${String(r.decided_by).startsWith("rule:") ? r.decided_by : "the owner"} (${r.proposed})`;
+      by[k] = (by[k] ?? 0) + 1;
+    }
+    console.log(`${rows.length} rows in status_reviews for ${JOB}`);
+    for (const [k, n] of Object.entries(by).sort()) console.log(`  ${String(n).padStart(4)}  ${k}`);
+    return 0;
+  }
   if (step === "fetch") {
     // The workflow's artifacts, with the local gh login (no secrets): the selection and bundles of a capture run, the answers of a gemini run.
     const { execFileSync } = await import("child_process");
