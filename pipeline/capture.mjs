@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Phase 0 capture pipeline: gate every portfolio (dead/parked/blank), then
-// Playwright-capture the live ones - desktop hero and mobile - plus
+// Playwright-capture the live ones in one visit: the whole page as one tall
+// desktop and one tall phone image with small thumbnails (AVIF,
+// pipeline/fullpage.mjs), the top of each cut out as the grade's hero.jpg
+// and the old mobile.jpg - plus
 // diagnostics (console errors, page weight, broken assets, 390px overflow,
 // dark-mode support, motion from a frame difference, DOM-shape hash), the
 // page's visible text (capped) and the facts code can check
@@ -44,6 +47,9 @@ import {
   syncRoster,
 } from "./roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
+import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
+import { imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
+import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -97,11 +103,12 @@ if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
   });
 }
 
-// Only the frames the app serves go to R2 (the AI grade uses hero.jpg too).
-// No full-page frame: nothing ever showed it, and at about 250 KB it was 70%
-// of a site's storage (docs/audits/free-tier-limits.md, R2 free 10 GB).
-const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg"]);
+const BUCKET = process.env.R2_BUCKET ?? "portfolio-rank";
+const IMAGES_BUCKET = imagesBucket();
 
+// The old frames (hero.jpg, mobile.jpg; pipeline/shot-files.mjs), while
+// LEGACY_FRAMES is on (pipeline/shot-store.mjs). The tall images and
+// thumbnails go up versioned through storeVersion.
 async function uploadDir(key, dir) {
   if (!s3) return;
   const { PutObjectCommand } = await import("@aws-sdk/client-s3");
@@ -109,10 +116,10 @@ async function uploadDir(key, dir) {
     if (!SERVE_FILES.has(f)) continue;
     await s3.send(
       new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET ?? "portfolio-rank",
+        Bucket: BUCKET,
         Key: `${key}/${f}`,
         Body: fs.readFileSync(path.join(dir, f)),
-        ContentType: f.endsWith(".jpg") ? "image/jpeg" : "image/png",
+        ContentType: contentTypeOf(f),
       })
     );
   }
@@ -121,6 +128,16 @@ async function uploadDir(key, dir) {
 // ---------------------------------------------------------------------------
 // Per-site capture
 // ---------------------------------------------------------------------------
+/** The row's stored meta.fullPage, or null. */
+async function storedFullPage(url) {
+  const row = (await db.execute({ sql: "SELECT meta FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+  try {
+    return JSON.parse(String(row?.meta ?? "null"))?.fullPage ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 16);
 
 // A failed capture (gate said dead/parked/error, blank page, or a crash) is
@@ -155,6 +172,9 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     await recordFailure(url, name, gate.status, gate.reason);
     return `${gate.status} (${gate.reason})`;
   }
+
+  // The stored images, to keep them when the page looks the same.
+  const prevFullPage = await storedFullPage(url);
 
   const ctx = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -229,15 +249,12 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     const heroSettled = quiet >= 2;
 
     // Motion: two frames 3 seconds apart, diffed in memory. The AI grade gets
-    // the result as a fact, not the frames. Hero from the settled frame.
+    // the result as a fact, not the frames. The hero is cut from the tall
+    // image below (its first screenful, after the scroll-through).
     const f0 = await page.screenshot({ type: "png" });
     await page.waitForTimeout(3000);
     const f2 = await page.screenshot({ type: "png" });
     const motion = lively >= 2 || pngDiff(f0, f2) > 0.02;
-    fs.writeFileSync(
-      path.join(dir, "hero.jpg"),
-      await page.screenshot({ type: "jpeg", quality: 75 })
-    );
 
     // Dark-mode support: pixel-diff light vs dark.
     await page.emulateMedia({ colorScheme: "dark" });
@@ -275,7 +292,24 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       { userAgent: UA }
     ).catch(() => null);
 
-    // Mobile: 390px hero + horizontal-overflow check.
+    // The diagnostics as they stand now: the scroll-through below loads
+    // lazy content, which must not change the page weight or the errors.
+    const diagnostics = {
+      consoleErrors: consoleErrors.length,
+      consoleSample: consoleErrors.slice(0, 5),
+      requests,
+      bytes,
+      broken404s: broken,
+    };
+
+    // The tall desktop image: scroll through once, back to the top, stitch
+    // (pipeline/fullpage.mjs). Its first screenful is the grade's hero.jpg;
+    // if the stitch fails, a plain screenshot of the top stands in.
+    const desktopView = await captureView(page, "desktop");
+    fs.writeFileSync(path.join(dir, "hero.jpg"), desktopView.ok ? desktopView.files.crop : await page.screenshot({ type: "jpeg", quality: 75 }));
+
+    // Phone: the same page at 390 wide, horizontal-overflow check, then the
+    // tall phone image, whose top is mobile.jpg.
     const mpage = await ctx.newPage();
     await mpage.setViewportSize({ width: 390, height: 844 });
     await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
@@ -283,22 +317,45 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // The phone view starts at the gate too.
     const mobileSplash = await passSplashGate(mpage).catch(() => null);
     const mobileModal = await passModal(mpage).catch(() => null);
+    // Its intro plays again on this load: a short wait for a still first screen.
+    await settleFirstScreen(mpage, { polls: 4, diff: pngDiff }).catch(() => false);
     const overflow390 = await mpage.evaluate(
       () => document.documentElement.scrollWidth > 395
     );
-    fs.writeFileSync(
-      path.join(dir, "mobile.jpg"),
-      await mpage.screenshot({ type: "jpeg", quality: 75 })
-    );
+    const phoneView = await captureView(mpage, "phone");
+    fs.writeFileSync(path.join(dir, "mobile.jpg"), phoneView.ok ? phoneView.files.crop : await mpage.screenshot({ type: "jpeg", quality: 75 }));
 
     await ctx.close();
 
+    // The stored images: a new version, or nothing when the page looks as it
+    // did (pipeline/fullpage.mjs unchanged), so no write and every cached
+    // copy stays good. They go to the public images bucket only
+    // (R2_IMAGES_BUCKET, pipeline/shot-store.mjs); without it nothing is
+    // stored and the version is not recorded, so the backfill makes them
+    // once the bucket exists.
+    const next = nextFullPage(prevFullPage, { desktopView, phoneView, pageText, at: new Date() });
+    const { uploadImages, uploadLegacy } = next;
+    const fullPage = uploadImages && !(s3 && IMAGES_BUCKET) ? notStored(next.fullPage) : next.fullPage;
+    if (s3 && IMAGES_BUCKET && uploadImages && fullPageComplete(fullPage)) {
+      const commands = await import("@aws-sdk/client-s3");
+      await storeVersion({
+        send: (c) => s3.send(c),
+        commands,
+        bucket: IMAGES_BUCKET,
+        shotKey: key,
+        v: fullPage.v,
+        prevV: prevFullPage?.v,
+        files: {
+          [IMAGE_FILES.desktop.tall]: desktopView.files.tall,
+          [IMAGE_FILES.desktop.thumb]: desktopView.files.thumb,
+          [IMAGE_FILES.phone.tall]: phoneView.files.tall,
+          [IMAGE_FILES.phone.thumb]: phoneView.files.thumb,
+        },
+      });
+    }
+
     const meta = {
-      consoleErrors: consoleErrors.length,
-      consoleSample: consoleErrors.slice(0, 5),
-      requests,
-      bytes,
-      broken404s: broken,
+      ...diagnostics,
       overflow390,
       darkMode,
       motion,
@@ -311,9 +368,12 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       ...(modal || mobileModal ? { modal: { ...(modal ?? {}), mobile: mobileModal ? mobileModal.passed : null } } : {}),
       // One line of what was done to reach the screenshots; only the screen after it is stored.
       ...(actionNote({ splash, modal }) ? { action: actionNote({ splash, modal }) } : {}),
+      fullPage,
     };
 
-    await uploadDir(key, dir);
+    // The old frames, cut from the tall images, while the site still reads
+    // them; not when nothing changed.
+    if (legacyFramesOn() && uploadLegacy) await uploadDir(key, dir);
 
     await db.execute({
       sql: `INSERT INTO portfolios

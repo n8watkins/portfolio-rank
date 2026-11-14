@@ -24,6 +24,10 @@ const pages = {
   // shubhadeepsec.github.io's kind: a "CLICK TO ENTER" overlay over a page that already has text, so
   // the splash check (nearly empty screens only) never fires; the overlay's own button is clicked.
   "/enter": `<body>${PAGE}<div id=m style="position:fixed;inset:0;background:#0b0b10;color:#fff;display:grid;place-items:center;z-index:9"><div role=button tabindex=0 style="cursor:pointer;padding:20px" onclick="${close}"><div>LOADING 100%</div><div>CLICK TO ENTER</div></div></div></body>`,
+  // qazimaazarshad.github.io's kind: a "Knock knock" door dialog with a "COME IN" control over a page that already has text.
+  "/door": `<body>${PAGE}<div id=m role=dialog aria-modal=true style="position:fixed;inset:0;background:#050816;color:#fff;display:grid;place-items:center;z-index:9"><div><h2>Knock knock.</h2><div style="cursor:pointer" onclick="${close}">COME IN</div><p>and I'll say hello back</p></div></div></body>`,
+  // A fake phone lock screen dialog: "Tap to unlock".
+  "/lock": `<body>${PAGE}<div id=m role=dialog aria-modal=true style="position:fixed;inset:0;background:#000;color:#fff;display:grid;place-items:center;z-index:9"><div>17:08<button onclick="${close}">Tap to unlock</button></div></div></body>`,
   // A cookie bar: too small to count.
   "/cookies": `<body>${PAGE}<div role=dialog style="position:fixed;left:0;right:0;bottom:0;height:80px;background:#eee">We use cookies <button>Accept</button></div></body>`,
   "/plain": `<body>${PAGE}</body>`,
@@ -84,6 +88,15 @@ test("a CLICK TO ENTER overlay over a page with text: its button is clicked, not
   const r = await passModal(page, { waitMs: 300 });
   assert.deepEqual([r.kind, r.button, r.how, r.passed], ["overlay", "CLICK TO ENTER", ["button"], true]);
   await page.close();
+});
+
+test("a COME IN door and a Tap to unlock screen over a page with text: their control is clicked, not Escape", async () => {
+  for (const [path, button] of [["/door", "COME IN"], ["/lock", "Tap to unlock"]]) {
+    const page = await open(path);
+    const r = await passModal(page, { waitMs: 300 });
+    assert.deepEqual([r.kind, r.button, r.how, r.passed], ["dialog", button, ["button"], true], path);
+    await page.close();
+  }
 });
 
 test("a cookie bar, an ordinary page and a site drawn in a full-screen fixed container are left alone", async () => {

@@ -27,7 +27,11 @@ const s3 = new S3Client({
   credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY },
 });
 
-/** Only a capture's full-page frame: 16 hex characters, then /full.jpg. */
+/**
+ * Only a capture's old full-page frame: 16 hex characters, then /full.jpg.
+ * The current tall images (<16 hex>/<version>/*.avif, pipeline/fullpage.mjs)
+ * never match.
+ */
 const isFullFrame = (key) => /^[0-9a-f]{16}\/full\.jpg$/.test(key);
 
 const found = [];

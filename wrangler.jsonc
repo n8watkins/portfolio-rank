@@ -101,6 +101,14 @@
     // change fingerprints and the profile's "site unchanged since" lines are
     // off until this is "true".
     "FRESHNESS_ENABLED": "false",
+    // The report card's "see the whole page" preview (lib/fullpage-flag.ts):
+    // the capture makes the tall page images either way (stored once the
+    // images bucket exists), but no page links to them until this is "true".
+    "FULLPAGE_PREVIEW_ENABLED": "false",
+    // The public images bucket's own domain (pipeline/shot-store.mjs), where
+    // the tall images and thumbnails are served straight from R2. Empty
+    // until the owner connects it (docs/audits/fullpage-images.md "Delivery").
+    "IMAGES_BASE_URL": "",
     // The review queue's automatic apply (lib/reviews/flag.ts, AUTOMATION.md):
     // with "true" the hourly cron applies rows that pass the owner's rule (both
     // models say portfolio, no code rule objects); off, every row waits for the
@@ -257,6 +265,9 @@
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
         "FRESHNESS_ENABLED": "true",
+        // Off on staging too until the report card's preview UI ships.
+        "FULLPAGE_PREVIEW_ENABLED": "false",
+        "IMAGES_BASE_URL": "",
         // On, as in production (lib/reviews/flag.ts).
         "REVIEW_AUTO_APPLY": "true",
         // The newsletter runs on staging first, against the owner's one Kit
