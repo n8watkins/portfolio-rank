@@ -333,14 +333,25 @@ const QUEUE_COLS = ["batch", "url", "grp", "current", "proposed", "agreed", "rea
  */
 export async function queueRows(db, rows, { onFeed, log = console.log }) {
   let added = 0;
+  let updated = 0;
   for (const r of rows) {
     const res = await db.execute({ sql: `INSERT OR IGNORE INTO status_reviews (${QUEUE_COLS.join(", ")}) VALUES (${QUEUE_COLS.map(() => "?").join(", ")})`, args: QUEUE_COLS.map((c) => r[c] ?? null) });
     added += res.rowsAffected;
+    if (res.rowsAffected || r.owner) continue;
+    // Already there: a row still waiting for the owner takes the new decision (a later screenshot
+    // check, an extra batch); a row the owner or a rule has decided is never touched.
+    const set = ["grp", "current", "proposed", "agreed", "reason", "off_list", "shot_key", "verdicts", "signals", "status", "decided_at", "decided_by"];
+    const u = await db.execute({
+      sql: `UPDATE status_reviews SET ${set.map((c) => `${c} = ?`).join(", ")} WHERE batch = ? AND url = ? AND status = 'pending'
+              AND (proposed != ? OR agreed != ? OR reason IS NOT ? OR verdicts IS NOT ? OR signals IS NOT ? OR status != ?)`,
+      args: [...set.map((c) => r[c] ?? null), r.batch, r.url, r.proposed, r.agreed, r.reason ?? null, r.verdicts ?? null, r.signals ?? null, r.status],
+    });
+    updated += u.rowsAffected;
   }
-  log(`${added} rows added, ${rows.length - added} already there`);
+  log(`${added} rows added, ${updated} pending rows updated, ${rows.length - added - updated} unchanged or already decided`);
   const decided = rows.filter((r) => r.owner?.action === "confirm");
   const out = [];
-  if (!decided.length) return { added, decided: out };
+  if (!decided.length) return { added, updated, decided: out };
   const { decideReviews } = await import("../../lib/reviews/store.mjs");
   for (const r of decided) {
     const id = (await db.execute({ sql: "SELECT id FROM status_reviews WHERE batch = ? AND url = ? AND status = 'pending'", args: [r.batch, r.url] })).rows[0]?.id;
@@ -353,7 +364,7 @@ export async function queueRows(db, rows, { onFeed, log = console.log }) {
     log(`owner verdict ${r.url}: ${r.proposed} ${res?.ok ? "confirmed" : `not applied (${res?.error})`}`);
     out.push({ url: r.url, ok: Boolean(res?.ok), error: res?.error });
   }
-  return { added, decided: out };
+  return { added, updated, decided: out };
 }
 
 // ---------------------------------------------------------------- upload

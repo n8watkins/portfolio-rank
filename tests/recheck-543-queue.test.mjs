@@ -61,5 +61,19 @@ test("owner verdicts are confirmed through the review store and hold over later 
   // Running the step again adds nothing and decides nothing twice.
   const again = await queueRows(db, rows, { onFeed: () => true, log: () => {} });
   assert.equal(again.added, 0);
+  assert.equal(again.updated, 0);
   assert.ok(again.decided.every((x) => x.error === "already decided"));
+});
+
+test("a later decision updates a row still pending, never one already decided", async () => {
+  // The screenshot check settles other.dev as "retry later": the pending row takes it.
+  const retry = { ...row("https://other.dev", "review"), reason: "Could not grade, retry later", status: "rejected", decided_by: "rule:retry-later", decided_at: "2026-11-14T01:00:00.000Z" };
+  const r = await queueRows(db, [retry], { onFeed: () => true, log: () => {} });
+  assert.equal(r.updated, 1);
+  const after = (await db.execute({ sql: "SELECT status, decided_by, reason FROM status_reviews WHERE url = ?", args: ["https://other.dev"] })).rows[0];
+  assert.deepEqual([after.status, after.decided_by, after.reason], ["rejected", "rule:retry-later", "Could not grade, retry later"]);
+  // The owner's decided rows are not touched by a new row for the same site.
+  const r2 = await queueRows(db, [{ ...row("https://andy-bell.design", "relist"), reason: "a grader changed its mind" }], { onFeed: () => true, log: () => {} });
+  assert.equal(r2.updated, 0);
+  assert.equal((await db.execute({ sql: "SELECT status FROM status_reviews WHERE url = ?", args: ["https://andy-bell.design"] })).rows[0].status, "confirmed");
 });

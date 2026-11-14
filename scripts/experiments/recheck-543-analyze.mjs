@@ -183,6 +183,16 @@ export function ownerRow(d, verdicts, owner, file) {
  * "rule:duplicate"), so it never waits for the owner and nothing is applied;
  * /admin/review lists it with the decided rows, saying which address is kept.
  */
+/**
+ * A blocked capture the screenshot check settled as "could not grade, retry later" (blank,
+ * loading, a bot check, a gate with a known click): decided by the rule, not the owner, and
+ * nothing applied; the site stays as it is until a later capture gets through.
+ */
+export function retryRow(d, verdicts, now = new Date().toISOString()) {
+  const base = queueRow({ ...d, proposed: "review", agreed: true }, verdicts, now);
+  return { ...base, reason: d.reason, status: "rejected", decided_by: "rule:retry-later", decided_at: now };
+}
+
 export function duplicateRow(d, verdicts, now = new Date().toISOString()) {
   const base = queueRow({ ...d, proposed: "review", agreed: true }, verdicts, now);
   return { ...base, reason: d.reason, status: "rejected", decided_by: "rule:duplicate", decided_at: now };
@@ -281,7 +291,7 @@ export function analyze(dir = DIR) {
     };
     results.push({ ...d, name: s.name, verdicts });
     const owner = ownerVerdicts.verdicts?.[s.url];
-    const row = d.path === "duplicate" ? duplicateRow(d, verdicts) : owner ? ownerRow(d, verdicts, owner, ownerVerdicts) : queueRow(d, verdicts);
+    const row = d.path === "duplicate" ? duplicateRow(d, verdicts) : d.path === "retry_later" ? retryRow(d, verdicts) : owner ? ownerRow(d, verdicts, owner, ownerVerdicts) : queueRow(d, verdicts);
     if (owner) results.at(-1).owner = { portfolio: owner.portfolio, reason: owner.reason };
     if (row) queue.push(row);
   }
