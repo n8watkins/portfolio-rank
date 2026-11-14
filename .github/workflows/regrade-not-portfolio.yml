@@ -43,7 +43,7 @@ on:
         required: true
         default: "gemini-dry-run"
         type: choice
-        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "gemini-extra", "gemini-screen", "queue-dry-run", "queue", "queue-count"]
+        options: ["capture", "recapture", "gemini-dry-run", "gemini-pilot", "gemini", "gemini-extra", "gemini-screen", "queue-dry-run", "queue", "queue-count", "queue-export"]
       capture_run:
         description: "recapture and gemini steps: the run id of the capture"
         required: false
@@ -255,6 +255,7 @@ jobs:
       - run: |
           case "${{ inputs.step }}" in
             queue-count) node scripts/experiments/recheck-543.mjs queue-count ;;
+            queue-export) node scripts/experiments/recheck-543.mjs queue-export ;;
             queue-dry-run) node scripts/experiments/recheck-543.mjs queue --dry-run ;;
             *) node scripts/experiments/recheck-543.mjs queue ;;
           esac

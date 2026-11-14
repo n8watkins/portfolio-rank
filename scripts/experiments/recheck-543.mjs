@@ -460,6 +460,15 @@ async function main() {
     await queueRows(db, rows, { onFeed: (u) => onFeedSet.has(u) });
     return 0;
   }
+  if (step === "queue-export") {
+    // Read-only: the decided rows of this batch (url, status, who, when, what), as JSON lines for the exclusions.
+    const { pipelineDb } = await import("../../pipeline/roster.mjs");
+    const db = pipelineDb(path.join(import.meta.dirname, "..", ".."));
+    const rows = (await db.execute({ sql: "SELECT url, status, proposed, decided_by, decided_at, reason, applied FROM status_reviews WHERE batch = ? AND status != 'pending' ORDER BY url", args: [JOB] })).rows;
+    for (const r of rows) console.log(`ROW ${JSON.stringify({ url: r.url, status: r.status, proposed: r.proposed, decided_by: r.decided_by, decided_at: r.decided_at, reason: r.reason, applied: r.applied })}`);
+    console.log(`${rows.length} decided rows`);
+    return 0;
+  }
   if (step === "queue-count") {
     // Read-only: what /admin/review shows for this batch, by status and kind (no writes).
     const { pipelineDb } = await import("../../pipeline/roster.mjs");
