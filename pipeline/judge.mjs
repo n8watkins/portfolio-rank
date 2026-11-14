@@ -41,6 +41,7 @@ import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary 
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import { rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
+import { withOwnerVerdict } from "../lib/reviews/store.mjs";
 import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
   RESPONSE_SCHEMA,
@@ -425,7 +426,8 @@ async function runRubric() {
         return false;
       }
       // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
-      await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, out.rubric, { url })), "write");
+      // The owner's confirmed verdict (lib/reviews/store.mjs) holds over the AI's is_portfolio.
+      await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, await withOwnerVerdict(db, url, out.rubric), { url })), "write");
       if (regrade) regraded++;
       else ok++;
       console.log(

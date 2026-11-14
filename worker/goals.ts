@@ -1,6 +1,7 @@
 // The owner's goals (pipeline/goals.mjs, lib/goals/config.mjs), on the
 // Monday-morning Cron Trigger ("0 16 * * 1", worker/index.ts): measures last
-// week, records progress, and emails the owner once when a goal is reached.
+// week, records progress, and emails the owner once when a goal is reached,
+// plus the review queue's count while status changes wait (lib/reviews/store.mjs).
 // Plain code, no Gemini.
 import * as Sentry from "@sentry/cloudflare";
 import { db as database } from "../lib/db";
@@ -17,7 +18,11 @@ export async function goalsTick(env: NightEnv & { KIT_API_KEY?: string }, schedu
       { db, email: emailSender(env, { db }), to: env.OWNER_EMAIL ?? null, siteUrl: String(env.SITE_URL ?? ""), kitApiKey: env.KIT_API_KEY ?? null, log: (line: string) => log("goals.log", { line }) },
       { now: new Date(scheduledTime) }
     );
-    log("goals.tick", { week: r.week, goals: r.goals.map((g) => ({ id: g.id, reached: g.reached, fired: g.fired, error: g.error ?? null })) });
+    log("goals.tick", {
+      week: r.week,
+      goals: r.goals.map((g) => ({ id: g.id, reached: g.reached, fired: g.fired, error: g.error ?? null })),
+      reviews: { pending: r.reviews.pending, emailed: r.reviews.emailed, error: r.reviews.error ?? null },
+    });
     return r;
   } catch (e) {
     // Never fails the weekly cron's other work; next Monday tries again.

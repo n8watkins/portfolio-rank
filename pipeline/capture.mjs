@@ -13,6 +13,7 @@
 // Usage:
 //   node pipeline/capture.mjs [--limit N] [--concurrency C] [--only substr] [--force] [--refresh N]
 //   node pipeline/capture.mjs --upload-only   # backfill captures/ to R2 later
+//   node pipeline/capture.mjs --recapture <file>   # exactly these listed addresses, as a refresh
 //
 // Failed captures are retried later with backoff (see recordCaptureFailure).
 //
@@ -32,6 +33,7 @@ import path from "path";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
+import { actionNote, passModal, passSplashGate } from "./splash.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -71,6 +73,10 @@ const CONCURRENCY = Number(flag("concurrency", "3"));
 const ONLY = flag("only", "");
 const FORCE = args.includes("--force");
 const REFRESH = Number(flag("refresh", "0")) || 0;
+// --recapture <file>: re-capture exactly the listed addresses in the file (one
+// a line), as a refresh: a failure keeps the old capture and marks nothing
+// (scripts/regrade-not-portfolio.mjs).
+const RECAPTURE = flag("recapture", "");
 
 // ---------------------------------------------------------------------------
 // DB + R2
@@ -181,6 +187,15 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(1500);
 
+    // A splash gate ("CLICK TO CONTINUE", "Press any key", a loader at
+    // 100%) is clicked through first, at most twice (./splash.mjs), so the
+    // capture and the grade see the portfolio, not the gate.
+    const splash = await passSplashGate(page).catch(() => null);
+    // A dialog on top of the page ("Choose a Theme", a welcome modal) is
+    // closed the way a visitor would (./splash.mjs passModal), so the
+    // capture shows the site's default view.
+    const modal = await passModal(page).catch(() => null);
+
     // Blank-page gate: needs visible text within the rendered page.
     // Blank-page gate: visible text, or visual content (canvas apps such as
     // Flutter web have no text in the DOM).
@@ -265,6 +280,9 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     await mpage.setViewportSize({ width: 390, height: 844 });
     await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
     await mpage.waitForTimeout(1500);
+    // The phone view starts at the gate too.
+    const mobileSplash = await passSplashGate(mpage).catch(() => null);
+    const mobileModal = await passModal(mpage).catch(() => null);
     const overflow390 = await mpage.evaluate(
       () => document.documentElement.scrollWidth > 395
     );
@@ -287,6 +305,12 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       heroSettled,
       domHash,
       classHash,
+      // The splash gate passed on the way in (./splash.mjs), when there was one.
+      ...(splash ? { splash: { ...splash, mobile: mobileSplash ? mobileSplash.passed : null } } : {}),
+      // The dialog closed on the way in (./splash.mjs passModal), when there was one.
+      ...(modal || mobileModal ? { modal: { ...(modal ?? {}), mobile: mobileModal ? mobileModal.passed : null } } : {}),
+      // One line of what was done to reach the screenshots; only the screen after it is stored.
+      ...(actionNote({ splash, modal }) ? { action: actionNote({ splash, modal }) } : {}),
     };
 
     await uploadDir(key, dir);
@@ -337,14 +361,18 @@ const feed = JSON.parse(
 const roster = await syncRoster(db, feed);
 console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
 let queue = feed.filter((p) => !ONLY || p.url.includes(ONLY));
+if (RECAPTURE) {
+  const want = new Set(fs.readFileSync(RECAPTURE, "utf8").split("\n").map((l) => l.trim()).filter(Boolean));
+  queue = feed.filter((p) => want.has(p.url)).map((p) => ({ ...p, refresh: true }));
+}
 
-if (!FORCE) {
+if (!FORCE && !RECAPTURE) {
   queue = await dueForCapture(db, queue);
 }
 queue = queue.slice(0, LIMIT);
 // The nightly refresh: listed, healthy sites whose screenshots are due
 // (changed or asked for first, then captures past 90 days).
-if (REFRESH > 0 && !ONLY) {
+if (REFRESH > 0 && !ONLY && !RECAPTURE) {
   await ensureFreshnessSchema(db);
   const queued = new Set(queue.map((p) => p.url));
   const listed = new Map(feed.map((p) => [p.url, p]));

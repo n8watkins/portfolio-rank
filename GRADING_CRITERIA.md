@@ -32,6 +32,7 @@ Scripts: `pipeline/capture.mjs` before screenshots, and the weekly health check 
   A parking phrase only counts in the page title or on a page with little text, because real portfolios mention phrases like "make an offer".
 - [ ] Renders visible content (text, or a canvas or images for canvas apps such as Flutter web); not blank.
 - [ ] Is actually a portfolio: the Gemini rubric's `is_portfolio`.
+  A "no" against at least 4 of the 6 code signals (name, projects, about, contact, resume, GitHub) is kept as a portfolio and flagged for review instead (`pipeline/portfolio-guard.mjs`).
   A `false` grade keeps the site out of the AI voting pool at once and counts as a failure in the health check.
 - [ ] Not a duplicate of another entry (same normalized URL, or the same address after redirects).
 
@@ -114,13 +115,13 @@ Rubric version 2 (`pipeline/rubric.mjs`).
 | `storytelling` | Project presentation | Gemini | 25% | Projects shown with the problem, their role, the outcome and links, rather than bare tech lists. | page text, with project-link health as context |
 | `writing` | Writing | Gemini | 15% | Clarity, voice, concision and typos. | page text |
 | `memorability` | Memorability | Gemini | 10% | Would a recruiter remember this site tomorrow. | screenshot and page text |
-| `resume` | Resume link | code | 10% | A link to a resume or CV. | links on the page |
-| `github` | GitHub link | code | 10% | A link to a GitHub profile. | links on the page |
-| `contact` | Contact path | code | 20% | A mailto link, a contact form, a contact page or a LinkedIn/social profile. | links and forms on the page |
-| `project_links` | Project links load | code | 25% | Project and demo links answer (up to 8 checked, HEAD then GET, 8 s timeout); passes when at least one was checked and none is broken. | HTTP checks of the page's outbound project links |
-| `own_domain` | Own domain | code | 10% | Served from the person's own domain, not a free hosting subdomain (vercel.app, github.io, netlify.app and similar). | final URL after redirects |
-| `fresh_footer` | Fresh footer year | code | 10% | The footer copyright year is at most 2 years old; unknown when the page shows no year. | page text |
-| `original` | Not a known template | code | 15% | No fingerprint of a known template (HTML5 UP, Start Bootstrap, BootstrapMade, Colorlib, a Brittany Chiang clone and others). | page HTML |
+| `resume` | Resume link | code | 12% | A link to a resume or CV. | links on the page |
+| `github` | GitHub link | code | 12% | A link to a GitHub profile. | links on the page |
+| `contact` | Contact path | code | 24% | A mailto link, a contact form, a contact page or a LinkedIn/social profile. | links and forms on the page |
+| `project_links` | Project links load | code | 29% | Project and demo links answer (up to 8 checked, HEAD then GET, 8 s timeout); passes when at least one was checked and none is broken. | HTTP checks of the page's outbound project links |
+| `own_domain` | Own domain | code | 12% | Served from the person's own domain, not a free hosting subdomain (vercel.app, github.io, netlify.app and similar). | final URL after redirects |
+| `fresh_footer` | Fresh footer year | code | 12% | The footer copyright year is at most 2 years old; unknown when the page shows no year. | page text |
+| `original` | Not a known template | code | context | No fingerprint of a known template (HTML5 UP, Start Bootstrap, BootstrapMade, Colorlib, a Brittany Chiang clone and others). | page HTML |
 | `motion` | Motion detected | code | context | The top of the page changes on its own (frame difference over 3 seconds). | screenshots during capture |
 | `pages` | Pages and sections | code | context | Internal pages linked from the home page and in-page sections in the navigation. | links on the page |
 | `portfolio_signals` | Portfolio-likeness | code | context | How many of six portfolio signals the page has: projects, about, contact, resume, GitHub, the person's name in the title or heading. | page HTML (pipeline/signals.mjs) |

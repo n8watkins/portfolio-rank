@@ -377,7 +377,7 @@ test("how grading works: tiers by ELO, the fine print, how to improve, the bands
     for (const name of ["Your tier is your place by ELO", "A careful ELO, updates and the grade", "How to improve your tier", "Facts by code, quality by AI", "How face-offs make a tier"]) await p.getByRole("heading", { name }).waitFor();
     await p.getByRole("heading", { name: "Points from automated checks" }).waitFor();
     await p.getByText(/Every graded portfolio gets a starting rank from automated checks/).waitFor();
-    assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 12);
+    assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 11, "6 code checks (no template) and 5 AI axes");
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
     await context.close();

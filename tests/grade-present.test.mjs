@@ -19,7 +19,7 @@ test("celebrations: an SSS is level 5 whatever its place; otherwise the top 50, 
   }
 });
 import { factLines, strengthsAndFixes } from "../lib/grader/report.mjs";
-import { CODE_CRITERIA } from "../pipeline/rubric.mjs";
+import { CODE_CRITERIA, NOT_A_FAULT } from "../pipeline/rubric.mjs";
 import { gradeKey } from "../lib/grade-score.mjs";
 
 const axis = (score, note = "") => ({ score, note });
@@ -39,23 +39,23 @@ const grade = (over = {}) => ({
 grade.withQuality = (g) => ({ ...g, quality_score: 3.25 });
 
 test("every weighted code check has hiring-manager copy and sits in exactly one group", () => {
-  const ids = CODE_CRITERIA.filter((c) => c.weight > 0).map((c) => c.id);
+  const ids = CODE_CRITERIA.filter((c) => c.weight > 0 && !NOT_A_FAULT.has(c.id)).map((c) => c.id);
   const grouped = FACT_GROUPS.flatMap((g) => g.facts);
   assert.deepEqual([...grouped].sort(), [...ids].sort());
   for (const id of ids) assert.ok(FACT_COPY[id]?.short && FACT_COPY[id]?.missing && FACT_COPY[id]?.fix, id);
 });
 
 test("facts become three questions: chips for what passes, cards for what's missing, unmeasured apart", () => {
-  const facts = factLines({ ...grade(), checks: { ...grade().checks, original: null } });
+  const facts = factLines({ ...grade(), checks: { ...grade().checks, fresh_footer: null } });
   const groups = hiringGroups(facts);
-  assert.deepEqual(groups.map((g) => g.title), ["Can they reach you?", "Can they see your work?", "Does it look current and yours?"]);
+  assert.deepEqual(groups.map((g) => g.title), ["Can they reach you?", "Can they see your work?", "Does it look current?"]);
   const reach = groups[0];
   assert.deepEqual(reach.ok.map((f) => f.short), ["Contact"]);
   assert.equal(reach.missing.length, 1);
   assert.equal(reach.missing[0].short, "Resume");
   assert.match(reach.missing[0].fix, /PDF/);
   assert.equal(groups[1].missing.length, 0);
-  assert.deepEqual(groups[2].unknown.map((f) => f.id), ["original"]);
+  assert.deepEqual(groups[2].unknown.map((f) => f.id), ["fresh_footer"]);
   assert.deepEqual(hiringGroups([]), [], "nothing measured, nothing shown");
 });
 
@@ -94,4 +94,16 @@ test("verdicts by tier, and a pool site's place", () => {
   assert.deepEqual(placeIn(pool, "b"), { rank: 2, total: 4, topPct: 38 });
   assert.equal(placeIn(pool, "c"), null, "too few face-offs, no place");
   assert.equal(placeIn(pool, "zzz"), null);
+});
+
+test("a template is not a fault: no fix, no fact line, no checklist row tells anyone to drop it", async () => {
+  const templated = { ...grade(), checks: { ...grade().checks, original: false }, facts: { template: "HTML5 UP" } };
+  const { fixes } = strengthsAndFixes(templated);
+  assert.equal(fixes.some((f) => f.criterion === "original"), false);
+  assert.equal(factLines(templated).some((f) => f.id === "original"), false);
+  assert.equal(hiringGroups(factLines(templated)).flatMap((g) => [...g.ok, ...g.missing, ...g.unknown]).some((f) => f.id === "original"), false);
+  assert.equal(JSON.stringify(fixes).toLowerCase().includes("template"), false);
+  const { checklistItems } = await import("../lib/tools/checklist.ts");
+  const rows = checklistItems({ finalUrl: "https://ana.dev", checks: { original: false }, facts: { template: "HTML5 UP" } });
+  assert.equal(rows.some((r) => r.id === "original" || /template/i.test(`${r.label} ${r.tip} ${r.found}`)), false);
 });

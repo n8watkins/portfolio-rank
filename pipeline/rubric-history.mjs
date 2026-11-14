@@ -11,6 +11,7 @@
 
 import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { ACTIVE } from "./roster.mjs";
+import { guardedForReview } from "./portfolio-guard.mjs";
 
 export async function ensureRubricHistory(db) {
   await applyTables(db, RUBRIC_HISTORY_TABLES);
@@ -51,6 +52,28 @@ export function replaceGradeStatements(url, oldJson, newRubric, now = new Date()
     });
   }
   stmts.push({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?", args: [JSON.stringify(newRubric), url] });
+  // Kept as a portfolio against the AI's verdict (./portfolio-guard.mjs): a person looks at it.
+  if (guardedForReview(newRubric)) stmts.push({ sql: "UPDATE portfolios SET needs_review = 1 WHERE url = ?", args: [url] });
+  return stmts;
+}
+
+/**
+ * Statements that clear a site's grade so the nightly "grade new" queue grades
+ * it again (the owner's review queue, lib/reviews/store.mjs, when a grade has
+ * no tier to rank on). A grade worth keeping moves to rubric_history first,
+ * as with replaceGradeStatements.
+ */
+export function clearGradeStatements(url, oldJson, now = new Date()) {
+  const stmts = [];
+  const old = parseRubric(oldJson);
+  if (old) {
+    stmts.push({
+      sql: `INSERT INTO rubric_history (url, model, tier, is_portfolio, rubric, judged_at, replaced_at, replaced_by_model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      args: [url, old.model ?? null, old.tier ?? null, old.is_portfolio == null ? null : old.is_portfolio ? 1 : 0, String(oldJson), old.judged_at ?? null, now.toISOString()],
+    });
+  }
+  stmts.push({ sql: "UPDATE portfolios SET ai_rubric = NULL WHERE url = ?", args: [url] });
   return stmts;
 }
 

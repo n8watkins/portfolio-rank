@@ -11,6 +11,11 @@
 // the email went out the goal never emails again; a send that failed is
 // tried on the next check.
 //
+// The same Monday email carries the review queue (lib/reviews/store.mjs,
+// /admin/review): when status changes wait for the owner, their count and
+// the link go in the first goal email that goes out, or, when no goal fires,
+// in a short email of their own. Nothing pending, nothing sent.
+//
 // Metrics, each as of the end of the finished week:
 //   newsletter_confirmed  confirmed newsletter subscribers, from Kit's API
 //                         (Kit keeps the list), as of the check; cached a
@@ -23,6 +28,7 @@ import { GOALS } from "../lib/goals/config.mjs";
 import { GOAL_TABLES } from "../lib/goals/schema.mjs";
 import { pacificParts, quotaDay } from "./quota-day.mjs";
 import { NOT_PORTFOLIO } from "./roster.mjs";
+import { pendingReviewCount } from "../lib/reviews/store.mjs";
 
 const DAY = 86400000;
 const iso = (d) => new Date(d).toISOString();
@@ -210,8 +216,31 @@ export function buildIcs({ uid, start, end, summary, description, url, now }) {
 const pacificLabel = (d) =>
   new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(d);
 
-/** What a reached goal's email says, with its .ics attachment. */
-export function goalEmail(m, { now, slot, siteUrl }) {
+/**
+ * The review queue's lines for the Monday email (lib/reviews/store.mjs,
+ * /admin/review): how many proposed status changes wait for the owner, with
+ * the link. Empty when nothing is pending.
+ */
+export function reviewLines(pending, siteUrl) {
+  if (!(pending > 0)) return [];
+  const page = siteUrl ? `${siteUrl.replace(/\/$/, "")}/admin/review` : "/admin/review";
+  return [
+    `Review queue: ${pending.toLocaleString("en-US")} proposed status change${pending === 1 ? "" : "s"} wait${pending === 1 ? "s" : ""} for you. Nothing changes until you confirm.`,
+    page,
+  ];
+}
+
+/** The Monday email when no goal fired but reviews are pending. */
+export function reviewDigestEmail(pending, { siteUrl }) {
+  return {
+    subject: `PortfolioRank: ${pending.toLocaleString("en-US")} site${pending === 1 ? "" : "s"} to review`,
+    text: [...reviewLines(pending, siteUrl), "", "You get this on Mondays while the queue has rows waiting."].join("\n"),
+    attachments: [],
+  };
+}
+
+/** What a reached goal's email says, with its .ics attachment, and the review queue's lines when rows are pending. */
+export function goalEmail(m, { now, slot, siteUrl, reviewsPending = 0 }) {
   const { goal } = m;
   const lines = m.conditions.map((c) => {
     const shown = c.values.map((v) => (v == null ? "unknown" : v.toLocaleString("en-US"))).join(c.values.length > 1 ? " then " : "");
@@ -234,6 +263,7 @@ export function goalEmail(m, { now, slot, siteUrl }) {
     ...(admin ? ["", `Progress on every goal: ${admin}`] : []),
     "",
     "This goal emails once; it won't fire again.",
+    ...(reviewsPending > 0 ? ["", ...reviewLines(reviewsPending, siteUrl)] : []),
   ].join("\n");
   const ics = buildIcs({ uid: `goal-${goal.id}@portfoliorank`, start: slot.start, end: slot.end, summary: goal.meeting.title, description, url: admin, now });
   return {
@@ -260,7 +290,13 @@ export async function checkGoals(ctx, { now, dryRun = false, goals = GOALS }) {
   const log = ctx.log ?? (() => {});
   if (!dryRun) await ensureGoalsSchema(ctx.db);
   const measured = await measureGoals(ctx, { now, goals });
-  const result = { week: measured[0]?.week ?? finishedWeek(now).week, dryRun, goals: /** @type {GoalResult[]} */ ([]) };
+  // The review queue rides on this Monday email (lib/reviews/store.mjs): in the first goal email that goes
+  // out, else in a short email of its own; never when nothing is pending.
+  const pending = await pendingReviewCount(ctx.db);
+  /** @type {{ pending: number, emailed: "goal" | "digest" | null, error?: string, email?: EmailPreview, wouldEmail?: boolean }} */
+  const reviews = { pending, emailed: null };
+  const result = { week: measured[0]?.week ?? finishedWeek(now).week, dryRun, goals: /** @type {GoalResult[]} */ ([]), reviews };
+  let carried = false;
   for (const m of measured) {
     const metrics = Object.fromEntries(m.conditions.map((c) => [c.metric, c.values[0]]));
     /** @type {GoalResult} */
@@ -288,11 +324,15 @@ export async function checkGoals(ctx, { now, dryRun = false, goals = GOALS }) {
     const slot = decisionSlot(now, { minutes: m.goal.meeting.minutes });
     // A retry reports the conditions that held when it was reached.
     const shown = event ? { ...m, week: String(event.reached_week), conditions: JSON.parse(String(event.met)) } : m;
-    const email = goalEmail(shown, { now, slot, siteUrl: ctx.siteUrl });
+    const email = goalEmail(shown, { now, slot, siteUrl: ctx.siteUrl, reviewsPending: carried ? 0 : pending });
     entry.email = { to: ctx.to, subject: email.subject, text: email.text, attachments: email.attachments.map((a) => ({ filename: a.filename, type: a.type, content: a.content })) };
     entry.slot = { start: iso(slot.start), end: iso(slot.end) };
     if (dryRun) {
       entry.wouldFire = true;
+      if (pending > 0 && !carried) {
+        carried = true;
+        reviews.emailed = "goal";
+      }
       result.goals.push(entry);
       continue;
     }
@@ -313,6 +353,10 @@ export async function checkGoals(ctx, { now, dryRun = false, goals = GOALS }) {
       await ctx.email.send({ to: ctx.to, subject: email.subject, text: email.text, attachments: email.attachments });
       await ctx.db.execute({ sql: "UPDATE goal_events SET notified_at = ?, slot_start = ?, last_error = NULL WHERE goal_id = ?", args: [iso(now), iso(slot.start), m.goal.id] });
       entry.fired = true;
+      if (pending > 0 && !carried) {
+        carried = true;
+        reviews.emailed = "goal";
+      }
       log(`goals: ${m.goal.id} reached and emailed`);
     } catch (e) {
       entry.error = String(e?.message ?? e).slice(0, 200);
@@ -320,6 +364,22 @@ export async function checkGoals(ctx, { now, dryRun = false, goals = GOALS }) {
       log(`goals: ${m.goal.id} reached, email failed (${entry.error}); tried again next week`);
     }
     result.goals.push(entry);
+  }
+  if (pending > 0 && !carried) {
+    const email = reviewDigestEmail(pending, { siteUrl: ctx.siteUrl });
+    reviews.email = { to: ctx.to, subject: email.subject, text: email.text, attachments: [] };
+    if (dryRun) reviews.wouldEmail = true;
+    else if (!ctx.email || !ctx.to) reviews.error = "owner alerts are off (no OWNER_EMAIL or email sender)";
+    else {
+      try {
+        await ctx.email.send({ to: ctx.to, subject: email.subject, text: email.text });
+        reviews.emailed = "digest";
+        log(`goals: review digest emailed (${pending} pending)`);
+      } catch (e) {
+        reviews.error = String(e?.message ?? e).slice(0, 200);
+        log(`goals: review digest failed (${reviews.error})`);
+      }
+    }
   }
   return result;
 }
