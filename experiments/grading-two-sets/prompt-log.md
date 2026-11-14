@@ -143,6 +143,16 @@ The new STEP 3 paragraph, word for word:
 
 > is_portfolio is true unless one of these exclusions applies: a parked or for-sale domain; an unedited placeholder (demo names like 'Aaaaby' or 'John Doe', or someone else's content); a page that is not about a person (a company or studio site, a bare code repository, a link-in-bio page like Linktree); a broken, blank or error page. The three signs of a portfolio, (1) who they are, a name or clear personal identity (stylized or spaced-out letters count), (2) what they do (developer, engineer, designer, and so on), and (3) a way to their work (a Projects button or link, a GitHub link, project links or a resume), feed the checklist, the scores and the tips only. A missing sign, a missing role included, is never a reason to say false: a weak portfolio is still a portfolio, with low scores and tips. Give the reason first, then the answer.
 
+## Note, 2026-11-13: a possible v2.2 wording (not a prompt change)
+
+Nothing in the prompts changes with this note; v2.1 stays the current definition.
+In the 543 re-check (exp/recheck-543, owner verdicts in `experiments/recheck-543/owner-verdicts.json` at e529231), Gemini 3.1 and Haiku disagreed on 7 sites.
+The owner sided with Gemini's "not a portfolio" on 5 personal blogs that Haiku called portfolios (armujahid.me, maggioni.dev, matvey.codes, www.tiagocreator.com, damianmarkowski.com), and called andy-bell.design not a portfolio too; www.techinz.dev he judged a weak portfolio, so it is relisted.
+So for the owner a personal blog with no work shown is not a portfolio, which v2.1 does not say: its exclusions are only parked or for sale, placeholders, pages not about a person, and broken pages.
+Haiku follows v2.1's wording here; Gemini 3.1 matches the owner's intent.
+A possible v2.2 exclusion, to be decided and tested before any use: "a personal blog with no way to the person's work is not a portfolio".
+It would sit with the other exclusions and keep "a weak portfolio is still a portfolio", so a blog that does link to projects, GitHub or a resume stays a portfolio.
+
 ## Mini test 8, 2026-11-13: prompt version "portfolio-definition-v2.1-projects" (version B)
 
 Owner-approved test "what the grader sees": the same 10 sites, the same definition (v2.1), graded twice with everything else equal.
