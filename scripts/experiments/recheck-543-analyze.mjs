@@ -64,8 +64,52 @@ export function changeFor(site, portfolio) {
  * One site's decision. `g` and `h` are the batched answers of Gemini 3.1 and
  * Haiku (raw, before the guard); `meta` the capture's meta.json.
  */
-export function decide(site, meta, { g, h, dupIndex }) {
+/**
+ * A blocked capture, decided from the screenshot check (recheck-543-screen.mjs): null when
+ * there is no screen answer yet (the capture stays in review). `hs`/`gs` are Haiku's and
+ * Gemini 3.1's answers { class, click, confidence, reason }.
+ */
+export function screenDecision(site, hs, gs) {
+  if (!hs) return null;
+  const say = (a) => `${a.class.replace("_", " ")} (${a.confidence})${a.click ? `, click "${a.click}"` : ""}: ${a.reason}`;
+  const retry = (why) => ({ path: "retry_later", outcome: "unchanged", proposed: null, agreed: null, reason: `Could not grade, retry later: ${why}. Haiku: ${say(hs)}` });
+  if (hs.class === "bot_check") return retry("a bot or security check stood in for the site");
+  if ((hs.class === "blank" || hs.class === "loading") && hs.confidence === "high") return retry(hs.class === "blank" ? "the page was blank" : "the page was still loading");
+  if (hs.class === "intro_gate" && hs.confidence === "high" && hs.click) return retry(`an intro screen that needs "${hs.click}" clicked`);
+  if (hs.confidence === "high" && (hs.class === "portfolio" || hs.class === "not_portfolio")) {
+    if (!gs) return { path: "screen", outcome: "pending", proposed: null, agreed: null, reason: `Waiting for Gemini 3.1's screenshot check. Haiku: ${say(hs)}` };
+    const portfolio = hs.class === "portfolio";
+    if (gs.class === hs.class) {
+      const proposed = changeFor(site, portfolio);
+      return { path: "screen", outcome: portfolio ? "portfolio" : "not_portfolio", proposed, agreed: true, reason: `Screenshot check: Haiku and Gemini 3.1 agree, ${portfolio ? "a portfolio" : "not a portfolio"}. Haiku: ${say(hs)}` };
+    }
+    return { path: "screen", outcome: "needs_review", proposed: "review", agreed: false, reason: `Screenshot check: Haiku says ${say(hs)}; Gemini 3.1 says ${say(gs)}.` };
+  }
+  return { path: "screen", outcome: "needs_review", proposed: "review", agreed: false, reason: `Screenshot check, not sure enough to decide: ${say(hs)}${gs ? `; Gemini 3.1: ${say(gs)}` : ""}` };
+}
+
+export function decide(site, meta, { g, h, dupIndex, dup = null, keep = false, screen = null }) {
   const signals = meta?.signals ?? null;
+  // A duplicate (recheck-543-dups.mjs): another address of a site kept under one address. No
+  // owner review and nothing applied; the kept address goes through the normal flow.
+  if (dup) {
+    return {
+      id: site.id,
+      url: site.url,
+      group: site.group,
+      current: site.current,
+      off_list: site.off_list,
+      shot_key: site.shot_key,
+      capture: { action: null, blocked: null, failed: null, retried: false },
+      signals,
+      path: "duplicate",
+      outcome: "duplicate",
+      proposed: null,
+      agreed: null,
+      duplicateOf: dup.duplicateOf,
+      reason: `Duplicate of ${dup.duplicateOf} (${dup.why}); kept under that address.`,
+    };
+  }
   const capture = {
     action: meta ? actionNote({ splash: meta.gate?.desktop, modal: meta.modal?.desktop, mode: meta.mode_pick?.desktop }) : null,
     // A bot or security check that stood in for the site is a blocked capture too, even when it had words enough.
@@ -75,9 +119,15 @@ export function decide(site, meta, { g, h, dupIndex }) {
   };
   const base = { id: site.id, url: site.url, group: site.group, current: site.current, off_list: site.off_list, shot_key: site.shot_key, capture, signals };
   if (capture.failed) return { ...base, path: "capture_failed", outcome: "unchanged", proposed: null, agreed: null, reason: `The capture failed (${capture.failed}); the site stays as it is.` };
-  if (capture.blocked) return { ...base, path: "capture_blocked", outcome: "needs_review", proposed: "review", agreed: false, reason: `Capture blocked, needs review: ${capture.blocked}. Not sent to any model.` };
+  if (capture.blocked) {
+    const s = screenDecision(site, screen?.haiku ?? null, screen?.gemini ?? null);
+    if (s) return { ...base, ...s, screen: { haiku: screen.haiku, gemini: screen.gemini ?? null } };
+    return { ...base, path: "capture_blocked", outcome: "needs_review", proposed: "review", agreed: false, reason: `Capture blocked, needs review: ${capture.blocked}. Not sent to any model.` };
+  }
   const hasWork = Boolean(signals?.projects);
   const junk = junkCheck({ url: site.url, name: site.name, page_text: meta.page_text, has_work: hasWork }, dupIndex);
+  // The kept address of a duplicate group: its copies are its own other addresses, not a reason to review.
+  if (keep) junk.review = false;
   if (junk.junk) {
     const proposed = changeFor(site, false);
     return { ...base, junk: junk.rule, path: "code_rule", outcome: "not_portfolio", proposed, agreed: true, reason: `Code rule: ${junk.rule}.` };
@@ -126,6 +176,16 @@ export function decide(site, meta, { g, h, dupIndex }) {
 export function ownerRow(d, verdicts, owner, file) {
   const base = queueRow({ ...d, proposed: owner.portfolio ? "relist" : "remove", agreed: true }, verdicts);
   return { ...base, reason: `Owner verdict: ${owner.reason}. ${d.reason}`, owner: { action: "confirm", by: file.decided_by, at: file.decided_at } };
+}
+
+/**
+ * A duplicate's row: already decided by the rule (status rejected, decided_by
+ * "rule:duplicate"), so it never waits for the owner and nothing is applied;
+ * /admin/review lists it with the decided rows, saying which address is kept.
+ */
+export function duplicateRow(d, verdicts, now = new Date().toISOString()) {
+  const base = queueRow({ ...d, proposed: "review", agreed: true }, verdicts, now);
+  return { ...base, reason: d.reason, status: "rejected", decided_by: "rule:duplicate", decided_at: now };
 }
 
 export function queueRow(d, verdicts, now = new Date().toISOString()) {
@@ -203,11 +263,17 @@ export function analyze(dir = DIR) {
   }
   const ownerFile = path.join(import.meta.dirname, "..", "..", "experiments", "recheck-543", "owner-verdicts.json");
   const ownerVerdicts = fs.existsSync(ownerFile) ? readJson(ownerFile) : { verdicts: {} };
+  const dups = fs.existsSync(path.join(dir, "duplicates.json")) ? readJson(path.join(dir, "duplicates.json")) : { byId: {}, groups: [] };
+  const keepIds = new Set((dups.groups ?? []).map((g) => g.keepId));
+  // The screenshot check of the blocked captures (recheck-543-screen.mjs): Haiku, then Gemini 3.1 for the high-confidence ones.
+  const screenHaiku = fs.existsSync(path.join(dir, "screen-haiku", "state.json")) ? readJson(path.join(dir, "screen-haiku", "state.json")).answers : {};
+  const screenGemini = fs.existsSync(path.join(dir, "screen-gemini", "answers.json")) ? readJson(path.join(dir, "screen-gemini", "answers.json")) : {};
   const results = [];
   const queue = [];
   for (const s of sel.sites) {
     const meta = metas.get(s.id);
-    const d = decide(s, meta, { g: g31.batch.get(s.id), h: hk.batch.get(s.id), dupIndex });
+    const screen = screenHaiku[s.id] ? { haiku: screenHaiku[s.id], gemini: screenGemini[s.id] ?? null } : null;
+    const d = decide(s, meta, { g: g31.batch.get(s.id), h: hk.batch.get(s.id), dupIndex, dup: dups.byId?.[s.id] ?? null, keep: keepIds.has(s.id), screen });
     const verdicts = {
       prompt: PROMPT_VERSION,
       gemini31: { batch: verdictOf(g31.batch.get(s.id)), solo: verdictOf(g31.solo.get(s.id)) },
@@ -215,7 +281,7 @@ export function analyze(dir = DIR) {
     };
     results.push({ ...d, name: s.name, verdicts });
     const owner = ownerVerdicts.verdicts?.[s.url];
-    const row = owner ? ownerRow(d, verdicts, owner, ownerVerdicts) : queueRow(d, verdicts);
+    const row = d.path === "duplicate" ? duplicateRow(d, verdicts) : owner ? ownerRow(d, verdicts, owner, ownerVerdicts) : queueRow(d, verdicts);
     if (owner) results.at(-1).owner = { portfolio: owner.portfolio, reason: owner.reason };
     if (row) queue.push(row);
   }

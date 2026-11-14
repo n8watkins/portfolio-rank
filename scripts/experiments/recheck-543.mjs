@@ -322,7 +322,7 @@ async function gemini({ dryRun, pilot = null, extra = false }) {
 
 // ---------------------------------------------------------------- queue
 
-const QUEUE_COLS = ["batch", "url", "grp", "current", "proposed", "agreed", "reason", "off_list", "shot_key", "verdicts", "signals", "status", "created_at"];
+const QUEUE_COLS = ["batch", "url", "grp", "current", "proposed", "agreed", "reason", "off_list", "shot_key", "verdicts", "signals", "status", "created_at", "decided_at", "decided_by"];
 
 /**
  * The review rows into status_reviews (INSERT OR IGNORE on batch and url, so a row the
