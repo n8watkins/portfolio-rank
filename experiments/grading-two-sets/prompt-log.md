@@ -143,6 +143,18 @@ The new STEP 3 paragraph, word for word:
 
 > is_portfolio is true unless one of these exclusions applies: a parked or for-sale domain; an unedited placeholder (demo names like 'Aaaaby' or 'John Doe', or someone else's content); a page that is not about a person (a company or studio site, a bare code repository, a link-in-bio page like Linktree); a broken, blank or error page. The three signs of a portfolio, (1) who they are, a name or clear personal identity (stylized or spaced-out letters count), (2) what they do (developer, engineer, designer, and so on), and (3) a way to their work (a Projects button or link, a GitHub link, project links or a resume), feed the checklist, the scores and the tips only. A missing sign, a missing role included, is never a reason to say false: a weak portfolio is still a portfolio, with low scores and tips. Give the reason first, then the answer.
 
+## Owner-approved prompt, 2026-11-13: "recheck-543-screen" (written by the recheck-543 lane)
+
+Prompt id `recheck-543-screen`, file `experiments/recheck-543/prompts/screen.txt` on exp/recheck-543 at commit 120513e (SHA-256 7631d4acb0c15af1b76fca1ad990f0c791f925c072cf7576ea8d15643f764fdf, 22 lines).
+Written by the recheck-543 lane and approved by the owner; logged here so every prompt in use has one record.
+Purpose: a screenshot check for the 51 recheck-543 captures that were never graded because they stayed blocked (45 almost empty, 3 bot checks, 3 gates or dialogs).
+Input, one site per request: the desktop (1440x900) and phone (390x844) first screens and the page's word count; no page text and no facts.
+Output, JSON: `class` (portfolio, intro_gate, loading, blank, bot_check or not_portfolio), `click` (what to click, for an intro gate), `confidence` (high, medium or low) and a `reason` of at most 25 words.
+Its portfolio class follows v2.1 (a weak or sparse portfolio is still a portfolio); its not_portfolio class names parked or for-sale domains, company, studio or product pages, unedited templates or placeholders, and error pages.
+Models: Claude Haiku 5.5 first (the owner's command, a $1 stop, about 2 cents expected), then Gemini 3.1 Flash-Lite (free tier, the same prompt and images) on the sites Haiku settled with high confidence as portfolio or not_portfolio.
+Decisions: both models agree with high confidence, the normal flow; blank or loading with high confidence, any bot check, or an intro gate with a visible click, "could not grade, retry later", not sent to the owner; anything else (low confidence, or the models disagree), the owner.
+Two things to watch, from reading it: the portfolio class says one sign ("a name ..., what they do, or a way to their work") is enough, which is looser than v2.1's "true unless an exclusion applies" only in wording, since an image-only page with a name and nothing else passes both; and a personal blog with no work shown falls under portfolio here, which matches v2.1 but not the owner's 543 verdicts (see the v2.2 note below).
+
 ## Note, 2026-11-13: a possible v2.2 wording (not a prompt change)
 
 Nothing in the prompts changes with this note; v2.1 stays the current definition.
