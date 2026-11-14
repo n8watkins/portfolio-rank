@@ -223,8 +223,24 @@ test("link checks: HEAD then GET, bot walls are blocked, not broken", async () =
     throw new TypeError("fetch failed");
   };
   const urls = ["ok", "no-head", "gone", "wall", "down", "dns"].map((p) => `https://site.test/${p}`);
-  const r = await checkLinks([...urls, "http://127.0.0.1/x"], { fetchImpl, concurrency: 2 });
-  assert.deepEqual(r, { checked: 6, ok: 2, broken: 3, blocked: 1 });
+  const context = { "https://site.test/gone": { text: "Live demo", section: "Projects" } };
+  const r = await checkLinks([...urls, "http://127.0.0.1/x"], { fetchImpl, concurrency: 2, context });
+  const { failures, ...counts } = r;
+  assert.deepEqual(counts, { checked: 6, ok: 2, broken: 3, blocked: 1 });
+  // Which links failed, why and where: broken ones first, then the bot walls.
+  assert.deepEqual(
+    failures.map((f) => [f.url.replace("https://site.test/", ""), f.kind, f.reason]),
+    [
+      ["gone", "broken", "404 Not Found"],
+      ["down", "broken", "503 Service Unavailable"],
+      ["dns", "broken", "didn't connect (no such site, or it refused the connection)"],
+      ["wall", "blocked", "403 Forbidden"],
+    ]
+  );
+  assert.deepEqual([failures[0].text, failures[0].section], ["Live demo", "Projects"]);
+  // Where a link sits: its text and the heading above it, entities decoded.
+  const [l] = extractLinks(`<h2>Tom &amp; Jerry&#x27;s work</h2><p><a href="https://demo.test/a">Live&nbsp;demo</a></p>`, "https://me.test/");
+  assert.deepEqual([l.section, l.text], ["Tom & Jerry's work", "Live demo"]);
   assert.ok(seen.includes("GET https://site.test/no-head"));
   assert.ok(!seen.some((s) => s.includes("127.0.0.1")), "private addresses are never fetched");
 });

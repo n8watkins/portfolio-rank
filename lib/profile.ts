@@ -2,7 +2,9 @@ import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
-import { BASE_ELO } from "@/lib/elo";
+import { tierOf, isPublicTier } from "@/lib/tiers.mjs";
+import { readSiteRow, readTierMeta, standingOf as liveStanding } from "@/lib/tiers-db.mjs";
+import { unpackCheck } from "@/lib/check-points.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { seen } from "@/lib/discovery/sites.mjs";
 import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
@@ -63,11 +65,42 @@ export function reportCard(raw: unknown): ReportCard | null {
   };
 }
 
-/**
- * Where a portfolio stands in the face-offs: its ELO and how many votes it
- * has (the ratings table). Tier letters come with the tiers work (#189).
- */
-export type Standing = { elo: number; faceoffs: number };
+export type Standing = {
+  tier: string | null;
+  elo: number;
+  faceoffs: number;
+  /** Real face-offs (people's votes and AI comparisons), each counted once. */
+  votes: number;
+  top: number | null;
+  of: number | null;
+  provisional: boolean;
+  /** Its starting rank came from automated checks (lib/check-points.mjs); `check` is the points breakdown. */
+  seeded: boolean;
+  check: ReturnType<typeof unpackCheck>;
+};
+
+function standingOf(raw: unknown): Standing | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const g = JSON.parse(raw);
+    const tier = tierOf(g);
+    const r = g?.rank;
+    if (!tier || typeof r?.elo !== "number") return null;
+    return {
+      tier,
+      elo: r.elo,
+      faceoffs: Number(r.faceoffs ?? 0),
+      votes: Number(r.votes ?? 0),
+      top: typeof r.top === "number" ? r.top : null,
+      of: typeof r.of === "number" ? r.of : null,
+      provisional: r.provisional !== false,
+      seeded: r.seeded === true,
+      check: unpackCheck(r.check),
+    };
+  } catch {
+    return null;
+  }
+}
 
 export type Saved<T> = (T & { at: number }) | null;
 
@@ -81,6 +114,8 @@ export type Profile = {
   /** "listed", or how far an added site is: waiting to be graded, being graded, graded. */
   stage: "listed" | "pending" | "grading" | "graded" | "not_portfolio";
   standing: Standing;
+  /** The tier shown (top tiers only; hidden by the owner hides it). */
+  tier: string | null;
   report: ReportCard | null;
   /** The newest grade job for this site, while it isn't finished or it explains why. */
   job: { id: string; status: string; reason: string | null } | null;
@@ -114,14 +149,13 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   const owner = await ownerState(client, url);
   if (owner.removedAt) return null;
 
-  const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
+  const [rubricRow, jobRow, seenRow, cacheRows, stars, saves] = await Promise.all([
     listed ? client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
     client.execute({ sql: "SELECT id, status, reason, result FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [siteKey] }).then((r) => r.rows[0]),
     listed ? null : seen(client, url),
     client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url)] }).then((r) => r.rows),
     client.execute({ sql: "SELECT n FROM star_counts WHERE url = ?", args: [url] }).then((r) => Number(r.rows[0]?.n ?? 0)),
     client.execute({ sql: "SELECT COUNT(*) AS n FROM likes WHERE url = ?", args: [url] }).then((r) => Number(r.rows[0]?.n ?? 0)),
-    listed ? client.execute({ sql: "SELECT elo, votes FROM ratings WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
   ]);
   if (!listed && !seenRow && !jobRow) return null;
 
@@ -140,7 +174,23 @@ export async function loadProfile(url: string): Promise<Profile | null> {
 
   const jobResult = jobRow?.status === "done" && jobRow.result ? String(jobRow.result) : null;
   const report = owner.hideGrade ? null : reportCard(rubricRow?.ai_rubric ?? jobResult);
-  const standing: Standing = rating ? { elo: Number(rating.elo), faceoffs: Number(rating.votes) } : { elo: BASE_ELO, faceoffs: 0 };
+  // The letter, ELO and place derived on read from its rating row and the daily cutoffs (lib/tiers-db.mjs):
+  // two reads by key, as current as the last vote. The points breakdown comes with the stored grade.
+  const stored = standingOf(rubricRow?.ai_rubric);
+  const [row, meta] = await Promise.all([readSiteRow(client, url), readTierMeta(client)]);
+  const live = liveStanding(row, meta);
+  const standing: Standing = {
+    tier: stored ? (live.tier ?? stored.tier) : null,
+    elo: live.elo,
+    faceoffs: live.faceoffs,
+    votes: live.votes,
+    top: live.top,
+    of: live.of,
+    provisional: live.provisional,
+    seeded: live.seeded,
+    check: stored?.check ?? null,
+  };
+  const tier = !owner.hideGrade && isPublicTier(standing.tier) ? standing.tier : null;
   const stage: Profile["stage"] = listed
     ? "listed"
     : report
@@ -160,6 +210,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     domain: domainOf(url),
     stage,
     standing,
+    tier,
     report,
     job: jobRow && jobRow.status !== "done" ? { id: String(jobRow.id), status: String(jobRow.status), reason: jobRow.reason == null ? null : String(jobRow.reason) } : null,
     hideGrade: owner.hideGrade,

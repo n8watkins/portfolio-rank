@@ -23,6 +23,7 @@ import { ACTIVE, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { AXES, TIER } from "../grade-pairs.mjs";
+import { atLeast, tierOf, tierValue } from "../../lib/tiers.mjs";
 
 // The production address (lib/site.ts PRODUCTION_SITE_URL; tests/site-url.test.mjs keeps them equal).
 export const SITE_URL = "https://portfoliorank.dev";
@@ -147,10 +148,12 @@ async function gradedRows(db) {
   return rows
     .filter((r) => !removed.has(String(r.url)))
     .map((r) => ({ url: String(r.url), name: r.name == null ? null : String(r.name), shotKey: r.shot_key == null ? null : String(r.shot_key), rubric: parse(r.ai_rubric), meta: parse(r.meta) }))
-    .filter((r) => r.rubric && TIER[r.rubric.tier] && r.rubric.is_portfolio !== false);
+    .filter((r) => r.rubric && TIER[r.rubric.tier] && r.rubric.is_portfolio !== false)
+    .map((r) => ({ ...r, tier: tierOf(r.rubric) }));
 }
 
-const top = (r) => r.rubric.tier === "S" || r.rubric.tier === "A";
+/** Tier A or higher: the top 30% by ELO among portfolios with enough face-offs (lib/tiers.mjs). */
+const top = (r) => atLeast(r.tier, "A");
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const median = (xs) => {
   if (!xs.length) return null;
@@ -177,7 +180,7 @@ export async function topGrades(db, { now }) {
   const rows = await gradedRows(db);
   const best = rows.filter(top);
   const rest = rows.filter((r) => !top(r));
-  if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} S/A and ${rest.length} other grades; ${MIN_GROUP} of each needed`);
+  if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} A-or-higher and ${rest.length} other grades; ${MIN_GROUP} of each needed`);
   const b = sheet(kind, {
     now,
     headline: "What the AI grader rewards, and what it marks down",
@@ -189,7 +192,7 @@ export async function topGrades(db, { now }) {
   b.fact("Share of all graded portfolios that are top-graded", best.length / rows.length, fmt.pct(best.length / rows.length), {
     scope: { need: "graded|all portfolios|every portfolio|everyone", avoid: "of (?:the )?(?:top|best|leading) (?:portfolios|sites)" },
   });
-  const sCount = rows.filter((r) => r.rubric.tier === "S").length;
+  const sCount = rows.filter((r) => r.tier === "SSS").length;
   b.fact("Portfolios with the judge's highest grade, a small part of the top-graded group", sCount, fmt.int(sCount));
   const per = [];
   const bestIds = [];
@@ -227,29 +230,29 @@ export async function topGrades(db, { now }) {
     b.notable([leadId, gapId], lead.length > 1 ? `{{${leadId}}} tie for the biggest lead of the top-graded portfolios, {{${gapId}}} each` : `the biggest lead of the top-graded portfolios is {{${gapId}}} on {{${leadId}}}`);
   }
   b.chart({
-    title: "Average score by axis: the top-graded portfolios against the rest",
+    title: "Average score by axis: portfolios graded A or higher against the rest",
     unit: "",
     max: 5,
     categories: bestIds.map(([l]) => l),
     series: [
-      { name: `Top-graded (top ${fmt.pct(best.length / rows.length)})`, facts: bestIds.map(([, id]) => id) },
+      { name: "Graded A or higher", facts: bestIds.map(([, id]) => id) },
       { name: "Everyone else", facts: restIds.map(([, id]) => id) },
     ],
-    alt: "Bar chart of the average AI score per axis, the top-graded portfolios next to all others; the top group leads on every axis.",
+    alt: "Bar chart of the average AI score per axis, portfolios graded A or higher next to all others; the top group leads on every axis.",
   });
-  // Up to 5 S-tier sites with a name, highest total first: named only for being graded S.
+  // Up to 5 SSS sites with a name, highest total first: named only for being graded SSS.
   const named = rows
-    .filter((r) => r.rubric.tier === "S" && r.name)
+    .filter((r) => r.tier === "SSS" && r.name)
     .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
     .slice(0, 5);
   for (const r of named) {
-    b.name(r, "has the AI judge's highest grade");
-    b.fact(`${r.name} (${domainOf(r.url)}) has the AI judge's highest grade`, "S", "the highest grade", { tone: "positive", about: r.url });
+    b.name(r, "has the AI judge's highest grade, one of the top 3");
+    b.fact(`${r.name} (${domainOf(r.url)}) has the AI judge's highest grade`, "SSS", "the highest grade", { tone: "positive", about: r.url });
     // What it does well, for the post to say when it links the site: its full-mark axes.
     const strong = per.filter((p) => axisScore(r, p.k) === 5).map((p) => p.label);
     if (strong.length) b.fact(`${r.name} (${domainOf(r.url)}) scores 5 out of 5 on ${joinWords(strong)}`, strong.length, joinWords(strong), { tone: "positive", about: r.url });
   }
-  // For each axis, the named S site that scores highest on it: a positive example a "Try this" step can link.
+  // For each axis, the named SSS site that scores highest on it: a positive example a "Try this" step can link.
   for (const p of per) {
     const strong = named.filter((r) => axisScore(r, p.k) != null).sort((x, y) => axisScore(y, p.k) - axisScore(x, p.k) || x.url.localeCompare(y.url))[0];
     if (strong) b.example(p.label, b.fact(`${strong.name} (${domainOf(strong.url)}) scores ${axisScore(strong, p.k)} out of 5 on ${p.label}`, axisScore(strong, p.k), String(axisScore(strong, p.k)), { tone: "positive", about: strong.url }), strong);
@@ -265,7 +268,7 @@ export async function pageCraft(db, { now }) {
   const rows = (await gradedRows(db)).filter((r) => r.meta && typeof r.meta === "object");
   const best = rows.filter(top);
   const rest = rows.filter((r) => !top(r));
-  if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} S/A and ${rest.length} other measured sites; ${MIN_GROUP} of each needed`);
+  if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} A-or-higher and ${rest.length} other measured sites; ${MIN_GROUP} of each needed`);
   const b = sheet(kind, {
     now,
     headline: "Dark mode, motion and page weight: what top portfolios actually ship",
@@ -316,26 +319,26 @@ export async function pageCraft(db, { now }) {
   // weigh no more than the others' median: positive examples to link, each
   // with what it does well. Named only for those reasons.
   const examples = best
-    .filter((r) => r.rubric.tier === "S" && r.name && r.meta.overflow390 === false && r.meta.consoleErrors === 0 && typeof r.meta.bytes === "number" && r.meta.bytes > 0 && (wr == null || r.meta.bytes <= wr))
+    .filter((r) => atLeast(r.tier, "S-") && r.name && r.meta.overflow390 === false && r.meta.consoleErrors === 0 && typeof r.meta.bytes === "number" && r.meta.bytes > 0 && (wr == null || r.meta.bytes <= wr))
     .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
     .slice(0, 5);
   for (const r of examples) {
-    b.name(r, "has the AI judge's highest grade, fits a phone screen and loads light with no console errors");
+    b.name(r, "has one of the AI judge's highest grades, fits a phone screen and loads light with no console errors");
     const traits = ["fits a phone screen", "no console errors", ...(r.meta.darkMode === true ? ["dark mode by default"] : []), ...(r.meta.motion === true ? ["motion on the page"] : [])];
-    b.fact(`${r.name} (${domainOf(r.url)}) has the highest grade and ${joinWords(traits)}`, "S", "the highest grade", { tone: "positive", about: r.url });
+    b.fact(`${r.name} (${domainOf(r.url)}) has one of the highest grades and ${joinWords(traits)}`, r.tier, "one of the highest grades", { tone: "positive", about: r.url });
     b.fact(`${r.name} (${domainOf(r.url)}) page weight, first load`, r.meta.bytes, `${fmt.dec(r.meta.bytes / 1e6)} MB`, { tone: "positive", about: r.url });
   }
   if (cats.length) {
     b.chart({
-      title: "What the capture measured: the top-graded portfolios against the rest",
+      title: "What the capture measured: portfolios graded A or higher against the rest",
       unit: "%",
       max: 1,
       categories: cats,
       series: [
-        { name: `Top-graded (top ${fmt.pct(best.length / rows.length)})`, facts: bestIds },
+        { name: "Graded A or higher", facts: bestIds },
         { name: "Everyone else", facts: restIds },
       ],
-      alt: "Bar chart comparing the share of top-graded portfolios and of all others with dark mode, motion, a phone-friendly layout and no console errors.",
+      alt: "Bar chart comparing the share of portfolios graded A or higher and of all others with dark mode, motion, a phone-friendly layout and no console errors.",
     });
   }
   return b.done();
@@ -370,9 +373,10 @@ export async function votePatterns(db, { now }) {
     query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
   });
   b.fact("People's votes between two graded portfolios", votes.length, fmt.int(votes.length));
-  const decided = votes.filter((v) => TIER[v.w.rubric.tier] !== TIER[v.l.rubric.tier]);
+  // Tiers by ELO (lib/tiers.mjs), as the site shows them.
+  const decided = votes.filter((v) => v.w.tier && v.l.tier && v.w.tier !== v.l.tier);
   if (decided.length >= MIN_GROUP) {
-    const agree = decided.filter((v) => TIER[v.w.rubric.tier] > TIER[v.l.rubric.tier]).length;
+    const agree = decided.filter((v) => tierValue(v.w.tier) > tierValue(v.l.tier)).length;
     const id = b.fact("Share of votes, between portfolios of different AI grades, won by the better-graded one", agree / decided.length, fmt.pct(agree / decided.length), {
       scope: { need: "different (?:AI )?grades?|better-graded|higher-graded", avoid: "of all votes" },
     });
@@ -436,22 +440,24 @@ export async function regradeChanges(db, { now }) {
     if (!before?.tier || !TIER[before.tier] || before.is_portfolio === false) continue;
     if (String(h.model ?? "") !== String(now2.rubric.model ?? "") || (before.rubric_version ?? null) !== (now2.rubric.rubric_version ?? null)) continue;
     seen.add(url);
+    // The grade's own letters (Gemini's S to D): the tier by ELO comes from face-offs, not from the grade.
+    if (!TIER[now2.rubric.tier]) continue;
     pairs.push({ row: now2, before, after: now2.rubric });
   }
   if (pairs.length < MIN_GROUP) return notReady(kind, `${pairs.length} portfolios re-graded after a change by the same judge; ${MIN_GROUP} needed`);
   const b = sheet(kind, {
     now,
     headline: "Before and after: what changed when portfolios got a better grade",
-    angle: "Portfolios whose page changed and were graded again by the same judge with the same rubric: how many moved up a tier, which parts of the grade improved most, and what the improvers did. A reader learns which changes pay off.",
+    angle: "Portfolios whose page changed and were graded again by the same judge with the same rubric: how many moved up a grade letter, which parts of the grade improved most, and what the improvers did. A reader learns which changes pay off.",
     dataLink: `${SITE_URL}/top`,
     query: "rubric_history: each re-graded portfolio's previous grade by the same model and rubric version, against its grade now",
   });
   b.fact("Portfolios re-graded after their page changed", pairs.length, fmt.int(pairs.length));
-  const up = pairs.filter((p) => TIER[p.after.tier] > TIER[p.before.tier]);
-  const down = pairs.filter((p) => TIER[p.after.tier] < TIER[p.before.tier]).length;
-  const upId = b.fact("Share that moved up at least one tier", up.length / pairs.length, fmt.pct(up.length / pairs.length));
-  b.fact("Share that moved down at least one tier", down / pairs.length, fmt.pct(down / pairs.length), { tone: "negative" });
-  b.notable([upId], `{{${upId}}} of re-graded portfolios moved up a tier after a change.`);
+  const up = pairs.filter((p) => tierValue(p.after.tier) > tierValue(p.before.tier));
+  const down = pairs.filter((p) => tierValue(p.after.tier) < tierValue(p.before.tier)).length;
+  const upId = b.fact("Share whose grade moved up at least one letter", up.length / pairs.length, fmt.pct(up.length / pairs.length));
+  b.fact("Share whose grade moved down at least one letter", down / pairs.length, fmt.pct(down / pairs.length), { tone: "negative" });
+  b.notable([upId], `{{${upId}}} of re-graded portfolios moved up a grade letter after a change.`);
   const cats = [];
   const ids = [];
   const gains = [];
@@ -468,8 +474,8 @@ export async function regradeChanges(db, { now }) {
     b.fact(best.length > 1 ? "The parts of the grade that improved most (tied)" : "The part of the grade that improved most", joinWords(best.map((g) => AXIS_LABELS[g.k])), joinWords(best.map((g) => AXIS_LABELS[g.k])));
     b.chart({ title: "Average change per part of the grade after a re-grade (1 to 5 scale)", unit: "", max: 2, categories: cats, series: [{ name: "Average change", facts: ids }], alt: "Bar chart of how much each part of the AI grade changed, on average, when a portfolio was re-graded after a change." });
   }
-  for (const p of up.filter((x) => x.row.name).sort((x, y) => TIER[y.after.tier] - TIER[x.after.tier] || x.row.url.localeCompare(y.row.url)).slice(0, 3)) {
-    b.name(p.row, `moved up from ${p.before.tier} to ${p.after.tier} after a redesign`);
+  for (const p of up.filter((x) => x.row.name).sort((x, y) => tierValue(y.after.tier) - tierValue(x.after.tier) || x.row.url.localeCompare(y.row.url)).slice(0, 3)) {
+    b.name(p.row, `grade moved up from ${p.before.tier} to ${p.after.tier} after a redesign`);
     const id = b.fact(`${p.row.name} (${domainOf(p.row.url)}) moved up to tier`, p.after.tier, p.after.tier, { tone: "positive", about: p.row.url });
     b.example("a redesign that paid off", id, p.row);
   }

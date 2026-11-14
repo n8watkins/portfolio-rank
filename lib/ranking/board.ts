@@ -43,8 +43,12 @@ export async function readBoard(view: View, { limit = 100, offset = 0 } = {}): P
   let computedAt: string | null = null;
   try {
     const res = await db().execute({
-      sql: `SELECT shown_rank, url, mu, sigma, confidence, tied_with_next, comparisons, wins, losses, tier
-            FROM site_ratings WHERE view = ? AND shown_rank > ? ORDER BY shown_rank LIMIT ?`,
+      // The tier is today's tier by rank (lib/tiers.mjs, placed hourly), read from the grade by primary key,
+      // so a board computed before the last refresh never shows a stale tier.
+      sql: `SELECT s.shown_rank, s.url, s.mu, s.sigma, s.confidence, s.tied_with_next, s.comparisons, s.wins, s.losses,
+                   CASE WHEN json_valid(p.ai_rubric) THEN json_extract(p.ai_rubric, '$.rank.tier') END AS tier
+            FROM site_ratings s LEFT JOIN portfolios p ON p.url = s.url
+            WHERE s.view = ? AND s.shown_rank > ? ORDER BY s.shown_rank LIMIT ?`,
       args: [view, offset, limit],
     });
     rows = res.rows.map((r) => {

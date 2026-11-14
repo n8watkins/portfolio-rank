@@ -7,17 +7,20 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
+import { ensureTierSchema, readTierMeta, standingOf, topRows } from "@/lib/tiers-db.mjs";
+import { MIN_FACEOFFS, eloOf as eloFor } from "@/lib/tiers.mjs";
 
-// What the /top page shows, read on the server: one page of a ranking view
-// (lib/ranking/board.ts) when RANKING_V2 is on, else today's single ELO
-// board, each row with its screenshot, "why it's good" from its stored AI
-// grade, its movement this week and, in Merged, whether the AI and people
-// strongly disagree. The page is rendered at most every few minutes (ISR),
+// What the /top page shows, read on the server: the ranked board (tiers by
+// ELO, lib/tiers.mjs: by tier, then ELO, from the last refresh's library),
+// and, when RANKING_V2 is on, one page of a ranking view (lib/ranking/board.ts),
+// each row with its screenshot, "why it's good" from its stored AI grade,
+// its movement this week and, in Merged, whether the AI and people strongly
+// disagree. The page is rendered at most every few minutes (ISR),
 // and every read here is a handful of indexed lookups for the rows shown
 // (docs/COSTS.md section C).
 
-/** "elo" is today's board (ratings.elo), shown while RANKING_V2 is off. */
-export type BoardKind = View | "elo";
+/** "rank" is the ranked board: tiers by ELO from face-offs (lib/tiers.mjs), the default. */
+export type BoardKind = View | "rank";
 
 /** The three ranking views are on (RANKING_V2, wrangler.jsonc vars). */
 export const rankingViewsEnabled = () => rankingConfig(process.env).enabled;
@@ -48,7 +51,14 @@ export type Entry = {
   likely: string | null;
   /** "Top X%" among the sites shown in this view (AI view). */
   topPct: number | null;
+  /** The tier by ELO (lib/tiers.mjs); shown only when public. */
   tier: string | null;
+  /** The ELO from face-offs (lib/tiers.mjs), shown beside the tier on every board; null without face-offs. */
+  elo: number | null;
+  /** Face-offs so far (an AI one counts a quarter; lib/tiers.mjs), on the ranked board. */
+  faceoffs: number | null;
+  /** Ranked board: too few face-offs yet, so the tier is the starting B. */
+  provisional: boolean;
   /** AI and people strongly disagree (Merged): their places in each view. */
   disagree: { ai: number; people: number } | null;
   votes: number | null;
@@ -60,8 +70,10 @@ export type Leaderboard = {
   rows: Entry[];
   /** Sites in the view (all pages). */
   total: number;
-  /** ELO board: votes cast. */
+  /** Ranked board: votes cast. */
   totalVotes: number | null;
+  /** Ranked board: portfolios with enough face-offs for their own tier. */
+  ranked: number | null;
 };
 
 type FeedEntry = { url: string; name: string; tagline?: string };
@@ -77,6 +89,16 @@ export const domainOf = (url: string) => {
 
 const noTable = (e: unknown) => /no such (table|column)/i.test(String((e as Error)?.message ?? e));
 const marks = (n: number) => Array.from({ length: n }, () => "?").join(",");
+
+/** The ELO from face-offs (lib/tiers.mjs) of each url that has face-offs: one read by key per url (lib/tiers-db.mjs). */
+export async function eloOf(urls: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!urls.length) return out;
+  await ensureTierSchema(db());
+  const res = await db().execute({ sql: `SELECT url, mu, sigma, votes FROM tier_ratings WHERE url IN (${marks(urls.length)})`, args: urls });
+  for (const r of res.rows) if (Number(r.votes) > 0) out.set(String(r.url), eloFor({ mu: Number(r.mu), sigma: Number(r.sigma) }));
+  return out;
+}
 
 // The basics a row shows as chips (lib/grader/report.mjs factLines ids).
 const CHIP: Record<string, string> = {
@@ -123,11 +145,6 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
     out.set(url, { facts, best: top ? { label: top.title, note: top.why } : null });
   }
   return out;
-}
-
-/** The tier of each url's stored grade (ELO board), skipping hidden grades. */
-function tierOf(why: Map<string, Why>, tiers: Map<string, string>, url: string) {
-  return why.has(url) ? (tiers.get(url) ?? null) : null;
 }
 
 /** Places moved between the last two weekly snapshots of a view. */
@@ -226,15 +243,16 @@ export const shotUrl = (bases: Map<string, string>, url: string) => {
 /** One board, best first, up to `limit` rows, ready to render. */
 export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Leaderboard> {
   await ensureSchema();
-  if (kind === "elo") return loadElo(limit);
+  if (kind === "rank") return loadRanked(limit);
 
   const board = await readBoard(kind, { limit });
   const urls = board.rows.map((r) => r.url);
-  const [bases, why, moves, split] = await Promise.all([
+  const [bases, why, moves, split, elos] = await Promise.all([
     shotBases(urls),
     whyFor(urls),
     kind === "ai" ? Promise.resolve(new Map<string, number>()) : movement(kind, urls),
     kind === "merged" ? disagreements(urls) : Promise.resolve(new Map<string, { ai: number; people: number }>()),
+    eloOf(urls),
   ]);
   const likely = kind === "ai" ? null : likelyRanks(board.rows, board.total);
 
@@ -254,62 +272,119 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
       likely: likely?.[i] ?? null,
       topPct: kind === "ai" ? topPct(r.rank, board.total) : null,
       tier: why.has(r.url) ? r.tier : null,
+      elo: elos.get(r.url) ?? null,
+      faceoffs: null,
+      provisional: false,
       disagree: split.get(r.url) ?? null,
       votes: null,
       why: why.get(r.url) ?? null,
     };
   });
-  return { kind, rows, total: board.total, totalVotes: null };
+  return { kind, rows, total: board.total, totalVotes: null, ranked: null };
 }
 
-// Today's board while RANKING_V2 is off: ELO from head-to-head votes, with
-// the AI seed standing in until enough people have voted.
-const MIN_VOTES = 1;
+/**
+ * The ranked board: every listed library member by ELO (and so by tier,
+ * lib/tiers.mjs: the letter comes from the rating against the daily cutoffs,
+ * on read). An index range read of the rows shown (lib/tiers-db.mjs topRows),
+ * never the whole library.
+ */
+type LibEntry = { url: string; rating: number; faceoffs: number; key: number | null; first: number; elo: number; votes: number };
+type Placed = { tier: string; provisional: boolean; top: number | null; place: number | null };
 
-async function loadElo(limit: number): Promise<Leaderboard> {
-  const hidden = await hiddenUrls();
-  const [res, votes] = await db().batch(
-    [
-      { sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT ?", args: [MIN_VOTES, limit + 50] },
-      // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
-      "SELECT n FROM vote_totals WHERE k = 'all'",
-    ],
-    "read"
-  );
-  const ranked = res.rows
-    .map((r) => ({ url: String(r.url), elo: Number(r.elo), votes: Number(r.votes) }))
+/** One portfolio in the ranked order: its rating entry and its tier placement. */
+export type RankedSite = { e: LibEntry; p: Placed };
+
+/**
+ * The first \cputime         unlimited
+filesize        unlimited
+datasize        unlimited
+stacksize       8MB
+coredumpsize    0kB
+resident        unlimited
+maxproc         79963
+descriptors     1048576
+memorylocked    64MB
+addressspace    unlimited
+maxfilelocks    unlimited
+sigpending      79963
+msgqueue        819200
+nice            0
+rt_priority     0
+rt_time         unlimited listed, graded portfolios the site shows, in the ranked
+ * order the leaderboard and the home page share (best ELO first), with the
+ * library size. Reads \cputime         unlimited
+filesize        unlimited
+datasize        unlimited
+stacksize       8MB
+coredumpsize    0kB
+resident        unlimited
+maxproc         79963
+descriptors     1048576
+memorylocked    64MB
+addressspace    unlimited
+maxfilelocks    unlimited
+sigpending      79963
+msgqueue        819200
+nice            0
+rt_priority     0
+rt_time         unlimited rows plus a margin for hidden ones, and the daily meta.
+ */
+export async function rankedOrder(limit = 100): Promise<{ sites: RankedSite[]; total: number }> {
+  const [rows, meta, hidden] = await Promise.all([topRows(db(), limit + 50), readTierMeta(db()), hiddenUrls()]);
+  const sites = rows
     .filter((r) => byUrl.has(r.url) && !hidden.has(r.url))
-    .slice(0, limit);
-  const urls = ranked.map((r) => r.url);
-  const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);
-  const tiers = new Map<string, string>();
-  if (urls.length) {
-    const t = await db().execute({
-      sql: `SELECT url, json_extract(ai_rubric, '$.tier') AS tier FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)`,
-      args: urls,
+    .slice(0, limit)
+    .map((r) => {
+      const s = standingOf(r, meta);
+      const e: LibEntry = { url: r.url, rating: r.mu - 2 * r.sigma, faceoffs: r.faceoffs, key: r.gkey, first: r.first ?? Number.MAX_SAFE_INTEGER, elo: s.elo, votes: r.votes };
+      return { e, p: { tier: s.tier ?? "B", provisional: s.provisional, top: s.top, place: s.place } };
     });
-    for (const r of t.rows) if (r.tier != null) tiers.set(String(r.url), String(r.tier));
-  }
-  const rows: Entry[] = ranked.map((r, i) => {
-    const p = byUrl.get(r.url)!;
+  return { sites, total: (meta as { n?: number } | null)?.n ?? sites.length };
+}
+
+async function loadRanked(limit: number): Promise<Leaderboard> {
+  const [{ sites: members, total }, votes] = await Promise.all([
+    rankedOrder(limit),
+    db()
+      // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
+      .execute("SELECT n FROM vote_totals WHERE k = 'all'")
+      .then((r) => Number(r.rows[0]?.n ?? 0))
+      .catch((e) => {
+        if (noTable(e)) return 0;
+        throw e;
+      }),
+  ]);
+  const shown = members.slice(0, limit);
+  const urls = shown.map((m) => m.e.url);
+  const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);
+  const rows: Entry[] = shown.map(({ e, p }, i) => {
+    const f = byUrl.get(e.url)!;
     return {
       rank: i + 1,
       place: i + 1,
       tied: false,
-      url: r.url,
-      name: p.name,
-      tagline: p.tagline ?? null,
-      domain: domainOf(r.url),
-      shot: shotUrl(bases, r.url),
-      score: String(Math.round(r.elo)),
+      url: e.url,
+      name: f.name,
+      tagline: f.tagline ?? null,
+      domain: domainOf(e.url),
+      shot: shotUrl(bases, e.url),
+      score: String(e.elo),
       move: null,
       likely: null,
-      topPct: null,
-      tier: tierOf(why, tiers, r.url),
+      topPct: p.provisional ? null : p.top,
+      // A grade its owner hid shows no tier.
+      tier: why.has(e.url) ? p.tier : null,
+      elo: e.elo,
+      faceoffs: Math.floor(e.faceoffs * 100) / 100,
+      provisional: p.provisional,
       disagree: null,
-      votes: r.votes,
-      why: why.get(r.url) ?? null,
+      votes: e.votes,
+      why: why.get(e.url) ?? null,
     };
   });
-  return { kind: "elo", rows, total: rows.length, totalVotes: Number(votes.rows[0]?.n ?? 0) };
+  return { kind: "rank", rows, total, totalVotes: votes, ranked: total };
 }
+
+/** Face-offs a portfolio needs before its tier comes from its place (lib/tiers.mjs). */
+export const FACEOFFS_TO_RANK = MIN_FACEOFFS;

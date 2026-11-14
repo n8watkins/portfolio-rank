@@ -5,6 +5,7 @@ import type { Portfolio } from "@/app/page";
 import { DetailDiagnostics, Socials } from "@/components/Diagnostics";
 import type { Inspection } from "@/app/api/inspect/route";
 import { peekCached } from "@/lib/cache";
+import { CHECK_KINDS } from "@/lib/freshness.mjs";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
@@ -156,7 +157,7 @@ export default async function PortfolioPage({
   // The page check as last measured (/api/inspect's cache), so the social
   // links and the checklist are there at first paint instead of moving the
   // page when the browser's own request answers.
-  const inspection = await peekCached<Inspection>("inspect", url).catch(() => null);
+  const inspection = await peekCached<Inspection>("inspect", url, CHECK_KINDS.polish.maxAgeMs, { isFailure: (d) => !d.ok, freshness: { kind: "polish", url } }).catch(() => null);
 
   const stars = Number(
     (

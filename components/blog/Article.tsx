@@ -1,29 +1,35 @@
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BarChart3, Bot, ExternalLink, Trophy } from "lucide-react";
-import { Markdown } from "@/components/blog/Markdown";
+import { Markdown, headingsOf } from "@/components/blog/Markdown";
+import { type TocItem, TocRail, TocToggle } from "@/components/blog/Toc";
 import { ShareLinks } from "@/components/blog/ShareLinks";
 import { tag as tagClass } from "@/components/ui/Chip";
 import { btnSecondary, eyebrow } from "@/components/ui/styles";
 import { tagSlug } from "@/lib/content/blog.mjs";
-import { type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
+import { Card } from "@/components/blog/BlogIndex";
+import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
-import { sitePath } from "@/lib/site";
+import { postLinkFor } from "@/lib/portfolio-links";
 import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
+import { sitePath } from "@/lib/site";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
 // draft on /admin/blog/[id]: the title block with the AI line, the cover,
 // the body (components/blog/Markdown.tsx), the portfolios it names, its
-// sources, the full AI note and the share links.
+// sources, the full AI note and the share links. Readers also get the
+// newsletter sign-up (`signup`): in the right-hand margin beside the body on
+// wide screens (sticky while you read), after the post below that.
 
 export type Related = { name: string; url: string; domain: string; reason?: string; shot: string | null };
 
 function Figure({ postId, image, cover = false }: { postId: string; image: PostImage; cover?: boolean }) {
   const credit = creditOf(image);
   const chart = image.kind === "chart";
-  const href = image.kind === "screenshot" && credit.href ? `/p/${encodeURIComponent(credit.href)}` : credit.href;
+  const href = image.kind === "screenshot" && credit.href ? postLinkFor(credit.href) : credit.href;
   return (
-    <figure className={cover ? "" : "my-9"}>
-      <div className={`overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
+    <figure className={`post-figure ${cover ? "" : "my-9"}`}>
+      {/* .post-frame lifts and its image zooms a touch on hover (globals.css, never with reduced motion). */}
+      <div className={`post-frame overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
         {/* eslint-disable-next-line @next/next/no-img-element -- our own media route and Pexels hotlinks, sized by CSS */}
         <img
           src={imageSrc(postId, image)}
@@ -71,11 +77,13 @@ export function Article({
   post,
   related,
   banner,
+  more = [],
   signup = false,
 }: {
   post: BlogPost;
   related: Related[];
   banner?: ReactNode;
+  more?: BlogListItem[];
   /** Show the newsletter sign-up (the public post; not the owner's draft preview). */
   signup?: boolean;
 }) {
@@ -85,6 +93,8 @@ export function Article({
   const dataLink = post.facts?.dataLink ?? "/top";
   const date = post.publishAt ?? post.createdAt;
   const blog = ROUTES.blog ?? "/blog";
+  // The contents: the body's subheads, then the post's own Sources section.
+  const toc: TocItem[] = [...headingsOf(post.body), { id: "sources", text: "Sources" }];
   return (
     <article className="pb-20">
       {banner}
@@ -122,10 +132,33 @@ export function Article({
         </div>
       )}
 
-      <div className="mx-auto max-w-[42rem] px-4 pt-8 text-[17px] leading-[1.75] sm:px-6 sm:text-lg sm:leading-[1.75]">
+      {/* The reading column stays centred under the header; on wide screens the
+          contents rail sits in the left gutter and the newsletter sign-up in the right. */}
+      <div className="mx-auto max-w-[78rem] px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_39rem_minmax(0,1fr)] xl:gap-12">
+        {toc.length > 1 && (
+          <aside className="hidden pt-8 xl:col-start-1 xl:row-start-1 xl:block xl:justify-self-end">
+            <div className="h-full w-56">
+              <TocRail items={toc} />
+            </div>
+          </aside>
+        )}
+        {signup && (
+          <aside className="hidden pt-8 xl:col-start-3 xl:row-start-1 xl:block">
+            <div className="h-full w-64 2xl:w-72">
+              <NewsletterSignup form="sidebar" className="sticky top-24 text-base leading-normal" />
+            </div>
+          </aside>
+        )}
+      <div className="mx-auto w-full max-w-[39rem] pt-8 text-[17px] leading-[1.75] sm:text-lg sm:leading-[1.75] xl:col-start-2 xl:row-start-1 xl:mx-0">
+        {toc.length > 1 && (
+          <div className="xl:hidden">
+            <TocToggle items={toc} />
+          </div>
+        )}
         <Markdown
           body={post.body}
           sources={sources}
+          linkFor={postLinkFor}
           figure={(slot) => {
             const im = bySlot.get(slot);
             return im && im !== cover ? <Figure postId={post.id} image={im} /> : null;
@@ -137,11 +170,11 @@ export function Article({
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {related.map((r) => (
                 <li key={r.url}>
-                  <a href={`/p/${encodeURIComponent(r.url)}`} className="card card-hover flex items-center gap-3 p-3">
+                  <a href={postLinkFor(r.url)} className="post-related card card-hover flex items-center gap-3 p-3">
                     <span className="h-12 w-20 shrink-0 overflow-hidden rounded-md border border-edge bg-raised">
                       {r.shot && (
                         // eslint-disable-next-line @next/next/no-img-element -- a small screenshot thumbnail
-                        <img src={r.shot} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
+                        <img src={r.shot} alt="" loading="lazy" className="post-thumb h-full w-full object-cover object-top" />
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -220,9 +253,29 @@ export function Article({
           <ShareLinks url={postUrl(post.slug)} text={post.shareLine || post.title} />
         </div>
 
-        {/* The newsletter sign-up for readers (not the owner's draft preview); it shows only while the newsletter is live. */}
-        {signup && <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal" />}
+        {signup && <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal xl:hidden" />}
       </div>
+      </div>
+
+      {more.length > 0 && (
+        <section aria-labelledby="more-articles" className="mx-auto mt-16 max-w-6xl border-t border-edge px-4 pt-10 sm:px-6">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="more-articles" className="text-2xl font-bold tracking-tight">
+              More articles
+            </h2>
+            <a href={blog} className="group inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-mute transition hover:text-ink">
+              All posts <ArrowRight className="nudge h-4 w-4" aria-hidden />
+            </a>
+          </div>
+          <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {more.map((p) => (
+              <li key={p.id}>
+                <Card post={p} level={3} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </article>
   );
 }

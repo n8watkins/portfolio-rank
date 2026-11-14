@@ -40,7 +40,7 @@ import {
 import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
-import { rankForWrite } from "../lib/tiers-store.mjs";
+import { rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { withOwnerVerdict } from "../lib/reviews/store.mjs";
 import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
@@ -425,6 +425,7 @@ async function runRubric() {
         console.log(`${label} ${url} - answered by ${out.model}, not ${PRIMARY_MODEL}; re-grading stops`);
         return false;
       }
+      // Written with its tier by rank (lib/tiers-store.mjs), so the site shows its tier at once.
       // The owner's confirmed verdict (lib/reviews/store.mjs) holds over the AI's is_portfolio.
       await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, await withOwnerVerdict(db, url, out.rubric), { url })), "write");
       if (regrade) regraded++;
@@ -782,6 +783,8 @@ try {
     console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
   }
   const counts = MODE === "rubric" ? await runRubric().finally(() => renderer?.close()) : await runPairwise();
+  // New grades move the library: every tier by rank is placed again (lib/tiers-store.mjs, no AI request).
+  if (MODE === "rubric") await refreshTiers(db, { log: console.log });
   const outcome = judgeOutcome({ mode: MODE, ...counts });
   await writeSummary(outcome, counts.stopped);
   console.log(outcome.verdict);

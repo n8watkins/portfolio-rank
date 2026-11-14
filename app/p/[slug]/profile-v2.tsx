@@ -2,11 +2,16 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, Clock, Hourglass, ShieldCheck, Sparkles, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
+import type { Inspection } from "@/app/api/inspect/route";
+import { peekCached } from "@/lib/cache";
+import { CHECK_KINDS } from "@/lib/freshness.mjs";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
+import { BELOW_TOP_TIERS, MIN_FACEOFFS, STARTING_TIER, familyOf, tierLabel } from "@/lib/tiers.mjs";
+import { TierBadge } from "@/components/ui/badges";
 import { ROUTES } from "@/lib/nav";
 import { eyebrow } from "@/components/ui/styles";
 import { loadProfile, loadSeoExtras, profileJsonLd, type Profile } from "@/lib/profile";
@@ -79,25 +84,64 @@ function SectionTitle({ id, kicker, title, children }: { id: string; kicker: str
   );
 }
 
-// Where it stands: ELO from the face-offs (tier letters come with #189).
 function Rank({ p }: { p: Profile }) {
   const s = p.standing;
+  const faceoffs = Math.floor(s.faceoffs);
+  const strong = familyOf(p.tier) === "A" || familyOf(p.tier) === "S";
+  const toGo = Math.max(0, MIN_FACEOFFS - faceoffs);
+  const votesText = `${s.votes.toLocaleString("en-US")} real vote${s.votes === 1 ? "" : "s"}`;
   return (
-    <section aria-labelledby="rank" className="card p-5 sm:p-6">
-      <SectionTitle id="rank" kicker="Rank" title="Where it stands" />
+    <section aria-labelledby="rank" className={`card p-5 sm:p-6 ${strong ? "card-featured" : ""}`}>
+      <SectionTitle id="rank" kicker="Rank" title={p.tier && !s.provisional ? (s.top != null ? `Top ${s.top}%` : `Tier ${tierLabel(p.tier)}`) : "Where it stands"} />
       <div className="flex items-center gap-5">
-        <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-raised text-lg font-bold tabular-nums ring-1 ring-inset ring-edge">
-          {p.listed ? s.elo : <span className="font-semibold text-mute" aria-hidden>?</span>}
-        </span>
+        {p.tier ? (
+          <a href="/grading#tiers" aria-label={`Tier ${tierLabel(p.tier)}: how tiers work`} className="rounded-2xl">
+            <TierBadge tier={p.tier} size="lg" />
+          </a>
+        ) : (
+          <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-raised text-lg font-semibold text-mute ring-1 ring-inset ring-edge" aria-hidden>
+            ?
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           {!p.listed ? (
             <>
               <p className="font-semibold">Not ranked yet</p>
-              <p className="text-sm text-mute">It joins the face-offs once it&apos;s graded.</p>
+              <p className="text-sm text-mute">It joins the face-offs once it&apos;s graded, starting at tier {STARTING_TIER}.</p>
             </>
+          ) : p.hideGrade ? (
+            <p className="text-sm text-mute">ELO {s.elo} from {votesText}. The owner hid the grade.</p>
+          ) : s.tier && s.seeded ? (
+            <>
+              <p className="font-semibold">Starting rank from automated checks</p>
+              <p className="text-sm text-mute">
+                ELO <span className="font-semibold tabular-nums text-ink">{s.elo}</span> · {votesText}
+                {p.tier && s.of != null ? ` · among ${s.of.toLocaleString("en-US")} ranked portfolios` : ""}. Votes move it from here.
+              </p>
+              {!p.tier && <p className="text-sm text-mute">{BELOW_TOP_TIERS}.</p>}
+            </>
+          ) : s.tier && s.provisional ? (
+            <>
+              <p className="font-semibold">
+                {toGo} of {MIN_FACEOFFS} face-offs until its letter
+              </p>
+              <p className="text-sm text-mute">Every portfolio starts at {STARTING_TIER}; after {MIN_FACEOFFS} face-offs its ELO sets the tier.</p>
+              <div className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-edge" role="progressbar" aria-label="Face-offs toward a letter" aria-valuemin={0} aria-valuemax={MIN_FACEOFFS} aria-valuenow={Math.min(faceoffs, MIN_FACEOFFS)}>
+                <div className="h-1.5 rounded-full bg-accent" style={{ width: `${(Math.min(s.faceoffs, MIN_FACEOFFS) / MIN_FACEOFFS) * 100}%` }} />
+              </div>
+            </>
+          ) : s.tier && p.tier ? (
+            <p className="text-sm text-mute">
+              ELO <span className="font-semibold tabular-nums text-ink">{s.elo}</span> from {faceoffs} face-offs
+              {s.of != null ? ` among ${s.of.toLocaleString("en-US")} ranked portfolios` : ""}. It moves as people vote.
+            </p>
+          ) : s.tier ? (
+            <p className="text-sm text-mute">
+              {BELOW_TOP_TIERS}. ELO {s.elo} from {faceoffs} face-offs.
+            </p>
           ) : (
             <p className="text-sm text-mute">
-              ELO <span className="font-semibold tabular-nums text-ink">{s.elo}</span> from {s.faceoffs} face-off{s.faceoffs === 1 ? "" : "s"}. It moves as people vote.
+              Not graded yet, so no letter. ELO {s.elo} from {faceoffs} face-offs.
             </p>
           )}
         </div>
@@ -107,7 +151,37 @@ function Rank({ p }: { p: Profile }) {
           </a>
         )}
       </div>
+      {!p.hideGrade && s.check && <PointsBreakdown check={s.check} />}
     </section>
+  );
+}
+
+/** The points from automated checks behind the starting rank (lib/check-points.mjs), item by item. */
+function PointsBreakdown({ check }: { check: NonNullable<Profile["standing"]["check"]> }) {
+  return (
+    <div className="mt-5 border-t border-edge pt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">
+          Automated checks: <span className="tabular-nums">{check.total}</span> of 100 points
+        </h3>
+        <a href="/grading#points" className="text-xs font-medium text-accent hover:underline">
+          How the points work
+        </a>
+      </div>
+      <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
+        {check.items.map((i) => (
+          <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-1.5">
+            <span className={i.measured ? "" : "text-mute"}>
+              {i.name}
+              {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
+            </span>
+            <span className={`shrink-0 tabular-nums ${i.id === "template" && i.points < 0 ? "text-down" : i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
+              {i.id === "template" ? (i.points < 0 ? i.points : "0") : `${i.points}/${i.max}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -119,7 +193,7 @@ function ReportCard({ p }: { p: Profile }) {
       {r ? (
         <>
           <p className="-mt-2 mb-4 text-xs text-mute">
-            AI design review by Gemini{r.model ? ` (${r.model})` : ""}: an opinion, not a verdict ·{" "}
+            AI design review by Gemini{r.model ? ` (${r.model})` : ""}: an opinion, not a verdict, and it doesn&apos;t set the tier ·{" "}
             <a href="/grading" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
               how grading works
             </a>
@@ -158,11 +232,32 @@ function ReportCard({ p }: { p: Profile }) {
   );
 }
 
+function ShareCard({ p }: { p: Profile }) {
+  // Once it has its letter: the starting B while face-offs are under way isn't one.
+  if (!p.tier || p.standing.provisional) return null;
+  const link = `${SITE_URL}${p.path}`;
+  return (
+    <section aria-labelledby="share" className="card p-5 sm:p-6">
+      <SectionTitle id="share" kicker="Share" title={`Tier ${tierLabel(p.tier)}: show it off`}>
+        <ShareButton url={link} title={p.name} />
+      </SectionTitle>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`${p.path}/opengraph-image`} alt={`${p.name}'s PortfolioRank card, tier ${tierLabel(p.tier)}`} className="aspect-[1200/630] w-full max-w-xl rounded-xl border border-edge bg-raised" />
+    </section>
+  );
+}
+
 export async function ProfileV2({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const p = await loadProfile(decodeURIComponent(slug));
   if (!p) notFound();
   const shot = await shotFor(p);
+  // The page check as last measured (/api/inspect's cache), so the social
+  // links are there at first paint instead of moving the header when the
+  // browser's own request answers.
+  const inspection = p.listed
+    ? await peekCached<Inspection>("inspect", p.url, CHECK_KINDS.polish.maxAgeMs, { isFailure: (d) => !d.ok, freshness: { kind: "polish", url: p.url } }).catch(() => null)
+    : null;
   // A ProfilePage about the person and its breadcrumb trail, indexable profiles only (lib/profile-seo.ts).
   const jsonLd = profileJsonLd(await seoFactsOf(p), { canonical: `${SITE_URL}${p.path}`, title: seoTitle(p) });
 
@@ -182,7 +277,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
           <div className="flex flex-wrap items-center gap-2">
             {p.listed && (
               <>
-                <Socials url={p.url} />
+                <Socials url={p.url} initial={inspection} />
                 <LikeButton url={p.url} name={p.name} hydrate count={p.saves} showCount />
                 <AddToListButton url={p.url} />
                 <ShareButton url={`${SITE_URL}${p.path}`} title={p.name} />
@@ -216,6 +311,8 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
         <FixList p={p} />
       </section>
 
+      <ShareCard p={p} />
+
       {/* Owners prove it with code they deploy (/claim, components/claim/VerifyFlow.tsx), then can re-check, hide the grade or remove it. */}
       <p className="flex items-center justify-center gap-2 pt-2 text-sm text-mute">
         <ShieldCheck className="h-4 w-4 text-mute" aria-hidden /> Is this your portfolio?{" "}
@@ -224,7 +321,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
         </a>
       </p>
 
-      {ROUTES.add && (
+      {!p.tier && ROUTES.add && (
         <p className="flex items-center justify-center gap-2 pt-4 text-sm text-mute">
           <Trophy className="h-4 w-4 text-accent" aria-hidden /> Know a great portfolio?{" "}
           <a href={ROUTES.add} className="font-semibold text-accent underline-offset-4 hover:underline">

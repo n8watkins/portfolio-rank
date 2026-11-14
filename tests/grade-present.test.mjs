@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import { CELEBRATIONS, FACT_COPY, FACT_GROUPS, celebrationLevel, fixEffects, hiringGroups, placeIn, verdictOf } from "../lib/grader/present.mjs";
 import { BADGES } from "../lib/games/badges.mjs";
 
-test("celebrations: an S is level 5 whatever its place; otherwise the top 50, 25, 10 and 5% bands; each badge exists", () => {
+test("celebrations: an SSS is level 5 whatever its place; otherwise the top 50, 25, 10 and 5% bands; each badge exists", () => {
   assert.equal(celebrationLevel(null), 0);
-  assert.equal(celebrationLevel({ tier: "S", percentile: null }), 5);
-  assert.equal(celebrationLevel({ tier: "s", percentile: { topPct: 30 } }), 5);
+  assert.equal(celebrationLevel({ tier: "SSS", percentile: null }), 5);
+  assert.equal(celebrationLevel({ tier: "sss", percentile: { topPct: 30 } }), 5);
+  // A plain S (the top 10%, tiers by rank) is celebrated by its place.
+  assert.equal(celebrationLevel({ tier: "S", percentile: { topPct: 8 } }), 3);
   const at = (topPct) => celebrationLevel({ tier: "A", percentile: { topPct } });
   assert.deepEqual([1, 5, 6, 10, 11, 25, 26, 50, 51, 100].map(at), [4, 4, 3, 3, 2, 2, 1, 1, 0, 0]);
   assert.equal(celebrationLevel({ tier: "B", percentile: null }), 0);
@@ -18,7 +20,7 @@ test("celebrations: an S is level 5 whatever its place; otherwise the top 50, 25
 });
 import { factLines, strengthsAndFixes } from "../lib/grader/report.mjs";
 import { CODE_CRITERIA, NOT_A_FAULT } from "../pipeline/rubric.mjs";
-import { seedFromGrade } from "../lib/ranking/engine.mjs";
+import { gradeKey } from "../lib/grade-score.mjs";
 
 const axis = (score, note = "") => ({ score, note });
 const grade = (over = {}) => ({
@@ -59,18 +61,18 @@ test("facts become three questions: chips for what passes, cards for what's miss
 
 test("a fix says what it changes: places gained for an AI axis, the checks score for a fact", () => {
   const g = grade.withQuality(grade());
-  const me = seedFromGrade(g).mu;
-  // Ten listed portfolios just above this one, ten far above, ten below.
+  // Places by score (the grade key, lib/grade-score.mjs): ten listed portfolios just above this one, ten far above, ten below.
+  const me = gradeKey(g);
   const pool = [
-    ...Array.from({ length: 10 }, (_, i) => ({ url: `https://near${i}.dev`, mu: me + 0.01 + i * 0.001 })),
-    ...Array.from({ length: 10 }, (_, i) => ({ url: `https://far${i}.dev`, mu: me + 9 })),
-    ...Array.from({ length: 10 }, (_, i) => ({ url: `https://below${i}.dev`, mu: me - 1 })),
-    { url: "https://self.dev", mu: me + 0.02 },
+    ...Array.from({ length: 10 }, (_, i) => ({ url: `https://near${i}.dev`, key: me + 10 + i })),
+    ...Array.from({ length: 10 }, (_, i) => ({ url: `https://far${i}.dev`, key: me + 90000 })),
+    ...Array.from({ length: 10 }, (_, i) => ({ url: `https://below${i}.dev`, key: me - 100 })),
+    { url: "https://self.dev", key: me + 20 },
   ];
   const { fixes } = strengthsAndFixes(g);
   const out = fixEffects(g, fixes, pool, { isSelf: (u) => u === "https://self.dev" });
   const story = out.find((f) => f.criterion === "storytelling");
-  assert.match(story.effect, /^about 10 places higher if project presentation goes up one point$/i);
+  assert.match(story.effect, /^the grade climbs about 10 places if project presentation goes up one point$/i);
   const resume = out.find((f) => f.criterion === "resume");
   assert.match(resume.effect, /^checks passed go from \d+ to 100 of 100$/);
   // An empty pool still says something true.
@@ -79,14 +81,18 @@ test("a fix says what it changes: places gained for an AI axis, the checks score
 
 test("verdicts by tier, and a pool site's place", () => {
   assert.match(verdictOf("S"), /One of the best/);
+  assert.match(verdictOf("SSS"), /very best/);
+  assert.match(verdictOf("S+"), /Outstanding/);
+  assert.equal(verdictOf("A-"), verdictOf("A"), "plus and minus share their letter's line");
   assert.equal(verdictOf("Z"), verdictOf("C"));
+  // The place by ELO the hourly refresh stored (lib/tiers-store.mjs), not by the grade or the seed level.
   const pool = [
-    { url: "a", mu: 30 },
-    { url: "b", mu: 25 },
-    { url: "c", mu: 20 },
-    { url: "d", mu: 10 },
+    { url: "a", mu: 10, key: 30, place: 1, of: 4, top: 13 },
+    { url: "b", mu: 25, key: 25, place: 2, of: 4, top: 38 },
+    { url: "c", mu: 20, key: 20, place: null, of: null, top: null },
   ];
-  assert.deepEqual(placeIn(pool, "b"), { rank: 2, total: 4, topPct: 50 });
+  assert.deepEqual(placeIn(pool, "b"), { rank: 2, total: 4, topPct: 38 });
+  assert.equal(placeIn(pool, "c"), null, "too few face-offs, no place");
   assert.equal(placeIn(pool, "zzz"), null);
 });
 

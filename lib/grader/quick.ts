@@ -1,6 +1,6 @@
 import type { Client } from "@libsql/client";
 import { safeFetch, readCapped } from "@/lib/safefetch";
-import { checkLinks, extractLinks, measureFacts, projectLinkCandidates } from "@/pipeline/facts.mjs";
+import { checkLinks, extractLinks, linkContext, measureFacts, projectLinkCandidates } from "@/pipeline/facts.mjs";
 import { parkingPhrase, titleOf, visibleText } from "@/pipeline/gate.mjs";
 import { codeChecks } from "@/pipeline/rubric.mjs";
 import { CHECK_KINDS, pageFingerprint, recordCheck } from "@/lib/freshness.mjs";
@@ -101,8 +101,10 @@ export async function measureQuick(
     facts.project_links = reuse.facts.project_links;
     linksCheckedAt = reuse.linksCheckedAt!;
   } else {
-    const urls = projectLinkCandidates(extractLinks(html, finalUrl), finalUrl);
-    facts.project_links = await checkLinks(urls, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS });
+    const links = extractLinks(html, finalUrl);
+    const urls = projectLinkCandidates(links, finalUrl);
+    // Which links failed, why, and where on the page (the report lists them).
+    facts.project_links = await checkLinks(urls, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS, context: linkContext(links) });
   }
   // Client-rendered pages send little HTML: the capture measures them properly.
   return {

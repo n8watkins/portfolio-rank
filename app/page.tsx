@@ -148,7 +148,7 @@ export default async function Home() {
         </section>
       </div>
 
-      {/* The newsletter and the blog join here once they have a back end and a route (ROUTES.blog). */}
+      {/* The blog joins here once it has a route (ROUTES.blog); the newsletter sign-up is in the footer below. */}
     </>
   );
 }

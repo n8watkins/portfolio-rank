@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Article } from "@/components/blog/Article";
-import { publishedPost, relatedPortfolios } from "@/lib/blog-server";
+import { moreArticles, publishedPost, relatedPortfolios } from "@/lib/blog-server";
 import { coverOf, imageSrc, postUrl } from "@/lib/blog";
 import { SITE_URL } from "@/lib/site";
 import { blogPostingLd, postModified } from "@/lib/blog-seo";
@@ -44,14 +44,14 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const post = await publishedPost(slug);
   if (!post) notFound();
-  const related = await relatedPortfolios(post);
+  const [related, more] = await Promise.all([relatedPortfolios(post), moreArticles(post)]);
   const cover = coverOf(post.images);
   // A BlogPosting and its breadcrumb trail (lib/blog-seo.ts).
   const jsonLd = blogPostingLd(post, cover ? new URL(imageSrc(post.id, cover), SITE_URL).toString() : `${postUrl(post.slug)}/opengraph-image`);
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(jsonLd) }} />
-      <Article post={post} related={related} signup />
+      <Article post={post} related={related} more={more} signup />
     </>
   );
 }

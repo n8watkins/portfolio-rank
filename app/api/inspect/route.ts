@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { cached, type CacheMeta } from "@/lib/cache";
+import { browserCache, cached, type CacheMeta } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
+import { siteSpec, type SiteSpec } from "@/lib/site-spec";
 import { db } from "@/lib/db";
 import { CHECK_KINDS, FINGERPRINT_MAX_BYTES, pageFingerprint, recordCheck } from "@/lib/freshness.mjs";
 
@@ -29,6 +30,8 @@ export type Inspection = CacheMeta & {
   hasResume?: boolean;
   hasContact?: boolean;
   copyrightYear?: number | null;
+  /** Framework, host, HTML size, viewport, dark mode, blog, Last-Modified (lib/site-spec.ts), from the same fetch. */
+  spec?: SiteSpec;
 };
 
 // First github.com/<user> link on the page → their profile URL. Skips GitHub's
@@ -152,6 +155,7 @@ async function inspect(target: string): Promise<Inspection> {
       /mailto:|href=["'][^"']*contact|<form/i.test(html) ||
       /linkedin\.com\/in\//i.test(html),
     copyrightYear: yearMatch ? Number(yearMatch[1]) : null,
+    spec: siteSpec(html, res.headers, finalUrl),
   };
 }
 
@@ -176,5 +180,5 @@ export async function GET(req: Request) {
     },
     () => inspect(url)
   );
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { "cache-control": browserCache(data) } });
 }

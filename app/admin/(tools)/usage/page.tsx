@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Bot, Clock, Gauge, ImageIcon, Search, TriangleAlert } from "lucide-react";
+import { Bot, Clock, Gauge, ImageIcon, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { requireAdmin } from "@/lib/admin";
 import { adminUsage, type UsageDay } from "@/lib/admin/usage";
@@ -9,7 +9,8 @@ import { PEOPLE_JOBS } from "@/pipeline/budget.mjs";
 // plain words, from lib/admin/usage.ts (the same data as GET
 // /api/admin/quota). Gemini today per model and per job, what each job may
 // still spend, people's grades and the grades still on their way, the last
-// 30 days, and the monthly and daily caps of Tavily, Pexels and Workers AI.
+// 30 days, the monthly and daily caps of Tavily, Pexels and Workers AI, and
+// a line on when site checks re-ran (AUTOMATION.md "When checks re-run").
 // Only the admin sees it; anyone else gets a 404.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Usage - PortfolioRank admin", robots: { index: false, follow: false } };
@@ -108,12 +109,27 @@ export default async function AdminUsagePage() {
   const tavily = u.tavily as { used: number; cap: number };
   const pexels = u.pexels as { used: number; cap: number };
   const alerts = u.alerts as { key: string; message?: string; title?: string }[];
+  // When checks re-run (lib/freshness.mjs).
+  const fresh = u.freshness as null | { unchanged: number; changedThisWeek: number; unchecked: number; checkedToday: number; remeasuredToday: { lighthouse: number; polish: number; screenshots: number; links: number; total: number } };
 
   return (
     <>
       <AdminHeader title="Usage">
         {u.now.day ? `Today is ${u.now.day} in Pacific time; ` : "Days are counted in Pacific time; "}Gemini&apos;s allowance resets at midnight Pacific. Every metered call is capped and stops at its limit, so nothing here can bill.
       </AdminHeader>
+      {fresh && (
+        <p className="-mt-2 mb-6 flex items-start gap-2 text-sm" aria-label="Site checks">
+          <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden />
+          <span>
+            <span className="font-semibold">Site checks:</span> {n(fresh.unchanged)} unchanged, {n(fresh.changedThisWeek)} changed this week, {n(fresh.remeasuredToday.total)} re-measured today
+            <span className="text-mute">
+              {" "}
+              (Lighthouse {n(fresh.remeasuredToday.lighthouse)}, polish {n(fresh.remeasuredToday.polish)}, screenshots {n(fresh.remeasuredToday.screenshots)}, links {n(fresh.remeasuredToday.links)}; {n(fresh.checkedToday)} fingerprints checked today
+              {fresh.unchecked > 0 ? `, ${n(fresh.unchecked)} not checked yet` : ""})
+            </span>
+          </span>
+        </p>
+      )}
       {alerts.length > 0 && (
         <ul className="-mt-2 mb-6 grid gap-2" aria-label="Owner alerts">
           {alerts.map((a) => (

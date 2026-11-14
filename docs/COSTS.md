@@ -210,7 +210,7 @@ Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("
 - Idle cost: staging has no Cron Triggers, no Gemini key and no dispatch token, so it spends nothing while nobody uses it.
 - R2: each deploy leaves its build's ISR cache behind (about 10 MB a build), which had grown to 970 MB in staging and 383 MB in production by 2026-11-12.
   Every deploy now removes all but the newest two builds (`scripts/prune-build-cache.mjs`), so each cache bucket stays near 20 to 30 MB, inside the free 10 GB.
-- Email: sends only go through the capped gate, to verified addresses.
+- Email: sends only go through the capped gate; staging's sign-in links count against PortfolioRank's mailroom share ([Email](#email)).
 - Turso: the account is on the Starter plan with overages disabled, so it cannot bill.
   Staging's database is 2.4 MB; the whole account uses 11 MB of 5 GB and 1.7M of 500M rows read.
 - GitHub Actions: staging adds about a minute per push to main.
@@ -233,6 +233,11 @@ Expected sign-in volume (email sign-in, added 2026-11-12):
 - Cost: $0 in every scenario: a send past the mailroom share is refused (the person sees "We can't send email right now" and can use GitHub), never billed.
 - Caps on the way: 3 links an hour and 6 a day per address, 10 an hour and 30 a day per network (keyed hashes in `rate_limits`), Turnstile, the gate's 40 sign-in emails a day with 10 kept for them, and the mailroom's priority share for sign-in.
 - Watch: if sign-ins grow past about 4 a day, PortfolioRank's mailroom month share runs out before the month does; raise it in the mailroom (taking from another app, inside the 2,500) or move reports to their own slice.
+
+Newsletter (2026-11-12, AUTOMATION.md "Newsletter"): Kit's free plan keeps the list and sends, outside Cloudflare and the mailroom.
+- Cost: $0 up to 10,000 subscribers with unlimited broadcasts; past that Kit asks for a paid plan before it sends again, so nothing bills by surprise.
+- Calls: one Kit call per sign-up pair (create, add to form), one per new post, and the subscriber count once a day (cached); the admin's Newsletter page asks for the count fresh.
+- Watch: Kit's footer badge and open and click tracking come with the free plan.
 
 ## Tavily credits
 

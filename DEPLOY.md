@@ -24,6 +24,10 @@ Staging does the same from `staging.portfoliorank.n8builds.dev` to https://stagi
 - **Games (`GAMES_V2`, off):** the games, badges, claims, live stats and report routes answer 404 until the variable `GAMES_V2` is `"true"` in `wrangler.jsonc` (both environments).
   Report links by email go through the same email gate and `SEND_EMAIL` binding as grade reports, so they need nothing more.
   Optional: `EARLY_SUPPORTER_UNTIL` (`YYYY-MM-DD`, Pacific), the last day the Early supporter badge is given.
+- **Newsletter (`NEWSLETTER_ENABLED`, on in production and staging):** the deploy-level kill switch for the sign-up forms, their API and the ten-minute cron (AUTOMATION.md "Newsletter"); the owner turns the newsletter on and off from `/admin/blog/newsletter` (stored, off by default), with no deploy.
+  Kit keeps the list and sends: set the `KIT_API_KEY` secret on each Worker (`pass-env pipe portfolio-rank/KIT_API_KEY -- npx wrangler secret put KIT_API_KEY --env staging`, and without `--env` for production).
+  The sign-up form is the Kit account's only form unless `KIT_FORM_ID` says which; `KIT_BROADCAST_MODE` is `"send"` in production (staging always makes drafts).
+  The "draft ready in Kit" note goes to `OWNER_EMAIL`; keep it out of this public file as a secret: `! pass-env set portfolio-rank/OWNER_EMAIL`, then `pass-env pipe portfolio-rank/OWNER_EMAIL -- npx wrangler secret put OWNER_EMAIL --env staging`.
 - **Cron Triggers and the Workflow:** `triggers.crons` and `workflows` in `wrangler.jsonc`; `npx wrangler triggers deploy` is not needed, a deploy registers them (they can take up to 15 minutes to reach every location).
   Check them in the dashboard (Workers & Pages, portfolio-rank, Settings, Triggers) or with `npx wrangler workflows instances list portfolio-rank-night`.
 - **Screenshots and favicons:** the Worker answers `/shots/<shot_key>/<file>` and `/favicon/<domain>` itself, before the app (`worker/assets.ts`), from the edge cache when it can.
