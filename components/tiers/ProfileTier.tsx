@@ -65,8 +65,8 @@ export function ProfileTier({ t }: { t: Data }) {
                     {i.name}
                     {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
                   </span>
-                  <span className={`shrink-0 tabular-nums ${i.id === "template" && i.points < 0 ? "text-down" : i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
-                    {i.id === "template" ? (i.points < 0 ? i.points : "0") : `${i.points}/${i.max}`}
+                  <span className={`shrink-0 tabular-nums ${i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
+                    {`${i.points}/${i.max}`}
                   </span>
                 </li>
               ))}
