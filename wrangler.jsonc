@@ -104,8 +104,9 @@
     // The review queue's automatic apply (lib/reviews/flag.ts, AUTOMATION.md):
     // with "true" the hourly cron applies rows that pass the owner's rule (both
     // models say portfolio, no code rule objects); off, every row waits for the
-    // owner on /admin/review.
-    "REVIEW_AUTO_APPLY": "false",
+    // owner on /admin/review. On since 2026-11-14 by the owner's decision:
+    // "If the graders agreed, it should be confirmed automatically."
+    "REVIEW_AUTO_APPLY": "true",
     // The blog newsletter on Kit (AUTOMATION.md "Newsletter"): the deploy-level
     // switch for the sign-up forms, their API and the newsletter's tick (on the
     // five-minute cron, no trigger of its own). Off in production: no form, no
@@ -256,8 +257,8 @@
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
         "FRESHNESS_ENABLED": "true",
-        // Off on staging too until the owner turns it on (lib/reviews/flag.ts).
-        "REVIEW_AUTO_APPLY": "false",
+        // On, as in production (lib/reviews/flag.ts).
+        "REVIEW_AUTO_APPLY": "true",
         // The newsletter runs on staging first, against the owner's one Kit
         // account: sign-ups land on the real list (Kit's double opt-in), and new
         // posts only ever become drafts marked [staging] (worker/newsletter.ts).
