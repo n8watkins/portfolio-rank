@@ -14,13 +14,49 @@ export const MAX_GATE_CLICKS = 2;
 export const GATE_WAIT_MS = 3000;
 /** How long a loader still counting up ("72 %") is given to reach 100% before the gate is clicked. */
 export const LOADER_WAIT_MS = 8000;
+/**
+ * How long a first screen with no text at all (a boot screen, a black
+ * loader) is given to show some before the gate check gives up: a fake
+ * desktop's lock screen ("Press Enter or Click to continue") appears only
+ * after a few seconds of black.
+ */
+export const BOOT_WAIT_MS = 8000;
 
 // Gate wording, matched on whole words in the visible text (lower case).
-// Plain words ("enter", "start", "continue") also appear on short real
-// pages ("Start a project"), so they count only on a nearly empty screen
-// (WEAK_MAX_WORDS) and only as an element's whole text.
-const STRONG = ["click to continue", "click to enter", "tap to continue", "tap to enter", "press any key", "press enter", "skip intro", "enter site", "enter the site"];
-const WEAK = ["enter", "start", "continue"];
+// Plain words ("enter", "start", "continue", "come in", "unlock") also
+// appear on short real pages ("Start a project"), so they count only on a
+// nearly empty screen (WEAK_MAX_WORDS) and only as an element's whole text.
+const STRONG = [
+  "click to continue",
+  "click to enter",
+  "click to unlock",
+  "tap to continue",
+  "tap to enter",
+  "tap to unlock",
+  "press any key",
+  "press enter",
+  "skip intro",
+  "enter site",
+  "enter the site",
+];
+const WEAK = ["enter", "start", "continue", "come in", "unlock"];
+/**
+ * In the browser: whether the screen now asks for a password or passcode (a
+ * visible password field, or a passcode prompt). The capture never types
+ * one, so a gate that leads there is not passable by a default action.
+ */
+function asksForPassword() {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
+  };
+  if ([...document.querySelectorAll("input[type=password]")].some(visible)) return true;
+  return /(^|[^a-z])enter\s+(your\s+)?(password|passcode|pin)([^a-z]|$)/i.test(document.body?.innerText ?? "");
+}
+
+/** Screen text that asks for a key: Enter is pressed as well as the click. */
+const ASKS_FOR_KEY = /(^|[^a-z])press\s+(enter|any\s+key|return)([^a-z]|$)/;
 export const WEAK_MAX_WORDS = 10;
 
 /**
@@ -77,8 +113,13 @@ const wordsOf = (t) => (String(t ?? "").replace(/\s+/g, " ").trim() ? String(t).
  * { passed, clicks, phrase, how: ("element" | "centre" | "key")[], words }.
  * @param {import("playwright").Page} page
  */
-export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs = GATE_WAIT_MS } = {}) {
+export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs = GATE_WAIT_MS, bootWaitMs = BOOT_WAIT_MS } = {}) {
   let text = await page.evaluate(visibleText).catch(() => "");
+  // A screen with no text yet may be booting: give it a few seconds to show some.
+  for (const until = Date.now() + bootWaitMs; wordsOf(text) === 0 && Date.now() < until; ) {
+    await page.waitForTimeout(250);
+    text = await page.evaluate(visibleText).catch(() => text);
+  }
   let found = detectGate(text);
   if (!found.gate) return null;
   const first = found;
@@ -115,7 +156,8 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
       await page.mouse.click(Math.round(v.width / 2), Math.round(v.height / 2)).catch(() => {});
       how.push("centre");
     }
-    if (found.phrase === "press any key" || found.phrase === "press enter") {
+    // The screen asks for a key ("Press Enter or Click to continue"): press it too.
+    if (ASKS_FOR_KEY.test(String(text).replace(/\s+/g, " ").toLowerCase())) {
       await page.keyboard.press("Enter").catch(() => {});
       how.push("key");
     }
@@ -134,6 +176,14 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
       await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
       return { passed: false, clicks, phrase: first.phrase, how, left: true, words: { before: first.words, after: first.words } };
     }
+    // A gate that leads to a password or passcode prompt is undone too: no
+    // password is ever typed, and the welcome screen (often with the
+    // person's name) shows more than a password box.
+    if (await page.evaluate(asksForPassword).catch(() => false)) {
+      await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+      return { passed: false, clicks, phrase: first.phrase, how, password: true, words: { before: first.words, after: first.words } };
+    }
     text = await page.evaluate(visibleText).catch(() => text);
     found = detectGate(text);
   }
@@ -149,7 +199,8 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
 // MODAL_MIN_DIALOG of the screen, or a fixed overlay covering more than
 // MODAL_MIN_OVERLAY of it), the capture does what a visitor does to get the
 // site's default view: it clicks the dialog's primary button (Continue,
-// Enter, Start, Get started, else Close), or presses Escape when there is
+// Enter, Start, Get started, Come in, Unlock, Click/Tap/Press to enter,
+// continue or unlock, else Close), or presses Escape when there is
 // none, then checks once more. A cookie bar is too small to count.
 export const MODAL_MIN_DIALOG = 0.2;
 export const MODAL_MIN_OVERLAY = 0.5;
@@ -220,7 +271,8 @@ function findModal([minDialog, minOverlay]) {
   }
   if (!found) return null;
   // A gate's wording counts too: "CLICK TO ENTER" over a page with plenty of text never trips the splash check.
-  const PRIMARY = /^(continue|enter|start|get started|let'?s go|explore|(click|tap) to (enter|continue)|skip intro)\b/i;
+  // "COME IN" on a door, "Tap to unlock" on a fake lock screen are the way in too.
+  const PRIMARY = /^(continue|enter|start|get started|let'?s go|explore|come in|unlock|(click|tap|press) (to )?(enter|continue|unlock)|skip intro)\b/i;
   const CLOSE = /^(close|dismiss|skip|×|✕|x)$/i;
   // Buttons and links, and anything a visitor can click (a pointer cursor): gates often draw their
   // button as a div. A label matches when any of its lines does ("LOADING 100%" then "CLICK TO ENTER").
@@ -287,7 +339,8 @@ export async function passModal(page, { waitMs = MODAL_WAIT_MS } = {}) {
  */
 export function actionNote({ splash = null, modal = null, mode = null } = {}) {
   const parts = [];
-  const tail = (r) => (r?.left ? " (it left the site, so it was undone)" : r?.passed === false ? " (still blocked)" : "");
+  const tail = (r) =>
+    r?.left ? " (it left the site, so it was undone)" : r?.password ? " (it led to a password prompt, so it was undone)" : r?.passed === false ? " (still blocked)" : "";
   if (splash && !splash.error) {
     const what = splash.phrase ? `clicked "${splash.phrase}"` : "clicked the centre of a loader screen";
     parts.push(`${what}${splash.how?.includes("key") ? " and pressed Enter" : ""}${tail(splash)}`);
