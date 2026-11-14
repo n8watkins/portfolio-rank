@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CheckCheck, ChevronDown, CircleAlert, ClipboardCheck, ExternalLink, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, CircleAlert, ClipboardCheck, ExternalLink, RotateCcw, X } from "lucide-react";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
@@ -41,6 +41,9 @@ export type Review = {
   decidedBy: string | null;
   applied: { grade?: string; visibility?: string[]; feed?: string | null; error?: string; rejected?: boolean; action?: "none" } | null;
   createdAt: string;
+  /** An automatic apply the owner undid: when and who. */
+  undoneAt?: string | null;
+  undoneBy?: string | null;
 };
 
 const GROUPS: Record<string, string> = {
@@ -62,6 +65,8 @@ const CHUNK = 200;
 // The static tag in a colour (its own text colour replaces the tag's muted one, which would win otherwise).
 const tagDown = `${tag.replace("text-mute", "")} text-down ring-down/40`;
 const tagUp = `${tag.replace("text-mute", "")} text-up`;
+// A tag whose text may need two lines on a phone: it grows instead of spilling out of the pill.
+const tagWrap = tag.replace("h-6", "min-h-6 py-0.5 leading-snug").replace("rounded-full", "rounded-xl");
 // A thumbnail that opens the large viewer.
 const thumb =
   "block cursor-zoom-in overflow-hidden rounded-lg ring-1 ring-edge transition hover:ring-edge-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
@@ -83,6 +88,11 @@ const domainOf = (url: string) => {
 };
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }) : "";
+/** What an apply did (applied.visibility, lower-case fragments) as one sentence. */
+const sentence = (parts: string[]) => {
+  const s = parts.join("; ");
+  return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`;
+};
 
 function VerdictCell({ v }: { v: Verdict | undefined }) {
   if (!v) return <span className="text-mute">not run</span>;
@@ -238,6 +248,11 @@ function Row({
             )}
             <span className={tag}>{GROUPS[r.group] ?? r.group}</span>
             {r.offList && <span className={tag}>No longer on the community list</span>}
+            {r.undoneAt && (
+              <span className={tagWrap} data-review-undone>
+                Applied automatically, then undone{r.undoneBy ? ` by ${r.undoneBy.replace(/^admin:/, "")}` : ""}, {when(r.undoneAt)}
+              </span>
+            )}
           </div>
           <p className="mt-1.5 text-sm">
             <span className="text-mute">Now:</span> {CURRENT[r.current] ?? r.current} <span className="text-mute">→ Proposed:</span>{" "}
@@ -307,6 +322,70 @@ function Row({
   );
 }
 
+/**
+ * Rows the owner's rule applied without waiting (status auto_applied,
+ * lib/reviews/store.mjs autoApplyReviews), newest first, each with Undo: the
+ * site goes back to what it was and the row waits for the owner again.
+ */
+function AutoApplied({
+  rows,
+  busy,
+  errors,
+  onUndo,
+}: {
+  rows: Review[];
+  busy: Set<number>;
+  errors: Record<number, string>;
+  onUndo: (id: number) => void;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="mt-8" aria-labelledby="review-auto-heading" data-review-auto>
+      <h2 id="review-auto-heading" className="text-lg font-bold tracking-tight">
+        Applied automatically ({rows.length.toLocaleString("en-US")})
+      </h2>
+      <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">
+        These passed the rule: both models say it is a portfolio and no code rule objects. Undo puts the site back as it was, and the row waits for you above.
+      </p>
+      <ul className="card mt-3 divide-y divide-edge">
+        {rows.map((r) => {
+          const domain = domainOf(r.url);
+          const said = GRADERS.map(([key, label]) => {
+            const v = r.verdicts[key]?.batch ?? r.verdicts[key]?.solo;
+            return `${label}: ${v ? (v.is_portfolio ? "portfolio" : "not a portfolio") : "no verdict"}`;
+          }).join(" · ");
+          return (
+            <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-review-auto-row={r.id}>
+              <div className="min-w-0 flex-1 basis-64">
+                <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1 font-semibold break-all hover:text-accent">
+                  {domain}
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
+                </a>
+                <p className="text-xs text-mute">
+                  <span className="font-semibold text-up">{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
+                  {r.offList ? " · no longer on the community list" : ""} · applied {when(r.decidedAt)}
+                </p>
+                <p className="mt-0.5 text-xs text-mute">{said}</p>
+                {r.applied?.visibility?.length ? <p className="mt-0.5 text-xs text-mute text-pretty">{sentence(r.applied.visibility)}</p> : null}
+              </div>
+              <div className="flex items-center gap-3">
+                {errors[r.id] && (
+                  <p className="text-sm text-down" role="alert">
+                    {errors[r.id]}
+                  </p>
+                )}
+                <button type="button" className={btnSecondary} disabled={busy.has(r.id)} onClick={() => onUndo(r.id)} data-review-undo aria-label={`Undo: ${domain}`}>
+                  <RotateCcw className="h-4 w-4" aria-hidden /> {busy.has(r.id) ? "Undoing..." : "Undo"}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function Decided({ rows }: { rows: Review[] }) {
   if (rows.length === 0) return null;
   return (
@@ -333,7 +412,7 @@ function Decided({ rows }: { rows: Review[] }) {
                 : r.applied && "action" in r.applied
                   ? "Marked checked; nothing to apply."
                   : r.applied?.visibility?.length
-                    ? r.applied.visibility.join("; ") + "."
+                    ? sentence(r.applied.visibility)
                     : "Recorded; the grade already matched."}
             </p>
           </li>
@@ -345,7 +424,17 @@ function Decided({ rows }: { rows: Review[] }) {
 
 type Filter = "all" | "agreed" | "flagged";
 
-export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Review[]; decided: Review[]; shotsBase: string | null }) {
+export function StatusReviewQueue({
+  pending,
+  autoApplied = [],
+  decided,
+  shotsBase,
+}: {
+  pending: Review[];
+  autoApplied?: Review[];
+  decided: Review[];
+  shotsBase: string | null;
+}) {
   const router = useRouter();
   const agreedIds = useMemo(() => pending.filter((r) => r.agreed).map((r) => r.id), [pending]);
   const [ticked, setTicked] = useState<Set<number>>(() => new Set(agreedIds));
@@ -363,7 +452,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
   const shown = pending.filter((r) => (filter === "agreed" ? r.agreed : filter === "flagged" ? !r.agreed : true));
   const flagged = pending.length - agreedIds.length;
 
-  async function decide(ids: number[], action: "confirm" | "reject") {
+  async function decide(ids: number[], action: "confirm" | "reject" | "undo") {
     setBusy((b) => new Set([...b, ...ids]));
     setNotice(null);
     const failed: Record<number, string> = {};
@@ -394,7 +483,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
     setBusy((b) => new Set([...b].filter((id) => !ids.includes(id))));
     setDone((d) => ({ ...d, ...Object.fromEntries(okIds.map((id) => [id, action])) }));
     setAsking(false);
-    if (ids.length > 1) setNotice(`${okIds.length.toLocaleString("en-US")} ${action === "confirm" ? "confirmed" : "rejected"}${Object.keys(failed).length ? `, ${Object.keys(failed).length} failed (marked below)` : ""}.`);
+    if (ids.length > 1) setNotice(`${okIds.length.toLocaleString("en-US")} ${action === "confirm" ? "confirmed" : action === "undo" ? "undone" : "rejected"}${Object.keys(failed).length ? `, ${Object.keys(failed).length} failed (marked below)` : ""}.`);
     router.refresh();
   }
 
@@ -423,6 +512,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
         <EmptyState icon={ClipboardCheck} title="Nothing to review">
           When a re-check proposes status changes, they wait here for you.
         </EmptyState>
+        <AutoApplied rows={autoApplied} busy={busy} errors={errors} onUndo={(id) => decide([id], "undo")} />
         <Decided rows={decided} />
         {viewer}
       </>
@@ -502,6 +592,7 @@ export function StatusReviewQueue({ pending, decided, shotsBase }: { pending: Re
           />
         ))}
       </ul>
+      <AutoApplied rows={autoApplied} busy={busy} errors={errors} onUndo={(id) => decide([id], "undo")} />
       <Decided rows={decided} />
       {viewer}
     </>
