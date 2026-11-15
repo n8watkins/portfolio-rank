@@ -77,6 +77,9 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Every background job works only on sites on the current list; rows that leave the list are deleted after 30 days, with their votes kept.
   Our exclusions override the community list, and `/removed` shows what was removed and why.
   Why: 254 unlisted sites were still being graded and voted on, and we can't rely on the community list being right for our purposes.
+- **The capture gives a working site every chance before calling it failed** (agent, 2026-11-14). Status: building (this PR).
+  A 401, 403, 429 or 503 or a TLS failure on the plain pre-check is left to the browser (often a bot filter, or a certificate the browser accepts); a page with no text yet gets up to 15 seconds to render before it counts as blank; a screenshot that times out or hits Chrome's "Unable to capture screenshot" is taken again through the DevTools protocol.
+  Why: 30 sites the owner confirmed as portfolios on 14 November failed the nightly capture (13 on a 403 to the pre-check alone, 9 blank after 3 seconds, 6 on a screenshot error) while a browser loaded all of them.
 - **Health check thresholds** (owner, 2026-11-10). Status: built (#53).
   Weekly check; `live` to `suspect` on any failure, `down` only after 3 failed checks in a row spanning at least 13 days; a pass resets to `live`.
   Bot walls are inconclusive, a redirect to another domain is a move, a run where more than 30% fail records nothing, and at most 10% of the list leaves at once.
