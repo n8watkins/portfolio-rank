@@ -173,6 +173,22 @@ test("dueForCapture: new sites and failures whose backoff ran out; never capture
   assert.deepEqual(due, ["https://retry-now.example", "https://pending.example", "https://new.example"]);
 });
 
+test("dueForCapture: a retry set a few minutes into last night's run is due tonight, not the night after", async () => {
+  // Seen 2026-11-15: sites retried at 04:32-04:38 got retry_at 04:32-04:38
+  // the next day, while that night's run picked its sites at 04:30, so each
+  // one-day retry waited two days.
+  const { db } = tempDb();
+  await ensureRosterSchema(db);
+  const runStart = new Date("2026-11-15T04:30:14Z");
+  await db.batch([
+    { sql: "INSERT INTO portfolios (url, status, retry_at) VALUES ('https://late-in-run.example', 'error', ?)", args: ["2026-11-15T04:38:00.000Z"] },
+    { sql: "INSERT INTO portfolios (url, status, retry_at) VALUES ('https://tomorrow.example', 'error', ?)", args: ["2026-11-16T04:31:00.000Z"] },
+  ]);
+  const entries = [{ url: "https://late-in-run.example" }, { url: "https://tomorrow.example" }];
+  const due = (await dueForCapture(db, entries, runStart)).map((e) => e.url);
+  assert.deepEqual(due, ["https://late-in-run.example"]);
+});
+
 // ---------------------------------------------------------------------------
 // gate
 

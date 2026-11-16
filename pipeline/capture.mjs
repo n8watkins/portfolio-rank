@@ -37,6 +37,7 @@ import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
 import { actionNote, passModal, passSplashGate } from "./splash.mjs";
+import { inconclusiveGate, shot, waitForContent } from "./capture-steps.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -168,7 +169,9 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
   const dir = path.join(ROOT, "captures", key);
 
   const gate = await httpGate(url);
-  if (gate.status !== "live") {
+  // A 401/403/429/503 or a TLS failure on the plain request is often a bot filter or a
+  // certificate a browser accepts: the browser decides (./capture-steps.mjs).
+  if (gate.status !== "live" && !inconclusiveGate(gate)) {
     await recordFailure(url, name, gate.status, gate.reason);
     return `${gate.status} (${gate.reason})`;
   }
@@ -216,9 +219,10 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // capture shows the site's default view.
     const modal = await passModal(page).catch(() => null);
 
-    // Blank-page gate: needs visible text within the rendered page.
     // Blank-page gate: visible text, or visual content (canvas apps such as
-    // Flutter web have no text in the DOM).
+    // Flutter web have no text in the DOM), given up to 15 seconds to appear
+    // (slow single-page apps render nothing at first; ./capture-steps.mjs).
+    await waitForContent(page);
     const rendered = await page.evaluate(readRenderedPage);
     if (rendered.text.trim().length < 30 && !rendered.media) {
       await ctx.close();
@@ -232,13 +236,13 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // viewport and its center (spinners, percent counters) hold still for
     // two polls. Pages that churn the whole viewport every poll are
     // animated backgrounds, not loaders — bail early and call it motion.
-    let prevShot = await page.screenshot({ type: "png" });
+    let prevShot = await shot(page, { type: "png" });
     let quiet = 0,
       lively = 0,
       polls = 0;
     while (polls < 8 && quiet < 2 && lively < 2) {
       await page.waitForTimeout(3000);
-      const cur = await page.screenshot({ type: "png" });
+      const cur = await shot(page, { type: "png" });
       const full = pngDiff(prevShot, cur);
       if (full < 0.01 && pngDiff(prevShot, cur, true) < 0.005) quiet++;
       else quiet = 0;
@@ -251,15 +255,15 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // Motion: two frames 3 seconds apart, diffed in memory. The AI grade gets
     // the result as a fact, not the frames. The hero is cut from the tall
     // image below (its first screenful, after the scroll-through).
-    const f0 = await page.screenshot({ type: "png" });
+    const f0 = await shot(page, { type: "png" });
     await page.waitForTimeout(3000);
-    const f2 = await page.screenshot({ type: "png" });
+    const f2 = await shot(page, { type: "png" });
     const motion = lively >= 2 || pngDiff(f0, f2) > 0.02;
 
     // Dark-mode support: pixel-diff light vs dark.
     await page.emulateMedia({ colorScheme: "dark" });
     await page.waitForTimeout(400);
-    const dark = await page.screenshot({ type: "png" });
+    const dark = await shot(page, { type: "png" });
     const darkMode = pngDiff(f2, dark) > 0.05;
     await page.emulateMedia({ colorScheme: "light" });
 
@@ -306,7 +310,7 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // (pipeline/fullpage.mjs). Its first screenful is the grade's hero.jpg;
     // if the stitch fails, a plain screenshot of the top stands in.
     const desktopView = await captureView(page, "desktop");
-    fs.writeFileSync(path.join(dir, "hero.jpg"), desktopView.ok ? desktopView.files.crop : await page.screenshot({ type: "jpeg", quality: 75 }));
+    fs.writeFileSync(path.join(dir, "hero.jpg"), desktopView.ok ? desktopView.files.crop : await shot(page, { type: "jpeg", quality: 75 }));
 
     // Phone: the same page at 390 wide, horizontal-overflow check, then the
     // tall phone image, whose top is mobile.jpg.
@@ -317,13 +321,15 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // The phone view starts at the gate too.
     const mobileSplash = await passSplashGate(mpage).catch(() => null);
     const mobileModal = await passModal(mpage).catch(() => null);
+    // The desktop view already waited for content; the phone view gets the same chance.
+    await waitForContent(mpage);
     // Its intro plays again on this load: a short wait for a still first screen.
     await settleFirstScreen(mpage, { polls: 4, diff: pngDiff }).catch(() => false);
     const overflow390 = await mpage.evaluate(
       () => document.documentElement.scrollWidth > 395
     );
     const phoneView = await captureView(mpage, "phone");
-    fs.writeFileSync(path.join(dir, "mobile.jpg"), phoneView.ok ? phoneView.files.crop : await mpage.screenshot({ type: "jpeg", quality: 75 }));
+    fs.writeFileSync(path.join(dir, "mobile.jpg"), phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 }));
 
     await ctx.close();
 

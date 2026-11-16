@@ -208,11 +208,53 @@ export function forEdge(request: Request, response: Response): Response {
 /** Scanners probing for /.env, /.git/config, /.claude/settings.json, /wp-admin and *.php. */
 const PROBE = /^\/(?:\.(?!well-known\/)|wp-|.*\.php$)/i;
 
-/** A plain 404 for scanner probes, answered before Next.js, or null for everything else. */
+/** The routes and files whose paths contain a dot (app/, public/). */
+const DOTTED_ROUTES = new Set([
+  "/sitemap.xml",
+  "/robots.txt",
+  "/manifest.webmanifest",
+  "/icon.png",
+  "/icon.svg",
+  "/blog/rss.xml",
+]);
+
+/** Dotted routes with a variable part: the sitemap's parts and a grade's screenshots. */
+const DOTTED_PATTERNS = [
+  /^\/sitemap\/(?:pages|blog|profiles-[1-9]\d{0,3})\.xml$/, // app/sitemap/[part], lib/sitemaps.mjs parsePart
+  /^\/api\/grade\/[^/]+\/shot\/(?:hero|mobile)\.jpg$/, // app/api/grade/[id]/shot/[file]
+];
+
+/**
+ * Routes whose own paths hold a dot: /p/<site address, as in /p/example.com>,
+ * /favicon/<domain> and /shots/<key>/<file>.jpg (worker/assets.ts).
+ */
+const DOTTED_PREFIXES = ["/p/", "/favicon/", "/shots/"];
+
+/**
+ * A file-like path (a dot in any segment) that is not a known route. Static
+ * files (public/, /_next/static) are served before the Worker runs, so one
+ * that reaches it is a miss, and Next.js would spend a full render (about
+ * 100 to 150 ms of CPU) on the 404 page to say so.
+ */
+export function isMissingFile(pathname: string): boolean {
+  if (!pathname.includes(".")) return false;
+  if (DOTTED_ROUTES.has(pathname)) return false;
+  if (DOTTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return false;
+  return !DOTTED_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+/**
+ * A plain 404 for scanner probes and missing files, answered before Next.js, or
+ * null for everything else. Small, no cookies, kept briefly by browsers and the edge.
+ */
 export function probeAnswer(request: Request): Response | null {
-  if (!PROBE.test(new URL(request.url).pathname)) return null;
+  const { pathname } = new URL(request.url);
+  if (!PROBE.test(pathname) && !isMissingFile(pathname)) return null;
   return new Response("Not found", {
     status: 404,
-    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=60, s-maxage=300",
+    },
   });
 }
