@@ -221,16 +221,28 @@ test("E: the default subhead has no digit, and a fix call may ask for a missing 
   assert.ok(which.includes("SECTION 1"), which.join(","));
 });
 
-test("E: a long post whose writer left out a section is repaired by the one fix call, not dropped", async () => {
+test("E: a long post whose writer left out sections is repaired by the one fix call, not dropped", async () => {
   const { db } = await sheetAndRoster();
-  // As the audit saw it: the section's block is missing, so the default subhead
+  // As the audit saw it: the sections' blocks are missing, so the default subhead
   // (with a digit then) failed the stray-number check, and no fix call was made.
-  const g = fakeGemini({ write: writing((t) => t.replace(/=== SECTION 3 ===[\s\S]*?(?=\n=== |$)/, "")), review: REVIEW_OK });
+  let section = "";
+  const g = fakeGemini({
+    write: (n, parts) => {
+      const full = mockAnswer({ parts });
+      if (n === 1) section = full.match(/=== SECTION 1 ===\n([\s\S]*?)(?=\n=== |$)/)[1];
+      if (n <= 2) return full.replace(/=== SECTION [345] ===[\s\S]*?(?=\n=== |$)/g, "");
+      // The fix call: a section block each for the sections it was asked for.
+      return [...parts[0].text.matchAll(/^=== (SECTION \d+) ===$/gm)]
+        .map((m, i) => `=== ${m[1]} ===\n## Another angle on the data, ${["first", "second", "third"][i] ?? "next"}\n${section.split("\n").slice(1).join("\n")}`)
+        .join("\n\n");
+    },
+    review: REVIEW_OK,
+  });
   const { ctx } = contentCtx(db);
   const r = await runDraft(ctx, g, { ...NIGHT, length: "long" });
   const writes = g.calls.filter((c) => c.kind === "write");
-  assert.equal(writes.length, 2, "the write and one fix");
-  assert.match(writes[1].parts[0].text, /=== SECTION 3 ===/, "the missing section is asked for");
+  assert.equal(writes.length, 3, "two writes for a long post and the one fix");
+  assert.match(writes[2].parts[0].text, /=== SECTION 3 ===/, "the missing section is asked for");
   assert.equal(r.status, "ok", r.failures?.join("; "));
 });
 

@@ -14,6 +14,7 @@ import { PRIMARY_MODEL } from "../../pipeline/gemini.mjs";
 import { topGrades } from "../../pipeline/content/facts.mjs";
 import { mockAnswer } from "../../pipeline/content/mock-writer.mjs";
 import { TOPICS } from "../../pipeline/content/topic.mjs";
+import { saveAutomation } from "../../lib/content/automation.mjs";
 
 export const MONDAY = Date.parse("2026-11-17T04:30:00Z");
 export const SUNDAY = Date.parse("2026-11-16T04:30:00Z");
@@ -108,4 +109,10 @@ export function contentCtx(db, { now = MONDAY, mode = "dry-run", keys = {}, ai =
       runId: "test",
     },
   };
+}
+
+/** The owner's saved Automation settings, on (no saved row means scheduled drafts are off). */
+export async function enableAutomation(db, { mode = "review", env = { CONTENT_MODE: mode === "publish" ? "publish" : "dry-run", CONTENT_DRAFTS_PER_WEEK: "2" } } = {}) {
+  const r = await saveAutomation(db, { enabled: true, mode, days: [1, 3], perWeek: 2 }, { env, by: "test" });
+  if (r.error) throw new Error(r.error);
 }

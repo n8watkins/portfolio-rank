@@ -44,7 +44,7 @@ import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
 import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
-import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, fixture, hex, sheetAndRoster } from "./helpers/content-fixture.mjs";
+import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, enableAutomation, fixture, hex, sheetAndRoster } from "./helpers/content-fixture.mjs";
 import { MANUAL_REQUESTS, runManualJob } from "../pipeline/content/manual.mjs";
 import { review } from "../lib/content/blog.mjs";
 
@@ -687,6 +687,7 @@ test("the kill switch: CONTENT_MODE is off unless it says dry-run or publish; of
 test("the schedule: pick on Sunday, drafts Monday and Wednesday, one a night, a dropped draft's reserve the next night", async () => {
   assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map(draftsDue), [0, 1, 1, 2, 2, 2, 2]);
   const db = await fixture();
+  await enableAutomation(db);
   const sunday = contentCtx(db, { now: SUNDAY }).ctx;
   assert.deepEqual((await contentJob(sunday)).job, { step: "pick" });
   assert.equal(contentWeek(SUNDAY), contentWeek(MONDAY), "Sunday night's pick serves the coming week");
@@ -720,7 +721,7 @@ test("automation: the owner's settings live in the database, inside the config's
 
   const db = await fixture();
   const read = await readAutomation(db, env);
-  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, keepReady: 0, engineMode: "dry-run" }, "the config's schedule until the owner saves");
+  assert.deepEqual(read.settings, { enabled: false, mode: "review", days: [1, 3], perWeek: 2, keepReady: 0, engineMode: "off" }, "scheduled drafts stay off until the owner saves (audit 2026-11-16)");
   assert.equal(read.saved, null);
   assert.ok((await saveAutomation(db, { enabled: true, mode: "publish", days: [2, 4], perWeek: 2 }, { env: { CONTENT_MODE: "publish" }, by: "owner" })).settings);
   // A later config lowers what was saved; it never raises it.
@@ -877,10 +878,12 @@ async function nightRun(db, { mode, now, fetchImpl }) {
     log: (l) => lines.push(l),
     fetchImpl,
     image: async () => null,
-    flags: { contentMode: mode, rankingV2: false, rubricRegrade: false, ranking: rankingConfig({}) },
+    flags: { contentMode: mode, rankingV2: false, rubricRegrade: false, pollGeneration: "true", ranking: rankingConfig({}) },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     runId: "test",
   };
+  // Scheduled drafts need the owner's saved Automation settings (no saved row means off).
+  if (mode !== "off") await enableAutomation(db, { mode: mode === "publish" ? "publish" : "review" });
   let state = await startNight(ctx);
   state = await planNight(ctx, state);
   for (let i = 0; i < 200 && !state.done; i++) {
@@ -1269,6 +1272,7 @@ test("write a draft now: the same writer and checks, live phases, stored as a dr
   // Logged as job content, recorded as step manual, which the night's schedule ignores.
   assert.equal((await db.execute("SELECT step FROM content_runs")).rows.map((r) => r.step).join(), "manual");
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'content'")).rows[0].n, 2);
+  await enableAutomation(db);
   const { job: tonight } = await contentJob({ db, now: () => MONDAY, flags: { contentMode: "dry-run" } });
   assert.notEqual(tonight, null, "the night still drafts: a manual draft is not one of its drafts");
   // Running it again does nothing.

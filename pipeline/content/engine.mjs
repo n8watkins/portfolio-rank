@@ -1,6 +1,9 @@
 // The content engine's night work (docs/CONTENT-ENGINE.md, "The pipeline"):
 // the end-of-day run's "Content" stage (pipeline/night.mjs) runs the weekly
-// polls first, then, while CONTENT_MODE is not "off", one content job:
+// polls first (only with POLL_GENERATION_ENABLED, its own switch, default
+// off; pipeline/polls.mjs), then, while CONTENT_MODE is not "off" and the
+// owner has saved Automation settings with it on (no saved row means off;
+// lib/content/automation.mjs), one content job:
 //
 //   pick   (stage 1 and 2) on Sunday night, or the first night of a week
 //          without one: every fact builder that is ready is an idea; one
