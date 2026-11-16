@@ -111,9 +111,33 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
 - **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
   It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
-- **Scheduled jobs, low caps:** staging runs production's scheduled jobs (the end-of-day run, the people queue, the model watch and the grader's tick), the hourly ones every six hours and the grader's tick every 30 minutes to keep its CPU time low (`worker/crons.ts`).
-  It never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs; without a key every Gemini job skips and says so in the log.
-  To exercise them, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
+- **Scheduled jobs, only an allowlist:** staging prepares changes for a release, so it does not mirror production's schedule and makes no duplicate outside calls (Gemini or any AI model, other people's sites, GitHub dispatch, Kit, email).
+  It runs on a schedule only what needs no outside call and is needed for the site to look right or to finish something a person did on staging.
+  The list is `STAGING_TASKS` in `worker/crons.ts`; a task added to the Worker's `scheduled()` handler without being classified there fails `tests/staging-crons.test.mjs`.
+  Production runs every task whatever the list says.
+  Staging's triggers are the hourly group every six hours and the grader's tick every 30 minutes (`env.staging.triggers.crons`); the nightly and weekly crons are not set on staging.
+
+  | Scheduled task | On staging | Why |
+  | --- | --- | --- |
+  | End-of-day run (`startTonight`) | off | Gemini, portfolio fetches and GitHub dispatch |
+  | Owner removals | kept | Database only; its alert email reaches `STAGING_EMAIL_TO` only (empty) |
+  | Edge purge | kept | Database and edge cache only |
+  | Email caps | off | Only emails the owner |
+  | Night watch | off | Would alert that the end-of-day run never started |
+  | People queue | kept | Does nothing unless a grade asked for on staging is queued; then it calls Gemini, and only with staging's own key |
+  | Tiers | kept | Database and edge cache only |
+  | Freshness | off | Fetches every listed portfolio |
+  | Review auto-apply | kept | Database and edge cache only |
+  | Image library | off | Workers AI and Gemini |
+  | Goals | off | Only emails the owner and reads Kit |
+  | Model watch | off | Fetches Google's model list and pages |
+  | Grader tick | kept | Does nothing unless a person asked for a grade on staging; then report email (`STAGING_EMAIL_TO` only) and, with a dispatch token, a GitHub capture; staging has no token |
+  | Newsletter tick | off | Kit |
+
+  Staging never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs.
+  A job's own feature flag (`FRESHNESS_ENABLED` and the like) still decides what pages show; the allowlist only decides what runs on a schedule.
+  To try a new scheduled job, run it by hand against staging or add it to the allowlist in the pull request that proves it; once it works, it belongs to production.
+  To exercise the people queue, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
   "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).
   Email from staging reaches only the addresses in `STAGING_EMAIL_TO` (empty: none), since its database holds real people's addresses (`lib/email/gate.mjs`).
 - **Launch features on:** `GRADER_ENABLED`, `GAMES_V2` and `RANKING_V2` are `"true"` in `env.staging` (production keeps all three `"false"`), so the launch can be walked through on staging first.
@@ -134,6 +158,11 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
 - **Secrets on the staging Worker:** `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, each kept in pass as `portfolio-rank/STAGING_<NAME>` and sent with `pass-env pipe portfolio-rank/STAGING_<NAME> -- npx wrangler secret put <NAME> --env staging`.
   `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.
 - **Sentry:** events from staging carry the environment `staging`.
+- **Proving a pipeline change:** the "Staging capture" workflow (`.github/workflows/staging-capture.yml`) runs the capture and the free checks on a small sample against staging's database, on demand only: `gh workflow run staging-capture.yml --ref <branch> -f sites=20`.
+  It runs the code of the ref it is dispatched on.
+  It holds only the `STAGING_TURSO_*` secrets: no production database, no `GEMINI_API_KEY` and no `R2_*`, because staging shares production's screenshots bucket and the capture then keeps screenshots on disk.
+  It stops at once unless the database address names staging (`scripts/staging-capture.mjs guard`).
+  The run summary shows the sites captured, each failure with its reason and the seconds per site.
 - **Keeping the copy fresh:** the copy holds real votes and rater ids, and the nightly retention jobs do not run on staging.
   The "Staging data" workflow replaces it every Monday with production's newest nightly backup (`scripts/refresh-staging-db.mjs`: it reads the private backups bucket, never production, refuses any database whose address is production's or does not name staging, empties staging, restores and checks every table's count), then redeploys staging and rebuilds the leaderboards.
   Run it by hand any time: `gh workflow run staging-data.yml -f job=refresh`.
