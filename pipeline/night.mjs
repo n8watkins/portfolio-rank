@@ -242,18 +242,15 @@ async function gradeItem(ctx, gemini, { row }, { replace }, stage) {
   const now = new Date(ctx.now());
   const grade = await gradeFromEvidence(gemini, { row, image, now });
   // "Is it a portfolio" is decided at the door (lib/reviews/door.mjs): the owner's own verdict holds; a
-  // "no" is removed by the rule with a record and Undo, or held for the owner. The grade is written
-  // first, ranked (lib/tiers-store.mjs; a background write, shown only with RANKING_V2).
+  // "no" is removed by the rule with a record and Undo, or held for the owner. The grade (ranked,
+  // lib/tiers-store.mjs; a background write, shown only with RANKING_V2) and its review row are one write.
   const door = await atTheDoor(ctx.db, {
     grade,
     row,
     night: stage?.night ?? pacificDay(ctx.now()),
     now,
     autoApply: Boolean(ctx.flags?.reviewAutoApply),
-    write: async (g) => {
-      const rubric = await rankForWrite(ctx.db, g, { url, now: ctx.now() });
-      await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
-    },
+    gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(ctx.db, g, { url, now: ctx.now() }), now),
   });
   return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
 }

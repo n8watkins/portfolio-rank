@@ -367,7 +367,7 @@ test("one night over a mixed set of new sites: every outcome, the summary lists 
   const missingKey = await site(db, S.missing);
   await site(db, S.bad);
   // Pull request #235's marker: never captured, a bot wall.
-  await site(db, S.walled, { status: "error", reason: BOT_WALL_REASON, needsReview: 1 });
+  await site(db, S.walled, { status: "error", reason: BOT_WALL_REASON, needsReview: 1, capturedAt: null });
   // Listed and graded a portfolio long ago; this week's health check found 1 signal.
   await site(db, S.collapsed, {
     rubric: { tier: "C", is_portfolio: true, model: PRIMARY_MODEL, rubric_version: 2, judged_at: "2026-10-01T00:00:00.000Z" },

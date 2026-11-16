@@ -301,17 +301,23 @@ export async function runHealthCheck({
   // Duplicates and "not a portfolio" are failures too, only after loading.
   const dupes = findDuplicates(results.filter((r) => r.ok));
   for (const r of results) {
+    // A removal decided in the review queue (the owner's, or the door's rule) stays down with its reason,
+    // whatever this check sees (loaded, failed, inconclusive or a duplicate), until an Undo or an owner
+    // decision changes the grade or the health: it was decided, not seen failing.
+    const was = rows.get(r.url);
+    if (Number(was?.not_portfolio ?? 0) === 1 && String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith("AI grading says")) {
+      r.ok = false;
+      r.decidedDown = true;
+      r.reason = String(was.health_reason);
+      continue;
+    }
     if (!r.ok) continue;
     if (dupes.has(r.url)) {
       r.ok = false;
       r.reason = `duplicate of ${dupes.get(r.url)}`;
-    } else if (Number(rows.get(r.url)?.not_portfolio ?? 0) === 1) {
+    } else if (Number(was?.not_portfolio ?? 0) === 1) {
       r.ok = false;
-      // A removal decided in the review queue (the owner's, or the door's rule) keeps its reason and stays
-      // down: it was decided, not seen failing, so the 13-day rule must not make it "suspect" (shown) again.
-      const was = rows.get(r.url);
-      r.decidedDown = String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith("AI grading says");
-      r.reason = r.decidedDown ? String(was.health_reason) : "AI grading says this is not a portfolio";
+      r.reason = "AI grading says this is not a portfolio";
     }
   }
 

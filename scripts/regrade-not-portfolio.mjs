@@ -44,6 +44,15 @@ import { withOwnerVerdict } from "../lib/reviews/store.mjs";
 import { quotaDay } from "../pipeline/quota-day.mjs";
 
 export const JOB = "regrade-not-portfolio";
+/**
+ * The re-check is finished (2026-11-13) and no longer writes: since 2026-11-16
+ * every AI grade is stored through the door (lib/reviews/door.mjs), which
+ * writes the owner's review row and never lets one "no" remove a site
+ * silently, and this script predates it. --dry-run and --report still run.
+ */
+export const FINISHED = true;
+export const FINISHED_MESSAGE =
+  "regrade-not-portfolio is a finished one-off and refuses to write grades: every AI grade now goes through the door (lib/reviews/door.mjs). Use --dry-run or --report.";
 /** Gemini requests this job may ever send, retries included. */
 export const CAP = 160;
 /** Gemini requests for the Pacific day, all jobs together, this job stays under. */
@@ -170,6 +179,7 @@ async function main() {
   console.log(`${list.length} site(s) to re-check: ${groups.legacy} graded by 3.1 or rubric v1, ${groups.v2} by rubric v2.`);
   console.log(`Gemini so far: ${startUse.job} of ${CAP} for this job; ${startUse.day} today (Pacific), limit ${DAY_LIMIT}.`);
   if (args.includes("--dry-run")) return;
+  if (FINISHED) throw new Error(FINISHED_MESSAGE);
   if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
 
   // 1. A fresh capture, with the splash click-through, of every site not done

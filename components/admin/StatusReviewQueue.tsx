@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
+import { ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } from "@/components/admin/review-labels";
@@ -51,6 +52,8 @@ export type Review = {
     feed?: string | null;
     error?: string;
     rejected?: boolean;
+    /** Why a rule's waiting row was closed without acting (status closed). */
+    closed?: string;
     action?: "none";
     /** The last Undo: when, who, what it reversed, and what it could not. */
     undo?: { at: string; by: string; reversed?: string; note?: string };
@@ -416,7 +419,8 @@ function AutoApplied({
           const removed = r.proposed === "remove";
           return (
             <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-review-auto-row={r.id}>
-              {removed && base && (
+              {/* Every row has the same left column, so the text starts at the same edge; on a phone an empty one takes no room. */}
+              {base ? (
                 <a
                   href={frameOf(base, "hero.jpg")}
                   target="_blank"
@@ -427,6 +431,8 @@ function AutoApplied({
                 >
                   <ScreenshotFrame src={frameOf(base, "hero.jpg")} alt="" domain={domain} />
                 </a>
+              ) : (
+                <div className="hidden w-28 shrink-0 sm:block" aria-hidden />
               )}
               <div className="min-w-0 flex-1 basis-64">
                 <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1 font-semibold break-all hover:text-accent">
@@ -488,14 +494,15 @@ function UndoButton({ id, domain, busy, onUndo }: { id: number; domain: string; 
 function decider(by: string | null) {
   if (!by) return "";
   if (by.startsWith("admin:")) return by.slice(6);
-  if (by.startsWith("rule:")) return `the ${by.slice(5).replace(/-/g, " ")} rule`;
+  if (by.startsWith("rule:")) return `the rule "${ruleName(by)}"`;
   if (by.startsWith("owner:")) return "the owner's verdict list";
   return by;
 }
 
 /** What a decision did, in one sentence. */
 function effect(r: Review) {
-  if (r.status === "rejected") return "Nothing changed.";
+  if (r.status === "closed") return `Closed without acting: ${r.applied?.closed ?? "a newer decision made it stale"}.`;
+  if (r.status === "rejected") return r.applied?.grade === "settled" ? "Kept listed; the grade records your decision." : "Nothing changed.";
   if (r.applied && "action" in r.applied) return "Marked checked; nothing to apply.";
   if (r.applied?.visibility?.length) return sentence(r.applied.visibility);
   return "Recorded; the grade already matched.";
@@ -549,7 +556,7 @@ function Decided({
                   {recent.has(r.id) && <span className="ml-2 align-[1px] text-xs font-semibold text-accent">just now</span>}
                 </p>
                 <p className="text-xs text-mute">
-                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
+                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "closed" ? "Closed" : r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
                   {" · "}
                   {PROPOSED[r.proposed]}
                   {r.decidedBy && ` · by ${decider(r.decidedBy)}`}
@@ -563,7 +570,8 @@ function Decided({
                     {errors[r.id]}
                   </p>
                 )}
-                <UndoButton id={r.id} domain={domain} busy={busy.has(r.id) || locked} onUndo={onUndo} />
+                {/* A closed row changed nothing and has nothing to undo. */}
+                {r.status !== "closed" && <UndoButton id={r.id} domain={domain} busy={busy.has(r.id) || locked} onUndo={onUndo} />}
               </div>
             </li>
           );
