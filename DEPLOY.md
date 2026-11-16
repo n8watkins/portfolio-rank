@@ -93,7 +93,13 @@ To try a pull request on staging: `gh pr edit <number> --add-label staging`; to 
 Nobody merges branches into a shared staging branch by hand any more.
 The smoke check is read-only (GET requests and the start of a GitHub sign-in).
 It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, sign-in redirects to GitHub with a client id and the site's own callback URL, and the old address answers a 301 to the same path.
-CI (typecheck, lint, the Worker build for both environments, E2E) runs on every pull request into main before it can merge.
+CI runs on every pull request into main before it can merge, sized to the change (`.github/workflows/ci.yml`, `scripts/ci-lanes.mjs`).
+It follows the site's code to sort the changed files: docs that no code reads run nothing; code the site cannot reach (a script, the nightly capture, a workflow file, a unit test) runs typecheck, lint and the unit tests; anything the site reaches, `data/`, and anything unknown runs everything, with the Worker build and the browser tests (E2E).
+It errs towards everything: a file is the site's when the site or a site test imports it, names its path in a string, or builds a path into its folder.
+A release pull request always runs everything, which is the full check on the batch before production deploys.
+`npm run test:unit` runs the tests that need no running site (about two minutes, no build); `npm run test:e2e` builds the app and runs every test, or with `E2E_TESTS=site` only the ones that need it, as CI does.
+A test file needs the running site when it reads one of `scripts/test-e2e.sh`'s `E2E_` variables; every other top-level `tests/*.test.mjs` is a unit test, and a test in a subfolder is run by neither, so keep tests at the top level.
+The main ruleset still requires `typecheck`, `Worker build` and `E2E` by name: GitHub counts a job CI skipped as passed, the unit tests run inside `typecheck`, and a job is skipped only when the sorting answered "false" for it, so a sorting that fails runs every job.
 Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging workflow skips with a notice.
 The release plan, the order open work lands in and the staging fidelity work are in [docs/audits/release-and-staging.md](docs/audits/release-and-staging.md).
 

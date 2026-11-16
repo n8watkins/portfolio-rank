@@ -1,23 +1,84 @@
 name: CI
 
-# Safety gate before main: what merges is what the next deploy ships (DEPLOY.md),
-# so a type error or a broken Worker build must be caught on the PR.
-# tsc --noEmit needs no secrets/env and reliably catches the common breakage.
+# The gate before main, sized to the change (DEPLOY.md "How a change ships").
+# main is the next release, so what merges must be shippable; but a docs fix
+# or a nightly list update does not need eight minutes of browser tests.
+#
+# The first job sorts the pull request's files (scripts/ci-lanes.mjs, which
+# follows the site's imports rather than trusting folder names):
+#   docs only            nothing else runs
+#   code the site cannot typecheck, lint and the unit tests
+#   reach, workflows
+#   anything the site    everything, with the Worker build and the
+#   reaches, data/, or   browser tests
+#   unknown
+# A release pull request changes package.json, so it always runs everything:
+# that is the full check on the whole batch before production deploys.
+#
+# The main ruleset keeps requiring the same three jobs by name (typecheck,
+# Worker build, E2E), and nothing changes there: GitHub counts a job this
+# file skips as passed. Two things keep that honest:
+#   - a job is skipped only when the sorting answered "false" for it; when
+#     the sorting fails or answers nothing, every job runs (the conditions
+#     below), so a broken sort can never turn into "all skipped, all green";
+#   - the unit tests run inside the required typecheck job, so they gate a
+#     pull request that skips the browser tests.
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  typecheck:
+  lanes:
+    name: Lanes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      typecheck: ${{ steps.lanes.outputs.typecheck }}
+      worker: ${{ steps.lanes.outputs.worker }}
+      e2e: ${{ steps.lanes.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The whole history, so the pull request's files can be listed
+          # against where it left main.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Sort the changed files
+        id: lanes
+        # bash by name, so GitHub adds pipefail: a sorter that crashes fails
+        # the step instead of hiding behind tee.
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            node scripts/ci-lanes.mjs --base "origin/$BASE_REF" | tee -a "$GITHUB_OUTPUT"
+          else
+            # Run by hand: everything.
+            node scripts/ci-lanes.mjs --all | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  # Typecheck, lint, then the tests that need no running site
+  # (scripts/test-unit.mjs): no build, no server, no database. The E2E job
+  # runs those tests too, with all the others.
+  typecheck:
+    needs: lanes
+    # Skipped only when the sorting said "false" in so many words. A sorting
+    # that failed, or answered nothing, runs the job.
+    if: ${{ !cancelled() && needs.lanes.outputs.typecheck != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
       - name: Typecheck
@@ -26,11 +87,18 @@ jobs:
       # eslint.config.mjs. Errors fail the PR.
       - name: Lint
         run: npm run lint
+      # The capture's tests (splash gates, dialogs, screenshots) open pages in
+      # headless Chromium.
+      - run: npx playwright install --with-deps chromium
+      - name: Unit tests
+        run: npm run test:unit
 
   # The Cloudflare Worker: binding types match wrangler.jsonc, the OpenNext
   # build succeeds and wrangler can bundle it.
   worker:
     name: Worker build
+    needs: lanes
+    if: ${{ !cancelled() && needs.lanes.outputs.worker != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -54,13 +122,19 @@ jobs:
         run: node scripts/check-worker-exports.mjs "${{ runner.temp }}/worker-bundle/index.js"
 
   # End to end: builds the app, starts it on a throwaway local database and a
-  # local PageSpeed stand-in, then runs tests/ over HTTP (vote integrity,
-  # stale-while-revalidate caching, the prewarm job's exit codes) and in a
-  # headless browser (Undo toasts).
+  # local PageSpeed stand-in, then runs every test in tests/ over HTTP (vote
+  # integrity, stale-while-revalidate caching, the prewarm job's exit codes)
+  # and in a headless browser (Undo toasts).
   e2e:
     name: E2E
+    needs: lanes
+    if: ${{ !cancelled() && needs.lanes.outputs.e2e != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Only the tests that need the running site: whenever this job runs, the
+      # typecheck job runs the unit tests (scripts/test-e2e.sh).
+      E2E_TESTS: site
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
