@@ -16,7 +16,7 @@ import { createClient } from "@libsql/client";
 import jpeg from "jpeg-js";
 import { chromium } from "playwright";
 import { captureSite, keyOf } from "../pipeline/capture.mjs";
-import { BLOCKED_PREFIX } from "../pipeline/capture-blocked.mjs";
+import { BLOCKED_PREFIX, BOT_WALL } from "../pipeline/capture-blocked.mjs";
 import { dueForCapture, ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_PLAN } from "../pipeline/budget.mjs";
@@ -127,7 +127,7 @@ test("a minimalist one-screen portfolio with a few links is captured, not blocke
 test("a new site whose capture is blocked is a failed capture with a retry, and nothing is stored", async () => {
   for (const [p, why] of [
     ["/empty", "10 words and no outbound links"],
-    ["/bot", "a bot or security check stood in for the site"],
+    ["/bot", BOT_WALL],
   ]) {
     assert.equal(results[p], `blocked (${why})`);
     const row = await rowOf(p);
@@ -141,6 +141,11 @@ test("a new site whose capture is blocked is a failed capture with a retry, and 
     assert.equal(row.meta, null);
     assert.equal(captured(p), false, "no screenshot written");
   }
+  // The bot wall is marked for the owner's review; the empty page is not (it ends as broken).
+  assert.equal(Number((await rowOf("/bot")).needs_review), 1);
+  assert.equal(Number((await rowOf("/empty")).needs_review), 0);
+  const queue = await db.execute("SELECT name FROM sqlite_master WHERE name = 'status_reviews'");
+  assert.equal(queue.rows.length, 0, "nothing is sent to the review queue");
   // Retried on a later night: not due tonight, due once the backoff runs out.
   const entries = [{ url: url("/empty") }, { url: url("/bot") }];
   assert.deepEqual(await dueForCapture(db, entries), []);

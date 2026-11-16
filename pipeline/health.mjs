@@ -8,15 +8,16 @@
 //   live --fail--> suspect --fail--> ... --fail (FAILS_TO_DOWN checks in a row
 //   spanning at least DOWN_AFTER_DAYS)--> down
 //   any state --pass--> live (fail count reset)
-//   a bot wall (403/429 challenge) is inconclusive: the state stays as it was,
-//   unless the site never had a good capture and its last one was blocked
-//   (./capture-blocked.mjs): then it is a failure, like a blank page
+//   a bot wall (403/429 challenge) is inconclusive: the state stays as it was
+//   a site that never had a good capture fails while its last capture was
+//   blocked by a gate or an empty page, and is inconclusive while it was
+//   blocked by a bot wall (./capture-blocked.mjs)
 //
 // Down sites are added to data/excluded.json (pipeline/exclusions.mjs), so the
 // list drops them; until then the site and the background jobs skip them.
 
 import { httpGate, isParkingDomain, netloc, parkingPhrase, visibleText } from "./gate.mjs";
-import { isBlockedReason } from "./capture-blocked.mjs";
+import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
 
@@ -314,16 +315,28 @@ export async function runHealthCheck({
     }
   }
   // A site that has never had a good capture and whose last one was blocked
-  // (a bot check, a gate, a picker or a nearly empty page that a plain fetch
-  // still sees as up: ./capture-blocked.mjs) fails too, with that reason, so
-  // a site that stays blocked ends up confirmed down and excluded as broken
-  // (exclusions.mjs kind "down"), never as "not a portfolio". A bot wall
-  // here counts as well: for a site we could never see, it is the evidence.
-  // A good capture since then (status 'live') clears it.
+  // (./capture-blocked.mjs). A good capture since then (status 'live')
+  // clears both cases.
+  // - A gate, a picker or a nearly empty page that this check sees as up
+  //   fails, with the capture's reason, so a site that stays blocked ends up
+  //   confirmed down and excluded as broken (exclusions.mjs kind "down"),
+  //   never as "not a portfolio".
+  // - A bot wall is never a failure (owner, 2026-11-16: bot-walled sites go
+  //   to him for review): a pass is made inconclusive, so the state stays as
+  //   it was and the site stays hidden (lib/hidden.mjs) instead of being
+  //   shown uncaptured; its needs_review mark is kept below.
+  // A bot wall this check meets itself stays inconclusive in both cases.
+  const botWalled = new Set();
   for (const r of results) {
-    if (r.ok === false) continue;
     const row = rows.get(r.url);
-    if (row && String(row.status) === "error" && isBlockedReason(row.reason)) {
+    if (!row || String(row.status) !== "error" || !isBlockedReason(row.reason)) continue;
+    if (isBotWallReason(row.reason)) {
+      botWalled.add(r.url);
+      if (r.ok === true) {
+        r.ok = null;
+        r.reason = String(row.reason);
+      }
+    } else if (r.ok === true) {
       r.ok = false;
       r.reason = String(row.reason);
     }
@@ -395,7 +408,8 @@ export async function runHealthCheck({
         stamp,
         r.finalUrl ?? null,
         signals,
-        r.signals?.needsReview ? 1 : 0,
+        // The signals' verdict, but a bot-walled capture's mark for the owner's review is never cleared here.
+        r.signals?.needsReview || botWalled.has(r.url) ? 1 : 0,
       ],
     });
   }
@@ -413,7 +427,7 @@ export function healthSummary(s) {
     "",
     `Checked ${s.checked} listed site(s): ${s.live} live, ${s.suspect} suspect, ${s.down} down, ${s.recovered} recovered, ${s.inconclusive.length} inconclusive (bot checks), ${s.needsReview.length} need review.`,
     "",
-    `A site is confirmed down after ${FAILS_TO_DOWN} failed checks in a row spanning at least ${DOWN_AFTER_DAYS} days; a bot check leaves its state unchanged, unless the site's capture has only ever been blocked.`,
+    `A site is confirmed down after ${FAILS_TO_DOWN} failed checks in a row spanning at least ${DOWN_AFTER_DAYS} days; a bot check leaves its state unchanged.`,
     "",
   ];
   if (s.newlyDown.length) {

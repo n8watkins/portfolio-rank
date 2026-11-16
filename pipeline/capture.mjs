@@ -35,8 +35,8 @@
 // does not show the site afterwards (a gate, a picker, a dialog, a bot
 // check, or under 40 words with no outbound links: ./capture-blocked.mjs)
 // is "blocked": nothing of it is stored or graded. A site with no good
-// capture records it as a failed capture and is retried; a site that has
-// one keeps it.
+// capture records it as a failed capture and is retried (a bot wall also
+// sets needs_review for the owner); a site that has one keeps it.
 import { chromium } from "playwright";
 import { createHash } from "crypto";
 import fs from "fs";
@@ -46,7 +46,7 @@ import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
 import { actionNote, passModal, passModePicker, passSplashGate } from "./splash.mjs";
-import { BLOCKED_PREFIX, capturedBlocked, countOutboundLinks } from "./capture-blocked.mjs";
+import { BLOCKED_PREFIX, BOT_WALL, capturedBlocked, countOutboundLinks } from "./capture-blocked.mjs";
 import { inconclusiveGate, shot, waitForContent } from "./capture-steps.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
@@ -106,18 +106,21 @@ export const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice
 // growing backoff (roster.captureRetryAt), and the weekly health check pulls
 // the retry forward once the site passes. Whether a site is shown is decided
 // by the health check (pipeline/health.mjs), not by one capture attempt.
-export async function recordCaptureFailure(db, url, name, status, reason) {
+// `needsReview` also sets portfolios.needs_review = 1 (a bot wall, for the
+// owner's review); without it the column is left as it is.
+export async function recordCaptureFailure(db, url, name, status, reason, { needsReview = false } = {}) {
   const row = (
     await db.execute({ sql: "SELECT capture_attempts FROM portfolios WHERE url = ?", args: [url] })
   ).rows[0];
   const attempts = Number(row?.capture_attempts ?? 0) + 1;
   await db.execute({
-    sql: `INSERT INTO portfolios (url, name, status, reason, checked_at, capture_attempts, retry_at)
-          VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+    sql: `INSERT INTO portfolios (url, name, status, reason, checked_at, capture_attempts, retry_at, needs_review)
+          VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?)
           ON CONFLICT(url) DO UPDATE SET status=excluded.status,
             reason=excluded.reason, checked_at=excluded.checked_at,
-            capture_attempts=excluded.capture_attempts, retry_at=excluded.retry_at`,
-    args: [url, name, status, reason, attempts, captureRetryAt(attempts)],
+            capture_attempts=excluded.capture_attempts, retry_at=excluded.retry_at,
+            needs_review=MAX(portfolios.needs_review, excluded.needs_review)`,
+    args: [url, name, status, reason, attempts, captureRetryAt(attempts), needsReview ? 1 : 0],
   });
 }
 
@@ -297,7 +300,8 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     if (blocked) {
       await ctx.close();
       if (refresh || stored.good) return `blocked (${blocked}); the existing capture is kept`;
-      await recordFailure(url, name, "error", `${BLOCKED_PREFIX}${blocked}`);
+      // A bot wall is not called broken: it is marked for the owner's review (./capture-blocked.mjs).
+      await recordFailure(url, name, "error", `${BLOCKED_PREFIX}${blocked}`, { needsReview: blocked === BOT_WALL });
       return `blocked (${blocked})`;
     }
 

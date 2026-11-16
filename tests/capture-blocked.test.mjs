@@ -1,16 +1,25 @@
 // A capture that does not show the site (pipeline/capture-blocked.mjs) is
-// never graded and never sent to the owner: the decision for each reason, a
-// real short portfolio that is not blocked, and what the weekly health check
-// (pipeline/health.mjs) and the exclusions (pipeline/exclusions.mjs) then do
-// with a site whose capture has only ever been blocked. No network: fetch is
-// a stand-in, the database a throwaway local file.
+// never graded: the decision for each reason, a real short portfolio that is
+// not blocked, and what the weekly health check (pipeline/health.mjs) and the
+// exclusions (pipeline/exclusions.mjs) then do with a site whose capture has
+// only ever been blocked: a blank or gated one ends as broken, a bot-walled
+// one is never failed and keeps its needs_review mark for the owner. No
+// network: fetch is a stand-in, the database a throwaway local file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { BLOCKED_PREFIX, BLOCK_MAX_WORDS, BOT_CHECK_MAX_WORDS, capturedBlocked, isBlockedReason } from "../pipeline/capture-blocked.mjs";
+import {
+  BLOCKED_PREFIX,
+  BLOCK_MAX_WORDS,
+  BOT_CHECK_MAX_WORDS,
+  BOT_WALL,
+  capturedBlocked,
+  isBlockedReason,
+  isBotWallReason,
+} from "../pipeline/capture-blocked.mjs";
 import { DOWN_AFTER_DAYS, FAILS_TO_DOWN, runHealthCheck } from "../pipeline/health.mjs";
 import { planExclusions } from "../pipeline/exclusions.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
@@ -38,9 +47,9 @@ test("capturedBlocked: a minimalist one-screen portfolio with a few links is not
 
 test("capturedBlocked: each reason", () => {
   const cases = [
-    [{ text: "Vercel Security Checkpoint We're verifying your browser", title: "Vercel Security Checkpoint" }, "a bot or security check stood in for the site"],
-    [{ text: "example.dev Verifying you are human. This may take a few seconds. example.dev needs to review the security of your connection before proceeding.", outboundLinks: 1 }, "a bot or security check stood in for the site"],
-    [{ text: "", title: "Just a moment...", outboundLinks: 1 }, "a bot or security check stood in for the site"],
+    [{ text: "Vercel Security Checkpoint We're verifying your browser", title: "Vercel Security Checkpoint" }, BOT_WALL],
+    [{ text: "example.dev Verifying you are human. This may take a few seconds. example.dev needs to review the security of your connection before proceeding.", outboundLinks: 1 }, BOT_WALL],
+    [{ text: "", title: "Just a moment...", outboundLinks: 1 }, BOT_WALL],
     [{ text: "CLICK TO ENTER", outboundLinks: 1 }, "still a gate or loader after the click-through"],
     [{ text: "Loading 72%", outboundLinks: 1 }, "still a gate or loader after the click-through"],
     [{ text: PORTFOLIO, splash: { passed: false, password: true } }, "still a gate or loader after the click-through"],
@@ -50,6 +59,7 @@ test("capturedBlocked: each reason", () => {
     [{ text: "", outboundLinks: 0 }, "0 words and no outbound links"],
   ];
   for (const [input, want] of cases) assert.equal(capturedBlocked(input), want, JSON.stringify(input));
+  assert.equal(BOT_WALL, "a bot or security check stood in for the site");
 });
 
 test("capturedBlocked: a long portfolio that jokes about robots is not a bot check", () => {
@@ -57,10 +67,15 @@ test("capturedBlocked: a long portfolio that jokes about robots is not a bot che
   assert.equal(capturedBlocked({ text, outboundLinks: 2 }), null);
 });
 
-test("isBlockedReason reads the stored failure reason", () => {
+test("isBlockedReason and isBotWallReason read the stored failure reason", () => {
   assert.equal(isBlockedReason(`${BLOCKED_PREFIX}12 words and no outbound links`), true);
+  assert.equal(isBlockedReason(`${BLOCKED_PREFIX}${BOT_WALL}`), true);
   assert.equal(isBlockedReason("renders blank"), false);
   assert.equal(isBlockedReason(null), false);
+  assert.equal(isBotWallReason(`${BLOCKED_PREFIX}${BOT_WALL}`), true);
+  assert.equal(isBotWallReason(`${BLOCKED_PREFIX}12 words and no outbound links`), false);
+  assert.equal(isBotWallReason(BOT_WALL), false, "only a capture failure's reason");
+  assert.equal(isBotWallReason(null), false);
 });
 
 // --- The weekly health check and the exclusions -----------------------------
@@ -80,30 +95,48 @@ function fakeFetch(map) {
 
 const EMPTY = "https://empty.example";
 const WALLED = "https://walled.example";
+const WALLED_OPEN = "https://walled-open.example";
+const EMPTY_WALLED = "https://empty-walled.example";
 const GOOD_WALLED = "https://good-walled.example";
 const RECOVERED = "https://recovered.example";
 const feed = [
   { name: "Empty Person", url: EMPTY },
   { name: "Walled Person", url: WALLED },
+  { name: "Open Walled", url: WALLED_OPEN },
+  { name: "Empty Walled", url: EMPTY_WALLED },
   { name: "Good Walled", url: GOOD_WALLED },
   { name: "Recovered Person", url: RECOVERED },
 ];
-// A plain fetch sees the empty site and the recovered one as up; the bot wall answers 403.
+const SPARSE = "<html><body><p>Hello there, welcome to my new website, coming along soon</p></body></html>";
+const WALL = { status: 403, body: "<title>Just a moment...</title>" };
 const fetchImpl = fakeFetch({
-  [EMPTY]: { status: 200, body: "<html><body><p>Hello there, welcome to my new website, coming along soon</p></body></html>" },
-  [WALLED]: { status: 403, body: "<title>Just a moment...</title>" },
-  [GOOD_WALLED]: { status: 403, body: "<title>Just a moment...</title>" },
-  [RECOVERED]: { status: 200, body: "<html><body><p>Hello there, welcome to my new website, coming along soon</p></body></html>" },
+  // The plain fetch sees the empty site as up.
+  [EMPTY]: { status: 200, body: SPARSE },
+  // The capture's browser met a bot wall; so does the health check.
+  [WALLED]: WALL,
+  // The capture's browser met a bot wall, but the plain fetch gets a page that
+  // passes, with signals that would clear needs_review.
+  [WALLED_OPEN]: { status: 200, body: "<html><head><title>Open Walled - Developer</title></head><body><h1>Open Walled</h1><p>Hi, I'm Open Walled. I build things for the web. <a href='https://github.com/x'>GitHub</a> Projects, resume, contact me.</p></body></html>" },
+  // The capture saw an empty page; the health check meets a bot wall.
+  [EMPTY_WALLED]: WALL,
+  [GOOD_WALLED]: WALL,
+  [RECOVERED]: { status: 200, body: SPARSE },
 });
 
 async function seed(db) {
   await ensureRosterSchema(db);
   const retry = "2026-11-12T00:00:00.000Z";
+  const blocked = (url, name, why, needsReview = 0) => ({
+    sql: "INSERT INTO portfolios (url, name, status, reason, capture_attempts, retry_at, needs_review) VALUES (?, ?, 'error', ?, 1, ?, ?)",
+    args: [url, name, `${BLOCKED_PREFIX}${why}`, retry, needsReview],
+  });
   await db.batch(
     [
       // Never had a good capture; the last one was blocked (pipeline/capture.mjs recordCaptureFailure).
-      { sql: "INSERT INTO portfolios (url, name, status, reason, capture_attempts, retry_at) VALUES (?, ?, 'error', ?, 1, ?)", args: [EMPTY, "Empty Person", `${BLOCKED_PREFIX}9 words and no outbound links`, retry] },
-      { sql: "INSERT INTO portfolios (url, name, status, reason, capture_attempts, retry_at) VALUES (?, ?, 'error', ?, 1, ?)", args: [WALLED, "Walled Person", `${BLOCKED_PREFIX}a bot or security check stood in for the site`, retry] },
+      blocked(EMPTY, "Empty Person", "9 words and no outbound links"),
+      blocked(WALLED, "Walled Person", BOT_WALL, 1),
+      blocked(WALLED_OPEN, "Open Walled", BOT_WALL, 1),
+      blocked(EMPTY_WALLED, "Empty Walled", "9 words and no outbound links"),
       // Has a good capture: a bot wall says nothing about it.
       { sql: "INSERT INTO portfolios (url, name, status, reason, shot_key, health) VALUES (?, ?, 'live', '', 'k1', 'live')", args: [GOOD_WALLED, "Good Walled"] },
       // Was blocked once, then captured fine: status live again.
@@ -114,9 +147,14 @@ async function seed(db) {
 }
 
 const rowOf = async (db, url) =>
-  (await db.execute({ sql: `SELECT status, reason, health, health_reason, retry_at, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] })).rows[0];
+  (
+    await db.execute({
+      sql: `SELECT status, reason, health, health_reason, health_fails, retry_at, needs_review, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`,
+      args: [url],
+    })
+  ).rows[0];
 
-test("health check: a never-captured site whose capture was blocked fails, stays hidden and keeps its capture backoff", async () => {
+test("health check: a never-captured blank site fails, stays hidden and keeps its capture backoff", async () => {
   const db = tempDb();
   await seed(db);
   const s = await runHealthCheck({ db, feed, fetchImpl, now: new Date("2026-11-11T00:00:00Z"), log: () => {} });
@@ -128,21 +166,46 @@ test("health check: a never-captured site whose capture was blocked fails, stays
   assert.equal(Number(empty.hidden), 1, "not shown on the site");
   assert.equal(empty.retry_at, "2026-11-12T00:00:00.000Z", "the retry is not pulled forward: the backoff stands");
 
-  const walled = await rowOf(db, WALLED);
-  assert.equal(walled.health, "suspect", "a bot wall is no longer inconclusive for a site we never saw");
-  assert.match(String(walled.health_reason), /bot or security check/);
-  assert.equal(Number(walled.hidden), 1);
+  // A bot wall the health check meets itself stays inconclusive, whatever the capture saw.
+  const emptyWalled = await rowOf(db, EMPTY_WALLED);
+  assert.equal(emptyWalled.health, null);
+  assert.equal(Number(emptyWalled.hidden), 1);
 
   const good = await rowOf(db, GOOD_WALLED);
   assert.equal(good.health, "live", "a site with a good capture behind a bot wall keeps its state");
   assert.equal(Number(good.hidden), 0);
   assert.ok(s.inconclusive.some((i) => i.url === GOOD_WALLED));
 
-  const recovered = await rowOf(db, RECOVERED);
-  assert.equal(recovered.health, "live");
+  assert.equal((await rowOf(db, RECOVERED)).health, "live");
 });
 
-test("health check: a site that stays blocked is confirmed down and excluded as broken, never as not a portfolio", async () => {
+test("health check: a bot-walled, never-captured site is never failed, stays hidden and keeps its needs_review mark", async () => {
+  const db = tempDb();
+  await seed(db);
+  const start = Date.parse("2026-11-11T00:00:00Z");
+  for (let i = 0; i < FAILS_TO_DOWN + 1; i++) {
+    const s = await runHealthCheck({ db, feed, fetchImpl, now: new Date(start + i * 7 * DAY), log: () => {} });
+    for (const url of [WALLED, WALLED_OPEN]) assert.ok(s.inconclusive.some((x) => x.url === url), `${url} is inconclusive`);
+  }
+  for (const url of [WALLED, WALLED_OPEN]) {
+    const row = await rowOf(db, url);
+    assert.equal(row.health, null, "never suspect, never down");
+    assert.equal(Number(row.health_fails), 0);
+    assert.equal(Number(row.needs_review), 1, "the mark for the owner's review survives every weekly check");
+    assert.equal(row.reason, `${BLOCKED_PREFIX}${BOT_WALL}`, "the capture's reason is kept");
+    assert.equal(row.status, "error");
+    assert.equal(Number(row.hidden), 1, "not shown on the site while uncaptured");
+    assert.equal(row.retry_at, "2026-11-12T00:00:00.000Z", "retried on its own backoff");
+  }
+  // And it never reaches the exclusions (the blank site, down by now, is left out of this feed).
+  const plan = await planExclusions({ db, excluded: [], feed: feed.filter((p) => p.url !== EMPTY), now: new Date(start + 40 * DAY) });
+  assert.deepEqual(plan.added, []);
+  // The plain fetch's own signals did not ask for review: only the capture's mark keeps it.
+  const signals = JSON.parse(String((await db.execute({ sql: "SELECT signals FROM portfolios WHERE url = ?", args: [WALLED_OPEN] })).rows[0].signals));
+  assert.equal(signals.needsReview, false);
+});
+
+test("health check: a blank site that stays blocked is confirmed down and excluded as broken, never as not a portfolio", async () => {
   const db = tempDb();
   await seed(db);
   // Healthy sites around them (the exclusions refuse to drop more than a tenth of the list at once).
@@ -159,16 +222,13 @@ test("health check: a site that stays blocked is confirmed down and excluded as 
     await runHealthCheck({ db, feed: all, fetchImpl: fetchAll, now: new Date(start + i * Math.ceil(DOWN_AFTER_DAYS / (FAILS_TO_DOWN - 1)) * DAY), log: () => {} });
   }
   assert.equal((await rowOf(db, EMPTY)).health, "down");
-  assert.equal((await rowOf(db, WALLED)).health, "down");
+  for (const url of [WALLED, WALLED_OPEN, EMPTY_WALLED]) assert.equal((await rowOf(db, url)).health, null, `${url} is not failed`);
   assert.equal((await rowOf(db, GOOD_WALLED)).health, "live");
 
   const plan = await planExclusions({ db, excluded: [], feed: all, now: new Date(start + 20 * DAY) });
-  const byUrl = Object.fromEntries(plan.added.map((a) => [a.url, a]));
-  assert.deepEqual(Object.keys(byUrl).sort(), [EMPTY, WALLED].sort());
-  for (const url of [EMPTY, WALLED]) {
-    assert.equal(byUrl[url].kind, "down", "broken, not not_portfolio");
-    assert.match(byUrl[url].reason, /^capture blocked: /);
-  }
-  assert.ok(!plan.feed.some((p) => p.url === EMPTY || p.url === WALLED));
-  assert.ok(plan.feed.some((p) => p.url === GOOD_WALLED) && plan.feed.some((p) => p.url === RECOVERED));
+  assert.deepEqual(plan.added.map((a) => a.url), [EMPTY]);
+  assert.equal(plan.added[0].kind, "down", "broken, not not_portfolio");
+  assert.match(plan.added[0].reason, /^capture blocked: /);
+  assert.ok(!plan.feed.some((p) => p.url === EMPTY));
+  for (const url of [WALLED, WALLED_OPEN, EMPTY_WALLED, GOOD_WALLED, RECOVERED]) assert.ok(plan.feed.some((p) => p.url === url));
 });
