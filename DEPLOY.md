@@ -79,9 +79,36 @@ Turning it off again is the same variable: the API answers 404 and the five-minu
 
 ## How a change ships
 
+A merge to main goes to staging.
+Production is the last release, and changes only when a release is cut.
+
+- **Merge** a pull request into main: staging is rebuilt with it, and production does not change.
+- **Deploy** with `npm run release -- --push` (RELEASING.md "Cutting a release") once the merges on staging are ready to go out together.
+  It lists what will ship (`--dry-run` shows the list without cutting anything), opens the release pull request, waits for CI on it, tags the merged commit `vX.Y.Z`, and the tag deploys production.
+- **Go back** to an older release: `gh workflow run deploy.yml -f code=vX.Y.Z`.
+  Schema changes are additive, so older code runs on the newer database.
+
+"Production" means the same code everywhere:
+
+- **The site** is deployed from the release tag.
+- **The scheduled jobs** that work on the production database (the nightly sync and capture, grading, the health check, discovery, backups and the others) run the release's code too, through `.github/actions/release-code`, although GitHub starts them from main.
+  A merged pipeline change therefore reaches production with the next release, together with the database changes it needs, not on the night it merged.
+  To try a branch's job by hand, run its workflow with `code=checkout`.
+- **The workflow files** are the exception: GitHub always runs main's copy of a file in `.github/workflows/`, so an edit to one is live when it merges.
+  Keep them thin, and put logic in the scripts they call.
+  A new step that calls a script the last release does not have fails every night until the release, so a pull request adding one makes the step skip while the script is missing (`if [ -f pipeline/new-step.mjs ]`).
+- **The data** (`data/`, the portfolio list) always comes from main, where the nightly sync puts it.
+  Pages import the list into the build, so a change to `data/` on main rebuilds the last release's code over the new data and deploys it, with no unreleased code.
+  That build first runs `node scripts/check-data.mjs`, the released code's own check of what it can read; when it fails nothing is deployed, the site stays as it was and the run fails.
+  A pull request that changes both the data's shape and the code reading it must keep the old code able to read the new data, or its data waits for the release.
+
+Because main is always the next release, a change visitors can see either sits behind a flag that is off in production, or was approved on staging through the `staging` label before it merged.
+Flags live in `wrangler.jsonc`, so turning one on in production is a merge and then a release.
+Until the first release tag exists (`npm run release -- --baseline`), the site and the jobs keep running main's code.
+
 Two workflows, so production and staging never overwrite each other:
 
-1. **Production** (`.github/workflows/deploy.yml`, every push to main): migrates the production database, builds, deploys, then runs `node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev`.
+1. **Production** (`.github/workflows/deploy.yml`; a release tag, a change to `data/` on main, or by hand): migrates the production database, builds, deploys, then runs `node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev`.
 2. **Staging** (`.github/workflows/staging.yml`): staging runs main plus every open pull request labeled `staging`, merged onto main in pull request order.
    It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
    It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev`.

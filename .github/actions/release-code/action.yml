@@ -1,0 +1,47 @@
+# Puts the last release's code in the working tree, under the data files that
+# are already checked out (DEPLOY.md "How a change ships").
+#
+# Production is the last release: the site is deployed from its tag, and the
+# scheduled jobs that work on the production database run its code too. A
+# merge to main reaches staging only; it reaches production, the site and the
+# jobs alike, when a release is cut (npm run release -- --push).
+#
+# Use it right after actions/checkout. What it leaves:
+#   - HEAD and the index stay where the checkout put them (main, for a
+#     scheduled run), so a later "git add data/..." commits data changes only
+#     and a pull request from this tree is a pull request against main;
+#   - data/ stays as checked out: the portfolio list always comes from main,
+#     where the nightly sync puts it;
+#   - .github/ stays as checked out: GitHub runs main's copy of the workflow
+#     file whatever this does, and its local actions must match it;
+#   - every other file is the release's.
+#
+# Before the first release tag exists it changes nothing and says so, so the
+# jobs keep running main's code until the baseline is cut.
+name: Release code
+description: Replace the checked-out code with the last release's, keeping data/ and .github/
+
+inputs:
+  code:
+    description: >-
+      "release" for the newest vX.Y.Z tag, "checkout" to keep what was checked
+      out (to try a branch by hand), or one exact tag such as v0.4.0
+    required: false
+    default: release
+
+outputs:
+  tag:
+    description: The release tag whose code is in the tree (empty when the checkout was kept)
+    value: ${{ steps.code.outputs.tag }}
+  sha:
+    description: The commit the code is from
+    value: ${{ steps.code.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - id: code
+      shell: bash
+      env:
+        CODE: ${{ inputs.code || 'release' }}
+      run: bash "$GITHUB_ACTION_PATH/release-code.sh"

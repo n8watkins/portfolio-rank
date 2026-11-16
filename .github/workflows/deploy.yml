@@ -1,16 +1,28 @@
-# Builds PortfolioRank with OpenNext and ships every push to main to
-# production (https://portfoliorank.dev), then smoke checks it
-# (scripts/smoke.mjs). Staging is its own workflow (staging.yml): main plus
-# the pull requests labeled "staging", so a merge here never replaces what is
-# being tried there (DEPLOY.md "How a change ships").
+# Builds PortfolioRank with OpenNext and ships it to production
+# (https://portfoliorank.dev), then smoke checks it (scripts/smoke.mjs).
+#
+# Production is the last release, never main (DEPLOY.md "How a change ships"):
+#   - a release tag (npm run release -- --push) deploys that release;
+#   - a change to data/ on main (the nightly list sync, a removal) rebuilds
+#     the last release's code over the new data, because pages import the
+#     list into the build. No unreleased code goes out with it.
+#   - "Run workflow" deploys the last release again, or one older tag to go
+#     back to it.
+# A merge to main that changes code reaches staging only (staging.yml).
 # The deploy skips with a notice until the CLOUDFLARE_API_TOKEN secret exists.
 name: Deploy
 
 on:
   push:
+    tags: ["v[0-9]*"]
     branches: [main]
-    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
+    paths: ["data/**"]
   workflow_dispatch:
+    inputs:
+      code:
+        description: "release (the last release again), or one vX.Y.Z tag to go back to"
+        required: false
+        default: "release"
 
 permissions:
   contents: read
@@ -22,8 +34,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy
-    # Production deploys only from main.
-    if: github.repository == 'n8watkins/portfolio-rank' && github.ref == 'refs/heads/main'
+    if: github.repository == 'n8watkins/portfolio-rank'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -37,7 +48,6 @@ jobs:
       # Browser errors go to Sentry (lib/error-reporting.ts). Only the deploy
       # builds set the DSN, so local, CI and test builds send nothing.
       NEXT_PUBLIC_SENTRY_DSN: https://524f3d71051d8ad12f3dafce965d0ed4@o4507767562371072.ingest.us.sentry.io/4512375298523136
-      NEXT_PUBLIC_SENTRY_RELEASE: ${{ github.sha }}
       # Readable browser stack traces in Sentry: with the SENTRY_AUTH_TOKEN
       # secret and the SENTRY_ORG / SENTRY_PROJECT repository variables set,
       # the build emits source maps, uploads them and deletes them before the
@@ -46,7 +56,30 @@ jobs:
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
+      # Unreleased code is never deployed from here; staging has it.
+      - name: Refuse to deploy unreleased code
+        if: inputs.code == 'checkout'
+        run: |
+          echo "::error::Production deploys a release. Cut one with npm run release -- --push (RELEASING.md)."
+          exit 1
+
+      # main for its data/; the code comes from the release in the next step.
       - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      # The pushed tag, the tag asked for, or the last release. Until the
+      # first release tag exists this keeps main's code, as before.
+      - id: code
+        uses: ./.github/actions/release-code
+        with:
+          code: ${{ github.ref_type == 'tag' && github.ref_name || inputs.code || 'release' }}
+
+      # Sentry groups errors by the code's commit, not the data's.
+      - name: Name the build
+        env:
+          CODE_SHA: ${{ steps.code.outputs.sha }}
+        run: echo "NEXT_PUBLIC_SENTRY_RELEASE=$CODE_SHA" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v7
         with:
@@ -54,6 +87,12 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # The data can be newer than the code reading it. This is the released
+      # code's own check of what it can read (scripts/check-data.mjs); when it
+      # fails nothing is deployed and the site stays as it was.
+      - name: Check the data fits this code
+        run: node scripts/check-data.mjs
 
       # Additive schema changes (lib/schema.mjs) land before the code that
       # needs them (and before the build prerenders from the database),

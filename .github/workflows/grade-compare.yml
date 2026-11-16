@@ -5,7 +5,12 @@ name: Weekly grade comparison
 # writes the pair count, tier agreement, per-axis differences and
 # is_portfolio disagreement to the run summary. Database reads only; no Gemini.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Code to run: release (the last release, as production runs), checkout (this branch) or one vX.Y.Z tag"
+        required: false
+        default: "release"
   schedule:
     - cron: "0 18 * * 0" # Sundays 18:00 UTC, after the health check
 
@@ -21,6 +26,10 @@ jobs:
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+      # Production runs the last release's code (.github/actions/release-code).
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code || 'release' }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
