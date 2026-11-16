@@ -77,7 +77,7 @@ Table `comparisons`, one row per judgement:
 | `created_at` | when (ISO, UTC) |
 | `rater_type` | `human` or `ai` |
 | `rater_id`, `model` | who: the account, or the AI judge and the model that answered |
-| `prompt_version`, `rubric_version` | which prompt (`compare-v1`, `batch-v1`, `legacy-pairwise` for ELO-era AI votes) |
+| `prompt_version`, `rubric_version` | which prompt (`compare-v1.1`, `batch-v1.1`, earlier `compare-v1`, `batch-v1`, `legacy-pairwise` for ELO-era AI votes) |
 | `method` | `one_on_one` or `batched` |
 | `shown` | the sites in the order shown (JSON); null for votes from before this table, which did not record it |
 | `ranking` | the result, best first (JSON groups; sites in one group tied); null for a skip |
