@@ -39,5 +39,35 @@ export function guardVerdict(grade, signals) {
   };
 }
 
-/** True when a stored grade was kept as a portfolio by the guard. */
-export const guardedForReview = (grade) => grade?.review?.kind === REVIEW_KIND;
+/**
+ * A "not a portfolio" answer held for the owner for another reason than the
+ * signals (owner, 2026-11-16; lib/reviews/door.mjs): the answer waits for the
+ * rule or the owner, the site stays listed meanwhile, and Undo of an automatic
+ * removal brings this grade back.
+ */
+export const HELD_KIND = "held_for_owner";
+const HELD_KINDS = new Set([REVIEW_KIND, HELD_KIND]);
+
+/** True when a stored grade keeps a site listed against the AI's "not a portfolio" (the guard, or a hold for the owner). */
+export const guardedForReview = (grade) => HELD_KINDS.has(grade?.review?.kind);
+
+/** What the AI itself answered to "is it a portfolio": its own answer even when a hold or the owner overrode it. */
+export const aiSaysPortfolio = (grade) => (typeof grade?.ai_is_portfolio === "boolean" ? grade.ai_is_portfolio : grade?.is_portfolio !== false);
+
+/**
+ * The grade with the AI's "not a portfolio" acted on: is_portfolio false and
+ * no hold. A junk rule (pipeline/junk-rules.mjs) uses it to take the guard's
+ * protection away from an unedited template.
+ */
+export function unguarded(grade) {
+  if (!grade || aiSaysPortfolio(grade)) return grade;
+  const { ai_is_portfolio: _a, review: _r, ...rest } = grade;
+  void _a;
+  void _r;
+  return { ...rest, is_portfolio: false };
+}
+
+/** The grade held for the owner: listed (is_portfolio true), the AI's "no" kept in ai_is_portfolio, `reason` in review. */
+export function held(grade, reason, extra = {}) {
+  return { ...unguarded(grade), is_portfolio: true, ai_is_portfolio: false, review: { kind: HELD_KIND, reason, ...extra } };
+}

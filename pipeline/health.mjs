@@ -307,7 +307,11 @@ export async function runHealthCheck({
       r.reason = `duplicate of ${dupes.get(r.url)}`;
     } else if (Number(rows.get(r.url)?.not_portfolio ?? 0) === 1) {
       r.ok = false;
-      r.reason = "AI grading says this is not a portfolio";
+      // A removal decided in the review queue (the owner's, or the door's rule) keeps its reason and stays
+      // down: it was decided, not seen failing, so the 13-day rule must not make it "suspect" (shown) again.
+      const was = rows.get(r.url);
+      r.decidedDown = String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith("AI grading says");
+      r.reason = r.decidedDown ? String(was.health_reason) : "AI grading says this is not a portfolio";
     }
   }
 
@@ -335,6 +339,7 @@ export async function runHealthCheck({
         }
       : null;
     const next = nextHealth(prev, r, now);
+    if (r.decidedDown) next.health = "down";
     if (next.health) summary[next.health]++;
     else summary.unchecked++;
     if (r.ok === null) summary.inconclusive.push({ url: r.url, reason: r.reason });
@@ -365,6 +370,9 @@ export async function runHealthCheck({
               final_url = COALESCE(excluded.final_url, portfolios.final_url),
               signals = COALESCE(excluded.signals, portfolios.signals),
               needs_review = CASE WHEN excluded.signals IS NULL THEN portfolios.needs_review
+                                  -- A "not a portfolio" held for the owner (lib/reviews/door.mjs) stays marked until he decides.
+                                  WHEN (CASE WHEN json_valid(portfolios.ai_rubric) THEN json_extract(portfolios.ai_rubric, '$.review.kind') END)
+                                       IN ('strong_signals', 'held_for_owner') THEN 1
                                   ELSE excluded.needs_review END
               ${retryNow ? ", retry_at = excluded.health_checked_at" : ""}`,
       args: [
