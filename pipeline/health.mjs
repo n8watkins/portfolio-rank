@@ -8,12 +8,15 @@
 //   live --fail--> suspect --fail--> ... --fail (FAILS_TO_DOWN checks in a row
 //   spanning at least DOWN_AFTER_DAYS)--> down
 //   any state --pass--> live (fail count reset)
-//   a bot wall (403/429 challenge) is inconclusive: the state stays as it was
+//   a bot wall (403/429 challenge) is inconclusive: the state stays as it was,
+//   unless the site never had a good capture and its last one was blocked
+//   (./capture-blocked.mjs): then it is a failure, like a blank page
 //
 // Down sites are added to data/excluded.json (pipeline/exclusions.mjs), so the
 // list drops them; until then the site and the background jobs skip them.
 
 import { httpGate, isParkingDomain, netloc, parkingPhrase, visibleText } from "./gate.mjs";
+import { isBlockedReason } from "./capture-blocked.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
 
@@ -270,7 +273,7 @@ export async function runHealthCheck({
   const rows = new Map(
     (
       await db.execute(
-        `SELECT url, status, health, health_reason, health_fails, health_first_fail_at,
+        `SELECT url, status, reason, health, health_reason, health_fails, health_first_fail_at,
                 CASE WHEN ${NOT_PORTFOLIO()} THEN 1 ELSE 0 END AS not_portfolio
          FROM portfolios WHERE delisted_at IS NULL`
       )
@@ -308,6 +311,21 @@ export async function runHealthCheck({
     } else if (Number(rows.get(r.url)?.not_portfolio ?? 0) === 1) {
       r.ok = false;
       r.reason = "AI grading says this is not a portfolio";
+    }
+  }
+  // A site that has never had a good capture and whose last one was blocked
+  // (a bot check, a gate, a picker or a nearly empty page that a plain fetch
+  // still sees as up: ./capture-blocked.mjs) fails too, with that reason, so
+  // a site that stays blocked ends up confirmed down and excluded as broken
+  // (exclusions.mjs kind "down"), never as "not a portfolio". A bot wall
+  // here counts as well: for a site we could never see, it is the evidence.
+  // A good capture since then (status 'live') clears it.
+  for (const r of results) {
+    if (r.ok === false) continue;
+    const row = rows.get(r.url);
+    if (row && String(row.status) === "error" && isBlockedReason(row.reason)) {
+      r.ok = false;
+      r.reason = String(row.reason);
     }
   }
 
@@ -395,7 +413,7 @@ export function healthSummary(s) {
     "",
     `Checked ${s.checked} listed site(s): ${s.live} live, ${s.suspect} suspect, ${s.down} down, ${s.recovered} recovered, ${s.inconclusive.length} inconclusive (bot checks), ${s.needsReview.length} need review.`,
     "",
-    `A site is confirmed down after ${FAILS_TO_DOWN} failed checks in a row spanning at least ${DOWN_AFTER_DAYS} days; a bot check leaves its state unchanged.`,
+    `A site is confirmed down after ${FAILS_TO_DOWN} failed checks in a row spanning at least ${DOWN_AFTER_DAYS} days; a bot check leaves its state unchanged, unless the site's capture has only ever been blocked.`,
     "",
   ];
   if (s.newlyDown.length) {
