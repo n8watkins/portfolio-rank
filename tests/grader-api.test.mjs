@@ -239,15 +239,33 @@ test("get it by email: a one-time link through the email gate makes this browser
   assert.equal((await call(visitor(), "GET", "/api/grade/link?t=forged.token", undefined, { redirect: "manual" })).headers.get("location").endsWith("/grade?link=bad"), true);
 });
 
-test("re-grades wait 7 days; only the owner is pointed at the earlier report", { skip: !enabled }, async () => {
+test("re-grades wait 7 days; everyone who asks is pointed at the earlier report, only the owner owns it", { skip: !enabled }, async () => {
   const mine = await grade(owner, "jane-e2e.dev");
   assert.equal(mine.status, 409);
   assert.equal(mine.body.error, "cooldown");
   assert.equal(mine.body.report, reportId);
   assert.ok(Date.parse(mine.body.nextAt) > Date.now() + 6 * 86400000);
-  const other = await grade(visitor(), "https://jane-e2e.dev/");
+  const stranger = visitor();
+  const other = await grade(stranger, "https://jane-e2e.dev/");
+  assert.equal(other.status, 409);
   assert.equal(other.body.error, "cooldown");
-  assert.equal(other.body.report, undefined, "a stranger can't discover the report by its address");
+  assert.equal(other.body.report, reportId, "anyone who submits a site gets its report");
+  // Handed the id, a stranger reads the report but can't delete it.
+  const seenBy = await call(stranger, "GET", `/api/grade/${reportId}`);
+  assert.equal(seenBy.status, 200);
+  assert.equal(seenBy.body.mine, false);
+  const del = await call(stranger, "DELETE", `/api/grade/${reportId}`);
+  assert.deepEqual([del.status, del.body.error], [403, "not_owner"]);
+});
+
+test("a grade in progress points everyone at its report too", { skip: !enabled }, async () => {
+  const first = await grade(visitor(), "busy-e2e.dev");
+  assert.equal(first.status, 202);
+  const second = await grade(visitor(), "https://busy-e2e.dev/");
+  assert.equal(second.status, 409);
+  assert.equal(second.body.error, "in_progress");
+  assert.equal(second.body.report, first.body.id);
+  await runCaptureJob({ grade: false });
 });
 
 test("pages that can't be graded answer 422 and count nothing", { skip: !enabled }, async () => {

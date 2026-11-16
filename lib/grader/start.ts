@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import type { Client } from "@libsql/client";
 import { quickFacts } from "@/lib/grader/quick";
 import { listedSite } from "@/lib/me";
-import { createJob, countWaiting, readJob, regradeCheck } from "@/lib/grader/jobs.mjs";
+import { createJob, countWaiting, existingReportBody, readJob, regradeCheck } from "@/lib/grader/jobs.mjs";
 import { graderCaps, reserveCaps } from "@/lib/grader/caps.mjs";
 import { startCapture } from "@/lib/grader/dispatch.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
 import { quotaDay } from "@/pipeline/quota-day.mjs";
 import { recordEvent } from "@/lib/games/badges.mjs";
 import { gamesEnabled } from "@/lib/games/server";
-import { PRIVATE, addOwnedJob, fail, graderFetcher, ownedJobs, requester, testSeam, workerEnv } from "@/lib/grader/server";
+import { PRIVATE, addOwnedJob, fail, graderFetcher, requester, testSeam, workerEnv } from "@/lib/grader/server";
 
 // Starting a grade once the request is checked (same origin, a valid
 // address, the attempt limits and Turnstile): the free checks, the re-grade
@@ -52,8 +52,9 @@ export async function startGrade(
 
   const again = await regradeCheck(client, { siteKey: target.siteKey, quickFingerprint: quick.fingerprint ?? null, now });
   if (!again.allowed) {
-    const mine = again.jobId && (await ownedJobs()).includes(again.jobId);
-    return fail(again.error!, 409, { message: again.reason, nextAt: again.nextAt, ...(mine ? { report: again.jobId } : {}) });
+    // Whoever asks is pointed at the existing report (shareable by its link): anyone who submits a site gets a grade and a report.
+    // What changes it (delete, email, re-grade) still belongs to the browser or account that owns it.
+    return fail(again.error!, 409, existingReportBody(again)!);
   }
 
   const caps = graderCaps(process.env.GRADER_CAPS);

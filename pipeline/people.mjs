@@ -87,10 +87,46 @@ export function gradeJobOf(req) {
   }
 }
 
+/** A claim ("running") older than this was left by a run that died; another run takes it over. */
+export const CLAIM_STALE_MS = 15 * 60 * 1000;
+
+/**
+ * Claims one request for this run: queued -> running in one conditional
+ * update, so the hourly drain and the capture runner never grade the same
+ * request twice. A claim a dead run left (older than CLAIM_STALE_MS) is
+ * taken over. Returns the request row, or null when someone else holds it,
+ * or it is gone or finished.
+ */
+async function claim(ctx, id) {
+  const now = ctx.now();
+  const res = await ctx.db.execute({
+    sql: `UPDATE people_requests SET status = 'running', updated_at = ?
+          WHERE id = ? AND (status = 'queued' OR (status = 'running' AND updated_at < ?)) RETURNING *`,
+    args: [iso(now), id, iso(now - CLAIM_STALE_MS)],
+  });
+  return res.rows[0] ?? null;
+}
+
 async function processOne(ctx, id) {
   const { db } = ctx;
-  const req = (await db.execute({ sql: "SELECT * FROM people_requests WHERE id = ? AND status = 'queued'", args: [id] })).rows[0];
+  const req = await claim(ctx, id);
   if (!req) return null;
+  try {
+    // Its grade job was deleted (the visitor's delete, or the retention sweep): nothing to grade, nothing to keep.
+    const jobId = gradeJobOf(req);
+    if (jobId && !(await db.execute({ sql: "SELECT 1 FROM grade_jobs WHERE id = ?", args: [jobId] })).rows.length) {
+      await db.execute({ sql: "DELETE FROM people_requests WHERE id = ?", args: [id] });
+      return null;
+    }
+    return await attempt(ctx, id, req);
+  } finally {
+    // Whatever happened, the claim ends: back in line unless it finished or failed.
+    await db.execute({ sql: "UPDATE people_requests SET status = 'queued' WHERE id = ? AND status = 'running'", args: [id] });
+  }
+}
+
+async function attempt(ctx, id, req) {
+  const { db } = ctx;
   const usage = await usageToday(db, { now: new Date(ctx.now()), plan: ctx.plan });
   if (peopleAllowance(usage, { plan: ctx.plan, quota: ctx.quota, now: new Date(ctx.now()) }) < 1) {
     await setStatus(db, id, { reason: "today's Gemini quota is used; it runs as soon as there is quota again" }, ctx.now());
@@ -157,7 +193,7 @@ async function notifyPerson(ctx, id) {
 export async function drainPeopleQueue(ctx, { limit = 10 } = {}) {
   await ensurePeopleSchema(ctx.db);
   await ensureGeminiLog(ctx.db);
-  const ids = (await ctx.db.execute({ sql: "SELECT id FROM people_requests WHERE status = 'queued' ORDER BY created_at, id LIMIT ?", args: [limit] })).rows.map((r) => Number(r.id));
+  const ids = (await ctx.db.execute({ sql: "SELECT id FROM people_requests WHERE status = 'queued' OR (status = 'running' AND updated_at < ?) ORDER BY created_at, id LIMIT ?", args: [new Date(ctx.now() - CLAIM_STALE_MS).toISOString(), limit] })).rows.map((r) => Number(r.id));
   const out = { done: 0, queued: 0, failed: 0 };
   for (const id of ids) {
     const status = await processRequest(ctx, id);
