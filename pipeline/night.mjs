@@ -634,7 +634,7 @@ export async function runBatch(ctx, state) {
     }
     const a = backgroundAllowance(stage.key, usage, { plan, quota: ctx.quota });
     if (a.allowed <= 0) {
-      if (a.limitedBy === "cap") await closeStage(ctx, s, `cap reached (${a.cap} requests today)`);
+      if (a.limitedBy === "cap") await closeStage(ctx, s, a.cap === 0 ? "off: its cap is 0 (GEMINI_BUDGET turns it on)" : `cap reached (${a.cap} requests today)`);
       else await stopRun(ctx, s, `only the reserve for people is left (${Math.max(0, a.remaining)} of the quota, reserve ${a.reserve}); the rest waits for tomorrow`, "stopped");
       return { state: s };
     }
@@ -818,11 +818,11 @@ export async function finishNight(ctx, state) {
     // New sites set aside for a missing screenshot: waiting for a newer capture, and back in the queue tonight.
     missingImage: s.missingImage ?? null,
   };
-  const siteLines = (title, list, line) => {
+  const siteLines = (title, list, line, note = null) => {
     const n = summary.sites.counts[list];
     if (!n) return [];
     const shown = summary.sites[list];
-    return [`### ${title} (${n})`, "", ...shown.map((x) => `- ${line(x)}`), ...(n > shown.length ? [`- and ${n - shown.length} more`] : []), ""];
+    return [`### ${title} (${n})`, "", ...(note ? [note, ""] : []), ...shown.map((x) => `- ${line(x)}`), ...(n > shown.length ? [`- and ${n - shown.length} more`] : []), ""];
   };
   const est = s.estimate ? `${s.estimate.requests} request(s), about ${s.estimate.minutes} min at ${ctx.rpm}/min` : "none (the AI stages never started)";
   const md = [
@@ -843,12 +843,11 @@ export async function finishNight(ctx, state) {
       ? [`Parked (failed on ${ctx.plan.parkAfterNights} nights in a row, not retried until cleared from night_item_failures):`, ...parked.map((p) => `- ${p.job}: ${p.item} (${p.reason})`)].join("\n")
       : "Nothing parked.",
     "",
-    summary.missingImage
-      ? `New sites with a missing screenshot: ${summary.missingImage.waiting} waiting for a newer capture, ${summary.missingImage.retried} captured again and back in the queue.`
+    summary.missingImage && summary.missingImage.waiting + summary.missingImage.retried > 0
+      ? `New sites with a missing screenshot: ${summary.missingImage.waiting} waiting for a newer capture, ${summary.missingImage.retried} captured again and back in the queue.\n`
       : "",
-    "",
     ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.tier ? ` (tier ${x.tier})` : ""}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
-    ...siteLines("Removed automatically (Undo on /admin/review)", "removed", (x) => `${x.url}${x.reviewId ? ` (review ${x.reviewId})` : ""}`),
+    ...siteLines("Removed automatically", "removed", (x) => `${x.url}${x.reviewId ? ` (review ${x.reviewId})` : ""}`, "Each one has Undo on /admin/review."),
     ...siteLines("Sent to review", "review", (x) => `${x.url}: ${x.why}`),
     ...siteLines("Failed", "failed", (x) => `${x.url}: ${x.reason}`),
     ...siteLines("Set aside", "setAside", (x) => `${x.url}: ${x.why}`),
