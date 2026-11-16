@@ -204,11 +204,11 @@ function Verdicts({ r }: { r: Review }) {
   );
 }
 
-function Signals({ s }: { s: Review["signals"] }) {
+function Signals({ s, small = false }: { s: Review["signals"]; small?: boolean }) {
   if (!s) return null;
   const failed = s.capture?.failed;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 ${small ? "text-xs" : "text-sm"}`}>
       {typeof s.score === "number" && (
         <p>
           <span className="font-semibold">
@@ -445,8 +445,8 @@ function AutoApplied({
                   </p>
                 )}
                 {removed && (
-                  <div className="mt-1 text-xs">
-                    <Signals s={r.signals} />
+                  <div className="mt-1">
+                    <Signals s={r.signals} small />
                   </div>
                 )}
                 {r.applied?.visibility?.length ? <p className="mt-0.5 text-xs text-mute text-pretty">{sentence(r.applied.visibility)}</p> : null}
