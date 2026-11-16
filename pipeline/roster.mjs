@@ -210,14 +210,21 @@ export function captureRetryAt(attempts, now = new Date()) {
  * whose retry date has come. Skips sites already captured, delisted or
  * confirmed down. A failed capture with no retry date waits for the health
  * check to pass it (which sets retry_at).
+ *
+ * A retry counts as due when it falls within RETRY_SLACK_MS of now: the
+ * nightly run starts at the same time each night, so a retry set while
+ * last night's run was in progress lands minutes after tonight's start and
+ * would otherwise wait a whole extra night.
  */
+const RETRY_SLACK_MS = 6 * 3600000;
+
 export async function dueForCapture(db, entries, now = new Date()) {
   const notDue = await db.execute({
     sql: `SELECT url FROM portfolios
           WHERE status = 'live'
              OR NOT (${ACTIVE()})
              OR (status != 'pending' AND (retry_at IS NULL OR retry_at > ?))`,
-    args: [now.toISOString()],
+    args: [new Date(now.getTime() + RETRY_SLACK_MS).toISOString()],
   });
   const skip = new Set(notDue.rows.map((r) => String(r.url)));
   return entries.filter((p) => !skip.has(p.url));
