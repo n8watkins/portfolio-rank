@@ -3,10 +3,14 @@
 // (lib/newsletter/send.mjs), scheduled or a draft by KIT_BROADCAST_MODE. A
 // draft sends the owner a one-line note through the owner-alert email. It
 // returns at once, before any database read, while NEWSLETTER_ENABLED is not
-// "true" or there is no KIT_API_KEY. It calls no AI, so staging runs it too;
-// staging only ever makes drafts, marked [staging].
+// "true" or there is no KIT_API_KEY. It calls no AI. Staging does not run it on
+// a schedule (worker/crons.ts, pull request #233); if it is ever run there it
+// only makes drafts, marked [staging]. An issue that stopped
+// (Kit refused or never answered) is reported to the owner once a day
+// (lib/newsletter/alerts.mjs); it is never retried.
 import { db as database } from "../lib/db";
 import { kitClient } from "../lib/newsletter/kit.mjs";
+import { reconcileStoppedIssues } from "../lib/newsletter/alerts.mjs";
 import { broadcastMode, newsletterTick as tick } from "../lib/newsletter/send.mjs";
 import { emailSender } from "../pipeline/alerts.mjs";
 import { testStandInsAllowed } from "../lib/test-mode.mjs";
@@ -46,6 +50,10 @@ export async function newsletterTick(env: NewsletterEnv, scheduledTime: number) 
       },
       log,
     });
+    // An issue that stopped (Kit refused or never answered) is never retried, so the owner is told, once a day.
+    await reconcileStoppedIssues(db, { now: scheduledTime, email: sender, to: env.OWNER_EMAIL ?? null, log: (line: string) => log("newsletter.alert", { line }) }).catch((e) =>
+      log("newsletter.alert.failed", { error: String((e as Error)?.message ?? e).slice(0, 200) })
+    );
     if (r.queued || r.scheduled || r.drafts || r.stopped || r.waiting) log("newsletter.tick", r);
     return r;
   } catch (e) {

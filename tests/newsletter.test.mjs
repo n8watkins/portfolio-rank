@@ -320,3 +320,32 @@ test("the email carries the post's AI line, in the live email and the admin prev
   const mail = postEmail({ title: "T", summary: null, url: `${BASE}/blog/t`, site: BASE, aiLine: "Written with AI <b>" });
   assert.match(mail.html, /Written with AI &lt;b&gt;/, "escaped");
 });
+
+test("a stopped issue tells the owner once a day, naming the post and the reason, and is never retried", async () => {
+  const { reconcileStoppedIssues } = await import("../lib/newsletter/alerts.mjs");
+  const db = await freshDb();
+  await addPost(db, { id: "a" });
+  const kit = mockKit({ answer: (c) => (c.path === "/broadcasts" ? [401, { errors: ["Invalid key"] }] : null) });
+  assert.equal((await newsletterTick({ db, kit: kit.kit, mode: "send", base: BASE, now: T0 + HOUR })).stopped, 1);
+  const mails = [];
+  const email = { send: async (m) => void mails.push(m) };
+  const run = (now) => reconcileStoppedIssues(db, { now, email, to: "owner@example.com" });
+  const r1 = await run(T0 + HOUR);
+  assert.deepEqual(r1.sent.length, 1);
+  assert.match(mails[0].subject, /Title a/);
+  assert.match(mails[0].text, /401/);
+  assert.match(mails[0].text, /Check Kit/);
+  await run(T0 + 2 * HOUR); // same Pacific day: no second email
+  assert.equal(mails.length, 1);
+  await run(T0 + 26 * HOUR); // next day: reminded again
+  assert.equal(mails.length, 2);
+  // After a week it clears; and an unpublished post is not an alert.
+  assert.deepEqual((await run(T0 + 9 * 24 * HOUR)).cleared.length, 1);
+  const later = T0 + 10 * 24 * HOUR;
+  await addPost(db, { id: "b", publishAt: later - HOUR });
+  await newsletterTick({ db, kit: null, base: BASE, now: later });
+  await db.execute("UPDATE posts SET status = 'unpublished' WHERE id = 'b'");
+  assert.equal((await newsletterTick({ db, kit: kit.kit, mode: "send", base: BASE, now: later })).stopped, 1);
+  assert.equal((await run(later)).active.length, 0);
+  assert.equal(kit.calls.filter((c) => c.path === "/broadcasts").length, 1, "no retry");
+});
