@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
-import { ruleName } from "@/lib/reviews/rule-names.mjs";
+import { RULE_NAMES, ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } from "@/components/admin/review-labels";
@@ -494,7 +494,8 @@ function UndoButton({ id, domain, busy, onUndo }: { id: number; domain: string; 
 function decider(by: string | null) {
   if (!by) return "";
   if (by.startsWith("admin:")) return by.slice(6);
-  if (by.startsWith("rule:")) return `the rule "${ruleName(by)}"`;
+  // The review rules by their plain names ("Gemini said not a portfolio"); other rules as before ("the duplicate rule").
+  if (by.startsWith("rule:")) return RULE_NAMES[by] ? `the rule "${RULE_NAMES[by]}"` : `the ${ruleName(by)} rule`;
   if (by.startsWith("owner:")) return "the owner's verdict list";
   return by;
 }
