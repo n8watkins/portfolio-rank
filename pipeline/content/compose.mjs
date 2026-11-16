@@ -248,7 +248,7 @@ export function assemble(sheet, plan, blocks) {
     const lines = String(blocks[`SECTION ${s.n}`] ?? "").split("\n");
     const headIdx = lines.findIndex((l) => l.trim());
     return {
-      subhead: clean(lines[headIdx] ?? "").replace(/[.:]$/, "") || `What the data shows, part ${s.n}`,
+      subhead: clean(lines[headIdx] ?? "").replace(/[.:]$/, "") || `What the data shows, part ${PART_WORDS[s.n - 1] ?? "more"}`,
       text: fix(lines.slice(headIdx + 1).join("\n"), `section ${s.n}`),
     };
   });
@@ -309,6 +309,9 @@ export function assemble(sheet, plan, blocks) {
   return { draft, notes };
 }
 
+/** The default subhead's number, in words: a digit in a subhead fails the stray-number check. */
+const PART_WORDS = ["one", "two", "three", "four", "five", "six"];
+
 /** The fix request: only the blocks with problems, rewritten. */
 export function buildFixRequest(sheet, plan, blocks, problems, names) {
   const text = [
@@ -342,7 +345,8 @@ export function blocksToFix(blocks, problems, plan) {
     if (/hook/i.test(p)) names.add("OPENER");
     if (/subhead/i.test(p)) sections.forEach((n) => names.add(n));
   }
-  return [...names].filter((n) => n in blocks);
+  // A section the writer left out has no block yet: it may be asked for too.
+  return [...names].filter((n) => n in blocks || sections.includes(n));
 }
 
 /**

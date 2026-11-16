@@ -20,7 +20,6 @@ export const TOPICS = [
 export const KIND_TOPIC = {
   "top-grades": TOPICS[1],
   "vote-patterns": TOPICS[0],
-  "regrade-changes": TOPICS[2],
   "leaderboard-movement": TOPICS[4],
   "page-craft": TOPICS[1],
 };

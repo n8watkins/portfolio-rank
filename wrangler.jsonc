@@ -138,6 +138,11 @@
     // The most drafts a week the owner may choose on /admin/blog
     // (lib/content/automation.mjs; at most 4). The page can only go lower.
     "CONTENT_DRAFTS_PER_WEEK": "2",
+    // Gemini poll generation (pipeline/polls.mjs pollGenerationOn) has its own
+    // switch, off until the owner turns it on: raising the content stage's
+    // Gemini cap does not start it. The weekly poll scheduling by code
+    // (schedulePolls) is not behind it.
+    "POLL_GENERATION_ENABLED": "false",
     // Never pay for Workers AI (lib/content/neurons.mjs, docs/COSTS.md "Workers
     // AI"): at most 40 AI images a UTC day, and behind it at most 2,500
     // neurons (40 Schnell images are about 2,320) of PortfolioRank's 5,000
@@ -287,6 +292,7 @@
         // "publish". Off, staging's crons write no post whatever key it has.
         "CONTENT_MODE": "off",
         "CONTENT_DRAFTS_PER_WEEK": "2",
+        "POLL_GENERATION_ENABLED": "false",
         // Staging never spends Workers AI: production's counter can't see
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",

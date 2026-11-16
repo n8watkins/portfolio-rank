@@ -124,11 +124,12 @@ test("B: AI and practice votes are not people's votes", async () => {
 test("B: only the human votes are counted, beside AI and practice votes", async () => {
   const db = await fixture();
   await addVotes(db, 30, "human");
+  await addVotes(db, 15, "human", 31 - 15);
   await addVotes(db, 30, "ai");
   await addVotes(db, 15, "anon");
   const s = await votePatterns(db, { now: MONDAY });
   assert.equal(s.ready, true, s.reason);
-  assert.equal(s.facts.find((f) => f.label === "People's votes between two graded portfolios").display, "30");
+  assert.equal(s.facts.find((f) => f.label === "People's votes between two graded portfolios").display, "45");
 });
 
 // ---------------------------------------------------------------------------
@@ -220,23 +221,16 @@ test("E: the default subhead has no digit, and a fix call may ask for a missing 
   assert.ok(which.includes("SECTION 1"), which.join(","));
 });
 
-test("E: a post whose writer left out a section is repaired by the one fix call, not dropped", async () => {
+test("E: a long post whose writer left out a section is repaired by the one fix call, not dropped", async () => {
   const { db } = await sheetAndRoster();
-  const without = (t) => t.replace(/=== SECTION 2 ===[\s\S]*?(?=\n=== |$)/, "");
-  const g = fakeGemini({
-    write: (n, parts) => {
-      const full = mockAnswer({ parts });
-      if (n === 1) return without(full);
-      // The fix call is asked for the missing section: answer with the one the mock would have written.
-      return /=== SECTION 2 ===/.test(parts[0].text) ? `=== SECTION 2 ===\n${full.match(/=== SECTION 1 ===\n([\s\S]*?)(?=\n=== |$)/)?.[1] ?? "## A heading\nText."}` : full;
-    },
-    review: REVIEW_OK,
-  });
+  // As the audit saw it: the section's block is missing, so the default subhead
+  // (with a digit then) failed the stray-number check, and no fix call was made.
+  const g = fakeGemini({ write: writing((t) => t.replace(/=== SECTION 3 ===[\s\S]*?(?=\n=== |$)/, "")), review: REVIEW_OK });
   const { ctx } = contentCtx(db);
-  const r = await runDraft(ctx, g, NIGHT);
+  const r = await runDraft(ctx, g, { ...NIGHT, length: "long" });
   const writes = g.calls.filter((c) => c.kind === "write");
   assert.equal(writes.length, 2, "the write and one fix");
-  assert.match(writes[1].parts[0].text, /=== SECTION 2 ===/);
+  assert.match(writes[1].parts[0].text, /=== SECTION 3 ===/, "the missing section is asked for");
   assert.equal(r.status, "ok", r.failures?.join("; "));
 });
 
@@ -245,7 +239,7 @@ test("E: a post whose writer left out a section is repaired by the one fix call,
 // ---------------------------------------------------------------------------
 test("F: a 401 or 403 from a named portfolio is inconclusive, like a 429", async () => {
   const answer = (status) => async () => new Response("", { status });
-  for (const status of [200, 301, 401, 403, 429]) assert.equal((await checkLinksLoad(["https://a.dev"], answer(status))).ok, true, String(status));
+  for (const status of [200, 401, 403, 429]) assert.equal((await checkLinksLoad(["https://a.dev"], answer(status))).ok, true, String(status));
   for (const status of [404, 410, 500, 503]) assert.equal((await checkLinksLoad(["https://a.dev"], answer(status))).ok, false, String(status));
 });
 

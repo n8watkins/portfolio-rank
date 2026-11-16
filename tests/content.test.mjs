@@ -18,7 +18,7 @@ import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
-import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
+import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
 import { CTA, LENGTHS, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
 import { WRITE_SYSTEM, assemble, buildWriteRequests, parseBlocks, reflow, cutBadSentences } from "../pipeline/content/compose.mjs";
@@ -44,7 +44,7 @@ import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
 import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
-import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, fixture, hex, rubric, sheetAndRoster } from "./helpers/content-fixture.mjs";
+import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, fixture, hex, sheetAndRoster } from "./helpers/content-fixture.mjs";
 import { MANUAL_REQUESTS, runManualJob } from "../pipeline/content/manual.mjs";
 import { review } from "../lib/content/blog.mjs";
 
@@ -106,7 +106,7 @@ test("fact builders: leaderboard movement names climbers and leaders, never a fa
   for (const [week, list] of [["2026-11-02", prev], ["2026-11-09", now]]) {
     for (let i = 0; i < list.length; i++) await db.execute({ sql: "INSERT INTO rank_history (view, week, url, rank, mu, sigma) VALUES ('merged', ?, ?, ?, 25, 3)", args: [week, list[i], i + 1] });
   }
-  const s = await leaderboardMovement(db, { now: MONDAY });
+  const s = await leaderboardMovement(db, { now: MONDAY, rankingV2: true });
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.ok(s.names.some((n) => n.url === "https://top-24.dev"), "the biggest climber is named");
@@ -119,11 +119,11 @@ test("fact builders: leaderboard movement names climbers and leaders, never a fa
 test("fact builders: people's votes, who wins when grades differ and which traits win; favourites named, never a loser", async () => {
   const db = await fixture();
   // 30 top sites beat 30 low sites, once each, plus a few upsets; removed-star wins a lot but is never named.
-  for (let i = 1; i <= 30; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES (?, ?, ?)", args: [`https://top-${i}.dev`, `https://low-${i}.dev`, `r${i}`] });
-  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES (?, ?, ?)", args: [`https://low-${i}.dev`, `https://top-${i}.dev`, `u${i}`] });
-  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES ('https://removed-star.dev', ?, ?)", args: [`https://top-${i + 10}.dev`, `x${i}`] });
+  for (let i = 1; i <= 30; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES (?, ?, 'human', ?)", args: [`https://top-${i}.dev`, `https://low-${i}.dev`, `r${i}`] });
+  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES (?, ?, 'human', ?)", args: [`https://low-${i}.dev`, `https://top-${i}.dev`, `u${i}`] });
+  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES ('https://removed-star.dev', ?, 'human', ?)", args: [`https://top-${i + 10}.dev`, `x${i}`] });
   // top-1 wins five more: a named favourite.
-  for (let i = 1; i <= 5; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES ('https://top-1.dev', ?, ?)", args: [`https://top-${i + 20}.dev`, `y${i}`] });
+  for (let i = 1; i <= 5; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES ('https://top-1.dev', ?, 'human', ?)", args: [`https://top-${i + 20}.dev`, `y${i}`] });
   const s = await votePatterns(db, { now: MONDAY });
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
@@ -136,29 +136,6 @@ test("fact builders: people's votes, who wins when grades differ and which trait
   // Too few votes: not ready.
   const empty = await fixture();
   assert.equal((await votePatterns(empty, { now: MONDAY })).ready, false);
-});
-
-test("fact builders: before and after, same-judge re-grades only; improvers named, decliners only in aggregate", async () => {
-  const db = await fixture();
-  // 22 top sites were graded B by the same model before their page changed; low-1 dropped from A.
-  for (let i = 1; i <= 22; i++) {
-    await db.execute({
-      sql: "INSERT INTO rubric_history (url, model, tier, rubric, judged_at, replaced_at, replaced_by_model) VALUES (?, ?, 'B', ?, '2026-06-01', '2026-11-01', ?)",
-      args: [`https://top-${i}.dev`, PRIMARY_MODEL, JSON.stringify(rubric("B", 3)), PRIMARY_MODEL],
-    });
-  }
-  await db.execute({ sql: "INSERT INTO rubric_history (url, model, tier, rubric, judged_at, replaced_at, replaced_by_model) VALUES ('https://low-1.dev', ?, 'A', ?, '2026-06-01', '2026-11-01', ?)", args: [PRIMARY_MODEL, JSON.stringify(rubric("A", 4)), PRIMARY_MODEL] });
-  // A model switch is not a page change: never counted.
-  await db.execute({ sql: "INSERT INTO rubric_history (url, model, tier, rubric, judged_at, replaced_at, replaced_by_model) VALUES ('https://top-25.dev', ?, 'D', ?, '2026-06-01', '2026-11-01', ?)", args: [BACKUP_MODEL, JSON.stringify(rubric("D", 1, { model: BACKUP_MODEL })), PRIMARY_MODEL] });
-  const s = await regradeChanges(db, { now: MONDAY });
-  assert.equal(s.ready, true, s.reason);
-  assertNoBadNames(s);
-  assert.equal(s.facts.find((f) => f.label === "Portfolios re-graded after their page changed").display, "23");
-  assert.equal(s.facts.find((f) => f.label === "Share that moved up at least one tier").display, "96%");
-  assert.equal(s.facts.find((f) => f.label === "Share that moved down at least one tier").about, null);
-  assert.ok(s.names.length > 0 && s.names.every((n) => /moved up from B to (S|A)/.test(n.reason)));
-  assert.ok(!s.names.some((n) => n.url.includes("low-") || n.url === "https://top-25.dev"));
-  assert.equal(s.charts.length, 1);
 });
 
 test("the naming rule: a sheet with a named negative fact, or an unlisted name, is refused", () => {
@@ -546,7 +523,7 @@ test("topic filter: the deny list drops politics, crime, disasters, lawsuits and
 });
 
 test("owner direction: no dev-meta story kinds; every kind is about portfolios and has a topic", () => {
-  assert.deepEqual(Object.keys(BUILDERS).sort(), ["leaderboard-movement", "page-craft", "regrade-changes", "top-grades", "vote-patterns"]);
+  assert.deepEqual(Object.keys(BUILDERS).sort(), ["leaderboard-movement", "page-craft", "top-grades", "vote-patterns"]);
   for (const k of Object.keys(BUILDERS)) {
     assert.ok(KIND_LABELS[k], k);
     assert.ok(TOPICS.includes(KIND_TOPIC[k]), k);
@@ -1315,7 +1292,7 @@ test("write a draft now: people's reserve is never touched; no key, no data and 
   await createJob(db2, { id: hex(401), by: "admin:o", now: MONDAY });
   assert.match((await runManualJob(manualCtx(db2, { answers: {}, apiKey: "" }), hex(401))).message, /GEMINI_API_KEY/);
   // A kind with no data.
-  await createJob(db2, { id: hex(402), kind: "leaderboard-movement", by: "admin:o", now: MONDAY });
+  await createJob(db2, { id: hex(402), kind: "vote-patterns", by: "admin:o", now: MONDAY });
   const nodata = await runManualJob(manualCtx(db2, { answers: {} }), hex(402));
   assert.equal(nodata.status, "skipped");
   assert.match(nodata.message, /no data yet/);

@@ -44,9 +44,9 @@ export const newJobId = () => crypto.randomBytes(8).toString("hex");
  * else the ready kind with the oldest latest post (so drafts spread over the
  * kinds). Returns { kind, sheet } or { error } when no kind is ready.
  */
-export async function chooseKind(db, { kind = null, now }) {
+export async function chooseKind(db, { kind = null, now, rankingV2 = false }) {
   if (kind && BUILDERS[kind]) {
-    const sheet = await BUILDERS[kind](db, { now });
+    const sheet = await BUILDERS[kind](db, { now, rankingV2 });
     if (sheet.ready) return { kind, sheet };
     return { error: `"${KIND_LABELS[kind] ?? kind}" has no data yet: ${sheet.reason}` };
   }
@@ -54,7 +54,7 @@ export async function chooseKind(db, { kind = null, now }) {
   const ready = [];
   const waiting = [];
   for (const [k, build] of Object.entries(BUILDERS)) {
-    const sheet = await build(db, { now });
+    const sheet = await build(db, { now, rankingV2 });
     if (sheet.ready) ready.push({ kind: k, sheet, at: last.get(k) ?? "" });
     else waiting.push(`${KIND_LABELS[k] ?? k}: ${sheet.reason}`);
   }
@@ -108,7 +108,7 @@ export async function runManualJob(ctx, jobId, { attempt = 1, tries = DRAFT_TRIE
       source = r.rows[0] ?? null;
       if (!source) return done("failed", "The draft to rewrite no longer exists.");
     }
-    const picked = await chooseKind(db, { kind: source ? String(source.kind) : job.kind, now: now() });
+    const picked = await chooseKind(db, { kind: source ? String(source.kind) : job.kind, now: now(), rankingV2: Boolean(ctx.flags?.rankingV2) });
     if (picked.error) return done("skipped", picked.error);
     const budget = await manualBudget(db, { env: ctx.env ?? {}, now: new Date(now()) });
     // A later try (after Google was busy) gets only what the earlier tries left of the draft's MANUAL_REQUESTS.

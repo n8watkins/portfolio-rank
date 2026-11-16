@@ -161,7 +161,7 @@ function budgeted(gemini, limit) {
 export async function runPick(ctx, gemini, { night, budget }) {
   const now = ctx.now();
   const mode = ctx.flags.contentMode;
-  const { ideas, waiting } = await findIdeas(ctx.db, { now });
+  const { ideas, waiting } = await findIdeas(ctx.db, { now, rankingV2: Boolean(ctx.flags?.rankingV2) });
   const lastKinds = (await runsOfWeek(ctx.db, contentWeek(now - 7 * 86400000), "draft")).filter((r) => r.status === "ok").map((r) => r.kind);
   let chosen;
   let requests = 0;
@@ -225,7 +225,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
     return { status: "deferred", requests: 0 };
   }
   await phase("facts");
-  const built = await BUILDERS[kind](db, { now });
+  const built = await BUILDERS[kind](db, { now, rankingV2: Boolean(ctx.flags?.rankingV2) });
   // Published posts the draft may link to (interlinks, owner 2026-11-12), newest first.
   const relatedPosts = built.ready ? (await listPublished(db, { now, limit: 12 }).catch(() => [])).map((p) => ({ title: p.title, url: `${SITE_URL}/blog/${p.slug}`, tags: p.tags })) : [];
   const sheet = built.ready ? { ...built, ...(focus ? { focus } : {}), ...(length ? { length } : {}), ...(relatedPosts.length ? { relatedPosts } : {}), ...extras } : built;
