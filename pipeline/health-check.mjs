@@ -17,7 +17,7 @@
 import fs from "fs";
 import path from "path";
 import { healthSummary, runHealthCheck } from "./health.mjs";
-import { planExclusions, readJson } from "./exclusions.mjs";
+import { DEAD_RECHECK_DAYS, planDeadRecheck, planExclusions, readJson } from "./exclusions.mjs";
 import { loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { createRenderer } from "./render.mjs";
 
@@ -59,14 +59,20 @@ try {
   if (!result.aborted && args.includes("--exclusions")) {
     const excludedPath = path.join(ROOT, "data", "excluded.json");
     const plan = await planExclusions({ db, excluded: readJson(excludedPath, []), feed });
-    if (plan.added.length && !DRY) {
-      fs.writeFileSync(excludedPath, `${JSON.stringify(plan.excluded, null, 2)}\n`);
-      fs.writeFileSync(path.join(ROOT, "data", "feed.json"), `${JSON.stringify(plan.feed, null, 2)}\n`);
+    // Dead entries due for their check every few months: back on the list if they answer now.
+    const dead = await planDeadRecheck({ excluded: plan.excluded });
+    const changed = plan.added.length || dead.back.length || dead.still.length;
+    if (changed && !DRY) {
+      fs.writeFileSync(excludedPath, `${JSON.stringify(dead.excluded, null, 2)}\n`);
+      if (plan.added.length) fs.writeFileSync(path.join(ROOT, "data", "feed.json"), `${JSON.stringify(plan.feed, null, 2)}\n`);
     }
     report(
-      plan.added.length
+      (plan.added.length
         ? `### Excluded\n\n${plan.added.length} confirmed-down site(s) ${DRY ? "would be" : "were"} added to data/excluded.json.\n`
-        : "### Excluded\n\nNo new exclusions.\n"
+        : "### Excluded\n\nNo new exclusions.\n") +
+        (dead.back.length || dead.still.length
+          ? `\n${dead.back.length} dead site(s) answered again and ${DRY ? "would leave" : "left"} the list${dead.back.length ? ` (${dead.back.join(", ")})` : ""}; ${dead.still.length} still dead, checked again in ${DEAD_RECHECK_DAYS} days.\n`
+          : "")
     );
   }
 } finally {
