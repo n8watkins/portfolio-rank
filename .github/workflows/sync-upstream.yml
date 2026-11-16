@@ -234,10 +234,18 @@ jobs:
       # hero.jpg or capture date. Does nothing until the images bucket
       # exists (R2_IMAGES_BUCKET). About 20 seconds a site at concurrency 4,
       # so 100 sites take about 33 minutes; no new site starts after 40.
+      # GitHub runs main's copy of this file while the job runs the last
+      # release's code (DEPLOY.md "How a change ships"), so the step skips
+      # until a release has the script.
       - name: Backfill tall page images
         env:
           FULLPAGE_BACKFILL: ${{ inputs.fullpage_backfill || '100' }}
-        run: node pipeline/fullpage-backfill.mjs --concurrency 4 --limit "$FULLPAGE_BACKFILL" --minutes 40
+        run: |
+          if [ ! -f pipeline/fullpage-backfill.mjs ]; then
+            echo "::notice::Skipped: the code being run has no pipeline/fullpage-backfill.mjs yet."
+            exit 0
+          fi
+          node pipeline/fullpage-backfill.mjs --concurrency 4 --limit "$FULLPAGE_BACKFILL" --minutes 40
       # Page text and facts for rows waiting for a grade that have none
       # (captured before rubric v2): the end-of-day grading on Cloudflare
       # reads only stored evidence. Then the project link checks that are
