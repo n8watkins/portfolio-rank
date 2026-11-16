@@ -10,7 +10,11 @@ name: Free limits snapshot
 #   TURSO_ORG             the Turso organization slug (a repository variable)
 #   CLOUDFLARE_API_TOKEN  needs Account Analytics Read and R2 read for these numbers
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
   schedule:
     - cron: "30 13 * * *" # daily 13:30 UTC, early morning Pacific
 
@@ -32,6 +36,10 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v7
+      # Production runs the last release's code (.github/actions/release-code).
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 20

@@ -1,0 +1,52 @@
+# Puts production's code in the working tree, under the data files that are
+# already checked out (DEPLOY.md "How a change ships").
+#
+# Production is the release that was last deployed and smoke checked. The
+# Deploy workflow records it by moving the `production` branch to that
+# release's commit, and nothing else writes that branch. The scheduled jobs
+# that work on the production database run that code too, so a merge to main
+# reaches staging only, and a new release reaches the jobs when its deploy
+# (with its database changes) has succeeded, not when its tag appears. Going
+# back to an older release moves the branch back, for the site and the jobs
+# alike.
+#
+# Use it right after actions/checkout. What it leaves:
+#   - HEAD and the index stay where the checkout put them (main, for a
+#     scheduled run), so a later "git add data/..." commits data changes only
+#     and a pull request from this tree is a pull request against main;
+#   - data/ stays as checked out: the portfolio list always comes from main,
+#     where the nightly sync puts it;
+#   - .github/ stays as checked out: GitHub runs main's copy of the workflow
+#     file whatever this does, and its local actions must match it;
+#   - every other file is the release's.
+#
+# Before the first release is deployed there is no `production` branch: it
+# changes nothing and says so, so the jobs keep running main's code. A failure
+# to reach GitHub is an error, never mistaken for that.
+name: Release code
+description: Replace the checked-out code with production's release, keeping data/ and .github/
+
+inputs:
+  code:
+    description: >-
+      Empty or "release" for what production runs, "checkout" to keep what was
+      checked out (to try a branch by hand), or one exact tag such as v0.4.0
+    required: false
+
+outputs:
+  tag:
+    description: The release tag whose code is in the tree (empty when the checkout was kept)
+    value: ${{ steps.code.outputs.tag }}
+  sha:
+    description: The commit the code is from
+    value: ${{ steps.code.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - id: code
+      shell: bash
+      env:
+        # The one place the default lives is the script.
+        CODE: ${{ inputs.code }}
+      run: bash "$GITHUB_ACTION_PATH/release-code.sh"

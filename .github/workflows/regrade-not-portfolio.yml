@@ -11,6 +11,9 @@ name: Re-check not-a-portfolio grades
 on:
   workflow_dispatch:
     inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
       mode:
         description: "run (capture and grade), dry-run (list and budget), or report"
         required: true
@@ -40,6 +43,10 @@ jobs:
       SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }}
     steps:
       - uses: actions/checkout@v7
+      # Production runs the last release's code (.github/actions/release-code).
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24

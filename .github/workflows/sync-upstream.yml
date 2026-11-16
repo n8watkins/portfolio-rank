@@ -25,6 +25,9 @@ name: Sync upstream + ingest
 on:
   workflow_dispatch:
     inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
       refresh:
         description: "Most sites to re-capture: changed or asked for first, then captures 90 days old (finds redesigns)"
         required: false
@@ -126,6 +129,12 @@ jobs:
         with:
           # The sync step pushes with the bot token, not GITHUB_TOKEN.
           persist-credentials: false
+
+      # Production runs the last release's code (.github/actions/release-code).
+      # HEAD stays on main, so the data pull request below holds data only.
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
 
       - uses: actions/setup-node@v7
         with:
