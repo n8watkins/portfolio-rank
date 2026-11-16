@@ -216,10 +216,28 @@ test("a grade: free checks at once, one capture dispatched with no inputs, then 
   assert.ok(log.length >= 1 && log.every((x) => x.model === PRIMARY_MODEL), "counted as people's 3.5 requests");
 });
 
-test("get it by email: a one-time link through the email gate makes this browser the owner", { skip: !enabled }, async () => {
+test("holding a report's id is not a way to own it: a non-owner can't add an address, trigger a send or take the report over", { skip: !enabled }, async () => {
   const stranger = visitor();
-  assert.equal((await call(stranger, "POST", `/api/grade/${reportId}/email`, { email: "not-an-address" })).body.error, "bad_email");
-  const r = await call(stranger, "POST", `/api/grade/${reportId}/email`, { email: "jane@example.com" });
+  const sends = Number((await db.execute("SELECT COUNT(*) AS n FROM email_outbox")).rows[0].n);
+  for (const email of ["not-an-address", "thief@example.com"]) {
+    const r = await call(stranger, "POST", `/api/grade/${reportId}/email`, { email });
+    assert.deepEqual([r.status, r.body.error], [403, "not_owner"], "the same refusal the delete route gives");
+  }
+  assert.equal((await db.execute({ sql: "SELECT COUNT(*) AS n FROM grade_emails WHERE job_id = ?", args: [reportId] })).rows[0].n, 0, "no address was stored");
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM email_outbox")).rows[0].n), sends, "nothing was sent");
+  assert.equal((await call(stranger, "GET", `/api/grade/${reportId}`)).body.mine, false);
+  // Not through the link route with a made-up or another report's token either.
+  const forged = await call(stranger, "GET", "/api/grade/link?t=forged.token", undefined, { redirect: "manual" });
+  assert.ok(forged.headers.get("location").endsWith("/grade?link=bad"));
+  assert.equal((await call(stranger, "GET", `/api/grade/${reportId}`)).body.mine, false);
+  assert.equal((await call(stranger, "DELETE", `/api/grade/${reportId}`)).body.error, "not_owner");
+  // The report itself stays readable by link.
+  assert.equal((await call(stranger, "GET", `/api/grade/${reportId}`)).status, 200);
+});
+
+test("get it by email: the owner asks, and the one-time link opens the report as its owner in another browser", { skip: !enabled }, async () => {
+  assert.equal((await call(owner, "POST", `/api/grade/${reportId}/email`, { email: "not-an-address" })).body.error, "bad_email");
+  const r = await call(owner, "POST", `/api/grade/${reportId}/email`, { email: "jane@example.com" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body, { requested: true, sent: true });
   const mail = (await db.execute("SELECT * FROM email_outbox WHERE kind = 'grade-report' ORDER BY id DESC LIMIT 1")).rows[0];
@@ -335,6 +353,15 @@ test("own key: checked for free, never stored or logged, used once to finish the
   await runCaptureJob();
   assert.equal((await call(v, "GET", `/api/grade/${id}`)).body.status, "awaiting_key");
   const logged = Number((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests")).rows[0].n);
+  // Someone who only has the id can't finish it on their key or hand it to the free tier.
+  const outsider = visitor();
+  const keysSeen = seen.geminiKeys.length;
+  for (const body of [{ geminiKey: GOOD_KEY }, { freeTier: true }]) {
+    const no = await call(outsider, "POST", `/api/grade/${id}/finish`, body);
+    assert.deepEqual([no.status, no.body.error], [403, "not_owner"]);
+  }
+  assert.equal(seen.geminiKeys.length, keysSeen, "their key was never sent to Google");
+  assert.equal((await call(v, "GET", `/api/grade/${id}`)).body.status, "awaiting_key", "the job is untouched");
   const wrong = await call(v, "POST", `/api/grade/${id}/finish`, { geminiKey: BAD_KEY });
   assert.equal(wrong.body.error, "own_key_rejected");
   const done = await call(v, "POST", `/api/grade/${id}/finish`, { geminiKey: GOOD_KEY });

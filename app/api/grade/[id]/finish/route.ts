@@ -22,8 +22,9 @@ import { PRIVATE, disabled, fail, graderEnabled, ownedJobs, readGradeShot, readJ
 //   400 bad_request | own_key_invalid | own_key_rejected | own_key_quota |
 //   grade_failed, 403 bad_origin, 404 not_found, 409 not_waiting_for_key,
 //   429 rate_limited, 503 gemini_busy | no_screenshot
-// Any visitor with the link may finish it: whoever pays for the request
-// is the one sending the key.
+// Only the report's owner (same check as DELETE) may finish it, with a key
+// or by handing it to the free tier: 403 not_owner for anyone else who just
+// holds the id, before anything is read or sent.
 export const dynamic = "force-dynamic";
 
 const HOUR = 60 * 60 * 1000;
@@ -40,12 +41,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const client = db();
   const job = await readJob(client, id);
   if (!job) return fail("not_found", 404);
+  const mine = (await ownedJobs()).includes(id);
+  if (!mine) return fail("not_owner", 403);
   if (job.status !== "awaiting_key") return fail("not_waiting_for_key", 409, { status: job.status });
 
   const who = await requester(req);
   const hit = await rateLimit(client, `grade-finish:v:${who.visitor}`, { limit: PER_HOUR, windowMs: HOUR, now: Date.now() });
   if (!hit.ok) return fail("rate_limited", 429, {}, { "retry-after": String(hit.retryAfterSec) });
-  const mine = (await ownedJobs()).includes(id);
 
   const image = async (shotKey: string) => {
     const bytes = await readGradeShot(shotKey.replace(/\/hero\.jpg$/, ""), "hero.jpg");
