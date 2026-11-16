@@ -304,3 +304,19 @@ test("production creates drafts, not scheduled sends, until the owner has checke
   assert.equal(config.env.staging.vars.KIT_BROADCAST_MODE, "draft");
   assert.equal(config.vars.NEWSLETTER_ENABLED, "false");
 });
+
+test("the email carries the post's AI line, in the live email and the admin preview", async () => {
+  const db = await freshDb();
+  await addPost(db);
+  const { queuedIssues } = await import("../lib/newsletter/store.mjs");
+  const { emailForPost } = await import("../lib/newsletter/send.mjs");
+  await newsletterTick({ db, kit: null, mode: "draft", base: BASE, now: T0 + HOUR });
+  const [issue] = await queuedIssues(db);
+  for (const preview of [false, true]) {
+    const html = emailForPost(issue.post, { base: BASE, preview }).html;
+    assert.match(html, />AI <a /, "the post's ai_line");
+    assert.match(html, /href="https:\/\/portfoliorank\.example\/about-posts"[^>]*>How posts are made</);
+  }
+  const mail = postEmail({ title: "T", summary: null, url: `${BASE}/blog/t`, site: BASE, aiLine: "Written with AI <b>" });
+  assert.match(mail.html, /Written with AI &lt;b&gt;/, "escaped");
+});
