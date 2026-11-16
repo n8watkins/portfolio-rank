@@ -141,7 +141,7 @@ test("4: a held grade always has exactly one open row describing it, whatever th
   assert.equal(await hidden(db, url), false);
 });
 
-test("5: one open case per site across groups: the door's decision supersedes an older open row, closed with the reason", async () => {
+test("5: one open case per site across groups: an older open row is closed, and the rule never removes over a case that waited for the owner", async () => {
   const { db } = await freshDb();
   const url = "https://older-case.dev";
   await site(db, url, { n: 2 });
@@ -155,10 +155,15 @@ test("5: one open case per site across groups: the door's decision supersedes an
   await drive(ctx, clock);
   const rows = await reviewsOf(db, url);
   const old = rows.find((r) => String(r.grp) === "live_ungraded");
-  const door = rows.find((r) => String(r.grp) === "door_not_portfolio");
   assert.equal(String(old.status), "closed");
   assert.match(JSON.parse(String(old.applied)).closed, /superseded by the nightly grade/);
-  assert.equal(String(door.status), "auto_applied", "removed once it is the only case");
+  // Two signals and Gemini's "no" would be an automatic removal on a site with no history. Here a
+  // relist proposal was waiting for the owner, so the rule holds the site for him instead.
+  assert.equal(rows.some((r) => String(r.grp) === "door_not_portfolio"), false, "no automatic removal over the owner's open case");
+  const door = rows.find((r) => String(r.grp) === "door_held");
+  assert.equal(String(door.status), "pending", "the one open case, waiting for the owner");
+  assert.match(String(door.reason), /already waiting for the owner's decision/);
+  assert.equal(await hidden(db, url), false, "the site stays listed until he decides");
   await assertOneCase(db, "after the door");
   assert.ok((await listReviews(db)).decided.some((r) => r.id === Number(old.id)), "the closed row is listed for the owner");
 });
