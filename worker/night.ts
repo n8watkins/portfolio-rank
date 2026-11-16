@@ -149,7 +149,13 @@ export function engine(env: NightEnv, runId: string) {
 // fails for another reason (the platform) is tried once more. The engine's
 // steps are idempotent.
 const ONCE_MORE = { retries: { limit: 1, delay: "1 minute", backoff: "constant" as const }, timeout: "20 minutes" };
-const MAX_BATCHES = 1500;
+// A ceiling, never the plan: a full night at the normal caps is about 40
+// batches of 20 requests, a few to open and close each stage, and at most 36
+// five-minute pauses for people in the three-hour window, so about 100. A run
+// that reaches this is stuck, and ends as "stopped" (finishNight). Every
+// batch must make progress or its stage ends (runBatch), so this is the
+// second line of defence, not the first.
+export const MAX_BATCHES = 250;
 
 export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> {
   async run(event: WorkflowEvent<NightParams>, step: WorkflowStep) {
