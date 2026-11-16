@@ -6,7 +6,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
-import { GATE_MAX_WORDS, MAX_GATE_CLICKS, detectGate, passSplashGate } from "../pipeline/splash.mjs";
+import { GATE_MAX_WORDS, MAX_GATE_CLICKS, actionNote, detectGate, passSplashGate } from "../pipeline/splash.mjs";
 
 test("detectGate: gate wording on a nearly empty screen; never on a page with real text", () => {
   assert.deepEqual(
@@ -25,6 +25,16 @@ test("detectGate: gate wording on a nearly empty screen; never on a page with re
   assert.equal(detectGate("Hi, I'm Jane, a designer in Lisbon. Start a project with me today please").gate, false);
   assert.equal(detectGate("").gate, false);
   assert.equal(detectGate("Restart the entertainment").gate, false, "whole words only");
+  // Lock screens and doors.
+  assert.deepEqual(
+    [detectGate("Friday 17:08 Press Enter or Click to continue"), detectGate("LOCKED 17:08 TAP TO UNLOCK"), detectGate("Knock knock. COME IN and I'll say hello back")].map((g) => [g.gate, g.phrase]),
+    [
+      [true, "click to continue"],
+      [true, "tap to unlock"],
+      [true, "come in"],
+    ]
+  );
+  assert.equal(detectGate("Come in for a chat about the role, I'm happy to talk about design systems and teams any day").gate, false, "a plain phrase in a sentence is not a gate");
 });
 
 const PORTFOLIO = `<h1>Abbas Raza</h1><p>${"Full-stack developer building fast web apps. ".repeat(10)}</p>`;
@@ -44,6 +54,19 @@ const pages = {
   "/real": `<body>${PORTFOLIO}<a href="/contact">Start a project</a></body>`,
   // A plain word that would leave the site: the click is undone.
   "/away": `<body><a href="https://example.invalid/">Enter</a></body>`,
+  // macos-kuldeeprajput.vercel.app's kind: two seconds of black with no text, then a lock screen
+  // that opens on Enter only (its label takes no clicks).
+  "/lock": `<body style="margin:0;background:#000"><script>setTimeout(()=>{document.body.innerHTML='<div style="height:100vh;display:grid;place-items:center;color:#fff"><div>Friday 17:08</div><div>Press Enter or Click to continue</div></div>';
+    addEventListener("keydown",(e)=>{if(e.key==="Enter")document.body.innerHTML=${JSON.stringify(PORTFOLIO)}})},2000)</script></body>`,
+  // The same site's phone view: "Tap to unlock".
+  "/unlock": `<body><div style="height:100vh;display:grid;place-items:center">LOCKED 17:08 <button id=u>TAP TO UNLOCK</button></div>
+    <script>u.onclick=()=>{document.body.innerHTML=${JSON.stringify(PORTFOLIO)}}</script></body>`,
+  // A door: "Knock knock." and a "COME IN" control (a div with a pointer), on a nearly empty screen.
+  "/door": `<body><h1>Knock knock.</h1><div id=c style="cursor:pointer;width:120px">COME IN</div><p>and I'll say hello back</p>
+    <script>c.onclick=()=>{document.body.innerHTML=${JSON.stringify(PORTFOLIO)}}</script></body>`,
+  // A gate that leads to a password prompt: the click is undone, nothing is typed.
+  "/password": `<body><button id=go>CLICK TO CONTINUE</button>
+    <script>go.onclick=()=>{document.body.innerHTML='<h2>Jane Doe</h2><input type=password placeholder="Enter Password"><p>Password is the current year</p>'}</script></body>`,
 };
 let server;
 let browser;
@@ -113,4 +136,43 @@ test("a real page is left alone, and a click that leaves the site is undone", as
   assert.equal(r.left, true);
   assert.equal(new URL(away.url()).pathname, "/away", "back on the portfolio");
   await away.close();
+});
+
+const portfolioShown = (page) => page.evaluate(() => document.body.innerText.includes("Abbas Raza"));
+
+test("a lock screen that appears after a black boot and opens on Enter: waited for, clicked, and Enter pressed", async () => {
+  const page = await open("/lock");
+  const r = await passSplashGate(page, { waitMs: 500 });
+  assert.deepEqual([r.passed, r.phrase], [true, "click to continue"]);
+  assert.ok(r.how.includes("key"), "the screen asked for Enter, so Enter was pressed");
+  assert.equal(await portfolioShown(page), true);
+  await page.close();
+});
+
+test("Tap to unlock and COME IN controls are clicked", async () => {
+  for (const [path, phrase] of [["/unlock", "tap to unlock"], ["/door", "come in"]]) {
+    const page = await open(path);
+    const r = await passSplashGate(page, { waitMs: 500 });
+    assert.deepEqual([r.passed, r.phrase, r.how[0]], [true, phrase, "element"], path);
+    assert.equal(await portfolioShown(page), true, path);
+    await page.close();
+  }
+});
+
+test("a gate that leads to a password prompt is undone: nothing is typed, the gate screen stays", async () => {
+  const page = await open("/password");
+  const r = await passSplashGate(page, { waitMs: 300 });
+  assert.deepEqual([r.passed, r.password], [false, true]);
+  assert.equal(await page.locator("input[type=password]").count(), 0, "reloaded back to the gate");
+  assert.match(actionNote({ splash: r }), /password prompt, so it was undone/);
+  await page.close();
+});
+
+test("a screen that never shows text is given the boot wait, then left alone", async () => {
+  const page = await browser.newPage();
+  await page.setContent("<body style='margin:0;background:#000'><canvas width=300 height=300></canvas></body>");
+  const t = Date.now();
+  assert.equal(await passSplashGate(page, { bootWaitMs: 800 }), null);
+  assert.ok(Date.now() - t >= 700 && Date.now() - t < 3000, "bounded by the boot wait");
+  await page.close();
 });

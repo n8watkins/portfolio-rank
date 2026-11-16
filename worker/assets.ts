@@ -2,16 +2,16 @@
 // edge cache (caches.default) when it can:
 //
 // - /shots/<shot_key>/<file>?v=<version>: our screenshots from the SHOTS R2
-//   bucket. Pages add ?v= (the capture's time, lib/shot-url.ts), so a
-//   recapture gets a new URL and the old one can be cached forever. Without a
-//   version the response is cached for a day.
+//   bucket (./shots.ts): the hero and phone tops and the full-page frames.
+//   Pages add ?v= (the capture's time, lib/shot-url.ts), so a recapture gets
+//   a new URL and the old one can be cached forever. Without a version the
+//   response is cached for a day.
 // - /favicon/<domain>: a roster site's icon, fetched from Google's favicon
 //   service, or a neutral placeholder when it has none (instead of a 404 and
 //   a console error per missing icon). Only roster domains are served.
 import feed from "../data/feed.json";
+import { shotFor } from "./shots";
 
-const SHOT_FILES = new Set(["hero.jpg", "mobile.jpg", "full.jpg"]);
-const YEAR = 31536000;
 const WEEK = 604800;
 
 const rosterDomains = new Set(
@@ -29,18 +29,6 @@ const PLACEHOLDER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"
 
 type Env = Pick<CloudflareEnv, "SHOTS">;
 type Ctx = { waitUntil(promise: Promise<unknown>): void };
-
-async function shot(key: string, file: string, versioned: boolean, env: Env): Promise<Response> {
-  const object = await env.SHOTS.get(`${key}/${file}`);
-  if (!object) return new Response("not found", { status: 404, headers: { "Cache-Control": "public, max-age=300" } });
-  return new Response(object.body, {
-    headers: {
-      "Content-Type": "image/jpeg",
-      "Cache-Control": versioned ? `public, max-age=${YEAR}, immutable` : "public, max-age=86400",
-      ETag: object.httpEtag,
-    },
-  });
-}
 
 async function favicon(domain: string): Promise<Response> {
   const headers = { "Cache-Control": `public, max-age=${WEEK}` };
@@ -63,11 +51,8 @@ async function favicon(domain: string): Promise<Response> {
  * The Next.js routes app/shots and app/favicon use it too, for `next dev`.
  */
 export function imageFor(url: URL, env: Env): (() => Promise<Response>) | null {
-  const s = url.pathname.match(/^\/shots\/([0-9a-f]{16})\/([a-z]+\.jpg)$/);
-  if (s && SHOT_FILES.has(s[2])) {
-    const versioned = /^[0-9a-z]{1,16}$/.test(url.searchParams.get("v") ?? "");
-    return () => shot(s[1], s[2], versioned, env);
-  }
+  const s = shotFor(url, env);
+  if (s) return s;
   const f = url.pathname.match(/^\/favicon\/([a-z0-9.-]{1,253})$/);
   if (f) {
     if (!rosterDomains.has(f[1])) return async () => new Response("not found", { status: 404 });
