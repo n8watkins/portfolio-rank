@@ -300,10 +300,15 @@
       // GEMINI_BUDGET caps above. The grader's tick starts no captures
       // without GITHUB_DISPATCH_TOKEN, which staging never gets, and email
       // only reaches STAGING_EMAIL_TO (lib/email/gate.mjs).
-      // To keep staging's CPU time low, the hourly jobs run every six hours and
-      // the grader's tick every 30 minutes (worker/crons.ts maps them to the
-      // same jobs); the nightly and weekly crons match production's.
-      "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 */6 * * *", "0 16 * * 1", "*/30 * * * *"] },
+      // Staging runs on a schedule only what makes no outside call and that
+      // it needs: the allowlist STAGING_TASKS in worker/crons.ts (owner
+      // removals, edge purge, tiers, review auto-apply, the people queue and
+      // the grader's tick). The end-of-day run, the weekly model watch and
+      // goals, freshness, the image library, night watch, email caps and the
+      // newsletter are off here. So only two triggers remain: the hourly group
+      // every six hours and the grader's tick every 30 minutes (worker/crons.ts
+      // maps them to production's crons to keep its CPU time low).
+      "triggers": { "crons": ["15 */6 * * *", "*/30 * * * *"] },
       // The same edge cache as production (worker/edge-cache.ts).
       "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {

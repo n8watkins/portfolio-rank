@@ -24,13 +24,16 @@ test("staging has its own email caps, every one lower than production's", () => 
   for (const [kind, n] of Object.entries(caps.reserve)) assert.ok(n < caps.kinds[kind] && n <= DEFAULT_EMAIL_CAPS.reserve[kind], kind);
 });
 
-test("staging runs production's schedule, with its Gemini held far below production's day", () => {
+test("staging keeps a few of production's crons, with its Gemini held far below production's day", () => {
   assert.ok(config.triggers.crons.length > 0, "production keeps its crons");
-  // The same jobs, the hourly and five-minute ones less often (worker/crons.ts).
-  assert.deepEqual(staging.triggers.crons.map(jobCron).sort(), [...config.triggers.crons].sort());
+  // Only crons that still have a task to run (worker/crons.ts, tests/staging-crons.test.mjs),
+  // each the same as production's or an alias of it, the hourly and five-minute ones less often.
+  const mapped = staging.triggers.crons.map(jobCron);
+  assert.equal(new Set(mapped).size, mapped.length, "no two staging crons run the same jobs");
+  for (const cron of mapped) assert.ok(config.triggers.crons.includes(cron), `${cron} is one of production's crons`);
   for (const [alias, cron] of Object.entries(STAGING_CRON_ALIASES)) {
-    assert.ok(staging.triggers.crons.includes(alias), alias);
     assert.ok(config.triggers.crons.includes(cron), cron);
+    assert.ok(staging.triggers.crons.includes(alias), `${alias} is used`);
   }
   assert.match(readFileSync("worker/night.ts", "utf8"), /PEOPLE_QUEUE_CRON = "15 \* \* \* \*"/);
   assert.match(readFileSync("worker/grader.ts", "utf8"), /GRADER_CRON = "\*\/5 \* \* \* \*"/);
