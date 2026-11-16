@@ -501,6 +501,16 @@ async function stopRun(ctx, s, reason, status) {
   s.done = true;
 }
 
+/** Everything a batch can move on a stage: items done, failed, skipped, set aside, or marked tried. */
+export const stageTally = (stage) =>
+  (stage.ok ?? 0) + (stage.failed ?? 0) + (stage.skipped ?? 0) + (stage.noImage ?? 0) + (stage.tried?.length ?? 0);
+
+/**
+ * Whether a batch got anywhere: an item was counted or set aside, or a request
+ * was spent. A batch that did neither would be handed the same items again.
+ */
+export const madeProgress = (tallyBefore, tallyAfter, requestsSpent) => tallyAfter > tallyBefore || requestsSpent > 0;
+
 /**
  * One batch of the current stage. Returns { state, pauseMs, pauseReason? }
  * where pauseMs asks the caller to wait before the next batch: people are
@@ -582,6 +592,7 @@ export async function runBatch(ctx, state) {
       log: ctx.log,
     });
     const spent = () => Object.values(gemini.requests).reduce((x, y) => x + y, 0);
+    const tallyBefore = stageTally(stage);
     let stop = null;
     let busyPauseMs = 0;
     for (const item of items) {
@@ -597,6 +608,10 @@ export async function runBatch(ctx, state) {
         const out = await h.run(ctx, gemini, item, stage, { left: budget - spent() });
         if (out === "skipped") {
           stage.skipped++;
+          stage.tried.push(item.id);
+        } else if (out === "sentinel") {
+          // No usable image and nothing written (a re-grade keeps its grade): set aside for tonight, not picked again.
+          stage.noImage = (stage.noImage ?? 0) + 1;
           stage.tried.push(item.id);
         } else {
           stage.ok++;
@@ -653,6 +668,12 @@ export async function runBatch(ctx, state) {
         await stopRun(ctx, s, `hard stop ${plan.stopBeforeResetMinutes} minutes before the quota resets (${pacificTime(s.timeline.hardStop)} Pacific); the rest waits for tomorrow`, "stopped");
       } else await closeStage(ctx, s, "time cap reached");
     } else if (busyPauseMs) return { state: s, pauseMs: busyPauseMs, pauseReason: "busy" };
+    // A batch that had items but graded, failed, skipped and spent nothing would get the same
+    // items again next time, and the next, until the time cap: the stage ends here instead.
+    else if (!madeProgress(tallyBefore, stageTally(stage), spent())) {
+      ctx.log(`${stage.label}: a batch of ${items.length} item(s) made no progress; ending the stage`);
+      await closeStage(ctx, s, `stopped: a batch made no progress (${items.length} item(s) could not be worked on)`);
+    }
     return { state: s };
   } catch (e) {
     ctx.log(`night ${s.night}: unexpected error: ${msg(e)}`);
@@ -669,6 +690,8 @@ const minutes = (from, to) => Math.max(0, Math.round((Date.parse(to) - Date.pars
  */
 export async function finishNight(ctx, state) {
   const s = structuredClone(state);
+  // The Workflow's batch limit ran out before the run was done: stopped, not complete (worker/night.ts).
+  if (!s.done) await stopRun(ctx, s, "the Workflow's batch limit ran out before every stage finished; the rest waits for tomorrow", "stopped");
   const finishedAt = iso(ctx.now());
   // Stages never reached (a stop, or the hard stop) are listed too.
   const seen = new Set(s.stages.map((x) => x.key));
@@ -686,7 +709,7 @@ export async function finishNight(ctx, state) {
     checks: s.checks,
     estimate: s.estimate,
     actual: { requests, minutes: s.aiStartedAt ? minutes(s.aiStartedAt, finishedAt) : 0, retries: s.retriesUsed, pauses: s.pauses },
-    stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
+    stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, noImage: x.noImage ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
     parked,
     humanVotes: HUMAN_VOTES_NOTE,
     polls: s.polls ?? null,
@@ -702,7 +725,7 @@ export async function finishNight(ctx, state) {
     "",
     "| Stage | Requests | Done | Failed | Skipped | Minutes | Result |",
     "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
-    ...summary.stages.map((x) => `| ${x.label} | ${x.requests} | ${x.done} | ${x.failed} | ${x.skipped} | ${x.minutes} | ${x.result} |`),
+    ...summary.stages.map((x) => `| ${x.label} | ${x.requests} | ${x.done} | ${x.failed} | ${x.skipped} | ${x.minutes} | ${x.result}${x.noImage ? `; ${x.noImage} set aside for a missing image` : ""} |`),
     "",
     HUMAN_VOTES_NOTE,
     "",
