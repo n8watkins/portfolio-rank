@@ -7,19 +7,20 @@ name: CI
 # The first job sorts the pull request's files (scripts/ci-lanes.mjs, which
 # follows the site's imports rather than trusting folder names):
 #   docs only            nothing else runs
-#   code the site never  typecheck, lint and the unit tests
-#   imports, workflows
-#   data/                the same, plus the Worker build
-#   anything the site    everything, with the browser tests
-#   reaches, or unknown
+#   code the site cannot typecheck, lint and the unit tests
+#   reach, workflows
+#   anything the site    everything, with the Worker build and the
+#   reaches, data/, or   browser tests
+#   unknown
 # A release pull request changes package.json, so it always runs everything:
 # that is the full check on the whole batch before production deploys.
 #
 # The main ruleset keeps requiring the same three jobs by name (typecheck,
 # Worker build, E2E), and nothing changes there: GitHub counts a job this
 # file skips as passed. Two things keep that honest:
-#   - when the sorting job fails, every job runs (the conditions below), so
-#     a broken sort can never turn into "all skipped, all green";
+#   - a job is skipped only when the sorting answered "false" for it; when
+#     the sorting fails or answers nothing, every job runs (the conditions
+#     below), so a broken sort can never turn into "all skipped, all green";
 #   - the unit tests run inside the required typecheck job, so they gate a
 #     pull request that skips the browser tests.
 on:
@@ -50,6 +51,9 @@ jobs:
           node-version: 24
       - name: Sort the changed files
         id: lanes
+        # bash by name, so GitHub adds pipefail: a sorter that crashes fails
+        # the step instead of hiding behind tee.
+        shell: bash
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
@@ -65,8 +69,9 @@ jobs:
   # runs those tests too, with all the others.
   typecheck:
     needs: lanes
-    # Runs when its lane is on, and also when the sorting failed.
-    if: ${{ !cancelled() && (needs.lanes.result != 'success' || needs.lanes.outputs.typecheck == 'true') }}
+    # Skipped only when the sorting said "false" in so many words. A sorting
+    # that failed, or answered nothing, runs the job.
+    if: ${{ !cancelled() && needs.lanes.outputs.typecheck != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -93,7 +98,7 @@ jobs:
   worker:
     name: Worker build
     needs: lanes
-    if: ${{ !cancelled() && (needs.lanes.result != 'success' || needs.lanes.outputs.worker == 'true') }}
+    if: ${{ !cancelled() && needs.lanes.outputs.worker != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -123,9 +128,13 @@ jobs:
   e2e:
     name: E2E
     needs: lanes
-    if: ${{ !cancelled() && (needs.lanes.result != 'success' || needs.lanes.outputs.e2e == 'true') }}
+    if: ${{ !cancelled() && needs.lanes.outputs.e2e != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Only the tests that need the running site: whenever this job runs, the
+      # typecheck job runs the unit tests (scripts/test-e2e.sh).
+      E2E_TESTS: site
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
