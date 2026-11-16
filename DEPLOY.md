@@ -98,7 +98,7 @@ It follows the site's imports to sort the changed files: docs alone run nothing;
 A release pull request always runs everything, which is the full check on the batch before production deploys.
 `npm run test:unit` runs the tests that need no running site (about a minute and a half, no build); `npm run test:e2e` builds the app and runs every test.
 A test file needs the running site when it reads one of `scripts/test-e2e.sh`'s `E2E_` variables; every other `tests/*.test.mjs` is a unit test.
-The main ruleset requires the one check `CI result`, which passes when every job that ran passed.
+The main ruleset still requires `typecheck`, `Worker build` and `E2E` by name: GitHub counts a job CI skipped as passed, the unit tests run inside `typecheck`, and when the sorting itself fails every job runs.
 Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging workflow skips with a notice.
 The release plan, the order open work lands in and the staging fidelity work are in [docs/audits/release-and-staging.md](docs/audits/release-and-staging.md).
 

@@ -183,8 +183,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   }
   const result = all ? { code: true, site: true, data: true, why: {} } : lanes(root, changedSince(root, base));
   const jobs = {
+    // Typecheck, lint and the unit tests, in one job.
     typecheck: result.code,
-    unit: result.code,
     worker: result.site || result.data,
     e2e: result.site,
   };

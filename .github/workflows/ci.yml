@@ -15,9 +15,13 @@ name: CI
 # A release pull request changes package.json, so it always runs everything:
 # that is the full check on the whole batch before production deploys.
 #
-# "CI result" is the one check the main ruleset needs to require: it passes
-# when every job that ran passed, and fails when one failed or the sorting
-# itself broke. A job this file skips reports as skipped, never as missing.
+# The main ruleset keeps requiring the same three jobs by name (typecheck,
+# Worker build, E2E), and nothing changes there: GitHub counts a job this
+# file skips as passed. Two things keep that honest:
+#   - when the sorting job fails, every job runs (the conditions below), so
+#     a broken sort can never turn into "all skipped, all green";
+#   - the unit tests run inside the required typecheck job, so they gate a
+#     pull request that skips the browser tests.
 on:
   pull_request:
     branches: [main]
@@ -33,7 +37,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       typecheck: ${{ steps.lanes.outputs.typecheck }}
-      unit: ${{ steps.lanes.outputs.unit }}
       worker: ${{ steps.lanes.outputs.worker }}
       e2e: ${{ steps.lanes.outputs.e2e }}
     steps:
@@ -57,30 +60,13 @@ jobs:
             node scripts/ci-lanes.mjs --all | tee -a "$GITHUB_OUTPUT"
           fi
 
+  # Typecheck, lint, then the tests that need no running site
+  # (scripts/test-unit.mjs): no build, no server, no database. The E2E job
+  # runs those tests too, with all the others.
   typecheck:
     needs: lanes
-    if: needs.lanes.outputs.typecheck == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Typecheck
-        run: npx tsc --noEmit
-      # Next.js's rules (React, hooks, Core Web Vitals, TypeScript); see
-      # eslint.config.mjs. Errors fail the PR.
-      - name: Lint
-        run: npm run lint
-
-  # The tests that need no running site (scripts/test-unit.mjs): no build, no
-  # server, no database. The E2E job runs these too, with all the others.
-  unit:
-    name: Unit tests
-    needs: lanes
-    if: needs.lanes.outputs.unit == 'true'
+    # Runs when its lane is on, and also when the sorting failed.
+    if: ${{ !cancelled() && (needs.lanes.result != 'success' || needs.lanes.outputs.typecheck == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -90,17 +76,24 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      # Next.js's rules (React, hooks, Core Web Vitals, TypeScript); see
+      # eslint.config.mjs. Errors fail the PR.
+      - name: Lint
+        run: npm run lint
       # The capture's tests (splash gates, dialogs, screenshots) open pages in
       # headless Chromium.
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:unit
+      - name: Unit tests
+        run: npm run test:unit
 
   # The Cloudflare Worker: binding types match wrangler.jsonc, the OpenNext
   # build succeeds and wrangler can bundle it.
   worker:
     name: Worker build
     needs: lanes
-    if: needs.lanes.outputs.worker == 'true'
+    if: ${{ !cancelled() && (needs.lanes.result != 'success' || needs.lanes.outputs.worker == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -130,7 +123,7 @@ jobs:
   e2e:
     name: E2E
     needs: lanes
-    if: needs.lanes.outputs.e2e == 'true'
+    if: ${{ !cancelled() && (needs.lanes.result != 'success' || needs.lanes.outputs.e2e == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -143,28 +136,3 @@ jobs:
       # tests/undo-ui.test.mjs drives the app in headless Chromium.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-
-  # The single check to require on main. A skipped job is fine (its lane was
-  # not needed); a failed or cancelled one, or a failed sorting, is not.
-  result:
-    name: CI result
-    needs: [lanes, typecheck, unit, worker, e2e]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Every job that ran passed
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-        run: |
-          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          sorted=$(echo "$RESULTS" | jq -r '.lanes.result')
-          bad=$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')
-          if [ "$sorted" != "success" ]; then
-            echo "::error::The changed files could not be sorted, so nothing was checked."
-            exit 1
-          fi
-          if [ -n "$bad" ]; then
-            echo "::error::Did not pass: $bad"
-            exit 1
-          fi
