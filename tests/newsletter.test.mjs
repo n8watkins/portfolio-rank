@@ -295,3 +295,12 @@ test("the admin's test draft: marked [test], never scheduled, linked to the draf
   assert.match(b.description, /sent to nobody/);
   assert.equal((await recentIssues(db)).length, 0, "a test draft is not an issue");
 });
+
+test("production creates drafts, not scheduled sends, until the owner has checked a few (wrangler.jsonc)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { parseJsonc } = await import("../scripts/check-worker-exports.mjs");
+  const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
+  assert.equal(config.vars.KIT_BROADCAST_MODE, "draft");
+  assert.equal(config.env.staging.vars.KIT_BROADCAST_MODE, "draft");
+  assert.equal(config.vars.NEWSLETTER_ENABLED, "false");
+});

@@ -122,8 +122,10 @@
     // to "true", the KIT_API_KEY secret and the owner's switch on
     // /admin/blog/newsletter (stored, off until turned on). KIT_BROADCAST_MODE:
     // a new post becomes a broadcast "send" (scheduled 10 minutes ahead) or a "draft".
+    // "draft" for now, so the first issues are reviewed in Kit before they go
+    // out; it moves to "send" after the owner has checked a few drafts.
     "NEWSLETTER_ENABLED": "false",
-    "KIT_BROADCAST_MODE": "send",
+    "KIT_BROADCAST_MODE": "draft",
     // Games, badges, claims, live stats and report downloads (lib/games):
     // every one of their routes answers 404 until this is "true", which
     // happens with the redesign.
