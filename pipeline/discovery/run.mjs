@@ -26,8 +26,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@libsql/client";
-import { DISCOVERY_TABLES, addFound, queue, reopenDue, seenKey, seenMany, settle } from "../../lib/discovery/sites.mjs";
+import { DISCOVERY_TABLES, addFound, adoptRedirects, queue, reopenDue, seenKey, seenMany, settle } from "../../lib/discovery/sites.mjs";
 import { siteKeyOf } from "../../lib/grader/url.mjs";
+import { asKnown, siteScope } from "./known.mjs";
 import { guardedFetch } from "../net-guard-node.mjs";
 import { createGemini } from "../gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "../gemini-log.mjs";
@@ -110,6 +111,7 @@ export function listedKeys(dataDir) {
  * rule), and are marked so the check drops them without a fetch.
  */
 export async function newItems(db, items, { listed, taken = new Set() }) {
+  const known = asKnown(listed);
   const authors = new Map();
   for (const it of items) {
     if (it.source !== "hn" || !it.author) continue;
@@ -120,8 +122,9 @@ export async function newItems(db, items, { listed, taken = new Set() }) {
   const fresh = [];
   for (const it of items) {
     const key = siteKeyOf(it.url);
-    if (listed.has(key) || taken.has(key)) continue;
-    taken.add(key);
+    // Known or already taken this run: by site (known.mjs), not by exact address.
+    if (known.has(key) || taken.has(siteScope(key))) continue;
+    taken.add(siteScope(key));
     const shared = it.source === "hn" && (authors.get(new URL(it.url).hostname)?.size ?? 0) >= 3;
     fresh.push(shared ? { ...it, context: { ...it.context, sharedLink: true } } : it);
   }
@@ -137,7 +140,7 @@ export async function judgeRow(row, io) {
   if (c.status === "dropped") return { key: row.key, status: "dropped", reason: c.reason, detail: c.detail };
   const f = filterPage(c.evidence);
   if (!f.keep) return { key: row.key, status: "dropped", reason: f.reason, detail: f.detail };
-  return { key: row.key, status: "screen", finalKey: c.finalKey, siteKey: siteKeyOf(row.url), work: { evidence: c.evidence, priority: f.priority } };
+  return { key: row.key, status: "screen", finalKey: c.finalKey, finalUrl: c.finalUrl, siteKey: siteKeyOf(row.url), work: { evidence: c.evidence, priority: f.priority } };
 }
 
 const bump = (o, k, n = 1) => (o[k] = (o[k] ?? 0) + n);
@@ -181,16 +184,30 @@ export async function runDiscovery({ db, io, caps, sources = SOURCES, now = new 
   const results = await mapLimit(rows, 8, (row) =>
     judgeRow(row, io).catch((e) => ({ key: row.key, status: "dropped", reason: "dead", detail: `check_crash:${String(e?.message ?? e).slice(0, 40)}` }))
   );
-  // A page that redirects to a site already listed, seen, or kept earlier in this run is a duplicate.
+  // A page that redirects to a site already listed or rejected (by site, known.mjs), seen, or kept
+  // earlier in this run is a duplicate. One that ends on a new address moves there: see adoptRedirects.
+  const known = asKnown(listed);
   const finals = results.filter((r) => r.status === "screen" && r.finalKey !== r.siteKey);
   const finalSeen = await seenMany(db, finals.map((r) => `https://${r.finalKey}`));
   const keptFinal = new Set();
+  const moves = [];
   for (const r of results) {
     if (r.status !== "screen") continue;
-    const dup = keptFinal.has(r.finalKey) || (r.finalKey !== r.siteKey && (listed.has(r.finalKey) || finalSeen.has(seenKey(`https://${r.finalKey}`))));
-    keptFinal.add(r.finalKey);
+    const redirected = r.finalKey !== r.siteKey;
+    const dup = keptFinal.has(siteScope(r.finalKey)) || (redirected && (known.has(r.finalKey) || finalSeen.has(seenKey(`https://${r.finalKey}`))));
+    keptFinal.add(siteScope(r.finalKey));
     if (dup) Object.assign(r, { status: "dropped", reason: "duplicate", detail: "duplicate_final_url", work: null });
+    else if (redirected) moves.push(r);
   }
+  const adopted = await adoptRedirects(
+    db,
+    moves.flatMap((r) => {
+      const to = normalizeCandidate(r.finalUrl);
+      return to.ok ? [{ from: r.key, url: to.url }] : [];
+    }),
+    { now }
+  );
+  for (const r of results) if (adopted.has(r.key)) r.key = adopted.get(r.key);
   await settle(db, results, { now });
   summary.check.rows = rows.length;
   for (const r of results) {
