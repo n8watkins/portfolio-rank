@@ -55,7 +55,9 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   When more than 30% of sites fail in one run the runner is the likelier culprit, so nothing is recorded and the job fails.
 - **Portfolio-likeness** (`pipeline/signals.mjs`, part of the health check): from each loaded page's HTML (the rendered DOM for single-page apps) it records six yes/no signals in `portfolios.signals`: projects/work section, about, contact (mailto, form or social links), resume/CV, a GitHub profile link, and the person's name in the title or h1.
   A page with at most one is flagged `needs_review`: never removed or hidden for it, listed in the run summary, and graded first by the rubric so Gemini's `is_portfolio` confirms or clears it.
-  The other way round, a grade that says `is_portfolio=false` for a page with at least 4 of the 6 signals is not acted on ([pipeline/portfolio-guard.mjs](pipeline/portfolio-guard.mjs), applied in `gradeRecord`): it is stored as a portfolio, so it stays listed and ranked, with the AI's answer in `ai_is_portfolio`, the reason in `review`, and the site flagged `needs_review` for a person to look at.
+  A listed site that is already graded is never graded again for it (owner, 2026-11-16: "Listed sites, health check only"); the night's free part turns the flag into a pending review row ("the site's portfolio signals collapsed") for the owner.
+  The other way round, a grade that says `is_portfolio=false` for a page with at least 4 of the 6 signals is not acted on ([pipeline/portfolio-guard.mjs](pipeline/portfolio-guard.mjs), applied in `gradeRecord`): it is stored as a portfolio, so it stays listed and ranked, with the AI's answer in `ai_is_portfolio` and the reason in `review`, and the night writes a pending review row for the owner (the door, below).
+  The health check keeps `needs_review` on such a held site instead of overwriting it, and a removal decided in the review queue stays `down` with its own reason (it is never turned `suspect` and shown again by the 13-day rule).
 - **Exclusions**: newly confirmed-down sites are appended to `data/excluded.json` as `{url, name, reason, kind, removed, first_failed, last_checked, checks}` and dropped from `feed.json` in one bot pull request (branch `data/health-exclusions`, auto-merge), at most 10% of the list at once.
   `generate_feed.py` reads both these objects and the older plain URL strings.
   `/removed` lists them with the reason and date; takedown requests are counted there but never named.
@@ -64,9 +66,14 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
 - **Owner review queue** ([lib/reviews/store.mjs](lib/reviews/store.mjs), `/admin/review`): a re-check (the first is "recheck-543") writes one `status_reviews` row per site whose listed or ranked state it would change, with fresh screenshots, each grader's verdict, the code's signals, the group and the reason.
   Rows where the graders agree come ticked; disagreements are flagged and unticked; nothing changes until the owner confirms.
   Confirm goes through the paths above: a "not a portfolio" grade with a tier is kept and flipped (the AI's answer in `ai_is_portfolio`, the owner's decision in `review`, re-ranked with `rankForWrite`), one without a tier is cleared for the nightly grade queue, a site held out only for its grade gets its health back, a broken one gets a recapture, and a delisted one goes into `data/additions.json` through the daily upstream sync (and the weekly health pull request, [pipeline/review-additions.mjs](pipeline/review-additions.mjs)).
-  A remove stores "not a portfolio" and takes the site off the list at once: health `down` with the health check's own "AI grading says this is not a portfolio" reason, so it is hidden now and the weekly health run moves it to `data/excluded.json` as `not_portfolio`.
-  The owner's verdict holds over later grades (`withOwnerVerdict` in the night run, the judge and the re-grade scripts); who decided and when is kept on the row.
+  A remove stores "not a portfolio" and takes the site off the list at once: health `down` with a reason that starts like the health check's own ("AI grading says this is not a portfolio", then "confirmed by the owner" or "removed automatically"), so it is hidden now and the weekly health run moves it to `data/excluded.json` as `not_portfolio`.
+  Only the owner's own Confirm is a verdict that holds over later grades (`withOwnerVerdict` in the judge and the re-grade scripts, `ownerVerdict` at the door); a rule's apply is recorded as the rule's (review kind `rule_applied`, never `owner_confirmed`), and who decided and when is kept on the row.
+  The door ([lib/reviews/door.mjs](lib/reviews/door.mjs), owner 2026-11-16): the nightly grade of a site writes rows too.
+  A Gemini "not a portfolio" with fewer than 4 code signals, or with a junk rule hit ([pipeline/junk-rules.mjs](pipeline/junk-rules.mjs), which the guard does not protect), is removed at once by `rule:gemini-not-portfolio` through the "remove" path above, as `auto_applied`, with Gemini's notes, the signals and the screenshot on the row.
+  A "no" with 4 or more signals, or one against an earlier decision (the owner undid or rejected a removal, a rule listed the site, or an earlier grade called it a portfolio), keeps the site listed and waits as a pending row.
+  The night's free part also writes a pending row for a bot-walled, never-captured site (the "review" kind: Mark checked records the look, nothing else changes) and for a listed site whose signals collapsed (a remove the owner confirms or rejects).
   The owner's rule ("if something passes the test, I don't need to review it; only if it fails"): with the launch switch `REVIEW_AUTO_APPLY` ([lib/reviews/flag.ts](lib/reviews/flag.ts), `"true"` in production and on staging by the owner's decision: "If the graders agreed, it should be confirmed automatically."), the hourly cron ([worker/review.ts](worker/review.ts)) applies every pending row that passes (`passesRule`: a relist both models call a portfolio, each model's batched answer or else its one-at-a-time one, with no junk rule and no blocked or failed capture) the same way as Confirm, as status `auto_applied` by `rule:both-pass`.
+  The same switch governs the door's removals: the night applies them at once when it is on, and with it off they wait, and the hourly cron applies them once it is turned on (`ruleFor`).
   Fails, disagreements, rows a model never answered, blocked captures and junk rules wait for the owner.
   Every apply keeps the site's state before it, so Undo on the page's "Applied automatically" list restores it exactly (a changed grade is written back with history and its tier membership follows), records `undone_at` and `undone_by`, and returns the row to pending for the owner; the rule never applies it again, and a relist it had added leaves `data/additions.json`.
   Every decision on the page asks first, in the page (a second click acts; Esc cancels), and names what happens and when it shows: off the list at once for a remove, back in the rankings at once for a graded relist, after the next daily sync for a delisted one, after its next capture for a broken one, ranked after its first nightly grade when it was never graded. Confirming many rows applies 8 at a time on the server and shows its progress.
@@ -147,12 +154,12 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 
 | Order | Stage (job name in `gemini_requests`) | Works on | Cap a day | Time cap |
 | ---: | --- | --- | ---: | ---: |
-| 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts | 300 | 60 min |
-| 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`) | 100 | 30 min |
+| 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts; a site whose screenshot was missing comes back once it is captured again; every answer goes through the door (the owner review queue, above) | 300 | 60 min |
+| 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`); off by default (cap 0, owner 2026-11-16: "We're not doing automatic regrading on change"), change detection still runs | 0 | 30 min |
 | 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
 | 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
 | 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
-| 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics; off by default (cap 0) until rubric v3, turned on with `GEMINI_BUDGET` `{"stages":{"regrade":{"cap":300}}}` ([docs/audits/gemini-prompting.md](docs/audits/gemini-prompting.md)) | 0 | 60 min |
+| 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics; off by default (cap 0: a site is graded once, at the door, owner 2026-11-16), turned on only with `GEMINI_BUDGET` `{"stages":{"regrade":{"cap":300}}}` ([docs/audits/gemini-prompting.md](docs/audits/gemini-prompting.md)) | 0 | 60 min |
 | 7 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
 "AI ranking comparisons" are Gemini comparing sites.
@@ -177,6 +184,7 @@ It counts `gemini_requests` since midnight Pacific, retries included.
 - Each request: the client's own retries for a busy 3.5 (10, 30 and 60 seconds) and for per-minute limits.
 - Each night: at most 20 retries in total; past that the run stops for the night.
 - Each stage: 5 failures in a row stop it for the night (the circuit breaker), and the next stage starts.
+- Each batch: no new item after 10 minutes of wall clock (`batchMinutes`), so a stalled Gemini never runs a Workflow step past its 20 minutes; grading and comparison requests time out after 60 seconds (`requestTimeoutSeconds`), posts after the client's 120.
 - Each item: tried once a night; an item that fails on 3 nights in a row is parked in `night_item_failures` and listed in every summary until someone deletes its row.
   A busy 3.5 is not the item's fault and never counts towards parking.
 - A spent daily quota stops the run as waiting for tomorrow, never as a failure; a rejected key fails it.
@@ -184,6 +192,8 @@ It counts `gemini_requests` since midnight Pacific, retries included.
 ### The summary and the admin view
 
 Each run writes its summary to `night_runs` and to the Worker's logs: the estimate at the start (requests and minutes at the pace), the actual at the end, each stage's requests, results and minutes, why it stopped, and the parked items.
+It also lists the sites the night touched (`summary.sites`, at most 50 each, with full counts in `sites.counts`): graded with their verdict, removed automatically, sent to review, failed and set aside, and counts the new sites waiting for a newer capture after a missing screenshot (`summary.missingImage`).
+Every request in `gemini_requests` names the site it was for (`item`) where the stage works on sites.
 `GET /api/admin/quota` (only for the GitHub account whose numeric id is `ADMIN_GITHUB_ID`) returns Gemini use by quota day, job and model for the last 30 days, what each stage and people may spend now, the last 14 runs, parked items, owner alerts and people's queue; the redesign's admin page will show it.
 
 ### Owner alerts

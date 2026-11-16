@@ -5,8 +5,10 @@
 // The grade is stored as a portfolio, so it stays listed and ranked
 // everywhere a "not a portfolio" verdict would hide it (tiers, boards, the
 // sitemap, Play), with the AI's own answer and the reason kept in the grade
-// (ai_is_portfolio, review), and the site marked portfolios.needs_review for
-// a person to look at.
+// (ai_is_portfolio, review), and the site marked portfolios.needs_review; the
+// nightly grade writes a pending review row for the owner (lib/reviews/door.mjs,
+// owner 2026-11-16), where a junk rule (./junk-rules.mjs) takes this
+// protection away.
 //
 // One place, at grade time (pipeline/rubric.mjs gradeRecord), so every
 // reader of is_portfolio follows it without a check of its own.

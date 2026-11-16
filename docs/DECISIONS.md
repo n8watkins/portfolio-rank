@@ -122,6 +122,49 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: the page text is already in the grading request, so the roles a site claims come at no extra Gemini request.
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
+  Superseded in part on 2026-11-16: no automatic re-grading (below).
+
+### Is it a portfolio, asked once at the door (2026-11-16)
+
+An audit of the nightly grading found that a single Gemini "not a portfolio" answer removed a site with no record the owner could see and no way back.
+AI grading was paused in production until these rules were built ([lib/reviews/door.mjs](../lib/reviews/door.mjs), [pipeline/night.mjs](../pipeline/night.mjs)).
+
+- **A Gemini "not a portfolio" removes a new site automatically** (owner, 2026-11-16: "If Gemini says it's not a portfolio, I'm cool just saying it's not a portfolio."). Status: building.
+  When the nightly grade's answer is "not a portfolio", the owner has no verdict on the site, and the code does not dispute it, the rule `rule:gemini-not-portfolio` removes it through the review queue's existing "remove" path.
+  It is behind the same `REVIEW_AUTO_APPLY` switch as the both-pass rule; with the switch off the row waits for the owner and the site stays listed.
+  Why one switch: both are "a rule applies a review row without the owner", and the owner turns automatic decisions on and off as one thing; a second switch would let one rule run while he believes all are off.
+- **Every automatic removal is recorded where the owner sees it, with the reason and an Undo** (owner, 2026-11-16: "We should have a list that's accessible from admin of sites we have said aren't portfolios."). Status: building.
+  Each removal is a `status_reviews` row (status `auto_applied`, decided by `rule:gemini-not-portfolio`) listed under "Applied automatically" on `/admin/review`, with the date, Gemini's notes, the code's signals and the screenshot it was judged on.
+  Gemini's answer has no reason field (the response schema is fixed), so its reason is its own notes on the page, criterion by criterion.
+  The grade is first written "held" (listed, with Gemini's answer in `ai_is_portfolio`), then the rule applies the removal, so Undo puts the site back listed and returns the row to pending for the owner.
+  A rule never removes a site again once the owner has undone or rejected its removal: a later "no" waits for him.
+- **When the code says it looks like a portfolio, the owner reviews it** (owner, 2026-11-16: "If Gemini says it's not a portfolio, and then the code says it looks like a portfolio, we can review it."). Status: building.
+  With 4 or more of the six code signals (`STRONG_SIGNALS` in [pipeline/portfolio-guard.mjs](../pipeline/portfolio-guard.mjs)) the site stays listed and a pending review row says Gemini said no, the code found N of 6, with the screenshots.
+  The weekly health check keeps such a site's `needs_review` mark instead of overwriting it.
+- **A junk rule is not protected by the signals** (agent, 2026-11-16). Status: building.
+  The junk rules ([pipeline/junk-rules.mjs](../pipeline/junk-rules.mjs): an unedited template, a placeholder name such as "John Doe", a parked or for-sale page, a code host or link-in-bio address) run before the guard, and a hit is removed automatically like any other "no", even with 6 of 6 signals.
+  Why: a starter template carries every portfolio signal by design.
+- **A rule's verdict is the rule's, never the owner's** (owner, 2026-11-16). Status: building.
+  A grade a rule decided carries the review kind `rule_applied` and names the rule; only the owner's own Confirm is an owner verdict (`owner_confirmed`), and only that holds over every later grade.
+  A rule's earlier verdict does not bind a later grade, but it is weighed: a later "no" against a rule's "portfolio", or a re-grade's "no" on a site an earlier grade called a portfolio, is held for the owner instead of being removed by a rule.
+  A rule's removal sets the site down, so no queue grades it again; only a manual grade could, and it would need the owner.
+- **Listed sites get the health check only; "is it a portfolio" is asked once, at the door** (owner, 2026-11-16: "Listed sites, health check only. Is it a portfolio is asked once, at the door, agreed." and "We're not doing automatic regrading on change."). Status: building.
+  The "grade changed sites" and "re-grade" stages default to a cap of 0 in `DEFAULT_PLAN`, so lifting the `GEMINI_BUDGET` pause does not bring them back; their code stays, and change detection keeps running (it is free).
+  A listed, graded site whose weekly signals collapse (1 or fewer) is not re-graded: a pending review row says so, and nothing is removed without Gemini's "no" at the door or the owner's decision.
+- **Bot-walled sites go to the owner** (owner, 2026-11-16: "Bot-walled sites can be sent to me for review."). Status: building.
+  A never-captured site whose capture met a bot or security check (marked by #235) becomes a pending review row of the "review" kind: Confirm ("Mark checked") records that he looked and changes nothing, the capture keeps retrying with backoff, and once a capture gets through the site is graded at the door like any new site; Reject records it too.
+- **A new site with a missing screenshot is graded once it is captured again** (agent, 2026-11-16). Status: building.
+  The "no usable captures" marker no longer keeps a site out for good: a capture newer than the marker puts it back in the "grade new sites" queue, and the night summary counts both kinds.
+- **A stalled Gemini cannot kill a night** (agent, 2026-11-16). Status: building.
+  A batch takes no new item after 10 minutes of wall clock and returns normally (the Workflow step limit is 20 minutes), and grading and comparison requests time out after 60 seconds instead of 120; posts keep the longer timeout.
+  Why: one item could take four 120-second timeouts plus the retry waits, and five failures in a row could pass the step limit.
+- **The night says which sites it touched** (agent, 2026-11-16). Status: building.
+  Every grading request in `gemini_requests` names its site (`item`), and `night_runs.summary.sites` lists, 50 at most each with full counts, the sites graded with their verdict, removed automatically, sent to review, failed and set aside.
+- **Decided, not built here: sites added by their owner** (owner, 2026-11-16). Status: planned.
+  A site added by its owner always gets a grade and a profile, joins the leaderboard when it passes a short checklist of the code signals, is never put on the rejected list, and gets the same weekly health check as every other site.
+- **Decided, not built here: a blank site is retried, then treated as broken** (owner, 2026-11-16). Status: planned (#235 builds the capture side).
+- **Accepted: Gemini over-awards top scores** (owner, 2026-11-16). Status: accepted, no change.
+  Why: the owner accepts it for now rather than adding a second model or calibration.
 
 ## Ranking
 
