@@ -43,7 +43,6 @@ import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegra
 import { rankForWrite } from "../lib/tiers-store.mjs";
 import { ensureReviewSchema } from "../lib/reviews/store.mjs";
 import { atTheDoor } from "../lib/reviews/door.mjs";
-import { quotaDay } from "./quota-day.mjs";
 import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
   RESPONSE_SCHEMA,
@@ -436,7 +435,6 @@ async function runRubric() {
       const door = await atTheDoor(db, {
         grade: out.rubric,
         row: { ...row, page_text: out.pageText ?? row.page_text, facts: out.facts == null ? row.facts : JSON.stringify(out.facts) },
-        night: quotaDay(now).day,
         now,
         autoApply: false,
         gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, g, { url }), now),

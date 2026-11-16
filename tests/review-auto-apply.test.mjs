@@ -14,7 +14,10 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { HIDDEN_WHERE } from "../lib/hidden.mjs";
-import { OWNER_NOT_PORTFOLIO, RULE_ACTOR, autoApplyReviews, confirmedRelists, decideReviews, listReviews, passesRule, undoReviews, withOwnerVerdict } from "../lib/reviews/store.mjs";
+import { OWNER_NOT_PORTFOLIO, RULE_ACTOR, autoApplyReviews, confirmedRelists, decideReviews, listReviews, ownerGrade, ownerVerdict, passesRule, undoReviews } from "../lib/reviews/store.mjs";
+
+// A grade with the owner's verdict applied, as the door does (lib/reviews/door.mjs doorDecision).
+const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await ownerVerdict(db, url));
 import { reviewAutoApplyEnabled } from "../lib/reviews/flag.ts";
 import { planExclusions } from "../pipeline/exclusions.mjs";
 import { planReviewAdditions } from "../pipeline/review-additions.mjs";

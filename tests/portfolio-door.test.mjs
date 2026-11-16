@@ -36,11 +36,14 @@ import {
   decideReviews,
   ensureReviewSchema,
   listReviews,
+  ownerGrade,
   ownerVerdict,
   undoReviews,
-  withOwnerVerdict,
 } from "../lib/reviews/store.mjs";
 import { BOT_WALL_REASON, doorDecision } from "../lib/reviews/door.mjs";
+
+// A grade with the owner's verdict applied, as the door does (doorDecision).
+const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await ownerVerdict(db, url));
 
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 const DAY = 86400000;
@@ -201,7 +204,8 @@ test("F1: a Gemini 'no' with 3 signals is removed automatically, with a record t
   assert.equal(again.summary.stages.find((s) => s.key === "grade_changed").done, 1, "graded again");
   assert.equal(await hidden(db, url), false, "still listed");
   assert.equal(await notPortfolio(db, url), false);
-  assert.deepEqual((await reviewsOf(db, url)).map((r) => String(r.status)), ["pending"], "one open case, no new removal");
+  // One open case, no new removal: the undone row is replaced by the new grade's held row.
+  assert.deepEqual((await reviewsOf(db, url)).map((r) => [String(r.status), String(r.grp)]), [["closed", "door_not_portfolio"], ["pending", "door_held"]]);
 });
 
 test("F5: a Gemini 'no' with 4 or more signals stays listed with a pending row, and the weekly health check does not erase it", async () => {
@@ -436,7 +440,8 @@ test("a removal stays off the list through the next weekly health checks (never 
   const fetchImpl = async (u) => ({ status: 200, ok: true, url: u, text: async () => PORTFOLIO_HTML });
   await runHealthCheck({ db, feed: [{ url, name: "Ann Lee" }], fetchImpl, log: () => {}, now: new Date(T0 + 4 * DAY) });
   assert.equal(String(await col(db, url, "health")), "down");
-  assert.match(String(await col(db, url, "health_reason")), /removed automatically/);
+  // A plain public reason (it reaches data/excluded.json and the Removed page); who decided is kept apart.
+  assert.equal(String(await col(db, url, "health_reason")), "AI grading says this is not a portfolio");
   assert.equal(await hidden(db, url), true);
 });
 

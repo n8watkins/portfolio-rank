@@ -48,10 +48,24 @@ export function guardVerdict(grade, signals) {
  * removal brings this grade back.
  */
 export const HELD_KIND = "held_for_owner";
-const HELD_KINDS = new Set([REVIEW_KIND, HELD_KIND]);
+/** Every review kind that holds a "not a portfolio" for the owner; the SQL below and guardedForReview read this one list. */
+export const HELD_KINDS = Object.freeze([REVIEW_KIND, HELD_KIND]);
+const HELD = new Set(HELD_KINDS);
 
 /** True when a stored grade keeps a site listed against the AI's "not a portfolio" (the guard, or a hold for the owner). */
-export const guardedForReview = (grade) => HELD_KINDS.has(grade?.review?.kind);
+export const guardedForReview = (grade) => HELD.has(grade?.review?.kind);
+
+/** SQL (never NULL): the grade in column `col` (JSON) is held for the owner. */
+export const HELD_SQL = (col) =>
+  `COALESCE((CASE WHEN json_valid(${col}) THEN json_extract(${col}, '$.review.kind') END) IN (${HELD_KINDS.map((k) => `'${k}'`).join(", ")}), 0)`;
+
+/**
+ * The start of every health reason for a site kept off the list because it
+ * is "not a portfolio" (pipeline/health.mjs, the review queue's removals,
+ * lib/reviews/store.mjs). pipeline/exclusions.mjs kindOf files such a site as
+ * "not_portfolio", and the public Removed page prints the reason.
+ */
+export const AI_SAYS_NOT_PORTFOLIO = "AI grading says this is not a portfolio";
 
 /** What the AI itself answered to "is it a portfolio": its own answer even when a hold or the owner overrode it. */
 export const aiSaysPortfolio = (grade) => (typeof grade?.ai_is_portfolio === "boolean" ? grade.ai_is_portfolio : grade?.is_portfolio !== false);

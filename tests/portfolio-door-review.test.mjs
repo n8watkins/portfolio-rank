@@ -269,7 +269,7 @@ test("3: a removal stays down with its reason when the weekly check sees an erro
   const { ctx, clock } = context(db, { gemini: { [a]: answer(false), [b]: answer(false) } });
   await drive(ctx, clock);
   const reason = String(await col(db, a, "health_reason"));
-  assert.match(reason, /removed automatically/);
+  assert.equal(reason, "AI grading says this is not a portfolio");
   // a answers 500; b's address is a duplicate of an entry listed before it.
   const fetchImpl = async (u) =>
     String(u).includes("removed-error") ? { status: 500, ok: false, url: u, text: async () => "" } : { status: 200, ok: true, url: u, text: async () => PORTFOLIO_HTML };
@@ -281,7 +281,8 @@ test("3: a removal stays down with its reason when the weekly check sees an erro
   await runHealthCheck({ db, feed, fetchImpl, log: () => {}, now: new Date(T0 + 4 * DAY) });
   for (const u of [a, b]) {
     assert.equal(String(await col(db, u, "health")), "down", u);
-    assert.match(String(await col(db, u, "health_reason")), /removed automatically/, u);
+    assert.equal(String(await col(db, u, "health_reason")), reason, u);
+    assert.equal(String(await col(db, u, "health_fails")) !== "0", true, u);
     assert.equal(await hidden(db, u), true, u);
   }
 });

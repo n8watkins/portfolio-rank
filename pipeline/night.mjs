@@ -226,7 +226,7 @@ async function count(db, from) {
 // answer, lib/reviews/door.mjs), "skipped" (screenshot unavailable for now)
 // or "sentinel" (screenshot gone for good). Throws Gemini errors and
 // malformed answers.
-async function gradeItem(ctx, gemini, { row }, { replace }, stage) {
+async function gradeItem(ctx, gemini, { row }, { replace }) {
   const url = String(row.url);
   const image = await ctx.image(String(row.shot_key));
   if (image === "missing") {
@@ -247,18 +247,12 @@ async function gradeItem(ctx, gemini, { row }, { replace }, stage) {
   const door = await atTheDoor(ctx.db, {
     grade,
     row,
-    night: stage?.night ?? pacificDay(ctx.now()),
     now,
     autoApply: Boolean(ctx.flags?.reviewAutoApply),
     gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(ctx.db, g, { url, now: ctx.now() }), now),
   });
   return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
 }
-
-const pacificDay = (ms) => {
-  const p = pacificParts(ms);
-  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
-};
 
 /**
  * A rubric v2 grade from stored evidence (row: url, name, page_text, facts,
@@ -280,8 +274,8 @@ export async function gradeFromEvidence(gemini, { row, image, now }) {
 // ---------------------------------------------------------------------------
 const handlers = {
   // sites: each item is a site (its id the URL), logged per request and listed in the summary.
-  grade_new: { ...queues.grade_new, parkable: true, sites: true, run: (ctx, g, item, stage) => gradeItem(ctx, g, item, { replace: false }, stage) },
-  grade_changed: { ...queues.grade_changed, parkable: true, sites: true, run: (ctx, g, item, stage) => gradeItem(ctx, g, item, { replace: true }, stage) },
+  grade_new: { ...queues.grade_new, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: false }) },
+  grade_changed: { ...queues.grade_changed, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   compare: {
     off: (ctx) => (ctx.flags.rankingV2 ? null : 'off: RANKING_V2 is not "true" (the ELO-era AI votes run only by hand, judge-vote.yml)'),
     count: async (ctx) => {
@@ -301,7 +295,7 @@ const handlers = {
   content: contentStage,
   // The blog's image library, a few house-style illustrations a night (pipeline/content/library-stage.mjs).
   library: libraryStage,
-  regrade: { ...queues.regrade, parkable: true, sites: true, run: (ctx, g, item, stage) => gradeItem(ctx, g, item, { replace: true }, stage) },
+  regrade: { ...queues.regrade, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   experiment: { off: () => "nothing scheduled" },
 };
 
@@ -652,10 +646,12 @@ export async function runBatch(ctx, state) {
     const gemini = createGemini({
       apiKey: ctx.apiKey,
       models: [PRIMARY_MODEL],
-      // A grade or a comparison answers in seconds; a stalled request gives up after plan.requestTimeoutSeconds
-      // (60) instead of the client's 120, so one item's four tries fit well inside a batch (audit F9). Posts
-      // keep the client's own timeout: a long draft can legitimately take longer.
-      ...(posts ? CONTENT_GEMINI : { timeoutMs: plan.requestTimeoutSeconds * 1000 }),
+      // A single-site grade (the stages whose items are sites) gives up after plan.requestTimeoutSeconds
+      // (60) instead of the client's 120, so one item's four tries fit well inside a batch (audit F9).
+      // Comparisons (five sites with images) and posts keep the client's own timeout: there is no latency
+      // data to say they finish in 60 s. The batch's wall-clock stop covers every stage.
+      ...(posts ? CONTENT_GEMINI : {}),
+      ...(h.sites ? { timeoutMs: plan.requestTimeoutSeconds * 1000 } : {}),
       limiter,
       onRequest: (r) => requestLog.record(r),
       onDailyQuota: "stop",
@@ -709,7 +705,7 @@ export async function runBatch(ctx, state) {
           if (h.sites && door) {
             noteSite(s, "graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome, tier: door.tier ?? null });
             if (door.outcome === "remove") noteSite(s, "removed", { url: item.id, reviewId: door.reviewId });
-            else if (["review", "strong_signals", "held"].includes(door.outcome) && !door.pendingBefore) {
+            else if (["review", "strong_signals", "held"].includes(door.outcome)) {
               noteSite(s, "review", { url: item.id, why: VERDICT_WORDS[door.outcome], reviewId: door.reviewId });
             }
           }

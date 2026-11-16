@@ -21,6 +21,7 @@
 
 import fs from "fs";
 import { normKey } from "./health.mjs";
+import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
 export const MAX_EXCLUDE_SHARE = 0.1;
@@ -28,8 +29,47 @@ export const MAX_EXCLUDE_SHARE = 0.1;
 export function kindOf(reason) {
   const r = String(reason ?? "");
   if (r.startsWith("duplicate of")) return "duplicate";
-  if (r.startsWith("AI grading says")) return "not_portfolio";
+  if (r.startsWith(AI_SAYS_NOT_PORTFOLIO)) return "not_portfolio";
   return "down";
+}
+
+/**
+ * Who removed a "not a portfolio" site, from its latest applied "remove" row
+ * in the review queue (lib/reviews/store.mjs), in data/excluded.json's shape
+ * (#222): { decided_by: "owner" | "rule:...", evidence: { review, gemini?,
+ * signals? } }, or null when no row decided it (the health check's own
+ * failure). Never shown on the public Removed page.
+ */
+export async function removalDecider(db, url) {
+  let r;
+  try {
+    r = (
+      await db.execute({
+        sql: `SELECT id, decided_by, verdicts, signals FROM status_reviews
+              WHERE url = ? AND proposed = 'remove' AND status IN ('confirmed', 'auto_applied')
+              ORDER BY decided_at DESC, id DESC LIMIT 1`,
+        args: [url],
+      })
+    ).rows[0];
+  } catch (e) {
+    if (/no such table/i.test(String(e?.message ?? e))) return null;
+    throw e;
+  }
+  if (!r) return null;
+  const by = String(r.decided_by ?? "");
+  const parse = (v) => {
+    try {
+      return v == null ? null : JSON.parse(String(v));
+    } catch {
+      return null;
+    }
+  };
+  const gemini = parse(r.verdicts)?.gemini35?.solo?.reason ?? null;
+  const signals = parse(r.signals);
+  return {
+    decided_by: by.startsWith("rule:") ? by : "owner",
+    evidence: { review: Number(r.id), ...(gemini ? { gemini } : {}), ...(typeof signals?.score === "number" ? { signals: signals.score } : {}) },
+  };
 }
 
 export const readJson = (file, fallback) => {
@@ -106,15 +146,19 @@ export async function planExclusions({ db, excluded, feed, now = new Date() }) {
   for (const r of rows) {
     const url = String(r.url);
     if (!onFeed.has(url) || have.has(normKey(url))) continue;
+    const kind = kindOf(r.health_reason);
+    // A removal decided in the review queue says who decided, apart from the public reason.
+    const decider = kind === "not_portfolio" ? await removalDecider(db, url) : null;
     added.push({
       url,
       name: onFeed.get(url).name ?? (r.name == null ? url : String(r.name)),
       reason: String(r.health_reason ?? ""),
-      kind: kindOf(r.health_reason),
+      kind,
       removed: day,
       first_failed: r.health_first_fail_at == null ? null : String(r.health_first_fail_at),
       last_checked: r.health_checked_at == null ? null : String(r.health_checked_at),
       checks: Number(r.health_fails ?? 0),
+      ...(decider ?? {}),
     });
   }
   if (added.length > feed.length * MAX_EXCLUDE_SHARE) {

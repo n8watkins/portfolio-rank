@@ -16,6 +16,7 @@
 import { httpGate, isParkingDomain, netloc, parkingPhrase, visibleText } from "./gate.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
+import { AI_SAYS_NOT_PORTFOLIO, HELD_SQL } from "./portfolio-guard.mjs";
 
 // Thresholds. The check runs weekly, so 3 failed checks in a row span 14 days.
 // Requiring both means extra manual runs can't confirm a site down faster.
@@ -305,7 +306,7 @@ export async function runHealthCheck({
     // whatever this check sees (loaded, failed, inconclusive or a duplicate), until an Undo or an owner
     // decision changes the grade or the health: it was decided, not seen failing.
     const was = rows.get(r.url);
-    if (Number(was?.not_portfolio ?? 0) === 1 && String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith("AI grading says")) {
+    if (Number(was?.not_portfolio ?? 0) === 1 && String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith(AI_SAYS_NOT_PORTFOLIO)) {
       r.ok = false;
       r.decidedDown = true;
       r.reason = String(was.health_reason);
@@ -317,7 +318,7 @@ export async function runHealthCheck({
       r.reason = `duplicate of ${dupes.get(r.url)}`;
     } else if (Number(was?.not_portfolio ?? 0) === 1) {
       r.ok = false;
-      r.reason = "AI grading says this is not a portfolio";
+      r.reason = AI_SAYS_NOT_PORTFOLIO;
     }
   }
 
@@ -377,8 +378,7 @@ export async function runHealthCheck({
               signals = COALESCE(excluded.signals, portfolios.signals),
               needs_review = CASE WHEN excluded.signals IS NULL THEN portfolios.needs_review
                                   -- A "not a portfolio" held for the owner (lib/reviews/door.mjs) stays marked until he decides.
-                                  WHEN (CASE WHEN json_valid(portfolios.ai_rubric) THEN json_extract(portfolios.ai_rubric, '$.review.kind') END)
-                                       IN ('strong_signals', 'held_for_owner') THEN 1
+                                  WHEN ${HELD_SQL("portfolios.ai_rubric")} THEN 1
                                   ELSE excluded.needs_review END
               ${retryNow ? ", retry_at = excluded.health_checked_at" : ""}`,
       args: [

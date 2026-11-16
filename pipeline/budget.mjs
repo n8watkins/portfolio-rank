@@ -90,8 +90,8 @@ export const DEFAULT_PLAN = {
   // A batch (one Workflow step, limited to 20 minutes) takes no new item
   // after this many minutes of wall clock (audit F9, 2026-11-16).
   batchMinutes: 10,
-  // A grade or comparison request gives up after this many seconds (the
-  // client's default is 120); posts keep the client's own timeout.
+  // A single-site grade request gives up after this many seconds (the
+  // client's default is 120); comparisons and posts keep the client's own.
   requestTimeoutSeconds: 60,
   // Per stage: a request cap (counted over the whole quota day, retries
   // included) and a wall-clock cap in minutes. Caps add up to more than
