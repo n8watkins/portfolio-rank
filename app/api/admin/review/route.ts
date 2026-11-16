@@ -10,12 +10,14 @@ import { PRIVATE, fail, forgetPool } from "@/lib/games/server";
 // (ADMIN_GITHUB_ID) only.
 // GET  /api/admin/review -> { pending: [review], autoApplied: [review], decided: [review] (latest 200 each) }
 // POST /api/admin/review { ids: number[] (1 to 200), action: "confirm" | "reject" | "undo" }
-//   -> { results: [{ id, url, ok, error?, applied? }] }
+//   -> { results: [{ id, url, ok, error?, applied?, reversed?, note? }] }
 //   Confirm applies each change through the pipeline's own paths (see the
 //   store) and records who and when; Reject records the decision only; Undo
-//   takes back a change the review rule applied (status auto_applied): the
-//   site's state goes back to what it was and the row waits for the owner
-//   again. A row in another state answers ok: false, error "wrong_status".
+//   takes back any decision (the owner's, the review rule's or another
+//   rule's): what it changed is reversed (store planUndo) and the row waits
+//   for the owner again. Confirm and Undo on a row in another state answer
+//   ok: false, error "wrong_status". The page asks before every one of these
+//   (components/admin/ConfirmButton.tsx).
 //   400 bad_request, 401/403
 // Decisions are recorded under "admin:<login>".
 export const dynamic = "force-dynamic";

@@ -157,7 +157,7 @@ test("undo puts the site back exactly, returns the row to pending for good, and 
   assert.equal(res.ok, true);
   const r = await reviewRow(db, id);
   assert.deepEqual([r.status, r.decided_by, r.undone_by, r.undone_at], ["pending", null, "admin:owner", LATER.toISOString()]);
-  assert.deepEqual(JSON.parse(String(r.applied)).undo, { at: LATER.toISOString(), by: "admin:owner" });
+  assert.deepEqual(JSON.parse(String(r.applied)).undo, { at: LATER.toISOString(), by: "admin:owner", reversed: "exact" });
   const back = await rubricOf(db, url);
   assert.equal(back.is_portfolio, false);
   assert.equal(back.review, undefined, "the grade is the one before");
@@ -166,7 +166,7 @@ test("undo puts the site back exactly, returns the row to pending for good, and 
   assert.deepEqual([p.health, p.health_reason, Number(p.health_fails), Number(p.needs_review)], ["suspect", "AI grading says this is not a portfolio", 2, 1]);
   assert.equal(await withOwnerVerdict(db, url, GRADE()).then((g) => g.is_portfolio), false, "no verdict once undone");
   assert.deepEqual(await auto(db, new Date("2026-11-17T00:00:00Z")), [], "the rule never applies an undone row again");
-  assert.deepEqual((await undoReviews(db, { ids: [id], actor: "admin:owner", now: LATER }))[0].error, "wrong_status", "undo only on an automatic apply");
+  assert.deepEqual((await undoReviews(db, { ids: [id], actor: "admin:owner", now: LATER }))[0].error, "wrong_status", "a pending row has nothing to undo");
 
   // The owner can still decide it.
   const [c] = await decideReviews(db, { ids: [id], action: "confirm", actor: "admin:owner", onFeed: () => true, now: LATER });
