@@ -67,7 +67,8 @@ function context(db) {
     ctx: {
       db,
       apiKey: "test-key-not-real",
-      plan: budgetPlan(JSON.stringify({ stages: { regrade: { cap: 300 } } })),
+      // Both re-grading stages are off by default (owner, 2026-11-16); this test runs them.
+      plan: budgetPlan(JSON.stringify({ stages: { regrade: { cap: 300 }, grade_changed: { cap: 100 } } })),
       quota: { [PRIMARY_MODEL]: 500, [BACKUP_MODEL]: 500 },
       rpm: 8,
       now: () => clock.t,

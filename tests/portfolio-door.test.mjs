@@ -40,7 +40,7 @@ import {
   undoReviews,
   withOwnerVerdict,
 } from "../lib/reviews/store.mjs";
-import { BOT_WALL_REASON } from "../lib/reviews/door.mjs";
+import { BOT_WALL_REASON, doorDecision } from "../lib/reviews/door.mjs";
 
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 const DAY = 86400000;
@@ -267,6 +267,21 @@ test("F6: a rule's verdict is stored and shown as the rule's, and only the owner
   assert.equal((await grade(db, url)).review.kind, OWNER_KIND);
   assert.equal((await ownerVerdict(db, url)).isPortfolio, false);
   assert.equal((await withOwnerVerdict(db, url, later)).is_portfolio, false);
+});
+
+test("F6: what a rule decided before is weighed at the door: a later 'no' against it waits for the owner, never removed by a rule", () => {
+  const row = { url: "https://weighed.dev", name: "Ann Lee", page_text: "Hi, I build things.", facts: JSON.stringify({ signals: signals(2) }) };
+  const no = gradeRecord({ parsed: answer(false), model: PRIMARY_MODEL, facts: { signals: signals(2) }, source: "r2" });
+  assert.equal(doorDecision({ grade: no, row }).outcome, "remove", "no earlier decision: the rule removes it");
+  const afterRule = doorDecision({ grade: no, row, rule: { isPortfolio: true, by: RULE_ACTOR, at: "2026-11-14T10:00:00Z" } });
+  assert.deepEqual([afterRule.outcome, afterRule.group, afterRule.grade.is_portfolio], ["held", "door_held", true]);
+  assert.match(afterRule.why, /rule:both-pass/);
+  const regrade = doorDecision({ grade: no, row, previous: { tier: "B", is_portfolio: true, judged_at: "2026-10-01T00:00:00Z" } });
+  assert.equal(regrade.outcome, "held", "a re-grade's 'no' on a site graded a portfolio is never removed by the rule");
+  assert.equal(doorDecision({ grade: no, row, takenBack: true }).outcome, "held");
+  const owner = doorDecision({ grade: no, row, owner: { isPortfolio: true, by: "admin:owner", at: "2026-11-15T00:00:00Z", batch: "b" } });
+  assert.deepEqual([owner.outcome, owner.grade.is_portfolio, owner.grade.review.kind], ["owner", true, OWNER_KIND]);
+  assert.equal(doorDecision({ grade: gradeRecord({ parsed: answer(true), model: PRIMARY_MODEL, facts: null, source: "r2" }), row }).outcome, "portfolio");
 });
 
 test("F2: the 'grade changed sites' and 're-grade' stages are off by default", () => {

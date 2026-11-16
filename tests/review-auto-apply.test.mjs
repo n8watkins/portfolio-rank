@@ -132,6 +132,9 @@ test("auto-apply: passes are applied like Confirm and recorded; the rest stay pe
   assert.ok(JSON.parse(String(r.verdicts)).gemini31, "the verdicts stay on the row");
   const g = await rubricOf(db, pass);
   assert.deepEqual([g.is_portfolio, g.ai_is_portfolio, g.review.by], [true, false, RULE_ACTOR]);
+  // The rule's verdict is the rule's, never the owner's (owner, 2026-11-16).
+  assert.equal(g.review.kind, "rule_applied");
+  assert.doesNotMatch(g.review.reason, /owner confirmed/i);
   assert.equal(String((await row(db, pass)).health), "live");
   assert.equal(await member(db, pass), 1);
   assert.equal(String((await reviewRow(db, idFail)).status), "pending");
@@ -141,7 +144,9 @@ test("auto-apply: passes are applied like Confirm and recorded; the rest stay pe
   const lists = await listReviews(db);
   assert.deepEqual(lists.autoApplied.map((x) => x.id), [idPass]);
   assert.deepEqual(lists.decided, [], "the owner's own decisions are listed apart");
-  assert.equal((await withOwnerVerdict(db, pass, GRADE())).is_portfolio, true, "later grades keep the applied verdict");
+  // A rule's apply is not the owner's verdict: a later grade is judged at the door (lib/reviews/door.mjs),
+  // where a "no" against this rule's "portfolio" waits for the owner instead of being applied.
+  assert.equal((await withOwnerVerdict(db, pass, GRADE())).is_portfolio, false, "a rule's verdict does not bind later grades");
 });
 
 test("undo puts the site back exactly, returns the row to pending for good, and logs who and when", async () => {
