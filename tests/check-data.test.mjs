@@ -47,12 +47,19 @@ test("a list cut short, or a file that is not a list, is a problem", () => {
   assert.match(checkData({ ...good(), excluded: { url: "https://x.example" } })[0], /excluded\.json is not a list/);
 });
 
-test("an excluded entry needs its address, and its text fields must be text", () => {
+test("excluded.json is checked no more strictly than the page and the generator read it", () => {
   const d = good();
-  d.excluded.push({ name: "No address" }, { url: "https://k.example", kind: 3 });
+  // What the readers already skip or accept is fine: an old bare address, an entry with no url.
+  d.excluded.push("https://old-style.example", { name: "No address" });
+  d.additions.push({ url: "" }, { source: "review" });
+  assert.deepEqual(checkData(d), []);
+
+  // What would break a reader is not: a field the page prints that is not text, an entry that is neither.
+  d.excluded.push({ url: "https://k.example", kind: 3 }, 42, null);
   const problems = checkData(d);
-  assert.equal(problems.length, 2);
-  assert.match(problems[1], /has a kind that is not text/);
+  assert.equal(problems.length, 3);
+  assert.match(problems[0], /has a kind that is not text/);
+  assert.match(problems[1], /neither an address nor an object/);
 });
 
 test("the command fails on a broken file and names it", () => {

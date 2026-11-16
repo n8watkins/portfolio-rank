@@ -11,8 +11,10 @@
 //
 //   node scripts/check-data.mjs [dir]     dir defaults to ./data
 //
-// New fields are fine (pages ignore what they do not know). A missing or
-// mistyped field that a page reads is not.
+// It is no stricter than the code that reads each file, so it never blocks
+// data the site would have shown: new fields are fine, and so is whatever a
+// reader already skips. A file that is not JSON, a list cut short, or a
+// missing or mistyped field that a page reads is not.
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -62,17 +64,29 @@ export function checkData({ feed, additions, excluded }) {
     say(`feed.json lists ${feed.length} portfolios, fewer than ${MIN_FEED}: it looks cut short`);
   }
 
-  list("additions.json", additions, (e, at) => {
-    if (!isText(e.name)) say(`${at} has no name`);
-    if (!isWebAddress(e.url)) say(`${at} has no web address (url: ${JSON.stringify(e.url)})`);
-  });
+  // No page imports additions.json; the feed generator reads it and skips an
+  // entry without an address, so objects are all it needs.
+  list("additions.json", additions, () => {});
 
-  list("excluded.json", excluded, (e, at) => {
-    if (!isWebAddress(e.url)) say(`${at} has no web address (url: ${JSON.stringify(e.url)})`);
-    for (const field of ["name", "kind", "reason", "removed"]) {
-      if (e[field] !== undefined && typeof e[field] !== "string") say(`${at} has a ${field} that is not text`);
-    }
-  });
+  // As loose as its readers: app/removed/page.tsx skips bare address strings
+  // (old entries) and entries without a url, and pipeline/generate_feed.py
+  // takes a string or an object. Anything else would break the generator, and
+  // a field the page prints must be text.
+  if (!Array.isArray(excluded)) {
+    say("excluded.json is not a list");
+  } else {
+    excluded.forEach((e, i) => {
+      const at = `excluded.json[${i}]`;
+      if (typeof e === "string") return;
+      if (!isObject(e)) {
+        say(`${at} is neither an address nor an object`);
+        return;
+      }
+      for (const field of ["url", "name", "kind", "reason", "removed"]) {
+        if (e[field] !== undefined && typeof e[field] !== "string") say(`${at} has a ${field} that is not text`);
+      }
+    });
+  }
 
   return problems;
 }

@@ -22,9 +22,8 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: "Code to run: release (the last release, as production runs), checkout (this branch) or one vX.Y.Z tag"
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
         required: false
-        default: "release"
       dry_run:
         description: "Report only, push nothing (off opens or updates the upstream pull request)"
         type: boolean
@@ -56,7 +55,7 @@ jobs:
       # Production runs the last release's code (.github/actions/release-code).
       - uses: ./.github/actions/release-code
         with:
-          code: ${{ inputs.code || 'release' }}
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24

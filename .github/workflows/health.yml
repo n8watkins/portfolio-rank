@@ -17,9 +17,8 @@ on:
   workflow_dispatch:
     inputs:
       code:
-        description: "Code to run: release (the last release, as production runs), checkout (this branch) or one vX.Y.Z tag"
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
         required: false
-        default: "release"
   # Fallback only: Mondays 12:00 UTC, after Cloudflare's Sunday-night start;
   # skips when Cloudflare started it in the last 30 hours (fallback-guard).
   schedule:
@@ -91,7 +90,7 @@ jobs:
       # HEAD stays on main, so the data pull request below holds data only.
       - uses: ./.github/actions/release-code
         with:
-          code: ${{ inputs.code || 'release' }}
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24

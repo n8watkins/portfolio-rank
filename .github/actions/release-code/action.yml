@@ -1,10 +1,14 @@
-# Puts the last release's code in the working tree, under the data files that
-# are already checked out (DEPLOY.md "How a change ships").
+# Puts production's code in the working tree, under the data files that are
+# already checked out (DEPLOY.md "How a change ships").
 #
-# Production is the last release: the site is deployed from its tag, and the
-# scheduled jobs that work on the production database run its code too. A
-# merge to main reaches staging only; it reaches production, the site and the
-# jobs alike, when a release is cut (npm run release -- --push).
+# Production is the release that was last deployed and smoke checked. The
+# Deploy workflow records it by moving the `production` branch to that
+# release's commit, and nothing else writes that branch. The scheduled jobs
+# that work on the production database run that code too, so a merge to main
+# reaches staging only, and a new release reaches the jobs when its deploy
+# (with its database changes) has succeeded, not when its tag appears. Going
+# back to an older release moves the branch back, for the site and the jobs
+# alike.
 #
 # Use it right after actions/checkout. What it leaves:
 #   - HEAD and the index stay where the checkout put them (main, for a
@@ -16,18 +20,18 @@
 #     file whatever this does, and its local actions must match it;
 #   - every other file is the release's.
 #
-# Before the first release tag exists it changes nothing and says so, so the
-# jobs keep running main's code until the baseline is cut.
+# Before the first release is deployed there is no `production` branch: it
+# changes nothing and says so, so the jobs keep running main's code. A failure
+# to reach GitHub is an error, never mistaken for that.
 name: Release code
-description: Replace the checked-out code with the last release's, keeping data/ and .github/
+description: Replace the checked-out code with production's release, keeping data/ and .github/
 
 inputs:
   code:
     description: >-
-      "release" for the newest vX.Y.Z tag, "checkout" to keep what was checked
-      out (to try a branch by hand), or one exact tag such as v0.4.0
+      Empty or "release" for what production runs, "checkout" to keep what was
+      checked out (to try a branch by hand), or one exact tag such as v0.4.0
     required: false
-    default: release
 
 outputs:
   tag:
@@ -43,5 +47,6 @@ runs:
     - id: code
       shell: bash
       env:
-        CODE: ${{ inputs.code || 'release' }}
+        # The one place the default lives is the script.
+        CODE: ${{ inputs.code }}
       run: bash "$GITHUB_ACTION_PATH/release-code.sh"
