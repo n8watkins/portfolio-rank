@@ -93,7 +93,12 @@ To try a pull request on staging: `gh pr edit <number> --add-label staging`; to 
 Nobody merges branches into a shared staging branch by hand any more.
 The smoke check is read-only (GET requests and the start of a GitHub sign-in).
 It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, sign-in redirects to GitHub with a client id and the site's own callback URL, and the old address answers a 301 to the same path.
-CI (typecheck, lint, the Worker build for both environments, E2E) runs on every pull request into main before it can merge.
+CI runs on every pull request into main before it can merge, sized to the change (`.github/workflows/ci.yml`, `scripts/ci-lanes.mjs`).
+It follows the site's imports to sort the changed files: docs alone run nothing; code the site never imports (a script, the nightly capture, a workflow file, a unit test) runs typecheck, lint and the unit tests; `data/` adds the Worker build; anything the site reaches, and anything unknown, runs everything with the browser tests (E2E).
+A release pull request always runs everything, which is the full check on the batch before production deploys.
+`npm run test:unit` runs the tests that need no running site (about a minute and a half, no build); `npm run test:e2e` builds the app and runs every test.
+A test file needs the running site when it reads one of `scripts/test-e2e.sh`'s `E2E_` variables; every other `tests/*.test.mjs` is a unit test.
+The main ruleset requires the one check `CI result`, which passes when every job that ran passed.
 Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging workflow skips with a notice.
 The release plan, the order open work lands in and the staging fidelity work are in [docs/audits/release-and-staging.md](docs/audits/release-and-staging.md).
 
