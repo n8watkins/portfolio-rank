@@ -104,9 +104,13 @@ test("the Automation panel: save the nights and drafts a week, queue a topic, se
   const { page: p, context, errors } = await pageAs(await admin());
   await p.goto(`${BASE}/admin/blog`);
   const panel = p.getByRole("region", { name: "Automation" });
-  await panel.getByText("On: 2 drafts a week on Monday and Wednesday nights, for your review").waitFor();
+  // No saved settings: scheduled drafts are off until the owner saves them on (audit 2026-11-16).
+  await panel.getByText(/^Off$/).waitFor();
   assert.equal(await panel.getByRole("radio", { name: /Publish automatically/ }).isDisabled(), true, "the config keeps publishing off");
   await panel.getByText(/Needs CONTENT_MODE "publish"/).waitFor();
+  await panel.getByRole("switch", { name: "Scheduled drafts" }).click();
+  await panel.getByRole("button", { name: "Save automation" }).click();
+  await panel.getByText("On: 2 drafts a week on Monday and Wednesday nights, for your review").waitFor();
 
   await panel.getByRole("button", { name: "Wednesday" }).click();
   await panel.getByRole("button", { name: "Thursday" }).click();
