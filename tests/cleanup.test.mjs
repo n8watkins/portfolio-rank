@@ -13,6 +13,7 @@ import { createClient } from "@libsql/client";
 import { httpGate, parkingPhrase } from "../pipeline/gate.mjs";
 import {
   ACTIVE,
+  AI_WORK,
   captureRetryAt,
   dueForCapture,
   ensureRosterSchema,
@@ -396,18 +397,21 @@ test("runHealthCheck records nothing when most sites fail at once (the runner, n
   assert.match(healthSummary(s), /FAILED/);
 });
 
-test("ACTIVE() keeps delisted, failing and down rows out of background jobs", async () => {
+test("ACTIVE() keeps delisted, down and unanswering rows out of the free jobs; AI_WORK() keeps every failing row out of the AI's", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
   await db.batch([
     "INSERT INTO portfolios (url) VALUES ('https://ok.example')",
-    "INSERT INTO portfolios (url, health) VALUES ('https://suspect.example', 'suspect')",
+    "INSERT INTO portfolios (url, health, health_reason) VALUES ('https://suspect.example', 'suspect', 'renders blank')",
+    "INSERT INTO portfolios (url, health, health_reason) VALUES ('https://unanswering.example', 'suspect', 'HTTP 402: deployment paused')",
     "INSERT INTO portfolios (url, health) VALUES ('https://down.example', 'down')",
     "INSERT INTO portfolios (url, delisted_at) VALUES ('https://gone.example', '2026-11-01')",
   ]);
-  const urls = (await db.execute(`SELECT url FROM portfolios WHERE ${ACTIVE()} ORDER BY url`)).rows.map((r) => r.url);
+  const urls = async (where) => (await db.execute(`SELECT url FROM portfolios WHERE ${where} ORDER BY url`)).rows.map((r) => r.url);
+  // A site suspect for what its page shows keeps its capture retries; one that does not answer does not.
+  assert.deepEqual(await urls(ACTIVE()), ["https://ok.example", "https://suspect.example"]);
   // A site that failed its last check is out of the AI's work at once (owner, 2026-11-16).
-  assert.deepEqual(urls, ["https://ok.example"]);
+  assert.deepEqual(await urls(AI_WORK()), ["https://ok.example"]);
 });
 
 // ---------------------------------------------------------------------------

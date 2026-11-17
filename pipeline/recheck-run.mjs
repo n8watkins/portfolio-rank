@@ -2,7 +2,10 @@
 // The hourly re-check of the not-working pool (.github/workflows/recheck.yml;
 // pipeline/recheck.mjs). Free: no Gemini, no email.
 //
-// Usage: node pipeline/recheck-run.mjs [--no-browser] [--controls N]
+// Usage: node pipeline/recheck-run.mjs [--no-browser] [--controls N] [--dry-run]
+// --dry-run checks the due sites (and, on a database the pool has never run
+// on, the rows its one-time adoption would make due) and writes nothing; it
+// prints what would change.
 // Writes a Markdown report to GITHUB_STEP_SUMMARY when set. Exits 1 when the
 // run looks broken (its browser never started, or too few control sites
 // loaded) so the workflow files an issue; nothing is recorded then.
@@ -21,7 +24,7 @@ const db = pipelineDb(path.join(import.meta.dirname, ".."));
 const renderer = args.includes("--no-browser") ? null : createRenderer();
 let exitCode = 0;
 try {
-  const s = await runRecheck({ db, render: renderer?.render, controls: Number(flag("controls", String(CONTROL_SITES))) });
+  const s = await runRecheck({ db, render: renderer?.render, controls: Number(flag("controls", String(CONTROL_SITES))), dryRun: args.includes("--dry-run") });
   const md = recheckSummary(s);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md}\n`);
   else console.log(`\n${md}`);

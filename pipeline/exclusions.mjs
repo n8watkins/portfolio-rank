@@ -25,7 +25,7 @@ import fs from "fs";
 import { APPLIED_REMOVAL_WHERE, checkSite, normKey } from "./health.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
-import { LEAVE_AFTER_DAYS, NOT_WORKING, ensureHealthSchema, leavesList, notAnswering } from "./not-working.mjs";
+import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesList, notAnswering } from "./not-working.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
 export const MAX_EXCLUDE_SHARE = 0.1;
@@ -166,24 +166,125 @@ export async function planDeadRecheck({ excluded, now = new Date(), render, answ
 }
 
 // The full health check runs every night (owner, 2026-11-16), but the export to data/excluded.json
-// (and the re-check of removed entries) stays weekly, so its bot pull request does not become a daily
-// one: a not-working site leaves the list only after 90 days anyway. Six days, not seven, so a
-// run that starts a little early still exports. The last export's time is kept in the cache table.
+// (and the re-check of removed entries) is planned once a week, so its bot pull request does not
+// become a daily one: a not-working site leaves the list only after 90 days anyway. Six days, not
+// seven, so a run that starts a little early still plans.
+//
+// A planned export is kept in the cache table (PENDING_EXPORT_KEY) and applied to the files on every
+// night until main carries it (its pull request merged): health.yml rewrites the pull request's
+// branch from main whenever any data file changes (an owner removal on a Tuesday, say), so an export
+// planned on Monday must be in Tuesday's files too. The export counts as done (EXPORT_KEY) only when
+// it has landed; one that never lands within PENDING_EXPORT_MAX_DAYS is dropped and planned again.
 export const EXPORT_EVERY_DAYS = 6;
+export const PENDING_EXPORT_MAX_DAYS = 14;
 const EXPORT_KEY = "health:last-export";
+export const PENDING_EXPORT_KEY = "health:pending-export";
 
-/** Whether the weekly export is due at `now` (none in the last EXPORT_EVERY_DAYS). */
+const cacheGet = async (db, k) => (await db.execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [k] })).rows[0] ?? null;
+const cacheSet = (db, k, v, at) => db.execute({ sql: "INSERT INTO cache (k, v, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, at = excluded.at", args: [k, v, at] });
+
+/** Whether a new weekly export may be planned at `now`: none landed in the last EXPORT_EVERY_DAYS, and none waiting to land. */
 export async function exportDue(db, now = new Date()) {
-  const row = (await db.execute({ sql: "SELECT at FROM cache WHERE k = ?", args: [EXPORT_KEY] })).rows[0];
+  if (await cacheGet(db, PENDING_EXPORT_KEY)) return false;
+  const row = await cacheGet(db, EXPORT_KEY);
   return !row || now.getTime() - Number(row.at) >= EXPORT_EVERY_DAYS * 86400000;
 }
 
-/** Records an export at `now` (the run that opened or updated the pull request). */
+/** Records an export as done at `at` (it landed on main, or it had nothing to carry). */
 export async function markExported(db, now = new Date()) {
-  await db.execute({
-    sql: "INSERT INTO cache (k, v, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, at = excluded.at",
-    args: [EXPORT_KEY, now.toISOString(), now.getTime()],
-  });
+  await cacheSet(db, EXPORT_KEY, now.toISOString(), now.getTime());
+}
+
+/**
+ * A planned export applied to the files' contents (idempotent): entries
+ * `added` (not already there) and dropped from the feed, entries `back`
+ * removed, entries `still` failing given their new check dates.
+ * plan: { added: [entry], back: [url], still: [{ url, last_checked, recheck_after }] }.
+ */
+export function applyExport({ excluded, feed }, plan) {
+  const key = (u) => normKey(u);
+  const back = new Set(plan.back.map(key));
+  const still = new Map(plan.still.map((s) => [key(s.url), s]));
+  const out = excluded
+    .filter((e) => !back.has(key(excludedUrl(e))))
+    .map((e) => {
+      const s = typeof e === "object" ? still.get(key(e.url)) : null;
+      return s ? { ...e, last_checked: s.last_checked, recheck_after: s.recheck_after } : e;
+    });
+  const have = new Set(out.map((e) => key(excludedUrl(e))));
+  for (const a of plan.added) if (!have.has(key(a.url))) out.push(a);
+  const drop = new Set(plan.added.map((a) => key(a.url)));
+  return { excluded: out, feed: feed.filter((p) => !drop.has(key(p.url))) };
+}
+
+/** Whether main's data/excluded.json already carries a planned export (its pull request merged). */
+export function exportLanded({ excluded }, plan) {
+  const have = new Map(excluded.map((e) => [normKey(excludedUrl(e)), e]));
+  return (
+    plan.added.every((a) => have.has(normKey(a.url))) &&
+    plan.back.every((u) => !have.has(normKey(u))) &&
+    plan.still.every((s) => have.get(normKey(s.url))?.recheck_after === s.recheck_after)
+  );
+}
+
+/**
+ * The weekly export, kept until it lands. `excluded` and `feed` are main's
+ * files as checked out. Plans a new export when one is due (planExclusions,
+ * then planDeadRecheck with the full check), keeps it in the cache table and
+ * returns the files with every export not yet on main applied, or null when
+ * there is nothing to apply. A removed site that passes its re-check gets its
+ * not-working marks due now, so once the daily sync lists it again the hourly
+ * re-check brings it back at once instead of at its old monthly date.
+ * `dryRun` plans and returns the same and writes nothing.
+ * Returns { files, plan, planned, landed, held }.
+ */
+export async function weeklyExport({ db, excluded, feed, render, answers, now = new Date(), dryRun = false, log = () => {} }) {
+  let pending = null;
+  let landed = false;
+  const row = await cacheGet(db, PENDING_EXPORT_KEY);
+  if (row) {
+    try {
+      pending = JSON.parse(String(row.v));
+    } catch {
+      pending = null;
+    }
+    if (pending && exportLanded({ excluded }, pending)) {
+      landed = true;
+      if (!dryRun) {
+        await markExported(db, new Date(Number(row.at)));
+        await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [PENDING_EXPORT_KEY] });
+      }
+      pending = null;
+    } else if (!pending || now.getTime() - Number(row.at) >= PENDING_EXPORT_MAX_DAYS * 86400000) {
+      log(`export: the export planned ${new Date(Number(row.at)).toISOString().slice(0, 10)} never landed; planning again`);
+      if (!dryRun) await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [PENDING_EXPORT_KEY] });
+      pending = null;
+    }
+  }
+  let planned = false;
+  let held = [];
+  if (!pending && (await exportDue(db, now))) {
+    planned = true;
+    const plan = await planExclusions({ db, excluded, feed, now, readOnly: dryRun });
+    held = plan.held;
+    const dead = await planDeadRecheck({ excluded: plan.excluded, now, render, ...(answers ? { answers } : {}) });
+    const stillSet = new Set(dead.still);
+    const still = dead.excluded.filter((e) => typeof e === "object" && stillSet.has(e.url)).map((e) => ({ url: e.url, last_checked: e.last_checked, recheck_after: e.recheck_after }));
+    pending = { added: plan.added, back: dead.back, still };
+    const empty = !pending.added.length && !pending.back.length && !pending.still.length;
+    if (!dryRun) {
+      if (dead.back.length) {
+        await db.execute({
+          sql: `UPDATE health_marks SET pool_next_at = ? WHERE url IN (${dead.back.map(() => "?").join(",")}) AND pool_stage IS NOT NULL`,
+          args: [now.toISOString(), ...dead.back],
+        });
+      }
+      if (empty) await markExported(db, now);
+      else await cacheSet(db, PENDING_EXPORT_KEY, JSON.stringify(pending), now.getTime());
+    }
+    if (empty) pending = null;
+  }
+  return { files: pending ? applyExport({ excluded, feed }, pending) : null, plan: pending, planned, landed, held };
 }
 
 /**
@@ -191,14 +292,18 @@ export async function markExported(db, now = new Date()) {
  * feed. Returns { added: [...entries], excluded, feed } without writing; the
  * caller writes the files.
  */
-export async function planExclusions({ db, excluded, feed, now = new Date() }) {
+export async function planExclusions({ db, excluded, feed, now = new Date(), readOnly = false }) {
   const have = new Set(excluded.map((e) => normKey(excludedUrl(e))));
-  await ensureHealthSchema(db);
+  if (!readOnly) await ensureHealthSchema(db);
+  // Marks that no longer describe the row count as none (./not-working.mjs VALID_MARKS); a database from
+  // before the pool (a dry run) has none.
+  const pooled = (await columnsOf(db, "health_marks")).has("pool_health");
   const rows = (
     await db.execute(
       `SELECT p.url, p.name, p.status, p.reason, p.health_reason, p.health_fails, p.health_first_fail_at, p.health_checked_at,
-              m.pool_stage, m.pool_since
-       FROM portfolios p LEFT JOIN health_marks m ON m.url = p.url
+              ${pooled ? `CASE WHEN ${VALID_MARKS()} THEN m.pool_stage END` : "NULL"} AS pool_stage,
+              ${pooled ? `CASE WHEN ${VALID_MARKS()} THEN m.pool_since END` : "NULL"} AS pool_since
+       FROM portfolios p ${pooled ? "LEFT JOIN health_marks m ON m.url = p.url" : ""}
        WHERE p.health = 'down' AND p.delisted_at IS NULL ORDER BY p.url`
     )
   ).rows;

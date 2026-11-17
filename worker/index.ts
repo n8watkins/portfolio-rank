@@ -33,7 +33,7 @@ import { newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
-import { GONE_WHERE, HIDDEN_WHERE } from "../lib/hidden.mjs";
+import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
@@ -84,8 +84,8 @@ type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): P
 
 /**
  * The hourly purges (./edge-cache.ts keeps profiles and the blog a day): profiles whose
- * owner's removal took effect or that the health check hid, and the blog when a post's
- * scheduled time came in the last hour. Best effort: a failure only means the page refreshes when its day is up.
+ * owner's removal took effect, and the blog when a post's scheduled time came in the
+ * last hour. Best effort: a failure only means the page refreshes when its day is up.
  */
 /** CachedPages.purgeTags for scheduled work, when this Worker exposes it (./edge-cache.ts). */
 function purgeTagsOf(ctx: { exports?: unknown }) {
@@ -96,16 +96,17 @@ function purgeTagsOf(ctx: { exports?: unknown }) {
 async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   if (!cached) return;
+  // Profiles the health check took away (the not-working pool, ../pipeline/not-working.mjs): marked when the
+  // write happened, cleared only by a purge that worked, so a failed one is tried again the next hour. One that
+  // comes back needs nothing: a not-found answer is never kept.
+  try {
+    const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => cached.purgeTags(urls.map(profileTag)) });
+    if (out.failed.length) console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly-not-working", error: `purge refused for ${out.failed.length} profile(s); tried again next hour` }));
+  } catch (e) {
+    console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly-not-working", error: String((e as Error)?.message ?? e).slice(0, 200) }));
+  }
   const tags = removed.map(profileTag);
   try {
-    // Profiles the health check hid in the last hour (the not-working pool, ../pipeline/not-working.mjs): their
-    // page answers not found now, so the day-long copy goes. One that comes back needs nothing: a not-found
-    // answer is never kept. Read through the hidden sites' index (../lib/hidden.mjs).
-    const hidden = await database().execute({
-      sql: `SELECT url FROM portfolios WHERE (${HIDDEN_WHERE}) AND ${GONE_WHERE} AND health_checked_at > ? LIMIT 500`,
-      args: [new Date(scheduledTime - 3900_000).toISOString()],
-    });
-    for (const row of hidden.rows) tags.push(profileTag(String(row.url)));
     const r = await database().execute({
       sql: "SELECT 1 FROM posts WHERE status = 'published' AND publish_at > ? AND publish_at <= ? LIMIT 1",
       args: [new Date(scheduledTime - 3600_000).toISOString(), new Date(scheduledTime).toISOString()],

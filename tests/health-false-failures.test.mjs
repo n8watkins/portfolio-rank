@@ -237,6 +237,8 @@ test("d: a decision made in /admin/review during the run is never overwritten", 
   const url = "https://failing.example";
   await site(db, url);
   await db.execute({ sql: "UPDATE portfolios SET health = 'suspect', health_fails = 2, health_reason = 'HTTP 500', health_first_fail_at = ? WHERE url = ?", args: [at(-14).toISOString(), url] });
+  // A database the pool already ran on: this failing row is not one of those it adopted when it shipped.
+  await db.execute({ sql: "INSERT INTO cache (k, v, at) VALUES ('health:pool-adopted', '{}', 0)" });
   const feed = [{ url, name: "Ann Lee" }, ...filler];
   let decided = false;
   const fetchImpl = async (u) => {

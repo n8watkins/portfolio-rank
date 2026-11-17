@@ -16,6 +16,7 @@
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
+import { NOT_ANSWERING_SQL } from "./not-working.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -95,15 +96,31 @@ export async function ensureRosterSchema(db) {
 }
 
 /**
- * SQL condition for rows background jobs may work on (grading, AI
- * comparisons, polls, blog facts, evidence, captures): on the list and
- * passing the health check, or not checked yet. A site that failed its last
- * check ('suspect') is out at once, while it is still shown to visitors, and
- * one not working or confirmed down ('down') is out too (owner, 2026-11-16:
- * the AI never spends a comparison on a site that does not work;
- * pipeline/not-working.mjs). `p` is the table alias.
+ * SQL condition for rows the free background jobs may work on (captures and
+ * their retries, the screenshot refresh, tall images, fingerprints,
+ * Lighthouse, link checks, PageSpeed prewarm, the door's review rows): on
+ * the list, not taken off it ('down'), and not known to be unanswering. A
+ * site 'suspect' because its last check found it not answering
+ * (pipeline/not-working.mjs, the not-working ladder) is left alone, unless a
+ * capture was queued after that check (the review queue's confirm sets
+ * retry_at); a site 'suspect' for a blocked capture or a page with the wrong
+ * thing keeps its capture retries, which is how it recovers. Read from the
+ * row alone, so it never goes stale. `p` is the table alias.
  */
 export const ACTIVE = (p = "portfolios") =>
+  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'
+   AND NOT (COALESCE(${p}.health, '') = 'suspect' AND ${NOT_ANSWERING_SQL(`${p}.health_reason`)}
+            AND NOT (COALESCE(${p}.retry_at, '') > COALESCE(${p}.health_checked_at, '')))`;
+
+/**
+ * SQL condition for rows the AI may spend on (grading, re-grading, AI
+ * comparisons, polls, blog facts, page evidence for a grade, the grader's
+ * comparison pool): on the list and passing its last health check, or not
+ * checked yet. A site that failed its last check ('suspect', for any reason)
+ * is out at once, while it is still shown to visitors (owner, 2026-11-16: the
+ * AI never spends a comparison on a site that does not work).
+ */
+export const AI_WORK = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') IN ('', 'live')`;
 
 /**

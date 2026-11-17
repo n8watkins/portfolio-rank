@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { measurePage } from "./facts.mjs";
 import { httpGate, UA, visibleText } from "./gate.mjs";
 import { normalizePageText } from "./rubric.mjs";
-import { ACTIVE } from "./roster.mjs";
+import { ACTIVE, AI_WORK } from "./roster.mjs";
 import { PRIMARY_MODEL } from "./gemini.mjs";
 
 // Below this much server-rendered text a page is treated as client-rendered
@@ -111,7 +111,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
 export async function rowsNeedingEvidence(db, { limit = 200, rubricVersion = null } = {}) {
   const res = await db.execute({
     sql: `SELECT url, name, meta, page_text, facts, captured_at FROM portfolios
-          WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+          WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
             AND (page_text IS NULL OR facts IS NULL)
             AND (ai_rubric IS NULL
                  OR (json_extract(ai_rubric, '$.error') IS NULL

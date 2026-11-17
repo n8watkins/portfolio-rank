@@ -113,11 +113,9 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   const listed = listedBy.get(url) ?? null;
   const owner = await ownerState(client, url);
   if (owner.removedAt) return null;
-  // A listed site that is not working has no profile until it works again (lib/hidden.mjs GONE_WHERE).
-  if (listed && (await client.execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND ${GONE_WHERE}`, args: [url] })).rows.length) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
-    listed ? client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
+    listed ? client.execute({ sql: `SELECT ai_rubric, (${GONE_WHERE}) AS gone FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]) : null,
     client.execute({ sql: "SELECT id, status, reason, result FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [siteKey] }).then((r) => r.rows[0]),
     listed ? null : seen(client, url),
     client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url)] }).then((r) => r.rows),
@@ -126,6 +124,8 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     listed ? client.execute({ sql: "SELECT elo, votes FROM ratings WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
   ]);
   if (!listed && !seenRow && !jobRow) return null;
+  // A listed site that is not working has no profile until it works again (lib/hidden.mjs GONE_WHERE).
+  if (listed && Number(rubricRow?.gone ?? 0) === 1) return null;
 
   const rows = new Map(cacheRows.map((r) => [String(r.k), r]));
   const read = <T,>(k: string): Saved<T> => {

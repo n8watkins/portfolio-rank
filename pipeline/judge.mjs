@@ -57,7 +57,7 @@ import { PROMPT_VERSION_LEGACY } from "../lib/ranking/config.mjs";
 import { createRenderer } from "./render.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
-import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
+import { AI_WORK, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -358,7 +358,7 @@ async function runRubric() {
   // portfolio) go first, so is_portfolio confirms or clears them soon.
   const res = await db.execute(
     `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
-     WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+     WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
      ORDER BY needs_review DESC, captured_at DESC, url`
   );
@@ -552,7 +552,7 @@ async function runPairwise() {
     `SELECT p.url, p.name, p.shot_key, p.ai_rubric,
             COALESCE(r.elo, ${BASE_ELO}) AS elo, COALESCE(r.votes, 0) AS votes
      FROM portfolios p LEFT JOIN ratings r ON r.url = p.url
-     WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")}
+     WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")}
        AND NOT ${NOT_PORTFOLIO("p")}`
   );
   let pool = res.rows.map((r) => ({
