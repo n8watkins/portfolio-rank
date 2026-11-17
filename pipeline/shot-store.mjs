@@ -6,7 +6,9 @@
 //     <shot_key>/<v>/desktop.avif ... (pipeline/fullpage.mjs IMAGE_FILES)
 //       versioned and immutable: uploaded with a year-long Cache-Control,
 //       served straight from R2 with no Worker in between. A new version
-//       is uploaded first, then the old one is deleted. Nothing else lives
+//       is uploaded first, the row is pointed at it, and only then is the
+//       old one deleted (a failure in between leaves the row's images
+//       standing; at worst an unused old version stays). Nothing else lives
 //       in this bucket, so making it public exposes nothing private (the
 //       SHOTS bucket also holds private grade reports and draft media).
 //       Until the bucket exists (R2_IMAGES_BUCKET unset) nothing is stored
@@ -50,9 +52,13 @@ const SHOT_KEY = /^[0-9a-f]{16}$/;
 
 /**
  * Uploads one version's four AVIF files, then deletes the previous
- * version's (when there was one and it differs). `send` is an S3 client's
+ * version's (when `prevV` is given and differs). `send` is an S3 client's
  * send; `commands` holds PutObjectCommand and DeleteObjectsCommand (passed
  * in, so tests need no SDK). Returns the number of writes.
+ *
+ * A caller that records the version in the database afterwards (the nightly
+ * capture) passes no `prevV` and calls deleteVersion only once the row points
+ * at the new version: until then the row's images must stay.
  */
 export async function storeVersion({ send, commands, bucket, shotKey, v, files, prevV }) {
   if (!SHOT_KEY.test(shotKey)) throw new Error(`not a shot key: ${shotKey}`);
@@ -61,13 +67,16 @@ export async function storeVersion({ send, commands, bucket, shotKey, v, files, 
     await send(new commands.PutObjectCommand({ Bucket: bucket, Key: imageKey(shotKey, v, file), Body: body, ContentType: "image/avif", CacheControl: IMMUTABLE }));
     writes++;
   }
-  if (prevV && prevV !== v) {
-    const out = await send(
-      new commands.DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: ALL_IMAGE_FILES.map((f) => ({ Key: imageKey(shotKey, prevV, f) })), Quiet: true } })
-    );
-    if (out?.Errors?.length) throw new Error(`R2 delete: ${out.Errors[0].Code} ${out.Errors[0].Message}`);
-  }
+  if (prevV && prevV !== v) await deleteVersion({ send, commands, bucket, shotKey, v: prevV });
   return writes;
+}
+
+/** Deletes one version's images (pipeline/fullpage.mjs ALL_IMAGE_FILES). */
+export async function deleteVersion({ send, commands, bucket, shotKey, v }) {
+  if (!SHOT_KEY.test(shotKey)) throw new Error(`not a shot key: ${shotKey}`);
+  if (!v) return;
+  const out = await send(new commands.DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: ALL_IMAGE_FILES.map((f) => ({ Key: imageKey(shotKey, v, f) })), Quiet: true } }));
+  if (out?.Errors?.length) throw new Error(`R2 delete: ${out.Errors[0].Code} ${out.Errors[0].Message}`);
 }
 
 /**

@@ -27,26 +27,35 @@
 // old (the nightly checks, sync-upstream.yml). Their screenshots, text,
 // facts and page fingerprint are renewed, so a redesign is found
 // (scripts/detect-changes.mjs) and re-graded the same night. A refresh that
-// fails keeps the existing capture and records nothing: whether a site is
-// down is the weekly health check's call.
+// fails keeps the existing capture and never marks the site failed (whether
+// a site is down is the weekly health check's call); it only waits out a
+// growing backoff before it is refreshed again (lib/freshness.mjs
+// recordRefreshFailure), so it does not head the refresh queue every night.
 //
 // Before the screenshots, a splash gate, a dialog on top and a mode picker
 // are passed the way a visitor would (./splash.mjs). A capture that still
-// does not show the site afterwards (a gate, a picker, a dialog, a bot
-// check, or under 40 words with no outbound links: ./capture-blocked.mjs)
-// is "blocked": nothing of it is stored or graded. A site with no good
-// capture records it as a failed capture and is retried (a bot wall also
-// sets needs_review for the owner); a site that has one keeps it.
+// does not show the site afterwards is not stored or graded: the main
+// document answered with an error status (a bot wall's 403 goes to the
+// owner's review, a 503 or a 429 is retried), the rendered page is a parked
+// domain, or the screen is "blocked" (a gate, a picker, a dialog, a bot
+// check, or under 40 words with nothing else that shows a site:
+// ./capture-blocked.mjs). The phone view is judged the same way. A site with
+// no good capture records it as a failed capture and is retried (a bot wall
+// also sets needs_review for the owner); a site that has one keeps it.
+//
+// Every site gets at most SITE_LIMIT_MS: a page that never answers (a main
+// thread blocked after load) is closed, recorded as a failed capture with the
+// normal backoff, and the run goes on.
 import { chromium } from "playwright";
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { httpGate, readRenderedPage, UA } from "./gate.mjs";
+import { httpGate, isParkingDomain, netloc, parkingPhrase, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
 import { actionNote, passModal, passModePicker, passSplashGate } from "./splash.mjs";
-import { BLOCKED_PREFIX, BOT_WALL, capturedBlocked, countOutboundLinks } from "./capture-blocked.mjs";
+import { BLOCKED_PREFIX, BOT_WALL, capturedBlocked, httpVerdict, readBlockedInputs } from "./capture-blocked.mjs";
 import { inconclusiveGate, shot, waitForContent } from "./capture-steps.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
@@ -57,9 +66,9 @@ import {
   pipelineDb,
   syncRoster,
 } from "./roster.mjs";
-import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
+import { clearRefreshFailure, ensureFreshnessSchema, recordRefreshFailure, screenshotsDue } from "../lib/freshness.mjs";
 import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
-import { imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
+import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -124,29 +133,109 @@ export async function recordCaptureFailure(db, url, name, status, reason, { need
   });
 }
 
+/** The longest one site's capture may take, everything included; a normal one takes one to three minutes. */
+export const SITE_LIMIT_MS = 5 * 60 * 1000;
+/** How long closing a timed-out capture's browser context is waited for. */
+const CLOSE_LIMIT_MS = 15000;
+
+/**
+ * Follows a page's main document: the status and cf-mitigated header of the
+ * last response its own navigation got (a challenge that reloads into the
+ * site ends on the site's response). { status: 0 } until there is one.
+ * @param {import("playwright").Page} page
+ */
+function trackDocument(page) {
+  const doc = { status: 0, cfMitigated: "" };
+  page.on("response", (res) => {
+    try {
+      if (res.frame() !== page.mainFrame() || !res.request().isNavigationRequest()) return;
+      doc.status = res.status();
+      doc.cfMitigated = res.headers()["cf-mitigated"] ?? "";
+    } catch {
+      // a response without a frame (a service worker's): not the document
+    }
+  });
+  return doc;
+}
+
+/** The one-line result of a verdict or a blocked reason: "blocked (...)" for a blocked reason, else "<status> (<reason>)". */
+const resultOf = (status, reason) =>
+  String(reason).startsWith(BLOCKED_PREFIX) ? `blocked (${String(reason).slice(BLOCKED_PREFIX.length)})` : `${status} (${reason})`;
+
+/**
+ * Whether a loaded view (desktop or phone) is not the site, after its passes
+ * and waits: { status, reason, needsReview } or null. In order: the main
+ * document's HTTP status (./capture-blocked.mjs httpVerdict), a parked
+ * domain on the rendered page (./gate.mjs, as the plain pre-check reads the
+ * served one), then capturedBlocked. `suffix` marks the phone view's reasons.
+ * @param {import("playwright").Page} page
+ */
+async function judgeView(page, doc, passes, suffix = "") {
+  const shown = await readBlockedInputs(page);
+  const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: shown.text, title: shown.title, shown: { ...shown, ...passes } });
+  if (verdict) return { ...verdict, reason: `${verdict.reason}${suffix}` };
+  const finalUrl = page.url();
+  if (isParkingDomain(finalUrl)) return { status: "parked", reason: `redirects to ${netloc(finalUrl)}${suffix}`, needsReview: false };
+  const phrase = parkingPhrase({ text: shown.text, title: shown.title });
+  if (phrase) return { status: "parked", reason: `parking phrase: "${phrase}"${suffix}`, needsReview: false };
+  const blocked = capturedBlocked({ ...shown, ...passes });
+  if (blocked) return { status: "error", reason: `${BLOCKED_PREFIX}${blocked}${suffix}`, needsReview: blocked === BOT_WALL };
+  return null;
+}
+
 /**
  * Captures one site into `root`/captures/<key>/ and its `portfolios` row.
- * `db`: the pipeline database; `s3`: an R2 client or null (local only).
+ * `db`: the pipeline database; `s3`: an R2 client or null (local only);
+ * `limitMs`: the most the whole capture may take (SITE_LIMIT_MS): past it the
+ * site's browser context is closed and a failed capture recorded.
  * Returns a one-line result; "live" first when the capture was stored.
  */
-export async function captureSite(browser, entry, { refresh = false, db, s3 = null, root = ROOT } = {}) {
+export async function captureSite(browser, entry, { refresh = false, db, s3 = null, root = ROOT, limitMs = SITE_LIMIT_MS } = {}) {
   const { url, name } = entry;
-  // A refresh never marks a site failed (see the header).
-  const recordFailure = refresh ? async () => {} : (...a) => recordCaptureFailure(db, ...a);
+  // A refresh never marks a site failed (see the header): it only waits out a backoff.
+  const record = refresh
+    ? (status, reason) => recordRefreshFailure(db, url, `${status}: ${reason}`)
+    : (status, reason, opts) => recordCaptureFailure(db, url, name, status, reason, opts);
+  // run.aborted: the time limit passed, so the capture must write nothing more;
+  // run.committed: the good capture is being written, so the limit waits for it.
+  const run = { aborted: false, committed: false, ctx: null };
+  const fail = async (...a) => {
+    if (!run.aborted) await record(...a);
+  };
+  const TIMED_OUT = Symbol("timed out");
+  let timer;
+  const work = captureOnce(browser, entry, { refresh, db, s3, root, fail }, run);
+  const out = await Promise.race([work, new Promise((resolve) => (timer = setTimeout(() => resolve(TIMED_OUT), limitMs)))]);
+  clearTimeout(timer);
+  if (out !== TIMED_OUT) return out;
+  if (run.committed) return work;
+  run.aborted = true;
+  work.catch(() => {});
+  // Closing the context kills the page, also one whose main thread never returns.
+  if (run.ctx) await Promise.race([run.ctx.close().catch(() => {}), new Promise((r) => setTimeout(r, CLOSE_LIMIT_MS))]);
+  const reason = `capture timed out after ${Math.round(limitMs / 1000)}s`;
+  await record("error", reason);
+  return `error (${reason})`;
+}
+
+/** captureSite's work, without the time limit; `fail` records a failed capture, `run` is the limit's state. */
+async function captureOnce(browser, entry, { refresh, db, s3, root, fail }, run) {
+  const { url, name } = entry;
   const key = keyOf(url);
   const dir = path.join(root, "captures", key);
   const IMAGES_BUCKET = imagesBucket();
 
   const gate = await httpGate(url);
   // A 401/403/429/503 or a TLS failure on the plain request is often a bot filter or a
-  // certificate a browser accepts: the browser decides (./capture-steps.mjs).
+  // certificate a browser accepts: the browser decides (./capture-steps.mjs), and the
+  // status its main document ends on decides again below (judgeView).
   if (gate.status !== "live" && !inconclusiveGate(gate)) {
-    await recordFailure(url, name, gate.status, gate.reason);
+    await fail(gate.status, gate.reason);
     return `${gate.status} (${gate.reason})`;
   }
 
   // The stored images, to keep them when the page looks the same, and
-  // whether the site already has a good capture (a blocked one never replaces it).
+  // whether the site already has a good capture (a failed one never replaces it).
   const stored = await storedCapture(db, url);
   const prevFullPage = stored.fullPage;
 
@@ -155,7 +244,28 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     userAgent: UA,
     ignoreHTTPSErrors: true,
   });
+  run.ctx = ctx;
+  if (run.aborted) {
+    await ctx.close().catch(() => {});
+    return "aborted";
+  }
+
+  // A capture that is not the site: nothing of it is stored. A site with a
+  // good capture keeps it (a refresh only waits out its backoff); one
+  // without is a failed capture with its reason, retried later with backoff.
+  const reject = async ({ status, reason, needsReview = false }) => {
+    await ctx.close().catch(() => {});
+    const result = resultOf(status, reason);
+    if (refresh || stored.good) {
+      if (refresh) await fail(status, reason);
+      return `${result}; the existing capture is kept`;
+    }
+    await fail(status, reason, { needsReview });
+    return result;
+  };
+
   const page = await ctx.newPage();
+  const doc = trackDocument(page);
 
   const consoleErrors = [];
   let bytes = 0,
@@ -175,6 +285,8 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     if (res.status() === 404) broken++;
   });
 
+  // The image version this capture uploaded, if any (removed again when the capture is not stored).
+  let uploadedV = null;
   try {
     await page.goto(url, { waitUntil: "load", timeout: 30000 });
     // Let SPAs/preloaders settle: idle network if it comes, then a beat.
@@ -199,9 +311,9 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     await waitForContent(page);
     const rendered = await page.evaluate(readRenderedPage);
     if (rendered.text.trim().length < 30 && !rendered.media) {
-      await ctx.close();
-      await recordFailure(url, name, "dead", "renders blank");
-      return "dead (renders blank)";
+      // A blank error page is the error it answered with.
+      const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: rendered.text, title: await page.title().catch(() => "") });
+      return reject(verdict ?? { status: "dead", reason: "renders blank" });
     }
 
     // Wait out slow preloaders and intro animations: poll until both the
@@ -283,34 +395,19 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     // if the stitch fails, a plain screenshot of the top stands in.
     const desktopView = await captureView(page, "desktop");
 
-    // Blocked (./capture-blocked.mjs): the screen after the passes, the
-    // waits and the scroll-through still does not show the site. Nothing of
-    // it is stored, uploaded or graded. A site with a good capture keeps it
-    // (a refresh records nothing, see the header); one without is a failed
-    // capture with its reason, retried later with backoff.
-    const shown = await page.evaluate(readRenderedPage).catch(() => settled);
-    const blocked = capturedBlocked({
-      text: shown.text,
-      title: await page.title().catch(() => ""),
-      outboundLinks: await page.evaluate(countOutboundLinks).catch(() => 0),
-      splash,
-      modal,
-      mode,
-    });
-    if (blocked) {
-      await ctx.close();
-      if (refresh || stored.good) return `blocked (${blocked}); the existing capture is kept`;
-      // A bot wall is not called broken: it is marked for the owner's review (./capture-blocked.mjs).
-      await recordFailure(url, name, "error", `${BLOCKED_PREFIX}${blocked}`, { needsReview: blocked === BOT_WALL });
-      return `blocked (${blocked})`;
-    }
-
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "hero.jpg"), desktopView.ok ? desktopView.files.crop : await shot(page, { type: "jpeg", quality: 75 }));
+    // Not the site (judgeView): an error status, a parked domain, or a
+    // screen that after the passes, the waits and the scroll-through is
+    // still blocked (./capture-blocked.mjs). Nothing of it is stored,
+    // uploaded or graded (reject). A bot wall is not called broken: it is
+    // marked for the owner's review.
+    const desktopVerdict = await judgeView(page, doc, { splash, modal, mode });
+    if (desktopVerdict) return reject(desktopVerdict);
+    const heroJpg = desktopView.ok ? desktopView.files.crop : await shot(page, { type: "jpeg", quality: 75 });
 
     // Phone: the same page at 390 wide, horizontal-overflow check, then the
     // tall phone image, whose top is mobile.jpg.
     const mpage = await ctx.newPage();
+    const mdoc = trackDocument(mpage);
     await mpage.setViewportSize({ width: 390, height: 844 });
     await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
     await mpage.waitForTimeout(1500);
@@ -326,9 +423,16 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
       () => document.documentElement.scrollWidth > 395
     );
     const phoneView = await captureView(mpage, "phone");
-    fs.writeFileSync(path.join(dir, "mobile.jpg"), phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 }));
+    // The phone view is graded too (mobile.jpg): it must show the site as well.
+    const phoneVerdict = await judgeView(mpage, mdoc, { splash: mobileSplash, modal: mobileModal, mode: mobileMode }, " (phone view)");
+    if (phoneVerdict) return reject(phoneVerdict);
+    const mobileJpg = phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 });
 
     await ctx.close();
+    if (run.aborted) return "aborted";
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "hero.jpg"), heroJpg);
+    fs.writeFileSync(path.join(dir, "mobile.jpg"), mobileJpg);
 
     // The stored images: a new version, or nothing when the page looks as it
     // did (pipeline/fullpage.mjs unchanged), so no write and every cached
@@ -339,15 +443,18 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     const next = nextFullPage(prevFullPage, { desktopView, phoneView, pageText, at: new Date() });
     const { uploadImages, uploadLegacy } = next;
     const fullPage = uploadImages && !(s3 && IMAGES_BUCKET) ? notStored(next.fullPage) : next.fullPage;
+    // The new version goes up first; the old one is deleted only once the
+    // row points at the new one (below), so the row never names images that
+    // are gone.
     if (s3 && IMAGES_BUCKET && uploadImages && fullPageComplete(fullPage)) {
       const commands = await import("@aws-sdk/client-s3");
+      if (run.aborted) return "aborted";
       await storeVersion({
         send: (c) => s3.send(c),
         commands,
         bucket: IMAGES_BUCKET,
         shotKey: key,
         v: fullPage.v,
-        prevV: prevFullPage?.v,
         files: {
           [IMAGE_FILES.desktop.tall]: desktopView.files.tall,
           [IMAGE_FILES.desktop.thumb]: desktopView.files.thumb,
@@ -355,6 +462,7 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
           [IMAGE_FILES.phone.thumb]: phoneView.files.thumb,
         },
       });
+      uploadedV = fullPage.v;
     }
 
     const meta = {
@@ -380,6 +488,8 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     // them; not when nothing changed.
     if (legacyFramesOn() && uploadLegacy) await uploadDir(s3, key, dir);
 
+    if (run.aborted) throw new Error("aborted");
+    run.committed = true;
     await db.execute({
       sql: `INSERT INTO portfolios
               (url, name, status, reason, shot_key, meta, checked_at, captured_at,
@@ -394,10 +504,25 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
               facts_at=COALESCE(excluded.facts_at, portfolios.facts_at)`,
       args: [url, name, key, JSON.stringify(meta), pageText, facts ? JSON.stringify(facts) : null, facts?.measured_at ?? null],
     });
+    // Stored: a refresh backoff ends, and the old images go now that nothing points at them.
+    // Neither can undo the capture: a failure here is only logged.
+    await clearRefreshFailure(db, url).catch((e) => console.warn(`  ${url}: refresh backoff not cleared (${String(e?.message ?? e).slice(0, 80)})`));
+    if (uploadedV && prevFullPage?.v && prevFullPage.v !== uploadedV) {
+      const commands = await import("@aws-sdk/client-s3");
+      await deleteVersion({ send: (c) => s3.send(c), commands, bucket: IMAGES_BUCKET, shotKey: key, v: prevFullPage.v }).catch((e) =>
+        console.warn(`  ${url}: old images ${key}/${prevFullPage.v} not deleted (${String(e?.message ?? e).slice(0, 80)})`)
+      );
+    }
     return `live → ${key} (motion=${meta.motion} dark=${meta.darkMode} overflow=${meta.overflow390})`;
   } catch (e) {
     await ctx.close().catch(() => {});
-    await recordFailure(url, name, "error", String(e.message ?? e).slice(0, 200));
+    if (run.aborted) return "aborted";
+    // A new version uploaded for a capture that was not stored is nobody's: remove it.
+    if (uploadedV && uploadedV !== prevFullPage?.v) {
+      const commands = await import("@aws-sdk/client-s3").catch(() => null);
+      if (commands) await deleteVersion({ send: (c) => s3.send(c), commands, bucket: IMAGES_BUCKET, shotKey: key, v: uploadedV }).catch(() => {});
+    }
+    await fail("error", String(e.message ?? e).slice(0, 200));
     return `error (${String(e.message ?? e).slice(0, 80)})`;
   }
 }
@@ -428,12 +553,13 @@ async function main() {
   const REFRESH = Number(flag("refresh", "0")) || 0;
   // --recapture <file>: re-capture exactly the listed addresses in the file (one
   // a line), as a refresh: a failure keeps the old capture and marks nothing
-  // (scripts/regrade-not-portfolio.mjs).
+  // but its refresh backoff (scripts/regrade-not-portfolio.mjs).
   const RECAPTURE = flag("recapture", "");
 
-  // DB + R2
+  // DB + R2 (the freshness tables hold the refresh backoff, lib/freshness.mjs)
   const db = pipelineDb(ROOT);
   await ensureRosterSchema(db);
+  await ensureFreshnessSchema(db);
 
   let s3 = null;
   if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
@@ -479,7 +605,6 @@ async function main() {
   // The nightly refresh: listed, healthy sites whose screenshots are due
   // (changed or asked for first, then captures past 90 days).
   if (REFRESH > 0 && !ONLY && !RECAPTURE) {
-    await ensureFreshnessSchema(db);
     const queued = new Set(queue.map((p) => p.url));
     const listed = new Map(feed.map((p) => [p.url, p]));
     const due = (await screenshotsDue(db, { limit: REFRESH + queue.length, active: ACTIVE }))
@@ -490,7 +615,18 @@ async function main() {
   }
   console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
 
-  const browser = await chromium.launch();
+  let browser = await chromium.launch();
+  let relaunching = null;
+  /** The shared browser, launched again if it went away (a crash must not end the run). */
+  const liveBrowser = async () => {
+    if (browser.isConnected()) return browser;
+    relaunching ??= chromium.launch().then((b) => {
+      browser = b;
+      relaunching = null;
+      return b;
+    });
+    return relaunching;
+  };
   let idx = 0,
     ok = 0,
     skipped = 0;
@@ -499,7 +635,11 @@ async function main() {
       while (idx < queue.length) {
         const entry = queue[idx++];
         const t = Date.now();
-        const result = await captureSite(browser, entry, { refresh: Boolean(entry.refresh), db, s3 });
+        // captureSite has its own time limit (SITE_LIMIT_MS) and records its failures;
+        // anything it still throws (the browser gone) is logged and the run goes on.
+        const result = await liveBrowser()
+          .then((b) => captureSite(b, entry, { refresh: Boolean(entry.refresh), db, s3 }))
+          .catch((e) => `error (${String(e?.message ?? e).slice(0, 80)})`);
         if (result.startsWith("live")) ok++;
         else skipped++;
         console.log(`[${idx}/${queue.length}] ${entry.url} — ${result} (${((Date.now() - t) / 1000).toFixed(1)}s)`);

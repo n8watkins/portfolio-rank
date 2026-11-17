@@ -7,7 +7,9 @@
 //                     401, 403, 429 or 503, or failed on TLS: often a bot
 //                     filter that lets a real browser through, or a
 //                     certificate the browser accepts (ignoreHTTPSErrors).
-//                     The browser decides instead of the pre-check.
+//                     The browser decides instead of the pre-check: the
+//                     status its main document ends on still rules out an
+//                     error page (capture-blocked.mjs httpVerdict).
 //   waitForContent    a page with no text yet is given up to CONTENT_WAIT_MS
 //                     to render before it counts as blank (slow single-page
 //                     apps rendered nothing in the first 3 seconds).
