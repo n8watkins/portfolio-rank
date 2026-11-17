@@ -21,7 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
-import { BROWSER_GONE, MAX_LAUNCH_FAILURES, captureQueue, captureSite, keyOf } from "../pipeline/capture.mjs";
+import { BROWSER_GONE, CRASH_REASON, MAX_LAUNCH_FAILURES, captureQueue, captureSite, keyOf, recordBrowserCrash } from "../pipeline/capture.mjs";
 import { dueForCapture, ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema } from "../lib/freshness.mjs";
 
@@ -32,6 +32,10 @@ const pages = {
   "/site": SITE,
   "/site2": SITE,
   "/site3": SITE,
+  "/rejected": SITE,
+  "/s3fault": SITE,
+  "/crasher": SITE,
+  "/neighbour": SITE,
   // The main thread blocks for good a few seconds after load.
   "/hang": `<!doctype html><title>Jane Doe</title><body><h1>Jane Doe</h1><p>${"I build things for the web and write about them here. ".repeat(10)}</p><a href="https://code.invalid/jane">GitHub</a>
     <script>setTimeout(()=>{for(;;){}},2500)</script></body>`,
@@ -67,6 +71,7 @@ const killPage = (point) =>
   SITE.replace(
     "</body>",
     {
+      gate: "",
       goto: "",
       settle: `<script>addEventListener("load",()=>fetch("/beacon"))</script>`,
       polls: `<script>setTimeout(()=>fetch("/beacon"),6000)</script>`,
@@ -81,6 +86,11 @@ before(async () => {
     const m = /^\/kill-(\w+)$/.exec(req.url);
     // Only the browser's own navigation, not the plain pre-check's fetch.
     const navigation = req.headers["sec-fetch-mode"] === "navigate";
+    // The plain pre-check's fetch: the browser dies meanwhile, and the pre-check then fails.
+    if (m && m[1] === "gate" && killer.point === "gate" && !navigation) {
+      kill();
+      return setTimeout(() => res.writeHead(404, html).end("not found"), 1500);
+    }
     if (m && m[1] === killer.point && navigation) {
       if (m[1] === "goto") {
         kill();
@@ -173,7 +183,8 @@ test("a capture that throws before its own handling leaves no timer running", as
 // the settle wait (a beacon on load), in the screenshot polls (a beacon six
 // seconds in), in the scroll-through (a lazy image far down), and while the
 // phone view loads (its document request, which carries the desktop's cookie).
-const KILL_POINTS = ["goto", "settle", "polls", "scroll", "phone"];
+// "gate": during the plain pre-check, which then fails: still the browser's death, not the site's failure.
+const KILL_POINTS = ["gate", "goto", "settle", "polls", "scroll", "phone"];
 
 test("whenever the browser goes away under a capture, nothing is recorded and the result says to retry", { timeout: 600000 }, async () => {
   for (const point of KILL_POINTS) {
@@ -303,4 +314,79 @@ test("images: the old version is deleted only after the row points at the new on
     assert.ok(Date.now() - t0 < 200000);
     assert.notEqual(JSON.parse(String((await rowOf("/site")).meta)).fullPage.v, "oldv");
   });
+});
+
+test("images: a row write the database rejects removes the new images and records the failure", SLOW, async () => {
+  await withImagesBucket(async () => {
+    // A new site; the database refuses the capture's own row (and nothing else).
+    const rejecting = {
+      execute: (stmt) =>
+        /shot_key, meta, checked_at, captured_at/.test(String(stmt?.sql ?? stmt)) ? Promise.reject(new Error("SQLITE_CONSTRAINT: the row was refused (stand-in)")) : db.execute(stmt),
+    };
+    const bucket = fakeBucket("/rejected");
+    const result = await captureSite(browser, { url: url("/rejected"), name: "Jane Doe" }, { db: rejecting, s3: bucket, root });
+    assert.match(result, /^error \(SQLITE_CONSTRAINT/, result);
+    assert.equal(newVersionDeletes(bucket.log).length, 1, "the new images are removed");
+    const row = await rowOf("/rejected");
+    assert.equal(row?.status, "error", "the failure is recorded");
+    assert.match(String(row.reason), /SQLITE_CONSTRAINT/);
+    assert.ok(row.retry_at, "with a retry date");
+  });
+});
+
+test("a storage error no site causes (refused credentials) is thrown as the run's fault, not recorded as the site's", SLOW, async () => {
+  await withImagesBucket(async () => {
+    const refusing = {
+      send: async (cmd) => {
+        if (cmd.constructor.name === "PutObjectCommand") throw Object.assign(new Error("The AWS Access Key Id you provided does not exist"), { name: "InvalidAccessKeyId" });
+        return {};
+      },
+    };
+    await assert.rejects(captureSite(browser, { url: url("/s3fault"), name: "Jane Doe" }, { db, s3: refusing, root }), /Access Key Id/);
+    assert.equal(await rowOf("/s3fault"), undefined, "nothing recorded against the site");
+  });
+});
+
+test("captureQueue: a database that fails every site ends the run with an error instead of finishing green", SLOW, async () => {
+  const down = { execute: async () => Promise.reject(new Error("SERVER_ERROR: the database is unreachable (stand-in)")) };
+  const entries = ["/dbfault1", "/dbfault2", "/dbfault3", "/dbfault4"].map((p) => ({ url: url(p), name: "Jane Doe" }));
+  await assert.rejects(
+    captureQueue(entries, { capture: (b, entry) => captureSite(b, entry, { db: down, s3: null, root }), concurrency: 1, log: () => {} }),
+    /the run cannot go on.*unreachable/
+  );
+});
+
+test("captureQueue: a site that takes the browser down every time is captured alone once, then recorded; its neighbour is captured", { timeout: 600000 }, async () => {
+  // Every browser launched here dies when one of its pages opens /crasher.
+  const launch = async () => {
+    const b = await chromium.launch();
+    const newContext = b.newContext.bind(b);
+    b.newContext = async (...a) => {
+      const ctx = await newContext(...a);
+      ctx.on("request", (r) => {
+        if (r.isNavigationRequest() && r.url().endsWith("/crasher")) b.close().catch(() => {});
+      });
+      return ctx;
+    };
+    return b;
+  };
+  const entries = [
+    { url: url("/crasher"), name: "Jane Doe" },
+    { url: url("/neighbour"), name: "Sam Lee" },
+  ];
+  const out = await captureQueue(entries, {
+    capture: (b, entry) => captureSite(b, entry, { db, s3: null, root }),
+    recordCrash: (entry) => recordBrowserCrash(db, entry),
+    launch,
+    concurrency: 2,
+    log: () => {},
+  });
+  assert.equal(out.ok, 1, JSON.stringify(out));
+  assert.equal(out.skipped, 1);
+  const crasher = await rowOf("/crasher");
+  assert.equal(crasher.status, "error");
+  assert.equal(crasher.reason, CRASH_REASON);
+  assert.ok(crasher.retry_at, "with backoff");
+  const neighbour = await rowOf("/neighbour");
+  assert.equal(neighbour.status, "live", "the neighbour is not charged for someone else's crashes");
 });

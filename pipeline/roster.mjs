@@ -216,7 +216,7 @@ export function captureRetryAt(attempts, now = new Date()) {
  * last night's run was in progress lands minutes after tonight's start and
  * would otherwise wait a whole extra night.
  */
-const RETRY_SLACK_MS = 6 * 3600000;
+import { RETRY_SLACK_MS } from "../lib/freshness.mjs";
 
 export async function dueForCapture(db, entries, now = new Date()) {
   const notDue = await db.execute({

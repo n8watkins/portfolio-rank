@@ -68,6 +68,8 @@ export const MEDIA_ONLY = "only a canvas, video or image, with no text or links"
  */
 export const OWNER_REVIEW_PREFIX = "needs owner review: ";
 export const MEDIA_REVIEW_REASON = `${OWNER_REVIEW_PREFIX}${MEDIA_ONLY}`;
+/** An error status (401, 403, 404, 410) on a page that otherwise shows a whole site: the owner decides. */
+export const SHOWS_SITE_REASON = `${OWNER_REVIEW_PREFIX}the page shows a site but answered with an error status`;
 /** A MEDIA_ONLY page whose screen is one flat colour: nothing was drawn. */
 export const BLANK_FRAME = "a blank screen: no text and nothing drawn";
 
@@ -95,7 +97,7 @@ const CAPTCHA_NOTICE = /(this site is )?protected by (re)?captcha and the google
 const ACCESS_WALL = /access denied|access to this (page|site|website) (has been|is) (denied|blocked)|error 10\d\d|security service to protect itself|request (has been |was )?blocked|blocked by (the )?(firewall|waf|security)|bot (protection|detection)|ddos protection|ray id/i;
 
 /** A rate limit: the site is up but turned this visit away for now (retried, never reviewed). */
-const RATE_LIMITED = /rate.?limit|too many requests|banned you temporarily/i;
+const RATE_LIMITED = /\brate[- ]?limit(ed|ing)?\b|\btoo many requests\b|\bbanned you temporarily\b/i;
 
 const wordsOf = (t) => String(t ?? "").split(/\s+/).filter(Boolean).length;
 const flat = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
@@ -109,21 +111,36 @@ const flat = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
  *     left out): in a title of a page that short; in the text of a nearly
  *     empty page (BLOCK_MAX_WORDS); or in the text of a page that short with a
  *     challenge on it (a captcha widget or a form with an image and a text
- *     box, `challenge`) and no navigation of its own (at most
- *     WALL_MAX_SITE_LINKS links to its own pages, `siteLinks`: terms and
- *     privacy).
- * @param {{ text?: string, title?: string, siteLinks?: number, challenge?: boolean }} page
+ *     box, `challenge`).
+ *   The robot request never counts on a page with its own navigation (more
+ *   than WALL_MAX_SITE_LINKS links to its own pages, `siteLinks`: a wall links
+ *   to terms and privacy at most) or a way to reach its owner (`contactLinks`,
+ *   mailto: and tel:): that is a site whose contact form asks for a captcha.
+ * @param {{ text?: string, title?: string, siteLinks?: number, contactLinks?: number, challenge?: boolean }} page
  */
-export function isBotWallPage({ text = "", title = "", siteLinks = 0, challenge = false } = {}) {
+export function isBotWallPage({ text = "", title = "", siteLinks = 0, contactLinks = 0, challenge = false } = {}) {
   const t = flat(text);
   const ttl = String(title ?? "");
   const n = wordsOf(t);
   if (n > BOT_CHECK_MAX_WORDS) return false;
   if (BOT_CHECK.test(t) || BOT_CHECK.test(ttl)) return true;
+  if (Number(contactLinks) > 0 || (Number(siteLinks) || 0) > WALL_MAX_SITE_LINKS) return false;
   const ask = flat(t.replace(CAPTCHA_NOTICE, " "));
   if (ROBOT_ASK.test(ttl.replace(CAPTCHA_NOTICE, " "))) return true;
   if (!ROBOT_ASK.test(ask)) return false;
-  return wordsOf(ask) <= BLOCK_MAX_WORDS || (challenge === true && (Number(siteLinks) || 0) <= WALL_MAX_SITE_LINKS);
+  return wordsOf(ask) <= BLOCK_MAX_WORDS || challenge === true;
+}
+
+/**
+ * Whether an error status looks like a challenge that may still let the
+ * browser through (Cloudflare's cf-mitigated: challenge, or bot-check
+ * wording on a 403, 429 or 503): the capture waits for it to reload before
+ * deciding (pipeline/capture.mjs).
+ * @param {{ status?: number, text?: string, title?: string, cfMitigated?: string, shown?: object }} doc
+ */
+export function isChallengeStatus({ status = 0, text = "", title = "", cfMitigated = "", shown = undefined } = {}) {
+  if ((Number(status) || 0) < 400) return false;
+  return /challenge/i.test(String(cfMitigated ?? "")) || isBotWallPage({ ...(shown ?? {}), text, title });
 }
 
 /** A wall links to its legal pages at most (terms, privacy); a site has navigation. */
@@ -174,7 +191,7 @@ export function capturedBlocked({
 } = {}) {
   const t = flat(text);
   const n = wordsOf(t);
-  if (isBotWallPage({ text, title, siteLinks, challenge })) return BOT_WALL;
+  if (isBotWallPage({ text, title, siteLinks, contactLinks, challenge })) return BOT_WALL;
   const loader = (/(^|[^\d])\d{1,3}\s?%/.test(t) && n <= 6) || (/\bloading\b|please wait/i.test(t) && n <= 3);
   if (splash?.passed === false || gateShown(text, t, gateElement) || loader) return "still a gate or loader after the click-through";
   if (mode?.passed === false) return "still a mode picker after the click";
@@ -198,9 +215,10 @@ export function capturedBlocked({
  *     the bot wall, for the owner's review (BOT_WALL_REASON);
  *   - a 401, 403, 404 or 410 whose page otherwise shows a whole site (a host
  *     that answers 403 with the real page, a single-page app served from a
- *     copied 404.html): also the owner's review, since a browser shows it
- *     but its status says error;
- *   - a rate limit (429, or rate-limit wording): an error, retried with backoff;
+ *     copied 404.html): the owner's review (SHOWS_SITE_REASON, not a bot
+ *     wall), since a browser shows it but its status says error;
+ *   - a rate limit (429, or rate-limit wording on a short 403 or 503 page):
+ *     an error, retried with backoff;
  *   - 404 or 410: dead, like the plain pre-check (pipeline/gate.mjs httpGate);
  *   - anything else 400 and up: an error ("HTTP 503"), retried with backoff.
  *
@@ -214,13 +232,16 @@ export function httpVerdict({ status = 0, text = "", title = "", cfMitigated = "
   const ttl = String(title ?? "");
   const n = wordsOf(t);
   const wall = { status: "error", reason: BOT_WALL_REASON, needsReview: true };
-  if (/challenge/i.test(String(cfMitigated ?? "")) || isBotWallPage({ ...(shown ?? {}), text, title })) return wall;
-  if (s === 429 || RATE_LIMITED.test(t) || RATE_LIMITED.test(ttl)) return { status: "error", reason: `HTTP ${s} (rate limited)`, needsReview: false };
+  if (isChallengeStatus({ status: s, text, title, cfMitigated, shown })) return wall;
+  const rateLimited = { status: "error", reason: `HTTP ${s} (rate limited)`, needsReview: false };
+  if (s === 429) return rateLimited;
   if ((s === 401 || s === 403) && (ACCESS_WALL.test(t) || ACCESS_WALL.test(ttl))) return wall;
   if ([401, 403, 404, 410].includes(s) && n >= BOT_CHECK_MAX_WORDS && shown && capturedBlocked({ ...shown, text, title }) === null) {
-    return { status: "error", reason: `${BOT_WALL_REASON} (HTTP ${s}, but the page shows a site)`, needsReview: true };
+    return { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP ${s})`, needsReview: true };
   }
   if (s === 404 || s === 410) return { status: "dead", reason: `HTTP ${s}`, needsReview: false };
+  // Rate-limit wording decides only on a 403 or 503 page short enough to be an error page ("built a rate limiter" is not one).
+  if ((s === 403 || s === 503) && n <= BOT_CHECK_MAX_WORDS && (RATE_LIMITED.test(t) || RATE_LIMITED.test(ttl))) return rateLimited;
   return { status: "error", reason: `HTTP ${s}`, needsReview: false };
 }
 
@@ -293,8 +314,9 @@ export function pageEvidence() {
  * @param {import("playwright").Page} page
  * @param {string} [fallbackText]
  */
-export async function readBlockedInputs(page, fallbackText = "") {
-  const text = await page.evaluate(() => document.body?.innerText ?? "").catch(() => String(fallbackText ?? ""));
+export async function readBlockedInputs(page, fallbackText = "", knownText = undefined) {
+  // knownText: the text the caller already read (and will store), so what is judged is what is stored.
+  const text = knownText ?? (await page.evaluate(() => document.body?.innerText ?? "").catch(() => String(fallbackText ?? "")));
   const title = await page.title().catch(() => "");
   const evidence = await page.evaluate(pageEvidence).catch(() => ({ outboundLinks: 0, siteLinks: 0, contactLinks: 0, mediaCover: 0, challenge: false }));
   const g = detectGate(flat(text));

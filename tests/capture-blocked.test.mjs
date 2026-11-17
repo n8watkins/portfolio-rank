@@ -18,6 +18,8 @@ import {
   BOT_WALL,
   BOT_WALL_REASON,
   MEDIA_ONLY,
+  OWNER_REVIEW_PREFIX,
+  SHOWS_SITE_REASON,
   capturedBlocked,
   httpVerdict,
   isBlockedReason,
@@ -169,18 +171,36 @@ test("httpVerdict: the main document's status decides; an error page is never th
   assert.deepEqual(httpVerdict({ status: 401, text: "Unauthorized" }), { status: "error", reason: "HTTP 401", needsReview: false });
   assert.deepEqual(httpVerdict({ status: 403, text: "Forbidden" }), { status: "error", reason: "HTTP 403", needsReview: false });
   assert.deepEqual(httpVerdict({ status: 404, ...site }), { status: "dead", reason: "HTTP 404", needsReview: false });
-  // A 403 whose page shows a whole site: a browser sees it, its status says error. The owner looks.
+  // A 403 whose page shows a whole site: a browser sees it, its status says error. The owner looks,
+  // under the owner-review prefix: it is not a bot wall, and not a blocked reason the health check fails.
   const odd = httpVerdict({ status: 403, ...site, shown: site });
-  assert.equal(odd.needsReview, true);
-  assert.ok(isBotWallReason(odd.reason), odd.reason);
-  assert.match(odd.reason, /HTTP 403, but the page shows a site/);
+  assert.deepEqual(odd, { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP 403)`, needsReview: true });
+  assert.ok(odd.reason.startsWith(OWNER_REVIEW_PREFIX));
+  assert.equal(isBotWallReason(odd.reason), false);
+  assert.equal(isBlockedReason(odd.reason), false);
   // Not without the evidence of what the page showed.
   assert.equal(httpVerdict({ status: 403, ...site }).needsReview, false);
   // A single-page app served from a copied 404.html after a hard navigation goes the same way.
-  const spa = httpVerdict({ status: 404, ...site, shown: site });
-  assert.equal(spa.needsReview, true);
-  assert.match(spa.reason, /HTTP 404, but the page shows a site/);
+  assert.deepEqual(httpVerdict({ status: 404, ...site, shown: site }), { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP 404)`, needsReview: true });
   assert.deepEqual(httpVerdict({ status: 404, text: "Not Found", shown: { text: "Not Found" } }), { status: "dead", reason: "HTTP 404", needsReview: false });
+});
+
+test("httpVerdict: rate-limit wording decides only on a 429 or a short 403 or 503 page, as whole words", () => {
+  const spa = { text: `Jane Doe. I built a rate limiter for the payments API. ${words(200)}`, title: "Jane Doe", outboundLinks: 2 };
+  assert.deepEqual(httpVerdict({ status: 404, ...spa, shown: spa }), { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP 404)`, needsReview: true });
+  assert.deepEqual(httpVerdict({ status: 404, text: "Not found. We rate limited nothing." }), { status: "dead", reason: "HTTP 404", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 503, text: "Too many requests. Try again later." }), { status: "error", reason: "HTTP 503 (rate limited)", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 503, text: "A separate limited edition. Down for maintenance." }), { status: "error", reason: "HTTP 503", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 500, text: "You are being rate limited" }), { status: "error", reason: "HTTP 500", needsReview: false });
+});
+
+test("isBotWallPage: a page with its own navigation or contact links is a site, captcha wording or not", () => {
+  const form = "Jane Doe. Designer. Work About Contact. Write to me: complete the captcha below and press send.";
+  assert.equal(isBotWallPage({ text: form, contactLinks: 1 }), false);
+  assert.equal(isBotWallPage({ text: form, siteLinks: 3 }), false);
+  assert.equal(isBotWallPage({ text: form }), true, "without either, a short captcha request is still a wall");
+  // Challenge wording that only walls use still counts.
+  assert.equal(isBotWallPage({ text: "Verifying you are human. This may take a few seconds.", contactLinks: 1 }), true);
 });
 
 test("isBlockedReason and isBotWallReason read the stored failure reason", () => {
