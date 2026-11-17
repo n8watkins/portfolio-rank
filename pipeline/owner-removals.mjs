@@ -13,8 +13,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 // One listed site, one key (the feed build's rule), so an entry is matched whatever its spelling.
-import { listKey } from "./list-key.mjs";
-import { excludedUrl, readJson } from "./exclusions.mjs";
+import { feedKeyer } from "./list-key.mjs";
+import { excludedUrl, readJson } from "./list-util.mjs";
 import { pipelineDb } from "./roster.mjs";
 import { logRemovalRestored, ownerRemovals, undoneRemovals } from "../lib/games/claims.mjs";
 
@@ -28,6 +28,8 @@ export const OWNER_REASON = "owner request";
  * (generate_feed.py), which no longer excludes it.
  */
 export function planOwnerRemovals({ removals, undone = [], excluded, feed }) {
+  // The feed's rule (rules 1 and 2 with its siblings marks), the one the build excludes by.
+  const listKey = feedKeyer(feed);
   const have = new Set(excluded.map((e) => listKey(excludedUrl(e))));
   const onFeed = new Map(feed.map((p) => [listKey(p.url), p]));
   const added = [];

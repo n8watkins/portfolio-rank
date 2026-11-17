@@ -8,7 +8,7 @@
 import fs from "fs";
 import path from "path";
 import * as commands from "@aws-sdk/client-s3";
-import { pipelineDb, purgeDelisted } from "./roster.mjs";
+import { loadFeed, pipelineDb, purgeDelisted } from "./roster.mjs";
 import { deleteAllShots, imagesBucket } from "./shot-store.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -34,7 +34,9 @@ const deleteShots = async (key) => {
   for (const bucket of buckets) await deleteAllShots({ send: (c) => s3.send(c), commands, bucket, shotKey: key });
 };
 
-const result = await purgeDelisted(pipelineDb(ROOT), { deleteShots, dryRun: DRY });
+// The feed carries the list's rule for "the same site" (its siblings marks), so a
+// row whose site is listed under another address is kept (pipeline/roster.mjs).
+const result = await purgeDelisted(pipelineDb(ROOT), { deleteShots, dryRun: DRY, feed: await loadFeed(ROOT) });
 const md = `### Purge\n\n${result.due} row(s) delisted for 30+ days: ${result.purged} purged, ${result.failed} failed${DRY ? " (dry run)" : ""}.\n`;
 console.log(md);
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md}\n`);
