@@ -12,6 +12,7 @@ import { migrate } from "../lib/schema.mjs";
 import { assignShownRanks, ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { runHealthCheck } from "../pipeline/health.mjs";
 import { runRecheck } from "../pipeline/recheck.mjs";
+import { sessionCookie } from "./helpers/session.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -91,6 +92,16 @@ test("a site that stopped working: its profile is the not-found page and the lea
   assert.match(html, /That page isn(&#x27;|')t here\./, "the site's normal not-found page");
   assert.ok(!html.includes(`Visit ${new URL(target.url).hostname.replace(/^www\./, "")}`), "nothing of the profile");
   assert.ok(!(await board()).includes(target.url), "not on the board");
+  // Its owner can still prove it is theirs and manage the listing (POST /api/owner/verify reads loadProfile).
+  const cookie = await sessionCookie({ id: 760000001, login: "not-working-owner" });
+  const verify = await fetch(`${BASE}/api/owner/verify`, {
+    method: "POST",
+    headers: { cookie, origin: BASE, "cf-connecting-ip": "198.51.100.77", "content-type": "application/json" },
+    body: JSON.stringify({ url: target.url, method: "start" }),
+  });
+  const verified = await verify.json();
+  assert.equal(verify.status, 200, JSON.stringify(verified));
+  assert.equal(verified.claim.url, target.url);
 
   // It works again: the next re-check brings it back, as it was.
   answering = true;

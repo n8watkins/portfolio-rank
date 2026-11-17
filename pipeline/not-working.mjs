@@ -7,7 +7,8 @@
 //
 //   live --first failed check--> failing (health 'suspect', stage 1):
 //        out of grading, AI comparisons, polls and blog facts
-//        (pipeline/roster.mjs AI_WORK) and of captures (ACTIVE); still shown
+//        (pipeline/roster.mjs AI_WORK) and of captures (ACTIVE, while these
+//        marks hold); still shown
 //   stage 1 --re-check about RECHECK_AFTER_MS later fails--> stage 2
 //   stage 2 --re-check CONFIRM_AFTER_MS after the first failure fails-->
 //        not working (health 'down', stage 3, pool_since): hidden from
@@ -18,11 +19,13 @@
 //        through the weekly pull request), where the monthly re-check of
 //        removed "down" entries can still bring it back
 //   any stage --a full check passes--> live, the ladder cleared
-//   any stage --a check that could not tell, or a page that answers with the
-//        wrong thing--> nothing changes (neither advanced nor cleared); the
-//        re-check comes back after an hour, then 2, 4, 8... hours up to a
-//        day (UNCLEAR_MAX_WAIT_MS), and time unknown counts toward the
-//        owner's 28-day alert (pipeline/health.mjs)
+//   any stage --a check that could not tell--> nothing changes (neither
+//        advanced nor cleared); the re-check comes back after an hour, then
+//        2, 4, 8... hours up to a day (UNCLEAR_MAX_WAIT_MS), and time unknown
+//        counts toward the owner's 28-day alert (pipeline/health.mjs)
+//   stage 1 or 2 --the page answers, with the wrong thing (parked, blank)-->
+//        off this ladder, onto the weekly-counted rule from that failure;
+//   not working --any failure--> still not working, on its cadence
 //
 // A check counts as a stage's re-check only when it comes when that re-check
 // is due (pool_next_at, less DUE_SLACK_MS): two failures on one bad day never
@@ -34,9 +37,10 @@
 //
 // Only a site that does not answer joins the ladder (notAnswering). One that
 // answers with the wrong thing (a parked page, a blank page, a redirect to a
-// social profile, a duplicate, a blocked capture) keeps the weekly-counted
-// ladder of pipeline/health.mjs, and a bot wall or a check that could not
-// tell is never a failure at all. A new failure always starts the ladder at
+// social profile, a duplicate, a blocked capture) is on the weekly-counted
+// rule of pipeline/health.mjs, a bot wall or a check that could not tell is
+// never a failure at all, and a row 'down' for any reason stays down until a
+// check passes (pipeline/health.mjs nextHealth). A new failure always starts the ladder at
 // its own time; only the one-time adoption of rows that were failing for not
 // answering when the pool shipped (adoptLegacy) starts it earlier.
 //
@@ -168,13 +172,11 @@ export function failOnLadder(prev, result, now = new Date()) {
 }
 
 /**
- * A check of a site on the ladder that says nothing about whether it answers:
- * it could not tell (a timeout, a dropped connection, a bot wall), or the
- * page answered with the wrong thing (parked, blank: the site answers, but
- * not as a portfolio). Neither advances nor clears the ladder: the health and
- * the stage stay. When the re-check was due, the next one waits unclearWaitMs
- * (1 h, then 2, 4 ... up to a day) instead of coming every hour forever.
- * `reason` is what to record (the old one for a check that could not tell).
+ * A check of a site on the ladder that could not tell (a timeout, a dropped
+ * connection, a bot wall). Neither advances nor clears the ladder: the health
+ * and the stage stay. When the re-check was due, the next one waits
+ * unclearWaitMs (1 h, then 2, 4 ... up to a day) instead of coming every hour
+ * forever. `reason` is what to record (the one it had).
  */
 export function holdOnLadder(prev, reason, now = new Date()) {
   const t = now.getTime();
@@ -266,7 +268,7 @@ export async function legacyRows(db, now = new Date()) {
   const noMarks = marks.has("pool_stage") ? "AND m.pool_stage IS NULL" : "";
   const rows = (
     await db.execute(
-      `SELECT p.url, p.health, p.health_reason, p.health_first_fail_at, p.health_checked_at FROM portfolios p ${join}
+      `SELECT p.url, p.name, p.health, p.health_reason, p.health_first_fail_at, p.health_checked_at FROM portfolios p ${join}
        WHERE p.delisted_at IS NULL AND p.health IN ('suspect', 'down') AND ${NOT_ANSWERING_SQL("p.health_reason")} ${noMarks} ORDER BY p.url`
     )
   ).rows;
@@ -277,6 +279,7 @@ export async function legacyRows(db, now = new Date()) {
     const down = health === "down";
     return {
       url: String(r.url),
+      name: r.name == null ? "" : String(r.name),
       health,
       reason: String(r.health_reason ?? ""),
       marks: {
@@ -332,10 +335,13 @@ export async function columnsOf(db, table) {
  * (health_marks.purge_pending, set when a write made the row 'down') and
  * clears the mark only when the purge worked, so a failed one is tried again
  * the next hour (the Worker's hourly Cron Trigger, worker/index.ts).
- * `purge(urls)` resolves true when the purge went through. Returns
- * { purged: [urls], failed: [urls] }.
+ * `purge(urls)` resolves true when the purge went through; it is called with
+ * at most PURGE_BATCH urls (CachedPages.purgeTags purges at most 100 tags a
+ * call, as worker/tier-purge.ts knows), and only a batch that went through is
+ * cleared. Returns { purged: [urls], failed: [urls] }.
  */
-export async function purgeGoneProfiles(db, { purge, limit = 200 }) {
+export const PURGE_BATCH = 100;
+export async function purgeGoneProfiles(db, { purge, limit = 500 }) {
   let rows;
   try {
     rows = (await db.execute({ sql: "SELECT url FROM health_marks WHERE purge_pending = 1 ORDER BY url LIMIT ?", args: [limit] })).rows;
@@ -344,14 +350,22 @@ export async function purgeGoneProfiles(db, { purge, limit = 200 }) {
     throw e;
   }
   const urls = rows.map((r) => String(r.url));
-  if (!urls.length) return { purged: [], failed: [] };
-  let ok = false;
-  try {
-    ok = Boolean(await purge(urls));
-  } catch {
-    ok = false;
+  const purged = [];
+  const failed = [];
+  for (let i = 0; i < urls.length; i += PURGE_BATCH) {
+    const part = urls.slice(i, i + PURGE_BATCH);
+    let ok = false;
+    try {
+      ok = Boolean(await purge(part));
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      failed.push(...part);
+      continue;
+    }
+    await db.execute({ sql: `UPDATE health_marks SET purge_pending = 0 WHERE url IN (${part.map(() => "?").join(",")})`, args: part });
+    purged.push(...part);
   }
-  if (!ok) return { purged: [], failed: urls };
-  await db.execute({ sql: `UPDATE health_marks SET purge_pending = 0 WHERE url IN (${urls.map(() => "?").join(",")})`, args: urls });
-  return { purged: urls, failed: [] };
+  return { purged, failed };
 }

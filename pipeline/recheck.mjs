@@ -11,16 +11,15 @@
 // Free: no Gemini. Nobody is emailed: the counts go to the job summary and
 // the owner's admin page (/admin/alerts lists the pool).
 
-import { healthSummary, runHealthCheck } from "./health.mjs";
-import { DUE_SQL, adoptLegacy, columnsOf, dueCutoff, ensureHealthSchema } from "./not-working.mjs";
+import { ensureHealthTables, healthSummary, runHealthCheck } from "./health.mjs";
+import { DUE_SQL, adoptLegacy, columnsOf, dueCutoff } from "./not-working.mjs";
 
 /** Live sites loaded beside the due ones as a test of the runner, never recorded. */
 export const CONTROL_SITES = 5;
 
-/** The listed sites whose re-check is due at `now`: [{ url, name }]. `dryRun` never changes the schema (an older database reads as nothing due). */
-export async function dueForRecheck(db, now = new Date(), { dryRun = false } = {}) {
-  if (!dryRun) await ensureHealthSchema(db);
-  else if (!(await columnsOf(db, "health_marks")).has("pool_health")) return [];
+/** The listed sites whose re-check is due at `now`: [{ url, name }]. A database the pool's columns are not in yet (a dry run before the release) has none. */
+export async function dueForRecheck(db, now = new Date()) {
+  if (!(await columnsOf(db, "health_marks")).has("pool_health")) return [];
   const rows = (await db.execute({ sql: DUE_SQL, args: [dueCutoff(now)] })).rows;
   return rows.map((r) => ({ url: String(r.url), name: r.name == null ? "" : String(r.name) }));
 }
@@ -48,14 +47,13 @@ export async function controlSites(db, n = CONTROL_SITES, except = []) {
  * them due). `dryRun` writes nothing (./health.mjs runHealthCheck).
  */
 export async function runRecheck({ db, fetchImpl = globalThis.fetch, render, now = new Date(), log = console.log, controls = CONTROL_SITES, concurrency = 4, dryRun = false }) {
-  if (!dryRun) await ensureHealthSchema(db);
+  // The schema once, here; the run below is told it is ready.
+  if (!dryRun) await ensureHealthTables(db);
   const adopted = await adoptLegacy(db, { now, dryRun });
-  const due = await dueForRecheck(db, now, { dryRun });
+  const due = await dueForRecheck(db, now);
   // In a dry run the adoption is not written, so its sites are added by hand (all due now).
-  if (dryRun) for (const a of adopted) if (!due.some((d) => d.url === a.url)) due.push({ url: a.url, name: "" });
+  if (dryRun) for (const a of adopted) if (!due.some((d) => d.url === a.url)) due.push({ url: a.url, name: a.name });
   if (!due.length) return { aborted: false, due: 0, checked: 0, adopted: adopted.length, dryRun };
-  const names = new Map((await db.execute({ sql: `SELECT url, name FROM portfolios WHERE url IN (${due.map(() => "?").join(",")})`, args: due.map((d) => d.url) })).rows.map((r) => [String(r.url), r.name == null ? "" : String(r.name)]));
-  for (const d of due) d.name = d.name || names.get(d.url) || "";
   const control = await controlSites(db, controls, due.map((d) => d.url));
   const s = await runHealthCheck({
     db,
@@ -72,6 +70,7 @@ export async function runRecheck({ db, fetchImpl = globalThis.fetch, render, now
     alerts: false,
     dryRun,
     adopted,
+    schemaReady: true,
   });
   return { due: due.length, ...s };
 }

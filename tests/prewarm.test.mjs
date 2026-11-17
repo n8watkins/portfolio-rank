@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { runPrewarm, classify } from "../scripts/lib/prewarm.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
+import { ensureHealthSchema } from "../pipeline/not-working.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -80,6 +81,8 @@ async function runScript(handler, { limit = 4 } = {}) {
   const dbFile = join(dir, "db.sqlite");
   const db = createClient({ url: `file:${dbFile}` });
   await ensureRosterSchema(db);
+  // The health check's table, as every migrated database has it: ACTIVE reads it.
+  await ensureHealthSchema(db);
   const add = (url, tier, extra = {}) =>
     db.execute({
       sql: "INSERT INTO portfolios (url, status, ai_rubric, health) VALUES (?, ?, ?, ?)",

@@ -85,6 +85,11 @@ export type Profile = {
   /** The newest grade job for this site, while it isn't finished or it explains why. */
   job: { id: string; status: string; reason: string | null } | null;
   hideGrade: boolean;
+  /**
+   * A listed site that is not working (lib/hidden.mjs GONE_WHERE): its public page answers not found
+   * (app/p/[slug]), while its owner's tools (claim, verify, owner actions) still find it.
+   */
+  gone: boolean;
   saved: { quick: Saved<QuickFacts>; share: Saved<ShareResult>; mobile: Saved<PsiResult>; desktop: Saved<PsiResult> };
   stars: number;
   saves: number;
@@ -124,8 +129,6 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     listed ? client.execute({ sql: "SELECT elo, votes FROM ratings WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
   ]);
   if (!listed && !seenRow && !jobRow) return null;
-  // A listed site that is not working has no profile until it works again (lib/hidden.mjs GONE_WHERE).
-  if (listed && Number(rubricRow?.gone ?? 0) === 1) return null;
 
   const rows = new Map(cacheRows.map((r) => [String(r.k), r]));
   const read = <T,>(k: string): Saved<T> => {
@@ -165,6 +168,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     report,
     job: jobRow && jobRow.status !== "done" ? { id: String(jobRow.id), status: String(jobRow.status), reason: jobRow.reason == null ? null : String(jobRow.reason) } : null,
     hideGrade: owner.hideGrade,
+    gone: Boolean(listed) && Number(rubricRow?.gone ?? 0) === 1,
     saved: { quick, share, mobile: read<PsiResult>(psiKey("mobile", url)), desktop: read<PsiResult>(psiKey("desktop", url)) },
     stars,
     saves,

@@ -17,6 +17,7 @@ import { finishNight, planNight, runBatch, startNight } from "../../pipeline/nig
 import { ensureRubricHistory } from "../../pipeline/rubric-history.mjs";
 import { ensureRankingSchema } from "../../lib/ranking/store.mjs";
 import { rankingConfig } from "../../lib/ranking/config.mjs";
+import { ensureHealthSchema } from "../../pipeline/not-working.mjs";
 
 export const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 export const DAY = 86400000;
@@ -32,11 +33,14 @@ export const PORTFOLIO_HTML = `<!doctype html><html><head><title>Ann Lee | Engin
 /** A page with no portfolio signals at all. */
 export const EMPTY_HTML = `<!doctype html><html><head><title>Welcome</title></head><body><p>${"Lorem ipsum dolor sit amet. ".repeat(20)}</p></body></html>`;
 
-export async function freshDb() {
+/** `health: false` leaves out health_marks, as on a database from before the not-working pool. */
+export async function freshDb({ health = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "door-"));
   const file = path.join(dir, "db.sqlite");
   const db = createClient({ url: `file:${file}` });
   await ensureRosterSchema(db);
+  // The health check's table, as every migrated database has it (lib/schema.mjs): pipeline/roster.mjs ACTIVE reads it.
+  if (health) await ensureHealthSchema(db);
   await ensureGeminiLog(db);
   await ensureRankingSchema(db);
   await ensureRubricHistory(db);

@@ -11,7 +11,7 @@ import path from "node:path";
 import * as health from "../pipeline/health.mjs";
 import * as pool from "../pipeline/not-working.mjs";
 import { controlSites, dueForRecheck, recheckSummary, runRecheck } from "../pipeline/recheck.mjs";
-import { EXPORT_EVERY_DAYS, exportDue, markExported, planExclusions, weeklyExport } from "../pipeline/exclusions.mjs";
+import { EXPORT_EVERY_DAYS, exportDue, markExported, planDeadRecheck, planExclusions, weeklyExport } from "../pipeline/exclusions.mjs";
 import { ACTIVE, AI_WORK, LISTED_NOT_DOWN, dueForCapture } from "../pipeline/roster.mjs";
 import { GONE_WHERE, HIDDEN_WHERE } from "../lib/hidden.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
@@ -488,25 +488,45 @@ test("a wrong-content suspect site that blips once is not backdated: the ladder 
   assert.equal((await marks(db, url)).pool_next_at, at(T0 + D).toISOString(), "the next day, as for any first failure");
 });
 
-test("a page with the wrong thing on a ladder site neither advances nor clears it, and the re-check backs off", async () => {
+test("review 2.1: a failing site that starts answering with the wrong thing leaves the ladder for the wrong-content rule, from that failure, and is never stuck", async () => {
   const url = "https://now-parked.example";
-  const { db, w, nightly, hourly } = await setup([url]);
+  const { db, feed, w, nightly } = await setup([url]);
   await nightly(T0 - D);
   w.mode.set(url, "paused");
   await nightly(T0);
-  await hourly(T0 + H);
-  assert.equal(Number((await marks(db, url)).pool_stage), pool.RECHECKED);
-  // The domain answers now, with a blank page (expired and parked, say): not answering is not what it shows.
+  assert.equal(Number((await marks(db, url)).pool_stage), pool.FAILING);
+  // The domain answers now, with a blank page (expired and parked, say).
   const blank = async (u) => (u.startsWith(url) ? response(200, "<div id=root></div>", u) : response(200, PORTFOLIO_HTML, u));
   const blankRender = async (u) => (u.startsWith(url) ? { status: 200, finalUrl: u, title: "", text: "", media: false, html: "" } : w.render(u));
-  const s = await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + D), log: quiet });
-  assert.equal(s.due, 1);
-  const m = await marks(db, url);
-  assert.equal(Number(m.pool_stage), pool.RECHECKED, "not advanced");
-  assert.deepEqual(await standing(db, url), { ...FAILING, capture: true }, "not cleared, still shown; it answers, so captures may try it");
-  assert.equal(await col(db, url, "health_reason"), "renders blank");
-  assert.equal(m.pool_next_at, at(T0 + D + H).toISOString(), "backed off an hour");
-  assert.ok(m.unknown_since, "its time counts toward the owner's alert");
+  await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + H), log: quiet });
+  assert.equal((await marks(db, url)).pool_stage, null, "off the not-answering ladder");
+  assert.deepEqual([await col(db, url, "health"), Number(await col(db, url, "health_fails")), await col(db, url, "health_first_fail_at")], ["suspect", 1, at(T0 + H).toISOString()], "the wrong-content rule, counting from now");
+  assert.deepEqual(await standing(db, url), { ...FAILING, capture: true }, "still shown; it answers, so captures may try it");
+  // The nightly run takes it back and the weekly-counted rule runs its course: down within about two weeks.
+  let t = T0 + D;
+  while (t <= T0 + 20 * D && (await col(db, url, "health")) !== "down") {
+    await health.runHealthCheck({ db, feed, fetchImpl: blank, render: blankRender, now: at(t), log: quiet });
+    t += D;
+  }
+  assert.equal(await col(db, url, "health"), "down");
+  assert.ok(t - T0 <= 16 * D, `down by day 15 (took ${(t - T0) / D - 1} days)`);
+});
+
+test("review 2.4: a down row stays down on a failure of any kind; only a pass restores it", async () => {
+  const url = "https://undone.example";
+  const { db, w, nightly } = await setup([url]);
+  // Down with no valid marks (removed in the review queue, then the decision undone, say), its last failure a week ago.
+  await setHealth(db, url, "down", "HTTP 402: deployment paused", T0 - 7 * D, 1);
+  await db.execute("INSERT INTO cache (k, v, at) VALUES ('health:pool-adopted', '{}', 0)");
+  w.mode.set(url, "paused");
+  await nightly(T0);
+  assert.equal(await col(db, url, "health"), "down", "a still-failing site is never shown again");
+  const blank = async (u) => (u.startsWith(url) ? response(200, "<div id=root></div>", u) : response(200, PORTFOLIO_HTML, u));
+  await health.runHealthCheck({ db, feed: [{ url, name: "Ann Lee" }, ...fillers], fetchImpl: blank, render: async (u) => (u.startsWith(url) ? { status: 200, finalUrl: u, title: "", text: "", media: false, html: "" } : goodPage(u)), now: at(T0 + D), log: quiet });
+  assert.equal(await col(db, url, "health"), "down");
+  w.mode.set(url, "ok");
+  await nightly(T0 + 2 * D);
+  assert.equal(await col(db, url, "health"), "live");
 });
 
 // ---------------------------------------------------------------------------
@@ -525,16 +545,25 @@ test("per consumer: the AI's queues take only healthy sites; the free jobs (capt
   await db.execute({ sql: "UPDATE portfolios SET health = 'suspect', health_reason = 'renders blank' WHERE url = ?", args: [blank] });
   await db.execute({ sql: "UPDATE portfolios SET health = 'suspect', health_reason = 'HTTP 402: deployment paused' WHERE url = ?", args: [failing] });
   await db.execute({ sql: "UPDATE portfolios SET health = 'down', health_reason = 'HTTP 402: deployment paused' WHERE url = ?", args: [hidden] });
+  // As the health check leaves them: checked at T0, the unanswering one on the ladder with marks that hold.
+  await db.execute({ sql: "UPDATE portfolios SET health_checked_at = ?", args: [at(T0).toISOString()] });
+  await db.execute({
+    sql: "INSERT INTO health_marks (url, pool_stage, pool_started_at, pool_next_at, pool_health, pool_checked_at) VALUES (?, 1, ?, ?, 'suspect', ?)",
+    args: [failing, at(T0).toISOString(), at(T0 + H).toISOString(), at(T0).toISOString()],
+  });
   const only = (rows) => rows.map((r) => String(typeof r === "string" ? r : r.url)).filter((u) => all.includes(u)).sort();
   const ai = (name, rows) => assert.deepEqual(only(rows), [ok], `AI_WORK: ${name}`);
   const free = (name, rows) => assert.deepEqual(only(rows), [blank, ok].sort(), `ACTIVE: ${name}`);
+  const shown = (name, rows) => assert.deepEqual(only(rows), [blank, failing, ok].sort(), `LISTED_NOT_DOWN: ${name}`);
 
-  // AI_WORK: grading, comparisons, polls, blog facts, the grader's pool, evidence for a grade.
+  // AI_WORK: grading, comparisons, polls, blog facts, evidence for a grade.
   ai("re-grade queue (pipeline/rubric-history.mjs regradeQueue)", await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 10 }));
   await db.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.model', ?)", args: [PRIMARY_MODEL] });
   ai("rubric-version queue (versionRegradeQueue)", await versionRegradeQueue(db, { primary: PRIMARY_MODEL, version: 99, limit: 10 }));
   ai("poll hero candidates (pipeline/polls.mjs heroCandidates)", await heroCandidates(db, { known: [], now: T0 }));
-  ai("the fallback grader's comparison pool (lib/grader/report.mjs gradedPool)", await gradedPool(db, { now: T0, ttlMs: 0 }));
+  // Visitors: the comparison pool the home page, /me, the grade page and a grade report show keeps a failing
+  // site until it is not working, as every other page does (review 2.9).
+  shown("the comparison pool (lib/grader/report.mjs gradedPool)", await gradedPool(db, { now: T0, ttlMs: 0 }));
   // ACTIVE: the free jobs.
   free("screenshot refresh (lib/freshness.mjs screenshotsDue, via pipeline/capture.mjs)", await screenshotsDue(db, { limit: 10, active: ACTIVE, now: T0 + 400 * 86400000 }));
   free("link checks (linksDue, via pipeline/evidence.mjs)", await linksDue(db, { limit: 10, active: ACTIVE, now: T0 + 400 * 86400000 }));
@@ -548,6 +577,9 @@ test("per consumer: the AI's queues take only healthy sites; the free jobs (capt
   // Each failing row as the health check left it (checked at T0), with a capture retry from before that.
   await db.execute({ sql: "UPDATE portfolios SET status = 'error', retry_at = ?, health_checked_at = ?", args: [at(T0 - D).toISOString(), at(T0).toISOString()] });
   free("captures and their retries (pipeline/roster.mjs dueForCapture)", await dueForCapture(db, all.map((url) => ({ url })), at(T0)));
+  // Review 2.6: a capture backoff (retry_at later than the check) never brings an unanswering ladder site back to capture work.
+  await db.execute({ sql: "UPDATE portfolios SET retry_at = ? WHERE url = ?", args: [at(T0 + 3 * D).toISOString(), failing] });
+  free("captures with a backoff date after the check (dueForCapture)", await dueForCapture(db, all.map((url) => ({ url })), at(T0 + 4 * D)));
 });
 
 test("captures: a blocked first capture keeps its retries while suspect, and the review queue's confirm of a hidden site queues a capture that runs", async () => {
@@ -599,7 +631,7 @@ test("one shared definition: no background job writes its own health condition",
   const spelled = files.filter((f) => !allowed.has(f) && /COALESCE\(\s*[\w.]*health\s*,\s*''\s*\)\s*(!=|=|IN|NOT IN)/.test(fs.readFileSync(f, "utf8")));
   assert.deepEqual(spelled, []);
   // Every query that picks sites for the AI uses AI_WORK, and never ACTIVE.
-  for (const f of ["pipeline/night.mjs", "pipeline/judge.mjs", "pipeline/compare.mjs", "pipeline/polls.mjs", "pipeline/rubric-history.mjs", "pipeline/content/facts.mjs", "lib/grader/report.mjs", "scripts/eval-rubric.mjs", "scripts/regrade-not-portfolio.mjs"]) {
+  for (const f of ["pipeline/night.mjs", "pipeline/judge.mjs", "pipeline/compare.mjs", "pipeline/polls.mjs", "pipeline/rubric-history.mjs", "pipeline/content/facts.mjs", "scripts/eval-rubric.mjs", "scripts/regrade-not-portfolio.mjs"]) {
     const src = fs.readFileSync(f, "utf8");
     assert.match(src, /\$\{AI_WORK\(/, f);
     assert.doesNotMatch(src, /\$\{ACTIVE\(/, f);
@@ -612,6 +644,8 @@ test("one shared definition: no background job writes its own health condition",
   }
   // The library and its tiers count a failing site (still shown) and drop a not-working one, as the trigger does.
   assert.match(fs.readFileSync("lib/tiers-store.mjs", "utf8"), /LISTED_NOT_DOWN\(\)/);
+  // So does the comparison pool every reader of which shows it to visitors (lib/grader/report.mjs gradedPool).
+  assert.match(fs.readFileSync("lib/grader/report.mjs", "utf8"), /\$\{LISTED_NOT_DOWN\(\)\}/);
   assert.equal(LISTED_NOT_DOWN("p"), "p.delisted_at IS NULL AND COALESCE(p.health, '') != 'down'");
 });
 
@@ -728,7 +762,7 @@ test("review 5: a removed site that passes its monthly re-check is due at once w
   const S = T0 + D;
   // Day 90: the weekly export takes it off the list; the roster sync delists it.
   let ex = await weeklyExport({ db, excluded: [], feed, now: at(S + 90 * D), answers: async () => false });
-  assert.deepEqual(ex.plan.added.map((a) => a.url), [url]);
+  assert.deepEqual(ex.plan.added, [url]);
   await db.execute({ sql: "UPDATE portfolios SET delisted_at = ? WHERE url = ?", args: [at(S + 90 * D).toISOString(), url] });
   // Main carries it a few days later.
   const landedFiles = ex.files;
@@ -845,7 +879,7 @@ test("review 9: the hourly re-check reads only its own sites' rows, not the whol
 test("dry runs write nothing, work on a database from before this release, and say what would change", async () => {
   const suspect = "https://dry-suspect.example";
   const fresh = "https://dry-fresh.example";
-  const { db } = await freshDb();
+  const { db } = await freshDb({ health: false });
   for (const f of fillers) await site(db, f.url);
   for (const u of [suspect, fresh]) await site(db, u);
   await setHealth(db, suspect, "suspect", "HTTP 404", T0 - 7 * D, 1);
@@ -873,4 +907,102 @@ test("dry runs write nothing, work on a database from before this release, and s
   const ex = await weeklyExport({ db, excluded: [], feed, now: at(T0), dryRun: true, answers: async () => false });
   assert.equal(ex.planned, true);
   assert.equal(await dump(), before);
+});
+
+// ---------------------------------------------------------------------------
+// The second review of #251 (findings numbered as in that review)
+
+test("review 2.2: the edge purge goes 100 profiles at a time and clears only a batch that went through", async () => {
+  const { db } = await freshDb();
+  const urls = Array.from({ length: 150 }, (_, i) => `https://gone-${String(i).padStart(3, "0")}.example`);
+  for (const u of urls) await db.execute({ sql: "INSERT INTO health_marks (url, purge_pending) VALUES (?, 1)", args: [u] });
+  const calls = [];
+  // Like CachedPages.purgeTags: purges at most 100 tags a call. The second call fails.
+  const out = await pool.purgeGoneProfiles(db, { purge: async (batch) => (calls.push(batch.length), calls.length === 1) });
+  assert.deepEqual(calls, [100, 50]);
+  assert.equal(out.purged.length, 100);
+  assert.equal(out.failed.length, 50);
+  const pending = Number((await db.execute("SELECT COUNT(*) AS n FROM health_marks WHERE purge_pending = 1")).rows[0].n);
+  assert.equal(pending, 50, "the batch that failed is tried again next hour");
+});
+
+test("review 2.5: a planned export is checked against the database every night: a site that recovered, or whose removal was undone, is never exported", async () => {
+  const back = "https://recovered-before-merge.example";
+  const stays = "https://still-gone.example";
+  const { db, feed, w, nightly, hourly } = await setup([back, stays]);
+  await failingSince(nightly, w, [back, stays], T0);
+  await hourly(T0 + H);
+  await hourly(T0 + D);
+  const monday = T0 + D + 91 * D;
+  const main = { excluded: [], feed };
+  const mon = await weeklyExport({ db, ...main, now: at(monday), answers: async () => false });
+  assert.deepEqual(mon.files.excluded.map((e) => e.url).sort(), [back, stays].sort());
+  // Tuesday: one of them works again (the hourly re-check brings it back) before the pull request merged.
+  w.mode.set(back, "ok");
+  await db.execute({ sql: "UPDATE health_marks SET pool_next_at = ? WHERE url = ?", args: [at(monday + H).toISOString(), back] });
+  await hourly(monday + H);
+  assert.equal(await col(db, back, "health"), "live");
+  const tue = await weeklyExport({ db, ...main, now: at(monday + D), answers: async () => assert.fail("not planned again") });
+  assert.deepEqual(tue.files.excluded.map((e) => e.url), [stays], "the recovered site is not in the files any more");
+  assert.ok(tue.files.feed.some((p) => p.url === back), "and it stays on the list");
+  // Main carries what is left: done.
+  const wed = await weeklyExport({ db, excluded: tue.files.excluded, feed: tue.files.feed, now: at(monday + 2 * D), answers: async () => false });
+  assert.equal(wed.landed, true);
+});
+
+test("review 2.7: removed entries are re-checked side by side, under a time budget; the rest wait for the next run", async () => {
+  const removed = "2026-09-01";
+  const excluded = Array.from({ length: 20 }, (_, i) => ({ url: `https://removed-${i}.example`, kind: "down", reason: "HTTP 402: deployment paused", removed }));
+  let running = 0;
+  let most = 0;
+  let t = 0;
+  const answers = async () => {
+    running++;
+    most = Math.max(most, running);
+    await new Promise((r) => setTimeout(r, 5));
+    t += 60000; // each check takes a minute of the budget
+    running--;
+    return false;
+  };
+  const r = await planDeadRecheck({ excluded, now: new Date("2026-11-17T00:00:00Z"), answers, concurrency: 4, budgetMs: 10 * 60000, clock: () => t });
+  assert.ok(most > 1, "several at a time");
+  assert.ok(r.still.length < 20 && r.still.length >= 10, `stopped at the budget (${r.still.length} checked)`);
+  assert.equal(r.left, 20 - r.still.length);
+  // Those not checked keep their date: due again on the next run.
+  const notChecked = r.excluded.filter((e) => !e.recheck_after);
+  assert.equal(notChecked.length, r.left);
+});
+
+test("review 2.8: each site's failure is stamped when its own check finished, so the hour's re-check is an hour after that", async () => {
+  const url = "https://late-in-the-run.example";
+  const { db, feed, w } = await setup([url]);
+  w.mode.set(url, "paused");
+  // The run starts at T0; this site's check finishes 50 minutes in.
+  const finished = T0 + 50 * 60000;
+  await health.runHealthCheck({ db, feed, fetchImpl: w.fetchImpl, render: w.render, now: at(T0), clock: () => finished, log: quiet });
+  const m = await marks(db, url);
+  assert.equal(m.pool_started_at, at(finished).toISOString());
+  assert.equal(m.pool_next_at, at(finished + H).toISOString());
+  assert.equal(await col(db, url, "health_checked_at"), at(finished).toISOString());
+  // The hourly job 20 minutes later does not count as the hour's re-check.
+  assert.equal((await dueForRecheck(db, at(finished + 20 * 60000))).length, 0);
+});
+
+test("review 2.10: the hourly re-check makes one schema pass and no extra names query", async () => {
+  const url = "https://one-pass.example";
+  const { db, w, nightly } = await setup([url]);
+  await failingSince(nightly, w, [url], T0);
+  const sqls = [];
+  const spy = new Proxy(db, {
+    get(target, prop) {
+      if (prop !== "execute") return typeof target[prop] === "function" ? target[prop].bind(target) : target[prop];
+      return async (q) => {
+        sqls.push(typeof q === "string" ? q : q.sql);
+        return target.execute(q);
+      };
+    },
+  });
+  await runRecheck({ db: spy, fetchImpl: w.fetchImpl, render: w.render, now: at(T0 + H), log: quiet });
+  assert.equal(sqls.filter((s) => /CREATE TABLE IF NOT EXISTS health_marks/.test(s)).length, 1, "health_marks ensured once");
+  assert.equal(sqls.filter((s) => /^SELECT url, name FROM portfolios WHERE url IN/.test(s)).length, 0, "no names query");
 });

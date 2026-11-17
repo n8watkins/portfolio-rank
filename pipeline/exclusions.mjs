@@ -22,7 +22,7 @@
 // old format) still work.
 
 import fs from "fs";
-import { APPLIED_REMOVAL_WHERE, checkSite, normKey } from "./health.mjs";
+import { APPLIED_REMOVAL_WHERE, checkSite, mapPool, normKey } from "./health.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
 import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesList, notAnswering } from "./not-working.mjs";
@@ -90,6 +90,10 @@ export const excludedUrl = (e) => (typeof e === "string" ? e : e?.url);
 // A dead entry is checked again this long after the last check, and at most this many a run.
 export const DEAD_RECHECK_DAYS = 91;
 export const DEAD_RECHECK_LIMIT = 40;
+// They run this many at a time, as the main check does, and none starts after this long, so the nightly job
+// (health.yml, 120 minutes) is never at risk: the rest wait for the next run.
+export const DEAD_RECHECK_CONCURRENCY = 8;
+export const DEAD_RECHECK_BUDGET_MS = 15 * 60000;
 // A "down" entry (three failed weekly checks) is checked again monthly (owner, 2026-11-16: a paused
 // Vercel project or a missing deployment often comes back), under the same cap a run.
 export const DOWN_RECHECK_DAYS = 30;
@@ -141,10 +145,22 @@ export const passesFullCheck =
  * (`answers(url, entry)`, by default passesFullCheck with `render`) leaves
  * the list (it returns with the next sync if the community list still has
  * it, and the weekly health check looks at it like any listed site); one
- * that doesn't gets its next check recheckDays(kind) later. Returns
- * { excluded, back: [urls], still: [urls] } without writing.
+ * that doesn't gets its next check recheckDays(kind) later. The checks run
+ * `concurrency` at a time (a dead server takes a minute or two to give up),
+ * and none starts once `budgetMs` has passed (by `clock`): those not checked
+ * stay due for the next run. Returns { excluded, back: [urls], still: [urls],
+ * left } without writing.
  */
-export async function planDeadRecheck({ excluded, now = new Date(), render, answers = passesFullCheck({ render }), limit = DEAD_RECHECK_LIMIT }) {
+export async function planDeadRecheck({
+  excluded,
+  now = new Date(),
+  render,
+  answers = passesFullCheck({ render }),
+  limit = DEAD_RECHECK_LIMIT,
+  concurrency = DEAD_RECHECK_CONCURRENCY,
+  budgetMs = DEAD_RECHECK_BUDGET_MS,
+  clock = Date.now,
+}) {
   const day = now.toISOString().slice(0, 10);
   const due = excluded
     .filter((e) => {
@@ -152,16 +168,20 @@ export async function planDeadRecheck({ excluded, now = new Date(), render, answ
       return at != null && at <= day;
     })
     .slice(0, limit);
+  const started = clock();
+  const answered = await mapPool(due, concurrency, async (e) => Boolean(await answers(e.url, e)), { stop: () => clock() - started >= budgetMs });
   const back = new Set();
   const still = new Set();
-  for (const e of due) {
-    if (await answers(e.url, e)) back.add(e);
+  due.forEach((e, i) => {
+    if (answered[i] === undefined) return;
+    if (answered[i]) back.add(e);
     else still.add(e);
-  }
+  });
   return {
     excluded: excluded.filter((e) => !back.has(e)).map((e) => (still.has(e) ? { ...e, last_checked: day, recheck_after: addDays(day, recheckDays(e.kind)) } : e)),
     back: [...back].map((e) => e.url),
     still: [...still].map((e) => e.url),
+    left: due.length - back.size - still.size,
   };
 }
 
@@ -217,14 +237,15 @@ export function applyExport({ excluded, feed }, plan) {
   return { excluded: out, feed: feed.filter((p) => !drop.has(key(p.url))) };
 }
 
-/** Whether main's data/excluded.json already carries a planned export (its pull request merged). */
+/**
+ * Whether main's data/excluded.json carries a planned export (its pull
+ * request merged): no addition left to make (`added`: urls still to add,
+ * already checked against today's state), the entries back are gone, the ones
+ * still failing have their new dates.
+ */
 export function exportLanded({ excluded }, plan) {
   const have = new Map(excluded.map((e) => [normKey(excludedUrl(e)), e]));
-  return (
-    plan.added.every((a) => have.has(normKey(a.url))) &&
-    plan.back.every((u) => !have.has(normKey(u))) &&
-    plan.still.every((s) => have.get(normKey(s.url))?.recheck_after === s.recheck_after)
-  );
+  return !plan.added.length && plan.back.every((u) => !have.has(normKey(u))) && plan.still.every((s) => have.get(normKey(s.url))?.recheck_after === s.recheck_after);
 }
 
 /**
@@ -232,45 +253,57 @@ export function exportLanded({ excluded }, plan) {
  * files as checked out. Plans a new export when one is due (planExclusions,
  * then planDeadRecheck with the full check), keeps it in the cache table and
  * returns the files with every export not yet on main applied, or null when
- * there is nothing to apply. A removed site that passes its re-check gets its
- * not-working marks due now, so once the daily sync lists it again the hourly
- * re-check brings it back at once instead of at its old monthly date.
+ * there is nothing to apply.
+ *
+ * Additions are checked against the database every night: the plan keeps
+ * only which sites it chose, and the entries are today's planExclusions, so a
+ * site that recovered, or whose removal was undone, after the plan was made
+ * drops out of it, and no site is ever exported that today's state would not
+ * plan. A removed site that passes its re-check gets its not-working marks due
+ * now, so once the daily sync lists it again the hourly re-check brings it
+ * back at once instead of at its old monthly date.
  * `dryRun` plans and returns the same and writes nothing.
- * Returns { files, plan, planned, landed, held }.
+ * Returns { files, plan: { added: [urls], back, still } | null, planned, landed, held }.
  */
 export async function weeklyExport({ db, excluded, feed, render, answers, now = new Date(), dryRun = false, log = () => {} }) {
+  // Today's additions: the only entries ever applied.
+  const today = await planExclusions({ db, excluded, feed, now, readOnly: dryRun });
+  const todayAdds = new Map(today.added.map((a) => [normKey(a.url), a]));
   let pending = null;
   let landed = false;
   const row = await cacheGet(db, PENDING_EXPORT_KEY);
   if (row) {
+    let stored = null;
     try {
-      pending = JSON.parse(String(row.v));
+      stored = JSON.parse(String(row.v));
     } catch {
-      pending = null;
+      stored = null;
     }
-    if (pending && exportLanded({ excluded }, pending)) {
+    // The additions this plan chose that today's state still plans (and main does not carry yet).
+    const current = stored ? { added: stored.added.filter((u) => todayAdds.has(normKey(u))), back: stored.back, still: stored.still } : null;
+    if (current && exportLanded({ excluded }, current)) {
       landed = true;
       if (!dryRun) {
         await markExported(db, new Date(Number(row.at)));
         await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [PENDING_EXPORT_KEY] });
       }
-      pending = null;
-    } else if (!pending || now.getTime() - Number(row.at) >= PENDING_EXPORT_MAX_DAYS * 86400000) {
+    } else if (!current || now.getTime() - Number(row.at) >= PENDING_EXPORT_MAX_DAYS * 86400000) {
       log(`export: the export planned ${new Date(Number(row.at)).toISOString().slice(0, 10)} never landed; planning again`);
       if (!dryRun) await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [PENDING_EXPORT_KEY] });
-      pending = null;
+    } else {
+      pending = current;
+      const dropped = stored.added.filter((u) => !current.added.includes(u) && !excluded.some((e) => normKey(excludedUrl(e)) === normKey(u)));
+      if (dropped.length) log(`export: no longer down or decided, so not exported: ${dropped.join(", ")}`);
     }
   }
   let planned = false;
-  let held = [];
   if (!pending && (await exportDue(db, now))) {
     planned = true;
-    const plan = await planExclusions({ db, excluded, feed, now, readOnly: dryRun });
-    held = plan.held;
-    const dead = await planDeadRecheck({ excluded: plan.excluded, now, render, ...(answers ? { answers } : {}) });
+    const dead = await planDeadRecheck({ excluded, now, render, ...(answers ? { answers } : {}) });
+    if (dead.left) log(`export: ${dead.left} removed site(s) due for their check were left for the next run (time budget)`);
     const stillSet = new Set(dead.still);
     const still = dead.excluded.filter((e) => typeof e === "object" && stillSet.has(e.url)).map((e) => ({ url: e.url, last_checked: e.last_checked, recheck_after: e.recheck_after }));
-    pending = { added: plan.added, back: dead.back, still };
+    pending = { added: today.added.map((a) => a.url), back: dead.back, still };
     const empty = !pending.added.length && !pending.back.length && !pending.still.length;
     if (!dryRun) {
       if (dead.back.length) {
@@ -284,7 +317,8 @@ export async function weeklyExport({ db, excluded, feed, render, answers, now = 
     }
     if (empty) pending = null;
   }
-  return { files: pending ? applyExport({ excluded, feed }, pending) : null, plan: pending, planned, landed, held };
+  const entries = pending ? { added: pending.added.map((u) => todayAdds.get(normKey(u))).filter(Boolean), back: pending.back, still: pending.still } : null;
+  return { files: entries ? applyExport({ excluded, feed }, entries) : null, plan: pending, planned, landed, held: today.held };
 }
 
 /**

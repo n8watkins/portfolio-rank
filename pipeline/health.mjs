@@ -351,10 +351,12 @@ export function findDuplicates(entries) {
 }
 
 /**
- * The state machine. prev: { health, fails, firstFailAt, lastFailAt } from
- * the row and health_marks (or null); result: { ok, reason } with ok true,
- * false or null (inconclusive).
- * A failure counts only on a week of its own: at least FAIL_WEEK_DAYS after
+ * The state machine. prev: { health, fails, firstFailAt, lastFailAt, pool }
+ * from the row and health_marks (or null); result: { ok, reason } with ok
+ * true, false or null (inconclusive). Five rules, in order: a pass restores;
+ * could-not-tell changes nothing; not answering is the not-working ladder;
+ * down stays down; a page with the wrong thing is the weekly-counted rule.
+ * In that rule a failure counts only on a week of its own: at least FAIL_WEEK_DAYS after
  * the last counted one (lastFailAt; for a row from before it was kept, the
  * n-th counted failure at least (n - 1) * FAIL_WEEK_DAYS after the first).
  * One in the same week updates the reason and nothing else.
@@ -362,27 +364,26 @@ export function findDuplicates(entries) {
  */
 export function nextHealth(prev, result, now = new Date()) {
   const keptReason = () => (prev?.health && prev.health !== "live" ? prev.reason ?? result.reason : result.reason);
+  // 1. A pass restores, from any state.
   if (result.ok === true) return { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "", pool: null };
-  if (prev?.pool) {
-    // On the not-working ladder (./not-working.mjs): only a check that finds the site not answering
-    // advances it. One that could not tell, or a page that answers with the wrong thing, holds it where
-    // it is (the next re-check backs off), whatever the weekly-counted ladder would make of it.
-    if (result.ok === false && notAnswering(result.reason)) return failOnLadder(prev, result, now);
-    return holdOnLadder(prev, result.ok === null ? keptReason() : result.reason, now);
-  }
+  // 2. A check that could not tell changes nothing (a re-check on the ladder backs off: ./not-working.mjs).
   if (result.ok === null) {
-    return {
-      health: prev?.health ?? null,
-      fails: Number(prev?.fails ?? 0),
-      firstFailAt: prev?.firstFailAt ?? null,
-      lastFailAt: prev?.lastFailAt ?? null,
-      reason: keptReason(),
-      pool: null,
-    };
+    if (prev?.pool) return holdOnLadder(prev, keptReason(), now);
+    return { health: prev?.health ?? null, fails: Number(prev?.fails ?? 0), firstFailAt: prev?.firstFailAt ?? null, lastFailAt: prev?.lastFailAt ?? null, reason: keptReason(), pool: null };
   }
-  // A site that does not answer joins the ladder, now. One already confirmed down (by the weekly-counted
-  // ladder, or a decision) stays on that ladder: it is not shown again for a different kind of failure.
-  if (notAnswering(result.reason) && prev?.health !== "down") return failOnLadder(prev, result, now);
+  // 3. The not-working ladder (./not-working.mjs): a site that does not answer, and a not-working site
+  //    that fails in any way.
+  const answers = !notAnswering(result.reason);
+  if (prev?.pool && (!answers || prev.pool.stage >= NOT_WORKING)) return failOnLadder(prev, result, now);
+  if (!prev?.pool && !answers && prev?.health !== "down") return failOnLadder(prev, result, now);
+  // 4. Down stays down until a check passes (confirmed by the weekly-counted rule, decided in the review
+  //    queue, or not working with marks a later change voided): a failure never shows it again.
+  if (prev?.health === "down") {
+    return { health: "down", fails: Number(prev.fails ?? 0), firstFailAt: prev.firstFailAt ?? now.toISOString(), lastFailAt: prev.lastFailAt ?? null, reason: result.reason, pool: null };
+  }
+  // 5. A page that answers with the wrong thing: the weekly-counted rule. A failing site that leaves the
+  //    not-answering ladder this way (it answers now) counts from this failure.
+  if (prev?.pool) prev = { ...prev, fails: 0, firstFailAt: null, lastFailAt: null, pool: null };
   const before = Number(prev?.fails ?? 0);
   const firstFailAt = prev?.firstFailAt ?? now.toISOString();
   const days = (from) => (now.getTime() - new Date(from).getTime()) / 86400000;
@@ -409,18 +410,30 @@ export function nextUnknown(prev, result, now = new Date()) {
   return { unknownSince: since, unknownLastAt: now.toISOString(), unknownDays: days, unknownWeeks: Math.floor(days / 7) };
 }
 
-async function mapPool(items, concurrency, fn) {
+/**
+ * Runs `fn` over `items`, `concurrency` at a time. With `stop()`, no new item
+ * starts once it says so (a time budget): those items are left undefined in
+ * the result, for the next run.
+ */
+export async function mapPool(items, concurrency, fn, { stop = () => false } = {}) {
   const out = new Array(items.length);
   let i = 0;
   await Promise.all(
     Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-      while (i < items.length) {
+      while (i < items.length && !stop()) {
         const idx = i++;
         out[idx] = await fn(items[idx], idx);
       }
     })
   );
   return out;
+}
+
+/** Every table the health check writes to (idempotent): the roster, the review queue's, health_marks. */
+export async function ensureHealthTables(db) {
+  await ensureRosterSchema(db);
+  await ensureReviewSchema(db);
+  await ensureHealthSchema(db);
 }
 
 /**
@@ -448,7 +461,7 @@ export async function runHealthCheck({
   feed,
   fetchImpl = globalThis.fetch,
   render,
-  now = new Date(),
+  now: nowIn,
   concurrency = 8,
   log = console.log,
   limit = Infinity,
@@ -458,12 +471,13 @@ export async function runHealthCheck({
   alerts = true,
   dryRun = false,
   adopted: adoptedIn = null,
+  schemaReady = false,
+  // The time a site's check finished, as ms: the real clock in a real run; a run given its own `now` (a
+  // simulated clock) stays at that time unless it passes a clock of its own.
+  clock = nowIn ? () => nowIn.getTime() : Date.now,
 }) {
-  if (!dryRun) {
-    await ensureRosterSchema(db);
-    await ensureReviewSchema(db);
-    await ensureHealthSchema(db);
-  }
+  const now = nowIn ?? new Date();
+  if (!dryRun && !schemaReady) await ensureHealthTables(db);
   // The one-time adoption of rows failing for not answering when the pool shipped (./not-working.mjs);
   // simulated in a dry run. The re-check passes what it adopted already.
   const adopted = new Map((adoptedIn ?? (await adoptLegacy(db, { now, dryRun }))).map((a) => [a.url, a]));
@@ -503,7 +517,8 @@ export async function runHealthCheck({
     const r = await checkSite(entry, { fetchImpl, render: counted }).catch((e) => unknown(`the check crashed: ${String(e?.message ?? e).slice(0, 80)}`, null));
     const label = r.ok === null ? `inconclusive: ${r.reason}` : r.ok ? (r.moved ? `ok, moved to ${r.finalUrl}` : "ok") : r.reason;
     log(`[${idx + 1}/${checkList.length}] ${entry.url}${controlSet.has(entry.url) ? " (control)" : ""} - ${label}`);
-    return { ...entry, ...r };
+    // When this site's check finished: its failure time and the base of its next re-check.
+    return { ...entry, ...r, at: new Date(clock()) };
   });
   const results = checked.slice(0, entries.length);
   const controlResults = checked.slice(entries.length);
@@ -627,7 +642,6 @@ export async function runHealthCheck({
     }
   }
 
-  const stamp = now.toISOString();
   const summary = {
     live: 0,
     suspect: 0,
@@ -665,14 +679,13 @@ export async function runHealthCheck({
           pool: poolOf(row),
         }
       : null;
-    const next = r.decidedDown
-      ? // Decided in the review queue, not seen failing: down with its reason, off the not-working ladder.
-        { ...nextHealth({ ...prev, pool: null }, { ok: false, reason: r.reason }, now), health: "down", reason: r.reason, pool: null }
-      : nextHealth(prev, r, now);
-    // A ladder site whose page answers with the wrong thing is held, like a check that could not tell, and
-    // its time counts toward the owner's alert the same way.
-    const heldOnLadder = Boolean(prev?.pool) && r.ok === false && !r.decidedDown && !notAnswering(r.reason);
-    const marks = nextUnknown(row ? { unknownSince: str(row.unknown_since) } : null, heldOnLadder ? { ok: null } : r, now);
+    // This site's own time: when its check finished, not when the run started (a nightly run takes most
+    // of an hour; the ladder's next re-check counts from the failure it saw).
+    const at = r.at ?? now;
+    const stamp = at.toISOString();
+    // A removal decided in the review queue is down with its reason (rule 4 of nextHealth), off the ladder.
+    const next = nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at);
+    const marks = nextUnknown(row ? { unknownSince: str(row.unknown_since) } : null, r, at);
     const pool = next.pool ?? null;
     // Whether this write changes what visitors see (lib/hidden.mjs, the rule itself, before and after) and
     // whether it takes the profile away (its cached copy must go: worker/index.ts, purge_pending).
