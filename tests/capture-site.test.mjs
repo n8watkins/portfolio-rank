@@ -18,6 +18,7 @@ import { chromium } from "playwright";
 import { captureSite, keyOf } from "../pipeline/capture.mjs";
 import { BLOCKED_PREFIX, BOT_WALL } from "../pipeline/capture-blocked.mjs";
 import { dueForCapture, ensureRosterSchema } from "../pipeline/roster.mjs";
+import { ensureFreshnessSchema } from "../lib/freshness.mjs";
 import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_PLAN } from "../pipeline/budget.mjs";
 import { PRIMARY_MODEL, BACKUP_MODEL } from "../pipeline/gemini.mjs";
@@ -60,6 +61,7 @@ const results = {};
 const url = (p) => `${base}${p}`;
 const OLD = { shot_key: "oldkey00oldkey00", meta: JSON.stringify({ motion: false, fullPage: { v: "old" } }), page_text: "Old good page text of the portfolio", captured_at: "2026-10-01 00:00:00" };
 
+// Six captures side by side while other test files run: far more than the runner's per-test timeout.
 before(async () => {
   server = http.createServer((req, res) => {
     if (req.url === "/bot") return res.writeHead(403, { "content-type": "text/html" }).end(BOT);
@@ -70,6 +72,8 @@ before(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "capture-site-"));
   db = createClient({ url: `file:${path.join(root, "db.sqlite")}` });
   await ensureRosterSchema(db);
+  // A failed refresh records its backoff there (capture.mjs's main creates it the same way).
+  await ensureFreshnessSchema(db);
   // Two sites that already have a good capture.
   for (const p of ["/refresh", "/forced"]) {
     await db.execute({
@@ -82,7 +86,7 @@ before(async () => {
     results[p] = await captureSite(browser, { url: url(p), name: p === "/minimal" ? "Sam Lee" : "Jane Doe" }, { db, s3: null, root, ...opts });
   };
   await Promise.all([run("/picker"), run("/minimal"), run("/empty"), run("/bot"), run("/refresh", { refresh: true }), run("/forced")]);
-});
+}, { timeout: 600000 });
 
 after(async () => {
   await browser?.close();
