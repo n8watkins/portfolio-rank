@@ -10,6 +10,7 @@
 // Against the local file (data/portfoliorank.db, or LOCAL_DB_FILE):
 //   node scripts/stored-capture-dry-run.mjs
 //   node scripts/stored-capture-dry-run.mjs --examples 20
+import fs from "node:fs";
 import path from "node:path";
 import { ACTIVE, pipelineDb } from "../pipeline/roster.mjs";
 import { scanStoredCaptures } from "../pipeline/night.mjs";
@@ -21,6 +22,12 @@ const args = process.argv.slice(2);
 const at = args.indexOf("--examples");
 const EXAMPLES = at >= 0 ? Number(args[at + 1]) || 10 : 10;
 
+// A local file that does not exist would be created empty by opening it: say so instead.
+const local = process.env.LOCAL_DB_FILE ?? path.join(ROOT, "data", "portfoliorank.db");
+if (!process.env.TURSO_DATABASE_URL && !fs.existsSync(local)) {
+  console.error(`No database: TURSO_DATABASE_URL is not set and ${local} does not exist. Run it with pass-env run -- (production) or LOCAL_DB_FILE=<file>.`);
+  process.exit(1);
+}
 const db = pipelineDb(ROOT);
 const byWhy = new Map();
 let hiddenAfter = 0;
