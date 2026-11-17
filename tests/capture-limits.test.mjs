@@ -142,11 +142,30 @@ test("a page that hangs after load is cut off at the time limit, its context clo
 });
 
 test("a capture that throws before its own handling leaves no timer running", async () => {
-  const timers = () => process.getActiveResourcesInfo().filter((r) => r === "Timeout").length;
-  const before = timers();
-  const broken = { execute: async () => Promise.reject(new Error("database gone")) };
-  await assert.rejects(captureSite(browser, { url: url("/site"), name: "Jane Doe" }, { db: broken, s3: null, root, limitMs: 600000 }), /database gone/);
-  assert.equal(timers(), before, "the site limit's timer is cleared");
+  // Only the timers made during this call are followed (other tests' timers come and go meanwhile).
+  const pending = new Set();
+  const realSet = globalThis.setTimeout;
+  const realClear = globalThis.clearTimeout;
+  globalThis.setTimeout = (fn, ms, ...args) => {
+    const h = realSet((...a) => {
+      pending.delete(h);
+      fn(...a);
+    }, ms, ...args);
+    pending.add(h);
+    return h;
+  };
+  globalThis.clearTimeout = (h) => {
+    pending.delete(h);
+    realClear(h);
+  };
+  try {
+    const broken = { execute: async () => Promise.reject(new Error("database gone")) };
+    await assert.rejects(captureSite(browser, { url: url("/site"), name: "Jane Doe" }, { db: broken, s3: null, root, limitMs: 600000 }), /database gone/);
+  } finally {
+    globalThis.setTimeout = realSet;
+    globalThis.clearTimeout = realClear;
+  }
+  assert.equal(pending.size, 0, "the site limit's timer is cleared");
 });
 
 // The browser is killed at a point the page itself signals, so each case hits

@@ -218,7 +218,9 @@ function watchBrowser(browser) {
     async lost(err) {
       if (w.now()) return true;
       const hinted = w.ctxLost || CLOSED_TEXT.test(String(err?.message ?? err ?? ""));
-      if (!hinted && w.page && !w.page.isClosed()) {
+      // No page yet (the database, the pre-check) and nothing pointing at the browser: it is still there.
+      if (!hinted && !w.page) return false;
+      if (!hinted && !w.page.isClosed()) {
         const answers = await within(w.page.evaluate(() => 1), PROBE_MS, "the page answering").then(
           () => true,
           () => false
