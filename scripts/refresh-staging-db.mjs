@@ -10,6 +10,7 @@
 //   TURSO_DATABASE_URL     production's address, only to refuse it as the target
 //   R2_ACCOUNT_ID, R2_BACKUP_ACCESS_KEY_ID, R2_BACKUP_SECRET_ACCESS_KEY
 //   node scripts/refresh-staging-db.mjs [--file SNAPSHOT.json.gz] [--dry-run]
+//     [--max-age-hours N | --allow-old]   refuses a backup older than 48 hours otherwise
 //
 // The refusals come first and need no network: the target must be set, must
 // not be production's address and must name a staging database.
@@ -46,6 +47,17 @@ export function refusal(url, productionUrl) {
 /** The newest backups/portfoliorank-YYYY-MM-DD.json.gz key in a listing. */
 export function newestBackup(keys) {
   return keys.filter((k) => /^backups\/portfoliorank-\d{4}-\d{2}-\d{2}\.json\.gz$/.test(k)).sort().at(-1) ?? null;
+}
+
+/** The oldest backup, in hours, the refresh takes unless --allow-old is given. */
+export const MAX_BACKUP_AGE_HOURS = 48;
+
+/** Why a snapshot taken at `exportedAt` is too old to refresh from, or null. */
+export function staleReason(exportedAt, now = new Date(), maxHours = MAX_BACKUP_AGE_HOURS) {
+  const at = new Date(exportedAt).getTime();
+  if (!Number.isFinite(at)) return "the backup has no usable export date";
+  const hours = (now.getTime() - at) / 3600000;
+  return hours > maxHours ? `the newest backup is ${hours.toFixed(1)} hours old (limit ${maxHours}); the nightly backup may have stopped` : null;
 }
 
 async function downloadNewest() {
@@ -93,6 +105,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { key, bytes } = file ? { key: file, bytes: readFileSync(file) } : await downloadNewest();
   const snap = upgradeSnapshot(JSON.parse((key.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")));
   console.log(`backup ${key}: the snapshot of ${snap.exported_at}`);
+  const stale = staleReason(snap.exported_at, new Date(), Number(flag("max-age-hours")) || MAX_BACKUP_AGE_HOURS);
+  if (stale && !args.includes("--allow-old")) {
+    console.error(`refusing to refresh: ${stale} (pass --allow-old to use it anyway)`);
+    process.exit(1);
+  }
   if (dryRun) {
     for (const [table, n] of Object.entries(countsOf(snap))) console.log(`${table}: ${n}`);
     console.log("dry run: staging not changed");

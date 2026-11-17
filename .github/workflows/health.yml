@@ -62,7 +62,10 @@ jobs:
             exit 0
           fi
           since=$(date -u -d "$WINDOW hours ago" +%Y-%m-%dT%H:%M:%SZ)
-          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since" --jq '.total_count')
+          # Only a run that succeeded or is still going counts: a run that
+          # failed, was cancelled or timed out did not do the night's work.
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since&per_page=100" \
+            --jq '[.workflow_runs[] | select(.status != "completed" or .conclusion == "success")] | length')
           if [ "${n:-0}" -gt 0 ]; then
             echo "::notice::Cloudflare's end-of-day run already started $WORKFLOW in the last $WINDOW hours; the GitHub schedule (fallback) skips."
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -196,17 +199,31 @@ jobs:
       - name: Purge rows delisted for 30+ days
         run: node pipeline/purge-delisted.mjs
 
-      - name: Notify on failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
+  # A job that fails, is cancelled or times out ends its own later steps, and
+  # `if: failure()` is false for a cancelled or timed-out job (sync run
+  # 43677044060 was cancelled at its 330-minute limit and filed nothing). So
+  # the notice is a job of its own: always() runs it whatever happened to the
+  # jobs it needs, and it reads their results.
+  notify-failure:
+    needs: [fallback-guard, health]
+    if: ${{ always() && (needs.fallback-guard.result == 'failure' || needs.fallback-guard.result == 'cancelled' || needs.health.result == 'failure' || needs.health.result == 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULTS: 'fallback-guard: ${{ needs.fallback-guard.result }}, health: ${{ needs.health.result }}'
+    steps:
+      - name: File or update the failure issue
         run: |
           title="⚠️ Scheduled job failed: ${{ github.workflow }}"
           url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           num=$(gh issue list --state open --search "$title" --json number,title \
             --jq ".[] | select(.title==\"$title\") | .number" | head -1)
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body "Failed again: $url"
+            gh issue comment "$num" --body "Failed again ($RESULTS): $url"
           else
-            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+            gh issue create --title "$title" --body "A scheduled run did not finish ($RESULTS): $url" >/dev/null
           fi

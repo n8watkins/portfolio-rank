@@ -31,7 +31,7 @@ export const CRON_GROUPS: Readonly<Record<string, string>> = {
   "30 3 * * *": "nightly",
   "30 4 * * *": "nightly",
   "15 * * * *": "hourly",
-  "0 16 * * 1": "weekly",
+  "0 16 * * MON": "weekly",
   "*/5 * * * *": "five-minute",
 };
 

@@ -1,5 +1,5 @@
 // The owner's goals (pipeline/goals.mjs, lib/goals/config.mjs), on the
-// Monday-morning Cron Trigger ("0 16 * * 1", worker/index.ts): measures last
+// Monday-morning Cron Trigger ("0 16 * * MON", worker/index.ts): measures last
 // week, records progress, and emails the owner once when a goal is reached,
 // plus the review queue's count while status changes wait (lib/reviews/store.mjs).
 // Plain code, no Gemini.

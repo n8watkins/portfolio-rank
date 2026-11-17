@@ -40,6 +40,7 @@ import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
 import { reviewAutoApplyEnabled } from "../lib/reviews/flag";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
+import { isNewsletterAlert } from "../lib/newsletter/alerts.mjs";
 import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
@@ -258,12 +259,12 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
       ];
       // The weekly model watch, the hourly removals, the hourly email caps
-      // and the hourly dead-man check own their alerts (./model-watch.ts,
-      // ./owner-removals.ts, ./email-alerts.ts, ./night-watch.ts); the night
-      // never clears them.
+      // and the hourly dead-man check and the newsletter tick own their alerts
+      // (./model-watch.ts, ./owner-removals.ts, ./email-alerts.ts,
+      // ./night-watch.ts, ./newsletter.ts); the night never clears them.
       const r = await reconcileAlerts(ctx.db, {
         conditions,
-        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key),
+        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key),
         email: ctx.email,
         to: this.env.OWNER_EMAIL ?? null,
         log: ctx.log,

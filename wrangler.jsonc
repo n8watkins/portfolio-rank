@@ -184,11 +184,13 @@
   // (pipeline/budget.mjs nightCrons, isNightStart).
   // "15 * * * *" finishes people's grade requests that waited for Gemini 3.5
   // (pipeline/people.mjs; none exist until "grade my portfolio" ships).
-  // "0 16 * * 1" is the weekly model watch, Mondays (worker/model-watch.ts).
+  // "0 16 * * MON" is the weekly model watch, Mondays (worker/model-watch.ts).
+  // Cloudflare counts weekdays 1 = Sunday to 7 = Saturday, so "1" would fire
+  // on Sunday: always write the day as a name.
   // "*/5 * * * *" is the grader's tick (worker/grader.ts): report emails,
   // captures that didn't start, requests waiting for a later day, cleanup;
   // it returns at once while GRADER_ENABLED is not "true".
-  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * 1", "*/5 * * * *"] },
+  "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 * * * *", "0 16 * * MON", "*/5 * * * *"] },
   // One instance a night ("night-<Pacific date>"), one step per batch; and
   // the owner's "Write a draft now", one instance a draft (worker/draft.ts).
   "workflows": [

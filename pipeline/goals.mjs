@@ -1,5 +1,5 @@
 // The owner's goals (lib/goals/config.mjs): a weekly check, plain code and
-// no Gemini, on the Monday-morning Cron Trigger ("0 16 * * 1", 8 or 9 am
+// no Gemini, on the Monday-morning Cron Trigger ("0 16 * * MON", 8 or 9 am
 // Pacific, worker/goals.ts).
 //
 // For the week that just finished (Monday to Monday, Pacific) it measures

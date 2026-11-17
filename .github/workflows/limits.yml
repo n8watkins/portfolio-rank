@@ -5,7 +5,11 @@ name: Free limits snapshot
 # stores them for /admin/limits (scripts/limits-snapshot.mjs,
 # lib/admin/limits.mjs), in production and in staging. A source whose
 # credentials are missing or refused is skipped and logged; the page then
-# shows that row as not measured, or the last measurement with its date.
+# shows that row as not measured, or the last measurement with its date. A
+# skipped source is a warning on the run (annotation and summary); a run that
+# measured nothing at all fails, and the notice below files an issue.
+# It also checks the backups are still being written (scripts/check-backup-fresh.mjs):
+# nothing else notices a backup run that never started.
 #   TURSO_PLATFORM_TOKEN  a Turso platform API token (not a database token)
 #   TURSO_ORG             the Turso organization slug (a repository variable)
 #   CLOUDFLARE_API_TOKEN  needs Account Analytics Read and R2 read for these numbers
@@ -34,6 +38,9 @@ jobs:
       TURSO_ORG: ${{ vars.TURSO_ORG }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BACKUP_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+      R2_BACKUP_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v7
       # Production runs the last release's code (.github/actions/release-code).
@@ -55,3 +62,39 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
         run: node scripts/limits-snapshot.mjs
+      # Runs even when a snapshot step failed, so one failure hides nothing.
+      # The scripts are the last release's (release-code above): until a
+      # release that has this one is deployed the file is missing and the
+      # step is skipped rather than failing.
+      - name: Backups are fresh
+        if: ${{ !cancelled() && hashFiles('scripts/check-backup-fresh.mjs') != '' }}
+        run: node scripts/check-backup-fresh.mjs
+
+  # A job that fails, is cancelled or times out ends its own later steps, and
+  # `if: failure()` is false for a cancelled or timed-out job (sync run
+  # 43677044060 was cancelled at its 330-minute limit and filed nothing). So
+  # the notice is a job of its own: always() runs it whatever happened to the
+  # jobs it needs, and it reads their results.
+  notify-failure:
+    needs: [snapshot]
+    if: ${{ always() && (needs.snapshot.result == 'failure' || needs.snapshot.result == 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULTS: 'snapshot: ${{ needs.snapshot.result }}'
+    steps:
+      - name: File or update the failure issue
+        run: |
+          title="⚠️ Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again ($RESULTS): $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run did not finish ($RESULTS): $url" >/dev/null
+          fi
