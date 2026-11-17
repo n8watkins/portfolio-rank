@@ -95,10 +95,24 @@ export async function ensureRosterSchema(db) {
 }
 
 /**
- * SQL condition for rows background jobs may work on: on the list and not
- * confirmed down. `p` is the table alias.
+ * SQL condition for rows background jobs may work on (grading, AI
+ * comparisons, polls, blog facts, evidence, captures): on the list and
+ * passing the health check, or not checked yet. A site that failed its last
+ * check ('suspect') is out at once, while it is still shown to visitors, and
+ * one not working or confirmed down ('down') is out too (owner, 2026-11-16:
+ * the AI never spends a comparison on a site that does not work;
+ * pipeline/not-working.mjs). `p` is the table alias.
  */
 export const ACTIVE = (p = "portfolios") =>
+  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') IN ('', 'live')`;
+
+/**
+ * SQL condition: on the list and not taken off it by the health check
+ * ('down': not working, or confirmed down). A failing ('suspect') site still
+ * counts: it is still shown to visitors, in the library and its tiers
+ * (lib/tiers-store.mjs, the same rule as lib/tiers-db.mjs's trigger).
+ */
+export const LISTED_NOT_DOWN = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'`;
 
 /** SQL condition (never NULL): the AI rubric said this is not a portfolio. */

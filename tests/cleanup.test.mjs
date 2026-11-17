@@ -336,7 +336,8 @@ test("findDuplicates keeps the first entry for the same URL or the same final UR
 test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${DOWN_AFTER_DAYS}+ days; a pass recovers`, () => {
   const t0 = new Date("2026-11-01T00:00:00Z");
   const at = (days) => new Date(t0.getTime() + days * DAY);
-  const fail = { ok: false, reason: "HTTP 404" };
+  // A site that answers with the wrong thing (a site that does not answer has the not-working ladder: tests/not-working.test.mjs).
+  const fail = { ok: false, reason: "renders blank" };
   let s = nextHealth(null, fail, at(0));
   assert.deepEqual([s.health, s.fails], ["suspect", 1]);
   // Three failures in two days (manual runs) are still only suspect, and count as one: each failed check needs a week of its own.
@@ -353,7 +354,7 @@ test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${D
   const same = nextHealth(w, { ok: null, reason: "blocked by a bot check" }, at(21));
   assert.deepEqual([same.health, same.fails], ["down", 3]);
   // Passing recovers.
-  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "" });
+  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "", pool: null });
 });
 
 test("runHealthCheck records states and schedules a recapture for recovered failed captures; a 'not a portfolio' grade is not a failed check", async () => {
@@ -395,7 +396,7 @@ test("runHealthCheck records nothing when most sites fail at once (the runner, n
   assert.match(healthSummary(s), /FAILED/);
 });
 
-test("ACTIVE() keeps delisted and down rows out of background jobs", async () => {
+test("ACTIVE() keeps delisted, failing and down rows out of background jobs", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
   await db.batch([
@@ -405,7 +406,8 @@ test("ACTIVE() keeps delisted and down rows out of background jobs", async () =>
     "INSERT INTO portfolios (url, delisted_at) VALUES ('https://gone.example', '2026-11-01')",
   ]);
   const urls = (await db.execute(`SELECT url FROM portfolios WHERE ${ACTIVE()} ORDER BY url`)).rows.map((r) => r.url);
-  assert.deepEqual(urls, ["https://ok.example", "https://suspect.example"]);
+  // A site that failed its last check is out of the AI's work at once (owner, 2026-11-16).
+  assert.deepEqual(urls, ["https://ok.example"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -417,7 +419,7 @@ test("planExclusions adds confirmed-down listed sites with evidence and drops th
   const feed = roster(30);
   await db.execute({
     sql: `INSERT INTO portfolios (url, health, health_reason, health_fails, health_first_fail_at, health_checked_at)
-          VALUES (?, 'down', 'HTTP 404', 3, '2026-11-01T16:00:00Z', '2026-11-15T16:00:00Z')`,
+          VALUES (?, 'down', 'renders blank', 3, '2026-11-01T16:00:00Z', '2026-11-15T16:00:00Z')`,
     args: [feed[3].url],
   });
   await db.execute({ sql: "INSERT INTO portfolios (url, health, health_reason) VALUES (?, 'down', 'duplicate of x')", args: [feed[4].url] });
@@ -428,7 +430,7 @@ test("planExclusions adds confirmed-down listed sites with evidence and drops th
   assert.deepEqual(plan.added[0], {
     url: feed[3].url,
     name: feed[3].name,
-    reason: "HTTP 404",
+    reason: "renders blank",
     kind: "down",
     removed: "2026-11-15",
     first_failed: "2026-11-01T16:00:00Z",

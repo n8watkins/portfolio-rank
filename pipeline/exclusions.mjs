@@ -24,6 +24,7 @@ import fs from "fs";
 import { APPLIED_REMOVAL_WHERE, checkSite, normKey } from "./health.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
+import { LEAVE_AFTER_DAYS, NOT_WORKING, ensureHealthSchema, leavesList, notAnswering } from "./not-working.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
 export const MAX_EXCLUDE_SHARE = 0.1;
@@ -103,7 +104,7 @@ const addDays = (day, days) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 
  * blank page, a blocked capture, a parked page, a redirect to a profile) is
  * never re-checked: an answer says nothing about that.
  */
-export const removedForNotAnswering = (reason) => /^(HTTP \d|does not load|DNS|connect timeout|TLS|timeout|connection dropped)/.test(String(reason ?? ""));
+export const removedForNotAnswering = (reason) => notAnswering(reason);
 
 /**
  * The day an excluded entry is due for its check, or null when it never is:
@@ -170,10 +171,13 @@ export async function planDeadRecheck({ excluded, now = new Date(), render, answ
  */
 export async function planExclusions({ db, excluded, feed, now = new Date() }) {
   const have = new Set(excluded.map((e) => normKey(excludedUrl(e))));
+  await ensureHealthSchema(db);
   const rows = (
     await db.execute(
-      `SELECT url, name, status, reason, health_reason, health_fails, health_first_fail_at, health_checked_at
-       FROM portfolios WHERE health = 'down' AND delisted_at IS NULL ORDER BY url`
+      `SELECT p.url, p.name, p.status, p.reason, p.health_reason, p.health_fails, p.health_first_fail_at, p.health_checked_at,
+              m.pool_stage, m.pool_since
+       FROM portfolios p LEFT JOIN health_marks m ON m.url = p.url
+       WHERE p.health = 'down' AND p.delisted_at IS NULL ORDER BY p.url`
     )
   ).rows;
   const onFeed = new Map(feed.map((p) => [p.url, p]));
@@ -194,6 +198,17 @@ export async function planExclusions({ db, excluded, feed, now = new Date() }) {
     if (isBlockedReason(r.health_reason) && String(r.status ?? "") === "live") {
       held.push({ url, why: "a good capture replaced the blocked one this failure was about" });
       continue;
+    }
+    // Not working (./not-working.mjs): hidden, but on the list until LEAVE_AFTER_DAYS have passed, so a
+    // site that answers again comes back by itself. A row confirmed down for not answering before the
+    // pool existed (no pool marks) counts from its first failure.
+    const inPool = Number(r.pool_stage ?? 0) === NOT_WORKING || (r.pool_stage == null && kind === "down" && notAnswering(r.health_reason));
+    if (inPool) {
+      const since = r.pool_since ?? r.health_first_fail_at;
+      if (!leavesList(since == null ? null : String(since), now)) {
+        held.push({ url, why: `not working since ${since == null ? "an unknown date" : String(since).slice(0, 10)}; it leaves the list after ${LEAVE_AFTER_DAYS} days` });
+        continue;
+      }
     }
     // A removal decided in the review queue says who decided, apart from the public reason.
     const decider = kind === "not_portfolio" ? await removalDecider(db, url) : null;

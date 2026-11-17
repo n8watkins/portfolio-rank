@@ -9,7 +9,7 @@
 //                                    on GitHub Actions (feed, capture of new
 //                                    sites, a re-capture of the oldest ones,
 //                                    page evidence, fingerprint changes) and,
-//                                    on Sundays, health.yml; waits for the
+//                                    health.yml (every night); waits for the
 //                                    first until 21:15 at the latest
 //                                 2. the AI stages, one batch per step, paced
 //                                    (pipeline/night.mjs)
@@ -24,7 +24,7 @@
 import { PROFILES_TAG } from "./edge-cache";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { db as database } from "../lib/db";
-import { budgetPlan, isNightStart, nightTimeline, pacificParts } from "../pipeline/budget.mjs";
+import { budgetPlan, isNightStart, nightTimeline } from "../pipeline/budget.mjs";
 import { retention } from "../pipeline/retention.mjs";
 import { dailyQuota } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_RPM } from "../pipeline/gemini.mjs";
@@ -182,17 +182,14 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
 
     // 1. The free checks on GitHub Actions, before any Gemini work.
     const checks = await step.do("start the free checks", ONCE_MORE, async () => {
-      // The weekly health check starts with Sunday's run.
-      const sunday = pacificParts(Date.parse(String(state.startedAt))).weekday === 0;
+      // The full health check of every listed site starts every night (owner, 2026-11-16: daily, not weekly).
       const nightly = await dispatchWorkflow({
         token: this.env.GITHUB_DISPATCH_TOKEN,
         workflow: "sync-upstream.yml",
         inputs: { refresh: String(this.env.NIGHTLY_REFRESH ?? "150"), rubric_regrade: String(this.env.RUBRIC_REGRADE ?? "false") },
         log: (line) => log("night.checks", { line }),
       });
-      const health = sunday
-        ? await dispatchWorkflow({ token: this.env.GITHUB_DISPATCH_TOKEN, workflow: "health.yml", log: (line) => log("night.checks", { line }) })
-        : null;
+      const health = await dispatchWorkflow({ token: this.env.GITHUB_DISPATCH_TOKEN, workflow: "health.yml", log: (line) => log("night.checks", { line }) });
       return { nightly, health };
     });
     let checksSummary: string;
@@ -217,7 +214,7 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       checksSummary = "sync-upstream.yml started (GitHub gave no run id, so the AI stages did not wait for it)";
     }
     if (checks.health && "skipped" in checks.health) checksSummary += `; health.yml: ${checks.health.skipped}`;
-    else if (checks.health) checksSummary += `; health.yml started (Sunday) ${checks.health.url ?? ""}`.trimEnd();
+    else if (checks.health) checksSummary += `; health.yml started ${checks.health.url ?? ""}`.trimEnd();
     state = { ...state, checks: { summary: checksSummary, nightly: checks.nightly, health: checks.health } };
 
     // 2. The AI stages.
