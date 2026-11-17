@@ -12,7 +12,8 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { normKey } from "./health.mjs";
+// One listed site, one key (the feed build's rule), so an entry is matched whatever its spelling.
+import { listKey } from "./list-key.mjs";
 import { excludedUrl, readJson } from "./exclusions.mjs";
 import { pipelineDb } from "./roster.mjs";
 import { logRemovalRestored, ownerRemovals, undoneRemovals } from "../lib/games/claims.mjs";
@@ -27,11 +28,11 @@ export const OWNER_REASON = "owner request";
  * (generate_feed.py), which no longer excludes it.
  */
 export function planOwnerRemovals({ removals, undone = [], excluded, feed }) {
-  const have = new Set(excluded.map((e) => normKey(excludedUrl(e))));
-  const onFeed = new Map(feed.map((p) => [normKey(p.url), p]));
+  const have = new Set(excluded.map((e) => listKey(excludedUrl(e))));
+  const onFeed = new Map(feed.map((p) => [listKey(p.url), p]));
   const added = [];
   for (const r of removals) {
-    const key = normKey(r.url);
+    const key = listKey(r.url);
     if (have.has(key)) continue;
     have.add(key);
     // No name: the entry only has to keep the address off the list.
@@ -43,17 +44,17 @@ export function planOwnerRemovals({ removals, undone = [], excluded, feed }) {
     });
   }
   // Only owner requests: a site excluded as down stays out even if its removal was undone.
-  const back = new Set(undone.map((u) => normKey(u.url ?? u)));
-  const current = new Set(removals.map((r) => normKey(r.url)));
+  const back = new Set(undone.map((u) => listKey(u.url ?? u)));
+  const current = new Set(removals.map((r) => listKey(r.url)));
   const restored = [];
   const kept = excluded.filter((e) => {
-    const key = normKey(excludedUrl(e));
+    const key = listKey(excludedUrl(e));
     if (typeof e === "string" || e?.kind !== "owner_request" || !back.has(key) || current.has(key)) return true;
     restored.push(excludedUrl(e));
     return false;
   });
-  const drop = new Set(added.map((a) => normKey(a.url)));
-  return { added, restored, excluded: [...kept, ...added], feed: feed.filter((p) => !drop.has(normKey(p.url))) };
+  const drop = new Set(added.map((a) => listKey(a.url)));
+  return { added, restored, excluded: [...kept, ...added], feed: feed.filter((p) => !drop.has(listKey(p.url))) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

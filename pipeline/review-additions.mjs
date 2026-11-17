@@ -22,7 +22,8 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { normKey } from "./health.mjs";
+// One listed site, one key (the feed build's rule), so an entry is matched whatever its spelling.
+import { listKey } from "./list-key.mjs";
 import { excludedUrl, readJson } from "./exclusions.mjs";
 import { pipelineDb } from "./roster.mjs";
 import { confirmedRelists, undoneRemovals } from "../lib/reviews/store.mjs";
@@ -42,25 +43,25 @@ export const OVERRIDABLE = new Set(["down", "not_portfolio"]);
  */
 export function planReviewAdditions({ relists: confirmed, undone = [], additions: allAdditions, excluded, feed: allFeed }) {
   const ours = new Set([
-    ...excluded.filter((e) => typeof e === "object" && e?.kind === "not_portfolio").map((e) => normKey(e.url)),
-    ...allAdditions.filter((a) => a?.source === "review").map((a) => normKey(a.url)),
+    ...excluded.filter((e) => typeof e === "object" && e?.kind === "not_portfolio").map((e) => listKey(e.url)),
+    ...allAdditions.filter((a) => a?.source === "review").map((a) => listKey(a.url)),
   ]);
-  const have = new Set(confirmed.map((r) => normKey(r.url)));
-  const relists = [...confirmed, ...undone.filter((u) => ours.has(normKey(u.url)) && !have.has(normKey(u.url)))];
+  const have = new Set(confirmed.map((r) => listKey(r.url)));
+  const relists = [...confirmed, ...undone.filter((u) => ours.has(listKey(u.url)) && !have.has(listKey(u.url)))];
   // A relist taken back (an automatic apply undone): its entry, marked source "review", leaves additions and the feed.
-  const wanted = new Set(relists.map((r) => normKey(r.url)));
-  const withdrawn = allAdditions.filter((a) => a?.source === "review" && !wanted.has(normKey(a.url))).map((a) => a.url);
-  const gone = new Set(withdrawn.map(normKey));
-  const additions = allAdditions.filter((a) => !gone.has(normKey(a.url)));
-  const feed = allFeed.filter((p) => !gone.has(normKey(p.url)));
-  const onFeed = new Set(feed.map((p) => normKey(p.url)));
-  const inAdditions = new Set(additions.map((a) => normKey(a.url)));
-  const exclusionOf = new Map(excluded.map((e) => [normKey(excludedUrl(e)), e]));
+  const wanted = new Set(relists.map((r) => listKey(r.url)));
+  const withdrawn = allAdditions.filter((a) => a?.source === "review" && !wanted.has(listKey(a.url))).map((a) => a.url);
+  const gone = new Set(withdrawn.map(listKey));
+  const additions = allAdditions.filter((a) => !gone.has(listKey(a.url)));
+  const feed = allFeed.filter((p) => !gone.has(listKey(p.url)));
+  const onFeed = new Set(feed.map((p) => listKey(p.url)));
+  const inAdditions = new Set(additions.map((a) => listKey(a.url)));
+  const exclusionOf = new Map(excluded.map((e) => [listKey(excludedUrl(e)), e]));
   const added = [];
   const blocked = [];
   const lift = new Set();
   for (const r of relists) {
-    const key = normKey(r.url);
+    const key = listKey(r.url);
     const ex = exclusionOf.get(key);
     if (ex !== undefined) {
       const kind = typeof ex === "string" ? "down" : ex.kind ?? "down";
@@ -76,14 +77,14 @@ export function planReviewAdditions({ relists: confirmed, undone = [], additions
     // generate_feed.py reads name, url and tagline; source marks the entries this script owns.
     added.push({ name: String(r.name ?? "").trim() || r.url, url: r.url, source: "review" });
   }
-  const unexcluded = excluded.filter((e) => lift.has(normKey(excludedUrl(e)))).map(excludedUrl);
+  const unexcluded = excluded.filter((e) => lift.has(listKey(excludedUrl(e)))).map(excludedUrl);
   return {
     added,
     unexcluded,
     withdrawn,
     blocked,
     additions: [...additions, ...added],
-    excluded: excluded.filter((e) => !lift.has(normKey(excludedUrl(e)))),
+    excluded: excluded.filter((e) => !lift.has(listKey(excludedUrl(e)))),
     feed: [...feed, ...added.map(({ name, url }) => ({ name, url }))],
   };
 }

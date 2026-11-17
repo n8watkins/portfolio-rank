@@ -31,8 +31,11 @@ emmabostian/developer-portfolios (upstream, community-curated)
 ## The list (two intake doors + a takedown)
 
 `data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
-Two addresses are one site when they share the site key (`lib/grader/url.mjs` `siteKeyOf`: host without www, path without the trailing slash, lower case; scheme and port ignored) and no real query or hash route (`#/alice`) tells them apart; tracking parameters (`utm_*`, `ref`, `src`) and plain anchors (`#about`) never do (`pipeline/roster.mjs` `sameSite`, and `site_of` in `generate_feed.py`, kept equal by a test).
-A site keeps the address it already has in `feed.json` when upstream only spells it another way, because that address is its key in the database (grade, votes, ratings, screenshots).
+Two addresses are one listed site when their list keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`): the site key (`lib/grader/url.mjs` `siteKeyOf`: host without www, path without the trailing slash, lower case; scheme and port ignored) plus any real query or hash route (`#/alice`); tracking parameters (`utm_*`, `ref`, `src`) and plain anchors (`#about`) never count.
+`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) applies the rule (duplicates, exclusions) in Node.
+A site's address in the database is its key everywhere (grade, votes, ratings, screenshots, likes, lists) and never changes once its row exists.
+The build reads the database (the nightly sync has `TURSO_DATABASE_URL`) and gives each entry the address its site is stored under as `url`, with the list's current spelling as `href`: the address people are sent to and pages are fetched from (`feedHref`).
+So a site the list respells, drops and lists again, or that is excluded and comes back, keeps its one row.
 
 | Source | Trust | Mechanism |
 |---|---|---|
@@ -46,10 +49,10 @@ A site keeps the address it already has in `feed.json` when upstream only spells
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
-  A row whose site is still in `feed.json` under another spelling with no row of its own is kept listed and logged.
+  It first gives the entries it is handed their stored address, in place (as the build does), so the job that called it (capture, the health check) works on the stored row and never inserts a second one; each such entry is logged.
   The sync refuses (fails the job) to delist more than 15% of the list at once (above the exclusions' 10% cap); for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which also raises the feed shrink guard below.
   Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries), except a row whose site is listed under another spelling: that one is kept for `scripts/repair-respelled-sites.mjs`, which moves its history (grade, screenshots, votes, ratings, likes, lists, owner settings) to the listed spelling (dry run by default, `--write` to apply).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries), except a row whose site is listed under another address: that one is kept for `scripts/repair-respelled-sites.mjs`, which merges it into the listed address (grade, screenshots, votes, ratings, likes, lists, owner settings, claims, review history; dry run by default, `--write` to apply).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
 - **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages, duplicates and a stored `is_portfolio=false`.
   States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row spanning at least 13 days); a pass resets to `live`.
@@ -673,7 +676,7 @@ serve images.
 - `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
 - `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
 - `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
-- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
+- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`, which reads the database when `TURSO_DATABASE_URL` or `LOCAL_DB_FILE` is set)
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
 - `scripts/repair-respelled-sites.mjs [--write] [--only URL] [--feed FILE]` - one-off: move the history of rows split by an upstream respelling to the listed spelling (dry run without `--write`)
