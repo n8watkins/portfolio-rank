@@ -16,9 +16,8 @@
 // When the list respells a site (pipeline/list-key.mjs: same key), the old row
 // is delisted and the new spelling gets a row of its own, as for any new site.
 // The old row holds the site's grade, votes and screenshots, so it is never
-// purged while its key is listed (a split site), the sync counts split sites
-// in the job summary every night, and scripts/repair-respelled-sites.mjs
-// merges them by hand.
+// purged while its key is listed (a split site), and the sync counts split
+// sites in the job summary every night until they are merged.
 
 import { createClient } from "@libsql/client";
 import path from "path";
@@ -32,6 +31,11 @@ export const PURGE_AFTER_DAYS = 30;
 export const PURGE_MAX_SHARE = 0.2;
 // A roster this small is a broken feed, not a real list.
 export const MIN_ROSTER = 500;
+// The job that owns the roster sync: the nightly upstream sync (its workflow
+// name, .github/workflows/sync-upstream.yml). Only there does a mass delist
+// fail the job; elsewhere it is logged and skipped (see syncRoster).
+export const SYNC_OWNER_WORKFLOW = "Sync upstream + ingest";
+const ownsSync = (env = process.env) => env.ROSTER_SYNC_OWNER === "1" || env.GITHUB_WORKFLOW === SYNC_OWNER_WORKFLOW;
 
 /** Pipeline DB client: Turso when TURSO_DATABASE_URL is set, else a local file. */
 export function pipelineDb(root) {
@@ -119,13 +123,24 @@ const chunks = (arr, n = 400) =>
 
 /**
  * Mark rows whose URL left the roster as delisted (with the date), and restore
- * rows that came back. Refuses (throws) to delist more than DELIST_MAX_SHARE of
- * the list at once, unless the owner set LIST_CLEANUP_SHARE for a real upstream
- * cleanup (the feed build refuses such a feed first). Writes the split sites
- * (pipeline/list-key.mjs splitSites) to the job summary. Returns
- * { delisted, relisted, listed, split }.
+ * rows that came back.
+ *
+ * More than DELIST_MAX_SHARE of the list at once (unless LIST_CLEANUP_SHARE
+ * allows it) is a broken or rewritten feed; the feed build refuses such a feed
+ * first. In the job that owns the sync (`owner`, default: the nightly sync
+ * workflow) it fails the job; in every other job (judge, compare, prewarm,
+ * the health check) nothing is delisted or relisted this run, a loud warning
+ * is logged, and the job carries on with the rows as they are, so one upstream
+ * event does not fail five jobs every night.
+ *
+ * Writes the split sites (pipeline/list-key.mjs splitSites) to the job
+ * summary. Returns { delisted, relisted, listed, split, skipped }.
  */
-export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = allowedShare(DELIST_MAX_SHARE) } = {}) {
+export async function syncRoster(
+  db,
+  feed,
+  { now = new Date(), maxDelistShare = allowedShare(DELIST_MAX_SHARE), owner = ownsSync(), log = console.warn } = {}
+) {
   if (!Array.isArray(feed) || feed.length < MIN_ROSTER) {
     throw new Error(
       `syncRoster: refusing a roster of ${feed?.length ?? 0} entries (minimum ${MIN_ROSTER}); the feed looks broken`
@@ -148,11 +163,13 @@ export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = 
   }
   const base = Math.max(feed.length, listedBefore);
   if (toDelist.length > base * maxDelistShare) {
-    throw new Error(
+    const msg =
       `syncRoster: ${toDelist.length} of ${base} listed sites would be delisted at once, more than ` +
-        `${Math.round(maxDelistShare * 100)}%; refusing (check data/feed.json: did upstream rewrite the addresses?). ` +
-        `For a real upstream cleanup, run the sync once with ${CLEANUP_SHARE_ENV} set to the share to allow (for example 0.3).`
-    );
+      `${Math.round(maxDelistShare * 100)}%; refusing (check data/feed.json: did upstream rewrite the addresses?). ` +
+      `For a real upstream cleanup, run the sync once with ${CLEANUP_SHARE_ENV} set to the share to allow (for example 0.3).`;
+    if (owner) throw new Error(msg);
+    log(`::warning::${msg} This job leaves the roster as it is and carries on.`);
+    return { delisted: 0, relisted: 0, listed, split: 0, skipped: true };
   }
   const stamp = now.toISOString();
   const stmts = [];
@@ -171,26 +188,29 @@ export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = 
   if (stmts.length) await db.batch(stmts, "write");
   const delisted = new Set(toDelist);
   const relisted = new Set(toRelist);
-  const split = splitSites(
+  const { splits, unclear } = splitSites(
     rows.map((r) => {
       const url = String(r.url);
-      return { url, listed: relisted.has(url) || (r.delisted_at == null && !delisted.has(url)) };
+      return { url, delistedAt: relisted.has(url) ? null : delisted.has(url) ? stamp : r.delisted_at };
     })
   );
-  if (split.pairs.length || split.unclear.length) {
+  if (splits.length || unclear.length) {
+    const once = splits.filter((s) => s.from.length === 1);
+    const more = splits.filter((s) => s.from.length > 1);
     jobSummary(
       [
-        `### Split sites waiting for a merge: ${split.pairs.length}`,
+        `### Split sites waiting for a merge: ${splits.length}`,
         "",
-        "Each old row holds the site's grade, votes and screenshots; scripts/repair-respelled-sites.mjs merges it into the listed row (AUTOMATION.md, \"Respelled sites\").",
+        "The list respelled these sites: each old row holds the site's grade, votes and screenshots and is never purged until it is merged into the listed row (AUTOMATION.md, \"Respelled sites\").",
         "",
-        ...split.pairs.map((p) => `- ${p.from} -> ${p.to}`),
-        ...split.unclear.map((u) => `- unclear, a person decides: ${u.join(", ")}`),
+        ...once.map((s) => `- ${s.from[0]} -> ${s.to}`),
+        ...(more.length ? ["", `Respelled more than once (${more.length}):`, ...more.map((s) => `- ${s.from.join(", ")} -> ${s.to}`)] : []),
+        ...(unclear.length ? ["", `Unclear, two listed rows for one key (${unclear.length}):`, ...unclear.map((u) => `- ${u.join(", ")}`)] : []),
         "",
       ].join("\n")
     );
   }
-  return { delisted: toDelist.length, relisted: toRelist.length, listed, split: split.pairs.length };
+  return { delisted: toDelist.length, relisted: toRelist.length, listed, split: splits.length, skipped: false };
 }
 
 /**
@@ -200,7 +220,7 @@ export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = 
  * `deleteShots(shotKey)` removes a capture's files from R2; when it throws,
  * that row is kept and retried on the next run. A row whose key is listed
  * under another address (a split site) is never purged: it holds the site's
- * history until scripts/repair-respelled-sites.mjs merges it.
+ * history until it is merged into the listed row.
  */
 export async function purgeDelisted(
   db,
@@ -219,7 +239,7 @@ export async function purgeDelisted(
     })
   ).rows) {
     const url = String(r.url);
-    if (listedKeys.has(listKey(url))) log(`kept ${url}: its site is listed under another address (scripts/repair-respelled-sites.mjs merges it)`);
+    if (listedKeys.has(listKey(url))) log(`kept ${url}: its site is listed under another address (a split site, kept until it is merged)`);
     else due.push({ url, shotKey: r.shot_key == null ? null : String(r.shot_key) });
   }
   const total = Number((await db.execute("SELECT COUNT(*) AS n FROM portfolios")).rows[0].n);
