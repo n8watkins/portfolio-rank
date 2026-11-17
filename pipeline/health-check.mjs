@@ -17,7 +17,7 @@
 import fs from "fs";
 import path from "path";
 import { healthSummary, runHealthCheck } from "./health.mjs";
-import { DEAD_RECHECK_DAYS, planDeadRecheck, planExclusions, readJson } from "./exclusions.mjs";
+import { DEAD_RECHECK_DAYS, DOWN_RECHECK_DAYS, planDeadRecheck, planExclusions, readJson } from "./exclusions.mjs";
 import { loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { createRenderer } from "./render.mjs";
 
@@ -59,7 +59,7 @@ try {
   if (!result.aborted && args.includes("--exclusions")) {
     const excludedPath = path.join(ROOT, "data", "excluded.json");
     const plan = await planExclusions({ db, excluded: readJson(excludedPath, []), feed });
-    // Dead entries due for their check every few months: back on the list if they answer now.
+    // Dead (every few months) and down (monthly) entries due for their check: back on the list if they answer now.
     const dead = await planDeadRecheck({ excluded: plan.excluded });
     const changed = plan.added.length || dead.back.length || dead.still.length;
     if (changed && !DRY) {
@@ -70,8 +70,9 @@ try {
       (plan.added.length
         ? `### Excluded\n\n${plan.added.length} confirmed-down site(s) ${DRY ? "would be" : "were"} added to data/excluded.json.\n`
         : "### Excluded\n\nNo new exclusions.\n") +
+        (plan.held.length ? `\nDown but not removed: ${plan.held.map((h) => `${h.url} (${h.why})`).join("; ")}.\n` : "") +
         (dead.back.length || dead.still.length
-          ? `\n${dead.back.length} dead site(s) answered again and ${DRY ? "would leave" : "left"} the list${dead.back.length ? ` (${dead.back.join(", ")})` : ""}; ${dead.still.length} still dead, checked again in ${DEAD_RECHECK_DAYS} days.\n`
+          ? `\n${dead.back.length} removed site(s) answered again and ${DRY ? "would leave" : "left"} the exclusion list${dead.back.length ? ` (${dead.back.join(", ")})` : ""}; ${dead.still.length} still not answering, checked again in ${DOWN_RECHECK_DAYS} days (down) or ${DEAD_RECHECK_DAYS} days (dead).\n`
           : "")
     );
   }
