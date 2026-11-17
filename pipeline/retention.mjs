@@ -12,7 +12,9 @@
 //   night_runs       the summary of each end-of-day run is kept
 //                    NIGHT_RUN_DAYS (180) days; its Gemini use lives on in
 //                    gemini_daily.
-//   comparisons      every row stays: the open method and the recompute
+//   night_sites      the sites each run touched (its summary keeps the
+//                    lists) are kept NIGHT_SITES_DAYS (90) days.
+//   comparisons     every row stays: the open method and the recompute
 //                    need who compared what, how, in which order and with
 //                    which result. Only the free-text `reason` (the model's
 //                    one-sentence explanation, which no recompute reads) is
@@ -37,6 +39,7 @@ import { pruneLinks } from "../lib/grader/links.mjs";
 
 export const GEMINI_RAW_DAYS = 90;
 export const NIGHT_RUN_DAYS = 180;
+export const NIGHT_SITES_DAYS = 90;
 export const COMPARISON_REASON_DAYS = 90;
 export const CLEARED_ALERT_DAYS = 180;
 export const EMAIL_SENDS_DAYS = 35;
@@ -123,10 +126,13 @@ export async function rollUpGeminiRequests(db, { now = new Date(), keepDays = GE
 /** Deletes and clears what the retention rules above say. Returns the counts. */
 export async function pruneLogs(db, { now = new Date() } = {}) {
   const before = (days) => new Date(now.getTime() - days * DAY_MS).toISOString();
-  const out = { nightRuns: 0, reasons: 0, alerts: 0, links: 0, badgeChecks: 0 };
+  const out = { nightRuns: 0, nightSites: 0, reasons: 0, alerts: 0, links: 0, badgeChecks: 0 };
   if (await tableExists(db, "night_runs")) {
     // night is a Pacific date ("YYYY-MM-DD"): compare dates.
     out.nightRuns = (await db.execute({ sql: "DELETE FROM night_runs WHERE night < ?", args: [before(NIGHT_RUN_DAYS).slice(0, 10)] })).rowsAffected;
+  }
+  if (await tableExists(db, "night_sites")) {
+    out.nightSites = (await db.execute({ sql: "DELETE FROM night_sites WHERE at < ?", args: [before(NIGHT_SITES_DAYS)] })).rowsAffected;
   }
   if (await tableExists(db, "comparisons")) {
     out.reasons = (

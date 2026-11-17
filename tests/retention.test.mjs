@@ -74,6 +74,9 @@ test("night runs older than 180 days go; comparisons keep everything the recompu
   await d.batch([
     "INSERT INTO night_runs (night, started_at, status) VALUES ('2026-05-01', '2026-05-02T03:30:00Z', 'done')",
     "INSERT INTO night_runs (night, started_at, status) VALUES ('2026-11-09', '2026-11-10T04:30:00Z', 'done')",
+    // The sites a night touched go after 90 days (NIGHT_SITES_DAYS).
+    "INSERT INTO night_sites (night, stage, url, entries, at) VALUES ('2026-08-01', 'grade_new', 'https://old.dev', '[]', '2026-08-02T04:30:00.000Z')",
+    "INSERT INTO night_sites (night, stage, url, entries, at) VALUES ('2026-11-09', 'grade_new', 'https://new.dev', '[]', '2026-11-10T04:30:00.000Z')",
   ]);
   const c = (created_at, i) =>
     insertComparison(d, { created_at, rater_type: "ai", model: "m", prompt_version: "p1", method: "one_on_one", shown: ["a", "b"], ranking: [["a"], ["b"]], reason: "A is cleaner", source: `s${i}` });
@@ -81,8 +84,9 @@ test("night runs older than 180 days go; comparisons keep everything the recompu
   await c("2026-10-30T00:00:00.000Z", 2); // recent
   const before = inputDigest(await loadInput(d));
   const out = await pruneLogs(d, { now: NOW });
-  assert.deepEqual(out, { nightRuns: 1, reasons: 1, alerts: 0, links: 0, badgeChecks: 0 });
+  assert.deepEqual(out, { nightRuns: 1, nightSites: 1, reasons: 1, alerts: 0, links: 0, badgeChecks: 0 });
   assert.deepEqual((await d.execute("SELECT night FROM night_runs")).rows.map((x) => x.night), ["2026-11-09"]);
+  assert.deepEqual((await d.execute("SELECT url FROM night_sites")).rows.map((x) => x.url), ["https://new.dev"]);
   const rows = (await d.execute("SELECT source, shown, ranking, reason FROM comparisons ORDER BY source")).rows.map((x) => [x.source, x.shown, x.ranking, x.reason]);
   assert.deepEqual(rows, [
     ["s1", '["a","b"]', '[["a"],["b"]]', null],
