@@ -125,7 +125,7 @@ export const REVIEW_SCHEMA = {
     problems: { type: "ARRAY", items: { type: "STRING" } },
     outside_claims: { type: "ARRAY", items: { type: "STRING" } },
   },
-  required: ["topic", "on_topic", "positive", "names_ok", "voice_ok", "problems"],
+  required: ["topic", "on_topic", "positive", "names_ok", "voice_ok", "problems", "outside_claims"],
   propertyOrdering: ["topic", "on_topic", "positive", "names_ok", "voice_ok", "problems", "outside_claims"],
 };
 
@@ -161,6 +161,8 @@ export function buildReviewRequest(sheet, filledPost) {
 export function reviewCheck(answer) {
   const problems = [];
   if (!answer || typeof answer !== "object") return { name: "review", ok: false, problems: ["the review answer was malformed"] };
+  // Fail closed: a review that does not say whether the post has outside claims is not a review that found none.
+  if (!Array.isArray(answer.outside_claims) || answer.outside_claims.some((s) => typeof s !== "string")) return { name: "review", ok: false, problems: ["the review answer has no outside_claims list, so outside claims were not checked"] };
   if (!answer.on_topic || !TOPICS.includes(answer.topic)) problems.push(`off topic (${answer.topic})`);
   if (!answer.positive) problems.push("not positive in tone");
   if (!answer.names_ok) problems.push("names someone it should not, or for the wrong reason");

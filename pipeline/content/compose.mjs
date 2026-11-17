@@ -362,7 +362,6 @@ export async function composeDraft(sheet, ctx) {
   let requests = 0;
   const call = async (req) => (requests++, ctx.generate(req));
   const history = [];
-  const names = (sheet.names ?? []).map((n) => n.name);
 
   // 2. Write.
   const blocks = {};
@@ -413,14 +412,13 @@ export async function composeDraft(sheet, ctx) {
   const review = reviewCheck(answer);
   history.at(-1).checks.push(review);
   if (!review.ok) return { passed: false, draft, plan, history, failures: review.problems.map((p) => `review: ${p}`), supported: [], requests, searches: 0, words };
-  const flagged = (answer.outside_claims ?? []).map((s) => String(s).trim()).filter(Boolean);
+  const flagged = answer.outside_claims.map((s) => String(s).trim()).filter(Boolean);
   let supported = [];
   let searches = 0;
   if (flagged.length) {
     await phase("researching");
     const claims = await checkClaims(filled, {
       flagged,
-      names,
       tavilyKey: ctx.tavilyKey,
       fetchImpl: ctx.fetchImpl,
       credits: ctx.credits,
@@ -429,7 +427,15 @@ export async function composeDraft(sheet, ctx) {
     });
     searches = claims.searches;
     supported = claims.supported;
-    history.at(-1).claims = { supported: claims.supported, cut: claims.cut, unchecked: false };
+    // Every flag and what became of it, so the owner sees each one.
+    const flags = flagged.map((s) => {
+      const sup = claims.supported.find((c) => c.sentence === s);
+      if (sup) return { sentence: s, outcome: "supported", url: sup.url };
+      const cut = claims.cut.find((c) => c.sentence === s);
+      if (cut) return { sentence: s, outcome: "cut", reason: cut.reason };
+      return { sentence: s, outcome: "not found in the post" };
+    });
+    history.at(-1).claims = { supported: claims.supported, cut: claims.cut, flagged: flags, unchecked: false };
     // Fail closed: a flagged claim that can't be found, or can't be removed, drops the draft.
     const drop = (failures) => ({ passed: false, draft, plan, history, failures, supported, requests, searches, words });
     if (claims.listedNotFound?.length) return drop(claims.listedNotFound.map((s) => `claims: the review flagged a sentence that is not in the post, so it could not be checked or cut: "${s.slice(0, 120)}"`));

@@ -154,7 +154,6 @@ Only PortfolioRank's own tables, read-only, plus the two outside searches above.
 | --- | --- | --- | --- |
 | Rankings | `rank_history` (ranking v2) | trends across the leaderboard: top sites and biggest climbers (`leaderboard-movement`) | after `RANKING_V2` is switched on ([RANKING.md](../RANKING.md)) |
 | Grades | `portfolios` (rubric, capture measurements) | what the AI grader rewards and penalizes (`top-grades`), dark mode, motion, phones and page weight (`page-craft`) | now |
-| Re-grades | `rubric_history` (same model and rubric version only) | how portfolios change: before and after a page change (`regrade-changes`) | as re-grades after page changes accumulate |
 | People's votes | `votes` with both sites' grades and measurements | what people vote for and against (`vote-patterns`) | once 40 votes between graded portfolios exist |
 | Polls | closed polls with totals, winner and margin (`pollResults` in [lib/polls/store.mjs](../lib/polls/store.mjs)) | "Developers voted: does a portfolio need a resume?" | back end built (#76); votes once the poll card ships |
 

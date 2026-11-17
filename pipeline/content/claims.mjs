@@ -124,7 +124,7 @@ async function loadPage(url, fetchImpl) {
  * { supported: [{ sentence, url, title }], cut: [{ sentence, reason }],
  *   requests, searches }.
  */
-export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, names = [], flagged = null }) {
+export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, flagged = null }) {
   const out = { supported: [], cut: [], requests: 0, searches: 0 };
   // `flagged`: the outside-claim sentences the final review already listed
   // (compose.mjs), so no list request is spent; Tavily runs only on those.
@@ -138,11 +138,11 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
     listed = await generate(buildListRequest(draftText));
     out.requests++;
   }
-  // A sentence built on the sheet's own facts (a {{placeholder}}) or about a
-  // site on the names list is PortfolioRank's data, not an outside claim,
-  // whatever the lister thought (a staging draft lost three such sentences).
-  const ours = (s) => /\{\{f\d+\}\}/.test(s) || names.some((n) => n && s.includes(n));
-  const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))].filter((s) => !ours(s));
+  // Fail closed: every sentence the review (or lister) flagged is checked or
+  // cut, whatever names or numbers it holds. A sentence that is only the
+  // sheet's own data should not have been flagged (the review prompt says so);
+  // a name inside a flagged sentence never exempts it (2026-11-16 review).
+  const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))];
   // Found whatever the quotes or spacing, the way a model copies a sentence;
   // one that cannot be found is reported in listedNotFound and the caller fails closed.
   const haystack = norm(draftText);
@@ -162,7 +162,7 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
       continue;
     }
     if (credits && !(await credits.reserve())) {
-      out.cut.push({ sentence: s, reason: "Tavily monthly credit cap reached, so outside claims are cut" });
+      out.cut.push({ sentence: s, reason: "Tavily weekly or monthly credit cap reached, so outside claims are cut" });
       continue;
     }
     try {

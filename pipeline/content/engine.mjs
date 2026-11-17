@@ -258,7 +258,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
       fetchImpl: ctx.fetchImpl,
       tavilyKey: ctx.content?.keys?.tavily,
       tavilyLeft,
-      credits: creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), now: () => new Date(now) }),
+      credits: creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), weekCap: TAVILY_PER_WEEK, now: () => new Date(now) }),
       onPhase: phase,
       log,
     });
