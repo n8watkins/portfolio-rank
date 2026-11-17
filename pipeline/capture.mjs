@@ -177,6 +177,53 @@ const CLOSE_LIMIT_MS = 15000;
  * in line (captureQueue).
  */
 export const BROWSER_GONE = "retry (the browser went away)";
+/**
+ * How long a capture waits for the browser's own word (its "disconnected"
+ * event) once something says it may be gone: when Chromium dies, its pages
+ * and context close first and the browser reports itself disconnected a
+ * moment later, so the call that failed first cannot tell.
+ */
+const GONE_GRACE_MS = 5000;
+/** Error text that suggests the browser went away: only a reason to wait for the browser's own word, never the answer. */
+const CLOSED_TEXT = /has been closed|target closed|browser closed|disconnected|crashed|connection closed/i;
+
+/**
+ * Follows the shared browser for one capture: whether it went away, from its
+ * own state (isConnected, its "disconnected" event) and not from whichever
+ * call happened to fail. `ctxLost` marks that the capture's context closed
+ * without the capture closing it.
+ * @param {import("playwright").Browser} browser
+ */
+function watchBrowser(browser) {
+  let resolveGone;
+  const goneEvent = new Promise((r) => (resolveGone = r));
+  const w = {
+    gone: !browser.isConnected(),
+    ctxLost: false,
+    /** Whether the browser is gone now. */
+    now: () => w.gone || !browser.isConnected(),
+    /**
+     * Whether the browser went away, after `err` (or nothing) went wrong:
+     * when the context closed under the capture, or the error text points
+     * that way, the browser gets GONE_GRACE_MS to say so.
+     */
+    async lost(err) {
+      if (w.now()) return true;
+      if (!w.ctxLost && !CLOSED_TEXT.test(String(err?.message ?? err ?? ""))) return false;
+      let timer;
+      await Promise.race([goneEvent, new Promise((r) => (timer = setTimeout(r, GONE_GRACE_MS)))]);
+      clearTimeout(timer);
+      return w.now();
+    },
+    stop: () => browser.off?.("disconnected", onGone),
+  };
+  const onGone = () => {
+    w.gone = true;
+    resolveGone();
+  };
+  browser.on?.("disconnected", onGone);
+  return w;
+}
 
 /** `promise`, or a rejection naming `what` once `ms` have passed. */
 function within(promise, ms, what) {
@@ -280,21 +327,23 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
   // run.aborted: the time limit passed, so the capture must write nothing more;
   // run.committed: the good capture is being written (each write bounded), so the limit waits for it;
   // run.storedGood: the site has a good capture, which a failed one never marks failed.
-  const run = { aborted: false, committed: false, storedGood: false, ctx: null };
+  // run.watch: whether the shared browser went away under this capture (watchBrowser).
+  const run = { aborted: false, committed: false, storedGood: false, ctx: null, watch: watchBrowser(browser) };
   const keepsGood = () => run.storedGood && !refresh;
   const fail = async (...a) => {
-    if (!run.aborted && !keepsGood() && browser.isConnected()) await record(...a);
+    if (!run.aborted && !keepsGood() && !run.watch.now()) await record(...a);
   };
   const TIMED_OUT = Symbol("timed out");
   let timer;
   const work = captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLimitMs }, run);
+  work.then(run.watch.stop, run.watch.stop);
   try {
     const out = await Promise.race([work, new Promise((resolve) => (timer = setTimeout(() => resolve(TIMED_OUT), limitMs)))]);
     if (out !== TIMED_OUT) return out;
   } catch (e) {
     // Thrown before captureOnce's own handling (the database, a new context): its page goes too.
+    if (await run.watch.lost(e)) return BROWSER_GONE;
     await closeWithin(run.ctx);
-    if (!browser.isConnected()) return BROWSER_GONE;
     throw e;
   } finally {
     clearTimeout(timer);
@@ -302,9 +351,10 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
   if (run.committed) return work.catch((e) => `error (${String(e?.message ?? e).slice(0, 80)})`);
   run.aborted = true;
   work.catch(() => {});
+  if (await run.watch.lost()) return BROWSER_GONE;
   // Closing the context kills the page, also one whose main thread never returns.
   await closeWithin(run.ctx);
-  if (!browser.isConnected()) return BROWSER_GONE;
+  if (run.watch.now()) return BROWSER_GONE;
   const reason = `capture timed out after ${Math.round(limitMs / 1000)}s`;
   if (keepsGood()) return `error (${reason}); the existing capture is kept`;
   await record("error", reason);
@@ -341,17 +391,29 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     ignoreHTTPSErrors: true,
   });
   run.ctx = ctx;
+  // The context closing without this capture closing it: the browser may be going away.
+  let closing = false;
+  ctx.on("close", () => {
+    if (!closing) run.watch.ctxLost = true;
+  });
+  const closeOwn = () => {
+    closing = true;
+    return closeWithin(ctx);
+  };
   if (run.aborted) {
-    await ctx.close().catch(() => {});
+    await closeOwn();
     return "aborted";
   }
 
   // A capture that is not the site: nothing of it is stored. A site with a
   // good capture keeps it (a refresh only waits out its backoff); one
   // without is a failed capture with its reason, retried later with backoff.
+  // A verdict reached while the browser was dying (a page that read as
+  // blank because it was closing) is not the site's: nothing is recorded.
   const reject = async ({ status, reason, needsReview = false }) => {
-    await closeWithin(ctx);
-    if (!browser.isConnected()) return BROWSER_GONE;
+    if (await run.watch.lost()) return BROWSER_GONE;
+    await closeOwn();
+    if (run.watch.now()) return BROWSER_GONE;
     await fail(status, reason, { needsReview });
     return kept(resultOf(status, reason));
   };
@@ -533,7 +595,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     if (phone.verdict) return reject(phone.verdict);
     const mobileJpg = phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 });
 
-    await closeWithin(ctx);
+    // A browser that died while the views were taken leaves them half made (their own errors are caught): not stored.
+    if (await run.watch.lost()) return BROWSER_GONE;
+    await closeOwn();
     if (run.aborted) return "aborted";
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "hero.jpg"), heroJpg);
@@ -632,14 +696,16 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     }
     return `live → ${key} (motion=${meta.motion} dark=${meta.darkMode} overflow=${meta.overflow390})`;
   } catch (e) {
-    await closeWithin(ctx);
+    // Decided from the browser's own state, before this capture closes anything (watchBrowser).
+    const gone = await run.watch.lost(e);
+    await closeOwn();
     // A new version uploaded (or partly uploaded) for a capture that was not stored is nobody's: remove it.
     if (uploadedV && uploadedV !== prevFullPage?.v) {
       const commands = await import("@aws-sdk/client-s3").catch(() => null);
       if (commands) await within(deleteVersion({ send: (c) => s3.send(c), commands, bucket: IMAGES_BUCKET, shotKey: key, v: uploadedV }), stepLimitMs, "removing the new images").catch(() => {});
     }
     if (run.aborted) return "aborted";
-    if (!browser.isConnected()) return BROWSER_GONE;
+    if (gone || run.watch.now()) return BROWSER_GONE;
     await fail("error", String(e.message ?? e).slice(0, 200));
     return kept(`error (${String(e.message ?? e).slice(0, 80)})`);
   }

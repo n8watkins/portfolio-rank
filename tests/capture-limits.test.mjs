@@ -55,8 +55,49 @@ async function seedGood(p, meta = OLD_META) {
   });
 }
 
+// The browser to kill and where (the "browser goes away" test), and whether it was.
+const killer = { browser: null, point: null, fired: false };
+const kill = () => {
+  if (killer.fired || !killer.browser) return;
+  killer.fired = true;
+  killer.browser.close().catch(() => {});
+};
+/** The kill-test page for one point: the site, plus what signals that point. */
+const killPage = (point) =>
+  SITE.replace(
+    "</body>",
+    {
+      goto: "",
+      settle: `<script>addEventListener("load",()=>fetch("/beacon"))</script>`,
+      polls: `<script>setTimeout(()=>fetch("/beacon"),6000)</script>`,
+      scroll: `<div style="height:6000px"></div><img loading=lazy src="/beacon.png" width=40 height=40>`,
+      phone: `<script>document.cookie="seen=1; path=/"</script>`,
+    }[point] + "</body>"
+  );
+
 before(async () => {
-  server = http.createServer((req, res) => res.writeHead(pages[req.url] ? 200 : 404, { "content-type": "text/html" }).end(pages[req.url] ?? "not found"));
+  server = http.createServer((req, res) => {
+    const html = { "content-type": "text/html" };
+    const m = /^\/kill-(\w+)$/.exec(req.url);
+    // Only the browser's own navigation, not the plain pre-check's fetch.
+    const navigation = req.headers["sec-fetch-mode"] === "navigate";
+    if (m && m[1] === killer.point && navigation) {
+      if (m[1] === "goto") {
+        kill();
+        return setTimeout(() => res.writeHead(200, html).end(killPage("goto")), 3000);
+      }
+      if (m[1] === "phone" && /seen=1/.test(req.headers.cookie ?? "")) {
+        kill();
+        return setTimeout(() => res.writeHead(200, html).end(killPage("phone")), 3000);
+      }
+    }
+    if (m) return res.writeHead(200, html).end(killPage(m[1]));
+    if (req.url === "/beacon" || req.url === "/beacon.png") {
+      kill();
+      return res.writeHead(204).end();
+    }
+    res.writeHead(pages[req.url] ? 200 : 404, html).end(pages[req.url] ?? "not found");
+  });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${server.address().port}`;
   root = fs.mkdtempSync(path.join(os.tmpdir(), "capture-limits-"));
@@ -108,13 +149,28 @@ test("a capture that throws before its own handling leaves no timer running", as
   assert.equal(timers(), before, "the site limit's timer is cleared");
 });
 
-test("when the browser goes away under a capture, nothing is recorded and the result says to retry", SLOW, async () => {
-  const b = await chromium.launch();
-  const p = captureSite(b, { url: url("/site2"), name: "Jane Doe" }, { db, s3: null, root });
-  await new Promise((r) => setTimeout(r, 3000));
-  await b.close();
-  assert.equal(await p, BROWSER_GONE);
-  assert.equal(await rowOf("/site2"), undefined, "no failed capture recorded for a site that did nothing wrong");
+// The browser is killed at a point the page itself signals, so each case hits
+// the same step every run: while the page loads (its document request), in
+// the settle wait (a beacon on load), in the screenshot polls (a beacon six
+// seconds in), in the scroll-through (a lazy image far down), and while the
+// phone view loads (its document request, which carries the desktop's cookie).
+const KILL_POINTS = ["goto", "settle", "polls", "scroll", "phone"];
+
+test("whenever the browser goes away under a capture, nothing is recorded and the result says to retry", { timeout: 600000 }, async () => {
+  for (const point of KILL_POINTS) {
+    const b = await chromium.launch();
+    Object.assign(killer, { browser: b, point, fired: false });
+    try {
+      const result = await captureSite(b, { url: url(`/kill-${point}`), name: "Jane Doe" }, { db, s3: null, root });
+      assert.ok(killer.fired, `${point}: the browser was killed`);
+      assert.equal(result, BROWSER_GONE, `${point}: ${result}`);
+      assert.equal(await rowOf(`/kill-${point}`), undefined, `${point}: no failed capture recorded for a site that did nothing wrong`);
+      assert.equal(captured(`/kill-${point}`), false, `${point}: nothing stored`);
+    } finally {
+      Object.assign(killer, { browser: null, point: null });
+      await b.close().catch(() => {});
+    }
+  }
 });
 
 test("captureQueue: a site that lost its browser goes back in line; a failed start is tried again", async () => {
