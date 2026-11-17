@@ -31,9 +31,9 @@ import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
-import { removalsTick } from "./owner-removals";
+import { applyRemovalsTick, removalAlertsTick } from "./owner-removals";
 import { purgeRemovedProfiles } from "../lib/games/claims.mjs";
-import { db as database } from "../lib/db";
+import { db as database, ensureSchema } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
@@ -100,6 +100,8 @@ const purgeFailed = (where: string, e: unknown) =>
  */
 async function purgeOwnerRemovals(purgeTags: PurgeTags, scheduledTime: number) {
   try {
+    // The hourly cron may run before a deploy's migration (portfolio_owner.purged_at).
+    await ensureSchema();
     const out = await purgeRemovedProfiles(database(), { now: new Date(scheduledTime), purge: (urls: string[]) => purgeTags(urls.map(profileTag)) });
     if (out.failed.length) purgeFailed("hourly-removals", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
   } catch (e) {
@@ -178,8 +180,10 @@ const worker = {
       const at = controller.scheduledTime;
       await runEach(
         only([
-          // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
-          ["owner removals", () => removalsTick(env as NightEnv, at)],
+          // Owners' removals held a day take effect (./owner-removals.ts).
+          ["owner removals", () => applyRemovalsTick(at)],
+          // Every removal still held alerts the owner, as a task of its own so a failure is reported (./owner-removals.ts).
+          ["removal alerts", () => removalAlertsTick(env as NightEnv, at)],
           // Removed profiles not purged yet (retried until it works) and blog posts whose scheduled time came this hour
           // leave or join the edge cache (./edge-cache.ts).
           ["edge purge", () => purgeAfterHour(ctx, at)],

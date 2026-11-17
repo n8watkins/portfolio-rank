@@ -19,6 +19,7 @@ import { register } from "node:module";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { reconcileAlerts } from "../pipeline/alerts.mjs";
+import { runEach } from "../pipeline/hourly.mjs";
 import {
   ACTIONS,
   PROOF_ERRORS,
@@ -131,14 +132,43 @@ test("a: the cancel log row says who cancelled and whether they asked, with no a
   assert.doesNotMatch(raw, /gh:/, "account deletion only rewrites claim_log.actor, so no id goes in the detail");
 });
 
+/** `db` with `before` run once, just before the first batch: what lands between a read and a write. */
+function interleaved(db, before) {
+  let fired = false;
+  return {
+    execute: (...a) => db.execute(...a),
+    batch: async (...a) => {
+      if (!fired) {
+        fired = true;
+        await before();
+      }
+      return db.batch(...a);
+    },
+  };
+}
+
 test("a: a cancel that loses the race to the hourly apply changes nothing and logs nothing", async () => {
   const db = await freshDb();
   await verified(db, { owner: "gh:1", login: "realowner", method: "file" });
   await ownerAction(db, { url: URL, owner: "gh:1", action: "remove", now: T0 });
-  assert.deepEqual(await applyDueRemovals(db, { now: at(REMOVAL_HOLD_MS) }), [URL]);
-  const late = await ownerAction(db, { url: URL, owner: "gh:1", action: "cancel_remove", now: at(REMOVAL_HOLD_MS + 1000) });
-  assert.ok(late.state.removedAt, "too late: removed");
-  assert.ok(!(await logOf(db)).some((l) => l.action === "remove_cancelled"));
+  // The cancel reads the held removal, then the hourly apply lands, then the cancel's statements run.
+  const raced = interleaved(db, async () => assert.deepEqual(await applyDueRemovals(db, { now: at(REMOVAL_HOLD_MS) }), [URL]));
+  const late = await ownerAction(raced, { url: URL, owner: "gh:1", action: "cancel_remove", now: at(REMOVAL_HOLD_MS) });
+  assert.equal(late.ok, true);
+  assert.equal(late.state.removedAt, at(REMOVAL_HOLD_MS).toISOString(), "the removal stays applied");
+  assert.ok(!(await logOf(db)).some((l) => l.action === "remove_cancelled"), "no cancel logged");
+});
+
+test("d: a removal that a cancel withdrew underneath the apply leaves the quiz pool alone", async () => {
+  const db = await freshDb();
+  await verified(db, { owner: "gh:1", login: "realowner", method: "file" });
+  await ownerAction(db, { url: URL, owner: "gh:1", action: "remove", now: T0 });
+  await db.execute({ sql: "INSERT INTO cache (k, v, at) VALUES ('games:pool', '[]', ?)", args: [T0.getTime()] });
+  // The apply reads the due removal, then a cancel lands, then the apply's statements run.
+  const raced = interleaved(db, async () => assert.equal((await ownerAction(db, { url: URL, owner: "gh:1", action: "cancel_remove", now: at(REMOVAL_HOLD_MS) })).ok, true));
+  assert.deepEqual(await applyDueRemovals(raced, { now: at(REMOVAL_HOLD_MS) }), []);
+  assert.equal((await ownerState(db, URL)).removedAt, null);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM cache WHERE k = 'games:pool'")).rows[0].n), 1, "the pool stays");
 });
 
 // ---------------------------------------------------------------------------
@@ -202,8 +232,13 @@ test("alerts: a cancel with nothing held is no alert, and the cancel counts come
   assert.deepEqual(alerts.map((c) => c.key), ["removal:https://a.example#again"]);
   assert.ok(isRemovalAlert(alerts[0].key));
   assert.match(alerts[0].detail, /^@realowner asked to remove https:\/\/a\.example from PortfolioRank\. It takes effect at /);
+  // A cancel logged a moment after the cron's nominal time still counts on that tick.
+  await ownerAction(db, { url: "https://b.example", owner: "gh:1", action: "remove", now: at(2 * HOUR) });
+  await ownerAction(db, { url: "https://b.example", owner: "gh:1", action: "cancel_remove", now: at(3 * HOUR + 1000) });
+  await ownerAction(db, { url: "https://b.example", owner: "gh:1", action: "remove", now: at(3 * HOUR + 2000) });
+  assert.match((await removalConditions(db, { now: at(3 * HOUR) })).find((c) => c.key.includes("b.example")).detail, /asked for again 2 time\(s\)/);
   // Once the cancel is more than a day old, the held removal's alert is the plain one again.
-  assert.deepEqual((await removalConditions(db, { now: at(HOUR + REMOVAL_HOLD_MS + 1) })).map((c) => c.key), ["removal:https://a.example"]);
+  assert.deepEqual((await removalConditions(db, { now: at(HOUR + REMOVAL_HOLD_MS + 1) })).map((c) => c.key), ["removal:https://a.example", "removal:https://b.example#again"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -312,7 +347,7 @@ export async function resolve(specifier, context, next) {
 }`)
 );
 
-test("d: removalsTick reports every removal it applied even when the alert step throws, and the purge and pool still follow", async (t) => {
+test("d: the hourly removal tasks migrate first, apply on their own, and a failing alert step is reported; the purge and pool still follow", async (t) => {
   if (process.env.TURSO_DATABASE_URL) return t.skip("a real database is configured");
   const file = tmpFile("ownership-tick-");
   process.env.LOCAL_DB_FILE = file;
@@ -323,18 +358,30 @@ test("d: removalsTick reports every removal it applied even when the alert step 
     await ownerAction(setup, { url, owner, action: "remove", now: when });
   }
   await setup.execute({ sql: "INSERT INTO cache (k, v, at) VALUES ('games:pool', '[]', ?)", args: [T0.getTime()] });
+  // A database whose deploy migration didn't run: no purged_at yet.
+  await setup.execute("ALTER TABLE portfolio_owner DROP COLUMN purged_at");
+  await setup.execute("DELETE FROM schema_meta WHERE k = 'fingerprint'");
   // Break the alerts table the way any failure inside reconcileAlerts would (a Turso hiccup, say).
   await setup.execute("DROP TABLE IF EXISTS owner_alerts");
   await setup.execute("CREATE TABLE owner_alerts (key TEXT PRIMARY KEY)");
 
-  const { removalsTick } = await import("../worker/owner-removals.ts");
-  const logged = [];
-  t.mock.method(console, "log", (line) => logged.push(line));
-  const out = await removalsTick({}, at(REMOVAL_HOLD_MS + HOUR).getTime());
+  // The two tasks as worker/index.ts runs them.
+  const { applyRemovalsTick, removalAlertsTick } = await import("../worker/owner-removals.ts");
+  const when = at(REMOVAL_HOLD_MS + HOUR).getTime();
+  let applied = null;
+  const reported = [];
+  t.mock.method(console, "log", () => {});
+  const out = await runEach(
+    [
+      ["owner removals", async () => (applied = await applyRemovalsTick(when))],
+      ["removal alerts", () => removalAlertsTick({}, when)],
+    ],
+    { report: (e, task) => reported.push(task) }
+  );
   t.mock.restoreAll();
-  assert.deepEqual(out.applied, ["https://a.example"], "the applied removal is reported");
-  assert.deepEqual(out.failed, ["alerts"]);
-  assert.ok(logged.some((l) => /removals\.tick\.failed/.test(l) && /alerts/.test(l)));
+  assert.deepEqual(applied, ["https://a.example"], "the removal applied, after the schema caught up");
+  assert.deepEqual(out.failed, ["removal alerts"]);
+  assert.deepEqual(reported, ["removal alerts"], "the failure reaches the reporter (Sentry in the Worker)");
   assert.equal(Number((await setup.execute("SELECT COUNT(*) AS n FROM cache WHERE k = 'games:pool'")).rows[0].n), 0, "the pool was dropped");
 
   // The hourly edge purge, as worker/index.ts runs it, finds it whatever the tick returned.

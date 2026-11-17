@@ -40,6 +40,7 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
   nightly: ["night start"],
   hourly: [
     "owner removals",
+    "removal alerts",
     "edge purge",
     "email caps",
     "night watch",
@@ -55,7 +56,8 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * What staging runs, and why (DEPLOY.md "Staging" has the table).
- *  - owner removals: database only (its alert emails reach STAGING_EMAIL_TO only).
+ *  - owner removals: database only.
+ *  - removal alerts: database, and its alert emails reach STAGING_EMAIL_TO only.
  *  - edge purge: database and the edge cache only.
  *  - tiers: database and the edge cache only, no AI request.
  *  - review auto-apply: database and the edge cache only, plain code.
@@ -67,6 +69,7 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
  */
 export const STAGING_TASKS: readonly string[] = [
   "owner removals",
+  "removal alerts",
   "edge purge",
   "tiers",
   "review auto-apply",

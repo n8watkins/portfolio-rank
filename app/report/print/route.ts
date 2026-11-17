@@ -4,7 +4,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 import { heroOf, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
-import { controlProof, ownerState } from "@/lib/games/claims.mjs";
+import { ownerState, proofLevel } from "@/lib/games/claims.mjs";
 import { percentilesOf } from "@/lib/games/pool.mjs";
 import { gamesEnabled, getPool, portfolioName, sign, unsign } from "@/lib/games/server";
 import { openOneTimeLink } from "@/lib/grader/links.mjs";
@@ -71,8 +71,17 @@ export async function GET(req: Request) {
   const state = await ownerState(db(), url);
   // A hidden grade is the owner's alone: proof only someone who can deploy to the site can give
   // (lib/games/claims.mjs controlProof), not a link from the page to a GitHub profile.
-  if (state.hideGrade && !(session?.raterId && (await controlProof(db(), { url, owner: session.raterId })))) {
-    return page(403, "Grade hidden", "The owner of this portfolio chose to hide its grade.");
+  if (state.hideGrade) {
+    const proof = session?.raterId ? await proofLevel(db(), { url, owner: session.raterId }) : "none";
+    if (proof === "link") {
+      // Verified by a link only (an owner who hid the grade before hiding needed more): say how to get access.
+      return page(
+        403,
+        "Prove the site is yours",
+        `Your claim on this portfolio rests on a link to your GitHub profile, which collaborators can have too, so it doesn't open a hidden grade. Add the verification file or meta tag on <a href="/claim?url=${encodeURIComponent(url)}">the claim page</a>, then download the report here.`
+      );
+    }
+    if (proof !== "control") return page(403, "Grade hidden", "The owner of this portfolio chose to hide its grade.");
   }
   const row = (await db().execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0];
   const view = printView(row?.ai_rubric == null ? null : String(row.ai_rubric));

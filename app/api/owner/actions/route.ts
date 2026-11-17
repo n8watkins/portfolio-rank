@@ -4,6 +4,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
 import { PROOF_ERRORS, controlProof, ownerAction } from "@/lib/games/claims.mjs";
+import { clearPoolCache } from "@/lib/games/pool.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { loadProfile } from "@/lib/profile";
 import { purgeProfile } from "@/lib/edge-purge";
@@ -20,7 +21,7 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 //                  exclusions pull request; /removed counts it without details
 //   cancel_remove  withdraws a removal that is still held; needs the same
 //                  proof as remove (a link from the page is not enough), from
-//                  any account that has it, logged and alerted like a removal
+//                  any account that has it; logged, and sends no alert by itself
 //   hide_grade     the AI grade is no longer shown; show_grade shows it again
 //                  (the same proof as remove)
 //   regrade        asks the grade service for a new grade (its cooldown
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
   await purgeProfile(url);
   if (action === "hide_grade" || action === "show_grade") {
     // The quiz pool leaves out removed sites and hidden grades.
-    await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
+    await clearPoolCache(db());
     forgetPool();
   }
   return NextResponse.json({ state: out.state, ...(out.regrade ? { regrade: out.regrade } : {}) }, { headers: PRIVATE });
