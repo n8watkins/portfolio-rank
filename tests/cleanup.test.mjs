@@ -70,11 +70,11 @@ test("syncRoster delists rows that left the feed, with the date, and restores th
     await db.execute({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live')", args: [u] });
   }
   const now = new Date("2026-11-10T00:00:00Z");
-  assert.deepEqual(await syncRoster(db, feed, { now }), { delisted: 1, relisted: 0, listed: 2 });
+  assert.deepEqual(await syncRoster(db, feed, { now }), { delisted: 1, relisted: 0, listed: 2, split: 0, skipped: false });
   const gone = (await db.execute("SELECT delisted_at FROM portfolios WHERE url = 'https://gone.example'")).rows[0];
   assert.equal(gone.delisted_at, now.toISOString());
   // Idempotent.
-  assert.deepEqual(await syncRoster(db, feed, { now }), { delisted: 0, relisted: 0, listed: 2 });
+  assert.deepEqual(await syncRoster(db, feed, { now }), { delisted: 0, relisted: 0, listed: 2, split: 0, skipped: false });
   // Re-listed.
   const back = [...feed, { name: "Back", url: "https://gone.example" }];
   assert.equal((await syncRoster(db, back, { now })).relisted, 1);
