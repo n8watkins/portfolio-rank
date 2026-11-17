@@ -27,6 +27,9 @@ export async function POST(req: Request) {
   }
   if (!Array.isArray(urls)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   const list = urls.filter((u): u is string => typeof u === "string").slice(0, MAX_URLS);
-  for (const url of list) revalidatePath(`/p/${encodeURIComponent(url)}`);
+  // A profile's slug is a whole encoded address, which Next does not match by its literal path, so the
+  // profile route itself is revalidated: every cached profile renders again on its next visit (one render
+  // each, and only in an hour when a profile was hidden or came back).
+  if (list.length) revalidatePath("/p/[slug]", "page");
   return NextResponse.json({ revalidated: list.length }, { headers: { "cache-control": "no-store" } });
 }

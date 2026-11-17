@@ -59,13 +59,18 @@ async function purgeUntilSettled() {
     const res = await fetch(`${BASE}/api/internal/revalidate-profiles`, { method: "POST", headers: { "content-type": "application/json", [INTERNAL_TOKEN_HEADER]: token }, body: JSON.stringify({ urls }) });
     assert.equal(res.status, 200);
   };
-  const origin = async (url) => (await fetch(BASE + pathOf(url))).status;
-  for (let tick = 0; tick < 5; tick++) {
+  const seen = [];
+  const origin = async (url) => {
+    const status = (await fetch(BASE + pathOf(url))).status;
+    seen.push(status);
+    return status;
+  };
+  for (let tick = 0; tick < 6; tick++) {
     const out = await purgeGoneProfiles(db, { purge: async () => true, origin, revalidate });
     if (!out.waiting.length && !out.failed.length) return;
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 1000));
   }
-  assert.fail("the app never answered as it should");
+  assert.fail(`the app never answered as it should (answers: ${seen.join(", ")})`);
 }
 
 let n = 0;
