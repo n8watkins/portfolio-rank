@@ -9,11 +9,15 @@
 //   spanning at least DOWN_AFTER_DAYS)--> down
 //   any state --pass--> live (fail count reset)
 //   a bot wall (403/429 challenge) is inconclusive: the state stays as it was
+//   a site that never had a good capture fails while its last capture was
+//   blocked by a gate or an empty page, and is inconclusive while it was
+//   blocked by a bot wall (./capture-blocked.mjs)
 //
 // Down sites are added to data/excluded.json (pipeline/exclusions.mjs), so the
 // list drops them; until then the site and the background jobs skip them.
 
 import { httpGate, isParkingDomain, netloc, parkingPhrase, visibleText } from "./gate.mjs";
+import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
 
@@ -270,7 +274,7 @@ export async function runHealthCheck({
   const rows = new Map(
     (
       await db.execute(
-        `SELECT url, status, health, health_reason, health_fails, health_first_fail_at,
+        `SELECT url, status, reason, health, health_reason, health_fails, health_first_fail_at,
                 CASE WHEN ${NOT_PORTFOLIO()} THEN 1 ELSE 0 END AS not_portfolio
          FROM portfolios WHERE delisted_at IS NULL`
       )
@@ -308,6 +312,33 @@ export async function runHealthCheck({
     } else if (Number(rows.get(r.url)?.not_portfolio ?? 0) === 1) {
       r.ok = false;
       r.reason = "AI grading says this is not a portfolio";
+    }
+  }
+  // A site that has never had a good capture and whose last one was blocked
+  // (./capture-blocked.mjs). A good capture since then (status 'live')
+  // clears both cases.
+  // - A gate, a picker or a nearly empty page that this check sees as up
+  //   fails, with the capture's reason, so a site that stays blocked ends up
+  //   confirmed down and excluded as broken (exclusions.mjs kind "down"),
+  //   never as "not a portfolio".
+  // - A bot wall is never a failure (owner, 2026-11-16: bot-walled sites go
+  //   to him for review): a pass is made inconclusive, so the state stays as
+  //   it was and the site stays hidden (lib/hidden.mjs) instead of being
+  //   shown uncaptured; its needs_review mark is kept below.
+  // A bot wall this check meets itself stays inconclusive in both cases.
+  const botWalled = new Set();
+  for (const r of results) {
+    const row = rows.get(r.url);
+    if (!row || String(row.status) !== "error" || !isBlockedReason(row.reason)) continue;
+    if (isBotWallReason(row.reason)) {
+      botWalled.add(r.url);
+      if (r.ok === true) {
+        r.ok = null;
+        r.reason = String(row.reason);
+      }
+    } else if (r.ok === true) {
+      r.ok = false;
+      r.reason = String(row.reason);
     }
   }
 
@@ -377,7 +408,8 @@ export async function runHealthCheck({
         stamp,
         r.finalUrl ?? null,
         signals,
-        r.signals?.needsReview ? 1 : 0,
+        // The signals' verdict, but a bot-walled capture's mark for the owner's review is never cleared here.
+        r.signals?.needsReview || botWalled.has(r.url) ? 1 : 0,
       ],
     });
   }
