@@ -2,29 +2,72 @@
 // for single-page apps, JavaScript redirects and cold starts) and the AI
 // grade (page text and facts for client-rendered sites captured before
 // rubric v2). Playwright is imported only when a page is first rendered.
-import { readRenderedPage, UA } from "./gate.mjs";
+import { chromeUA, readRenderedPage } from "./gate.mjs";
+
+/**
+ * The browser's own User-Agent, as a visitor's Chrome sends it: the version
+ * of the Chromium that Playwright installed (browser.version(), "158.0.8127.18"),
+ * never a pinned string, so it stays current with every Playwright update and
+ * matches the version the browser's client hints report. Headless Chromium
+ * says "HeadlessChrome", which bot filters block on sight; a visitor's says
+ * "Chrome". Independent of the plain request's User-Agent (gate.mjs UA, worked
+ * out from the date), so one stale string can't fail both opinions at once.
+ */
+export function browserUserAgent(version) {
+  const major = Number.parseInt(String(version ?? ""), 10);
+  return Number.isFinite(major) && major > 0 ? chromeUA(major) : chromeUA();
+}
+
+/** The browser could not start (Playwright's Chromium missing or failing to launch): says nothing about a site. */
+export class BrowserUnavailableError extends Error {
+  /** @param {unknown} cause */
+  constructor(cause) {
+    super(`the browser could not start: ${String(/** @type {any} */ (cause)?.message ?? cause).split("\n")[0].slice(0, 160)}`);
+    this.name = "BrowserUnavailableError";
+    this.cause = cause;
+  }
+}
 
 /**
  * A lazy renderer. render(url) resolves to { status, finalUrl, title, text,
  * media, html } or throws; close() shuts the browser if one was started.
+ * A failed launch throws BrowserUnavailableError and is not kept: the next
+ * render tries to launch again.
+ * The page counts as loaded once its HTML has arrived and parsed
+ * (domcontentloaded); then it gets until `timeoutMs` for the load event and a
+ * few seconds of network quiet, but a slow image or script never turns a
+ * page that answered into an error.
  */
-export function createRenderer({ viewport = { width: 1280, height: 800 }, timeoutMs = 30000 } = {}) {
+export function createRenderer({
+  viewport = { width: 1280, height: 800 },
+  timeoutMs = 30000,
+  launch = () => import("playwright").then(({ chromium }) => chromium.launch()),
+} = {}) {
   let browser = null;
   let starting = null;
+  let userAgent = null;
   const start = async () => {
     if (browser) return browser;
-    starting ??= import("playwright").then(({ chromium }) => chromium.launch());
-    browser = await starting;
+    starting ??= launch();
+    try {
+      browser = await starting;
+    } catch (e) {
+      starting = null;
+      throw new BrowserUnavailableError(e);
+    }
+    userAgent ??= browserUserAgent(browser.version());
     return browser;
   };
   return {
     async render(url) {
       const b = await start();
       // Certificate errors stay errors: a visitor would see a warning page.
-      const ctx = await b.newContext({ userAgent: UA, viewport });
+      const ctx = await b.newContext({ userAgent, viewport });
       try {
         const page = await ctx.newPage();
-        const res = await page.goto(url, { waitUntil: "load", timeout: timeoutMs });
+        const began = Date.now();
+        const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+        await page.waitForLoadState("load", { timeout: Math.max(1000, timeoutMs - (Date.now() - began)) }).catch(() => {});
         await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
         await page.waitForTimeout(1000);
         return {

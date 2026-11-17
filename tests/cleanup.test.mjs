@@ -339,10 +339,10 @@ test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${D
   const fail = { ok: false, reason: "HTTP 404" };
   let s = nextHealth(null, fail, at(0));
   assert.deepEqual([s.health, s.fails], ["suspect", 1]);
-  // Three failures in two days (manual runs) are still only suspect.
+  // Three failures in two days (manual runs) are still only suspect, and count as one: each failed check needs a week of its own.
   s = nextHealth(s, fail, at(1));
   s = nextHealth(s, fail, at(2));
-  assert.deepEqual([s.health, s.fails], ["suspect", 3]);
+  assert.deepEqual([s.health, s.fails], ["suspect", 1]);
   // Weekly cadence: day 0, 7, 14 -> down.
   let w = nextHealth(null, fail, at(0));
   w = nextHealth(w, fail, at(7));
@@ -353,10 +353,10 @@ test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${D
   const same = nextHealth(w, { ok: null, reason: "blocked by a bot check" }, at(21));
   assert.deepEqual([same.health, same.fails], ["down", 3]);
   // Passing recovers.
-  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, reason: "" });
+  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "" });
 });
 
-test("runHealthCheck records states, schedules a recapture for recovered failed captures, and flags not-a-portfolio", async () => {
+test("runHealthCheck records states and schedules a recapture for recovered failed captures; a 'not a portfolio' grade is not a failed check", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
   const feed = [
@@ -374,15 +374,16 @@ test("runHealthCheck records states, schedules a recapture for recovered failed 
   });
   const s = await runHealthCheck({ db, feed, fetchImpl, now, log: () => {} });
   assert.equal(s.aborted, false);
-  assert.deepEqual([s.live, s.suspect], [1, 2]);
+  assert.deepEqual([s.live, s.suspect], [2, 1]);
   const rows = Object.fromEntries(
     (await db.execute("SELECT url, health, health_reason, retry_at FROM portfolios")).rows.map((r) => [r.url, r])
   );
   assert.equal(rows["https://alice.dev"].health, "live");
   assert.equal(rows["https://alice.dev"].retry_at, now.toISOString());
   assert.deepEqual([rows["https://bob.dev"].health, rows["https://bob.dev"].health_reason], ["suspect", "HTTP 404"]);
-  assert.match(rows["https://cara.dev"].health_reason, /not a portfolio/);
-  assert.match(healthSummary(s), /1 live, 2 suspect/);
+  // The grade goes to the review queue (tests/health-false-failures.test.mjs), never into the health state.
+  assert.equal(rows["https://cara.dev"].health, "live");
+  assert.match(healthSummary(s), /2 live, 1 suspect/);
 });
 
 test("runHealthCheck records nothing when most sites fail at once (the runner, not the sites)", async () => {
