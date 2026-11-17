@@ -39,9 +39,14 @@
 // owner's review, a 503 or a 429 is retried), the rendered page is a parked
 // domain, or the screen is "blocked" (a gate, a picker, a dialog, a bot
 // check, or under 40 words with nothing else that shows a site:
-// ./capture-blocked.mjs). The phone view is judged the same way. A site with
+// ./capture-blocked.mjs). A page with no words, or only a canvas, video or
+// image, is never stored as live: a flat frame is blank, anything else goes
+// to the owner's review. The desktop view decides; the phone view stops the
+// capture only with an error status or a bot wall of its own. A site with
 // no good capture records it as a failed capture and is retried (a bot wall
 // also sets needs_review for the owner); a site that has one keeps it.
+// Where a rule cannot tell, the outcome is the owner's review or "keep the
+// existing capture and retry", never "stored as live" or "excluded as broken".
 //
 // Every site gets at most SITE_LIMIT_MS: a page that never answers (a main
 // thread blocked after load) is closed, recorded as a failed capture with the
