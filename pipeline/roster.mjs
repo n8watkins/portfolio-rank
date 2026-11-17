@@ -12,10 +12,20 @@
 //                 (pipeline/health.mjs). NULL until first checked.
 //   retry_at      when capture may try a site again after a failed capture
 //                 (backoff), so one transient error never hides a site forever.
+//
+// A row's url is its key in many tables (votes, ratings, likes, lists, owner
+// settings, review history...), so it never changes. When the list spells a
+// site's address another way (a trailing slash, www, http, upper case, the
+// default port, a tracking parameter), it is still the same site
+// (sameSite below): generate_feed.py keeps the spelling the list already
+// had, syncRoster never delists a row whose site is still on the list, and
+// purgeDelisted never deletes one. scripts/repair-respelled-sites.mjs moves
+// the history of rows that were split before this rule existed.
 
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
+import { siteKeyOf } from "../lib/grader/url.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -23,6 +33,98 @@ export const PURGE_AFTER_DAYS = 30;
 export const PURGE_MAX_SHARE = 0.2;
 // A roster this small is a broken feed, not a real list.
 export const MIN_ROSTER = 500;
+// Refuse to delist more than this share of the list in one sync: the feed
+// keeps its length when upstream rewrites every address, so only this
+// notices. A real upstream cleanup that is bigger is let through once by
+// setting CLEANUP_SHARE_ENV (also read by generate_feed.py --max-shrink).
+export const DELIST_MAX_SHARE = 0.1;
+export const CLEANUP_SHARE_ENV = "LIST_CLEANUP_SHARE";
+
+/** The owner's one-off allowance for a big upstream cleanup (a share, 0 to 1), or null. */
+export function cleanupShare(env = process.env) {
+  const raw = String(env[CLEANUP_SHARE_ENV] ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0 || n > 1) {
+    throw new Error(`${CLEANUP_SHARE_ENV}="${raw}" is not a share between 0 and 1 (for example 0.3)`);
+  }
+  return n;
+}
+
+// Query parameters that only say where a visitor came from.
+const TRACKING_PARAM = /^(utm_[a-z0-9_]*|ref|src|source|fbclid|gclid|igshid|mc_cid|mc_eid)$/;
+
+/**
+ * A listed address as { site, extra }. `site` is the site key every part of
+ * PortfolioRank uses (lib/grader/url.mjs siteKeyOf: host without www, path
+ * without the trailing slash, lower case; scheme, port, query and fragment
+ * ignored). `extra` is what can still tell two entries on one site apart: the
+ * query without tracking parameters, and a hash route (`#/alice`, `#!/bob`),
+ * lower case; a plain anchor such as `#about` is not one. An address that is
+ * not http(s) keeps its own lower-cased text as the site.
+ *
+ * pipeline/generate_feed.py site_of is the same rule in Python; the test
+ * tests/roster-address-edit.test.mjs runs both over the same addresses.
+ */
+export function siteOf(url) {
+  const raw = String(url ?? "").trim();
+  const lower = raw.toLowerCase();
+  if (!/^https?:\/\//.test(lower)) return { site: lower, extra: "" };
+  let site;
+  try {
+    site = siteKeyOf(raw);
+  } catch {
+    return { site: lower, extra: "" };
+  }
+  const hashAt = lower.indexOf("#");
+  const beforeHash = hashAt < 0 ? lower : lower.slice(0, hashAt);
+  const queryAt = beforeHash.indexOf("?");
+  const params = (queryAt < 0 ? "" : beforeHash.slice(queryAt + 1))
+    .split("&")
+    .filter((p) => p && !TRACKING_PARAM.test(p.split("=")[0]))
+    .sort();
+  const hash = hashAt < 0 ? "" : lower.slice(hashAt + 1);
+  const route = /^!?\//.test(hash) ? hash.replace(/\/+$/, "") : "";
+  const extra = `${params.length ? `?${params.join("&")}` : ""}${route && route !== "!" ? `#${route}` : ""}`;
+  return { site, extra };
+}
+
+/**
+ * Whether two listed addresses are the same site: the same site key, and
+ * nothing that tells them apart (equal extras, or one has none). So
+ * `https://x.dev/` and `http://www.x.dev?utm_source=gh` are one site, while
+ * `host.dev/#/alice` and `host.dev/#/bob` are two.
+ */
+export function sameSite(a, b) {
+  const x = typeof a === "string" ? siteOf(a) : a;
+  const y = typeof b === "string" ? siteOf(b) : b;
+  return x.site === y.site && (x.extra === y.extra || !x.extra || !y.extra);
+}
+
+/**
+ * Pairs each address in `from` with the one address in `to` that is the same
+ * site, when that is unambiguous both ways: no other address in `from` is that
+ * site, and no other address in `to`. Returns Map(from -> to).
+ */
+export function matchSameSite(from, to) {
+  const bySite = new Map();
+  for (const u of to) {
+    const s = siteOf(u);
+    if (!bySite.has(s.site)) bySite.set(s.site, []);
+    bySite.get(s.site).push({ url: u, s });
+  }
+  const picks = new Map();
+  const taken = new Map();
+  for (const u of from) {
+    const s = siteOf(u);
+    const hits = (bySite.get(s.site) ?? []).filter((t) => sameSite(s, t.s));
+    if (hits.length !== 1) continue;
+    picks.set(u, hits[0].url);
+    taken.set(hits[0].url, (taken.get(hits[0].url) ?? 0) + 1);
+  }
+  for (const [u, t] of picks) if (taken.get(t) !== 1) picks.delete(u);
+  return picks;
+}
 
 /** Pipeline DB client: Turso when TURSO_DATABASE_URL is set, else a local file. */
 export function pipelineDb(root) {
@@ -109,10 +211,22 @@ const chunks = (arr, n = 400) =>
   Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
 /**
- * Mark rows whose URL left the roster as delisted (with the date), and restore
- * rows that came back. Returns { delisted, relisted, listed }.
+ * Mark rows whose site left the roster as delisted (with the date), and
+ * restore rows that came back. A row whose address the feed now spells
+ * another way (sameSite) is still on the list when that feed entry has no row
+ * of its own: it is kept, never delisted, and counted in `respelled`. (Once
+ * the new spelling has a row of its own, the old row is delisted as before,
+ * and purgeDelisted keeps it for scripts/repair-respelled-sites.mjs.)
+ *
+ * Refuses (throws) to delist more than DELIST_MAX_SHARE of the list at once,
+ * unless the owner set CLEANUP_SHARE_ENV for a real upstream cleanup.
+ * Returns { delisted, relisted, listed, respelled }.
  */
-export async function syncRoster(db, feed, { now = new Date() } = {}) {
+export async function syncRoster(
+  db,
+  feed,
+  { now = new Date(), maxDelistShare = cleanupShare() ?? DELIST_MAX_SHARE, log = console.warn } = {}
+) {
   if (!Array.isArray(feed) || feed.length < MIN_ROSTER) {
     throw new Error(
       `syncRoster: refusing a roster of ${feed?.length ?? 0} entries (minimum ${MIN_ROSTER}); the feed looks broken`
@@ -121,15 +235,33 @@ export async function syncRoster(db, feed, { now = new Date() } = {}) {
   await ensureRosterSchema(db);
   const roster = new Set(feed.map((p) => p.url));
   const rows = (await db.execute("SELECT url, delisted_at FROM portfolios")).rows;
+  const stored = new Set(rows.map((r) => String(r.url)));
+  const respelled = matchSameSite(
+    [...stored].filter((u) => !roster.has(u)),
+    [...roster].filter((u) => !stored.has(u))
+  );
+  for (const [from, to] of respelled) {
+    log(`syncRoster: ${from} is listed as ${to} now; keeping its row (scripts/repair-respelled-sites.mjs moves its history)`);
+  }
   const toDelist = [];
   const toRelist = [];
   let listed = 0;
+  let listedBefore = 0;
   for (const r of rows) {
     const url = String(r.url);
-    const onList = roster.has(url);
+    const onList = roster.has(url) || respelled.has(url);
     if (onList) listed++;
+    if (r.delisted_at == null) listedBefore++;
     if (!onList && r.delisted_at == null) toDelist.push(url);
     else if (onList && r.delisted_at != null) toRelist.push(url);
+  }
+  const base = Math.max(feed.length, listedBefore);
+  if (toDelist.length > base * maxDelistShare) {
+    throw new Error(
+      `syncRoster: ${toDelist.length} of ${base} listed sites would be delisted at once, more than ` +
+        `${Math.round(maxDelistShare * 100)}%; refusing (check data/feed.json: did upstream rewrite the addresses?). ` +
+        `For a real upstream cleanup, run the sync once with ${CLEANUP_SHARE_ENV} set to the share to allow (for example 0.3).`
+    );
   }
   const stamp = now.toISOString();
   const stmts = [];
@@ -146,7 +278,7 @@ export async function syncRoster(db, feed, { now = new Date() } = {}) {
     });
   }
   if (stmts.length) await db.batch(stmts, "write");
-  return { delisted: toDelist.length, relisted: toRelist.length, listed };
+  return { delisted: toDelist.length, relisted: toRelist.length, listed, respelled: respelled.size };
 }
 
 /**
@@ -168,6 +300,23 @@ export async function purgeDelisted(
       args: [cutoff],
     })
   ).rows.map((r) => ({ url: String(r.url), shotKey: r.shot_key == null ? null : String(r.shot_key) }));
+  // A row whose site is still listed under another spelling holds that site's
+  // grade, votes and screenshots: never purged (scripts/repair-respelled-sites.mjs).
+  if (due.length) {
+    const listedSites = new Map();
+    for (const r of (await db.execute("SELECT url FROM portfolios WHERE delisted_at IS NULL")).rows) {
+      const s = siteOf(String(r.url));
+      if (!listedSites.has(s.site)) listedSites.set(s.site, []);
+      listedSites.get(s.site).push(s);
+    }
+    for (let i = due.length - 1; i >= 0; i--) {
+      const s = siteOf(due[i].url);
+      if ((listedSites.get(s.site) ?? []).some((l) => sameSite(s, l))) {
+        log(`kept ${due[i].url}: the same site is listed under another spelling (run scripts/repair-respelled-sites.mjs)`);
+        due.splice(i, 1);
+      }
+    }
+  }
   const total = Number((await db.execute("SELECT COUNT(*) AS n FROM portfolios")).rows[0].n);
   if (due.length && due.length > total * PURGE_MAX_SHARE) {
     throw new Error(
