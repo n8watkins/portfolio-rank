@@ -197,10 +197,12 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
     ? (status, reason) => recordRefreshFailure(db, url, `${status}: ${reason}`)
     : (status, reason, opts) => recordCaptureFailure(db, url, name, status, reason, opts);
   // run.aborted: the time limit passed, so the capture must write nothing more;
-  // run.committed: the good capture is being written, so the limit waits for it.
-  const run = { aborted: false, committed: false, ctx: null };
+  // run.committed: the good capture is being written, so the limit waits for it;
+  // run.storedGood: the site has a good capture, which a failed one never marks failed.
+  const run = { aborted: false, committed: false, storedGood: false, ctx: null };
+  const keepsGood = () => run.storedGood && !refresh;
   const fail = async (...a) => {
-    if (!run.aborted) await record(...a);
+    if (!run.aborted && !keepsGood()) await record(...a);
   };
   const TIMED_OUT = Symbol("timed out");
   let timer;
@@ -214,6 +216,7 @@ export async function captureSite(browser, entry, { refresh = false, db, s3 = nu
   // Closing the context kills the page, also one whose main thread never returns.
   if (run.ctx) await Promise.race([run.ctx.close().catch(() => {}), new Promise((r) => setTimeout(r, CLOSE_LIMIT_MS))]);
   const reason = `capture timed out after ${Math.round(limitMs / 1000)}s`;
+  if (keepsGood()) return `error (${reason}); the existing capture is kept`;
   await record("error", reason);
   return `error (${reason})`;
 }
@@ -238,6 +241,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail }, run)
   // whether the site already has a good capture (a failed one never replaces it).
   const stored = await storedCapture(db, url);
   const prevFullPage = stored.fullPage;
+  run.storedGood = stored.good;
 
   const ctx = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -255,13 +259,9 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail }, run)
   // without is a failed capture with its reason, retried later with backoff.
   const reject = async ({ status, reason, needsReview = false }) => {
     await ctx.close().catch(() => {});
-    const result = resultOf(status, reason);
-    if (refresh || stored.good) {
-      if (refresh) await fail(status, reason);
-      return `${result}; the existing capture is kept`;
-    }
     await fail(status, reason, { needsReview });
-    return result;
+    const result = resultOf(status, reason);
+    return refresh || stored.good ? `${result}; the existing capture is kept` : result;
   };
 
   const page = await ctx.newPage();
@@ -516,14 +516,15 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail }, run)
     return `live → ${key} (motion=${meta.motion} dark=${meta.darkMode} overflow=${meta.overflow390})`;
   } catch (e) {
     await ctx.close().catch(() => {});
-    if (run.aborted) return "aborted";
     // A new version uploaded for a capture that was not stored is nobody's: remove it.
     if (uploadedV && uploadedV !== prevFullPage?.v) {
       const commands = await import("@aws-sdk/client-s3").catch(() => null);
       if (commands) await deleteVersion({ send: (c) => s3.send(c), commands, bucket: IMAGES_BUCKET, shotKey: key, v: uploadedV }).catch(() => {});
     }
+    if (run.aborted) return "aborted";
     await fail("error", String(e.message ?? e).slice(0, 200));
-    return `error (${String(e.message ?? e).slice(0, 80)})`;
+    const result = `error (${String(e.message ?? e).slice(0, 80)})`;
+    return refresh || stored.good ? `${result}; the existing capture is kept` : result;
   }
 }
 
