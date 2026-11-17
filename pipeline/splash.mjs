@@ -88,9 +88,10 @@ const visibleText = () => document.body?.innerText ?? "";
  * In the browser: the visible clickable element whose own text is the
  * phrase (a button, a link, or anything with role=button or a pointer
  * cursor), marked with data-pr-gate so Playwright can click it; true when
- * one was found.
+ * one was found. With `mark` false it only answers whether there is one
+ * (the capture's blocked check, pipeline/capture-blocked.mjs).
  */
-function markGateTarget([phrase, exact]) {
+export function findGateTarget([phrase, exact, mark = true]) {
   const want = phrase.toLowerCase();
   const visible = (el) => {
     const r = el.getBoundingClientRect();
@@ -107,7 +108,7 @@ function markGateTarget([phrase, exact]) {
     return click(a) - click(b) || a.innerText.length - b.innerText.length;
   });
   if (!candidates[0]) return false;
-  candidates[0].setAttribute("data-pr-gate", "1");
+  if (mark) candidates[0].setAttribute("data-pr-gate", "1");
   return true;
 }
 
@@ -149,7 +150,7 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
       text = await page.evaluate(visibleText).catch(() => text);
     }
     await page.waitForTimeout(300);
-    const marked = found.phrase ? await page.evaluate(markGateTarget, [found.phrase, found.exact]).catch(() => false) : false;
+    const marked = found.phrase ? await page.evaluate(findGateTarget, [found.phrase, found.exact]).catch(() => false) : false;
     // A plain word ("Start") is clicked only on its own button or link, never the page centre.
     if (!marked && found.exact) break;
     clicks++;

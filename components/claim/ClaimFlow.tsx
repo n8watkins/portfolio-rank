@@ -7,6 +7,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { useClientSession } from "@/lib/session-client";
+import { afterProof, scheduledAction } from "@/components/claim/flow-rules";
 
 type Claim = {
   url: string;
@@ -43,6 +44,7 @@ const ERRORS: Record<string, string> = {
   not_owner: "This account isn't the verified owner of this portfolio.",
   account_too_new: "Owner actions need a GitHub account at least 30 days old. Ask through GitHub if this can't wait.",
   remove_needs_meta: "Removing your portfolio needs the meta tag on your site first.",
+  cancel_needs_meta: "Cancelling a removal needs the same proof as asking for one: the meta tag on your site first.",
   hide_needs_meta: "Hiding the grade needs the meta tag on your site first.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };
@@ -115,7 +117,8 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
     };
   }, [session, url, check]);
 
-  // A claim verified by its link adds the meta tag before it can remove the site.
+  // A claim verified by its link adds the meta tag before it can remove the site or cancel a removal;
+  // then it goes back to the removal that waits, or on to confirming one (afterProof).
   const proveForRemoval = async () => {
     setBusy(true);
     setError("");
@@ -126,7 +129,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
     setClaim(c);
     if (c.removable) {
       setConfirmText("");
-      setStep("confirm-remove");
+      setStep(afterProof(c.state));
     } else setError(r.body.reason === "unreachable" ? `We couldn't open ${domain} just now. Try again in a moment.` : "We didn't find the tag on the home page yet. Check it's inside <head> and deployed, then try again.");
   };
 
@@ -386,7 +389,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
               One more check: prove {domain} is yours
             </h1>
             <p className="mt-2 text-mute">
-              A link to your GitHub profile is enough to ask for a re-grade, but sites link collaborators&apos; and template authors&apos; profiles too. Hiding the grade or removing the site asks for proof only its owner can add: put this line inside the &lt;head&gt; of {domain}&apos;s home page, deploy, then check.
+              A link to your GitHub profile is enough to ask for a re-grade, but sites link collaborators&apos; and template authors&apos; profiles too. Hiding the grade, removing the site or cancelling a removal asks for proof only its owner can add: put this line inside the &lt;head&gt; of {domain}&apos;s home page, deploy, then check.
             </p>
             <pre className="mt-4 overflow-x-auto rounded-lg bg-raised p-3 font-mono text-[12.5px]">{claim.meta.tag}</pre>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -394,7 +397,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
               <button type="button" disabled={busy} onClick={proveForRemoval} className="group btn-sheen inline-flex h-11 items-center gap-1.5 rounded-lg bg-fill px-4 text-sm font-semibold text-on-fill sm:h-9">
                 <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} aria-hidden /> Check the tag
               </button>
-              <button type="button" onClick={() => setStep("manage")} className={btnSecondary}>
+              <button type="button" onClick={() => setStep(ownerStep(claim))} className={btnSecondary}>
                 Back
               </button>
             </div>
@@ -462,12 +465,25 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
             <h1 id="claim-t" className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
               {domain} will be removed
             </h1>
-            <p className="mt-2 text-mute">
-              It leaves PortfolioRank on {when(claim.state.removeAfter)}, then joins our exclusion list. Changed your mind? Cancel before then.
-            </p>
-            <button type="button" disabled={busy} onClick={() => act("cancel_remove")} className={`${btnSecondary} mt-6`}>
-              Keep {domain} listed
-            </button>
+            {scheduledAction(claim) === "cancel" ? (
+              <>
+                <p className="mt-2 text-mute">
+                  It leaves PortfolioRank on {when(claim.state.removeAfter)}, then joins our exclusion list. Changed your mind? Cancel before then.
+                </p>
+                <button type="button" disabled={busy} onClick={() => act("cancel_remove")} className={`${btnSecondary} mt-6`}>
+                  Keep {domain} listed
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-mute">
+                  Its owner asked to remove it: it leaves PortfolioRank on {when(claim.state.removeAfter)}. Only someone who can deploy to {domain} can cancel that, so a link to your GitHub profile isn&apos;t enough. Add the meta tag to the site to prove it&apos;s yours, then you can keep it listed.
+                </p>
+                <button type="button" onClick={() => setStep("remove-proof")} className={`${btnSecondary} mt-6`}>
+                  Prove {domain} is yours
+                </button>
+              </>
+            )}
           </>
         )}
 

@@ -22,7 +22,7 @@
 import { ensurePollsSchema } from "../lib/polls/schema.mjs";
 import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
 import { prunePolls } from "../lib/polls/store.mjs";
-import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
+import { AI_WORK, NOT_PORTFOLIO } from "./roster.mjs";
 import { PRIMARY_MODEL } from "./gemini.mjs";
 
 export { ensurePollsSchema };
@@ -182,7 +182,7 @@ export async function heroCandidates(db, { known, now }) {
   const rows = (
     await db.execute(
       `SELECT url, shot_key FROM portfolios p
-       WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")} AND NOT ${NOT_PORTFOLIO("p")}
+       WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")} AND NOT ${NOT_PORTFOLIO("p")}
          AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IN (${SHOWN_GRADES.map((t) => `'${t}'`).join(",")})
        ORDER BY p.url`
     )
@@ -269,7 +269,7 @@ export async function dataDigest(db) {
               SUM(COALESCE(json_extract(facts, '$.motion'), 0) = 1) AS motion,
               SUM(json_valid(facts)) AS measured
        FROM portfolios p
-       WHERE p.status = 'live' AND ${ACTIVE("p")} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IS NOT NULL`
+       WHERE p.status = 'live' AND ${AI_WORK("p")} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IS NOT NULL`
     )
   ).rows[0];
   const n = (k) => Number(r?.[k] ?? 0);

@@ -14,6 +14,7 @@ import { loadProfileTier } from "@/lib/tiers-view";
 import { ProfileTier } from "@/components/tiers/ProfileTier";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
+import { isGone } from "@/lib/roster";
 import { SITE_URL } from "@/lib/site";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
@@ -144,6 +145,8 @@ export default async function PortfolioPage({
   const url = decodeURIComponent(slug);
   const portfolio = (feed as Portfolio[]).find((p) => p.url === url);
   if (!portfolio) notFound();
+  // A site that is not working has no profile until it works again (lib/hidden.mjs GONE_WHERE).
+  if (await isGone(url)) notFound();
 
   await ensureSchema();
   let rating = { elo: BASE_ELO, votes: 0 };

@@ -96,7 +96,7 @@ export function fakeGemini(answers) {
   };
 }
 
-export const REVIEW_OK = { topic: TOPICS[1], on_topic: true, positive: true, names_ok: true, voice_ok: true, problems: [] };
+export const REVIEW_OK = { topic: TOPICS[1], on_topic: true, positive: true, names_ok: true, voice_ok: true, problems: [], outside_claims: [] };
 
 export function contentCtx(db, { now = MONDAY, mode = "dry-run", keys = {}, ai = null, fetchImpl, store } = {}) {
   const stored = new Map();

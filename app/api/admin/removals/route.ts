@@ -3,6 +3,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdmin, requireAdminPost } from "@/lib/admin";
 import { isKnownPortfolio } from "@/lib/roster";
 import { pendingRemovals, undoRemoval } from "@/lib/games/claims.mjs";
+import { clearPoolCache } from "@/lib/games/pool.mjs";
 import { purgeProfile } from "@/lib/edge-purge";
 import { PRIVATE, fail, forgetPool } from "@/lib/games/server";
 
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
   if (!out.ok) return fail(out.error ?? "not_removed", 404);
   // Its profile is back (worker/edge-cache.ts keeps profiles a day), and so is the site in the quiz pool.
   await purgeProfile(url);
-  await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
+  await clearPoolCache(db());
   forgetPool();
   return NextResponse.json(
     {

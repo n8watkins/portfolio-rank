@@ -7,6 +7,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { ListView, type ListItem } from "@/components/ListView";
 import { SITE_URL } from "@/lib/site";
+import { hiddenUrls } from "@/lib/roster";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,10 @@ async function loadList(slug: string): Promise<LoadedList | null> {
   const isPublic = Number(row.is_public) === 1;
   if (!isPublic && !isOwner) return null;
 
+  // Sites the site does not show (not working, a failed capture, removed by their owner) are left
+  // out, as everywhere else (lib/roster.ts hiddenUrls); the list keeps them and shows them again
+  // when they come back.
+  const hidden = await hiddenUrls();
   const items: ListItem[] = (
     await db().execute({
       sql: "SELECT url FROM list_items WHERE list_id = ? ORDER BY added_at DESC",
@@ -54,7 +59,7 @@ async function loadList(slug: string): Promise<LoadedList | null> {
     })
   ).rows
     .map((r) => String(r.url))
-    .filter((u) => byUrl.has(u))
+    .filter((u) => byUrl.has(u) && !hidden.has(u))
     .map((u) => ({ url: u, name: byUrl.get(u)!.name, domain: domainOf(u) }));
 
   return {

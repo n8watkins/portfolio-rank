@@ -25,6 +25,16 @@ const db = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: proces
 
 const now = new Date();
 const snap = await takeSnapshot(db, { now });
+// An empty or wrong TURSO_DATABASE_URL (a fresh local file, a database that
+// was recreated) yields a valid but empty snapshot; refuse to store that as
+// the night's backup. The real schema has about 70 tables.
+const MIN_TABLES = 30;
+const tableCount = Object.keys(snap.tables).length;
+const portfolioRows = snap.tables.portfolios?.rows.length ?? 0;
+if (tableCount < MIN_TABLES || portfolioRows < 1) {
+  console.error(`refusing to back up: the snapshot has ${tableCount} tables (at least ${MIN_TABLES} expected) and ${portfolioRows} portfolios (at least 1 expected); is TURSO_DATABASE_URL the right database?`);
+  process.exit(1);
+}
 const json = JSON.stringify(snap);
 const gz = gzipSync(json, { level: 9 });
 console.log(

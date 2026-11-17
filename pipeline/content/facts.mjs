@@ -19,7 +19,7 @@
 // same facts, so a chart can't disagree with the text.
 //
 // Page text is never read here: trend facts are counts made by code.
-import { ACTIVE, NOT_PORTFOLIO } from "../roster.mjs";
+import { AI_WORK, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { AXES, TIER } from "../grade-pairs.mjs";
@@ -134,7 +134,7 @@ async function removedUrls(db) {
 }
 
 /** Listed, visible, real portfolios (the only ones that may be named). */
-const VISIBLE = `p.status = 'live' AND ${ACTIVE("p")} AND NOT (${HIDDEN_WHERE}) AND NOT ${NOT_PORTFOLIO("p")}`;
+const VISIBLE = `p.status = 'live' AND ${AI_WORK("p")} AND NOT (${HIDDEN_WHERE}) AND NOT ${NOT_PORTFOLIO("p")}`;
 
 async function gradedRows(db) {
   const removed = await removedUrls(db);

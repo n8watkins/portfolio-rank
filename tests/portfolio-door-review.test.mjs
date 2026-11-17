@@ -27,7 +27,10 @@ import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { RULE_ACTOR, autoApplyReviews, confirmedRelists, decideReviews, ensureReviewSchema, undoReviews } from "../lib/reviews/store.mjs";
 import * as store from "../lib/reviews/store.mjs";
-import { BOT_WALL_REASON, syncReviewRows } from "../lib/reviews/door.mjs";
+import { syncReviewRows } from "../lib/reviews/door.mjs";
+import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
+// Page text over the capture's word floor, so a stored capture of it shows the site (lib/reviews/stored-capture.mjs).
+import { SITE_TEXT } from "./helpers/door-night.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
@@ -58,7 +61,7 @@ async function freshDb() {
 
 let k = 0;
 /** A listed, captured site with evidence; `n` signals in its facts, or none at all with n = null. */
-async function site(db, url, { name = "Ann Lee", text = "Hi, I build things.", n = 2, rubric = null, status = "live", reason = "", needsReview = 0, healthSignals = null, captured = true } = {}) {
+async function site(db, url, { name = "Ann Lee", text = SITE_TEXT, n = 2, rubric = null, status = "live", reason = "", needsReview = 0, healthSignals = null, captured = true } = {}) {
   await db.execute({
     sql: `INSERT INTO portfolios (url, name, status, reason, shot_key, captured_at, ai_rubric, page_text, facts, meta, needs_review, signals)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{"motion":false}', ?, ?)`,
@@ -380,7 +383,7 @@ test("7: the owner's Reject settles a held grade: the weekly check no longer re-
   assert.equal(await hidden(db, removed), false);
 });
 
-test("8: a bot-wall row only for a never-captured site; the reason string matches pull request #235's when its file is here", async () => {
+test("8: a bot-wall row only for a never-captured site, by the capture's own reason", async () => {
   const { db } = await freshDb();
   const never = "https://never-captured.dev";
   const before = "https://captured-before.dev";
@@ -388,12 +391,6 @@ test("8: a bot-wall row only for a never-captured site; the reason string matche
   await site(db, before, { status: "error", reason: BOT_WALL_REASON, needsReview: 1, rubric: { tier: "B", is_portfolio: true, model: PRIMARY_MODEL, judged_at: "2026-10-01T00:00:00Z" } });
   const r = await syncReviewRows(db, { now: new Date(T0) });
   assert.deepEqual(r.botWall, [never]);
-  const file = path.join(ROOT, "pipeline", "capture-blocked.mjs");
-  if (fs.existsSync(file)) {
-    const m = await import(file);
-    assert.equal(`${m.BLOCKED_PREFIX}${m.BOT_WALL}`, BOT_WALL_REASON, "the door's constant drifted from #235's marker");
-    assert.equal(m.isBotWallReason(BOT_WALL_REASON), true);
-  }
 });
 
 test("9: the night ensures the review schema once, not for every graded site", async () => {

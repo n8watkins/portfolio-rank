@@ -20,7 +20,7 @@
 //   node scripts/regrade-not-portfolio.mjs --report       # what the re-check did
 //   node scripts/regrade-not-portfolio.mjs                # refuses: it no longer grades
 import path from "node:path";
-import { pipelineDb, ACTIVE } from "../pipeline/roster.mjs";
+import { pipelineDb, AI_WORK } from "../pipeline/roster.mjs";
 import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { ensureRubricHistory } from "../pipeline/rubric-history.mjs";
 import { guardedForReview } from "../pipeline/portfolio-guard.mjs";
@@ -41,7 +41,7 @@ export async function candidates(db) {
   const rows = (
     await db.execute(
       `SELECT p.url, p.name, p.ai_rubric FROM portfolios p
-        WHERE ${ACTIVE("p")} AND json_valid(p.ai_rubric)
+        WHERE ${AI_WORK("p")} AND json_valid(p.ai_rubric)
           AND (json_extract(p.ai_rubric, '$.is_portfolio') = 0
                OR EXISTS (SELECT 1 FROM cache c WHERE c.k = 'regrade-np:' || p.url))
         ORDER BY p.url`

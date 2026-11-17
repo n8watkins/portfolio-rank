@@ -10,7 +10,7 @@
 //                        priority, and only when RUBRIC_REGRADE is "true"
 
 import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
-import { ACTIVE } from "./roster.mjs";
+import { AI_WORK } from "./roster.mjs";
 import { guardedForReview } from "./portfolio-guard.mjs";
 
 export async function ensureRubricHistory(db) {
@@ -88,7 +88,7 @@ export async function regradeQueue(db, { primary, limit, where = "", whereArgs =
   if (limit <= 0) return [];
   const res = await db.execute({
     sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
-          WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+          WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
             AND json_valid(ai_rubric)
             AND json_extract(ai_rubric, '$.error') IS NULL
             AND json_extract(ai_rubric, '$.tier') IS NOT NULL
@@ -111,7 +111,7 @@ export async function versionRegradeQueue(db, { primary, version, limit, where =
   if (limit <= 0) return [];
   const res = await db.execute({
     sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
-          WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+          WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
             AND json_valid(ai_rubric)
             AND json_extract(ai_rubric, '$.error') IS NULL
             AND json_extract(ai_rubric, '$.tier') IS NOT NULL

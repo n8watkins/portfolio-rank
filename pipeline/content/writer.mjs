@@ -43,6 +43,11 @@ export function sheetForWriter(sheet) {
   };
 }
 
+/** A URL without its trailing slash, for comparing addresses. */
+export const trimUrl = (u) => String(u ?? "").replace(/\/$/, "");
+/** A string made safe to put inside a RegExp. */
+export const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]*)\s*\}\}/gi;
 
 /** Fills {{id}} placeholders with the facts' displays. Unknown ids stay, for the checks to catch. */

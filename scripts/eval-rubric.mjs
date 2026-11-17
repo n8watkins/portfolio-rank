@@ -42,7 +42,7 @@ import {
 } from "../pipeline/rubric.mjs";
 import { measurePage } from "../pipeline/facts.mjs";
 import { httpGate, UA, visibleText } from "../pipeline/gate.mjs";
-import { ACTIVE, pipelineDb } from "../pipeline/roster.mjs";
+import { AI_WORK, pipelineDb } from "../pipeline/roster.mjs";
 import { createRenderer } from "../pipeline/render.mjs";
 import { compareGrades } from "./grade-compare.mjs";
 
@@ -134,7 +134,7 @@ async function gradedRows() {
   try {
     const res = await db.execute(
       `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
-       WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+       WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
          AND json_valid(ai_rubric) AND json_extract(ai_rubric, '$.error') IS NULL
          AND json_extract(ai_rubric, '$.tier') IS NOT NULL
        ORDER BY url`

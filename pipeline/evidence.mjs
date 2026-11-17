@@ -21,8 +21,9 @@ import { fileURLToPath } from "node:url";
 import { measurePage } from "./facts.mjs";
 import { httpGate, UA, visibleText } from "./gate.mjs";
 import { normalizePageText } from "./rubric.mjs";
-import { ACTIVE } from "./roster.mjs";
+import { ACTIVE, AI_WORK } from "./roster.mjs";
 import { PRIMARY_MODEL } from "./gemini.mjs";
+import { storedMs } from "../lib/stored-time.mjs";
 
 // Below this much server-rendered text a page is treated as client-rendered
 // and loaded in a browser instead (an offline sample of 30 sites found 40%
@@ -111,7 +112,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
 export async function rowsNeedingEvidence(db, { limit = 200, rubricVersion = null } = {}) {
   const res = await db.execute({
     sql: `SELECT url, name, meta, page_text, facts, captured_at FROM portfolios
-          WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+          WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
             AND (page_text IS NULL OR facts IS NULL)
             AND (ai_rubric IS NULL
                  OR (json_extract(ai_rubric, '$.error') IS NULL
@@ -128,9 +129,8 @@ const DAY_MS = 86400000;
 
 /** Whole nights since a row's capture (SQLite "YYYY-MM-DD HH:MM:SS", UTC), or null. */
 export function nightsSince(capturedAt, now = Date.now()) {
-  const s = String(capturedAt ?? "");
-  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(" ", "T")}Z`);
-  return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / DAY_MS)) : null;
+  const t = storedMs(capturedAt);
+  return t != null ? Math.max(0, Math.floor((now - t) / DAY_MS)) : null;
 }
 
 /**

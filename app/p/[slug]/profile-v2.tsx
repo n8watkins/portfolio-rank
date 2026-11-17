@@ -51,7 +51,7 @@ async function seoFactsOf(p: Profile): Promise<SeoFacts> {
 export async function profileMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const p = await loadProfile(decodeURIComponent(slug));
-  if (!p) return {};
+  if (!p || p.gone) return {};
   const canonical = `${SITE_URL}${p.path}`;
   const facts = await seoFactsOf(p);
   // Graded, a real portfolio and not hidden by the health check: the only profiles search engines are asked to index.
@@ -250,7 +250,8 @@ function ShareCard({ p }: { p: Profile }) {
 export async function ProfileV2({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const p = await loadProfile(decodeURIComponent(slug));
-  if (!p) notFound();
+  // A site that is not working has no public page until it works again; its owner's tools still find it.
+  if (!p || p.gone) notFound();
   const shot = await shotFor(p);
   // The page check as last measured (/api/inspect's cache), so the social
   // links are there at first paint instead of moving the header when the

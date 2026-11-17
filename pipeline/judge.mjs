@@ -42,7 +42,9 @@ import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import { rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { ensureReviewSchema } from "../lib/reviews/store.mjs";
-import { atTheDoor } from "../lib/reviews/door.mjs";
+import { atTheDoor, setAsideCapture, withCaptureColumns } from "../lib/reviews/door.mjs";
+import { freshGradeDue } from "../lib/reviews/store.mjs";
+import { parseObject, storedCaptureBlocked } from "../lib/reviews/stored-capture.mjs";
 import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
   RESPONSE_SCHEMA,
@@ -57,7 +59,7 @@ import { PROMPT_VERSION_LEGACY } from "../lib/ranking/config.mjs";
 import { createRenderer } from "./render.mjs";
 import { prepareAiVotes, FLASH_LITE_RATER_ID, raterIdFor } from "./ai-votes.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
-import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
+import { AI_WORK, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -357,8 +359,8 @@ async function runRubric() {
   // Sites the health check flagged needs_review (little that looks like a
   // portfolio) go first, so is_portfolio confirms or clears them soon.
   const res = await db.execute(
-    `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
-     WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
+    `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals, captured_at FROM portfolios
+     WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
      ORDER BY needs_review DESC, captured_at DESC, url`
   );
@@ -369,6 +371,8 @@ async function runRubric() {
   let ok = 0;
   let errors = 0;
   let skipped = 0;
+  // Set aside before any request: the stored capture does not show the site (handle).
+  let setAside = 0;
   let regraded = 0;
   let consecutiveErrors = 0;
   let stopped = null;
@@ -401,14 +405,25 @@ async function runRubric() {
   let quotaSpent = false;
 
   // Returns false when the run must stop (Gemini unavailable or out of quota).
-  async function handle(row, label, { regrade = false } = {}) {
-    const url = String(row.url);
+  async function handle(given, label, { regrade = false } = {}) {
+    const url = String(given.url);
     try {
+      // Never grade a stored capture that does not show the site (lib/reviews/stored-capture.mjs): set
+      // aside for a new capture before any request, as the night does, and not counted as judged.
+      const row = await withCaptureColumns(db, given);
+      const blocked = storedCaptureBlocked(row);
+      if (blocked) {
+        const aside = await setAsideCapture(db, { row, why: blocked, now: new Date() });
+        setAside++;
+        console.log(`${label} ${url} - set aside, not sent to Gemini: the stored capture does not show the site (${blocked}); ${aside.recapture === "refresh" ? "a new capture is asked for" : "captured again first"}`);
+        return true;
+      }
       const out = await gradeRow(row);
       if (out.status === "sentinel") {
         // The screenshot is definitively absent from R2 (404): sentinel so this
         // row stops re-qualifying every run. Transient failures are "skipped".
-        if (!regrade) {
+        // A site waiting for its one fresh grade keeps that marker (lib/reviews/store.mjs FRESH_GRADE_DUE).
+        if (!regrade && !freshGradeDue(parseObject(row.ai_rubric))) {
           await db.execute({
             sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
             args: [JSON.stringify({ error: "no_usable_captures", judged_at: new Date().toISOString() }), url],
@@ -437,6 +452,8 @@ async function runRubric() {
         row: { ...row, page_text: out.pageText ?? row.page_text, facts: out.facts == null ? row.facts : JSON.stringify(out.facts) },
         now,
         autoApply: false,
+        // Checked above, unless the page text was only measured now (the door checks that one).
+        captureChecked: row.page_text != null,
         gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, g, { url }), now),
       });
       if (regrade) regraded++;
@@ -526,9 +543,10 @@ async function runRubric() {
 
   if (stopped) console.log(`  stopped early: ${stopped}`);
   console.log(
-    `rubric done: ${ok}/${queue.length} judged, ${regraded}/${regradeQueued} re-graded, ${skipped} skipped, ${gemini.summary()}`
+    `rubric done: ${ok}/${queue.length} judged, ${regraded}/${regradeQueued} re-graded, ${skipped} skipped, ${setAside} set aside (stored capture does not show the site), ${gemini.summary()}`
   );
-  return { queued: queue.length + regradeQueued, ok: ok + regraded, errors, skipped, deferred, stopped };
+  // A site set aside for its stored capture was never work for Gemini: not queued, so a run of only those is not a failure.
+  return { queued: queue.length + regradeQueued - setAside, ok: ok + regraded, errors, skipped, deferred, stopped, setAside };
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +570,7 @@ async function runPairwise() {
     `SELECT p.url, p.name, p.shot_key, p.ai_rubric,
             COALESCE(r.elo, ${BASE_ELO}) AS elo, COALESCE(r.votes, 0) AS votes
      FROM portfolios p LEFT JOIN ratings r ON r.url = p.url
-     WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")}
+     WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")}
        AND NOT ${NOT_PORTFOLIO("p")}`
   );
   let pool = res.rows.map((r) => ({

@@ -242,7 +242,8 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
   const tavilyLeft = Math.max(0, Math.min(TAVILY_PER_POST, TAVILY_PER_WEEK - (await tavilyThisWeek(db, now))));
   const postId = crypto.randomBytes(8).toString("hex");
   let history = [];
-  let searches = 0;
+  // One counter for the week (lib/content/tavily-credits.mjs): the searches this draft holds, answered or in flight, read even when the draft throws.
+  const credits = creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), weekCap: TAVILY_PER_WEEK, now: () => new Date(now) });
   let draft = null;
   let supported = [];
   let failures = [];
@@ -258,19 +259,19 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
       fetchImpl: ctx.fetchImpl,
       tavilyKey: ctx.content?.keys?.tavily,
       tavilyLeft,
-      credits: creditsFor(db, { cap: monthlyCap(ctx.content?.tavilyMonthlyCredits), now: () => new Date(now) }),
+      credits,
       onPhase: phase,
       log,
     });
-    ({ draft, history, supported, failures, passed, searches } = r);
+    ({ draft, history, supported, failures, passed } = r);
     log(`${passed ? "passed" : "failed"} in ${r.requests} request(s), ${r.words} words`);
   } catch (e) {
     if (!(e instanceof ContentBudgetError)) {
       // Google busy: "deferred", so the same night (or "Write a draft now") may try the draft again later (pipeline/content/busy.mjs).
       const busy = isBusy(e);
-      await recordRun(db, { night, now, step, mode, status: busy ? "deferred" : "failed", kind, gemini: g.used.n, tavily: searches, detail: { ...(busy ? { reason: "Google's AI was busy" } : {}), error: msg(e), history } });
+      await recordRun(db, { night, now, step, mode, status: busy ? "deferred" : "failed", kind, gemini: g.used.n, tavily: credits.kept(), detail: { ...(busy ? { reason: "Google's AI was busy" } : {}), error: msg(e), history } });
       // What the draft spent before it stopped, for the job's totals (pipeline/content/manual.mjs).
-      e.spent = { gemini: g.used.n, tavily: searches, imagesAi: 0 };
+      e.spent = { gemini: g.used.n, tavily: credits.kept(), imagesAi: 0 };
       throw e;
     }
     failures.push(msg(e));
@@ -281,9 +282,9 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
   if (!passed && draft) checks.proposedImages = draft.images ?? [];
   if (!passed) {
     if (draft) await storePost(db, postOf({ id: postId, kind, sheet, draft, images: [], supported, checks, night, ctx, requests: g.used.n, status: "dropped" }), { mode, publishAt: null, now });
-    await recordRun(db, { night, now, step, mode, status: "dropped", kind, postId: draft ? postId : null, gemini: g.used.n, tavily: searches, detail: { failures: failures.slice(0, 20) } });
+    await recordRun(db, { night, now, step, mode, status: "dropped", kind, postId: draft ? postId : null, gemini: g.used.n, tavily: credits.kept(), detail: { failures: failures.slice(0, 20) } });
     log(`dropped after ${history.length} round(s): ${failures.slice(0, 3).join("; ")}`);
-    return { status: "dropped", postId: draft ? postId : null, requests: g.used.n, searches, aiImages: 0, failures };
+    return { status: "dropped", postId: draft ? postId : null, requests: g.used.n, searches: credits.kept(), aiImages: 0, failures };
   }
 
   // Stage 7: images.
@@ -313,8 +314,8 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
     },
   }).catch(async (e) => {
     if (e instanceof ContentBudgetError) return { images: [], dropped: (draft.images ?? []).map((i) => i.slot), requests: 0, aiImages: 0, pexels: 0, notes: [msg(e)], body };
-    if (isBusy(e)) await recordRun(db, { night, now, step, mode, status: "deferred", kind, gemini: g.used.n, tavily: searches, detail: { reason: "Google's AI was busy", error: msg(e), history } });
-    e.spent = { gemini: g.used.n, tavily: searches, imagesAi: 0 };
+    if (isBusy(e)) await recordRun(db, { night, now, step, mode, status: "deferred", kind, gemini: g.used.n, tavily: credits.kept(), detail: { reason: "Google's AI was busy", error: msg(e), history } });
+    e.spent = { gemini: g.used.n, tavily: credits.kept(), imagesAi: 0 };
     throw e;
   });
   checks.images = img.notes;
@@ -328,9 +329,9 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
   const held = mode === "publish" && ctx.flags?.publishGate !== "none" ? scorecard(post).flags : [];
   if (held.length) post.checks = { ...post.checks, publishHeld: `kept for review: ${held.slice(0, 3).join("; ")}` };
   const stored = await storePost(db, post, { mode: held.length ? "dry-run" : mode, publishAt, now });
-  await recordRun(db, { night, now, step, mode, status: "ok", kind, postId, gemini: g.used.n, tavily: searches, imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, ...(held.length ? { held: held.slice(0, 3) } : {}), publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
+  await recordRun(db, { night, now, step, mode, status: "ok", kind, postId, gemini: g.used.n, tavily: credits.kept(), imagesAi: img.aiImages, detail: { stored: stored.status, capped: stored.capped, ...(held.length ? { held: held.slice(0, 3) } : {}), publishAt: iso(publishAt), images: img.images.map((i) => `${i.slot}:${i.kind}`), dropped: img.dropped, pexels: img.pexels, imageChecks: img.requests } });
   log(`${stored.status}${stored.capped ? " (held back by the weekly cap)" : ""} after ${history.length} round(s), ${g.used.n} request(s), ${img.images.length} image(s)`);
-  return { status: "ok", postId, stored: stored.status, requests: g.used.n, searches, aiImages: img.aiImages };
+  return { status: "ok", postId, stored: stored.status, requests: g.used.n, searches: credits.kept(), aiImages: img.aiImages };
 }
 
 /** The row storePost writes, from a draft (filled) and its checks. */
@@ -444,7 +445,7 @@ export async function contentSummaryConditions(db, { now, mode }) {
   const dropped = drafts.filter((r) => r.status === "dropped");
   const capped = drafts.filter((r) => parse(r.detail).capped).length;
   const gem = rows.reduce((a, r) => a + Number(r.gemini), 0);
-  const tav = rows.reduce((a, r) => a + Number(r.tavily), 0);
+  const tav = await tavilyThisWeek(db, now);
   const ai = rows.reduce((a, r) => a + Number(r.images_ai), 0);
   const lines = [
     `Mode: ${mode}.`,

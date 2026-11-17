@@ -12,10 +12,19 @@
 //                 (pipeline/health.mjs). NULL until first checked.
 //   retry_at      when capture may try a site again after a failed capture
 //                 (backoff), so one transient error never hides a site forever.
+//
+// When the list respells a site (pipeline/list-key.mjs: same key), the old row
+// is delisted and the new spelling gets a row of its own, as for any new site.
+// The old row holds the site's grade, votes and screenshots, so it is never
+// purged while its key is listed (a split site), and the sync counts split
+// sites in the job summary every night until they are merged.
 
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
+import { VALID_MARKS, ensureHealthSchema } from "./not-working.mjs";
+import { listKey, splitSites } from "./list-key.mjs";
+import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, jobSummary } from "./list-util.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -23,6 +32,11 @@ export const PURGE_AFTER_DAYS = 30;
 export const PURGE_MAX_SHARE = 0.2;
 // A roster this small is a broken feed, not a real list.
 export const MIN_ROSTER = 500;
+// The job that owns the roster sync: the nightly upstream sync (its workflow
+// name, .github/workflows/sync-upstream.yml). Only there does a mass delist
+// fail the job; elsewhere it is logged and skipped (see syncRoster).
+export const SYNC_OWNER_WORKFLOW = "Sync upstream + ingest";
+const ownsSync = (env = process.env) => env.ROSTER_SYNC_OWNER === "1" || env.GITHUB_WORKFLOW === SYNC_OWNER_WORKFLOW;
 
 /** Pipeline DB client: Turso when TURSO_DATABASE_URL is set, else a local file. */
 export function pipelineDb(root) {
@@ -92,13 +106,45 @@ export async function ensureRosterSchema(db) {
   }
   // Needs the health column above (lib/hidden.mjs).
   await db.execute(HIDDEN_INDEX);
+  // The health check's own table, which ACTIVE reads (pipeline/not-working.mjs).
+  await ensureHealthSchema(db);
 }
 
 /**
- * SQL condition for rows background jobs may work on: on the list and not
- * confirmed down. `p` is the table alias.
+ * SQL condition for rows the free background jobs may work on (captures and
+ * their retries, the screenshot refresh, tall images, fingerprints,
+ * Lighthouse, link checks, PageSpeed prewarm, the door's review rows): the
+ * rule main has always had (on the list, not taken off it: 'down'), less the
+ * sites on the not-answering ladder while its marks hold
+ * (pipeline/not-working.mjs VALID_MARKS). Everything else keeps its capture
+ * work: a site 'suspect' for a blocked capture or a page with the wrong
+ * thing (that is how it recovers), and one whose row something else changed
+ * since (the review queue's confirm, which queues a capture). Reads the
+ * health_marks table, which ensureRosterSchema creates (as lib/schema.mjs
+ * does). `p` is the table alias.
  */
 export const ACTIVE = (p = "portfolios") =>
+  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'
+   AND NOT EXISTS (SELECT 1 FROM health_marks lm WHERE lm.url = ${p}.url AND ${VALID_MARKS("lm", p)})`;
+
+/**
+ * SQL condition for rows the AI may spend on (grading, re-grading, AI
+ * comparisons, polls, blog facts, page evidence for a grade, the grader's
+ * comparison pool): on the list and passing its last health check, or not
+ * checked yet. A site that failed its last check ('suspect', for any reason)
+ * is out at once, while it is still shown to visitors (owner, 2026-11-16: the
+ * AI never spends a comparison on a site that does not work).
+ */
+export const AI_WORK = (p = "portfolios") =>
+  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') IN ('', 'live')`;
+
+/**
+ * SQL condition: on the list and not taken off it by the health check
+ * ('down': not working, or confirmed down). A failing ('suspect') site still
+ * counts: it is still shown to visitors, in the library and its tiers
+ * (lib/tiers-store.mjs, the same rule as lib/tiers-db.mjs's trigger).
+ */
+export const LISTED_NOT_DOWN = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'`;
 
 /** SQL condition (never NULL): the AI rubric said this is not a portfolio. */
@@ -110,9 +156,24 @@ const chunks = (arr, n = 400) =>
 
 /**
  * Mark rows whose URL left the roster as delisted (with the date), and restore
- * rows that came back. Returns { delisted, relisted, listed }.
+ * rows that came back.
+ *
+ * More than DELIST_MAX_SHARE of the list at once (unless LIST_CLEANUP_SHARE
+ * allows it) is a broken or rewritten feed; the feed build refuses such a feed
+ * first. In the job that owns the sync (`owner`, default: the nightly sync
+ * workflow) it fails the job; in every other job (judge, compare, prewarm,
+ * the health check) nothing is delisted or relisted this run, a loud warning
+ * is logged, and the job carries on with the rows as they are, so one upstream
+ * event does not fail five jobs every night.
+ *
+ * Writes the split sites (pipeline/list-key.mjs splitSites) to the job
+ * summary. Returns { delisted, relisted, listed, split, skipped }.
  */
-export async function syncRoster(db, feed, { now = new Date() } = {}) {
+export async function syncRoster(
+  db,
+  feed,
+  { now = new Date(), maxDelistShare = allowedShare(DELIST_MAX_SHARE), owner = ownsSync(), log = console.warn } = {}
+) {
   if (!Array.isArray(feed) || feed.length < MIN_ROSTER) {
     throw new Error(
       `syncRoster: refusing a roster of ${feed?.length ?? 0} entries (minimum ${MIN_ROSTER}); the feed looks broken`
@@ -124,12 +185,24 @@ export async function syncRoster(db, feed, { now = new Date() } = {}) {
   const toDelist = [];
   const toRelist = [];
   let listed = 0;
+  let listedBefore = 0;
   for (const r of rows) {
     const url = String(r.url);
     const onList = roster.has(url);
     if (onList) listed++;
+    if (r.delisted_at == null) listedBefore++;
     if (!onList && r.delisted_at == null) toDelist.push(url);
     else if (onList && r.delisted_at != null) toRelist.push(url);
+  }
+  const base = Math.max(feed.length, listedBefore);
+  if (toDelist.length > base * maxDelistShare) {
+    const msg =
+      `syncRoster: ${toDelist.length} of ${base} listed sites would be delisted at once, more than ` +
+      `${Math.round(maxDelistShare * 100)}%; refusing (check data/feed.json: did upstream rewrite the addresses?). ` +
+      `For a real upstream cleanup, run the sync once with ${CLEANUP_SHARE_ENV} set to the share to allow (for example 0.3).`;
+    if (owner) throw new Error(msg);
+    log(`::warning::${msg} This job leaves the roster as it is and carries on.`);
+    return { delisted: 0, relisted: 0, listed, split: 0, skipped: true };
   }
   const stamp = now.toISOString();
   const stmts = [];
@@ -146,7 +219,31 @@ export async function syncRoster(db, feed, { now = new Date() } = {}) {
     });
   }
   if (stmts.length) await db.batch(stmts, "write");
-  return { delisted: toDelist.length, relisted: toRelist.length, listed };
+  const delisted = new Set(toDelist);
+  const relisted = new Set(toRelist);
+  const { splits, unclear } = splitSites(
+    rows.map((r) => {
+      const url = String(r.url);
+      return { url, delistedAt: relisted.has(url) ? null : delisted.has(url) ? stamp : r.delisted_at };
+    })
+  );
+  if (splits.length || unclear.length) {
+    const once = splits.filter((s) => s.from.length === 1);
+    const more = splits.filter((s) => s.from.length > 1);
+    jobSummary(
+      [
+        `### Split sites waiting for a merge: ${splits.length}`,
+        "",
+        "The list respelled these sites: each old row holds the site's grade, votes and screenshots and is never purged until it is merged into the listed row (AUTOMATION.md, \"Respelled sites\").",
+        "",
+        ...once.map((s) => `- ${s.from[0]} -> ${s.to}`),
+        ...(more.length ? ["", `Respelled more than once (${more.length}):`, ...more.map((s) => `- ${s.from.join(", ")} -> ${s.to}`)] : []),
+        ...(unclear.length ? ["", `Unclear, two listed rows for one key (${unclear.length}):`, ...unclear.map((u) => `- ${u.join(", ")}`)] : []),
+        "",
+      ].join("\n")
+    );
+  }
+  return { delisted: toDelist.length, relisted: toRelist.length, listed, split: splits.length, skipped: false };
 }
 
 /**
@@ -154,7 +251,9 @@ export async function syncRoster(db, feed, { now = new Date() } = {}) {
  * Votes and ratings are kept: the vote log is the source of truth for ELO and
  * the leaderboard only shows roster URLs, so rankings stay consistent.
  * `deleteShots(shotKey)` removes a capture's files from R2; when it throws,
- * that row is kept and retried on the next run.
+ * that row is kept and retried on the next run. A row whose key is listed
+ * under another address (a split site) is never purged: it holds the site's
+ * history until it is merged into the listed row.
  */
 export async function purgeDelisted(
   db,
@@ -162,12 +261,20 @@ export async function purgeDelisted(
 ) {
   await ensureRosterSchema(db);
   const cutoff = new Date(now.getTime() - days * 86400000).toISOString();
-  const due = (
+  const listedKeys = new Set(
+    (await db.execute("SELECT url FROM portfolios WHERE delisted_at IS NULL")).rows.map((r) => listKey(String(r.url)))
+  );
+  const due = [];
+  for (const r of (
     await db.execute({
       sql: "SELECT url, shot_key FROM portfolios WHERE delisted_at IS NOT NULL AND delisted_at <= ?",
       args: [cutoff],
     })
-  ).rows.map((r) => ({ url: String(r.url), shotKey: r.shot_key == null ? null : String(r.shot_key) }));
+  ).rows) {
+    const url = String(r.url);
+    if (listedKeys.has(listKey(url))) log(`kept ${url}: its site is listed under another address (a split site, kept until it is merged)`);
+    else due.push({ url, shotKey: r.shot_key == null ? null : String(r.shot_key) });
+  }
   const total = Number((await db.execute("SELECT COUNT(*) AS n FROM portfolios")).rows[0].n);
   if (due.length && due.length > total * PURGE_MAX_SHARE) {
     throw new Error(
@@ -216,7 +323,7 @@ export function captureRetryAt(attempts, now = new Date()) {
  * last night's run was in progress lands minutes after tonight's start and
  * would otherwise wait a whole extra night.
  */
-const RETRY_SLACK_MS = 6 * 3600000;
+import { RETRY_SLACK_MS } from "../lib/freshness.mjs";
 
 export async function dueForCapture(db, entries, now = new Date()) {
   const notDue = await db.execute({

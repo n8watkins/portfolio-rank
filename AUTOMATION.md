@@ -24,49 +24,97 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug] · /removed
 
-  weekly health check  ──►  live → suspect → down  ──►  data/excluded.json (bot PR)
+  nightly health check + hourly re-check  ──►  live → failing → not working (hidden)  ──►  data/excluded.json after 90 days (weekly bot PR)
                                                    ──►  monthly report on the community list (PR opt-in, off)
 ```
 
 ## The list (two intake doors + a takedown)
 
-`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**
-(deduped by normalized URL; original URL strings preserved so DB keys never break).
+`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
+Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`, exactly the health check's `normKey`: the address lower-cased, host without www, path without the trailing slash; scheme, port, query and fragment ignored).
+`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address exactly as the list spells it.
+
+#### Respelled sites
+
+A site's address is its key everywhere in the database (grade, votes, ratings, screenshots, likes, lists, claims, review history).
+When the list respells a site, the old row is delisted and the new spelling gets a row of its own, captured and graded like a new site, so an upstream fix to a broken address takes effect at once.
+Nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N" (sites respelled more than once, and keys with two listed rows, separately).
+Merging them is a separate change.
 
 | Source | Trust | Mechanism |
 |---|---|---|
 | **Upstream merge** | High (Emma reviewed it) | Auto-pulled by `sync-upstream` |
 | **Direct submission** | Unvetted | Issue form → `data/additions.json` |
 | **Takedown / opt-out** | - | "Remove my portfolio" issue → `data/excluded.json` (dropped forever) |
-| **Our own cleanup** | Health check, confirmed over 2+ weeks | `health.yml` → `data/excluded.json` (reason, dates, evidence) |
+| **Our own cleanup** | Health check: not working for 90 days, or answering with the wrong thing over 2+ weeks | `health.yml` → `data/excluded.json` (reason, dates, evidence) |
 
 ### Our list wins (owner decision 2026-11-10)
 
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
-  Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries).
+  The feed build refuses a feed that drops more than 15% of the current addresses (before the data pull request), and the sync refuses to delist more than 15% at once (above the exclusions' 10% cap): the nightly sync job fails, every other job logs a warning and leaves the roster as it is for that run; for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which raises both and the shrink guard below (the share only ever raises a limit).
+  Grading, AI comparisons, polls, blog facts and page evidence only use listed rows that passed their last health check, or were never checked (`AI_WORK`); captures, the screenshot refresh and the free measurements use listed rows that are not down, less the sites on the not-answering ladder while its marks hold (`ACTIVE`); the site shows listed rows that are not hidden (`lib/hidden.mjs`), and the comparison pool the home page, `/me`, the grade page and grade reports show keeps every listed row that is not down (`LISTED_NOT_DOWN`).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries and its health marks), except a row whose site is listed under another address (see Respelled sites).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
-- **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages, duplicates and a stored `is_portfolio=false`.
-  States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row spanning at least 13 days); a pass resets to `live`.
-  Bot walls (403/429 challenges) are inconclusive and leave the state alone; free-tier apps answering 502/503/504 get a second look after 30 seconds.
+- **Health check** (`pipeline/health.mjs`, every night since 2026-11-16, weekly before): every listed site is checked for loading, parking, blank pages and duplicates, with one plain request per site (the browser only for unclear answers).
+  A site that does not answer goes on the not-working ladder (below); one that answers with the wrong thing (parked, blank, a redirect to a social profile, a duplicate, a blocked capture) goes `live` → `suspect` (any failure) → `down` (3 failed checks in a row, each on a week of its own, spanning at least 13 days, however many runs); a pass resets to `live`.
+  The plain request sends a current Chrome User-Agent (worked out from the date) with Accept and Accept-Language; the browser's second opinion sends its own engine's version.
+  Inconclusive results leave the state alone: a bot wall (403/429, or a page the capture's own rule calls a bot check), and anything that says nothing about the site, after a retry and the browser (a timeout, a dropped connection, a temporary DNS failure, a browser or check that crashed).
+  A definite answer from either opinion (refused, nothing answering at the address, an HTTP error) still counts as a failure.
+  A site whose capture met a bot wall is never counted down; it waits for the owner's review.
+  Free-tier apps answering 502/503/504 get a second look after 30 seconds.
   A redirect to another domain is a move, not a failure: the run summary lists moves (and flags targets that don't carry the person's name) so the stored URL can be updated.
-  When more than 30% of sites fail in one run the runner is the likelier culprit, so nothing is recorded and the job fails.
+  When more than 30% of sites fail, more than 15% are inconclusive, or the browser cannot start at all, the runner is the likelier culprit, so nothing is recorded and the job fails.
+  A site the check could not tell about for 28 days running (time, not a number of runs) goes to the owner as an alert on `/admin/alerts`.
+  Rows are read after the checks and every write is conditional on them, so a capture, a grade or a review decision made during the run is never overwritten; the nightly capture starts in the same minute, so this matters every night.
+  A stored `is_portfolio=false` is never a failed check: a grade with no decision on record is handed to the door (`lib/reviews/door.mjs`), which records it in the review queue.
+- **Not working** ([pipeline/not-working.mjs](pipeline/not-working.mjs), owner 2026-11-16): a listed site that does not answer (paused hosting, a deleted deployment, a dead domain, a refused connection, an HTTP error) is treated the same whatever the cause.
+  At its first failed check it is `suspect`: out of grading, AI comparisons, polls, blog facts and page evidence at once (`pipeline/roster.mjs AI_WORK`, which leaves out every failing site), and out of captures and the free measurements while it is on the ladder (`ACTIVE`, which leaves out only ladder sites whose marks hold, so a site suspect for what its page shows keeps its capture retries and a capture the review queue queues runs); still shown to visitors.
+  It is re-checked about an hour later and again the next day, with the same full check (browser included); a pass at any point puts it straight back as `live`.
+  Still failing the next day, it is not working: health `down`, hidden everywhere a visitor could see it (`lib/hidden.mjs`), and its profile answers the site's normal not-found page (`GONE_WHERE`).
+  Nothing is deleted: the row, the grade, the votes, the ratings and the screenshots stay, so a site that passes comes back exactly as it was.
+  A not-working site is re-checked daily for its first 7 days, weekly to day 30, then monthly, with one check on day 90 itself; it leaves the list through the weekly export (kind `down`) only once a check made on or after day 90 has failed, never on an older one, and the re-checks of removed entries can still bring it back.
+  The numbers are constants at the top of `pipeline/not-working.mjs`.
+  A check counts as a stage's re-check only when that re-check is due, so two failures on one bad day never skip a stage.
+  A re-check that could not tell neither advances nor clears the ladder; the next re-check waits 1 hour, then 2, 4, 8, 16, then a day, and after 28 days of not telling the owner gets an alert on `/admin/alerts`.
+  A failing site whose page answers again, with the wrong thing (parked, blank), leaves this ladder for the weekly-counted rule, counting from that failure; a not-working site that fails in any way stays not working on its cadence.
+  A row that is `down` (not working, confirmed by the weekly-counted rule, or decided in the review queue) stays down on any failure; only a passing check restores it.
+  Every new failure starts the ladder at its own time; a site suspect for something else (a blank page, say) that also fails to answer once starts at stage 1 then, never earlier.
+  Each site's failure is stamped with the time its own check finished, not the run's start, so the hour's re-check is an hour after the failure it confirms.
+  The ladder's marks (in `health_marks`) record the health and check time they were written with, and count only while the row still has both: when anything else changes the row (the review queue's confirm or remove, a hand edit), the marks are void and the nightly run checks the site again from the start.
+  A removed site that passes its monthly re-check gets its marks due at once, so the hourly re-check brings it back as soon as the daily sync lists it again.
+  The nightly run leaves sites on this ladder to the hourly re-check ([pipeline/recheck.mjs](pipeline/recheck.mjs), `recheck.yml`), so a site is never checked twice in an hour.
+  The re-check's own guard is 5 sites that were live at their last check, loaded beside the due ones: when fewer than 3 of them load, or its browser never starts, it records nothing and fails.
+  The nightly run's share guards (30% failing, 15% unknown) do not apply to it: its sites are expected to fail.
+  An hour with nothing due costs one database query: the workflow counts the due sites with plain `fetch` before any `npm ci` or browser install.
+  A run takes at most 120 due sites, oldest due first, 8 at a time, writes each batch as soon as its checks are done, and starts no batch after 20 minutes; the rest stay due for the next hour.
+  Each site is stamped with the real time its own check finished.
+  Bot-walled sites and checks that could not tell never enter the ladder.
+  Nobody is emailed about a site hidden or back: the owner sees counts in the job summaries and the list on `/admin/alerts`.
+  When this shipped, nothing was adopted: a `suspect` row whose reason is not answering starts the ladder at its next failed nightly check, like any first failure (hidden the next day if it still fails); a `down` one stays down and, at its next failed nightly check, joins the ladder as not working since its first failure (it leaves the list on a failed check on or after day 90 from then).
 - **Portfolio-likeness** (`pipeline/signals.mjs`, part of the health check): from each loaded page's HTML (the rendered DOM for single-page apps) it records six yes/no signals in `portfolios.signals`: projects/work section, about, contact (mailto, form or social links), resume/CV, a GitHub profile link, and the person's name in the title or h1.
   A page with at most one is flagged `needs_review`: never removed or hidden for it, listed in the run summary, and graded first by the rubric so Gemini's `is_portfolio` confirms or clears it.
   A listed site that is already graded is never graded again for it (owner, 2026-11-16: "Listed sites, health check only"); the night's free part turns the flag into a pending review row ("the site's portfolio signals collapsed") for the owner.
   The other way round, a grade that says `is_portfolio=false` for a page with at least 4 of the 6 signals is not acted on ([pipeline/portfolio-guard.mjs](pipeline/portfolio-guard.mjs), applied in `gradeRecord`): it is stored as a portfolio, so it stays listed and ranked, with the AI's answer in `ai_is_portfolio` and the reason in `review`, and the night writes a pending review row for the owner (the door, below).
   The health check keeps `needs_review` on such a held site until the owner decides, and a removal decided in the review queue stays `down` with its own reason whatever the check sees (a load, an error or a duplicate; it is never turned `suspect` and shown again by the 13-day rule).
-- **Exclusions**: newly confirmed-down sites are appended to `data/excluded.json` as `{url, name, reason, kind, removed, first_failed, last_checked, checks}` and dropped from `feed.json` in one bot pull request (branch `data/health-exclusions`, auto-merge), at most 10% of the list at once.
+- **Exclusions**: planned once a week (`EXPORT_EVERY_DAYS` in [pipeline/exclusions.mjs](pipeline/exclusions.mjs) `weeklyExport`; the full check runs nightly, the export does not) and kept in the cache table: every night applies it to the files again until main carries it, because the workflow rewrites its pull request from main whenever any data file changes; it counts as done only once it has landed.
+  The plan keeps only which sites it chose; every night the entries come from that night's state, so a site that recovered, or whose removal was undone, after the plan was made is never exported.
+  Newly confirmed-down sites and sites not working for 90 days are appended to `data/excluded.json` as `{url, name, reason, kind, removed, first_failed, last_checked, checks}` and dropped from `feed.json` in one bot pull request (branch `data/health-exclusions`, auto-merge), at most 10% of the list at once.
   `generate_feed.py` reads both these objects and the older plain URL strings.
   `/removed` lists them with the reason and date; takedown requests are counted there but never named.
-- **Site visibility** (`lib/roster.ts hiddenUrls`): a roster site is hidden when it is confirmed down, or when its capture failed and the health check hasn't passed it since.
+  A bot-walled site and a "not a portfolio" with no decision on record are never added.
+  Entries removed for not answering (`dead` every 91 days; `down` on days 7, 14 and 21 after removal, while the row is still kept for its grade and votes, then monthly) are checked again with the same full check, browser included, and leave the list when they pass; a paused Vercel deployment is recorded as "HTTP 402: deployment paused".
+  When a row is purged (30 days off the list), its health marks go with it.
+  Those checks run 8 at a time and none starts after 15 minutes; the rest stay due for the next run.
+- **Site visibility** (`lib/roster.ts hiddenUrls`): a roster site is hidden when it is not working or confirmed down, or when its capture failed and the health check hasn't passed it since.
+  Hidden sites are left out of browse and search, the boards, face-offs and games, the sitemap, public lists, polls (an existing poll keeps the option and its votes, without the screenshot or link) and the home page; the boards' shown ranks are renumbered by the run that hid or showed a site (any change of the hidden rule), and the run drops the cached games and grader pools in the same write.
+  The hourly Cron Trigger brings the cached copies of every profile the check hid or showed in line (`health_marks.purge_pending`, set when the write happens): it asks the app to revalidate its own copy (`/api/internal/revalidate-profiles`, the Worker's token only), asks the app for the page, and purges the edge 100 at a time; the mark is cleared only once the app answers as it should (not found, or the page), so a stale copy the edge took in between is purged again the next hour.
   Captures that fail are retried with backoff (1, 2, 4, 8, 16, then 30 days), and a passing health check schedules a recapture at once, so one transient error never hides a site for good.
 - **Owner review queue** ([lib/reviews/store.mjs](lib/reviews/store.mjs), `/admin/review`): a re-check (the first is "recheck-543") writes one `status_reviews` row per site whose listed or ranked state it would change, with fresh screenshots, each grader's verdict, the code's signals, the group and the reason.
   Rows where the graders agree come ticked; disagreements are flagged and unticked; nothing changes until the owner confirms.
-  Confirm goes through the paths above: a "not a portfolio" grade with a tier is kept and flipped (the AI's answer in `ai_is_portfolio`, the owner's decision in `review`, re-ranked with `rankForWrite`), one without a tier is cleared for the nightly grade queue, a site held out only for its grade gets its health back, a broken one gets a recapture, and a delisted one goes into `data/additions.json` through the daily upstream sync (and the weekly health pull request, [pipeline/review-additions.mjs](pipeline/review-additions.mjs)).
-  A remove stores "not a portfolio" and takes the site off the list at once: health `down` with the health check's own plain reason ("AI grading says this is not a portfolio", plus "(confirmed by the owner)" for the owner's), so it is hidden now and the weekly health run moves it to `data/excluded.json` as `not_portfolio`, where who decided goes in `decided_by` and `evidence` (`removalDecider`), never in the public reason.
+  Confirm goes through the paths above: a "not a portfolio" grade with a tier is kept and flipped (the AI's answer in `ai_is_portfolio`, the owner's decision in `review`, re-ranked with `rankForWrite`), one without a tier is cleared for the nightly grade queue, a site held out only for its grade gets its health back, a broken one gets a recapture, and a delisted one goes into `data/additions.json` through the daily upstream sync (and the health workflow's pull request, [pipeline/review-additions.mjs](pipeline/review-additions.mjs)).
+  A remove stores "not a portfolio" and takes the site off the list at once: health `down` with the health check's own plain reason ("AI grading says this is not a portfolio", plus "(confirmed by the owner)" for the owner's), so it is hidden now and the health run's weekly export moves it to `data/excluded.json` as `not_portfolio`, where who decided goes in `decided_by` and `evidence` (`removalDecider`), never in the public reason.
   A site has at most one open row in any group: the door closes older open rows (status `closed`, with the reason) when it writes a newer grade's row.
   Only the owner's own Confirm is a verdict that holds over later grades (`ownerVerdict`, read at the door); a rule's apply is recorded as the rule's (review kind `rule_applied`, never `owner_confirmed`), and who decided and when is kept on the row.
   The door ([lib/reviews/door.mjs](lib/reviews/door.mjs), owner 2026-11-16): every AI grade is stored through it, in the night run and in the fallback grader (`judge.mjs rubric` on GitHub Actions); the one-off `scripts/regrade-not-portfolio.mjs` no longer writes.
@@ -84,6 +132,7 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Every decided row (the owner's, the rule's, or another rule's such as `rule:duplicate`) is listed under Decided with Undo: it goes back to pending, `undone_at` and `undone_by` are recorded, and what it changed is reversed: exactly when the apply kept the state before it, and for an apply from before that (the owner's 13 November verdicts) the grade only, from `rubric_history`, with the rest reported on the row; a rejection, a "Mark checked" or a rule's row changed nothing, so only the row moves.
   While rows wait, the Monday goals email carries their count and the link (see Owner goals).
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
+  `LIST_CLEANUP_SHARE` raises the limit for one run (see Roster sync).
 - **Upstream report** (`upstream-removals.yml`, monthly, report-only): the community list runs its own link checker every Saturday that removes broken and parked links (its CONTRIBUTING.md, sample report emmabostian/developer-portfolios#3696), so a removal PR for those would only duplicate it.
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
   Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
@@ -145,11 +194,11 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), checks the change fingerprint of a 168th of the list ("When checks re-run" above), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)) |
 | Every 5 minutes | Worker cron | The grader's tick ([worker/grader.ts](worker/grader.ts)): report emails, captures that didn't start, requests waiting for a later day, cleanup; nothing while `GRADER_ENABLED` is off |
 | 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
-| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due, fingerprint changes); on Sundays also `health.yml` (not waited for) |
+| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due, fingerprint changes); every night also `health.yml` (not waited for) |
 | Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
 | 23:30 | Workflow | Hard stop, 30 minutes before the reset; the summary and owner alerts |
 | Then | Workflow | Roll-ups and retention of the log tables ([pipeline/retention.mjs](pipeline/retention.mjs)): `gemini_requests` older than 90 Pacific days becomes `gemini_daily`, `night_runs` older than 180 days and the free-text reason of comparisons older than 90 days go |
-| Mondays 08:00 or 09:00 | Worker cron `0 16 * * 1` | Model watch (below): Google's model list, deprecations and release notes; no Gemini generate calls |
+| Mondays 08:00 or 09:00 | Worker cron `0 16 * * MON` | Model watch (below): Google's model list, deprecations and release notes; no Gemini generate calls |
 
 The cron: Cron Triggers run in UTC, so `wrangler.jsonc` has `30 3 * * *` (20:30 under daylight time) and `30 4 * * *` (20:30 under standard time); the handler starts the run only from the one that is 20:30 in Los Angeles, so the run starts at the same local time all year ([pipeline/budget.mjs](pipeline/budget.mjs) `isNightStart`, tested for every day of 2026 and 2027).
 The Workflow instance is `night-<Pacific date>` and the night is claimed in the `night_runs` table, so a night runs once: a failed or stopped run never restarts itself.
@@ -262,10 +311,10 @@ The automatic blog's back end ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md),
 - **The switch:** the Worker variable `CONTENT_MODE`: "off" (the default in both environments; the stage does no post work), "dry-run" (drafts stay private, status `draft`) or "publish" (posts go live at the next 08:00 Pacific); only the owner sets "publish".
   It is the ceiling for the owner's Automation panel on `/admin/blog` (on or off, nights, drafts a week up to `CONTENT_DRAFTS_PER_WEEK`, review or publish, a topic queue), saved in the database and read by every night; unreadable settings mean no drafts ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#automation)).
 - **Schedule:** Sunday night picks the week's 2 ideas and a reserve (one request, or none when there is only one idea); Monday and Wednesday nights each draft one post for Tuesday and Thursday; a dropped or deferred draft is made up on a later night of the week.
-- **A draft:** facts from code, then the write request, the claim listing, the claim judgement (only with Tavily results) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
-- **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 50 a week, 1 fresh illustration, 2 Pexels searches and 3 Gemini image checks a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes; the owner's "Write a draft now" adds at most 5 drafts a Pacific day under the same per-post caps.
+- **A draft:** facts from code, then the write request, the claim judgement (only with Tavily results; the final review lists the outside claims) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
+- **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 50 a week (the `tavily_searches` table is the weekly counter, reserved before each search), 1 fresh illustration, 2 Pexels searches and 3 Gemini image checks a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes; the owner's "Write a draft now" adds at most 5 drafts a Pacific day under the same per-post caps.
 - **Never pay for images:** at most 40 AI images a UTC day (`MAX_AI_IMAGES_PER_DAY`) with no hourly cap of its own (the `portfoliorank-ai` AI Gateway's 40 an hour is the burst backstop), and behind it at most 2,500 neurons (`AI_NEURON_CEILING`) of the account's free 10,000; every Workers AI call reserves its image and neurons first and is skipped when there is no room; a setting above its maximum is rejected and turns Workers AI off ([lib/content/neurons.mjs](lib/content/neurons.mjs)).
-- **Optional keys** (Worker secrets): `TAVILY_API_KEY` (without it outside claims are cut) and `PEXELS_API_KEY` (without it no stock photos); the `AI` binding (Workers AI) makes illustrations.
+- **Optional keys** (Worker secrets): `TAVILY_API_KEY` (without it outside claims are cut; a flagged sentence that names a listed site is cut without a search either way) and `PEXELS_API_KEY` (without it no stock photos); the `AI` binding (Workers AI) makes illustrations.
 - **Tables:** `posts` (body, fact sheet, checks, images with source, licence and credit, claims with sources, `publish_at`, `newsletter_pending`) and `content_runs` (each night's picks and drafts, and the Gemini, Tavily and Workers AI calls they used).
 - **The owner:** `GET /api/admin/content[?status=draft|published|dropped|unpublished|all]` (admin only) lists posts with their fact sheet, checks and images, the latest runs and the mode; on Sunday nights while the engine is on, an owner alert `content-weekly` summarises the week.
 
@@ -303,9 +352,16 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   An account verifies at most 3 portfolios by itself; more go to review.
 - **Owner actions:** remove, hide or show the grade, and re-grade.
   A link to the GitHub profile is enough only to ask for a re-grade: pages link collaborators', designers' and template authors' profiles too.
-  Hiding or showing the grade and removing need proof only the site's owner can give (`controlProof`): the meta tag, `github_pages`, or a claim the admin reviewed; and a removal is held for 24 hours: the hourly cron alerts the owner of PortfolioRank about each held removal (`worker/owner-removals.ts`), the claimant can cancel it, and the admin can undo it before or after it takes effect (`/api/admin/removals`).
-  Once the day is up the site is hidden (`lib/roster.ts`), then added to `data/excluded.json` as `owner_request` with reason "owner request" by the weekly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
-  A hidden grade is left out of the portfolio page, the print report (except for the owner) and the quiz pool.
+  Hiding or showing the grade, removing, cancelling a held removal and reading a hidden grade in the print report need proof that you can deploy to the site (`controlProof`): the verification file, the meta tag, `github_pages`, or a claim the admin reviewed.
+  Without it the actions route answers 403 `remove_needs_meta`, `cancel_needs_meta` or `hide_needs_meta` (`not_owner` without a verified claim; `account_too_new` for an account younger than `MIN_GITHUB_ACCOUNT_AGE_DAYS`).
+  A removal is held for 24 hours, and any account with that proof can cancel it, not only the one that asked: both can deploy to the site.
+  The cancel is logged with who cancelled and whether it was the account that asked (no account id in the log's detail), and the admin can undo a removal before or after it takes effect (`/api/admin/removals`).
+  The hourly cron alerts the owner of PortfolioRank about each held removal while it waits (`removal:<url>`, emailed when asked for, then once a day; `worker/owner-removals.ts`, `removalConditions`).
+  A cancel sends no email by itself (the site stays listed); it is in the audit log.
+  A removal asked for again after a cancel in the last day says so, under its own key (`removal:<url>#again`), so it is emailed the same day: a key is emailed at most once a day, so a site's removals send at most two emails a day however often they flip.
+  Once the day is up the site is hidden (`lib/roster.ts`) and the quiz pool's cache dropped in the same transaction; the hourly edge purge then takes its profile out of the edge cache and records `portfolio_owner.purged_at`, trying again each hour until the purge works, whatever the rest of the hourly tick did (`purgeRemovedProfiles`).
+  It is then added to `data/excluded.json` as `owner_request` with reason "owner request" by the nightly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
+  A hidden grade is left out of the portfolio page, the print report (except for an owner with that proof) and the quiz pool.
   A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
   Every claim step and action is written to `claim_log`, the audit log.
 - **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, sites changed this month from `rating_resets`, the newest entry) come from one pass over the listed portfolios, cached an hour.
@@ -333,12 +389,12 @@ The API:
 | `POST /api/badges` `{ kind: "share" }` or `{ kind: "visit", url }` | `{ recorded, badges }` |
 | `GET /api/owner/claims` | `{ claims: [{ url, status, method, meta, state }] }`; 401 |
 | `POST /api/owner/claims` `{ url, method?, note? }` | `{ claim }` with status `verified`, `pending`, `review` or `rejected`; 400, 401, 403, 429 |
-| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new` or `remove_needs_meta`, 429 |
+| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new`, `remove_needs_meta`, `cancel_needs_meta` or `hide_needs_meta`, 429 |
 | `GET`/`POST /api/admin/removals` `{ url, action: "undo" }` | the admin's view of held and done removals, and their undo; `{ state, wasRemoved, note? }` (when `wasRemoved`, the weekly exclusions pull request takes its `data/excluded.json` entry out again, logged as `removal_restored`; the daily sync lists the site again) |
 | `GET /api/admin/claims`, `POST /api/admin/claims` `{ id, decision, note? }` | the review queue, and a decision; admin login only |
 | `GET /api/stats/live` | the live numbers; public, 60 s, edge cache |
 | `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` with `reason` |
-| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden), 404, 410 (link used, expired or forged) |
+| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden, except for an owner with control proof), 404, 410 (link used, expired or forged) |
 
 A quiz is `{ id, kind, day, challenge, hit, rounds: [{ index, url, name, tagline, domain, path, shot, hero }], progress: { results, finished, score, hits } }`.
 
@@ -496,8 +552,8 @@ Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12,
   The answer is the same `{ ok: true }` for a new, pending or confirmed address; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited`, 503 `email_unavailable` (Kit not set up or not answering).
 - **Double opt-in and unsubscribe** are Kit's: the form has double opt-in on, so Kit sends its confirm email and only confirmed subscribers get posts; every broadcast carries Kit's unsubscribe link (`{{ unsubscribe_url }}`) and one-click header, and Kit handles bounces and complaints.
 - **The form:** `KIT_FORM_ID` when set, else the account's only active form (asked once a day, cached); with several forms and no `KIT_FORM_ID`, sign-ups answer 503.
-- **New posts** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the newsletter's tick (on the five-minute grader cron `*/5 * * * *`, no trigger of its own; production and staging) turns each such post, once it is live, into an issue and the issue into one Kit broadcast to every subscriber.
-  `KIT_BROADCAST_MODE` `"send"` (production) schedules it 10 minutes ahead (the V4 API has no "send now"); `"draft"` saves a draft, and so does a 403 when scheduling.
+- **New posts** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the newsletter's tick (on the five-minute grader cron `*/5 * * * *`, no trigger of its own; production only, staging's task list leaves it out) turns each such post, once it is live, into an issue and the issue into one Kit broadcast to every subscriber.
+  `KIT_BROADCAST_MODE` `"send"` schedules it 10 minutes ahead (the V4 API has no "send now"); `"draft"` (the value in production today, and always on staging) saves a draft, and so does a 403 when scheduling.
   A draft emails the owner one line, "Newsletter: draft ready in Kit", through the owner-alert gate to `OWNER_EMAIL`.
   Staging always makes drafts, with `[staging]` in the subject: it shares the owner's one Kit account.
   A post that went live more than 3 days before the newsletter saw it is recorded as "Not sent", so switching the newsletter on never mails a backlog; an unpublished post's issue stops.
@@ -516,7 +572,7 @@ Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12,
 ## Model watch
 
 Owner decision of 2026-11-10: model watch is news only; nothing switches on its own.
-Every Monday at 16:00 UTC (08:00 or 09:00 Pacific) a Cron Trigger on the Worker (`0 16 * * 1` in `wrangler.jsonc`, [worker/model-watch.ts](worker/model-watch.ts)) runs [pipeline/model-watch.mjs](pipeline/model-watch.mjs).
+Every Monday at 16:00 UTC (08:00 or 09:00 Pacific) a Cron Trigger on the Worker (`0 16 * * MON` in `wrangler.jsonc`, [worker/model-watch.ts](worker/model-watch.ts)) runs [pipeline/model-watch.mjs](pipeline/model-watch.mjs).
 
 | Source | What it gives | Cost |
 | --- | --- | --- |
@@ -568,7 +624,8 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 |---|---|---|---|
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
 | **`sync-upstream.yml`** | the end-of-day Workflow at 20:30 Pacific; fallback schedule 06:00 UTC + manual | The free checks: rebuild `feed.json` from upstream's merged README, open the sync PR if it changed, capture new sites and re-capture the oldest (`--refresh`), measure page evidence, record page changes. No Gemini, except as the fallback: the manual `grade` input, or a scheduled run (Cloudflare didn't start it) grades within the accountant's shares | TURSO, R2, SHOTS_BASE_URL (GEMINI only for `grade`) |
-| **`health.yml`** | the end-of-day Workflow on Sunday nights; fallback schedule Mondays 12:00 UTC + manual | Roster sync, health check of every listed site, exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
+| **`health.yml`** | the end-of-day Workflow every night; fallback schedule daily 12:00 UTC + manual | Roster sync, health check of every listed site (except those the hourly re-check owns), the weekly exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
+| **`recheck.yml`** | hourly at :40 + manual | The not-working pool's re-checks that are due (`pipeline/recheck-run.mjs`); an hour with none due is one query and no install. No Gemini, no email | TURSO |
 | **`judge-vote.yml`** | manual only | Fallback: the ELO-era AI votes, or (repository variable `RANKING_V2`) the ranking v2 comparisons and recompute, within the accountant's share | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
@@ -576,7 +633,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 | **`upstream-removals.yml`** | 2nd of the month 17:00 UTC + manual | Report of what the community list's own Saturday checker misses; optionally (off) one PR for those | TURSO (read), UPSTREAM_PR_TOKEN (optional) |
 
-The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
+The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check, whose fallback runs daily at 12:00 UTC, 7.5 hours after Cloudflare's start), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
 Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without claiming it and this fallback does the night's work.
 `judge-vote.yml` lost its schedule: AI comparisons run in the end-of-day run, and the ELO-era AI votes (30 a day into the shared ELO pool) no longer run on their own, since the owner's decision keeps background comparisons for `RANKING_V2`.
 `grade-compare`, `backup`, `prewarm` and `upstream-removals` call no Gemini and nothing depends on their exact time, so they keep their GitHub schedules.
@@ -669,11 +726,12 @@ serve images.
 - `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
 - `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
 - `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
-- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
-- `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
+- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
+- `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - the nightly health check; `--exclusions` plans the export once a week and applies it until it lands; `--dry-run` checks every site and writes nothing, not even the roster sync (`LOCAL_DB_FILE=...` for a scratch database)
+- `node pipeline/recheck-due.mjs` - how many sites the hourly re-check has due; `node pipeline/recheck-run.mjs [--no-browser] [--controls N] [--dry-run]` - run it (`--dry-run`: writes nothing)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
-- `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the weekly health workflow runs it)
-- `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the weekly health workflow run it)
+- `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the nightly health workflow runs it)
+- `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the nightly health workflow run it)
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)

@@ -159,7 +159,8 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   | Scheduled task | On staging | Why |
   | --- | --- | --- |
   | End-of-day run (`startTonight`) | off | Gemini, portfolio fetches and GitHub dispatch |
-  | Owner removals | kept | Database only; its alert email reaches `STAGING_EMAIL_TO` only (empty) |
+  | Owner removals | kept | Database only |
+  | Removal alerts | kept | Database only; its alert email reaches `STAGING_EMAIL_TO` only (empty) |
   | Edge purge | kept | Database and edge cache only |
   | Email caps | off | Only emails the owner |
   | Night watch | off | Would alert that the end-of-day run never started |

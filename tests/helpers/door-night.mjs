@@ -32,11 +32,16 @@ export const PORTFOLIO_HTML = `<!doctype html><html><head><title>Ann Lee | Engin
 /** A page with no portfolio signals at all. */
 export const EMPTY_HTML = `<!doctype html><html><head><title>Welcome</title></head><body><p>${"Lorem ipsum dolor sit amet. ".repeat(20)}</p></body></html>`;
 
-export async function freshDb() {
+/** `health: false` leaves out health_marks, as on a database from before the not-working pool. */
+export async function freshDb({ health = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "door-"));
   const file = path.join(dir, "db.sqlite");
   const db = createClient({ url: `file:${file}` });
   await ensureRosterSchema(db);
+  if (!health) {
+    await db.execute("DROP TRIGGER IF EXISTS health_marks_follow_purge");
+    await db.execute("DROP TABLE IF EXISTS health_marks");
+  }
   await ensureGeminiLog(db);
   await ensureRankingSchema(db);
   await ensureRubricHistory(db);
@@ -47,8 +52,13 @@ export async function freshDb() {
 }
 
 let k = 0;
+/**
+ * Page text that shows a site: over capture-blocked.mjs BLOCK_MAX_WORDS, so a stored capture of it
+ * passes the capture's own check (lib/reviews/stored-capture.mjs) whatever the facts say.
+ */
+export const SITE_TEXT = `Hi, I build things. ${"I design and build accessible web apps for small teams and write about what I learn. ".repeat(3)}`.trim();
 /** A listed, captured site with evidence; `n` signals in its facts, or none at all with n = null. */
-export async function site(db, url, { name = "Ann Lee", text = "Hi, I build things.", n = 2, rubric = null, status = "live", reason = "", needsReview = 0, healthSignals = null, captured = true } = {}) {
+export async function site(db, url, { name = "Ann Lee", text = SITE_TEXT, n = 2, rubric = null, status = "live", reason = "", needsReview = 0, healthSignals = null, captured = true } = {}) {
   await db.execute({
     sql: `INSERT INTO portfolios (url, name, status, reason, shot_key, captured_at, ai_rubric, page_text, facts, meta, needs_review, signals)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{"motion":false}', ?, ?)`,

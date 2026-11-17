@@ -145,7 +145,18 @@ if (inputAt >= 0) {
   for (const [k, v] of Object.entries(extra)) values[k] = { ...values[k], ...v };
 }
 for (const n of notes) console.log(`skipped: ${n}`);
+// A skipped provider is a warning on the run (annotation and job summary), not
+// a failure: the Turso token is a known "needs owner" item. A run that measured
+// nothing at all is a failure: it would otherwise be green and store nothing.
+for (const n of notes) console.log(`::warning title=Free limits: provider skipped::${n.replace(/[\r\n]+/g, " ")}`);
+if (notes.length && process.env.GITHUB_STEP_SUMMARY) {
+  fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Free limits: skipped\n\n${notes.map((n) => `- ${n}`).join("\n")}\n\n`);
+}
 for (const [k, v] of Object.entries(values)) console.log(`${k.padEnd(18)} ${Math.round(v.used).toLocaleString("en-US")}`);
+if (!Object.keys(values).length) {
+  console.error("limits-snapshot: no measurement was taken (every source was skipped or failed), so nothing is stored and this run fails.");
+  process.exit(1);
+}
 if (dryRun) {
   console.log("dry run: nothing stored");
 } else {

@@ -1,28 +1,33 @@
-name: Weekly health check + cleanup
+name: Nightly health check + cleanup
 
 # PortfolioRank's own cleanup (owner decision 2026-11-10: our list wins, and
 # background jobs only work on sites on the current list). Free: no Gemini.
 #   1. mark database rows that left data/feed.json as delisted
 #   2. check every listed site (loads, not parked, not blank, not a duplicate,
-#      not graded "not a portfolio") and advance live -> suspect -> down;
-#      down only after 3 failed checks in a row spanning 13+ days
+#      not graded "not a portfolio"): a site that does not answer goes on the
+#      not-working ladder (hidden after the next day's re-check fails, off the
+#      list on a failed check on or after day 90); a page with the wrong thing
+#      is confirmed down after 3 failed checks on different weeks over 13+ days
 #   3. add newly confirmed-down sites to data/excluded.json (and drop them
 #      from data/feed.json) through one bot pull request that auto-merges,
 #      same flow as the daily upstream sync
 #   4. delete screenshots and rows delisted for 30+ days (votes are kept)
 # See pipeline/health.mjs and AUTOMATION.md.
-# Cloudflare's end-of-day run starts this on Sunday nights (20:30 Pacific),
-# alongside the nightly checks; it does not wait for it.
+# Cloudflare's end-of-day run starts this every night (20:30 Pacific),
+# alongside the nightly checks; it does not wait for it. The export in step 3
+# runs once a week (pipeline/exclusions.mjs EXPORT_EVERY_DAYS); sites on the
+# not-working ladder are re-checked by recheck.yml, hourly.
 on:
   workflow_dispatch:
     inputs:
       code:
         description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
         required: false
-  # Fallback only: Mondays 12:00 UTC, after Cloudflare's Sunday-night start;
-  # skips when Cloudflare started it in the last 30 hours (fallback-guard).
+  # Fallback only: daily 12:00 UTC, after Cloudflare's 20:30 Pacific start
+  # (every night since 2026-11-16); skips when Cloudflare started it in the
+  # last 30 hours (fallback-guard).
   schedule:
-    - cron: "0 12 * * 1"
+    - cron: "0 12 * * *"
 
 concurrency:
   group: health
@@ -59,7 +64,10 @@ jobs:
             exit 0
           fi
           since=$(date -u -d "$WINDOW hours ago" +%Y-%m-%dT%H:%M:%SZ)
-          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since" --jq '.total_count')
+          # Only a run that succeeded or is still going counts: a run that
+          # failed, was cancelled or timed out did not do the night's work.
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since&per_page=100" \
+            --jq '[.workflow_runs[] | select(.status != "completed" or .conclusion == "success")] | length')
           if [ "${n:-0}" -gt 0 ]; then
             echo "::notice::Cloudflare's end-of-day run already started $WORKFLOW in the last $WINDOW hours; the GitHub schedule (fallback) skips."
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -175,9 +183,9 @@ jobs:
           git commit -m "$title" -m "Release-note: skip"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin "HEAD:refs/heads/$BRANCH"
-          body="Sites the weekly health check confirmed down (3 failed checks in a row over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json; owner requests the admin undid come back out of data/excluded.json (the daily sync lists them again); sites the owner confirmed as portfolios on /admin/review that had left the list go into data/additions.json. They show on /removed once this merges; owner requests are counted there, never named.
+          body="Sites the health check took off the list (not working for 90+ days and failing a check made on or after that day, or answering with the wrong thing for 3 checks over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json; owner requests the admin undid come back out of data/excluded.json (the daily sync lists them again); sites the owner confirmed as portfolios on /admin/review that had left the list go into data/additions.json. They show on /removed once this merges; owner requests are counted there, never named.
 
-          Opened by the [Weekly health check run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
+          Opened by the [nightly health check run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
           open=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then
             gh pr edit "$open" --title "$title" --body "$body"
@@ -193,17 +201,31 @@ jobs:
       - name: Purge rows delisted for 30+ days
         run: node pipeline/purge-delisted.mjs
 
-      - name: Notify on failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
+  # A job that fails, is cancelled or times out ends its own later steps, and
+  # `if: failure()` is false for a cancelled or timed-out job (sync run
+  # 43677044060 was cancelled at its 330-minute limit and filed nothing). So
+  # the notice is a job of its own: always() runs it whatever happened to the
+  # jobs it needs, and it reads their results.
+  notify-failure:
+    needs: [fallback-guard, health]
+    if: ${{ always() && (needs.fallback-guard.result == 'failure' || needs.fallback-guard.result == 'cancelled' || needs.health.result == 'failure' || needs.health.result == 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULTS: 'fallback-guard: ${{ needs.fallback-guard.result }}, health: ${{ needs.health.result }}'
+    steps:
+      - name: File or update the failure issue
         run: |
           title="⚠️ Scheduled job failed: ${{ github.workflow }}"
           url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           num=$(gh issue list --state open --search "$title" --json number,title \
             --jq ".[] | select(.title==\"$title\") | .number" | head -1)
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body "Failed again: $url"
+            gh issue comment "$num" --body "Failed again ($RESULTS): $url"
           else
-            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+            gh issue create --title "$title" --body "A scheduled run did not finish ($RESULTS): $url" >/dev/null
           fi

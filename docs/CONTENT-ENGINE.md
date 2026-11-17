@@ -60,12 +60,14 @@ Each one is code with a test before the first post goes out.
 
 An outside claim is anything about the world that our data doesn't show ("hiring managers spend about seven seconds on a portfolio").
 
-- One Gemini request lists every outside claim in the draft, as exact sentences.
-- Code searches each one with Tavily (basic search, 1 credit), at most 6 claims a post.
+- The final review lists every outside claim in the draft, as exact sentences. What makes a sentence an outside claim is where its information comes from, not who it mentions: any fact that is not in the fact sheet is one, even when it names a listed site.
+- A flagged sentence that names a listed site (by name or by a link to its URL) is cut without a search, so a listed person's name is never sent to Tavily.
+- Code searches each other flagged sentence with Tavily (basic search, 1 credit), at most 6 claims a post. Each search is reserved against the week (`tavily_searches`, the only weekly counter, 50) and the month (`tavily_credits`, 200) before the call and given back when Tavily does not answer.
 - One Gemini request judges each claim against the search results, which travel as untrusted data, never as instructions (the same rule as page text in grading).
 - A supported claim keeps a link to the source that supports it; code checks the link loads.
 - A quote is kept only if code finds it word for word in the fetched source page.
-- Anything unsupported is cut, and the draft is revised without it.
+- Anything unsupported is cut, and the draft is revised without it. If cutting leaves the draft failing its quality checks, the draft is dropped; that is the correct fail-closed result while the blog is in dry-run and the owner reads every draft.
+- Known limit: code does not detect an outside claim the review fails to flag. What stands between such a sentence and publication is the review prompt, the dry-run mode and the owner reading every draft. Closing it means generating posts so that every sentence about a named site is built from a sheet fact by construction (a design job for when the blog is switched to publish).
 
 Tavily's free plan gives 1,000 credits a month ([Tavily credits](https://docs.tavily.com/documentation/api-credits)); at 2 posts a week, 6 claims each and a few news searches, the engine uses about 100 a month.
 
@@ -154,7 +156,6 @@ Only PortfolioRank's own tables, read-only, plus the two outside searches above.
 | --- | --- | --- | --- |
 | Rankings | `rank_history` (ranking v2) | trends across the leaderboard: top sites and biggest climbers (`leaderboard-movement`) | after `RANKING_V2` is switched on ([RANKING.md](../RANKING.md)) |
 | Grades | `portfolios` (rubric, capture measurements) | what the AI grader rewards and penalizes (`top-grades`), dark mode, motion, phones and page weight (`page-craft`) | now |
-| Re-grades | `rubric_history` (same model and rubric version only) | how portfolios change: before and after a page change (`regrade-changes`) | as re-grades after page changes accumulate |
 | People's votes | `votes` with both sites' grades and measurements | what people vote for and against (`vote-patterns`) | once 40 votes between graded portfolios exist |
 | Polls | closed polls with totals, winner and margin (`pollResults` in [lib/polls/store.mjs](../lib/polls/store.mjs)) | "Developers voted: does a portfolio need a resume?" | back end built (#76); votes once the poll card ships |
 

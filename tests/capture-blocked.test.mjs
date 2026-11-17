@@ -16,9 +16,16 @@ import {
   BLOCK_MAX_WORDS,
   BOT_CHECK_MAX_WORDS,
   BOT_WALL,
+  BOT_WALL_REASON,
+  MEDIA_ONLY,
+  OWNER_REVIEW_PREFIX,
+  SHOWS_SITE_REASON,
   capturedBlocked,
+  httpVerdict,
   isBlockedReason,
+  isBotWallPage,
   isBotWallReason,
+  readBlockedInputs,
 } from "../pipeline/capture-blocked.mjs";
 import { DOWN_AFTER_DAYS, FAILS_TO_DOWN, runHealthCheck } from "../pipeline/health.mjs";
 import { planExclusions } from "../pipeline/exclusions.mjs";
@@ -65,6 +72,135 @@ test("capturedBlocked: each reason", () => {
 test("capturedBlocked: a long portfolio that jokes about robots is not a bot check", () => {
   const text = `${words(BOT_CHECK_MAX_WORDS)} I promise I'm not a robot.`;
   assert.equal(capturedBlocked({ text, outboundLinks: 2 }), null);
+});
+
+test("capturedBlocked: what besides words shows a site", () => {
+  // A canvas or video filling the screen with no DOM text or links: a canvas site or a stuck preloader,
+  // which the capture never stores as live on its own (MEDIA_ONLY: blank frame or owner review).
+  assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 1 }), MEDIA_ONLY);
+  assert.equal(capturedBlocked({ text: "Coming soon", mediaCover: 0.8 }), MEDIA_ONLY, "an image-only coming-soon page");
+  assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 0.1 }), "0 words and no outbound links", "a small spinner or logo is not a site");
+  // A short home page with its own navigation, or one page and a contact link.
+  assert.equal(capturedBlocked({ text: words(17), siteLinks: 4, contactLinks: 1 }), null);
+  assert.equal(capturedBlocked({ text: words(17), siteLinks: 1, contactLinks: 1 }), null);
+  assert.equal(capturedBlocked({ text: words(10), siteLinks: 1 }), "10 words and no outbound links", "one link of its own is not enough");
+  assert.equal(capturedBlocked({ text: words(10), contactLinks: 1 }), "10 words and no outbound links", "a coming-soon page with an email link is not a site");
+  // A bare loading line is a loader, media or not.
+  assert.equal(capturedBlocked({ text: "Loading...", mediaCover: 1 }), "still a gate or loader after the click-through");
+});
+
+test("capturedBlocked: a plain gate word counts only as an element's whole text", () => {
+  const text = "Jane Doe\nDesigner. Let's start something.\nGitHub LinkedIn";
+  assert.equal(capturedBlocked({ text, outboundLinks: 2 }), null, "start in a sentence");
+  assert.equal(capturedBlocked({ text, outboundLinks: 2, gateElement: false }), null);
+  assert.equal(capturedBlocked({ text: "Jane Doe\nStart", outboundLinks: 1 }), "still a gate or loader after the click-through", "start on a line of its own");
+  assert.equal(capturedBlocked({ text: "Jane Doe Start", outboundLinks: 1, gateElement: true }), "still a gate or loader after the click-through", "the page said it is a button");
+  // A loader at 100% next to the word is still a loader.
+  assert.equal(capturedBlocked({ text: "Jane Doe. Loading experience 100% Enter", outboundLinks: 3 }), "still a gate or loader after the click-through");
+});
+
+test("capturedBlocked: 'not a robot' is a bot check only on a nearly empty page that asks for it", () => {
+  assert.equal(capturedBlocked({ text: "Hi, I'm Sam. Developer, climber, definitely not a robot. GitHub LinkedIn Email", outboundLinks: 2 }), null);
+  assert.equal(capturedBlocked({ text: `${words(60)} Please confirm you are not a robot.`, outboundLinks: 2 }), null, "a long page");
+  assert.equal(capturedBlocked({ text: "One more step. Please verify you are not a robot to continue.", outboundLinks: 1 }), BOT_WALL);
+  assert.equal(capturedBlocked({ text: "Are you a robot? Complete the reCAPTCHA below.", outboundLinks: 1 }), BOT_WALL);
+  assert.equal(capturedBlocked({ text: words(80), title: "Are you a robot?", outboundLinks: 1 }), BOT_WALL, "in the title");
+});
+
+test("isBotWallPage: rule 1 on its own, for callers that ask only 'is this a bot wall'", () => {
+  assert.equal(isBotWallPage({ text: "", title: "Just a moment..." }), true);
+  assert.equal(isBotWallPage({ text: "Verifying you are human. This may take a few seconds." }), true);
+  assert.equal(isBotWallPage({ text: PORTFOLIO }), false);
+  // A gate or an empty page is blocked, but not a bot wall.
+  assert.equal(isBotWallPage({ text: "CLICK TO ENTER" }), false);
+  assert.equal(isBotWallPage({ text: "" }), false);
+});
+
+test("isBotWallPage: a longer interstitial with a challenge form and no navigation is a wall", () => {
+  const waf =
+    "Enter the characters you see below. Sorry, we just need to make sure you're not a robot. For best results, please make sure your browser is accepting cookies. " +
+    "Type the characters you see in this image: Try different image Continue shopping Conditions of Use Privacy Policy © 1996-2026, Example.com, Inc. or its affiliates";
+  assert.ok(waf.split(/\s+/).length > BLOCK_MAX_WORDS);
+  assert.equal(isBotWallPage({ text: waf, siteLinks: 2, challenge: true }), true);
+  assert.equal(capturedBlocked({ text: waf, siteLinks: 2, challenge: true, outboundLinks: 0 }), BOT_WALL);
+  // The same words on a site with navigation, or with no challenge on screen, are not taken for a wall.
+  assert.equal(isBotWallPage({ text: waf, siteLinks: 5, challenge: true }), false);
+  assert.equal(isBotWallPage({ text: waf, siteLinks: 0, challenge: false }), false);
+});
+
+test("isBotWallPage: the reCAPTCHA notice and a joking title are not a wall", () => {
+  const notice = "Ana Ruiz Product designer in Madrid. GitHub LinkedIn This site is protected by reCAPTCHA and the Google Privacy Policy and Terms of Service apply.";
+  assert.equal(isBotWallPage({ text: notice }), false);
+  assert.equal(capturedBlocked({ text: notice, outboundLinks: 2 }), null);
+  assert.equal(isBotWallPage({ text: words(2000), title: "Jane Doe - I'm not a robot" }), false, "a long site");
+  assert.equal(isBotWallPage({ text: words(2000), title: "Are you a robot?" }), false, "a title counts only on a short page");
+  assert.equal(isBotWallPage({ text: words(30), title: "Jane Doe - I'm not a robot" }), false);
+  // A short page that asks for the captcha is still one.
+  assert.equal(isBotWallPage({ text: "Please complete the CAPTCHA below to continue." }), true);
+});
+
+test("readBlockedInputs: a page that cannot be read falls back to the text read before, never to an empty page", async () => {
+  const failing = { evaluate: async () => Promise.reject(new Error("Execution context was destroyed")), title: async () => "Jane Doe" };
+  const shown = await readBlockedInputs(failing, PORTFOLIO);
+  assert.equal(shown.text, PORTFOLIO);
+  assert.equal(capturedBlocked(shown), null);
+  assert.equal("html" in shown, false, "the page's HTML is not carried along");
+});
+
+test("httpVerdict: the main document's status decides; an error page is never the site", () => {
+  const site = { text: `Jane Doe ${words(200)}`, title: "Jane Doe", outboundLinks: 3 };
+  assert.equal(httpVerdict({ status: 200, ...site }), null);
+  assert.equal(httpVerdict({ status: 0, text: "" }), null, "no status known");
+  assert.equal(httpVerdict({ status: 304, ...site }), null);
+  // Bot walls: challenge wording, Cloudflare's challenge header, a firewall's 403.
+  for (const doc of [
+    { status: 403, text: "Verifying you are human. This may take a few seconds.", title: "Just a moment..." },
+    { status: 503, text: "Checking your browser before accessing example.dev", title: "Just a moment..." },
+    { status: 403, text: "", cfMitigated: "challenge" },
+    { status: 403, text: "Error 1020 Access denied. This website is using a security service to protect itself from online attacks. Ray ID: 8f2a", title: "Access denied" },
+    { status: 429, text: "Verifying you are human.", title: "Just a moment..." },
+  ]) {
+    assert.deepEqual(httpVerdict(doc), { status: "error", reason: BOT_WALL_REASON, needsReview: true }, JSON.stringify(doc));
+  }
+  // Rate limits are retried, never reviewed (Cloudflare's 1015 page says "Access denied" in its title too).
+  assert.deepEqual(httpVerdict({ status: 429, text: "Error 1015 You are being rate limited", title: "Access denied | example.dev" }), { status: "error", reason: "HTTP 429 (rate limited)", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 429, text: "" }), { status: "error", reason: "HTTP 429 (rate limited)", needsReview: false });
+  // Errors are retried with backoff; 404 and 410 are dead, as in the plain pre-check.
+  assert.deepEqual(httpVerdict({ status: 503, text: "Service Unavailable" }), { status: "error", reason: "HTTP 503", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 500, ...site }), { status: "error", reason: "HTTP 500", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 401, text: "Unauthorized" }), { status: "error", reason: "HTTP 401", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 403, text: "Forbidden" }), { status: "error", reason: "HTTP 403", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 404, ...site }), { status: "dead", reason: "HTTP 404", needsReview: false });
+  // A 403 whose page shows a whole site: a browser sees it, its status says error. The owner looks,
+  // under the owner-review prefix: it is not a bot wall, and not a blocked reason the health check fails.
+  const odd = httpVerdict({ status: 403, ...site, shown: site });
+  assert.deepEqual(odd, { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP 403)`, needsReview: true });
+  assert.ok(odd.reason.startsWith(OWNER_REVIEW_PREFIX));
+  assert.equal(isBotWallReason(odd.reason), false);
+  assert.equal(isBlockedReason(odd.reason), false);
+  // Not without the evidence of what the page showed.
+  assert.equal(httpVerdict({ status: 403, ...site }).needsReview, false);
+  // A single-page app served from a copied 404.html after a hard navigation goes the same way.
+  assert.deepEqual(httpVerdict({ status: 404, ...site, shown: site }), { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP 404)`, needsReview: true });
+  assert.deepEqual(httpVerdict({ status: 404, text: "Not Found", shown: { text: "Not Found" } }), { status: "dead", reason: "HTTP 404", needsReview: false });
+});
+
+test("httpVerdict: rate-limit wording decides only on a 429 or a short 403 or 503 page, as whole words", () => {
+  const spa = { text: `Jane Doe. I built a rate limiter for the payments API. ${words(200)}`, title: "Jane Doe", outboundLinks: 2 };
+  assert.deepEqual(httpVerdict({ status: 404, ...spa, shown: spa }), { status: "error", reason: `${SHOWS_SITE_REASON} (HTTP 404)`, needsReview: true });
+  assert.deepEqual(httpVerdict({ status: 404, text: "Not found. We rate limited nothing." }), { status: "dead", reason: "HTTP 404", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 503, text: "Too many requests. Try again later." }), { status: "error", reason: "HTTP 503 (rate limited)", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 503, text: "A separate limited edition. Down for maintenance." }), { status: "error", reason: "HTTP 503", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 500, text: "You are being rate limited" }), { status: "error", reason: "HTTP 500", needsReview: false });
+});
+
+test("isBotWallPage: a page with its own navigation or contact links is a site, captcha wording or not", () => {
+  const form = "Jane Doe. Designer. Work About Contact. Write to me: complete the captcha below and press send.";
+  assert.equal(isBotWallPage({ text: form, contactLinks: 1 }), false);
+  assert.equal(isBotWallPage({ text: form, siteLinks: 3 }), false);
+  assert.equal(isBotWallPage({ text: form }), true, "without either, a short captcha request is still a wall");
+  // Challenge wording that only walls use still counts.
+  assert.equal(isBotWallPage({ text: "Verifying you are human. This may take a few seconds.", contactLinks: 1 }), true);
 });
 
 test("isBlockedReason and isBotWallReason read the stored failure reason", () => {
