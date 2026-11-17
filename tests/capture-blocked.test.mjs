@@ -17,10 +17,13 @@ import {
   BOT_CHECK_MAX_WORDS,
   BOT_WALL,
   BOT_WALL_REASON,
+  MEDIA_ONLY,
   capturedBlocked,
   httpVerdict,
   isBlockedReason,
+  isBotWallPage,
   isBotWallReason,
+  readBlockedInputs,
 } from "../pipeline/capture-blocked.mjs";
 import { DOWN_AFTER_DAYS, FAILS_TO_DOWN, runHealthCheck } from "../pipeline/health.mjs";
 import { planExclusions } from "../pipeline/exclusions.mjs";
@@ -70,8 +73,10 @@ test("capturedBlocked: a long portfolio that jokes about robots is not a bot che
 });
 
 test("capturedBlocked: what besides words shows a site", () => {
-  // A canvas or video filling the screen (Flutter web, three.js): no DOM text, no links.
-  assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 1 }), null);
+  // A canvas or video filling the screen with no DOM text or links: a canvas site or a stuck preloader,
+  // which the capture never stores as live on its own (MEDIA_ONLY: blank frame or owner review).
+  assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 1 }), MEDIA_ONLY);
+  assert.equal(capturedBlocked({ text: "Coming soon", mediaCover: 0.8 }), MEDIA_ONLY, "an image-only coming-soon page");
   assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 0.1 }), "0 words and no outbound links", "a small spinner or logo is not a site");
   // A short home page with its own navigation, or one page and a contact link.
   assert.equal(capturedBlocked({ text: words(17), siteLinks: 4, contactLinks: 1 }), null);
@@ -98,6 +103,46 @@ test("capturedBlocked: 'not a robot' is a bot check only on a nearly empty page 
   assert.equal(capturedBlocked({ text: "One more step. Please verify you are not a robot to continue.", outboundLinks: 1 }), BOT_WALL);
   assert.equal(capturedBlocked({ text: "Are you a robot? Complete the reCAPTCHA below.", outboundLinks: 1 }), BOT_WALL);
   assert.equal(capturedBlocked({ text: words(80), title: "Are you a robot?", outboundLinks: 1 }), BOT_WALL, "in the title");
+});
+
+test("isBotWallPage: rule 1 on its own, for callers that ask only 'is this a bot wall'", () => {
+  assert.equal(isBotWallPage({ text: "", title: "Just a moment..." }), true);
+  assert.equal(isBotWallPage({ text: "Verifying you are human. This may take a few seconds." }), true);
+  assert.equal(isBotWallPage({ text: PORTFOLIO }), false);
+  // A gate or an empty page is blocked, but not a bot wall.
+  assert.equal(isBotWallPage({ text: "CLICK TO ENTER" }), false);
+  assert.equal(isBotWallPage({ text: "" }), false);
+});
+
+test("isBotWallPage: a longer interstitial with a challenge form and no navigation is a wall", () => {
+  const waf =
+    "Enter the characters you see below. Sorry, we just need to make sure you're not a robot. For best results, please make sure your browser is accepting cookies. " +
+    "Type the characters you see in this image: Try different image Continue shopping Conditions of Use Privacy Policy © 1996-2026, Example.com, Inc. or its affiliates";
+  assert.ok(waf.split(/\s+/).length > BLOCK_MAX_WORDS);
+  assert.equal(isBotWallPage({ text: waf, siteLinks: 2, challenge: true }), true);
+  assert.equal(capturedBlocked({ text: waf, siteLinks: 2, challenge: true, outboundLinks: 0 }), BOT_WALL);
+  // The same words on a site with navigation, or with no challenge on screen, are not taken for a wall.
+  assert.equal(isBotWallPage({ text: waf, siteLinks: 5, challenge: true }), false);
+  assert.equal(isBotWallPage({ text: waf, siteLinks: 0, challenge: false }), false);
+});
+
+test("isBotWallPage: the reCAPTCHA notice and a joking title are not a wall", () => {
+  const notice = "Ana Ruiz Product designer in Madrid. GitHub LinkedIn This site is protected by reCAPTCHA and the Google Privacy Policy and Terms of Service apply.";
+  assert.equal(isBotWallPage({ text: notice }), false);
+  assert.equal(capturedBlocked({ text: notice, outboundLinks: 2 }), null);
+  assert.equal(isBotWallPage({ text: words(2000), title: "Jane Doe - I'm not a robot" }), false, "a long site");
+  assert.equal(isBotWallPage({ text: words(2000), title: "Are you a robot?" }), false, "a title counts only on a short page");
+  assert.equal(isBotWallPage({ text: words(30), title: "Jane Doe - I'm not a robot" }), false);
+  // A short page that asks for the captcha is still one.
+  assert.equal(isBotWallPage({ text: "Please complete the CAPTCHA below to continue." }), true);
+});
+
+test("readBlockedInputs: a page that cannot be read falls back to the text read before, never to an empty page", async () => {
+  const failing = { evaluate: async () => Promise.reject(new Error("Execution context was destroyed")), title: async () => "Jane Doe" };
+  const shown = await readBlockedInputs(failing, PORTFOLIO);
+  assert.equal(shown.text, PORTFOLIO);
+  assert.equal(capturedBlocked(shown), null);
+  assert.equal("html" in shown, false, "the page's HTML is not carried along");
 });
 
 test("httpVerdict: the main document's status decides; an error page is never the site", () => {
@@ -131,6 +176,11 @@ test("httpVerdict: the main document's status decides; an error page is never th
   assert.match(odd.reason, /HTTP 403, but the page shows a site/);
   // Not without the evidence of what the page showed.
   assert.equal(httpVerdict({ status: 403, ...site }).needsReview, false);
+  // A single-page app served from a copied 404.html after a hard navigation goes the same way.
+  const spa = httpVerdict({ status: 404, ...site, shown: site });
+  assert.equal(spa.needsReview, true);
+  assert.match(spa.reason, /HTTP 404, but the page shows a site/);
+  assert.deepEqual(httpVerdict({ status: 404, text: "Not Found", shown: { text: "Not Found" } }), { status: "dead", reason: "HTTP 404", needsReview: false });
 });
 
 test("isBlockedReason and isBotWallReason read the stored failure reason", () => {

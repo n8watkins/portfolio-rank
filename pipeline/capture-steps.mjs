@@ -16,7 +16,10 @@
 //   shot              a screenshot that times out or hits Chrome's "Unable to
 //                     capture screenshot" is taken again through the DevTools
 //                     protocol, which captures the viewport as composited.
+//   flatFrame         whether a screenshot is one flat colour: a page with
+//                     no text whose canvas or image never drew anything.
 
+import { PNG } from "pngjs";
 import { readRenderedPage } from "./gate.mjs";
 
 export const CONTENT_WAIT_MS = 15000;
@@ -44,6 +47,35 @@ export async function waitForContent(page, maxMs = CONTENT_WAIT_MS) {
     if (Date.now() - t0 >= maxMs) return { ms: Date.now() - t0, content: false };
     await page.waitForTimeout(POLL_MS);
   }
+}
+
+/** A frame is flat when fewer than this share of its sampled pixels differ from its most common colour. */
+export const FLAT_FRAME_MAX_SHARE = 0.005;
+
+/**
+ * Whether a PNG screenshot is one flat colour (a canvas that never drew, a
+ * black preloader): fewer than FLAT_FRAME_MAX_SHARE of about 40,000 sampled
+ * pixels differ noticeably from the most common colour.
+ * @param {Buffer} png
+ */
+export function flatFrame(png) {
+  const img = PNG.sync.read(png);
+  const step = Math.max(1, Math.floor(Math.sqrt((img.width * img.height) / 40000)));
+  const counts = new Map();
+  const samples = [];
+  for (let y = 0; y < img.height; y += step) {
+    for (let x = 0; x < img.width; x += step) {
+      const o = (y * img.width + x) * 4;
+      const px = [img.data[o], img.data[o + 1], img.data[o + 2]];
+      samples.push(px);
+      const k = px.map((c) => c >> 4).join(",");
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "0,0,0";
+  const base = top.split(",").map((c) => Number(c) * 16 + 8);
+  const off = samples.filter((px) => Math.abs(px[0] - base[0]) + Math.abs(px[1] - base[1]) + Math.abs(px[2] - base[2]) > 40).length;
+  return off / Math.max(1, samples.length) < FLAT_FRAME_MAX_SHARE;
 }
 
 /** The DevTools screenshot is asked for up to this many times, this far apart, while Chrome has no frame ready. */
