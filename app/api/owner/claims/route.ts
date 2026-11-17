@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
-import { CLAIMS_PER_HOUR, META_NAME, NOTE_MAX, autoProof, claimHold, listClaims, metaProof, openClaim, ownerState, removalProof, setClaimStatus } from "@/lib/games/claims.mjs";
+import { CLAIMS_PER_HOUR, META_NAME, NOTE_MAX, applyProof, autoProof, listClaims, metaProof, openClaim, ownerState, removalProof, setClaimStatus } from "@/lib/games/claims.mjs";
 import { fetchPage, githubProfile, templateOf } from "@/lib/games/owner";
 import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
 import { accountTooNew, guardConfig } from "@/lib/rater";
@@ -87,18 +87,24 @@ export async function POST(req: Request) {
 
   const now = new Date();
   let claim = (await openClaim(db(), { url, owner: me.id, login: me.login, token: randomBytes(12).toString("base64url"), now })) as Claim;
+  // A proof that held goes through the same limits on every route (lib/games/claims.mjs applyProof):
+  // past the automatic limit, or from a GitHub account younger than MIN_GITHUB_ACCOUNT_AGE_DAYS, a new
+  // claim waits for the site owner's review, and a verified claim stays as it is.
+  const prove = async (proof: string) => {
+    const out = await applyProof(db(), { claim, proof, tooNew: me.tooNew, minAccountAgeDays: guardConfig().minAccountAgeDays, actor: me.id, now });
+    return NextResponse.json({ claim: await shape(out.claim as Claim), ...(out.reason ? { reason: out.reason } : {}) }, { headers: PRIVATE });
+  };
   // A claim verified by its link can add the meta tag later, which removal asks for.
   if (claim.status === "verified" && method === "meta" && claim.method !== "meta") {
     const page = await fetchPage(url);
     if (!metaProof({ url, page, token: claim.token })) return NextResponse.json({ claim: await shape(claim), reason: page ? "no_proof" : "unreachable" }, { headers: PRIVATE });
-    // The same limits as a first proof (claimHold): a GitHub account younger than MIN_GITHUB_ACCOUNT_AGE_DAYS waits for a review.
-    const hold = await claimHold(db(), { claim, proof: "meta", tooNew: me.tooNew, minAccountAgeDays: guardConfig().minAccountAgeDays });
-    claim = (await setClaimStatus(db(), { claim, status: hold ? "review" : "verified", method: "meta", note: hold, actor: me.id, now })) as Claim;
-    return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
+    return prove("meta");
   }
   if (claim.status === "verified" || claim.status === "rejected") return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
 
   if (method === "manual") {
+    // Already waiting for a review: asking again changes nothing.
+    if (claim.status === "review") return NextResponse.json({ claim: await shape(claim), reason: "review" }, { headers: PRIVATE });
     const note = typeof body.note === "string" ? body.note.trim() : "";
     claim = (await setClaimStatus(db(), { claim, status: "review", method: "manual", note: note || null, actor: me.id, now })) as Claim;
     return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
@@ -114,17 +120,5 @@ export async function POST(req: Request) {
     proof = autoProof({ url, page, login: profile?.login ?? me.login, template: await templateOf(url) });
   }
   if (!proof) return NextResponse.json({ claim: await shape(claim), reason: page ? "no_proof" : "unreachable" }, { headers: PRIVATE });
-
-  // Proof holds; past the automatic limit, or from a GitHub account younger
-  // than MIN_GITHUB_ACCOUNT_AGE_DAYS, the site owner confirms by hand.
-  const hold = await claimHold(db(), { claim, proof, tooNew: me.tooNew, minAccountAgeDays: guardConfig().minAccountAgeDays });
-  claim = (await setClaimStatus(db(), {
-    claim,
-    status: hold ? "review" : "verified",
-    method: proof,
-    note: hold,
-    actor: me.id,
-    now,
-  })) as Claim;
-  return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
+  return prove(proof);
 }

@@ -30,9 +30,8 @@ export async function removalsTick(env: NightEnv, scheduledTime: number) {
       return undefined;
     }
   };
+  // Each removal that applies drops the cached quiz pool in its own transaction (applyDueRemovals).
   const applied = (await step("apply", () => applyDueRemovals(db, { now }))) ?? [];
-  // The quiz pool leaves out removed sites.
-  if (applied.length) await step("pool", () => db.execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] }));
   // Only the removal alerts are in scope here, so this never clears the night's.
   const alerts = await step("alerts", async () =>
     reconcileAlerts(db, {

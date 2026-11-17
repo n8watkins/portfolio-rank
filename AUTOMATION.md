@@ -300,12 +300,20 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   Every proof is checked on the listed address's own page, so a fork or copy at another address (the copier's github.io or domain) can't claim or remove the original.
   The GitHub profile's Website field is never proof: anyone can set it to any domain, and claims once verified that way count as pending and give no owner rights (`RETIRED_PROOFS`).
   Otherwise the owner adds `<meta name="portfoliorank-verify" content="<token>">` and asks again with `method: "meta"`, or asks for manual review, which the admin decides through `/api/admin/claims`.
-  An account verifies at most 3 portfolios by itself; more go to review.
+  An account verifies at most 3 portfolios by itself; more go to review, and so does every new claim from a GitHub account younger than `MIN_GITHUB_ACCOUNT_AGE_DAYS`.
+  Both claim routes (`/api/owner/claims` and, with "Add your portfolio" on, `/api/owner/verify`, which proves with the verification file or meta tag) apply these limits the same way (`applyProof`): a hold only stops a claim from gaining something, so a verified claim is never demoted (a too-new account's new proof on it waits, reason `account_too_new`), a claim held for review stays as it is until the hold is gone or the admin decides, and a rejected claim stays rejected until the admin changes it.
+  Opening a claim counts against 10 an hour per account on both routes, before anything is written.
+  `/api/owner/verify` "start", which the claim page sends on every load, only reads a claim that already exists (`verifyReadOnly`), as does a check of a claim that is rejected or would be held again.
 - **Owner actions:** remove, hide or show the grade, and re-grade.
   A link to the GitHub profile is enough only to ask for a re-grade: pages link collaborators', designers' and template authors' profiles too.
-  Hiding or showing the grade and removing need proof only the site's owner can give (`controlProof`): the meta tag, `github_pages`, or a claim the admin reviewed; and a removal is held for 24 hours: the hourly cron alerts the owner of PortfolioRank about each held removal (`worker/owner-removals.ts`), the claimant can cancel it, and the admin can undo it before or after it takes effect (`/api/admin/removals`).
-  Once the day is up the site is hidden (`lib/roster.ts`), then added to `data/excluded.json` as `owner_request` with reason "owner request" by the weekly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
-  A hidden grade is left out of the portfolio page, the print report (except for the owner) and the quiz pool.
+  Hiding or showing the grade, removing, cancelling a held removal and reading a hidden grade in the print report need proof that you can deploy to the site (`controlProof`): the verification file, the meta tag, `github_pages`, or a claim the admin reviewed.
+  Without it the actions route answers 403 `remove_needs_meta`, `cancel_needs_meta` or `hide_needs_meta` (`not_owner` without a verified claim; `account_too_new` for an account younger than `MIN_GITHUB_ACCOUNT_AGE_DAYS`, which `/api/recheck` refuses too).
+  A removal is held for 24 hours, and any account with that proof can cancel it, not only the one that asked: both can deploy to the site.
+  The cancel is logged with who cancelled and whether it was the account that asked (no account id in the log's detail), and the admin can undo a removal before or after it takes effect (`/api/admin/removals`).
+  The hourly cron alerts the owner of PortfolioRank once per site (`removal:<url>`, at most one email a day) while a removal is held and for a day after a cancel, with the latest state: held until when, or cancelled by whom, and how many cancels the last day saw (`worker/owner-removals.ts`, `removalConditions`).
+  Once the day is up the site is hidden (`lib/roster.ts`) and the quiz pool's cache dropped in the same transaction; the hourly edge purge then takes its profile out of the edge cache and records `portfolio_owner.purged_at`, trying again each hour until the purge works, whatever the rest of the hourly tick did (`purgeRemovedProfiles`).
+  It is then added to `data/excluded.json` as `owner_request` with reason "owner request" by the weekly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
+  A hidden grade is left out of the portfolio page, the print report (except for an owner with that proof) and the quiz pool.
   A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
   Every claim step and action is written to `claim_log`, the audit log.
 - **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, sites changed this month from `rating_resets`, the newest entry) come from one pass over the listed portfolios, cached an hour.
@@ -332,13 +340,14 @@ The API:
 | `GET /api/badges` | `{ badges: [{ id, name, how, hue, counter, target, progress, earned, earnedAt, new }], counters, eye, signedIn }` |
 | `POST /api/badges` `{ kind: "share" }` or `{ kind: "visit", url }` | `{ recorded, badges }` |
 | `GET /api/owner/claims` | `{ claims: [{ url, status, method, meta, state }] }`; 401 |
-| `POST /api/owner/claims` `{ url, method?, note? }` | `{ claim }` with status `verified`, `pending`, `review` or `rejected`; 400, 401, 403, 429 |
-| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new` or `remove_needs_meta`, 429 |
+| `POST /api/owner/claims` `{ url, method?, note? }` | `{ claim, reason? }` with status `verified`, `pending`, `review` or `rejected`; reason `review` or `account_too_new` when a proof held but is waiting; 400, 401, 403, 429 |
+| `POST /api/owner/verify` `{ url, method }` | `{ claim, reason? }`; method `start`, `file` or `meta`; reason `review`, `rejected` or `account_too_new`, or why the proof wasn't found; 400, 401, 403, 404 (tools off), 429 |
+| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new`, `remove_needs_meta`, `cancel_needs_meta` or `hide_needs_meta`, 429 |
 | `GET`/`POST /api/admin/removals` `{ url, action: "undo" }` | the admin's view of held and done removals, and their undo; `{ state, wasRemoved, note? }` (when `wasRemoved`, the weekly exclusions pull request takes its `data/excluded.json` entry out again, logged as `removal_restored`; the daily sync lists the site again) |
 | `GET /api/admin/claims`, `POST /api/admin/claims` `{ id, decision, note? }` | the review queue, and a decision; admin login only |
 | `GET /api/stats/live` | the live numbers; public, 60 s, edge cache |
 | `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` with `reason` |
-| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden), 404, 410 (link used, expired or forged) |
+| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden, except for an owner with control proof), 404, 410 (link used, expired or forged) |
 
 A quiz is `{ id, kind, day, challenge, hit, rounds: [{ index, url, name, tagline, domain, path, shot, hero }], progress: { results, finished, score, hits } }`.
 

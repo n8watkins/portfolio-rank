@@ -88,35 +88,44 @@ function purgeTagsOf(ctx: { exports?: unknown }) {
   return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
 }
 
+type PurgeTags = (tags: string[]) => Promise<boolean>;
+const purgeFailed = (where: string, e: unknown) =>
+  console.log(JSON.stringify({ event: "edge.purge_failed", where, error: String((e as Error)?.message ?? e).slice(0, 200) }));
+
 /**
- * The hourly purges (./edge-cache.ts keeps profiles and the blog a day):
- * - profiles whose owner's removal took effect, read from the database
- *   (lib/games/claims.mjs purgeRemovedProfiles), not from what the removals
- *   task returned: each is purged however that task's other steps went, and
- *   one whose purge fails is tried again the next hour until it works;
- * - the blog, when a post's scheduled time came in the last hour (best effort:
- *   a failure only means the page refreshes when its day is up).
+ * Profiles whose owner's removal took effect, read from the database
+ * (lib/games/claims.mjs purgeRemovedProfiles), not from what the removals task
+ * returned: each is purged however that task's other steps went, and one whose
+ * purge fails is tried again the next hour until it works.
  */
-async function purgeAfterHour(ctx: { exports?: unknown }, scheduledTime: number) {
-  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
-  if (!cached) return;
-  const failed = (where: string, e: unknown) =>
-    console.log(JSON.stringify({ event: "edge.purge_failed", where, error: String((e as Error)?.message ?? e).slice(0, 200) }));
+async function purgeOwnerRemovals(purgeTags: PurgeTags, scheduledTime: number) {
   try {
-    const out = await purgeRemovedProfiles(database(), { now: new Date(scheduledTime), purge: (urls: string[]) => cached.purgeTags(urls.map(profileTag)) });
-    if (out.failed.length) failed("hourly-removals", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
+    const out = await purgeRemovedProfiles(database(), { now: new Date(scheduledTime), purge: (urls: string[]) => purgeTags(urls.map(profileTag)) });
+    if (out.failed.length) purgeFailed("hourly-removals", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
   } catch (e) {
-    failed("hourly-removals", e);
+    purgeFailed("hourly-removals", e);
   }
+}
+
+/** The blog, when a post's scheduled time came in the last hour. Best effort: a failure only means the page refreshes when its day is up. */
+async function purgeScheduledPosts(purgeTags: PurgeTags, scheduledTime: number) {
   try {
     const r = await database().execute({
       sql: "SELECT 1 FROM posts WHERE status = 'published' AND publish_at > ? AND publish_at <= ? LIMIT 1",
       args: [new Date(scheduledTime - 3600_000).toISOString(), new Date(scheduledTime).toISOString()],
     });
-    if (r.rows.length) await cached.purgeTags([BLOG_TAG]);
+    if (r.rows.length) await purgeTags([BLOG_TAG]);
   } catch (e) {
-    failed("hourly", e);
+    purgeFailed("hourly", e);
   }
+}
+
+/** The hourly purges (./edge-cache.ts keeps profiles and the blog a day): one helper per source of pages to purge, each on its own. */
+async function purgeAfterHour(ctx: { exports?: unknown }, scheduledTime: number) {
+  const purgeTags = purgeTagsOf(ctx);
+  if (!purgeTags) return;
+  await purgeOwnerRemovals(purgeTags, scheduledTime);
+  await purgeScheduledPosts(purgeTags, scheduledTime);
 }
 const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerprint ?? "dev");
 

@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
-import { controlProof, ownerAction } from "@/lib/games/claims.mjs";
+import { PROOF_ERRORS, controlProof, ownerAction } from "@/lib/games/claims.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { loadProfile } from "@/lib/profile";
 import { purgeProfile } from "@/lib/edge-purge";
@@ -11,7 +11,7 @@ import { PRIVATE, fail, forgetPool, gamesEnabled, off, overLimit, rateLimited } 
 import { accountTooNew, guardConfig } from "@/lib/rater";
 
 // What a verified owner can do with their portfolio (remove and hide always; regrade with GAMES_V2).
-// A held removal takes effect hourly (worker/owner-removals.ts), which also clears the quiz pool's cache.
+// A held removal takes effect hourly (worker/owner-removals.ts), clearing the quiz pool's cache with it.
 // POST /api/owner/actions { url, action, confirm? }
 //   remove         (needs confirm: true, and the meta tag or a reviewed
 //                  claim) held for 24 hours with an alert to the site's
@@ -33,7 +33,7 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
 /** ownerAction's refusals that mean "not with this proof" (403), not a bad request. */
-const FORBIDDEN = new Set(["not_owner", "remove_needs_meta", "cancel_needs_meta", "hide_needs_meta"]);
+const FORBIDDEN = new Set<string>(PROOF_ERRORS);
 
 export async function POST(req: Request) {
   // Remove and hide are always on, so removal is self-serve; a re-grade waits for the games (GAMES_V2).
