@@ -368,17 +368,17 @@ test("f: the summary says needs-review sites go to the owner, not the grading qu
 // ---------------------------------------------------------------------------
 // Removed "down" sites come back by themselves (owner, 2026-11-16)
 
-test("a removed 'down' site is checked again monthly and leaves the exclusion list when it answers", async () => {
+test("a removed 'down' site is checked again (days 7, 14, 21, then monthly) and leaves the exclusion list when it answers", async () => {
   const now = new Date("2026-12-20T00:00:00Z");
   const list = [
     { url: "https://paused.example", kind: "down", reason: "HTTP 402: deployment paused", removed: "2026-11-16" },
     { url: "https://still-paused.example", kind: "down", reason: "HTTP 402: deployment paused", removed: "2026-11-16" },
-    { url: "https://recent.example", kind: "down", reason: "HTTP 500", removed: "2026-12-10" },
+    { url: "https://recent.example", kind: "down", reason: "HTTP 500", removed: "2026-12-15" },
     { url: "https://np.example", kind: "not_portfolio", removed: "2026-01-01" },
   ];
   const checked = [];
   const r = await exclusions.planDeadRecheck({ excluded: list, now, answers: async (u) => (checked.push(u), u === "https://paused.example") });
-  assert.deepEqual(checked, ["https://paused.example", "https://still-paused.example"], "due 30 days after removal; never a not_portfolio entry");
+  assert.deepEqual(checked, ["https://paused.example", "https://still-paused.example"], "due 7 days after removal; never a not_portfolio entry");
   assert.deepEqual(r.back, ["https://paused.example"]);
   const still = r.excluded.find((e) => e.url === "https://still-paused.example");
   assert.equal(still.recheck_after, "2027-01-19");

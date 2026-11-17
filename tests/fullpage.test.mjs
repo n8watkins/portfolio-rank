@@ -35,7 +35,6 @@ import { captureOnce } from "../pipeline/capture-once.mjs";
 import { IMMUTABLE, deleteAllShots, imageKey, imagesBucket, legacyFramesOn, notStored, storeVersion } from "../pipeline/shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "../pipeline/shot-files.mjs";
 import { ACTIVE, ensureRosterSchema, pipelineDb } from "../pipeline/roster.mjs";
-import { ensureHealthSchema } from "../pipeline/not-working.mjs";
 import { SHOT_FILES, shotFor } from "../worker/shots.ts";
 import { fullPageFrames } from "../lib/shot-url.ts";
 import { fullPagePreviewEnabled } from "../lib/fullpage-flag.ts";
@@ -308,8 +307,6 @@ test("backfill queue: never tried first, retries a week apart, three tries at mo
   process.env.LOCAL_DB_FILE = path.join(tmp, "backfill.db");
   const db = pipelineDb(tmp);
   await ensureRosterSchema(db);
-  // The health check's table, as every migrated database has it: ACTIVE reads it.
-  await ensureHealthSchema(db);
   const now = Date.parse("2026-11-13T12:00:00Z");
   const done = { v: "abc", at: "2026-11-01T00:00:00Z", desktop: { width: 1440, height: 3000, bytes: 100 }, phone: { width: 390, height: 5000, bytes: 90 } };
   const failedOld = { at: "2026-11-01T00:00:00Z", desktop: { error: "x" }, phone: { error: "x" }, tries: 1 };

@@ -16,7 +16,7 @@
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
-import { VALID_MARKS } from "./not-working.mjs";
+import { VALID_MARKS, ensureHealthSchema } from "./not-working.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -93,6 +93,8 @@ export async function ensureRosterSchema(db) {
   }
   // Needs the health column above (lib/hidden.mjs).
   await db.execute(HIDDEN_INDEX);
+  // The health check's own table, which ACTIVE reads (pipeline/not-working.mjs).
+  await ensureHealthSchema(db);
 }
 
 /**
@@ -104,8 +106,9 @@ export async function ensureRosterSchema(db) {
  * (pipeline/not-working.mjs VALID_MARKS). Everything else keeps its capture
  * work: a site 'suspect' for a blocked capture or a page with the wrong
  * thing (that is how it recovers), and one whose row something else changed
- * since (the review queue's confirm, which queues a capture). Needs the
- * health_marks table (lib/schema.mjs). `p` is the table alias.
+ * since (the review queue's confirm, which queues a capture). Reads the
+ * health_marks table, which ensureRosterSchema creates (as lib/schema.mjs
+ * does). `p` is the table alias.
  */
 export const ACTIVE = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'

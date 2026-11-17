@@ -25,7 +25,7 @@ import fs from "fs";
 import { APPLIED_REMOVAL_WHERE, checkSite, mapPool, normKey } from "./health.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
-import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesList, notAnswering } from "./not-working.mjs";
+import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesOnFreshFailure, notAnswering } from "./not-working.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
 export const MAX_EXCLUDE_SHARE = 0.1;
@@ -94,13 +94,24 @@ export const DEAD_RECHECK_LIMIT = 40;
 // (health.yml, 120 minutes) is never at risk: the rest wait for the next run.
 export const DEAD_RECHECK_CONCURRENCY = 8;
 export const DEAD_RECHECK_BUDGET_MS = 15 * 60000;
-// A "down" entry (three failed weekly checks) is checked again monthly (owner, 2026-11-16: a paused
-// Vercel project or a missing deployment often comes back), under the same cap a run.
+// A "down" entry removed for not answering is checked again (owner, 2026-11-16: a paused Vercel project or
+// a missing deployment often comes back) on these days after its removal, while its row is still kept (the
+// row of a site off the list is deleted 30 days after it leaves, pipeline/roster.mjs PURGE_AFTER_DAYS, and a
+// site back after that would return ungraded). The checks are planned with the weekly export, so each
+// lands within a week of its day: the last one before day 28. Then monthly, under the same cap a run.
+export const DOWN_RECHECK_FIRST_DAYS = [7, 14, 21];
 export const DOWN_RECHECK_DAYS = 30;
 /** Days to the next check of an entry of this kind, or 0 for a kind that is never checked again. */
 export const recheckDays = (kind) => (kind === "dead" ? DEAD_RECHECK_DAYS : kind === "down" ? DOWN_RECHECK_DAYS : 0);
 
 const addDays = (day, days) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+
+/** The next check of a "down" entry removed on `removed` (YYYY-MM-DD), checked on `day`: DOWN_RECHECK_FIRST_DAYS, then monthly. */
+export function nextDownCheck(removed, day) {
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(String(removed ?? ""));
+  const first = valid ? DOWN_RECHECK_FIRST_DAYS.map((d) => addDays(String(removed), d)).find((d) => d > day) : null;
+  return first ?? addDays(day, DOWN_RECHECK_DAYS);
+}
 
 /**
  * Whether a "down" entry was removed for not answering (the name, the
@@ -114,13 +125,13 @@ export const removedForNotAnswering = (reason) => notAnswering(reason);
 /**
  * The day an excluded entry is due for its check, or null when it never is:
  * recheck_after when set; for a "down" entry removed for not answering
- * without one, DOWN_RECHECK_DAYS after its removal.
+ * without one, its first check day (DOWN_RECHECK_FIRST_DAYS) after its removal.
  */
 export function recheckDue(e) {
   if (!e || typeof e !== "object" || !recheckDays(e.kind)) return null;
   if (e.kind === "down" && !removedForNotAnswering(e.reason)) return null;
   if (e.recheck_after) return String(e.recheck_after);
-  if (e.kind === "down") return /^\d{4}-\d{2}-\d{2}$/.test(String(e.removed ?? "")) ? addDays(String(e.removed), DOWN_RECHECK_DAYS) : "";
+  if (e.kind === "down") return /^\d{4}-\d{2}-\d{2}$/.test(String(e.removed ?? "")) ? addDays(String(e.removed), DOWN_RECHECK_FIRST_DAYS[0]) : "";
   return "";
 }
 
@@ -178,7 +189,9 @@ export async function planDeadRecheck({
     else still.add(e);
   });
   return {
-    excluded: excluded.filter((e) => !back.has(e)).map((e) => (still.has(e) ? { ...e, last_checked: day, recheck_after: addDays(day, recheckDays(e.kind)) } : e)),
+    excluded: excluded
+      .filter((e) => !back.has(e))
+      .map((e) => (still.has(e) ? { ...e, last_checked: day, recheck_after: e.kind === "down" ? nextDownCheck(e.removed, day) : addDays(day, recheckDays(e.kind)) } : e)),
     back: [...back].map((e) => e.url),
     still: [...still].map((e) => e.url),
     left: due.length - back.size - still.size,
@@ -308,7 +321,8 @@ export async function weeklyExport({ db, excluded, feed, render, answers, now = 
     if (!dryRun) {
       if (dead.back.length) {
         await db.execute({
-          sql: `UPDATE health_marks SET pool_next_at = ? WHERE url IN (${dead.back.map(() => "?").join(",")}) AND pool_stage IS NOT NULL`,
+          sql: `UPDATE health_marks SET pool_next_at = ? WHERE url IN (${dead.back.map(() => "?").join(",")})
+                  AND EXISTS (SELECT 1 FROM portfolios p WHERE p.url = health_marks.url AND ${VALID_MARKS("health_marks", "p")})`,
           args: [now.toISOString(), ...dead.back],
         });
       }
@@ -336,7 +350,8 @@ export async function planExclusions({ db, excluded, feed, now = new Date(), rea
     await db.execute(
       `SELECT p.url, p.name, p.status, p.reason, p.health_reason, p.health_fails, p.health_first_fail_at, p.health_checked_at,
               ${pooled ? `CASE WHEN ${VALID_MARKS()} THEN m.pool_stage END` : "NULL"} AS pool_stage,
-              ${pooled ? `CASE WHEN ${VALID_MARKS()} THEN m.pool_since END` : "NULL"} AS pool_since
+              ${pooled ? `CASE WHEN ${VALID_MARKS()} THEN m.pool_since END` : "NULL"} AS pool_since,
+              ${pooled ? `CASE WHEN ${VALID_MARKS()} THEN m.last_fail_at END` : "NULL"} AS last_fail_at
        FROM portfolios p ${pooled ? "LEFT JOIN health_marks m ON m.url = p.url" : ""}
        WHERE p.health = 'down' AND p.delisted_at IS NULL ORDER BY p.url`
     )
@@ -360,14 +375,18 @@ export async function planExclusions({ db, excluded, feed, now = new Date(), rea
       held.push({ url, why: "a good capture replaced the blocked one this failure was about" });
       continue;
     }
-    // Not working (./not-working.mjs): hidden, but on the list until LEAVE_AFTER_DAYS have passed, so a
-    // site that answers again comes back by itself. A row confirmed down for not answering before the
-    // pool existed (no pool marks) counts from its first failure.
-    const inPool = kind === "down" && (Number(r.pool_stage ?? 0) === NOT_WORKING || (r.pool_stage == null && notAnswering(r.health_reason)));
-    if (inPool) {
-      const since = r.pool_since ?? r.health_first_fail_at;
-      if (!leavesList(since == null ? null : String(since), now)) {
-        held.push({ url, why: `not working since ${since == null ? "an unknown date" : String(since).slice(0, 10)}; it leaves the list after ${LEAVE_AFTER_DAYS} days` });
+    // Not working (./not-working.mjs): hidden, but on the list until it has been so LEAVE_AFTER_DAYS AND a
+    // check made on or after that day has failed, so a site never leaves on a check weeks old. A row down
+    // for not answering with no ladder (from before the pool, or its marks voided) waits for its next
+    // nightly check, which puts it on the ladder (not working since its first failure).
+    if (kind === "down" && (Number(r.pool_stage ?? 0) === NOT_WORKING || notAnswering(r.health_reason))) {
+      const since = r.pool_since == null ? null : String(r.pool_since);
+      if (Number(r.pool_stage ?? 0) !== NOT_WORKING) {
+        held.push({ url, why: "down for not answering; its next check puts it on the not-working ladder" });
+        continue;
+      }
+      if (!leavesOnFreshFailure(since, r.last_fail_at == null ? null : String(r.last_fail_at))) {
+        held.push({ url, why: `not working since ${String(since).slice(0, 10)}; it leaves the list only when a check on or after day ${LEAVE_AFTER_DAYS} fails` });
         continue;
       }
     }

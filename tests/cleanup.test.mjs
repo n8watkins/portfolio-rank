@@ -21,8 +21,6 @@ import {
   purgeDelisted,
   syncRoster,
 } from "../pipeline/roster.mjs";
-// The health check's table, as every migrated database has it: ACTIVE reads it.
-import { ensureHealthSchema } from "../pipeline/not-working.mjs";
 import {
   checkSite,
   DOWN_AFTER_DAYS,
@@ -69,7 +67,6 @@ test("syncRoster delists rows that left the feed, with the date, and restores th
   const { db } = tempDb();
   const feed = roster(MIN_ROSTER);
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   for (const u of [feed[0].url, feed[1].url, "https://gone.example"]) {
     await db.execute({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live')", args: [u] });
   }
@@ -97,9 +94,7 @@ test("ensureRosterSchema is additive and idempotent on an existing table", async
   await db.execute("CREATE TABLE portfolios (url TEXT PRIMARY KEY, name TEXT, status TEXT NOT NULL DEFAULT 'pending', reason TEXT, shot_key TEXT, meta TEXT, checked_at TEXT, captured_at TEXT)");
   await db.execute("INSERT INTO portfolios (url, status) VALUES ('https://a.example', 'live')");
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const cols = (await db.execute("PRAGMA table_info(portfolios)")).rows.map((r) => r.name);
   for (const c of ["delisted_at", "health", "health_fails", "retry_at", "capture_attempts", "final_url"]) assert.ok(cols.includes(c), c);
   const row = (await db.execute("SELECT status, health_fails FROM portfolios")).rows[0];
@@ -110,7 +105,6 @@ test("ensureRosterSchema is additive and idempotent on an existing table", async
 test("purgeDelisted deletes screenshots and rows after 30 days, keeps votes and ratings", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   await db.execute("CREATE TABLE votes (winner TEXT, loser TEXT)");
   await db.execute("CREATE TABLE ratings (url TEXT PRIMARY KEY, elo INTEGER)");
   const now = new Date("2026-12-20T00:00:00Z");
@@ -139,7 +133,6 @@ test("purgeDelisted deletes screenshots and rows after 30 days, keeps votes and 
 test("purgeDelisted keeps a row whose screenshots could not be deleted, and refuses a mass purge", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const now = new Date("2026-12-20T00:00:00Z");
   const old = new Date(now - 40 * DAY).toISOString();
   for (let i = 0; i < 9; i++) await db.execute({ sql: "INSERT INTO portfolios (url) VALUES (?)", args: [`https://k${i}.example`] });
@@ -163,7 +156,6 @@ test("capture retries back off: 1, 2, 4, 8, 16, then 30 days", () => {
 test("dueForCapture: new sites and failures whose backoff ran out; never captured, delisted or down ones", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const now = new Date("2026-11-10T00:00:00Z");
   const past = new Date(now - DAY).toISOString();
   const future = new Date(now.getTime() + DAY).toISOString();
@@ -188,7 +180,6 @@ test("dueForCapture: a retry set a few minutes into last night's run is due toni
   // one-day retry waited two days.
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const runStart = new Date("2026-11-15T04:30:14Z");
   await db.batch([
     { sql: "INSERT INTO portfolios (url, status, retry_at) VALUES ('https://late-in-run.example', 'error', ?)", args: ["2026-11-15T04:38:00.000Z"] },
@@ -370,7 +361,6 @@ test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${D
 test("runHealthCheck records states and schedules a recapture for recovered failed captures; a 'not a portfolio' grade is not a failed check", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const feed = [
     { name: "Alice Able", url: "https://alice.dev" },
     { name: "Bob Bee", url: "https://bob.dev" },
@@ -410,7 +400,6 @@ test("runHealthCheck records nothing when most sites fail at once (the runner, n
 test("ACTIVE() keeps delisted, down and unanswering rows out of the free jobs; AI_WORK() keeps every failing row out of the AI's", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   await db.batch([
     "INSERT INTO portfolios (url) VALUES ('https://ok.example')",
     "INSERT INTO portfolios (url, health, health_reason) VALUES ('https://suspect.example', 'suspect', 'renders blank')",
@@ -433,7 +422,6 @@ test("ACTIVE() keeps delisted, down and unanswering rows out of the free jobs; A
 test("planExclusions adds confirmed-down listed sites with evidence and drops them from the feed", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const feed = roster(30);
   await db.execute({
     sql: `INSERT INTO portfolios (url, health, health_reason, health_fails, health_first_fail_at, health_checked_at)
@@ -464,7 +452,6 @@ test("planExclusions adds confirmed-down listed sites with evidence and drops th
 test("planExclusions refuses to exclude more than 10% of the list at once", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
-  await ensureHealthSchema(db);
   const feed = roster(20);
   for (const p of feed.slice(0, 3)) await db.execute({ sql: "INSERT INTO portfolios (url, health) VALUES (?, 'down')", args: [p.url] });
   await assert.rejects(planExclusions({ db, excluded: [], feed }), /refusing/);

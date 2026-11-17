@@ -34,6 +34,7 @@ import { libraryTick } from "./library";
 import { removalsTick } from "./owner-removals";
 import { db as database } from "../lib/db";
 import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
+import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
@@ -93,14 +94,30 @@ function purgeTagsOf(ctx: { exports?: unknown }) {
   return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
 }
 
-async function purgeAfterHour(ctx: { exports?: unknown }, removed: string[], scheduledTime: number) {
+async function purgeAfterHour(ctx: { exports?: unknown }, env: CloudflareEnv, removed: string[], scheduledTime: number) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   if (!cached) return;
-  // Profiles the health check took away (the not-working pool, ../pipeline/not-working.mjs): marked when the
-  // write happened, cleared only by a purge that worked, so a failed one is tried again the next hour. One that
-  // comes back needs nothing: a not-found answer is never kept.
+  // Profiles the health check hid or showed (the not-working pool, ../pipeline/not-working.mjs): marked when the
+  // write happened. Each hour the app drops its own cached copy (path revalidation), is asked for the page past the
+  // edge (which also makes Next render a stale copy again), the edge copy is purged, and the mark is cleared only
+  // once the app already answers as it should, so a stale page the edge took in between is purged again.
   try {
-    const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => cached.purgeTags(urls.map(profileTag)) });
+    const waitUntil = (p: Promise<unknown>) => (ctx as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil?.(p);
+    const secret = String((env as unknown as { AUTH_SECRET?: string }).AUTH_SECRET ?? "");
+    const revalidate = async (urls: string[]) => {
+      if (!secret) return;
+      await app.fetch(
+        new Request(`${env.SITE_URL}/api/internal/revalidate-profiles`, {
+          method: "POST",
+          headers: { "content-type": "application/json", [INTERNAL_TOKEN_HEADER]: await internalToken(secret, REVALIDATE_PROFILES) },
+          body: JSON.stringify({ urls }),
+        }),
+        env,
+        { waitUntil }
+      );
+    };
+    const origin = async (url: string) => (await app.fetch(new Request(`${env.SITE_URL}/p/${encodeURIComponent(url)}`), env, { waitUntil })).status;
+    const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => cached.purgeTags(urls.map(profileTag)), origin, revalidate });
     if (out.failed.length) console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly-not-working", error: `purge refused for ${out.failed.length} profile(s); tried again next hour` }));
   } catch (e) {
     console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly-not-working", error: String((e as Error)?.message ?? e).slice(0, 200) }));
@@ -174,7 +191,7 @@ const worker = {
             removed = (await removalsTick(env as NightEnv, at)).applied;
           }],
           // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
-          ["edge purge", () => purgeAfterHour(ctx, removed, at)],
+          ["edge purge", () => purgeAfterHour(ctx, env, removed, at)],
           // An alert at 80% of any email cap (./email-alerts.ts).
           ["email caps", () => emailAlertsTick(env as NightEnv, at)],
           // An alert when last night's run never started or died (./night-watch.ts).

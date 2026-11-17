@@ -66,10 +66,10 @@ import {
   LEAVE_AFTER_DAYS,
   NOT_WORKING,
   ON_LADDER_SQL,
+  PURGE_BACK,
+  PURGE_GONE,
   VALID_MARKS,
-  adoptLegacy,
   columnsOf,
-  ensureHealthSchema,
   failOnLadder,
   holdOnLadder,
   leavesList,
@@ -77,6 +77,14 @@ import {
   poolOf,
 } from "./not-working.mjs";
 import { isHiddenRow } from "../lib/hidden.mjs";
+import { GRADER_POOL_KEY } from "../lib/grader/report.mjs";
+
+/**
+ * Drops the cached pools a visitor's games and grade reports draw from, so a
+ * site the run hid or showed leaves or joins them at once. After #252 merges,
+ * the games half is lib/games/pool.mjs clearPoolStatement().
+ */
+const CLEAR_POOLS = { sql: "DELETE FROM cache WHERE k IN (?, ?)", args: ["games:pool", GRADER_POOL_KEY] };
 
 // Thresholds of the ladder for sites that answer with the wrong thing (a
 // site that does not answer has ./not-working.mjs's). Failures count once a
@@ -372,10 +380,16 @@ export function nextHealth(prev, result, now = new Date()) {
     return { health: prev?.health ?? null, fails: Number(prev?.fails ?? 0), firstFailAt: prev?.firstFailAt ?? null, lastFailAt: prev?.lastFailAt ?? null, reason: keptReason(), pool: null };
   }
   // 3. The not-working ladder (./not-working.mjs): a site that does not answer, and a not-working site
-  //    that fails in any way.
+  //    that fails in any way. A row already down that does not answer and has no ladder (from before the
+  //    pool, or its marks voided) is not working since its first failure, so it never shows again and
+  //    still leaves the list only on a fresh failed check.
   const answers = !notAnswering(result.reason);
   if (prev?.pool && (!answers || prev.pool.stage >= NOT_WORKING)) return failOnLadder(prev, result, now);
-  if (!prev?.pool && !answers && prev?.health !== "down") return failOnLadder(prev, result, now);
+  if (!prev?.pool && !answers) {
+    if (prev?.health !== "down") return failOnLadder(prev, result, now);
+    const since = prev.firstFailAt ?? now.toISOString();
+    return failOnLadder({ ...prev, pool: { stage: NOT_WORKING, startedAt: since, since, nextAt: null, unclear: 0 } }, result, now);
+  }
   // 4. Down stays down until a check passes (confirmed by the weekly-counted rule, decided in the review
   //    queue, or not working with marks a later change voided): a failure never shows it again.
   if (prev?.health === "down") {
@@ -431,9 +445,9 @@ export async function mapPool(items, concurrency, fn, { stop = () => false } = {
 
 /** Every table the health check writes to (idempotent): the roster, the review queue's, health_marks. */
 export async function ensureHealthTables(db) {
+  // The roster's schema includes health_marks (./roster.mjs ensureRosterSchema).
   await ensureRosterSchema(db);
   await ensureReviewSchema(db);
-  await ensureHealthSchema(db);
 }
 
 /**
@@ -451,10 +465,10 @@ export async function ensureHealthTables(db) {
  * fail: those are expected to fail.
  *
  * `dryRun` checks and plans exactly the same and writes nothing: no schema
- * change, no adoption, no row, no door, no alert. The result carries
- * `changes` ([{ url, from, to, stage, reason }]) for each site whose health or
- * ladder stage would change. It works on a database from before this release
- * (the pool's columns read as empty, with the one-time adoption simulated).
+ * change, no row, no door, no alert. The result carries `changes` ([{ url,
+ * from, to, stage, reason }]) for each site whose health or ladder stage
+ * would change. It works on a database from before this release (the pool's
+ * columns read as empty).
  */
 export async function runHealthCheck({
   db,
@@ -470,7 +484,6 @@ export async function runHealthCheck({
   controls = [],
   alerts = true,
   dryRun = false,
-  adopted: adoptedIn = null,
   schemaReady = false,
   // The time a site's check finished, as ms: the real clock in a real run; a run given its own `now` (a
   // simulated clock) stays at that time unless it passes a clock of its own.
@@ -478,9 +491,6 @@ export async function runHealthCheck({
 }) {
   const now = nowIn ?? new Date();
   if (!dryRun && !schemaReady) await ensureHealthTables(db);
-  // The one-time adoption of rows failing for not answering when the pool shipped (./not-working.mjs);
-  // simulated in a dry run. The re-check passes what it adopted already.
-  const adopted = new Map((adoptedIn ?? (await adoptLegacy(db, { now, dryRun }))).map((a) => [a.url, a]));
   const marksCols = await columnsOf(db, "health_marks");
   const hasPool = marksCols.has("pool_health");
   let entries = feed.slice(0, limit);
@@ -488,7 +498,7 @@ export async function runHealthCheck({
   if (scheduled === "skip") {
     // The same rule as the re-check's (./not-working.mjs ON_LADDER_SQL): a site whose row changed under
     // its marks (set back to live by hand, confirmed or removed in the review queue) is the nightly run's again.
-    const onLadder = new Set([...(hasPool ? (await db.execute(ON_LADDER_SQL)).rows.map((r) => String(r.url)) : []), ...adopted.keys()]);
+    const onLadder = new Set(hasPool ? (await db.execute(ON_LADDER_SQL)).rows.map((r) => String(r.url)) : []);
     const before = entries.length;
     entries = entries.filter((e) => !onLadder.has(e.url));
     leftToRecheck = before - entries.length;
@@ -564,7 +574,8 @@ export async function runHealthCheck({
             CASE WHEN ${OPEN_CASE_SQL("p")} THEN 1 ELSE 0 END AS open_case,
             CASE WHEN ${REMOVAL_ON_RECORD_SQL("p")} THEN 1 ELSE 0 END AS decided_removal,
             ${["last_fail_at", "unknown_weeks", "unknown_last_at", "unknown_since", "pool_stage", "pool_started_at", "pool_next_at", "pool_since", "pool_unclear"].map((c) => `${mark(c)} AS ${c}`).join(", ")},
-            ${hasPool ? `CASE WHEN ${VALID_MARKS()} THEN 1 ELSE 0 END` : "0"} AS pool_valid
+            ${hasPool ? `CASE WHEN ${VALID_MARKS()} THEN 1 ELSE 0 END` : "0"} AS pool_valid,
+            ${marksCols.size ? "CASE WHEN m.url IS NULL THEN 0 ELSE 1 END" : "0"} AS has_marks
      FROM portfolios p ${marksCols.size ? "LEFT JOIN health_marks m ON m.url = p.url" : ""} WHERE p.delisted_at IS NULL ${where}`;
   const readRows = [];
   if (scheduled === "check") {
@@ -577,13 +588,6 @@ export async function runHealthCheck({
     readRows.push(...(await db.execute(rowSql(""))).rows);
   }
   const rows = new Map(readRows.map((r) => [String(r.url), r]));
-  // The adoption, simulated in a dry run (written already otherwise, and read back above).
-  if (dryRun) {
-    for (const [url, a] of adopted) {
-      const row = rows.get(url);
-      if (row && Number(row.pool_valid) !== 1) rows.set(url, { ...row, ...a.marks, pool_valid: 1 });
-    }
-  }
 
   // Duplicates are failures too, only after loading. A "not a portfolio" grade never is.
   const dupes = findDuplicates(results.filter((r) => r.ok));
@@ -692,6 +696,8 @@ export async function runHealthCheck({
     const hiddenBefore = isHiddenRow({ status: row?.status, health: row?.health });
     const hiddenAfter = isHiddenRow({ status: row?.status, health: next.health });
     const goneNow = next.health === "down" && str(row?.health) !== "down";
+    const backNow = next.health !== "down" && str(row?.health) === "down";
+    const purgeState = goneNow ? PURGE_GONE : backNow ? PURGE_BACK : 0;
     // A passing site whose last capture failed gets recaptured on the next sync.
     const retryNow = r.ok === true && row && String(row.status) !== "live";
     // Signals only from a page that loaded; otherwise the last ones stay.
@@ -747,8 +753,9 @@ export async function runHealthCheck({
               pool_stage = excluded.pool_stage, pool_started_at = excluded.pool_started_at,
               pool_next_at = excluded.pool_next_at, pool_since = excluded.pool_since, pool_unclear = excluded.pool_unclear,
               pool_health = excluded.pool_health, pool_checked_at = excluded.pool_checked_at,
-              -- Set when this write takes the profile away; cleared only by a purge that worked.
-              purge_pending = MAX(health_marks.purge_pending, excluded.purge_pending)`,
+              -- Set when this write takes the profile away (1) or brings it back (2); cleared by the hourly purge
+              -- once the cached copies agree (./not-working.mjs purgeGoneProfiles).
+              purge_pending = CASE WHEN excluded.purge_pending > 0 THEN excluded.purge_pending ELSE health_marks.purge_pending END`,
       args: [
         r.url,
         next.lastFailAt,
@@ -763,10 +770,13 @@ export async function runHealthCheck({
         // What the marks describe: the row as this write leaves it (./not-working.mjs VALID_MARKS).
         pool ? next.health : null,
         pool ? stamp : null,
-        goneNow ? 1 : 0,
+        purgeState,
       ],
     };
-    plans.push({ r, prev, next, marks, hiddenBefore, hiddenAfter, stmts: [stmt, mark] });
+    // A marks row only when there is something to keep or to clear: a ladder, a counted failure, a streak
+    // of could-not-tell, a profile to purge, or a row already there. A healthy site without one gets none.
+    const needMark = Number(row?.has_marks ?? 0) === 1 || Boolean(pool) || Boolean(next.lastFailAt) || Boolean(marks.unknownSince) || purgeState > 0;
+    plans.push({ r, prev, next, marks, hiddenBefore, hiddenAfter, stmts: needMark ? [stmt, mark] : [stmt] });
   }
   const written = [];
   if (dryRun) {
@@ -775,11 +785,16 @@ export async function runHealthCheck({
   } else {
     for (let i = 0; i < plans.length; i += 100) {
       const chunk = plans.slice(i, i + 100);
-      const res = await db.batch(
-        chunk.flatMap((p) => p.stmts),
-        "write"
-      );
-      chunk.forEach((p, j) => written.push(Number(res[j * 2]?.rowsAffected ?? 0) > 0));
+      const stmts = chunk.flatMap((p) => p.stmts);
+      // A site hidden or shown leaves the cached games pool and grader pool in the same write, as every
+      // other hide path does (lib/games/pool.mjs; after #252, clearPoolStatement() does the first).
+      if (chunk.some((p) => p.hiddenBefore !== p.hiddenAfter)) stmts.push(CLEAR_POOLS);
+      const res = await db.batch(stmts, "write");
+      let at = 0;
+      for (const p of chunk) {
+        written.push(Number(res[at]?.rowsAffected ?? 0) > 0);
+        at += p.stmts.length;
+      }
     }
   }
   plans.forEach(({ r, prev, next, marks }, i) => {
@@ -804,7 +819,6 @@ export async function runHealthCheck({
     if (r.ok === true && prev?.pool) summary.returned.push({ url: r.url, wasNotWorking: prev.pool.stage === NOT_WORKING });
     if (next.pool?.stage === NOT_WORKING && leavesList(next.pool.since, now)) summary.leavingList.push({ url: r.url, since: next.pool.since });
   });
-  summary.adopted = [...adopted.values()].map((a) => ({ url: a.url, health: a.health, reason: a.reason }));
 
   if (dryRun) {
     // What would change, site by site; nothing below runs (no door, no ranks, no alert).
@@ -960,16 +974,6 @@ export function healthSummary(s) {
     `A site that does not answer leaves the AI's work at its first failed check and is hidden when its re-check the next day fails too (the not-working pool, pipeline/not-working.mjs); ${s.leftToRecheck ? `${s.leftToRecheck} site(s) on that ladder were left to the hourly re-check. ` : ""}A site that answers with the wrong thing (parked, blank, a duplicate) is confirmed down after ${FAILS_TO_DOWN} failed checks on different weeks, spanning at least ${DOWN_AFTER_DAYS} days. An inconclusive check leaves the state unchanged, and a site whose capture met a bot wall is never counted down.`,
     "",
   ];
-  if (s.adopted?.length) {
-    lines.push(
-      "### Failing when the pool shipped (adopted once)",
-      "",
-      `${s.adopted.filter((a) => a.health === "suspect").length} 'suspect' site(s) not answering join the ladder at stage 1 (hidden after two more failed checks an hour apart); ${s.adopted.filter((a) => a.health === "down").length} 'down' site(s) are not working since their first failure.`,
-      "",
-      ...s.adopted.map((a) => `- ${cell(a.url)} (${a.health}: ${cell(a.reason)})`),
-      ""
-    );
-  }
   if (s.dryRun && s.changes) {
     lines.push(`### Would change (${s.changes.length})`, "", "| URL | From | To | Stage | Hidden | Reason |", "| --- | --- | --- | ---: | --- | --- |");
     for (const c of s.changes) lines.push(`| ${cell(c.url)} | ${cell(c.from ?? "unchecked")} | ${cell(c.to ?? "unchecked")} | ${c.stage ?? ""} | ${c.hidden ? "yes" : "no"} | ${cell(c.reason)} |`);

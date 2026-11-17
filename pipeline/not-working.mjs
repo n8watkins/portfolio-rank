@@ -40,9 +40,14 @@
 // social profile, a duplicate, a blocked capture) is on the weekly-counted
 // rule of pipeline/health.mjs, a bot wall or a check that could not tell is
 // never a failure at all, and a row 'down' for any reason stays down until a
-// check passes (pipeline/health.mjs nextHealth). A new failure always starts the ladder at
-// its own time; only the one-time adoption of rows that were failing for not
-// answering when the pool shipped (adoptLegacy) starts it earlier.
+// check passes (pipeline/health.mjs nextHealth). A new failure always starts
+// the ladder at its own time. A row already 'down' for not answering with no
+// ladder (from before the pool, or its marks voided) joins it as not working
+// since its first failure, at its next failed check.
+//
+// A not-working site leaves the list only on a fresh failed check: its
+// cadence brings a check at day LEAVE_AFTER_DAYS, and the export takes it
+// only once a check on or after that day has failed (last_fail_at).
 //
 // The state lives in portfolios.health ('suspect' while failing, 'down' when
 // not working, which every reader of the hidden rule already understands)
@@ -94,9 +99,6 @@ export const NOT_WORKING = 3;
  */
 export const notAnswering = (reason) => /^(HTTP \d|does not load|DNS|connect timeout|TLS|timeout|connection dropped)/.test(String(reason ?? ""));
 
-/** The same rule in SQL (never NULL) on a reason column: tests/not-working.test.mjs keeps the two equal. */
-export const NOT_ANSWERING_SQL = (col) =>
-  `(${["HTTP [0-9]*", "does not load*", "DNS*", "connect timeout*", "TLS*", "timeout*", "connection dropped*"].map((g) => `COALESCE(${col}, '') GLOB '${g}'`).join(" OR ")})`;
 
 /** Days between re-checks of a site not working for `ageDays` days (POOL_CADENCE). */
 export const cadenceDays = (ageDays) => (POOL_CADENCE.find((c) => ageDays < c.untilDays) ?? POOL_CADENCE[POOL_CADENCE.length - 1]).everyDays;
@@ -155,10 +157,9 @@ export function failOnLadder(prev, result, now = new Date()) {
       next = { ...next, stage: RECHECKED, nextAt: iso(Math.max(ms(pool.startedAt) + CONFIRM_AFTER_MS, t + RECHECK_AFTER_MS)) };
     } else if (pool.stage === RECHECKED) {
       // Still failing the next day: not working.
-      next = { ...next, stage: NOT_WORKING, since: iso(t), nextAt: iso(t + cadenceDays(0) * DAY) };
+      next = { ...next, stage: NOT_WORKING, since: iso(t), nextAt: iso(notWorkingNext(t, t)) };
     } else {
-      const since = ms(pool.since ?? pool.startedAt);
-      next = { ...next, stage: NOT_WORKING, nextAt: iso(t + cadenceDays((t - since) / DAY) * DAY) };
+      next = { ...next, stage: NOT_WORKING, nextAt: iso(notWorkingNext(ms(pool.since ?? pool.startedAt), t)) };
     }
   }
   return {
@@ -193,8 +194,27 @@ export function holdOnLadder(prev, reason, now = new Date()) {
   };
 }
 
+/**
+ * The next check of a site not working since `since` (ms), checked at `t`:
+ * POOL_CADENCE, but never past day LEAVE_AFTER_DAYS, so the check that may
+ * take it off the list is made on that day, not up to a month later.
+ */
+export function notWorkingNext(since, t) {
+  const next = t + cadenceDays((t - since) / DAY) * DAY;
+  const leave = since + LEAVE_AFTER_DAYS * DAY;
+  return t < leave && next > leave ? leave : next;
+}
+
 /** Whether a site not working since `since` has been so for LEAVE_AFTER_DAYS by `now` (it then leaves the list). */
 export const leavesList = (since, now = new Date()) => Number.isFinite(ms(since)) && now.getTime() - ms(since) >= LEAVE_AFTER_DAYS * DAY;
+
+/**
+ * Whether a not-working site may leave the list: not working LEAVE_AFTER_DAYS,
+ * and its last failed check (`lastFailAt`) made on or after that day, so a
+ * site never leaves on a check weeks old (one that passed since is back on
+ * the list already).
+ */
+export const leavesOnFreshFailure = (since, lastFailAt) => Number.isFinite(ms(since)) && Number.isFinite(ms(lastFailAt)) && ms(lastFailAt) >= ms(since) + LEAVE_AFTER_DAYS * DAY - DUE_SLACK_MS;
 
 /** Creates health_marks with the pool's columns and indexes (idempotent; lib/schema.mjs runs the same). */
 export async function ensureHealthSchema(db) {
@@ -245,79 +265,6 @@ export const POOL_SQL = `SELECT p.url, p.name, p.health, p.health_reason, p.heal
 export const LADDER_UNKNOWN_SQL = `SELECT p.url, p.health_reason, m.unknown_since FROM health_marks m JOIN portfolios p ON p.url = m.url
   WHERE ${ON_LADDER} AND m.unknown_since IS NOT NULL AND m.unknown_since <= ? ORDER BY p.url`;
 
-// ---------------------------------------------------------------------------
-// The one-time adoption of rows failing when the pool shipped
-
-/** The cache key that says the adoption ran (once per database). */
-export const ADOPTED_KEY = "health:pool-adopted";
-
-/**
- * The rows that were failing for not answering when the pool shipped:
- * listed, 'suspect' or 'down' with a not-answering reason, and no ladder
- * marks. Each joins the ladder from its own first failure, due now:
- *   - 'suspect' at stage 1 (its next failed check counts as the hour's
- *     re-check, and the one an hour after that hides it);
- *   - 'down' (confirmed by the old three-week rule) at stage 3, not working
- *     since its first failure, so it leaves the list 90 days after that.
- * Returns [{ url, health, marks }] without writing; `readOnly` reads columns
- * that may not exist yet (a database before this release) as empty.
- */
-export async function legacyRows(db, now = new Date()) {
-  const marks = await columnsOf(db, "health_marks");
-  const join = marks.has("pool_stage") ? "LEFT JOIN health_marks m ON m.url = p.url" : "";
-  const noMarks = marks.has("pool_stage") ? "AND m.pool_stage IS NULL" : "";
-  const rows = (
-    await db.execute(
-      `SELECT p.url, p.name, p.health, p.health_reason, p.health_first_fail_at, p.health_checked_at FROM portfolios p ${join}
-       WHERE p.delisted_at IS NULL AND p.health IN ('suspect', 'down') AND ${NOT_ANSWERING_SQL("p.health_reason")} ${noMarks} ORDER BY p.url`
-    )
-  ).rows;
-  const t = now.toISOString();
-  return rows.map((r) => {
-    const health = String(r.health);
-    const first = r.health_first_fail_at != null && Number.isFinite(ms(r.health_first_fail_at)) ? String(r.health_first_fail_at) : t;
-    const down = health === "down";
-    return {
-      url: String(r.url),
-      name: r.name == null ? "" : String(r.name),
-      health,
-      reason: String(r.health_reason ?? ""),
-      marks: {
-        pool_stage: down ? NOT_WORKING : FAILING,
-        pool_started_at: first,
-        pool_next_at: t,
-        pool_since: down ? first : null,
-        pool_health: health,
-        pool_checked_at: r.health_checked_at == null ? null : String(r.health_checked_at),
-        pool_unclear: 0,
-      },
-    };
-  });
-}
-
-/**
- * Runs the adoption once per database (ADOPTED_KEY): writes the marks of
- * legacyRows. Returns the adopted rows ([] when it ran before). `dryRun`
- * writes nothing and returns what it would adopt.
- */
-export async function adoptLegacy(db, { now = new Date(), dryRun = false } = {}) {
-  const done = await db.execute({ sql: "SELECT 1 FROM cache WHERE k = ?", args: [ADOPTED_KEY] }).catch(() => ({ rows: [] }));
-  if (done.rows.length) return [];
-  const rows = await legacyRows(db, now);
-  if (dryRun) return rows;
-  const stmts = rows.map((r) => ({
-    sql: `INSERT INTO health_marks (url, pool_stage, pool_started_at, pool_next_at, pool_since, pool_health, pool_checked_at, pool_unclear)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-          ON CONFLICT(url) DO UPDATE SET pool_stage = excluded.pool_stage, pool_started_at = excluded.pool_started_at,
-            pool_next_at = excluded.pool_next_at, pool_since = excluded.pool_since, pool_health = excluded.pool_health,
-            pool_checked_at = excluded.pool_checked_at, pool_unclear = 0`,
-    args: [r.url, r.marks.pool_stage, r.marks.pool_started_at, r.marks.pool_next_at, r.marks.pool_since, r.marks.pool_health, r.marks.pool_checked_at],
-  }));
-  stmts.push({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [ADOPTED_KEY, JSON.stringify({ adopted: rows.length }), now.getTime()] });
-  await db.batch(stmts, "write");
-  return rows;
-}
-
 /** The columns a table has (empty when it does not exist). */
 export async function columnsOf(db, table) {
   try {
@@ -330,28 +277,74 @@ export async function columnsOf(db, table) {
 // ---------------------------------------------------------------------------
 // The edge cache
 
+/** health_marks.purge_pending: the profile was taken away (it must answer not found), or it came back (it must answer). */
+export const PURGE_GONE = 1;
+export const PURGE_BACK = 2;
+
 /**
- * Purges the cached profiles of sites the health check took off the site
- * (health_marks.purge_pending, set when a write made the row 'down') and
- * clears the mark only when the purge worked, so a failed one is tried again
- * the next hour (the Worker's hourly Cron Trigger, worker/index.ts).
- * `purge(urls)` resolves true when the purge went through; it is called with
- * at most PURGE_BATCH urls (CachedPages.purgeTags purges at most 100 tags a
- * call, as worker/tier-purge.ts knows), and only a batch that went through is
- * cleared. Returns { purged: [urls], failed: [urls] }.
+ * Brings the cached copies of profiles the health check hid or showed in line
+ * with the site (health_marks.purge_pending, set by the write that changed
+ * the row; the Worker's hourly Cron Trigger, worker/index.ts). A profile page
+ * is kept twice: by Next's incremental cache (5 minutes, served stale once
+ * while it renders again) and at the edge (a day). So each tick, for each
+ * pending profile:
+ *   0. `revalidate(urls)` asks the app to drop its own cached copy (Next's
+ *      path revalidation), so the next render is the page as it is now;
+ *   1. `origin(url)` asks the app itself, past the edge, for the page and
+ *      returns its status: that request is also what makes Next render a
+ *      stale copy again;
+ *   2. `purge(urls)` drops the edge's copies, at most PURGE_BATCH a call
+ *      (CachedPages.purgeTags purges at most 100 tags, worker/tier-purge.ts);
+ *   3. the mark is cleared only when the purge went through AND the origin
+ *      already answered as it should (not found for a hidden profile, the
+ *      page for one that came back). Otherwise the next tick does it all
+ *      again, so a stale copy the edge took in between never lasts a day.
+ * Without `origin` (no app to ask), a purge that went through clears the mark.
+ * Returns { purged: [urls], failed: [urls], waiting: [urls] }.
  */
 export const PURGE_BATCH = 100;
-export async function purgeGoneProfiles(db, { purge, limit = 500 }) {
+/**
+ * @param {{ execute: Function }} db
+ * @param {{ purge: (urls: string[]) => Promise<boolean> | boolean, origin?: (url: string) => Promise<number> | number, revalidate?: (urls: string[]) => Promise<unknown>, limit?: number }} opts
+ */
+export async function purgeGoneProfiles(db, { purge, origin, revalidate, limit = 500 }) {
   let rows;
   try {
-    rows = (await db.execute({ sql: "SELECT url FROM health_marks WHERE purge_pending = 1 ORDER BY url LIMIT ?", args: [limit] })).rows;
+    rows = (await db.execute({ sql: "SELECT url, purge_pending FROM health_marks WHERE purge_pending > 0 ORDER BY url LIMIT ?", args: [limit] })).rows;
   } catch (e) {
-    if (/no such (table|column)/i.test(String(e?.message ?? e))) return { purged: [], failed: [] };
+    if (/no such (table|column)/i.test(String(e?.message ?? e))) return { purged: [], failed: [], waiting: [] };
     throw e;
   }
-  const urls = rows.map((r) => String(r.url));
+  const want = new Map(rows.map((r) => [String(r.url), Number(r.purge_pending)]));
+  const urls = [...want.keys()];
+  // 0. The app's own copies first (best effort: the origin check below decides).
+  if (revalidate && urls.length) {
+    for (let i = 0; i < urls.length; i += PURGE_BATCH) {
+      try {
+        await revalidate(urls.slice(i, i + PURGE_BATCH));
+      } catch {
+        // The origin's answer below decides whether the mark is cleared.
+      }
+    }
+  }
+  // 1. The origin's answer, before the purge (it is also what renders a stale copy again).
+  const settled = new Set();
+  for (const url of urls) {
+    if (!origin) {
+      settled.add(url);
+      continue;
+    }
+    let status = 0;
+    try {
+      status = Number(await origin(url));
+    } catch {
+      status = 0;
+    }
+    if (want.get(url) === PURGE_GONE ? status === 404 : status === 200) settled.add(url);
+  }
   const purged = [];
   const failed = [];
+  const waiting = [];
   for (let i = 0; i < urls.length; i += PURGE_BATCH) {
     const part = urls.slice(i, i + PURGE_BATCH);
     let ok = false;
@@ -364,8 +357,10 @@ export async function purgeGoneProfiles(db, { purge, limit = 500 }) {
       failed.push(...part);
       continue;
     }
-    await db.execute({ sql: `UPDATE health_marks SET purge_pending = 0 WHERE url IN (${part.map(() => "?").join(",")})`, args: part });
     purged.push(...part);
+    const done = part.filter((u) => settled.has(u));
+    waiting.push(...part.filter((u) => !settled.has(u)));
+    if (done.length) await db.execute({ sql: `UPDATE health_marks SET purge_pending = 0 WHERE url IN (${done.map(() => "?").join(",")})`, args: done });
   }
-  return { purged, failed };
+  return { purged, failed, waiting };
 }

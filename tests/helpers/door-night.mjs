@@ -17,7 +17,6 @@ import { finishNight, planNight, runBatch, startNight } from "../../pipeline/nig
 import { ensureRubricHistory } from "../../pipeline/rubric-history.mjs";
 import { ensureRankingSchema } from "../../lib/ranking/store.mjs";
 import { rankingConfig } from "../../lib/ranking/config.mjs";
-import { ensureHealthSchema } from "../../pipeline/not-working.mjs";
 
 export const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
 export const DAY = 86400000;
@@ -39,8 +38,10 @@ export async function freshDb({ health = true } = {}) {
   const file = path.join(dir, "db.sqlite");
   const db = createClient({ url: `file:${file}` });
   await ensureRosterSchema(db);
-  // The health check's table, as every migrated database has it (lib/schema.mjs): pipeline/roster.mjs ACTIVE reads it.
-  if (health) await ensureHealthSchema(db);
+  if (!health) {
+    await db.execute("DROP TRIGGER IF EXISTS health_marks_follow_purge");
+    await db.execute("DROP TABLE IF EXISTS health_marks");
+  }
   await ensureGeminiLog(db);
   await ensureRankingSchema(db);
   await ensureRubricHistory(db);

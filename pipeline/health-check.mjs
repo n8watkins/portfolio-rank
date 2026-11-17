@@ -27,7 +27,7 @@
 import fs from "fs";
 import path from "path";
 import { healthSummary, runHealthCheck } from "./health.mjs";
-import { DEAD_RECHECK_DAYS, DOWN_RECHECK_DAYS, EXPORT_EVERY_DAYS, readJson, weeklyExport } from "./exclusions.mjs";
+import { DEAD_RECHECK_DAYS, DOWN_RECHECK_DAYS, DOWN_RECHECK_FIRST_DAYS, EXPORT_EVERY_DAYS, readJson, weeklyExport } from "./exclusions.mjs";
 import { loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { createRenderer } from "./render.mjs";
 import { LEAVE_AFTER_DAYS } from "./not-working.mjs";
@@ -88,7 +88,7 @@ try {
         (ex.landed ? "Last week's export has landed on main.\n\n" : "") +
         (!p
           ? `Nothing to export${ex.planned ? "" : `; a new export is planned once every ${EXPORT_EVERY_DAYS}+ days`}.\n`
-          : `${ex.planned ? "Planned tonight" : "Planned earlier and not on main yet, applied again"}: ${p.added.length} site(s) confirmed down or not working for ${LEAVE_AFTER_DAYS}+ days ${verb("added to", "would be added to")} data/excluded.json; ${p.back.length} removed site(s) passed the full check and ${verb("leave", "would leave")} it${p.back.length ? ` (${p.back.join(", ")})` : ""}; ${p.still.length} still failing or unknown, checked again in ${DOWN_RECHECK_DAYS} days (down) or ${DEAD_RECHECK_DAYS} days (dead).\n`) +
+          : `${ex.planned ? "Planned tonight" : "Planned earlier and not on main yet, applied again"}: ${p.added.length} site(s) confirmed down or not working for ${LEAVE_AFTER_DAYS}+ days ${verb("added to", "would be added to")} data/excluded.json; ${p.back.length} removed site(s) passed the full check and ${verb("leave", "would leave")} it${p.back.length ? ` (${p.back.join(", ")})` : ""}; ${p.still.length} still failing or unknown, checked again on days ${DOWN_RECHECK_FIRST_DAYS.join(", ")} after removal and then every ${DOWN_RECHECK_DAYS} days (down), or in ${DEAD_RECHECK_DAYS} days (dead).\n`) +
         (ex.held.length ? `\nHidden or down but still on the list: ${ex.held.map((h) => `${h.url} (${h.why})`).join("; ")}.\n` : "")
     );
   }

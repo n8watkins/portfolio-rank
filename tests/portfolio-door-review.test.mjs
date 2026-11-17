@@ -12,7 +12,6 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { ensureRosterSchema, NOT_PORTFOLIO, syncRoster } from "../pipeline/roster.mjs";
-import { ensureHealthSchema } from "../pipeline/not-working.mjs";
 import { HIDDEN_WHERE } from "../lib/hidden.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
@@ -49,8 +48,6 @@ async function freshDb() {
   const file = path.join(dir, "db.sqlite");
   const db = createClient({ url: `file:${file}` });
   await ensureRosterSchema(db);
-  // The health check's table, as every migrated database has it: ACTIVE reads it.
-  await ensureHealthSchema(db);
   await ensureGeminiLog(db);
   await ensureRankingSchema(db);
   await ensureRubricHistory(db);

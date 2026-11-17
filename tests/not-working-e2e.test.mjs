@@ -13,6 +13,8 @@ import { assignShownRanks, ensureRankingSchema } from "../lib/ranking/store.mjs"
 import { runHealthCheck } from "../pipeline/health.mjs";
 import { runRecheck } from "../pipeline/recheck.mjs";
 import { sessionCookie } from "./helpers/session.mjs";
+import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
+import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -50,6 +52,22 @@ const render = async (u) =>
     ? { status: 200, finalUrl: u, title: target.name, text: `${target.name} builds web apps.`, media: false, html: page }
     : { status: 402, finalUrl: u, title: "", text: "This deployment is temporarily paused", media: false, html: "" };
 
+/** The Worker's hourly purge path (worker/index.ts purgeAfterHour), tick after tick, until no mark is left. */
+async function purgeUntilSettled() {
+  const token = await internalToken(process.env.AUTH_SECRET ?? "", REVALIDATE_PROFILES);
+  const revalidate = async (urls) => {
+    const res = await fetch(`${BASE}/api/internal/revalidate-profiles`, { method: "POST", headers: { "content-type": "application/json", [INTERNAL_TOKEN_HEADER]: token }, body: JSON.stringify({ urls }) });
+    assert.equal(res.status, 200);
+  };
+  const origin = async (url) => (await fetch(BASE + pathOf(url))).status;
+  for (let tick = 0; tick < 5; tick++) {
+    const out = await purgeGoneProfiles(db, { purge: async () => true, origin, revalidate });
+    if (!out.waiting.length && !out.failed.length) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  assert.fail("the app never answered as it should");
+}
+
 let n = 0;
 /** The board as a visitor's request reads it (a new limit each time, so no cached answer is reused). */
 const board = async () => {
@@ -73,10 +91,11 @@ test("a site that stopped working: its profile is the not-found page and the lea
   // The board as the nightly recompute leaves it: the shown sites numbered.
   await assignShownRanks(db);
   const site = [{ url: target.url, name: target.name }];
-  // Live: the nightly check passes; the board shows it. (The profile is first loaded once hidden: a
-  // rendered profile is kept 5 minutes, here as on the site.)
+  // Live: the nightly check passes; the board shows it, and the profile is rendered once, so the app keeps a
+  // cached copy of it (5 minutes), as on the site.
   await runHealthCheck({ db, feed: site, fetchImpl, render, now: new Date(F - D), log: quiet });
   assert.ok((await board()).includes(target.url), "on the board while it works");
+  assert.equal((await fetch(BASE + pathOf(target.url))).status, 200, "the profile while it works");
 
   // Paused hosting: the nightly check fails it, the hour's re-check and the next day's fail it too.
   answering = false;
@@ -86,6 +105,10 @@ test("a site that stopped working: its profile is the not-found page and the lea
   const s = await runRecheck({ db, fetchImpl, render, now: new Date(F + D), controls: 0, log: quiet });
   assert.deepEqual(s.newlyHidden.map((x) => x.url), [target.url]);
 
+  // The hourly purge path (the Worker's, here against the app directly): the app drops its cached copy,
+  // is asked for the page, the edge copy is purged; repeated until the app answers not found.
+  await purgeUntilSettled();
+  for (const n of [1, 2]) assert.equal((await fetch(BASE + pathOf(target.url))).status, 404, `request ${n} after the purge`);
   const gone = await fetch(BASE + pathOf(target.url));
   assert.equal(gone.status, 404);
   const html = await gone.text();
@@ -109,5 +132,8 @@ test("a site that stopped working: its profile is the not-found page and the lea
   const back = await runRecheck({ db, fetchImpl, render, now: new Date(F + 2 * D), controls: 0, log: quiet });
   assert.deepEqual(back.returned.map((x) => x.url), [target.url]);
   assert.ok((await board()).includes(target.url), "back on the board");
+  // The same purge path brings the page back: the app's cached not-found goes too.
+  await purgeUntilSettled();
+  for (const n of [1, 2]) assert.equal((await fetch(BASE + pathOf(target.url))).status, 200, `request ${n} after it came back`);
   assert.equal(String((await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [target.url] })).rows[0].ai_rubric), rubric, "its grade is as it was");
 });
