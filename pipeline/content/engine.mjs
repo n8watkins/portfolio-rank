@@ -1,6 +1,9 @@
 // The content engine's night work (docs/CONTENT-ENGINE.md, "The pipeline"):
 // the end-of-day run's "Content" stage (pipeline/night.mjs) runs the weekly
-// polls first, then, while CONTENT_MODE is not "off", one content job:
+// polls first (only with POLL_GENERATION_ENABLED, its own switch, default
+// off; pipeline/polls.mjs), then, while CONTENT_MODE is not "off" and the
+// owner has saved Automation settings with it on (no saved row means off;
+// lib/content/automation.mjs), one content job:
 //
 //   pick   (stage 1 and 2) on Sunday night, or the first night of a week
 //          without one: every fact builder that is ready is an idea; one
@@ -161,7 +164,7 @@ function budgeted(gemini, limit) {
 export async function runPick(ctx, gemini, { night, budget }) {
   const now = ctx.now();
   const mode = ctx.flags.contentMode;
-  const { ideas, waiting } = await findIdeas(ctx.db, { now });
+  const { ideas, waiting } = await findIdeas(ctx.db, { now, rankingV2: Boolean(ctx.flags?.rankingV2) });
   const lastKinds = (await runsOfWeek(ctx.db, contentWeek(now - 7 * 86400000), "draft")).filter((r) => r.status === "ok").map((r) => r.kind);
   let chosen;
   let requests = 0;
@@ -225,7 +228,7 @@ export async function runDraft(ctx, gemini, { kind, night, budget, step = "draft
     return { status: "deferred", requests: 0 };
   }
   await phase("facts");
-  const built = await BUILDERS[kind](db, { now });
+  const built = await BUILDERS[kind](db, { now, rankingV2: Boolean(ctx.flags?.rankingV2) });
   // Published posts the draft may link to (interlinks, owner 2026-11-12), newest first.
   const relatedPosts = built.ready ? (await listPublished(db, { now, limit: 12 }).catch(() => [])).map((p) => ({ title: p.title, url: `${SITE_URL}/blog/${p.slug}`, tags: p.tags })) : [];
   const sheet = built.ready ? { ...built, ...(focus ? { focus } : {}), ...(length ? { length } : {}), ...(relatedPosts.length ? { relatedPosts } : {}), ...extras } : built;

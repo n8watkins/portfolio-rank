@@ -1,0 +1,196 @@
+{
+ "kind": "vote-patterns",
+ "ready": true,
+ "headline": "What people vote for when two portfolios go head to head",
+ "angle": "In people's head-to-head votes, how often the portfolio with the better AI grade wins, and which things the winner has more often (dark mode, motion, a phone-friendly layout, no errors). A reader learns what real visitors reward.",
+ "dataAsOf": "2026-11-16T16:00:00.000Z",
+ "dataLink": "https://portfoliorank.dev/top",
+ "facts": [
+  {
+   "id": "f1",
+   "label": "People's votes between two graded portfolios",
+   "value": 51,
+   "display": "51",
+   "tone": "neutral",
+   "about": null,
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f2",
+   "label": "Share of votes, between portfolios of different AI grades, won by the better-graded one",
+   "value": 0.8823529411764706,
+   "display": "88%",
+   "tone": "neutral",
+   "about": null,
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z",
+   "scope": {
+    "need": "different (?:AI )?grades?|better-graded|higher-graded",
+    "avoid": "of all votes"
+   }
+  },
+  {
+   "id": "f3",
+   "label": "Share of votes won by the portfolio with dark mode by default, when only one of the two has it",
+   "value": 0.8333333333333334,
+   "display": "83%",
+   "tone": "neutral",
+   "about": null,
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z",
+   "scope": {
+    "need": "only one|one of the two|when one",
+    "avoid": "of all votes"
+   }
+  },
+  {
+   "id": "f4",
+   "label": "Share of votes won by the portfolio with a layout that fits a phone screen, when only one of the two has it",
+   "value": 0.8333333333333334,
+   "display": "83%",
+   "tone": "neutral",
+   "about": null,
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z",
+   "scope": {
+    "need": "only one|one of the two|when one",
+    "avoid": "of all votes"
+   }
+  },
+  {
+   "id": "f5",
+   "label": "Share of votes won by the portfolio with no console errors, when only one of the two has it",
+   "value": 0.8333333333333334,
+   "display": "83%",
+   "tone": "neutral",
+   "about": null,
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z",
+   "scope": {
+    "need": "only one|one of the two|when one",
+    "avoid": "of all votes"
+   }
+  },
+  {
+   "id": "f6",
+   "label": "Share of its head-to-head votes Top Person 1 (top-1.dev) won",
+   "value": 1,
+   "display": "100%",
+   "tone": "positive",
+   "about": "https://top-1.dev",
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f7",
+   "label": "Share of its head-to-head votes Top Person 2 (top-2.dev) won",
+   "value": 1,
+   "display": "100%",
+   "tone": "positive",
+   "about": "https://top-2.dev",
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f8",
+   "label": "Share of its head-to-head votes Top Person 3 (top-3.dev) won",
+   "value": 1,
+   "display": "100%",
+   "tone": "positive",
+   "about": "https://top-3.dev",
+   "query": "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+   "at": "2026-11-16T16:00:00.000Z"
+  }
+ ],
+ "charts": [
+  {
+   "id": "c1",
+   "title": "When only one portfolio has it, how often it wins the vote",
+   "unit": "%",
+   "max": 1,
+   "categories": [
+    "dark mode by default",
+    "a layout that fits a phone screen",
+    "no console errors"
+   ],
+   "series": [
+    {
+     "name": "Votes won",
+     "facts": [
+      "f3",
+      "f4",
+      "f5"
+     ]
+    }
+   ],
+   "alt": "Bar chart of how often the portfolio with each trait wins a vote against one without it."
+  }
+ ],
+ "names": [
+  {
+   "name": "Top Person 1",
+   "url": "https://top-1.dev",
+   "domain": "top-1.dev",
+   "reason": "won most of its head-to-head votes"
+  },
+  {
+   "name": "Top Person 2",
+   "url": "https://top-2.dev",
+   "domain": "top-2.dev",
+   "reason": "won most of its head-to-head votes"
+  },
+  {
+   "name": "Top Person 3",
+   "url": "https://top-3.dev",
+   "domain": "top-3.dev",
+   "reason": "won most of its head-to-head votes"
+  }
+ ],
+ "screenshots": [
+  {
+   "url": "https://top-1.dev",
+   "name": "Top Person 1",
+   "shotKey": "0000000000020deb"
+  },
+  {
+   "url": "https://top-2.dev",
+   "name": "Top Person 2",
+   "shotKey": "0000000000020deb"
+  },
+  {
+   "url": "https://top-3.dev",
+   "name": "Top Person 3",
+   "shotKey": "0000000000020deb"
+  }
+ ],
+ "notable": [
+  {
+   "factIds": [
+    "f2"
+   ],
+   "why": "People pick the better-graded portfolio in {{f2}} of votes where the grades differ."
+  }
+ ],
+ "superlatives": [],
+ "examples": [
+  {
+   "axis": "what voters pick",
+   "factId": "f6",
+   "name": "Top Person 1",
+   "url": "https://top-1.dev"
+  },
+  {
+   "axis": "what voters pick",
+   "factId": "f7",
+   "name": "Top Person 2",
+   "url": "https://top-2.dev"
+  },
+  {
+   "axis": "what voters pick",
+   "factId": "f8",
+   "name": "Top Person 3",
+   "url": "https://top-3.dev"
+  }
+ ]
+}

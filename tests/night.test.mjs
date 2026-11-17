@@ -104,7 +104,7 @@ function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, ra
       log: (l) => lines.push(l),
       fetchImpl: gemini.fetchImpl,
       image: async () => ({ inline_data: { mime_type: "image/jpeg", data: "AAAA" } }),
-      flags: { rankingV2, rubricRegrade, ranking: { ...rankingConfig({ RANKING_V2: rankingV2 ? "true" : "" }), ...(rankingBudget ? { budget: rankingBudget } : {}) } },
+      flags: { rankingV2, rubricRegrade, pollGeneration: "true", ranking: { ...rankingConfig({ RANKING_V2: rankingV2 ? "true" : "" }), ...(rankingBudget ? { budget: rankingBudget } : {}) } },
       runId: "test",
     },
   };

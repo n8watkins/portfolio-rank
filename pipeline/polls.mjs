@@ -483,14 +483,27 @@ export async function generatePolls(ctx, gemini, { night }) {
 }
 
 /**
+ * Whether the Gemini poll generation may run (POLL_GENERATION_ENABLED,
+ * wrangler.jsonc; default off). It has its own switch so raising the content
+ * stage's Gemini cap for "Write a draft now" does not also start it
+ * (audit 2026-11-16). The weekly scheduling by code alone (schedulePolls:
+ * hero-pair and evergreen polls) never asks: it runs whatever this says.
+ * Read from the run's flags, its env, or the Worker's vars (process.env).
+ */
+export function pollGenerationOn(ctx) {
+  const v = ctx?.flags?.pollGeneration ?? ctx?.env?.POLL_GENERATION_ENABLED ?? (typeof process === "undefined" ? undefined : process.env?.POLL_GENERATION_ENABLED);
+  return /^true$/i.test(String(v ?? ""));
+}
+
+/**
  * The Content stage's poll job, in the shape pipeline/night.mjs expects of a
  * stage handler. The content engine's posts will join this stage later.
  */
 export const pollsContent = {
   parkable: false,
-  count: async (ctx) => (await generationNeeded(ctx)).n,
+  count: async (ctx) => (pollGenerationOn(ctx) ? (await generationNeeded(ctx)).n : 0),
   next: async (ctx, stage) => {
-    if (stage.pollsDone) return [];
+    if (stage.pollsDone || !pollGenerationOn(ctx)) return [];
     const need = await generationNeeded(ctx);
     if (!need.n) return [];
     return [{ id: `polls:${stage.night}` }];

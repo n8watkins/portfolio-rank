@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
 import { adminErrorStatus, requireAdmin, requireAdminPost } from "@/lib/admin";
 import { workerEnv } from "@/lib/grader/server";
-import { cleanNotes, cleanTopic, createJob, draftNowPolicy, finishJob, getJob, jobCalls, recentJobs } from "@/lib/content/jobs.mjs";
+import { cleanNotes, cleanTopic, createJob, draftNowPolicy, failStaleJobs, finishJob, getJob, jobCalls, recentJobs } from "@/lib/content/jobs.mjs";
 import { contentCosts } from "@/lib/content/costs.mjs";
 import { BUILDERS } from "@/pipeline/content/facts.mjs";
 import { newJobId } from "@/pipeline/content/manual.mjs";
@@ -37,6 +37,8 @@ export async function GET(req: Request) {
   if (id != null) {
     if (!/^[0-9a-f]{16}$/.test(id)) return fail("not_found", 404);
     const client = db();
+    // A job the Workflow lost is marked failed here too, so the page's polling stops showing it as running.
+    await failStaleJobs(client);
     const job = await getJob(client, id);
     // calls: Gemini attempts and answers apart (lib/content/jobs.mjs jobCalls).
     return job ? NextResponse.json({ job: { ...job, calls: (await jobCalls(client, [id]))[id] } }, { headers: PRIVATE }) : fail("not_found", 404);

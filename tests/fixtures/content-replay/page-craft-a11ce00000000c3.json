@@ -1,0 +1,357 @@
+{
+ "kind": "page-craft",
+ "ready": true,
+ "headline": "Dark mode, motion and page weight: what top portfolios actually ship",
+ "angle": "What the capture measured on each portfolio (dark mode, motion, fitting a phone screen, page weight, console errors), the top-graded portfolios against the rest; aggregate only.",
+ "dataAsOf": "2026-11-16T16:00:00.000Z",
+ "dataLink": "https://portfoliorank.dev/top",
+ "facts": [
+  {
+   "id": "f1",
+   "label": "Portfolios measured and graded",
+   "value": 60,
+   "display": "60",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f2",
+   "label": "Of them, top-graded",
+   "value": 30,
+   "display": "30",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f3",
+   "label": "Share of measured portfolios that are top-graded",
+   "value": 0.5,
+   "display": "50%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f4",
+   "label": "Share of the top-graded portfolios with dark mode by default",
+   "value": 1,
+   "display": "100%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f5",
+   "label": "Share of other portfolios with dark mode by default",
+   "value": 0,
+   "display": "0%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f6",
+   "label": "Share of the top-graded portfolios with motion on the page",
+   "value": 1,
+   "display": "100%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f7",
+   "label": "Share of other portfolios with motion on the page",
+   "value": 1,
+   "display": "100%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f8",
+   "label": "Share of the top-graded portfolios with fits a phone screen without sideways scrolling",
+   "value": 1,
+   "display": "100%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f9",
+   "label": "Share of other portfolios with fits a phone screen without sideways scrolling",
+   "value": 0,
+   "display": "0%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f10",
+   "label": "Share of the top-graded portfolios with no console errors",
+   "value": 1,
+   "display": "100%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f11",
+   "label": "Share of other portfolios with no console errors",
+   "value": 0,
+   "display": "0%",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f12",
+   "label": "Median page weight of the top-graded portfolios, first load",
+   "value": 900000,
+   "display": "0.9 MB",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f13",
+   "label": "Median page weight of other portfolios, first load",
+   "value": 4000000,
+   "display": "4.0 MB",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f14",
+   "label": "Median number of network requests of the top-graded portfolios",
+   "value": 30,
+   "display": "30",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f15",
+   "label": "Median number of network requests of other portfolios",
+   "value": 30,
+   "display": "30",
+   "tone": "neutral",
+   "about": null,
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f16",
+   "label": "Top Person 1 (top-1.dev) has the highest grade and fits a phone screen, no console errors, dark mode by default and motion on the page",
+   "value": "S",
+   "display": "the highest grade",
+   "tone": "positive",
+   "about": "https://top-1.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f17",
+   "label": "Top Person 1 (top-1.dev) page weight, first load",
+   "value": 900000,
+   "display": "0.9 MB",
+   "tone": "positive",
+   "about": "https://top-1.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f18",
+   "label": "Top Person 2 (top-2.dev) has the highest grade and fits a phone screen, no console errors, dark mode by default and motion on the page",
+   "value": "S",
+   "display": "the highest grade",
+   "tone": "positive",
+   "about": "https://top-2.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f19",
+   "label": "Top Person 2 (top-2.dev) page weight, first load",
+   "value": 900000,
+   "display": "0.9 MB",
+   "tone": "positive",
+   "about": "https://top-2.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f20",
+   "label": "Top Person 3 (top-3.dev) has the highest grade and fits a phone screen, no console errors, dark mode by default and motion on the page",
+   "value": "S",
+   "display": "the highest grade",
+   "tone": "positive",
+   "about": "https://top-3.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f21",
+   "label": "Top Person 3 (top-3.dev) page weight, first load",
+   "value": 900000,
+   "display": "0.9 MB",
+   "tone": "positive",
+   "about": "https://top-3.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f22",
+   "label": "Top Person 4 (top-4.dev) has the highest grade and fits a phone screen, no console errors, dark mode by default and motion on the page",
+   "value": "S",
+   "display": "the highest grade",
+   "tone": "positive",
+   "about": "https://top-4.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f23",
+   "label": "Top Person 4 (top-4.dev) page weight, first load",
+   "value": 900000,
+   "display": "0.9 MB",
+   "tone": "positive",
+   "about": "https://top-4.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f24",
+   "label": "Top Person 5 (top-5.dev) has the highest grade and fits a phone screen, no console errors, dark mode by default and motion on the page",
+   "value": "S",
+   "display": "the highest grade",
+   "tone": "positive",
+   "about": "https://top-5.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  },
+  {
+   "id": "f25",
+   "label": "Top Person 5 (top-5.dev) page weight, first load",
+   "value": 900000,
+   "display": "0.9 MB",
+   "tone": "positive",
+   "about": "https://top-5.dev",
+   "query": "portfolios: capture measurements (meta) and current AI grades of listed, visible portfolios",
+   "at": "2026-11-16T16:00:00.000Z"
+  }
+ ],
+ "charts": [
+  {
+   "id": "c1",
+   "title": "What the capture measured: the top-graded portfolios against the rest",
+   "unit": "%",
+   "max": 1,
+   "categories": [
+    "dark mode by default",
+    "motion on the page",
+    "fits a phone screen without sideways scrolling",
+    "no console errors"
+   ],
+   "series": [
+    {
+     "name": "Top-graded (top 50%)",
+     "facts": [
+      "f4",
+      "f6",
+      "f8",
+      "f10"
+     ]
+    },
+    {
+     "name": "Everyone else",
+     "facts": [
+      "f5",
+      "f7",
+      "f9",
+      "f11"
+     ]
+    }
+   ],
+   "alt": "Bar chart comparing the share of top-graded portfolios and of all others with dark mode, motion, a phone-friendly layout and no console errors."
+  }
+ ],
+ "names": [
+  {
+   "name": "Top Person 1",
+   "url": "https://top-1.dev",
+   "domain": "top-1.dev",
+   "reason": "has the AI judge's highest grade, fits a phone screen and loads light with no console errors"
+  },
+  {
+   "name": "Top Person 2",
+   "url": "https://top-2.dev",
+   "domain": "top-2.dev",
+   "reason": "has the AI judge's highest grade, fits a phone screen and loads light with no console errors"
+  },
+  {
+   "name": "Top Person 3",
+   "url": "https://top-3.dev",
+   "domain": "top-3.dev",
+   "reason": "has the AI judge's highest grade, fits a phone screen and loads light with no console errors"
+  },
+  {
+   "name": "Top Person 4",
+   "url": "https://top-4.dev",
+   "domain": "top-4.dev",
+   "reason": "has the AI judge's highest grade, fits a phone screen and loads light with no console errors"
+  },
+  {
+   "name": "Top Person 5",
+   "url": "https://top-5.dev",
+   "domain": "top-5.dev",
+   "reason": "has the AI judge's highest grade, fits a phone screen and loads light with no console errors"
+  }
+ ],
+ "screenshots": [
+  {
+   "url": "https://top-1.dev",
+   "name": "Top Person 1",
+   "shotKey": "0000000000020deb"
+  },
+  {
+   "url": "https://top-2.dev",
+   "name": "Top Person 2",
+   "shotKey": "0000000000020deb"
+  },
+  {
+   "url": "https://top-3.dev",
+   "name": "Top Person 3",
+   "shotKey": "0000000000020deb"
+  },
+  {
+   "url": "https://top-4.dev",
+   "name": "Top Person 4",
+   "shotKey": "0000000000020deb"
+  },
+  {
+   "url": "https://top-5.dev",
+   "name": "Top Person 5",
+   "shotKey": "0000000000020deb"
+  }
+ ],
+ "notable": [],
+ "superlatives": [],
+ "examples": []
+}
