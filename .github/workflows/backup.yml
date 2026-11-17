@@ -59,17 +59,31 @@ jobs:
       - name: Snapshot DB to R2
         run: node scripts/backup-db.mjs
 
-      - name: Notify on failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
+  # A job that fails, is cancelled or times out ends its own later steps, and
+  # `if: failure()` is false for a cancelled or timed-out job (sync run
+  # 43677044060 was cancelled at its 330-minute limit and filed nothing). So
+  # the notice is a job of its own: always() runs it whatever happened to the
+  # jobs it needs, and it reads their results.
+  notify-failure:
+    needs: [backup]
+    if: ${{ always() && (needs.backup.result == 'failure' || needs.backup.result == 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULTS: 'backup: ${{ needs.backup.result }}'
+    steps:
+      - name: File or update the failure issue
         run: |
           title="⚠️ Scheduled job failed: ${{ github.workflow }}"
           url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           num=$(gh issue list --state open --search "$title" --json number,title \
             --jq ".[] | select(.title==\"$title\") | .number" | head -1)
           if [ -n "$num" ]; then
-            gh issue comment "$num" --body "Failed again: $url"
+            gh issue comment "$num" --body "Failed again ($RESULTS): $url"
           else
-            gh issue create --title "$title" --body "A scheduled run failed: $url" >/dev/null
+            gh issue create --title "$title" --body "A scheduled run did not finish ($RESULTS): $url" >/dev/null
           fi

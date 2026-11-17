@@ -9,7 +9,7 @@ import { isModelWatchAlert, runModelWatch } from "../pipeline/model-watch.mjs";
 import type { NightEnv } from "./night";
 
 /** Mondays 16:00 UTC (08:00 or 09:00 Pacific), wrangler.jsonc triggers.crons. */
-export const MODEL_WATCH_CRON = "0 16 * * 1";
+export const MODEL_WATCH_CRON = "0 16 * * MON";
 
 const log = (event: string, data: Record<string, unknown> = {}) => console.log(JSON.stringify({ event, ...data }));
 
