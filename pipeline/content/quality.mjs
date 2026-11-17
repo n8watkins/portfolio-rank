@@ -3,7 +3,7 @@
 // true against the fact sheet (ties included), a callout that restates one
 // fact with its scope, a hook from a notable fact, and Try this steps that
 // point to a named positive example. Each returns { name, ok, problems }.
-import { PLACEHOLDER, draftTexts } from "./writer.mjs";
+import { PLACEHOLDER, draftTexts, trimUrl } from "./writer.mjs";
 
 const result = (name, problems) => ({ name, ok: problems.length === 0, problems });
 const ids = (text) => [...String(text).matchAll(PLACEHOLDER)].map((m) => m[1]);
@@ -173,9 +173,9 @@ export function checkSubstance(draft, sheet) {
       break;
     }
   }
-  const sites = new Set((sheet.names ?? []).map((n) => String(n.url).replace(/\/$/, "")));
+  const sites = new Set((sheet.names ?? []).map((n) => trimUrl(n.url)));
   const need = Math.min(3, sites.size);
-  const linked = new Set([...body.matchAll(/\]\((https?:[^)\s]+)\)/g)].map((m) => m[1].replace(/\/$/, "")).filter((u) => sites.has(u)));
+  const linked = new Set([...body.matchAll(/\]\((https?:[^)\s]+)\)/g)].map((m) => trimUrl(m[1])).filter((u) => sites.has(u)));
   if (linked.size < need) p.push(`${linked.size} named example site(s) linked; link at least ${need} from the names list as [Name](site_url), each with what it does well`);
   return result("substance", p);
 }

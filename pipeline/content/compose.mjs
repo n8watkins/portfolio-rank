@@ -20,6 +20,7 @@
 // Length is a soft gate: a body below 85% of its profile's minimum fails.
 import { CTA, PLACEHOLDER, fill, normalizeDraft } from "./writer.mjs";
 import { planPost } from "./plan.mjs";
+import { GeminiIncompleteError } from "../gemini.mjs";
 import { checkLinksLoad, codeChecks, urlsIn, wordCount } from "./checks.mjs";
 import { buildReviewRequest, reviewCheck } from "./topic.mjs";
 import { checkClaims, cutClaimSentences } from "./claims.mjs";
@@ -353,7 +354,7 @@ export function blocksToFix(blocks, problems, plan) {
  * Writes a draft from a sheet. ctx: { generate(request) -> answer (budgeted),
  * left() -> requests left, roster, tavilyKey, fetchImpl, credits, tavilyLeft,
  * log }. Returns { passed, draft, plan, history, failures, supported,
- * requests, searches, words }.
+ * requests, words }. (Tavily searches are counted by ctx.credits, the one counter.)
  */
 export async function composeDraft(sheet, ctx) {
   const log = ctx.log ?? (() => {});
@@ -362,7 +363,6 @@ export async function composeDraft(sheet, ctx) {
   let requests = 0;
   const call = async (req) => (requests++, ctx.generate(req));
   const history = [];
-  const names = (sheet.names ?? []).map((n) => n.name);
 
   // 2. Write.
   const blocks = {};
@@ -374,7 +374,7 @@ export async function composeDraft(sheet, ctx) {
   // 4. Checks, then one targeted fix.
   await phase("checking");
   let code = codeChecks(draft, sheet, { roster: ctx.roster ?? [] });
-  history.push({ round: 0, checks: code.checks, repairs: notes, claims: { supported: [], cut: [], unchecked: false } });
+  history.push({ round: 0, checks: code.checks, repairs: notes, claims: { flagged: [] } });
   if (!code.ok && ctx.left() >= 2) {
     const which = blocksToFix(blocks, code.failures, plan);
     if (which.length) {
@@ -383,22 +383,22 @@ export async function composeDraft(sheet, ctx) {
       Object.assign(blocks, parseBlocks(await call(buildFixRequest(sheet, plan, blocks, code.failures, which))));
       ({ draft, notes } = assemble(sheet, plan, blocks));
       code = codeChecks(draft, sheet, { roster: ctx.roster ?? [] });
-      history.push({ round: 1, checks: code.checks, repairs: notes, claims: { supported: [], cut: [], unchecked: false } });
+      history.push({ round: 1, checks: code.checks, repairs: notes, claims: { flagged: [] } });
     }
   }
   const words = wordCount(fill(draft.body, sheet.facts));
-  if (!code.ok) return { passed: false, draft, plan, history, failures: code.failures, supported: [], requests, searches: 0, words };
+  if (!code.ok) return { passed: false, draft, plan, history, failures: code.failures, supported: [], requests, words };
   // External links load (checked once a draft, not every round).
   if (ctx.fetchImpl) {
     const links = await checkLinksLoad([fill(draft.body, sheet.facts)].flatMap((t) => urlsIn(t)), ctx.fetchImpl);
     history.at(-1).checks.push(links);
-    if (!links.ok) return { passed: false, draft, plan, history, failures: links.problems.map((p) => `links-load: ${p}`), supported: [], requests, searches: 0, words };
+    if (!links.ok) return { passed: false, draft, plan, history, failures: links.problems.map((p) => `links-load: ${p}`), supported: [], requests, words };
   }
 
   // 5. One review; outside claims it flags go to Tavily, the unsupported are cut.
-  if (ctx.left() < 1) return { passed: false, draft, plan, history, failures: ["review: no budget left for the review"], supported: [], requests, searches: 0, words };
+  if (ctx.left() < 1) return { passed: false, draft, plan, history, failures: ["review: no budget left for the review"], supported: [], requests, words };
   // The review reads the post as readers see it (numbers filled in): the
-  // title, subtitle, TL;DR, body and the meta lines, so a claim anywhere in
+  // title, alternative titles, subtitle, TL;DR, body and the meta lines, so a claim anywhere in
   // them can be flagged. Flagged sentences are looked for in all of those.
   const f = (t) => fill(t, sheet.facts);
   const filled = [
@@ -406,36 +406,52 @@ export async function composeDraft(sheet, ctx) {
     f(draft.subtitle),
     `TL;DR:\n${(draft.tldr ?? []).map((b) => `- ${f(b)}`).join("\n")}`,
     f(draft.body),
+    `Alternative title A: ${f(draft.alt_title_a)}\nAlternative title B: ${f(draft.alt_title_b)}`,
     `Share line: ${f(draft.share_line)}\nNewsletter blurb: ${f(draft.newsletter_blurb)}`,
   ].join("\n\n");
   await phase("checking", "the review");
-  const answer = await call(buildReviewRequest(sheet, filled));
+  let answer;
+  try {
+    answer = await call(buildReviewRequest(sheet, filled));
+  } catch (e) {
+    if (!(e instanceof GeminiIncompleteError)) throw e;
+    // A cut-off review cannot say what the outside claims are: the draft fails, nothing passes.
+    return { passed: false, draft, plan, history, failures: ["review: the review's answer was cut off before it finished, so outside claims were not checked"], supported: [], requests, words };
+  }
   const review = reviewCheck(answer);
   history.at(-1).checks.push(review);
-  if (!review.ok) return { passed: false, draft, plan, history, failures: review.problems.map((p) => `review: ${p}`), supported: [], requests, searches: 0, words };
-  const flagged = (answer.outside_claims ?? []).map((s) => String(s).trim()).filter(Boolean);
+  if (!review.ok) return { passed: false, draft, plan, history, failures: review.problems.map((p) => `review: ${p}`), supported: [], requests, words };
+  const flagged = [...new Set(answer.outside_claims.map((s) => String(s).trim()).filter(Boolean))];
   let supported = [];
-  let searches = 0;
   if (flagged.length) {
     await phase("researching");
     const claims = await checkClaims(filled, {
       flagged,
-      names,
+      sites: sheet.names ?? [],
       tavilyKey: ctx.tavilyKey,
       fetchImpl: ctx.fetchImpl,
       credits: ctx.credits,
       budget: { gemini: ctx.left(), tavily: ctx.tavilyLeft ?? 0 },
       generate: async (req) => (requests++, ctx.generate(req)),
     });
-    searches = claims.searches;
     supported = claims.supported;
-    history.at(-1).claims = { supported: claims.supported, cut: claims.cut, unchecked: false };
+    // Every flag and what became of it, each sentence once, so the owner sees each one.
+    history.at(-1).claims.flagged = flagged.map((s) => {
+      const sup = claims.supported.find((c) => c.sentence === s);
+      if (sup) return { sentence: s, outcome: "supported", url: sup.url };
+      const cut = claims.cut.find((c) => c.sentence === s);
+      if (cut) return { sentence: s, outcome: "cut", reason: cut.reason };
+      return { sentence: s, outcome: "not found in the post" };
+    });
     // Fail closed: a flagged claim that can't be found, or can't be removed, drops the draft.
-    const drop = (failures) => ({ passed: false, draft, plan, history, failures, supported, requests, searches, words });
+    const drop = (failures) => ({ passed: false, draft, plan, history, failures, supported, requests, words });
     if (claims.listedNotFound?.length) return drop(claims.listedNotFound.map((s) => `claims: the review flagged a sentence that is not in the post, so it could not be checked or cut: "${s.slice(0, 120)}"`));
     if (claims.cut.length) {
       const cut = cutClaimSentences(draft, sheet.facts, claims.cut.map((c) => c.sentence));
       if (cut.notFound.length) return drop(cut.notFound.map((s) => `claims: could not remove the unsupported sentence: "${s.slice(0, 120)}"`));
+      // A title has no sentence to drop: an outside claim in one fails the draft, saying which.
+      const titleFields = ["title", "alt_title_a", "alt_title_b"].filter((x) => cut.fields.has(x));
+      if (titleFields.length) return drop(titleFields.map((x) => `claims: an unsupported outside claim is in the ${x === "title" ? "title" : x === "alt_title_a" ? "first alternative title" : "second alternative title"}, so the draft is dropped`));
       draft = normalizeDraft(cut.draft);
       log(`claims: cut ${claims.cut.length}, kept ${claims.supported.length}`);
       // What is left must still be a whole post (a cut subtitle or TL;DR bullet fails here).
@@ -444,7 +460,7 @@ export async function composeDraft(sheet, ctx) {
       if (!after.ok) return drop(after.failures.map((x) => `after cutting outside claims: ${x}`));
     }
   }
-  return { passed: true, draft, plan, history, failures: [], supported, requests, searches, words: wordCount(fill(draft.body, sheet.facts)) };
+  return { passed: true, draft, plan, history, failures: [], supported, requests, words: wordCount(fill(draft.body, sheet.facts)) };
 }
 
 export { CTA };
