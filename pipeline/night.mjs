@@ -70,8 +70,9 @@ import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content
 import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
-import { ensureReviewSchema } from "../lib/reviews/store.mjs";
-import { atTheDoor, syncReviewRows } from "../lib/reviews/door.mjs";
+import { FRESH_GRADE_DUE_SQL, ensureReviewSchema, freshGradeDue } from "../lib/reviews/store.mjs";
+import { atTheDoor, setAsideCapture, setAsideCaptures, syncReviewRows, withCaptureColumns } from "../lib/reviews/door.mjs";
+import { CAPTURED_BEFORE_CHECK_SQL, storedCaptureBlocked } from "../lib/reviews/stored-capture.mjs";
 import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
@@ -146,16 +147,20 @@ const READY = (p = "p") => `${p}.status = 'live' AND ${p}.shot_key IS NOT NULL A
 const NOT_PARKED = (job, p = "p") =>
   `NOT EXISTS (SELECT 1 FROM night_item_failures f WHERE f.job = '${job}' AND f.item = ${p}.url AND f.parked_at IS NOT NULL)`;
 const NOT_TRIED = (p = "p") => `${p}.url NOT IN (SELECT value FROM json_each(?))`;
-const GRADE_COLS = "p.url, p.name, p.shot_key, p.meta, p.ai_rubric, p.page_text, p.facts, p.signals";
+const GRADE_COLS = "p.url, p.name, p.shot_key, p.meta, p.ai_rubric, p.page_text, p.facts, p.signals, p.captured_at";
 // A new site's screenshot was missing when its grade was tried: the marker
 // (gradeItem) keeps it from being asked for every night, and a capture newer
 // than the marker makes it eligible again (audit F4, 2026-11-16).
 const MISSING_IMAGE = (p = "p") =>
   `(json_valid(${p}.ai_rubric) AND json_extract(${p}.ai_rubric, '$.error') = 'no_usable_captures')`;
 const RECAPTURED = (p = "p") => `COALESCE(datetime(${p}.captured_at) > datetime(json_extract(${p}.ai_rubric, '$.judged_at')), 0)`;
-/** Not graded yet: no grade, or a missing-screenshot marker older than the site's latest capture. */
-const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR (${MISSING_IMAGE(p)} AND ${RECAPTURED(p)}))`;
-const CHANGED = `json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL
+/**
+ * Not graded yet: no grade, or a marker older than the site's latest capture: a missing screenshot,
+ * or the one fresh grade due after the owner undid or rejected a removal (lib/reviews/store.mjs
+ * FRESH_GRADE_DUE), which the bad capture's scores never were.
+ */
+const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
+const CHANGED = `json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL AND NOT ${FRESH_GRADE_DUE_SQL("p")}
   AND EXISTS (SELECT 1 FROM rating_resets r WHERE r.url = p.url AND r.reason = 'page_changed'
               AND r.at > COALESCE(json_extract(p.ai_rubric, '$.judged_at'), ''))`;
 
@@ -223,14 +228,28 @@ async function count(db, from) {
 
 // One grade from stored evidence: the R2 hero, the page text and facts.
 // Returns { status: "ok", door } (door: what the door did with Gemini's
-// answer, lib/reviews/door.mjs), "skipped" (screenshot unavailable for now)
-// or "sentinel" (screenshot gone for good). Throws Gemini errors and
-// malformed answers.
-async function gradeItem(ctx, gemini, { row }, { replace }) {
+// answer, lib/reviews/door.mjs), { status: "unusable", aside } (the stored
+// capture does not show the site: set aside for a new capture, nothing sent
+// to Gemini), "skipped" (screenshot unavailable for now) or "sentinel"
+// (screenshot gone for good). Throws Gemini errors and malformed answers.
+async function gradeItem(ctx, gemini, item, { replace }) {
+  // Never grade a capture that does not show the site (lib/reviews/stored-capture.mjs); planNight set
+  // most of them aside already, this catches the rest before any request. Checked once, here: the door
+  // is told so (captureChecked). The re-grade queue's rows come without captured_at, read once.
+  const row = await withCaptureColumns(ctx.db, item.row);
   const url = String(row.url);
+  const blocked = storedCaptureBlocked(row);
+  if (blocked) return { status: "unusable", aside: await setAsideCapture(ctx.db, { row, why: blocked, now: new Date(ctx.now()) }) };
   const image = await ctx.image(String(row.shot_key));
   if (image === "missing") {
-    if (!replace) {
+    if (freshGradeDue(parseJson(row.ai_rubric))) {
+      // Waiting for its one fresh grade (lib/reviews/store.mjs FRESH_GRADE_DUE): the marker, and the owner's
+      // keep in it, stay; only its time moves, so the site waits for a capture newer than this one.
+      await ctx.db.execute({
+        sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.judged_at', ?, '$.missing_image_at', ?) WHERE url = ?",
+        args: [iso(ctx.now()), iso(ctx.now()), url],
+      });
+    } else if (!replace) {
       await ctx.db.execute({
         sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
         args: [JSON.stringify({ error: "no_usable_captures", judged_at: iso(ctx.now()) }), url],
@@ -249,6 +268,7 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
     row,
     now,
     autoApply: Boolean(ctx.flags?.reviewAutoApply),
+    captureChecked: true,
     gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(ctx.db, g, { url, now: ctx.now() }), now),
   });
   return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
@@ -455,11 +475,23 @@ export async function planNight(ctx, state) {
   // the owner's review queue (lib/reviews/door.mjs). A failure never stops the night.
   try {
     const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()) });
-    for (const url of sent.botWall) noteSite(s, "review", { url, why: "bot wall: the capture never got past a bot check" });
-    for (const url of sent.collapsed) noteSite(s, "review", { url, why: "the portfolio signals collapsed (weekly health check)" });
+    await recordSites(ctx, s, "plan", [
+      ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
+      ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
+    ]);
     if (sent.botWall.length || sent.collapsed.length) ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.collapsed.length} collapsed site(s) sent to the owner`);
   } catch (e) {
     ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);
+  }
+  // Free too: sites waiting for a grade whose stored capture does not show the site (captures from
+  // before the capture checked its screen, #235) are set aside for a new capture, never sent to Gemini
+  // and never removed on its answer (lib/reviews/stored-capture.mjs, door.mjs setAsideCapture).
+  try {
+    await setAsideUnusable(ctx, s);
+  } catch (e) {
+    // Said in the summary: the check did not run to the end. Each grade still checks its own site.
+    s.storedCaptureCheckFailed = msg(e);
+    ctx.log(`Stored captures: checking them failed: ${msg(e)}; each grade still checks its own`);
   }
   // New sites set aside for a missing screenshot: waiting for a newer capture, or back in the queue tonight (audit F4).
   try {
@@ -551,10 +583,138 @@ export const SITE_LIST_MAX = 50;
 export const SITE_LISTS = ["graded", "removed", "review", "failed", "setAside"];
 export const emptySites = () => ({ ...Object.fromEntries(SITE_LISTS.map((k) => [k, []])), counts: Object.fromEntries(SITE_LISTS.map((k) => [k, 0])) });
 
-function noteSite(s, list, entry) {
+// Each site's outcome in a stage is also written to night_sites, one row per (night, stage, site)
+// holding all of that outcome's list entries, and the summary is read from there (sitesWritten): a
+// Workflow step that is retried after its writes starts again from the state before it, so what the
+// lost attempt did is in the database, never in the state it returned. The retry works the same
+// item again and its row replaces the lost attempt's, so the site's final outcome in that stage
+// wins (a failure the retry graded is listed as graded only). The free part writes under stage
+// "plan". Bookkeeping only: a failed write is logged and never fails the item or the night.
+
+/** The night's in-memory lists (the fallback when night_sites cannot be read). */
+function noteInMemory(s, entries) {
   s.sites ??= emptySites();
-  s.sites.counts[list]++;
-  if (s.sites[list].length < SITE_LIST_MAX) s.sites[list].push(entry);
+  for (const [list, entry] of entries) {
+    s.sites.counts[list]++;
+    if (s.sites[list].length < SITE_LIST_MAX) s.sites[list].push(entry);
+  }
+}
+
+/** Records the outcomes of several sites in one stage: `records` is [{ url, entries: [[list, entry]] }]. */
+async function recordSites(ctx, s, stage, records) {
+  if (!records.length) return;
+  for (const r of records) noteInMemory(s, r.entries);
+  try {
+    await ctx.db.batch(
+      records.map((r) => ({
+        sql: `INSERT INTO night_sites (night, stage, url, entries, at) VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT(night, stage, url) DO UPDATE SET entries = excluded.entries, at = excluded.at`,
+        args: [s.night, stage, r.url, JSON.stringify(r.entries), iso(ctx.now())],
+      })),
+      "write"
+    );
+  } catch (e) {
+    ctx.log(`night summary: recording ${records.length} site(s) of ${stage} failed: ${msg(e)} (the summary falls back to this attempt's own lists)`);
+    s.sitesUnrecorded = (s.sitesUnrecorded ?? 0) + records.length;
+  }
+}
+
+/**
+ * The night's site lists as written (night_sites), in the shape of emptySites, with each stage's
+ * tallies from the same rows ({ [stage]: { done, failed, unusable } }) and every unusable-capture
+ * reason (uncapped, for the summary); null when they cannot be read.
+ */
+async function sitesWritten(db, night) {
+  let rows;
+  try {
+    rows = (await db.execute({ sql: "SELECT stage, entries FROM night_sites WHERE night = ? ORDER BY at, rowid", args: [night] })).rows;
+  } catch {
+    return null;
+  }
+  const sites = emptySites();
+  const stages = {};
+  const unusable = [];
+  for (const r of rows) {
+    const stage = String(r.stage);
+    const tally = (stages[stage] ??= { done: 0, failed: 0, unusable: 0 });
+    let entries;
+    try {
+      entries = JSON.parse(String(r.entries));
+    } catch {
+      continue;
+    }
+    for (const [list, entry] of entries) {
+      if (!SITE_LISTS.includes(list)) continue;
+      sites.counts[list]++;
+      if (sites[list].length < SITE_LIST_MAX) sites[list].push(entry);
+      if (list === "graded") tally.done++;
+      if (list === "failed") tally.failed++;
+      if (list === "setAside" && entry.capture) {
+        tally.unusable++;
+        unusable.push(entry.capture);
+      }
+    }
+  }
+  return { sites, stages, unusable };
+}
+
+/** A site set aside because its stored capture does not show the site (setAsideCapture's result), as list entries. */
+function unusableEntries(stage, aside) {
+  const how = aside.recapture === "refresh" ? "its grade is kept and a new capture is asked for" : "captured again before any grade";
+  return [
+    ["setAside", { url: aside.url, stage, capture: aside.why, why: `the stored capture does not show the site (${aside.why}); not sent to Gemini, ${how}` }],
+    ...(aside.botWall && aside.reviewId != null ? [["review", { url: aside.url, why: "bot wall: the stored capture shows a bot check, not the site", reviewId: aside.reviewId }]] : []),
+  ];
+}
+
+/** How many waiting sites one query of the stored-capture check reads. */
+export const STORED_CAPTURE_PAGE = 200;
+
+/**
+ * Every site waiting for "grade new sites" whose stored capture is from before the capture checked
+ * its screen (lib/reviews/stored-capture.mjs), page by page in address order. Calls
+ * `onPage(blocked, scanned)` for each page, where blocked is [{ row, why }] for the ones whose capture
+ * does not show the site. Writes nothing itself (scripts/stored-capture-dry-run.mjs reads with it).
+ * Returns { scanned, blocked }.
+ */
+export async function scanStoredCaptures(db, { pageSize = STORED_CAPTURE_PAGE, onPage = async () => {} } = {}) {
+  let after = "";
+  let scanned = 0;
+  let blocked = 0;
+  for (;;) {
+    const rows = (
+      await db.execute({
+        sql: `SELECT ${GRADE_COLS} FROM portfolios p
+              WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")} AND ${CAPTURED_BEFORE_CHECK_SQL("p")} AND p.url > ?
+              ORDER BY p.url LIMIT ?`,
+        args: [after, pageSize],
+      })
+    ).rows;
+    if (!rows.length) break;
+    scanned += rows.length;
+    after = String(rows.at(-1).url);
+    const page = rows.map((row) => ({ row, why: storedCaptureBlocked(row) })).filter((x) => x.why);
+    blocked += page.length;
+    await onPage(page, scanned);
+    if (rows.length < pageSize) break;
+  }
+  return { scanned, blocked };
+}
+
+/**
+ * planNight's check of every site waiting for "grade new sites": each one whose stored capture does
+ * not show the site is set aside (lib/reviews/door.mjs setAsideCaptures), a page at a time, with one
+ * write for the page's sites and one for their summary rows.
+ */
+async function setAsideUnusable(ctx, s) {
+  const r = await scanStoredCaptures(ctx.db, {
+    onPage: async (page) => {
+      if (!page.length) return;
+      const asides = await setAsideCaptures(ctx.db, page, { now: new Date(ctx.now()) });
+      await recordSites(ctx, s, "plan", asides.map((a) => ({ url: a.url, entries: unusableEntries("plan", a) })));
+    },
+  });
+  if (r.blocked) ctx.log(`Stored captures: ${r.blocked} of ${r.scanned} unchecked capture(s) set aside before grading, their capture does not show the site`);
 }
 
 const VERDICT_WORDS = {
@@ -564,11 +724,12 @@ const VERDICT_WORDS = {
   review: "not a portfolio: waits for the owner (automatic removal is off)",
   strong_signals: "not a portfolio, but the code found a portfolio: kept, sent to review",
   held: "not a portfolio, held for the owner: sent to review",
+  owner_kept: "not a portfolio, but the owner kept it: its one fresh grade, kept listed",
 };
 
 /** Everything a batch can move on a stage: items done, failed, skipped, set aside, or marked tried. */
 export const stageTally = (stage) =>
-  (stage.ok ?? 0) + (stage.failed ?? 0) + (stage.skipped ?? 0) + (stage.noImage ?? 0) + (stage.tried?.length ?? 0);
+  (stage.ok ?? 0) + (stage.failed ?? 0) + (stage.skipped ?? 0) + (stage.noImage ?? 0) + (stage.unusable ?? 0) + (stage.tried?.length ?? 0);
 
 /**
  * Whether a batch got anywhere: an item was counted or set aside, or a request
@@ -634,7 +795,7 @@ export async function runBatch(ctx, state) {
     const budget = Math.min(plan.batch, a.allowed);
     const items = await h.next(ctx, stage, budget);
     if (!items.length) {
-      await closeStage(ctx, s, stage.ok || stage.failed || stage.skipped ? "done: nothing left" : "nothing waiting");
+      await closeStage(ctx, s, stage.ok || stage.failed || stage.skipped || stage.noImage || stage.unusable ? "done: nothing left" : "nothing waiting");
       return { state: s };
     }
 
@@ -684,6 +845,8 @@ export async function runBatch(ctx, state) {
       }
       // Each request is logged with the site it was for (gemini_requests.item).
       requestLog.item = h.sites ? item.id : null;
+      // The item's outcome as list entries for the summary, recorded once whatever happens (finally).
+      let notes = null;
       try {
         // left: what this batch may still spend, for an item that makes several requests (a post).
         const res = await h.run(ctx, gemini, item, stage, { left: budget - spent() });
@@ -691,22 +854,28 @@ export async function runBatch(ctx, state) {
         if (out === "skipped") {
           stage.skipped++;
           stage.tried.push(item.id);
-          if (h.sites) noteSite(s, "setAside", { url: item.id, stage: stage.key, why: "screenshot unavailable for now; tried again tomorrow" });
+          notes = [["setAside", { url: item.id, stage: stage.key, why: "screenshot unavailable for now; tried again tomorrow" }]];
         } else if (out === "sentinel") {
           // No usable image and nothing written (a re-grade keeps its grade): set aside for tonight, not picked again.
           stage.noImage = (stage.noImage ?? 0) + 1;
           stage.tried.push(item.id);
-          if (h.sites) noteSite(s, "setAside", { url: item.id, stage: stage.key, why: "screenshot missing; graded after its next capture" });
+          notes = [["setAside", { url: item.id, stage: stage.key, why: "screenshot missing; graded after its next capture" }]];
+        } else if (out === "unusable") {
+          // The stored capture does not show the site: set aside for a new capture, nothing sent to Gemini.
+          stage.unusable = (stage.unusable ?? 0) + 1;
+          stage.consecutive = 0;
+          stage.tried.push(item.id);
+          notes = unusableEntries(stage.key, res.aside);
         } else {
           stage.ok++;
           stage.consecutive = 0;
           if (h.parkable) await clearItemFailure(db, stage.job, item.id);
           const door = res && typeof res === "object" ? res.door : null;
-          if (h.sites && door) {
-            noteSite(s, "graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome, tier: door.tier ?? null });
-            if (door.outcome === "remove") noteSite(s, "removed", { url: item.id, reviewId: door.reviewId });
+          if (door) {
+            notes = [["graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome, tier: door.tier ?? null }]];
+            if (door.outcome === "remove") notes.push(["removed", { url: item.id, reviewId: door.reviewId }]);
             else if (["review", "strong_signals", "held"].includes(door.outcome)) {
-              noteSite(s, "review", { url: item.id, why: VERDICT_WORDS[door.outcome], reviewId: door.reviewId });
+              notes.push(["review", { url: item.id, why: VERDICT_WORDS[door.outcome], reviewId: door.reviewId }]);
             }
           }
         }
@@ -740,7 +909,7 @@ export async function runBatch(ctx, state) {
         stage.tried.push(item.id);
         stage.lastError = msg(e);
         ctx.log(`${stage.label}: ${item.id} failed: ${msg(e)}`);
-        if (h.sites) noteSite(s, "failed", { url: item.id, stage: stage.key, reason: msg(e) });
+        notes = [["failed", { url: item.id, stage: stage.key, reason: msg(e) }]];
         // Only the item's own failures count towards parking, never a busy 3.5.
         if (h.parkable && !(e instanceof GeminiUnavailableError)) {
           const f = await recordItemFailure(db, { job: stage.job, item: item.id, night: s.night, reason: msg(e), parkAfter: plan.parkAfterNights, now: ctx.now() });
@@ -749,6 +918,7 @@ export async function runBatch(ctx, state) {
         if (stage.consecutive >= plan.breaker) break;
       } finally {
         if (!later) h.advance?.(stage, item);
+        if (h.sites && notes) await recordSites(ctx, s, stage.key, [{ url: item.id, entries: notes }]);
       }
     }
     stage.requests += spent();
@@ -777,6 +947,29 @@ export async function runBatch(ctx, state) {
 
 const minutes = (from, to) => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60000));
 
+/** Gemini requests logged for this run, by job (gemini_requests); empty when they cannot be read. */
+async function requestsWritten(ctx, s, finishedAt) {
+  const out = {};
+  if (ctx.runId == null) return out;
+  try {
+    const r = await ctx.db.execute({
+      sql: "SELECT job, COUNT(*) AS n FROM gemini_requests WHERE run_id = ? AND at >= ? AND at <= ? GROUP BY job",
+      args: [String(ctx.runId), s.startedAt, finishedAt],
+    });
+    for (const row of r.rows) out[String(row.job)] = Number(row.n);
+  } catch {
+    // The state's own counts stand.
+  }
+  return out;
+}
+
+/** Unusable-capture reasons counted: { count, byWhy }. */
+function unusableTally(reasons) {
+  const byWhy = {};
+  for (const why of reasons) byWhy[why] = (byWhy[why] ?? 0) + 1;
+  return { count: reasons.length, byWhy };
+}
+
 /**
  * The run's summary (Markdown and JSON), stored in night_runs. Returns
  * { status, markdown, summary }.
@@ -788,7 +981,34 @@ export async function finishNight(ctx, state) {
   const finishedAt = iso(ctx.now());
   // Stages never reached (a stop, or the hard stop) are listed too.
   const seen = new Set(s.stages.map((x) => x.key));
-  const stages = [...s.stages, ...STAGES.filter((d) => !seen.has(d.key)).map((d) => ({ key: d.key, label: d.label, requests: 0, ok: 0, failed: 0, skipped: 0, parked: [], result: s.stopped ? "not reached" : "not run" }))];
+  const reached = [...s.stages, ...STAGES.filter((d) => !seen.has(d.key)).map((d) => ({ key: d.key, label: d.label, requests: 0, ok: 0, failed: 0, skipped: 0, parked: [], result: s.stopped ? "not reached" : "not run" }))];
+  // What was written wins over the state's counts, which miss whatever a retried step's lost attempt did:
+  // the site lists and a site stage's done, failed and unusable counts come from night_sites (each
+  // site's final outcome in the stage), the requests from gemini_requests.
+  const requestsByJob = await requestsWritten(ctx, s, finishedAt);
+  const fromDb = await sitesWritten(ctx.db, s.night);
+  const sites = fromDb?.sites ?? s.sites ?? emptySites();
+  // A note this attempt could not write is in its own lists only: add those, so nothing it did goes missing.
+  const unrecorded = Boolean(fromDb && s.sitesUnrecorded);
+  if (unrecorded) {
+    for (const list of SITE_LISTS) {
+      const have = new Set(sites[list].map((x) => x.url));
+      const mine = s.sites?.[list] ?? [];
+      const extra = mine.filter((x) => !have.has(x.url));
+      sites[list].push(...extra.slice(0, Math.max(0, SITE_LIST_MAX - sites[list].length)));
+      sites.counts[list] = Math.max(sites.counts[list] + extra.length, s.sites?.counts?.[list] ?? 0);
+    }
+  }
+  const stages = reached.map((x) => {
+    const job = STAGES.find((d) => d.key === x.key)?.job;
+    const t = fromDb && handlers[x.key]?.sites ? fromDb.stages[x.key] ?? { done: 0, failed: 0, unusable: 0 } : null;
+    const pick = (written, own) => (unrecorded ? Math.max(written, own ?? 0) : written);
+    return {
+      ...x,
+      requests: Math.max(x.requests ?? 0, requestsByJob[job] ?? 0),
+      ...(t ? { ok: pick(t.done, x.ok), failed: pick(t.failed, x.failed), unusable: pick(t.unusable, x.unusable) } : {}),
+    };
+  });
   const requests = stages.reduce((a, x) => a + (x.requests ?? 0), 0);
   const status = s.status === "running" ? "complete" : s.status;
   const parked = await parkedItems(ctx.db).catch(() => []);
@@ -802,14 +1022,22 @@ export async function finishNight(ctx, state) {
     checks: s.checks,
     estimate: s.estimate,
     actual: { requests, minutes: s.aiStartedAt ? minutes(s.aiStartedAt, finishedAt) : 0, retries: s.retriesUsed, pauses: s.pauses },
-    stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, noImage: x.noImage ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
+    stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, noImage: x.noImage ?? 0, unusable: x.unusable ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
     parked,
     humanVotes: HUMAN_VOTES_NOTE,
     polls: s.polls ?? null,
-    // The sites tonight touched (SITE_LISTS; at most SITE_LIST_MAX each, counts in sites.counts).
-    sites: s.sites ?? emptySites(),
+    // The sites tonight touched, as written (night_sites; SITE_LISTS, at most SITE_LIST_MAX each, counts in sites.counts).
+    sites,
     // New sites set aside for a missing screenshot: waiting for a newer capture, and back in the queue tonight.
     missingImage: s.missingImage ?? null,
+    // Sites set aside before grading because their stored capture does not show the site: how many tonight
+    // and why, and whether the free part's check of every waiting site ran to the end (error when not).
+    unusableCapture: {
+      ...unusableTally(fromDb?.unusable ?? sites.setAside.filter((x) => x.capture).map((x) => x.capture)),
+      error: s.storedCaptureCheckFailed ?? null,
+    },
+    // Sites whose outcome could not be written to night_sites (the lists above then miss them).
+    unrecorded: s.sitesUnrecorded ?? 0,
   };
   const siteLines = (title, list, line, note = null) => {
     const n = summary.sites.counts[list];
@@ -826,9 +1054,9 @@ export async function finishNight(ctx, state) {
     `Estimated: ${est}. Actual: ${requests} request(s) in ${summary.actual.minutes} min, ${s.retriesUsed} retr${s.retriesUsed === 1 ? "y" : "ies"}, ${s.pauses} pause(s) for people.`,
     s.checks ? `Free checks: ${s.checks.summary}` : "",
     "",
-    "| Stage | Requests | Done | Failed | Skipped | Minutes | Result |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
-    ...summary.stages.map((x) => `| ${x.label} | ${x.requests} | ${x.done} | ${x.failed} | ${x.skipped} | ${x.minutes} | ${x.result}${x.noImage ? `; ${x.noImage} set aside for a missing image` : ""} |`),
+    "| Stage | Requests | Done | Failed | Skipped | Bad capture | Minutes | Result |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ...summary.stages.map((x) => `| ${x.label} | ${x.requests} | ${x.done} | ${x.failed} | ${x.skipped} | ${x.unusable} | ${x.minutes} | ${x.result}${x.noImage ? `; ${x.noImage} set aside for a missing image` : ""} |`),
     "",
     HUMAN_VOTES_NOTE,
     "",
@@ -839,6 +1067,13 @@ export async function finishNight(ctx, state) {
     summary.missingImage && summary.missingImage.waiting + summary.missingImage.retried > 0
       ? `New sites with a missing screenshot: ${summary.missingImage.waiting} waiting for a newer capture, ${summary.missingImage.retried} captured again and back in the queue.\n`
       : "",
+    summary.unusableCapture.count
+      ? `Set aside before grading, their stored capture does not show the site (never sent to Gemini, never removed; captured again first): ${summary.unusableCapture.count} (${Object.entries(summary.unusableCapture.byWhy).map(([w, n]) => `${n} ${w}`).join("; ")}).\n`
+      : "",
+    summary.unusableCapture.error
+      ? `**The check of stored captures did not finish** (${summary.unusableCapture.error}); each grade still checked its own site before any request.\n`
+      : "",
+    summary.unrecorded ? `${summary.unrecorded} site outcome(s) could not be recorded; the lists below may miss them.\n` : "",
     ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.tier ? ` (tier ${x.tier})` : ""}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
     ...siteLines("Removed automatically", "removed", (x) => `${x.url}${x.reviewId ? ` (review ${x.reviewId})` : ""}`, "Each one has Undo on /admin/review."),
     ...siteLines("Sent to review", "review", (x) => `${x.url}: ${x.why}`),

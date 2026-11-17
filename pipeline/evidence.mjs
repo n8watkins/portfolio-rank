@@ -23,6 +23,7 @@ import { httpGate, UA, visibleText } from "./gate.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import { ACTIVE } from "./roster.mjs";
 import { PRIMARY_MODEL } from "./gemini.mjs";
+import { storedMs } from "../lib/stored-time.mjs";
 
 // Below this much server-rendered text a page is treated as client-rendered
 // and loaded in a browser instead (an offline sample of 30 sites found 40%
@@ -128,9 +129,8 @@ const DAY_MS = 86400000;
 
 /** Whole nights since a row's capture (SQLite "YYYY-MM-DD HH:MM:SS", UTC), or null. */
 export function nightsSince(capturedAt, now = Date.now()) {
-  const s = String(capturedAt ?? "");
-  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(" ", "T")}Z`);
-  return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / DAY_MS)) : null;
+  const t = storedMs(capturedAt);
+  return t != null ? Math.max(0, Math.floor((now - t) / DAY_MS)) : null;
 }
 
 /**
