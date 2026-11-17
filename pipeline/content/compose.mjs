@@ -23,7 +23,6 @@ import { planPost } from "./plan.mjs";
 import { checkLinksLoad, codeChecks, urlsIn, wordCount } from "./checks.mjs";
 import { buildReviewRequest, reviewCheck } from "./topic.mjs";
 import { checkClaims, cutClaimSentences } from "./claims.mjs";
-import { splitFlags } from "./backing.mjs";
 
 /** The writer's standing rules: voice and safety only; the shape is code's. */
 export const WRITE_SYSTEM = [
@@ -398,7 +397,7 @@ export async function composeDraft(sheet, ctx) {
   // 5. One review; outside claims it flags go to Tavily, the unsupported are cut.
   if (ctx.left() < 1) return { passed: false, draft, plan, history, failures: ["review: no budget left for the review"], supported: [], requests, searches: 0, words };
   // The review reads the post as readers see it (numbers filled in): the
-  // title, subtitle, TL;DR, body and the meta lines, so a claim anywhere in
+  // title, alternative titles, subtitle, TL;DR, body and the meta lines, so a claim anywhere in
   // them can be flagged. Flagged sentences are looked for in all of those.
   const f = (t) => fill(t, sheet.facts);
   const filled = [
@@ -406,6 +405,7 @@ export async function composeDraft(sheet, ctx) {
     f(draft.subtitle),
     `TL;DR:\n${(draft.tldr ?? []).map((b) => `- ${f(b)}`).join("\n")}`,
     f(draft.body),
+    `Alternative title A: ${f(draft.alt_title_a)}\nAlternative title B: ${f(draft.alt_title_b)}`,
     `Share line: ${f(draft.share_line)}\nNewsletter blurb: ${f(draft.newsletter_blurb)}`,
   ].join("\n\n");
   await phase("checking", "the review");
@@ -413,20 +413,15 @@ export async function composeDraft(sheet, ctx) {
   const review = reviewCheck(answer);
   history.at(-1).checks.push(review);
   if (!review.ok) return { passed: false, draft, plan, history, failures: review.problems.map((p) => `review: ${p}`), supported: [], requests, searches: 0, words };
-  const reviewFlags = answer.outside_claims.map((s) => String(s).trim()).filter(Boolean);
-  // Do not rely on the reviewer alone (pipeline/content/backing.mjs): a flagged sentence that code can show is
-  // built only from sheet facts is "ours" (not searched, not cut); a sentence that names a listed site with no
-  // sheet fact about it is checked whether or not the reviewer flagged it.
-  const { check, ours } = splitFlags(draft, sheet, reviewFlags);
-  const flagged = check.map((c) => c.sentence);
-  const byOf = new Map(check.map((c) => [c.sentence, c.by]));
+  const flagged = [...new Set(answer.outside_claims.map((s) => String(s).trim()).filter(Boolean))];
   let supported = [];
   let searches = 0;
-  history.at(-1).claims = { flagged: ours.map((o) => ({ sentence: o.sentence, by: o.by, outcome: "ours", facts: o.facts })), unchecked: false };
+  history.at(-1).claims = { flagged: [], unchecked: false };
   if (flagged.length) {
     await phase("researching");
     const claims = await checkClaims(filled, {
       flagged,
+      sites: sheet.names ?? [],
       tavilyKey: ctx.tavilyKey,
       fetchImpl: ctx.fetchImpl,
       credits: ctx.credits,
@@ -436,21 +431,22 @@ export async function composeDraft(sheet, ctx) {
     searches = claims.searches;
     supported = claims.supported;
     // Every flag and what became of it, each sentence once, so the owner sees each one.
-    const flags = [...new Set(flagged)].map((s) => {
-      const by = byOf.get(s);
+    history.at(-1).claims.flagged = flagged.map((s) => {
       const sup = claims.supported.find((c) => c.sentence === s);
-      if (sup) return { sentence: s, by, outcome: "supported", url: sup.url };
+      if (sup) return { sentence: s, outcome: "supported", url: sup.url };
       const cut = claims.cut.find((c) => c.sentence === s);
-      if (cut) return { sentence: s, by, outcome: "cut", reason: cut.reason };
-      return { sentence: s, by, outcome: "not found in the post" };
+      if (cut) return { sentence: s, outcome: "cut", reason: cut.reason };
+      return { sentence: s, outcome: "not found in the post" };
     });
-    history.at(-1).claims.flagged.push(...flags);
     // Fail closed: a flagged claim that can't be found, or can't be removed, drops the draft.
     const drop = (failures) => ({ passed: false, draft, plan, history, failures, supported, requests, searches, words });
     if (claims.listedNotFound?.length) return drop(claims.listedNotFound.map((s) => `claims: the review flagged a sentence that is not in the post, so it could not be checked or cut: "${s.slice(0, 120)}"`));
     if (claims.cut.length) {
       const cut = cutClaimSentences(draft, sheet.facts, claims.cut.map((c) => c.sentence));
       if (cut.notFound.length) return drop(cut.notFound.map((s) => `claims: could not remove the unsupported sentence: "${s.slice(0, 120)}"`));
+      // A title has no sentence to drop: an outside claim in one fails the draft, saying which.
+      const titleFields = ["title", "alt_title_a", "alt_title_b"].filter((x) => cut.fields.has(x));
+      if (titleFields.length) return drop(titleFields.map((x) => `claims: an unsupported outside claim is in the ${x === "title" ? "title" : x === "alt_title_a" ? "first alternative title" : "second alternative title"}, so the draft is dropped`));
       draft = normalizeDraft(cut.draft);
       log(`claims: cut ${claims.cut.length}, kept ${claims.supported.length}`);
       // What is left must still be a whole post (a cut subtitle or TL;DR bullet fails here).

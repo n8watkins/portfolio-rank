@@ -153,7 +153,7 @@ export function buildReviewRequest(sheet, filledPost) {
   return {
     parts: [{ text }],
     schema: REVIEW_SCHEMA,
-    options: { prompt: "content-review-v1", systemInstruction: "You are a strict editor for PortfolioRank's blog.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0 },
+    options: { prompt: "content-review-v1.1", systemInstruction: "You are a strict editor for PortfolioRank's blog.", thinkingLevel: "low", maxOutputTokens: 1024, temperature: 0 },
   };
 }
 

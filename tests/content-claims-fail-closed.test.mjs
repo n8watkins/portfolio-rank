@@ -47,22 +47,21 @@ async function postsOf(db) {
 // ---------------------------------------------------------------------------
 // a. A flagged claim that names a listed portfolio is still checked or cut
 // ---------------------------------------------------------------------------
-test("a: a flagged outside claim that names a listed site is searched and cut, and its outcome is recorded", async () => {
+test("a: a flagged outside claim that names a listed site is cut without a search, and its outcome is recorded", async () => {
   for (const mode of ["dry-run", "publish"]) {
     const { db, sheet } = await sheetAndRoster();
     const name = sheet.names[0].name;
     const claim = `Recruiters at Google hired ${name} within a week, a LinkedIn study found.`;
     const g = fakeGemini({ write: inClosing(claim), review: { ...REVIEW_OK, outside_claims: [claim] } });
-    const w = web({ tavily: () => new Response(JSON.stringify({ results: [] })) });
+    const w = web();
     const { ctx } = contentCtx(db, { mode, keys: { tavily: "k" }, fetchImpl: w.fetchImpl });
     ctx.flags.publishGate = "none";
     const r = await runDraft(ctx, g, NIGHT);
     assert.equal(r.status, "ok", `${mode}: ${r.failures?.join("; ")}`);
-    assert.equal(w.searches(), 1, `${mode}: the claim was searched`);
+    assert.equal(w.searches(), 0, `${mode}: no search, so the name is never sent out`);
     const [post] = await postsOf(db);
     assert.ok(!post.body.includes("LinkedIn study"), `${mode}: the claim is not in the stored post`);
-    const claims = post.checks.history.at(-1).claims;
-    assert.deepEqual(claims.flagged.map((f) => [f.sentence, f.outcome]), [[claim, "cut"]]);
+    assert.deepEqual(flagsOf(post.checks.history).map((f) => [f.sentence, f.outcome]), [[claim, "cut"]]);
   }
 });
 
@@ -167,15 +166,17 @@ const ENDINGS = [
   { name: "judge throws", judge: () => { throw new Error("gemini answered 500"); }, outcome: "throws" },
   { name: "review answer is not an object", review: "no claims", outcome: "dropped" },
   { name: "review answer has no outside_claims", review: withoutClaimsList(), outcome: "dropped" },
+  { name: "flagged sentence names a listed site", naming: true, outcome: "cut", reason: /names a listed site/, noSearch: true },
   { name: "review flags a sentence that is not in the post", flagged: ["Nine of ten employers read a portfolio before a resume."], outcome: "dropped" },
 ];
 
 test("every ending of a claim check is a cut sentence or a failed run, never a passed claim", async () => {
   for (const e of ENDINGS) {
-    const { db } = await sheetAndRoster();
+    const { db, sheet } = await sheetAndRoster();
+    const claim = e.naming ? `Recruiters hired ${sheet.names[0].name} about seven seconds after it loaded, a study found.` : CLAIM;
     if (e.weekFull) for (let i = 0; i < TAVILY_PER_WEEK; i++) await db.execute({ sql: "INSERT INTO tavily_searches (at) VALUES (?)", args: [new Date(MONDAY - 1000).toISOString()] });
-    const flagged = e.flagged ?? [CLAIM];
-    const g = fakeGemini({ write: inClosing(CLAIM), review: e.review ?? { ...REVIEW_OK, outside_claims: flagged }, judge: e.judge ?? { verdicts: [] } });
+    const flagged = e.flagged ?? [claim];
+    const g = fakeGemini({ write: inClosing(claim), review: e.review ?? { ...REVIEW_OK, outside_claims: flagged }, judge: e.judge ?? { verdicts: [] } });
     const w = web(e.web);
     const { ctx } = contentCtx(db, { keys: "keys" in e ? e.keys : { tavily: "k" }, fetchImpl: w.fetchImpl });
     if ("monthly" in e) ctx.content.tavilyMonthlyCredits = e.monthly;
@@ -187,6 +188,7 @@ test("every ending of a claim check is a cut sentence or a failed run, never a p
       thrown = err;
     }
     const posts = await postsOf(db);
+    if (e.noSearch) assert.equal(w.searches(), 0, `${e.name}: nothing sent to Tavily`);
     const passedWithClaim = posts.filter((p) => p.status !== "dropped" && p.body.includes("seven seconds"));
     assert.deepEqual(passedWithClaim, [], `${e.name}: a post kept the claim`);
     if (e.outcome === "cut") {

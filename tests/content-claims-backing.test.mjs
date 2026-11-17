@@ -1,8 +1,8 @@
-// Outside claims, second review of 2026-11-16 (pull request #253): the code
-// does not depend on the reviewer for sentences that name a listed site (a
-// sentence is "ours" only when a sheet fact about that site backs it), the
-// review prompt says what makes an outside claim, and the weekly Tavily count
-// is one counter (tavily_searches) that no failure path can lose.
+// Outside claims, reviews of 2026-11-16 (pull request #253). The rule: a
+// sentence the reviewer flags that names a listed site is cut without a
+// search (its name never reaches Tavily); any other flagged sentence is
+// searched and kept only if supported. The weekly Tavily count is one counter
+// (tavily_searches) that no failure path can lose.
 // Mock writer, fake fetch, fake Gemini: no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +14,7 @@ import { buildReviewRequest } from "../pipeline/content/topic.mjs";
 import { tavilyThisWeek } from "../lib/content/store.mjs";
 import { creditsFor } from "../lib/content/tavily-credits.mjs";
 import { CONTENT_TABLES } from "../lib/content/schema.mjs";
-import { flagsOf } from "../pipeline/content/claim-flags.mjs";
+import { flagsOf, labelOf } from "../pipeline/content/claim-flags.mjs";
 import { pruneLogs } from "../pipeline/retention.mjs";
 import { renderPreview } from "../pipeline/content/preview.mjs";
 
@@ -35,17 +35,9 @@ const web = ({ tavily = () => new Response(JSON.stringify({ results: [RESULT] })
   };
   return { fetchImpl, seen, searches: () => seen.filter((u) => u === TAVILY_API).length };
 };
-const noResults = () => new Response(JSON.stringify({ results: [] }));
 
 async function postsOf(db) {
   return (await db.execute("SELECT status, body, checks FROM posts")).rows.map((r) => ({ status: String(r.status), body: String(r.body), checks: JSON.parse(String(r.checks ?? "{}")) }));
-}
-
-/** A sentence that names the sheet's first listed site and rests on a sheet fact about it. */
-function ownSentence(sheet) {
-  const site = sheet.names[0];
-  const fact = sheet.facts.find((f) => f.about === site.url);
-  return { site, fact, raw: `Consider [${site.name}](${site.url}), who earns {{${fact.id}}} on visual design.`, plain: `Consider ${site.name}, who earns ${fact.display} on visual design.` };
 }
 
 // ---------------------------------------------------------------------------
@@ -59,63 +51,41 @@ test("1: the review prompt says an outside claim is about where the information 
   assert.doesNotMatch(text, /about a named site is not one/);
 });
 
-test("1+2: a reviewer that follows the OLD wording (leaves out a sentence that names a listed site) does not let the claim through", async () => {
+test("a flagged sentence that names a listed site is cut without a search, found though the review copied it without the post's link", async () => {
   const { db, sheet } = await sheetAndRoster();
-  const claim = `Recruiters at Google hired ${sheet.names[0].name} within a week, a LinkedIn study found.`;
-  const g = fakeGemini({ write: inClosing(claim), review: { ...REVIEW_OK, outside_claims: [] } });
-  const w = web({ tavily: noResults });
+  const site = sheet.names[0];
+  // The post links the site; the review copies the sentence as plain text, without the link.
+  const claim = `Recruiters hired [${site.name}](${site.url}) within a week, a LinkedIn study found.`;
+  const plainClaim = `Recruiters hired ${site.name} within a week, a LinkedIn study found.`;
+  const g = fakeGemini({ write: inClosing(claim), review: { ...REVIEW_OK, outside_claims: [plainClaim] } });
+  const w = web();
   const { ctx } = contentCtx(db, { mode: "publish", keys: { tavily: "k" }, fetchImpl: w.fetchImpl });
   ctx.flags.publishGate = "none";
   const r = await runDraft(ctx, g, NIGHT);
   assert.equal(r.status, "ok", r.failures?.join("; "));
-  assert.equal(w.searches(), 1, "the code checked it");
-  const [post] = await postsOf(db);
-  assert.ok(!post.body.includes("LinkedIn study"));
-  assert.deepEqual(flagsOf(post.checks.history).map((f) => [f.by, f.outcome]), [["code", "cut"]]);
-});
-
-test("2: a sentence built from a sheet fact about the site it names is ours, even when the review flags nothing", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const own = ownSentence(sheet);
-  const g = fakeGemini({ write: inClosing(own.raw), review: { ...REVIEW_OK, outside_claims: [] } });
-  const w = web();
-  const { ctx } = contentCtx(db, { keys: { tavily: "k" }, fetchImpl: w.fetchImpl });
-  const r = await runDraft(ctx, g, NIGHT);
-  assert.equal(r.status, "ok", r.failures?.join("; "));
   assert.equal(w.searches(), 0);
-  assert.ok((await postsOf(db))[0].body.includes(own.site.name));
+  assert.ok(!(await postsOf(db))[0].body.includes("LinkedIn study"));
+  const [flag] = flagsOf((await postsOf(db))[0].checks.history);
+  assert.deepEqual([flag.outcome, flag.reason], ["cut", "names a listed site, so it is cut without a search"]);
 });
 
-// ---------------------------------------------------------------------------
-// 3. A flagged sentence that is only the site's data is "ours"
-// ---------------------------------------------------------------------------
-test("3: a flagged sentence built only from sheet facts is recorded as ours with its fact, not searched, not cut", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const own = ownSentence(sheet);
-  // The review copies it as plain text, without the Markdown link.
-  const g = fakeGemini({ write: inClosing(own.raw), review: { ...REVIEW_OK, outside_claims: [own.plain] } });
-  const w = web();
-  const { ctx } = contentCtx(db, { keys: { tavily: "k" }, fetchImpl: w.fetchImpl });
-  const r = await runDraft(ctx, g, NIGHT);
-  assert.equal(r.status, "ok", r.failures?.join("; "));
-  assert.equal(w.searches(), 0, "the listed person's name is never sent to Tavily");
-  assert.ok(!g.calls.some((c) => c.kind === "judge"));
-  const [post] = await postsOf(db);
-  assert.ok(post.body.includes(own.site.name), "the sentence stays");
-  assert.deepEqual(flagsOf(post.checks.history).map((f) => [f.outcome, f.facts]), [["ours", [own.fact.id]]]);
-});
-
-test("3: a flagged sentence that names a listed site and also states something about the world is not ours", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const own = ownSentence(sheet);
-  const mixed = `${own.raw.replace(/\.$/, "")}, and recruiters at Google hired them for it.`;
-  const g = fakeGemini({ write: inClosing(mixed), review: { ...REVIEW_OK, outside_claims: [] } });
-  const w = web({ tavily: noResults });
-  const { ctx } = contentCtx(db, { keys: { tavily: "k" }, fetchImpl: w.fetchImpl });
-  const r = await runDraft(ctx, g, NIGHT);
-  assert.equal(r.status, "ok", r.failures?.join("; "));
-  assert.equal(w.searches(), 1);
-  assert.ok(!(await postsOf(db))[0].body.includes("recruiters at Google"));
+test("the name of a listed site is never sent to Tavily, whatever else is searched", async () => {
+  const sites = [{ name: "Top Person 1", url: "https://top-1.dev" }];
+  const draft = "Intro.\nRecruiters hired [Top Person 1](https://top-1.dev) in a week, a study found.\nRecruiters spend seven seconds on a portfolio, studies say.\nSee how [this site](https://top-1.dev) does it, a survey found.";
+  const flagged = ["Recruiters hired Top Person 1 in a week, a study found.", "Recruiters spend seven seconds on a portfolio, studies say.", "See how this site does it, a survey found."];
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
+    if (String(url) === TAVILY_API) {
+      bodies.push(String(init.body));
+      return new Response(JSON.stringify({ results: [] }));
+    }
+    return new Response("ok");
+  };
+  const r = await checkClaims(draft, { tavilyKey: "k", fetchImpl, budget: { gemini: 5, tavily: 10 }, generate: async () => ({}), flagged, sites });
+  assert.equal(bodies.length, 1, "only the sentence that names no listed site was searched");
+  assert.ok(bodies.every((b) => !/top person|top-1/i.test(b)));
+  assert.equal(r.cut.length, 3);
+  assert.equal(r.cut.filter((c) => /names a listed site/.test(c.reason)).length, 2, "named by its text, and by a link under other words");
 });
 
 test("3: the presence test ignores Markdown link markup on both sides", async () => {
@@ -213,25 +183,26 @@ test("10: the weekly rows are pruned after the window plus a day", async () => {
 // ---------------------------------------------------------------------------
 // 9. The owner sees every flag
 // ---------------------------------------------------------------------------
-test("9: the owner's preview lists every flag with its outcome, source, reason and fact", async () => {
-  const { db, sheet } = await sheetAndRoster();
-  const own = ownSentence(sheet);
-  const second = "Hiring managers read the first screen only, surveys show.";
-  const flagged = [own.plain, CLAIM, second];
-  const g = fakeGemini({ write: inClosing(`${own.raw}\n${CLAIM}\n${second}`), review: { ...REVIEW_OK, outside_claims: flagged }, judge: { verdicts: [{ claim: 0, supported: true, source_url: RESULT.url }] } });
-  let n = 0;
-  const w = web({ tavily: () => new Response(JSON.stringify({ results: n++ === 0 ? [RESULT] : [] })) });
-  const { ctx } = contentCtx(db, { keys: { tavily: "k" }, fetchImpl: w.fetchImpl });
-  const r = await runDraft(ctx, g, NIGHT);
-  assert.equal(r.status, "ok", r.failures?.join("; "));
-  const [row] = await postsOf(db);
-  const post = { title: "T", subtitle: "", body: "x", status: "draft", kind: "k", requests: 1, publishAt: null, aiLine: "", aiNote: "", altTitles: [], tags: [], shareLine: "", newsletterBlurb: "", images: [], claims: [], facts: { facts: [], names: [] }, checks: row.checks };
+test("9: the owner's preview and the admin page list every flag with the same label, source and reason", () => {
+  const history = [
+    { round: 0, checks: [], claims: { flagged: [{ sentence: "Kept one.", outcome: "supported", url: "https://good.example/study" }, { sentence: "Cut one.", outcome: "cut", reason: "no search results" }], unchecked: false } },
+  ];
+  const legacy = [{ round: 0, checks: [], claims: { supported: [{ sentence: "Old kept.", url: "https://good.example/old" }], cut: [{ sentence: "Old cut.", reason: "no search results" }] } }];
+  assert.deepEqual(flagsOf(history).map(labelOf), ["Kept, with a source", "Cut"]);
+  assert.deepEqual(flagsOf(legacy).map(labelOf), ["Kept, with a source", "Cut"], "old records read the same way");
+  const post = { title: "T", subtitle: "", body: "x", status: "draft", kind: "k", requests: 1, publishAt: null, aiLine: "", aiNote: "", altTitles: [], tags: [], shareLine: "", newsletterBlurb: "", images: [], claims: [], facts: { facts: [], names: [] }, checks: { passed: true, rounds: 1, failures: [], history } };
   const html = renderPreview(post);
-  assert.match(html, /Ours: built from the sheet/);
-  assert.match(html, /Kept, with a source/);
-  assert.match(html, /Cut<\/strong>/);
-  assert.match(html, new RegExp(`facts ${own.fact.id}`));
-  assert.match(html, /good\.example/);
-  assert.match(html, /no search results/);
-  assert.equal(flagsOf(row.checks.history).length, 3, "each sentence once");
+  for (const text of ["Kept, with a source", "Kept one.", "good.example/study", "Cut</strong>", "Cut one.", "no search results"]) assert.ok(html.includes(text), text);
+});
+
+test("a flag that comes from an alternative title fails the draft and says which field", async () => {
+  const { db } = await sheetAndRoster();
+  const claim = "Recruiters read portfolios for seven seconds, studies say";
+  const write = (_n, parts) => mockAnswer({ parts }).replace(/(=== TITLE ===\n[^\n]*\n[^\n]*\n)[^\n]*/, `$1${claim}`);
+  const g = fakeGemini({ write, review: { ...REVIEW_OK, outside_claims: [claim] } });
+  const { ctx } = contentCtx(db, { keys: {}, fetchImpl: web().fetchImpl });
+  const r = await runDraft(ctx, g, NIGHT);
+  assert.equal(r.status, "dropped");
+  assert.match(r.failures.join("; "), /alternative title/);
+  assert.equal((await postsOf(db)).filter((p) => p.status === "draft").length, 0);
 });

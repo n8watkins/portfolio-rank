@@ -4,7 +4,7 @@
 // captions (full width on phones), and the fact sheet folded into a
 // collapsed "Show the data" section that scrolls at 320px. Light and dark.
 // Pure: no I/O; `imageSrc(image)` says where each image is served from.
-import { flagsOf } from "./claim-flags.mjs";
+import { flagsOf, labelOf } from "./claim-flags.mjs";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -106,9 +106,8 @@ export function renderPreview(post, { imageSrc = (im) => im.url, banner = "" } =
   const images = new Map(post.images.map((im) => [im.slot, figureHtml(im, imageSrc(im))]));
   const checks = (post.checks?.history ?? []).flatMap((h) => h.checks.map((c) => `<tr><td>${h.round}</td><td>${esc(c.name)}</td><td>${c.ok ? "pass" : "fail"}</td><td>${esc(c.problems.join("; "))}</td></tr>`));
   const flags = flagsOf(post.checks?.history).map((c) => {
-    const label = c.outcome === "supported" ? "Kept, with a source" : c.outcome === "ours" ? "Ours: built from the sheet" : c.outcome === "cut" ? "Cut" : c.outcome;
-    const detail = c.url ? ` - <a href="${esc(c.url)}">source</a>` : c.reason ? ` <em>(${esc(c.reason)})</em>` : c.facts?.length ? ` <em>(facts ${esc(c.facts.join(", "))})</em>` : "";
-    return `<li><strong>${esc(label)}${c.by === "code" ? " (found by code)" : ""}</strong><br>${esc(c.sentence)}${detail}</li>`;
+    const detail = c.url ? ` - <a href="${esc(c.url)}">source</a>` : c.reason ? ` <em>(${esc(c.reason)})</em>` : "";
+    return `<li><strong>${esc(labelOf(c))}</strong><br>${esc(c.sentence)}${detail}</li>`;
   });
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>${esc(post.title)}</title><style>${PREVIEW_CSS}</style></head><body><main>
 ${banner ? `<p class="banner"><strong>${esc(banner)}</strong></p>` : ""}

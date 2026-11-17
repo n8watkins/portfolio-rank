@@ -108,7 +108,8 @@ export const norm = (s) =>
  * `norm` with Markdown link markup removed (a link becomes its text), for
  * comparing a sentence the review copied as plain text with the post's own.
  */
-export const plain = (s) => norm(String(s).replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1"));
+export const stripLinks = (s) => String(s).replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1");
+export const plain = (s) => norm(stripLinks(s));
 
 /** Loads a source page: { ok, text }. */
 async function loadPage(url, fetchImpl) {
@@ -122,15 +123,41 @@ async function loadPage(url, fetchImpl) {
   }
 }
 
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const trimUrl = (u) => String(u ?? "").replace(/\/$/, "");
+
 /**
- * Checks the outside claims of a draft. `draftText` is the unfilled draft;
- * `budget` is { gemini: requests left, tavily: searches left }; `credits`
- * ({ reserve, release }, lib/content/tavily-credits.mjs) counts each search
- * against the month's Tavily cap, and at the cap claims are cut. Returns
- * { supported: [{ sentence, url, title }], cut: [{ sentence, reason }],
- *   requests, searches }.
+ * Whether a sentence names a listed site, by its name (a whole word) or by a
+ * link to its URL. `sentence` is what the review flagged; `draftText` is the
+ * post, whose own sentence may carry a link the review's plain copy lost.
  */
-export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, flagged = null }) {
+export function namesSite(sentence, draftText, sites) {
+  const key = plain(sentence);
+  const lines = String(draftText).split("\n").flatMap((l) => l.split(SENTENCE_BREAK));
+  const raw = [sentence, ...lines.filter((l) => l.trim() && (plain(l).includes(key) || (plain(l).length >= 12 && key.includes(plain(l)))))];
+  return sites.some((n) => {
+    const url = trimUrl(n.url);
+    const name = String(n.name ?? "").trim();
+    return raw.some((t) => (url && [...t.matchAll(/\]\(([^)\s]+)\)/g)].some((m) => trimUrl(m[1]) === url)) || (name && new RegExp(`(^|[^\\p{L}\\p{N}])${escRe(name)}(?=$|[^\\p{L}\\p{N}])`, "u").test(stripLinks(t))));
+  });
+}
+
+/**
+ * Checks the outside claims the review flagged in a draft. `draftText` is the
+ * filled draft; `flagged` the sentences the review listed (without it one
+ * request lists them). `sites` is the names list [{ name, url }].
+ *
+ * Rule: a flagged sentence that names a listed site is cut without any search,
+ * so a listed person's name is never sent to Tavily; any other is searched
+ * and kept only when a result supports it and its source loads, else cut.
+ * `budget` is { gemini: requests left, tavily: searches left }; `credits`
+ * ({ reserve, release }, lib/content/tavily-credits.mjs) reserves each search
+ * against the week's and the month's Tavily caps before the call, and at a cap
+ * claims are cut. Returns { supported: [{ sentence, url, title }], cut:
+ * [{ sentence, reason }], listedNotFound?, requests, searches }, where
+ * `searches` counts only searches Tavily answered.
+ */
+export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, generate, credits, sites = [], flagged = null }) {
   const out = { supported: [], cut: [], requests: 0, searches: 0 };
   // `flagged`: the outside-claim sentences the final review already listed
   // (compose.mjs), so no list request is spent; Tavily runs only on those.
@@ -144,23 +171,26 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
     listed = await generate(buildListRequest(draftText));
     out.requests++;
   }
-  // Fail closed: every sentence the review (or lister) flagged is checked or
-  // cut, whatever names or numbers it holds. A sentence that is only the
-  // sheet's own data should not have been flagged (the review prompt says so);
-  // a name inside a flagged sentence never exempts it (2026-11-16 review).
+  // Fail closed: every sentence the review (or lister) flagged is searched or cut.
   const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))];
   // Found whatever the quotes or spacing, the way a model copies a sentence;
   // one that cannot be found is reported in listedNotFound and the caller fails closed.
   const haystack = plain(draftText);
   const present = sentences.filter((s) => haystack.includes(plain(s)));
   for (const s of sentences) if (!present.includes(s)) out.listedNotFound = [...(out.listedNotFound ?? []), s];
-  if (!present.length) return out;
+  // A sentence about a listed site is cut unsearched: its name never goes to Tavily.
+  const searchable = [];
+  for (const s of present) {
+    if (namesSite(s, draftText, sites)) out.cut.push({ sentence: s, reason: "names a listed site, so it is cut without a search" });
+    else searchable.push(s);
+  }
+  if (!searchable.length) return out;
   if (!tavilyKey) {
-    for (const s of present) out.cut.push({ sentence: s, reason: "no search key (TAVILY_API_KEY), so outside claims are cut" });
+    for (const s of searchable) out.cut.push({ sentence: s, reason: "no search key (TAVILY_API_KEY), so outside claims are cut" });
     return out;
   }
-  const toSearch = present.slice(0, MAX_CLAIMS);
-  for (const s of present.slice(MAX_CLAIMS)) out.cut.push({ sentence: s, reason: `more than ${MAX_CLAIMS} outside claims` });
+  const toSearch = searchable.slice(0, MAX_CLAIMS);
+  for (const s of searchable.slice(MAX_CLAIMS)) out.cut.push({ sentence: s, reason: `more than ${MAX_CLAIMS} outside claims` });
   const searched = [];
   for (const s of toSearch) {
     if (out.searches >= budget.tavily) {
@@ -253,11 +283,13 @@ function withoutClaims(text, facts, claims) {
 export function cutClaimSentences(draft, facts, sentences) {
   const claims = sentences.map((s) => plain(s));
   const found = new Set();
+  const fields = new Set();
   const out = { ...draft };
   for (const f of FIELDS) {
     if (typeof draft[f] !== "string") continue;
     const r = withoutClaims(draft[f], facts, claims);
     r.hit.forEach((k) => found.add(k));
+    if (r.hit.size) fields.add(f);
     out[f] = f === "body" ? r.text : r.text.trim();
   }
   if (Array.isArray(draft.tldr)) {
@@ -267,5 +299,5 @@ export function cutClaimSentences(draft, facts, sentences) {
       return !r.hit.size;
     });
   }
-  return { draft: out, cut: sentences.filter((_, k) => found.has(k)), notFound: sentences.filter((_, k) => !found.has(k)) };
+  return { draft: out, fields, cut: sentences.filter((_, k) => found.has(k)), notFound: sentences.filter((_, k) => !found.has(k)) };
 }

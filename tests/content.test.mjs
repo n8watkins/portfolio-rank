@@ -948,7 +948,7 @@ test("quality: substance (owner, 2026-11-12): robotic phrasing, TL;DR the body s
   fails({ body: d.body.replace(/\[(Top Person [23])\]\([^)]+\)/g, "$1") }, /1 named example site\(s\) linked; link at least 3/);
 });
 
-test("staging fixes (2026-11-12): the hero marker leaves the body; a flagged sentence is always checked or cut, even one that names a listed site (2026-11-16)", async () => {
+test("staging fixes (2026-11-12): the hero marker leaves the body; a flagged sentence is always cut or searched, and one that names a listed site is cut unsearched (2026-11-16)", async () => {
   assert.equal(normalizeDraft({ body: "Opener one.\nOpener two.\n\n[[image:hero]]\n\n### A\nText." }).body, "Opener one.\nOpener two.\n\n\n### A\nText.");
   const listed = ["Consider Top Person 1, who earns {{f30}} on visual design.", "Projects by Top Person 2 are clear.", "Recruiters spend six seconds on a portfolio."];
   const text = listed.join("\n");
