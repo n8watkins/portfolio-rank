@@ -229,7 +229,7 @@ export default async function GradeReportPage({ params, searchParams }: Params &
           <p className="mt-1 text-xs text-mute">Graded {day(rep.gradedAt)}. A grade describes the page, not the developer.</p>
 
           <div className="mt-auto pt-6">
-            <ReportActions id={job.id} domain={job.domain} listed={!!page.listed} joinHref={joinHref} emailed={job.email.requested} games={page.games} />
+            <ReportActions id={job.id} domain={job.domain} listed={!!page.listed} joinHref={joinHref} emailed={job.email.requested} mine={job.mine} games={page.games} />
           </div>
         </div>
       </section>

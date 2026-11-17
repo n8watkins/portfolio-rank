@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/db";
-import { JOB_ID, deleteJob, readJob } from "@/lib/grader/jobs.mjs";
+import { JOB_ID, deleteJob, readJob, shotKeyOf } from "@/lib/grader/jobs.mjs";
 import { retryStalled } from "@/lib/grader/dispatch.mjs";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { publicJob } from "@/lib/grader/view.mjs";
@@ -14,9 +14,13 @@ import { PRIVATE, deleteGradeShots, disabled, fail, graderEnabled, ownedJobs, sa
 //   mine, steps, checks (the free checks), shots, email: { requested, sent },
 //   report: null | { tier, facts, judgments, strengths, fixes, percentile,
 //   similar, better, roles, model, ownKey, gradedAt, ... } }
-//   Poll it every few seconds while status is capturing, grading or queued.
+//   Poll it every few seconds while status is capturing or grading, and
+//   every minute or more while it only waits (lib/grader/poll.mjs).
 //   Reports are unlisted: the id is the only way in, every answer says
-//   noindex, and nothing is cached in shared caches.
+//   noindex, and nothing is cached in shared caches. Whoever has the id
+//   sees the report, the free checks and the screenshots, never the
+//   requester, the network, any address left for the email, the page text or
+//   a key; `mine` says whether this browser may delete it.
 // DELETE /api/grade/<id> -> 204: only the browser that owns the report (it
 //   requested it, or opened its emailed one-time link) may delete it; its
 //   screenshots go too. 403 not_owner, 404.
@@ -56,7 +60,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const job = await readJob(client, id);
   if (!job) return fail("not_found", 404);
   if (!(await ownedJobs()).includes(id)) return fail("not_owner", 403);
-  await deleteGradeShots(job.shot_key == null ? null : String(job.shot_key));
+  // The screenshots, and the people-queue request with the page text (deleteJob), go with it; a capture still running cleans up after itself.
+  await deleteGradeShots(job.shot_key == null ? shotKeyOf(id) : String(job.shot_key));
   await deleteJob(client, id);
   return new NextResponse(null, { status: 204, headers: PRIVATE });
 }

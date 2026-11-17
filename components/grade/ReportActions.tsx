@@ -18,6 +18,7 @@ export function ReportActions({
   listed,
   joinHref,
   emailed,
+  mine,
   games,
 }: {
   id: string;
@@ -28,6 +29,8 @@ export function ReportActions({
   joinHref: string;
   /** An email for this report is already on its way. */
   emailed: boolean;
+  /** This browser owns the report: only the owner can ask for it by email. */
+  mine: boolean;
   /** GAMES_V2: a share counts toward the badges. */
   games: boolean;
 }) {
@@ -86,7 +89,7 @@ export function ReportActions({
             </span>
           </a>
         )}
-        {emailed ? (
+        {!mine ? null : emailed ? (
           <p className="flex items-start gap-2.5 p-1 text-sm" role="status">
             <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-up" aria-hidden />
             <span>
@@ -110,7 +113,7 @@ export function ReportActions({
           </button>
         )}
       </div>
-      {mailOpen && !emailed && (
+      {mine && mailOpen && !emailed && (
         <div id="report-email" className="mt-3">
           <EmailLink jobId={id} success="Done. Check your inbox for the link; it works once and for 7 days." />
         </div>
