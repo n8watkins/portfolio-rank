@@ -13,7 +13,8 @@ import { HELD_KINDS, guardedForReview } from "../pipeline/portfolio-guard.mjs";
 import { REMOVED_KINDS } from "../lib/removed-kinds.mjs";
 import * as store from "../lib/reviews/store.mjs";
 import { autoApplyReviews, decideReviews, ensureReviewSchema, listReviews, undoReviews } from "../lib/reviews/store.mjs";
-import { BOT_WALL_REASON, syncReviewRows } from "../lib/reviews/door.mjs";
+import { syncReviewRows } from "../lib/reviews/door.mjs";
+import { BOT_WALL_REASON, isBotWallReason } from "../pipeline/capture-blocked.mjs";
 import { DAY, EMPTY_HTML, PORTFOLIO_HTML, T0, answer, col, context, drive, faulty, freshDb, grade, hidden, reviewsOf, signals, site } from "./helpers/door-night.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -188,18 +189,13 @@ test("6: the 60-second request timeout is for single-site grades only; other req
   assert.deepEqual(seen, [60000, 120000]);
 });
 
-test("7: a bot-wall reason with a suffix still matches (the prefix, as #235's text)", async () => {
+test("7: a bot-wall reason with a suffix still matches, in the door's SQL and in the capture's check", async () => {
   const { db } = await freshDb();
   const url = "https://walled-suffix.dev";
   await site(db, url, { status: "error", reason: `${BOT_WALL_REASON} (3 tries)`, needsReview: 1, captured: false });
   const r = await syncReviewRows(db, { now: new Date(T0) });
   assert.deepEqual(r.botWall, [url]);
-  // When #235's file is here, the constant matches its marker (it should merge first; then this becomes an import).
-  const file = path.join(ROOT, "pipeline", "capture-blocked.mjs");
-  if (fs.existsSync(file)) {
-    const m = await import(file);
-    assert.equal(`${m.BLOCKED_PREFIX}${m.BOT_WALL}`, BOT_WALL_REASON);
-  }
+  assert.equal(isBotWallReason(`${BOT_WALL_REASON} (3 tries)`), true);
 });
 
 test("8: every held kind is known to the health check and the night's collapse rows, from one list", async () => {
