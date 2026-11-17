@@ -11,10 +11,11 @@ Build feed.json = (upstream README) - (our exclusions) + (our additions).
   JSON array of {name, url, tagline?}.
 
 This file only reads the README. Everything that decides whether two
-addresses are one site (duplicates, exclusions, and keeping the address a
-site is stored under in the database) is pipeline/build-feed.mjs, so the
-rule lives in one place (pipeline/list-key.mjs); this script runs it with
-Node and passes its exit code on.
+addresses are one site (duplicates, exclusions) is pipeline/build-feed.mjs,
+so the rule lives in one place (pipeline/list-key.mjs); this script runs it
+with Node and passes its exit code on. Addresses are written exactly as the
+list spells them; the roster sync moves a respelled site's row
+(pipeline/site-move.mjs).
 
 Usage:
     python generate_feed.py [README.md] [feed.json]

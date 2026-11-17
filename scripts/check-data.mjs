@@ -58,10 +58,7 @@ export function checkData({ feed, additions, excluded }) {
   list("feed.json", feed, (e, at) => {
     if (!isText(e.name)) say(`${at} has no name`);
     if (!isWebAddress(e.url)) say(`${at} has no web address (url: ${JSON.stringify(e.url)})`);
-    if (e.tagline !== undefined && typeof e.tagline !== "string") say(`${at} has a tagline that is not text`);
-    // The list's current spelling of a site stored under another address (pipeline/list-key.mjs).
-    if (e.href !== undefined && (!isWebAddress(e.href) || e.href === e.url)) say(`${at} has an href that is not another web address (href: ${JSON.stringify(e.href)})`);
-  });
+    if (e.tagline !== undefined && typeof e.tagline !== "string") say(`${at} has a tagline that is not text`);  });
   if (Array.isArray(feed) && feed.length < MIN_FEED) {
     say(`feed.json lists ${feed.length} portfolios, fewer than ${MIN_FEED}: it looks cut short`);
   }
