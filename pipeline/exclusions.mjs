@@ -1,8 +1,9 @@
-// Our list wins: sites the health check confirmed down go into
-// data/excluded.json with the reason and the evidence, and out of
-// data/feed.json, so generate_feed.py keeps them out even while the community
-// list still has them. The weekly health workflow commits both files through
-// the same bot pull request flow as the daily upstream sync.
+// Our list wins: sites the health check confirmed down, and sites not working
+// for LEAVE_AFTER_DAYS (./not-working.mjs), go into data/excluded.json with
+// the reason and the evidence, and out of data/feed.json, so generate_feed.py
+// keeps them out even while the community list still has them. The health
+// workflow exports once a week (EXPORT_EVERY_DAYS) and commits both files
+// through the same bot pull request flow as the daily upstream sync.
 //
 // data/excluded.json holds objects:
 //   { url, name, reason, kind, removed, first_failed?, last_checked?, checks?,

@@ -12,7 +12,7 @@ export function isKnownPortfolio(url: string): boolean {
   return known.has(url);
 }
 
-// The set changes when the weekly health check or a capture runs, so each
+// The set changes when the health check (nightly, and hourly for the not-working pool) or a capture runs, so each
 // isolate keeps it for a few minutes instead of scanning portfolios on every
 // page render and vote (docs/COSTS.md section C).
 const HIDDEN_TTL_MS = 5 * 60 * 1000;

@@ -11,7 +11,7 @@ import path from "node:path";
 import * as health from "../pipeline/health.mjs";
 import * as pool from "../pipeline/not-working.mjs";
 import { controlSites, dueForRecheck, recheckSummary, runRecheck } from "../pipeline/recheck.mjs";
-import { planExclusions } from "../pipeline/exclusions.mjs";
+import { EXPORT_EVERY_DAYS, exportDue, markExported, planExclusions } from "../pipeline/exclusions.mjs";
 import { ACTIVE, LISTED_NOT_DOWN, dueForCapture } from "../pipeline/roster.mjs";
 import { GONE_WHERE, HIDDEN_WHERE } from "../lib/hidden.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
@@ -235,7 +235,7 @@ test("a re-check that could not tell neither hides nor restores; it is tried aga
 
 test("a bot-walled site never enters the pool, whatever its answers", async () => {
   const url = "https://walled.example";
-  const { db, w, nightly, hourly } = await setup([]);
+  const { db, w, hourly } = await setup([]);
   await site(db, url, { status: "error", reason: BOT_WALL_REASON, needsReview: 1, captured: false });
   const feed = [{ url, name: "Ann Lee" }, ...fillers];
   w.mode.set(url, "paused");
@@ -268,6 +268,14 @@ test("two failures on one bad day never skip a stage", () => {
     assert.equal(pool.notAnswering(reason), false, reason);
     assert.equal(health.nextHealth(null, { ok: false, reason }, at(F)).pool, null, reason);
   }
+});
+
+test("the export to data/excluded.json stays weekly while the full check runs every night", async () => {
+  const { db } = await freshDb();
+  assert.equal(await exportDue(db, at(T0)), true, "never exported: due");
+  await markExported(db, at(T0));
+  for (let d = 1; d < EXPORT_EVERY_DAYS; d++) assert.equal(await exportDue(db, at(T0 + d * D)), false, `night ${d}`);
+  assert.equal(await exportDue(db, at(T0 + EXPORT_EVERY_DAYS * D)), true);
 });
 
 test("the owner's numbers live in one place", () => {
