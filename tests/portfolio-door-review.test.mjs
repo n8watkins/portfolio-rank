@@ -29,6 +29,8 @@ import { RULE_ACTOR, autoApplyReviews, confirmedRelists, decideReviews, ensureRe
 import * as store from "../lib/reviews/store.mjs";
 import { syncReviewRows } from "../lib/reviews/door.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
+// Page text over the capture's word floor, so a stored capture of it shows the site (lib/reviews/stored-capture.mjs).
+import { SITE_TEXT } from "./helpers/door-night.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const T0 = Date.parse("2026-11-17T04:30:00Z"); // 20:30 Pacific on 2026-11-16
@@ -59,7 +61,7 @@ async function freshDb() {
 
 let k = 0;
 /** A listed, captured site with evidence; `n` signals in its facts, or none at all with n = null. */
-async function site(db, url, { name = "Ann Lee", text = "Hi, I build things.", n = 2, rubric = null, status = "live", reason = "", needsReview = 0, healthSignals = null, captured = true } = {}) {
+async function site(db, url, { name = "Ann Lee", text = SITE_TEXT, n = 2, rubric = null, status = "live", reason = "", needsReview = 0, healthSignals = null, captured = true } = {}) {
   await db.execute({
     sql: `INSERT INTO portfolios (url, name, status, reason, shot_key, captured_at, ai_rubric, page_text, facts, meta, needs_review, signals)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{"motion":false}', ?, ?)`,

@@ -42,6 +42,8 @@ import {
 } from "../lib/reviews/store.mjs";
 import { doorDecision } from "../lib/reviews/door.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
+// Page text over the capture's word floor, so a stored capture of it shows the site (lib/reviews/stored-capture.mjs).
+import { SITE_TEXT } from "./helpers/door-night.mjs";
 
 // A grade with the owner's verdict applied, as the door does (doorDecision).
 const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await ownerVerdict(db, url));
@@ -75,7 +77,7 @@ async function freshDb() {
 
 let k = 0;
 /** A listed, captured site with evidence. */
-async function site(db, url, { name = "Ann Lee", text = "Hi, I build things.", n = 2, rubric = null, capturedAt = "2026-11-16 12:00:00", status = "live", reason = "", needsReview = 0, healthSignals = null } = {}) {
+async function site(db, url, { name = "Ann Lee", text = SITE_TEXT, n = 2, rubric = null, capturedAt = "2026-11-16 12:00:00", status = "live", reason = "", needsReview = 0, healthSignals = null } = {}) {
   const key = `k${++k}`;
   await db.execute({
     sql: `INSERT INTO portfolios (url, name, status, reason, shot_key, captured_at, ai_rubric, page_text, facts, meta, needs_review, signals)
@@ -192,17 +194,20 @@ test("F1: a Gemini 'no' with 3 signals is removed automatically, with a record t
   assert.equal(undo.ok, true, JSON.stringify(undo));
   assert.equal(await hidden(db, url), false);
   assert.equal(await notPortfolio(db, url), false);
+  // The "no" grade's scores are not shown as its grade: it waits for one fresh grade after a new capture
+  // (the review of #238, finding b; tests/portfolio-door-stored-capture.test.mjs).
   const g = await grade(db, url);
-  assert.equal(g.ai_is_portfolio, false, "Gemini's answer is kept");
+  assert.equal(g.error, "fresh_grade_due");
   assert.equal(String((await reviewsOf(db, url))[0].status), "pending");
 
   // The rule never removes it again: not the hourly apply...
   assert.deepEqual(await autoApplyReviews(db, { onFeed: () => true, now: new Date(clock.t + 2 * 3600000) }), []);
-  // ...and not the next night, even when the site is graded again and Gemini still says no.
-  await db.execute({ sql: "INSERT INTO rating_resets (url, at, reason) VALUES (?, ?, 'page_changed')", args: [url, new Date(T0 + 12 * 3600000).toISOString()] });
-  const next = context(db, { gemini: mockGemini({ [url]: answer(false) }), budget: { stages: { grade_changed: { cap: 50 } } }, start: T0 + DAY });
+  // ...and not the next night, when the site is graded again after a new capture and Gemini still says no.
+  await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-17 12:00:00' WHERE url = ?", args: [url] });
+  const next = context(db, { gemini: mockGemini({ [url]: answer(false) }), start: T0 + DAY });
   const again = await drive(next.ctx, next.clock);
-  assert.equal(again.summary.stages.find((s) => s.key === "grade_changed").done, 1, "graded again");
+  assert.equal(again.summary.stages.find((s) => s.key === "grade_new").done, 1, "graded again");
+  assert.equal((await grade(db, url)).ai_is_portfolio, false, "Gemini's answer is kept");
   assert.equal(await hidden(db, url), false, "still listed");
   assert.equal(await notPortfolio(db, url), false);
   // One open case, no new removal: the undone row is replaced by the new grade's held row.
