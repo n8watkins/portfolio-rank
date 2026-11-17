@@ -12,7 +12,8 @@
 //   node scripts/stored-capture-dry-run.mjs --examples 20
 import fs from "node:fs";
 import path from "node:path";
-import { ACTIVE, pipelineDb } from "../pipeline/roster.mjs";
+import { AI_WORK, pipelineDb } from "../pipeline/roster.mjs";
+import { HIDDEN_WHERE } from "../lib/hidden.mjs";
 import { scanStoredCaptures } from "../pipeline/night.mjs";
 import { CAPTURE_CHECKED_SINCE, isBotWall, parseObject } from "../lib/reviews/stored-capture.mjs";
 import { parseRubric } from "../pipeline/rubric-history.mjs";
@@ -42,12 +43,14 @@ const { scanned, blocked } = await scanStoredCaptures(db, {
     }
   },
 });
-// What setting them aside would hide: a failed capture is hidden unless the weekly health check has it live.
+// What setting them aside would hide: the shared hidden rule (lib/hidden.mjs), as each row would be once its
+// capture is a failed one (status 'error'): hidden unless the health check has it live.
+const HIDDEN_ONCE_FAILED = HIDDEN_WHERE.replaceAll("status", "'error'");
 const urls = [...byWhy.values()].flat().map((r) => String(r.url));
 for (let i = 0; i < urls.length; i += 200) {
   const part = urls.slice(i, i + 200);
   const r = await db.execute({
-    sql: `SELECT COUNT(*) AS n FROM portfolios WHERE url IN (${part.map(() => "?").join(",")}) AND COALESCE(health, '') != 'live'`,
+    sql: `SELECT COUNT(*) AS n FROM portfolios WHERE url IN (${part.map(() => "?").join(",")}) AND (${HIDDEN_ONCE_FAILED})`,
     args: part,
   });
   hiddenAfter += Number(r.rows[0].n);
@@ -55,7 +58,7 @@ for (let i = 0; i < urls.length; i += 200) {
 const waiting = Number(
   (
     await db.execute(
-      `SELECT COUNT(*) AS n FROM portfolios p WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")}
+      `SELECT COUNT(*) AS n FROM portfolios p WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")}
          AND p.page_text IS NOT NULL AND p.facts IS NOT NULL AND p.ai_rubric IS NULL`
     )
   ).rows[0].n
