@@ -577,9 +577,15 @@ test("per consumer: the AI's queues take only healthy sites; the free jobs (capt
   // Each failing row as the health check left it (checked at T0), with a capture retry from before that.
   await db.execute({ sql: "UPDATE portfolios SET status = 'error', retry_at = ?, health_checked_at = ?", args: [at(T0 - D).toISOString(), at(T0).toISOString()] });
   free("captures and their retries (pipeline/roster.mjs dueForCapture)", await dueForCapture(db, all.map((url) => ({ url })), at(T0)));
-  // Review 2.6: a capture backoff (retry_at later than the check) never brings an unanswering ladder site back to capture work.
-  await db.execute({ sql: "UPDATE portfolios SET retry_at = ? WHERE url = ?", args: [at(T0 + 3 * D).toISOString(), failing] });
-  free("captures with a backoff date after the check (dueForCapture)", await dueForCapture(db, all.map((url) => ({ url })), at(T0 + 4 * D)));
+});
+
+test("review 2.6: a capture backoff date never brings a site on the not-answering ladder back into capture work", async () => {
+  const url = "https://backoff.example";
+  const { db, w, nightly } = await setup([url]);
+  await failingSince(nightly, w, [url], T0);
+  // Its last capture failed; the capture's backoff set retry_at to a date after the health check.
+  await db.execute({ sql: "UPDATE portfolios SET status = 'error', retry_at = ? WHERE url = ?", args: [at(T0 + 3 * D).toISOString(), url] });
+  assert.deepEqual(await dueForCapture(db, [{ url }], at(T0 + 4 * D)), []);
 });
 
 test("captures: a blocked first capture keeps its retries while suspect, and the review queue's confirm of a hidden site queues a capture that runs", async () => {
