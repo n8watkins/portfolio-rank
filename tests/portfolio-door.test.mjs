@@ -40,7 +40,8 @@ import {
   ownerVerdict,
   undoReviews,
 } from "../lib/reviews/store.mjs";
-import { BOT_WALL_REASON, doorDecision } from "../lib/reviews/door.mjs";
+import { doorDecision } from "../lib/reviews/door.mjs";
+import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
 
 // A grade with the owner's verdict applied, as the door does (doorDecision).
 const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await ownerVerdict(db, url));

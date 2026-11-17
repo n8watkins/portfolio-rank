@@ -78,8 +78,11 @@ export function capturedBlocked({ text = "", title = "", outboundLinks = 0, spla
 /** Whether a stored capture failure reason is a blocked capture's (any kind, the bot wall included). */
 export const isBlockedReason = (reason) => String(reason ?? "").startsWith(BLOCKED_PREFIX);
 
-/** Whether a stored capture failure reason is the bot wall's. */
-export const isBotWallReason = (reason) => String(reason ?? "") === `${BLOCKED_PREFIX}${BOT_WALL}`;
+/** The stored capture failure reason of a bot-walled site (the door in lib/reviews/door.mjs matches it in SQL). */
+export const BOT_WALL_REASON = `${BLOCKED_PREFIX}${BOT_WALL}`;
+
+/** Whether a stored capture failure reason is the bot wall's: it starts with BOT_WALL_REASON, so a suffix added later still matches. */
+export const isBotWallReason = (reason) => String(reason ?? "").startsWith(BOT_WALL_REASON);
 
 /** In the browser: how many other hosts the page links to (http and https links only). */
 export function countOutboundLinks() {
