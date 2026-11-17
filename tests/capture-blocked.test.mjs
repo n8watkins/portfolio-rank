@@ -16,7 +16,9 @@ import {
   BLOCK_MAX_WORDS,
   BOT_CHECK_MAX_WORDS,
   BOT_WALL,
+  BOT_WALL_REASON,
   capturedBlocked,
+  httpVerdict,
   isBlockedReason,
   isBotWallReason,
 } from "../pipeline/capture-blocked.mjs";
@@ -65,6 +67,70 @@ test("capturedBlocked: each reason", () => {
 test("capturedBlocked: a long portfolio that jokes about robots is not a bot check", () => {
   const text = `${words(BOT_CHECK_MAX_WORDS)} I promise I'm not a robot.`;
   assert.equal(capturedBlocked({ text, outboundLinks: 2 }), null);
+});
+
+test("capturedBlocked: what besides words shows a site", () => {
+  // A canvas or video filling the screen (Flutter web, three.js): no DOM text, no links.
+  assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 1 }), null);
+  assert.equal(capturedBlocked({ text: "", outboundLinks: 0, mediaCover: 0.1 }), "0 words and no outbound links", "a small spinner or logo is not a site");
+  // A short home page with its own navigation, or one page and a contact link.
+  assert.equal(capturedBlocked({ text: words(17), siteLinks: 4, contactLinks: 1 }), null);
+  assert.equal(capturedBlocked({ text: words(17), siteLinks: 1, contactLinks: 1 }), null);
+  assert.equal(capturedBlocked({ text: words(10), siteLinks: 1 }), "10 words and no outbound links", "one link of its own is not enough");
+  assert.equal(capturedBlocked({ text: words(10), contactLinks: 1 }), "10 words and no outbound links", "a coming-soon page with an email link is not a site");
+  // A bare loading line is a loader, media or not.
+  assert.equal(capturedBlocked({ text: "Loading...", mediaCover: 1 }), "still a gate or loader after the click-through");
+});
+
+test("capturedBlocked: a plain gate word counts only as an element's whole text", () => {
+  const text = "Jane Doe\nDesigner. Let's start something.\nGitHub LinkedIn";
+  assert.equal(capturedBlocked({ text, outboundLinks: 2 }), null, "start in a sentence");
+  assert.equal(capturedBlocked({ text, outboundLinks: 2, gateElement: false }), null);
+  assert.equal(capturedBlocked({ text: "Jane Doe\nStart", outboundLinks: 1 }), "still a gate or loader after the click-through", "start on a line of its own");
+  assert.equal(capturedBlocked({ text: "Jane Doe Start", outboundLinks: 1, gateElement: true }), "still a gate or loader after the click-through", "the page said it is a button");
+  // A loader at 100% next to the word is still a loader.
+  assert.equal(capturedBlocked({ text: "Jane Doe. Loading experience 100% Enter", outboundLinks: 3 }), "still a gate or loader after the click-through");
+});
+
+test("capturedBlocked: 'not a robot' is a bot check only on a nearly empty page that asks for it", () => {
+  assert.equal(capturedBlocked({ text: "Hi, I'm Sam. Developer, climber, definitely not a robot. GitHub LinkedIn Email", outboundLinks: 2 }), null);
+  assert.equal(capturedBlocked({ text: `${words(60)} Please confirm you are not a robot.`, outboundLinks: 2 }), null, "a long page");
+  assert.equal(capturedBlocked({ text: "One more step. Please verify you are not a robot to continue.", outboundLinks: 1 }), BOT_WALL);
+  assert.equal(capturedBlocked({ text: "Are you a robot? Complete the reCAPTCHA below.", outboundLinks: 1 }), BOT_WALL);
+  assert.equal(capturedBlocked({ text: words(80), title: "Are you a robot?", outboundLinks: 1 }), BOT_WALL, "in the title");
+});
+
+test("httpVerdict: the main document's status decides; an error page is never the site", () => {
+  const site = { text: `Jane Doe ${words(200)}`, title: "Jane Doe", outboundLinks: 3 };
+  assert.equal(httpVerdict({ status: 200, ...site }), null);
+  assert.equal(httpVerdict({ status: 0, text: "" }), null, "no status known");
+  assert.equal(httpVerdict({ status: 304, ...site }), null);
+  // Bot walls: challenge wording, Cloudflare's challenge header, a firewall's 403.
+  for (const doc of [
+    { status: 403, text: "Verifying you are human. This may take a few seconds.", title: "Just a moment..." },
+    { status: 503, text: "Checking your browser before accessing example.dev", title: "Just a moment..." },
+    { status: 403, text: "", cfMitigated: "challenge" },
+    { status: 403, text: "Error 1020 Access denied. This website is using a security service to protect itself from online attacks. Ray ID: 8f2a", title: "Access denied" },
+    { status: 429, text: "Verifying you are human.", title: "Just a moment..." },
+  ]) {
+    assert.deepEqual(httpVerdict(doc), { status: "error", reason: BOT_WALL_REASON, needsReview: true }, JSON.stringify(doc));
+  }
+  // Rate limits are retried, never reviewed (Cloudflare's 1015 page says "Access denied" in its title too).
+  assert.deepEqual(httpVerdict({ status: 429, text: "Error 1015 You are being rate limited", title: "Access denied | example.dev" }), { status: "error", reason: "HTTP 429 (rate limited)", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 429, text: "" }), { status: "error", reason: "HTTP 429 (rate limited)", needsReview: false });
+  // Errors are retried with backoff; 404 and 410 are dead, as in the plain pre-check.
+  assert.deepEqual(httpVerdict({ status: 503, text: "Service Unavailable" }), { status: "error", reason: "HTTP 503", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 500, ...site }), { status: "error", reason: "HTTP 500", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 401, text: "Unauthorized" }), { status: "error", reason: "HTTP 401", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 403, text: "Forbidden" }), { status: "error", reason: "HTTP 403", needsReview: false });
+  assert.deepEqual(httpVerdict({ status: 404, ...site }), { status: "dead", reason: "HTTP 404", needsReview: false });
+  // A 403 whose page shows a whole site: a browser sees it, its status says error. The owner looks.
+  const odd = httpVerdict({ status: 403, ...site, shown: site });
+  assert.equal(odd.needsReview, true);
+  assert.ok(isBotWallReason(odd.reason), odd.reason);
+  assert.match(odd.reason, /HTTP 403, but the page shows a site/);
+  // Not without the evidence of what the page showed.
+  assert.equal(httpVerdict({ status: 403, ...site }).needsReview, false);
 });
 
 test("isBlockedReason and isBotWallReason read the stored failure reason", () => {
