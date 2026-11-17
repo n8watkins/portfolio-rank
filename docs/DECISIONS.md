@@ -81,8 +81,10 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   A 401, 403, 429 or 503 or a TLS failure on the plain pre-check is left to the browser (often a bot filter, or a certificate the browser accepts); a page with no text yet gets up to 15 seconds to render before it counts as blank; a screenshot that times out or hits Chrome's "Unable to capture screenshot" is taken again through the DevTools protocol.
   Why: 30 sites the owner confirmed as portfolios on 14 November failed the nightly capture (13 on a 403 to the pre-check alone, 9 blank after 3 seconds, 6 on a screenshot error) while a browser loaded all of them.
 - **Health check thresholds** (owner, 2026-11-10). Status: built (#53).
-  Weekly check; `live` to `suspect` on any failure, `down` only after 3 failed checks in a row spanning at least 13 days; a pass resets to `live`.
+  Weekly check; `live` to `suspect` on any failure, `down` only after 3 failed checks in a row, each on a week of its own, spanning at least 13 days; a pass resets to `live`.
   Bot walls are inconclusive, a redirect to another domain is a move, a run where more than 30% fail records nothing, and at most 10% of the list leaves at once.
+  Updated after the 2026-11-16 audit (agent, owner's rules: a bot-walled site is never removed, a removal always leaves a record the owner can see and undo): a timeout, a dropped connection, a temporary DNS failure or a crash of the check is inconclusive, never a failure; a run where more than 15% are inconclusive, or the browser cannot start, records nothing; a site unknown for 4 weeks goes to the owner; a "not a portfolio" grade leaves only through the review queue; a removed "down" site that passes the full check again comes back by itself (checked monthly).
+  Why: a pinned 2.5-year-old User-Agent and a slow page body made live sites fail every week, and a bot wall the check did not recognise could remove a site the owner wanted to review.
   Failed captures retry after 1, 2, 4, 8, 16, then every 30 days.
   Why: one check of every site found 1,995 fine and a handful of noisy failures, too noisy to remove anything on one result; one screenshot timeout used to hide a site forever.
 - **Free portfolio-likeness check before Gemini** (agent, 2026-11-10). Status: built (#53).

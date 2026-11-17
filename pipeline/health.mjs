@@ -11,8 +11,13 @@
 //   inconclusive: the state stays as it was. That is a bot wall (403/429, or
 //   a page the capture's own rule calls a bot check, ./capture-blocked.mjs),
 //   and anything that says nothing about the site: a timeout, a dropped
-//   connection, a temporary DNS failure on the runner, or the check itself
-//   crashing, each after a retry and the browser's second opinion
+//   connection, a temporary DNS failure on the runner, a browser that could
+//   not start or crashed, or the check itself crashing, each after a retry
+//   and the browser's second opinion. A definite answer from either opinion
+//   (refused, a connect timeout, an HTTP error) is still a failure
+//   a run that could not tell for over MAX_UNKNOWN_SHARE of the sites, or
+//   whose browser never started, records nothing and fails; a site unknown
+//   UNKNOWN_WEEKS_TO_OWNER weeks running goes to the owner (/admin/alerts)
 //   a site whose stored capture reason is the bot wall is never failed: every
 //   result is inconclusive while that reason stands (owner, 2026-11-16:
 //   bot-walled sites wait for his review)
@@ -41,6 +46,8 @@ import { replaceGradeStatements } from "./rubric-history.mjs";
 import { atTheDoor } from "../lib/reviews/door.mjs";
 import { APPLIED, OPEN_CASE_SQL, ensureReviewSchema } from "../lib/reviews/store.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
+import { HEALTH_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
+import { reconcileAlerts } from "./alerts.mjs";
 
 // Thresholds. The check runs weekly, so 3 failed checks in a row span 14 days.
 // Requiring both means extra manual runs can't confirm a site down faster.
@@ -51,6 +58,13 @@ export const DOWN_AFTER_DAYS = 13;
 // day count once. Six days, not seven, so a weekly run that starts a little
 // early still counts.
 export const FAIL_WEEK_DAYS = 6;
+// When the check could not tell (timeouts, dropped connections, DNS, a broken
+// browser) for more than this share of sites in one run, the runner is the
+// likelier culprit: the run records nothing and fails, like MAX_FAIL_SHARE.
+export const MAX_UNKNOWN_SHARE = 0.15;
+// A site the check could not tell about this many weeks in a row goes to the
+// owner (an alert on /admin/alerts) instead of staying unknown forever.
+export const UNKNOWN_WEEKS_TO_OWNER = 4;
 // At most this many "not a portfolio" grades from before the review queue are
 // handed to the door in one run; the rest go next week.
 export const DOOR_LIMIT = 50;
@@ -136,22 +150,38 @@ const BOT_WALL_STATUS = new Set([403, 429]);
 
 /**
  * Whether a page is a bot or security check standing in for the site: the
- * capture's rule (./capture-blocked.mjs capturedBlocked, its first rule, on
- * the page's title and visible text), so the capture and this check never
- * disagree about what a wall is.
+ * capture's own verdict (./capture-blocked.mjs capturedBlocked returns
+ * BOT_WALL) on the page's title and visible text, so the capture and this
+ * check never disagree about what a wall is. Only the title and the text are
+ * passed: whatever else capturedBlocked weighs (links, gates, media), a page
+ * it calls a bot wall is a wall here. tests/health-false-failures.test.mjs
+ * pins which pages that is, so a change to the capture's rule shows there.
  */
-export const isBotWallPage = ({ title = "", text = "" } = {}) =>
-  capturedBlocked({ title: String(title ?? ""), text: String(text ?? ""), outboundLinks: 1 }) === BOT_WALL;
+export const isBotWallPage = ({ title = "", text = "" } = {}) => capturedBlocked({ title: String(title ?? ""), text: String(text ?? "") }) === BOT_WALL;
 
 /** The plain answer was a bot wall: its status, or its page (an error answer carries its page in gate.html). */
 const gateWall = (gate) =>
   BOT_WALL_STATUS.has(gate.httpStatus) || (gate.status !== "dead" && Boolean(gate.html) && isBotWallPage({ title: titleOf(gate.html), text: visibleText(gate.html) }));
 
-// The browser's errors that say nothing about the site: its own timeout, a
+// The browser's answers that say nothing about the site: its own timeout, or a
 // connection dropped or reset (bot filters do this, as with ERR_HTTP2_PROTOCOL_ERROR
-// for an old User-Agent), or the browser itself going away (a crash of the check).
+// for an old User-Agent). net::ERR_CONNECTION_TIMED_OUT and ERR_CONNECTION_REFUSED
+// are not on the list: nothing answers at the address.
 const BROWSER_TRANSIENT =
-  /Timeout \d+ms exceeded|net::ERR_(CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|HTTP2_PROTOCOL_ERROR|QUIC_PROTOCOL_ERROR|SPDY_PROTOCOL_ERROR|TIMED_OUT|NETWORK_CHANGED|NETWORK_IO_SUSPENDED|NAME_RESOLUTION_FAILED|INTERNET_DISCONNECTED|ABORTED)|Target (page, context or browser )?(has been )?closed|browser has been closed|Browser closed/i;
+  /Timeout \d+ms exceeded|net::ERR_(CONNECTION_RESET|CONNECTION_CLOSED|EMPTY_RESPONSE|HTTP2_PROTOCOL_ERROR|QUIC_PROTOCOL_ERROR|SPDY_PROTOCOL_ERROR|TIMED_OUT|NETWORK_CHANGED|NETWORK_IO_SUSPENDED|NAME_RESOLUTION_FAILED|INTERNET_DISCONNECTED|ABORTED)\b/i;
+// The browser itself failing, not the site: it could not start (render.mjs
+// BrowserUnavailableError, Playwright's "browserType.launch: Executable doesn't
+// exist"), the tab or the browser crashed or closed, or the check's own code
+// threw (a TypeError and the like).
+const BROWSER_BROKE = /browserType\.launch|Executable doesn't exist|Page crashed|Target crashed|Target (page, context or browser )?(has been )?closed|browser has been closed|Browser closed|the browser could not start/i;
+
+/** Whether a render error is the browser's (or the check's) own failure. `launch` when it never started. */
+export function browserFailure(e) {
+  if (e?.name === "BrowserUnavailableError" || /browserType\.launch|Executable doesn't exist|the browser could not start/i.test(String(e?.message ?? e))) return { launch: true };
+  if (e instanceof TypeError || e instanceof ReferenceError || e instanceof RangeError || e instanceof SyntaxError) return { launch: false };
+  if (BROWSER_BROKE.test(String(e?.message ?? e))) return { launch: false };
+  return null;
+}
 
 // Sleeping free-tier apps answer these while they wake up.
 const COLD_START_STATUS = new Set([502, 503, 504]);
@@ -164,7 +194,7 @@ const blocked = (status, finalUrl) => ({
 });
 
 /** Inconclusive for a reason that says nothing about the site (a timeout, a dropped connection, a crash). */
-const unknown = (reason, finalUrl) => ({ ok: null, reason: `could not tell: ${reason}`, finalUrl });
+const unknown = (reason, finalUrl, extra = {}) => ({ ok: null, unknown: true, reason: `could not tell: ${reason}`, finalUrl, ...extra });
 
 /**
  * Check one site. `render(url)` loads it in a real browser and returns
@@ -213,13 +243,15 @@ export async function checkSite(
     } catch (e) {
       if (wall) return blocked(gate.httpStatus, finalUrl);
       const browserSaid = String(e?.message ?? e).split("\n")[0].slice(0, 80);
-      // Neither opinion learned anything about the site (or the check's own code broke): inconclusive, never a failed check.
-      const crashed = e instanceof TypeError || e instanceof ReferenceError || e instanceof RangeError || e instanceof SyntaxError;
-      if (gate.transient || crashed || BROWSER_TRANSIENT.test(String(e?.message ?? e))) {
-        return unknown(`${gate.status === "error" ? gate.reason : "plain request answered"}; browser: ${browserSaid}`, finalUrl);
-      }
-      const why = gate.status === "error" ? gate.reason : browserSaid;
-      return { ok: false, reason: `does not load (${why})`, finalUrl };
+      const broke = browserFailure(e);
+      // A definite answer from either opinion decides: the browser's (refused, timed out connecting, a
+      // name that does not resolve) even over a plain request that only timed out or was dropped, and
+      // the plain request's (refused, connect timeout, TLS, an HTTP error) when the browser told nothing.
+      // A browser that broke gave no second opinion at all: the check is incomplete, so inconclusive.
+      if (!broke && !BROWSER_TRANSIENT.test(String(e?.message ?? e))) return { ok: false, reason: `does not load (${browserSaid})`, finalUrl };
+      if (!broke && gate.status === "error" && !gate.transient) return { ok: false, reason: `does not load (${gate.reason})`, finalUrl };
+      // Neither opinion learned anything about the site: inconclusive, never a failed check.
+      return unknown(`${gate.status === "error" ? gate.reason : "plain request answered"}; browser: ${browserSaid}`, finalUrl, broke?.launch ? { browserDown: true } : {});
     }
     finalUrl = page.finalUrl || finalUrl;
     if (BOT_WALL_STATUS.has(page.status) || isBotWallPage({ title: page.title, text: page.text })) {
@@ -282,11 +314,14 @@ export function findDuplicates(entries) {
 }
 
 /**
- * The state machine. prev: { health, fails, firstFailAt } from the row (or
- * null); result: { ok, reason } with ok true, false or null (inconclusive).
- * A failure counts only on a week of its own (FAIL_WEEK_DAYS); one in the
- * same week as a counted one updates the reason and nothing else.
- * Returns the new { health, fails, firstFailAt, reason }.
+ * The state machine. prev: { health, fails, firstFailAt, lastFailAt } from
+ * the row and health_marks (or null); result: { ok, reason } with ok true,
+ * false or null (inconclusive).
+ * A failure counts only on a week of its own: at least FAIL_WEEK_DAYS after
+ * the last counted one (lastFailAt; for a row from before it was kept, the
+ * n-th counted failure at least (n - 1) * FAIL_WEEK_DAYS after the first).
+ * One in the same week updates the reason and nothing else.
+ * Returns the new { health, fails, firstFailAt, lastFailAt, reason }.
  */
 export function nextHealth(prev, result, now = new Date()) {
   if (result.ok === null) {
@@ -294,17 +329,34 @@ export function nextHealth(prev, result, now = new Date()) {
       health: prev?.health ?? null,
       fails: Number(prev?.fails ?? 0),
       firstFailAt: prev?.firstFailAt ?? null,
+      lastFailAt: prev?.lastFailAt ?? null,
       reason: prev?.health && prev.health !== "live" ? prev.reason ?? result.reason : result.reason,
     };
   }
-  if (result.ok) return { health: "live", fails: 0, firstFailAt: null, reason: "" };
+  if (result.ok) return { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "" };
   const before = Number(prev?.fails ?? 0);
   const firstFailAt = prev?.firstFailAt ?? now.toISOString();
-  const span = (now.getTime() - new Date(firstFailAt).getTime()) / 86400000;
-  const newWeek = before === 0 || span >= before * FAIL_WEEK_DAYS;
+  const days = (from) => (now.getTime() - new Date(from).getTime()) / 86400000;
+  const span = days(firstFailAt);
+  const last = before > 0 ? prev?.lastFailAt ?? null : null;
+  const newWeek = before === 0 || (last ? days(last) >= FAIL_WEEK_DAYS : span >= before * FAIL_WEEK_DAYS);
   const fails = newWeek ? before + 1 : before;
   const down = fails >= FAILS_TO_DOWN && span >= DOWN_AFTER_DAYS;
-  return { health: down ? "down" : "suspect", fails, firstFailAt, reason: result.reason };
+  return { health: down ? "down" : "suspect", fails, firstFailAt, lastFailAt: newWeek ? now.toISOString() : last, reason: result.reason };
+}
+
+/**
+ * Weeks in a row a site's check could not tell (prev: { unknownWeeks,
+ * unknownLastAt } from health_marks): an inconclusive check on a week of its
+ * own adds one, any pass or failure starts over. Returns { unknownWeeks,
+ * unknownLastAt }.
+ */
+export function nextUnknown(prev, result, now = new Date()) {
+  if (result.ok !== null) return { unknownWeeks: 0, unknownLastAt: null };
+  const weeks = Number(prev?.unknownWeeks ?? 0);
+  const last = prev?.unknownLastAt ?? null;
+  const newWeek = weeks === 0 || !last || (now.getTime() - new Date(last).getTime()) / 86400000 >= FAIL_WEEK_DAYS;
+  return newWeek ? { unknownWeeks: weeks + 1, unknownLastAt: now.toISOString() } : { unknownWeeks: weeks, unknownLastAt: last };
 }
 
 async function mapPool(items, concurrency, fn) {
@@ -338,37 +390,63 @@ export async function runHealthCheck({
 }) {
   await ensureRosterSchema(db);
   await ensureReviewSchema(db);
+  await applyTables(db, HEALTH_TABLES);
   const entries = feed.slice(0, limit);
+  // How the browser fared: a browser that never starts makes every second opinion missing.
+  const browser = { rendered: 0, launchFailures: 0, lastLaunchError: "" };
+  const counted = render
+    ? async (u) => {
+        try {
+          const page = await render(u);
+          browser.rendered++;
+          return page;
+        } catch (e) {
+          if (browserFailure(e)?.launch) {
+            browser.launchFailures++;
+            browser.lastLaunchError = String(e?.message ?? e).split("\n")[0].slice(0, 200);
+          }
+          throw e;
+        }
+      }
+    : undefined;
   const results = await mapPool(entries, concurrency, async (entry, idx) => {
     // The check itself crashing says nothing about the site.
-    const r = await checkSite(entry, { fetchImpl, render }).catch((e) => unknown(`the check crashed: ${String(e?.message ?? e).slice(0, 80)}`, null));
+    const r = await checkSite(entry, { fetchImpl, render: counted }).catch((e) => unknown(`the check crashed: ${String(e?.message ?? e).slice(0, 80)}`, null));
     const label = r.ok === null ? `inconclusive: ${r.reason}` : r.ok ? (r.moved ? `ok, moved to ${r.finalUrl}` : "ok") : r.reason;
     log(`[${idx + 1}/${entries.length}] ${entry.url} - ${label}`);
     return { ...entry, ...r };
   });
 
+  const abort = (message, extra = {}) => ({ aborted: true, checked: entries.length, message, ...extra });
+  // The runner, not the sites: nothing is recorded, and the job fails so the owner hears of it.
+  if (render && browser.launchFailures > 0 && browser.rendered === 0) {
+    return abort(`the browser could not start (${browser.lastLaunchError}); without the second opinion nothing was recorded`);
+  }
   const loadFailures = results.filter((r) => r.ok === false).length;
   if (entries.length >= 20 && loadFailures > entries.length * MAX_FAIL_SHARE) {
-    return {
-      aborted: true,
-      checked: entries.length,
-      failed: loadFailures,
-      message: `${loadFailures} of ${entries.length} sites failed to load; more than ${MAX_FAIL_SHARE * 100}% points at the runner, so nothing was recorded`,
-    };
+    return abort(`${loadFailures} of ${entries.length} sites failed to load; more than ${MAX_FAIL_SHARE * 100}% points at the runner, so nothing was recorded`, { failed: loadFailures });
+  }
+  const unknowns = results.filter((r) => r.unknown).length;
+  if (entries.length >= 20 && unknowns > entries.length * MAX_UNKNOWN_SHARE) {
+    return abort(
+      `the check could not tell for ${unknowns} of ${entries.length} sites (timeouts, dropped connections, DNS, a broken browser); more than ${MAX_UNKNOWN_SHARE * 100}% points at the runner, so nothing was recorded`,
+      { unknown: unknowns }
+    );
   }
 
   // The rows as they are now, after the checks (which take most of an hour): the nightly capture, a
   // grade or a decision in /admin/review may have changed a site meanwhile. Every write below is
-  // conditional on these values (stillAsRead), so a change made after this read is never overwritten.
+  // conditional on these values (STILL_AS_READ), so a change made after this read is never overwritten.
   const rows = new Map(
     (
       await db.execute(
-        `SELECT url, status, reason, health, health_reason, health_fails, health_first_fail_at, ai_rubric,
-                CASE WHEN ${NOT_PORTFOLIO()} THEN 1 ELSE 0 END AS not_portfolio,
-                CASE WHEN ${OPEN_CASE_SQL("portfolios")} THEN 1 ELSE 0 END AS open_case,
-                CASE WHEN EXISTS (SELECT 1 FROM status_reviews d WHERE d.url = portfolios.url AND d.proposed = 'remove'
-                                  AND d.status IN (${APPLIED.map((s) => `'${s}'`).join(", ")})) THEN 1 ELSE 0 END AS decided_removal
-         FROM portfolios WHERE delisted_at IS NULL`
+        `SELECT p.url, p.status, p.reason, p.health, p.health_reason, p.health_fails, p.health_first_fail_at,
+                ${RUBRIC_TOKEN("p")} AS rubric_token,
+                CASE WHEN ${NOT_PORTFOLIO("p")} THEN 1 ELSE 0 END AS not_portfolio,
+                CASE WHEN ${OPEN_CASE_SQL("p")} THEN 1 ELSE 0 END AS open_case,
+                CASE WHEN ${REMOVAL_ON_RECORD_SQL("p")} THEN 1 ELSE 0 END AS decided_removal,
+                m.last_fail_at, m.unknown_weeks, m.unknown_last_at
+         FROM portfolios p LEFT JOIN health_marks m ON m.url = p.url WHERE p.delisted_at IS NULL`
       )
     ).rows.map((r) => [String(r.url), r])
   );
@@ -443,20 +521,25 @@ export async function runHealthCheck({
     needsReview: [],
     changedDuringRun: [],
     toOwnerReview: [],
+    settledAtDoor: [],
+    unknownForWeeks: [],
   };
   const plans = [];
+  const str = (v) => (v == null ? null : String(v));
   for (const r of results) {
     const row = rows.get(r.url);
     const prev = row
       ? {
-          health: row.health == null ? null : String(row.health),
+          health: str(row.health),
           fails: row.health_fails,
-          firstFailAt: row.health_first_fail_at == null ? null : String(row.health_first_fail_at),
+          firstFailAt: str(row.health_first_fail_at),
+          lastFailAt: str(row.last_fail_at),
           reason: row.health_reason == null ? "" : String(row.health_reason),
         }
       : null;
     const next = nextHealth(prev, r, now);
     if (r.decidedDown) next.health = "down";
+    const marks = nextUnknown(row ? { unknownWeeks: row.unknown_weeks, unknownLastAt: str(row.unknown_last_at) } : null, r, now);
     // A passing site whose last capture failed gets recaptured on the next sync.
     const retryNow = r.ok === true && row && String(row.status) !== "live";
     // Signals only from a page that loaded; otherwise the last ones stay.
@@ -501,23 +584,32 @@ export async function runHealthCheck({
         ...stillAsReadArgs(row),
       ],
     };
-    plans.push({ r, prev, next, stmt });
+    // The check's own memory, written only when the row above was (changes() is that statement's count).
+    const mark = {
+      sql: `INSERT INTO health_marks (url, last_fail_at, unknown_weeks, unknown_last_at) SELECT ?, ?, ?, ? WHERE changes() > 0
+            ON CONFLICT(url) DO UPDATE SET last_fail_at = excluded.last_fail_at, unknown_weeks = excluded.unknown_weeks,
+              unknown_last_at = excluded.unknown_last_at`,
+      args: [r.url, next.lastFailAt, marks.unknownWeeks, marks.unknownLastAt],
+    };
+    plans.push({ r, prev, next, marks, stmts: [stmt, mark] });
   }
   const written = [];
-  for (let i = 0; i < plans.length; i += 200) {
-    const chunk = plans.slice(i, i + 200);
+  for (let i = 0; i < plans.length; i += 100) {
+    const chunk = plans.slice(i, i + 100);
     const res = await db.batch(
-      chunk.map((p) => p.stmt),
+      chunk.flatMap((p) => p.stmts),
       "write"
     );
-    chunk.forEach((p, j) => written.push(Number(res[j]?.rowsAffected ?? 0) > 0));
+    chunk.forEach((p, j) => written.push(Number(res[j * 2]?.rowsAffected ?? 0) > 0));
   }
-  plans.forEach(({ r, prev, next }, i) => {
+  plans.forEach(({ r, prev, next, marks }, i) => {
     if (!written[i]) {
       // Changed while the run was checking: nothing recorded, next week's check looks again.
       summary.changedDuringRun.push(r.url);
       return;
     }
+    // Weeks in a row with nothing learned: the owner looks (a bot-walled capture already has its review row).
+    if (marks.unknownWeeks >= UNKNOWN_WEEKS_TO_OWNER && !botWalled.has(r.url)) summary.unknownForWeeks.push({ url: r.url, weeks: marks.unknownWeeks, reason: r.reason });
     if (next.health) summary[next.health]++;
     else summary.unchecked++;
     if (r.ok === null) summary.inconclusive.push({ url: r.url, reason: r.reason });
@@ -532,19 +624,60 @@ export async function runHealthCheck({
   for (const url of toDoor.filter((u) => passed.has(u)).slice(0, doorLimit)) {
     try {
       const out = await toTheDoor(db, url, now);
-      if (out) summary.toOwnerReview.push({ url, outcome: out.outcome, reviewId: out.reviewId });
+      // A row in the review queue, or settled without one by an earlier decision (the owner's verdict, a grade that says portfolio).
+      if (out?.reviewId != null) summary.toOwnerReview.push({ url, outcome: out.outcome, reviewId: out.reviewId });
+      else if (out) summary.settledAtDoor.push({ url, outcome: out.outcome });
     } catch (e) {
       log(`door: ${url} - left for next week: ${String(e?.message ?? e).slice(0, 160)}`);
     }
   }
+  // The owner's alert (/admin/alerts): sites the check has not been able to judge for weeks.
+  await reconcileAlerts(db, {
+    conditions: summary.unknownForWeeks.length
+      ? [
+          {
+            key: UNKNOWN_ALERT_KEY,
+            kind: "problem",
+            title: `The weekly health check could not tell about ${summary.unknownForWeeks.length} listed site(s) for ${UNKNOWN_WEEKS_TO_OWNER}+ weeks`,
+            detail: summary.unknownForWeeks.map((u) => `${u.url}: ${u.weeks} weeks (${u.reason})`).join("\n"),
+          },
+        ]
+      : [],
+    scope: (key) => key === UNKNOWN_ALERT_KEY,
+    now,
+    log,
+  });
   return { aborted: false, checked: results.length, ...summary };
 }
 
+/** The owner alert for sites the check could not judge for UNKNOWN_WEEKS_TO_OWNER weeks (pipeline/alerts.mjs). */
+export const UNKNOWN_ALERT_KEY = "health-unknown";
+
+/**
+ * SQL (never NULL): a removal of the portfolios row aliased `p` is on record
+ * in the review queue: a "remove" row the owner confirmed or a rule applied,
+ * and nobody undid (an Undo puts the row back to pending). The one definition
+ * here and in ./exclusions.mjs; it belongs in lib/reviews/store.mjs beside
+ * OPEN_CASE_SQL, from its APPLIED list, once that lane can take it.
+ */
+export const REMOVAL_ON_RECORD_SQL = (p) =>
+  `EXISTS (SELECT 1 FROM status_reviews d WHERE d.url = ${p}.url AND ${APPLIED_REMOVAL_WHERE("d.")})`;
+/** The same rule as a WHERE clause on status_reviews, columns prefixed with `a` ("d." or ""). */
+export const APPLIED_REMOVAL_WHERE = (a = "") => `${a}proposed = 'remove' AND ${a}status IN (${APPLIED.map((s) => `'${s}'`).join(", ")})`;
+
+/**
+ * SQL: a cheap token for the grade in `p`.ai_rubric, enough to see that it
+ * changed (a new grade, a hold, a decision or an Undo rewrites it): its
+ * length and its last 200 characters, where a decision's review record and
+ * a new grade's dates land. The run compares it instead of the whole JSON.
+ */
+const RUBRIC_TOKEN = (p) => `(COALESCE(length(${p}.ai_rubric), -1) || ':' || COALESCE(substr(${p}.ai_rubric, -200), ''))`;
+
 // The columns a capture, a grade, a review decision or an Undo changes, compared with the values read
-// after the checks. SQLite's IS compares NULLs as equal.
-const GUARDED = ["status", "reason", "health", "health_reason", "health_fails", "health_first_fail_at", "ai_rubric"];
-const STILL_AS_READ = `portfolios.delisted_at IS NULL AND ${GUARDED.map((c) => `portfolios.${c} IS ?`).join(" AND ")}`;
-const stillAsReadArgs = (row) => GUARDED.map((c) => (row?.[c] == null ? null : typeof row[c] === "bigint" ? Number(row[c]) : row[c]));
+// after the checks (the grade by its token). SQLite's IS compares NULLs as equal.
+const GUARDED = ["status", "reason", "health", "health_reason", "health_fails", "health_first_fail_at"];
+const STILL_AS_READ = `portfolios.delisted_at IS NULL AND ${GUARDED.map((c) => `portfolios.${c} IS ?`).join(" AND ")} AND ${RUBRIC_TOKEN("portfolios")} IS ?`;
+const stillAsReadArgs = (row) => [...GUARDED, "rubric_token"].map((c) => (row?.[c] == null ? null : typeof row[c] === "bigint" ? Number(row[c]) : row[c]));
 
 /**
  * Hands one "not a portfolio" grade with no decision on record to the door
@@ -559,8 +692,7 @@ async function toTheDoor(db, url, now) {
     await db.execute({
       sql: `SELECT p.url, p.name, p.shot_key, p.page_text, p.facts, p.signals, p.ai_rubric FROM portfolios p
             WHERE p.url = ? AND p.delisted_at IS NULL AND ${NOT_PORTFOLIO("p")} AND NOT ${OPEN_CASE_SQL("p")}
-              AND NOT EXISTS (SELECT 1 FROM status_reviews d WHERE d.url = p.url AND d.proposed = 'remove'
-                              AND d.status IN (${APPLIED.map((s) => `'${s}'`).join(", ")}))`,
+              AND NOT ${REMOVAL_ON_RECORD_SQL("p")}`,
       args: [url],
     })
   ).rows[0];
@@ -603,13 +735,33 @@ export function healthSummary(s) {
     lines.push(
       "### Old \"not a portfolio\" grades sent to the review queue",
       "",
-      "Graded \"not a portfolio\" before the review queue existed, with no decision on record. The door decided each one with a record (a removal by its rule, with Undo, or held for the owner); the health check never removes them itself.",
+      "Graded \"not a portfolio\" before the review queue existed, with no decision on record. Each now has a row in the review queue: a removal the rule applies (with Undo), or a case held for the owner. The health check never removes them itself.",
       "",
       "| URL | Door |",
       "| --- | --- |"
     );
     for (const d of s.toOwnerReview) lines.push(`| ${cell(d.url)} | ${cell(d.outcome)} |`);
     lines.push("");
+  }
+  if (s.settledAtDoor?.length) {
+    lines.push(
+      "### Old \"not a portfolio\" grades settled without a new review row",
+      "",
+      "An earlier decision settled these at the door (the owner's verdict, or a grade that says portfolio); nothing was added to the queue.",
+      "",
+      ...s.settledAtDoor.map((d) => `- ${cell(d.url)} (${cell(d.outcome)})`),
+      ""
+    );
+  }
+  if (s.unknownForWeeks?.length) {
+    lines.push(
+      `### Unknown for ${UNKNOWN_WEEKS_TO_OWNER}+ weeks (sent to the owner)`,
+      "",
+      "The check could not tell whether these sites work for weeks in a row; they are on /admin/alerts for a look by hand.",
+      "",
+      ...s.unknownForWeeks.map((u) => `- ${cell(u.url)}: ${u.weeks} weeks (${cell(u.reason)})`),
+      ""
+    );
   }
   if (s.newlyDown.length) {
     lines.push("### Newly down", "", "| URL | Reason |", "| --- | --- |");

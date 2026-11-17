@@ -5,12 +5,15 @@
 // are stand-ins, the database is a throwaway local file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
 import * as gate from "../pipeline/gate.mjs";
 import * as health from "../pipeline/health.mjs";
 import * as exclusions from "../pipeline/exclusions.mjs";
 import * as render from "../pipeline/render.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
-import { autoApplyReviews, undoReviews } from "../lib/reviews/store.mjs";
+import { autoApplyReviews, ensureReviewSchema, undoReviews } from "../lib/reviews/store.mjs";
 import { DAY, PORTFOLIO_HTML, T0, col, freshDb, reviewsOf, site } from "./helpers/door-night.mjs";
 
 const quiet = () => {};
@@ -85,11 +88,26 @@ test("a: the browser second opinion sends its own engine's version as a visitor'
   assert.match(render.browserUserAgent(undefined), /Chrome\/\d+/, "falls back to the date's version");
 });
 
-test("a: the plain request sends a browser's navigation headers; a host that answers 500 without them passes", async () => {
-  // juanbenito.vercel.app (2026-11-16): HTTP 500 "Internal Server Error" (21 bytes) to a request with only a User-Agent.
-  const fetchImpl = async (u, init) => (headerOf(init, "sec-fetch-mode") === "navigate" && /text\/html/.test(headerOf(init, "accept")) ? response(200, PORTFOLIO_HTML, u) : response(500, "Internal Server Error", u));
-  const g = await gate.httpGate("https://juanbenito.example", { fetchImpl });
-  assert.equal(g.status, "live", g.reason);
+test("a: on the wire, the plain request carries a browser's Accept and Accept-Language, and no header pair a browser never sends", async () => {
+  // juanbenito.vercel.app (2026-11-16): HTTP 500 "Internal Server Error" (21 bytes) to a request with only a User-Agent,
+  // HTTP 200 with Accept and Accept-Language. A real local server, since Node's fetch rewrites some headers.
+  const server = http.createServer((req, res) => {
+    const browserLike = /text\/html/.test(String(req.headers.accept)) && /en-US/.test(String(req.headers["accept-language"]));
+    res.writeHead(browserLike ? 200 : 500, { "content-type": browserLike ? "text/html" : "text/plain" });
+    res.end(browserLike ? `<html><body><pre>${JSON.stringify(req.headers)}</pre>${"<p>Ann Lee builds web apps.</p>".repeat(5)}</body></html>` : "Internal Server Error");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    const g = await gate.httpGate(`http://127.0.0.1:${server.address().port}/`);
+    assert.equal(g.status, "live", g.reason);
+    const wire = JSON.parse(g.html.match(/<pre>(.*?)<\/pre>/)[1].replace(/&quot;/g, '"'));
+    assert.match(wire["user-agent"], /Chrome\/\d+\.0\.0\.0/);
+    // Node's fetch sends sec-fetch-mode "cors"; beside it, sec-fetch-dest "document" or upgrade-insecure-requests would mark a fake.
+    assert.equal(wire["sec-fetch-dest"], undefined);
+    assert.equal(wire["upgrade-insecure-requests"], undefined);
+  } finally {
+    server.close();
+  }
   // And a 5xx gets the browser's second opinion before it counts.
   const r = await health.checkSite({ url: "https://five.example", name: "Ann Lee" }, { fetchImpl: async (u) => response(500, "Internal Server Error", u), render: async (u) => goodPage(u) });
   assert.equal(r.ok, true);
@@ -375,5 +393,213 @@ test("a paused deployment and a missing deployment are recorded with their own r
     render: async (u) => ({ status: 402, finalUrl: `${u}/`, title: "", text: "This deployment is temporarily paused", media: false, html: "" }),
   });
   assert.deepEqual([r.ok, r.reason], [false, "HTTP 402: deployment paused"]);
-  assert.equal(await exclusions.siteAnswers("https://paused.example", { fetchImpl: async (u) => response(200, `<p>This deployment is temporarily paused</p>${" ".repeat(300)}`, u) }), false);
+});
+
+// ---------------------------------------------------------------------------
+// The code review of pull request #247 (findings numbered as in the review)
+
+const connectTimeout = () =>
+  Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("Connect Timeout Error"), { name: "ConnectTimeoutError", code: "UND_ERR_CONNECT_TIMEOUT" }) });
+const browserThrows = (message) => async () => {
+  throw new Error(message);
+};
+
+test("review 1: a connect timeout is a real failure, and a definite browser answer is never overridden by a plain request that only timed out", async () => {
+  const g = await gate.httpGate("https://gone.example", {
+    fetchImpl: async () => {
+      throw connectTimeout();
+    },
+  });
+  assert.equal(g.status, "error");
+  assert.notEqual(g.transient, true, "nothing answers at the address: not transient");
+  const site = { url: "https://gone.example", name: "Ann Lee" };
+  const gone = await health.checkSite(site, {
+    fetchImpl: async () => {
+      throw connectTimeout();
+    },
+    render: browserThrows("page.goto: net::ERR_CONNECTION_TIMED_OUT at https://gone.example/"),
+  });
+  assert.equal(gone.ok, false, gone.reason);
+  // The plain request was definite, the browser only timed out: still a failure.
+  const slowBrowser = await health.checkSite(site, {
+    fetchImpl: async () => {
+      throw connectTimeout();
+    },
+    render: browserThrows("page.goto: Timeout 30000ms exceeded."),
+  });
+  assert.equal(slowBrowser.ok, false, slowBrowser.reason);
+  // The plain request timed out (transient), the browser was refused (definite): the browser decides.
+  const refused = await health.checkSite(site, { fetchImpl: async (u) => slowBody(u), render: browserThrows("page.goto: net::ERR_CONNECTION_REFUSED at https://gone.example/") });
+  assert.equal(refused.ok, false, refused.reason);
+});
+
+test("review 2: a removed site comes back only by passing the same full check, and only when it was removed for not answering", async () => {
+  const now = new Date("2026-12-30T00:00:00Z");
+  const removed = "2026-11-16";
+  const list = [
+    { url: "https://blank.example", name: "Ann Lee", kind: "down", reason: "renders blank", removed },
+    { url: "https://gated.example", name: "Ann Lee", kind: "down", reason: "capture blocked: still a gate or loader after the click-through", removed },
+    { url: "https://linked.example", name: "Ann Lee", kind: "down", reason: "redirects to linkedin.com, not a portfolio", removed },
+    { url: "https://parked.example", name: "Ann Lee", kind: "down", reason: "HTTP 402: deployment paused", removed },
+    { url: "https://empty.example", name: "Ann Lee", kind: "down", reason: "HTTP 500", removed },
+    { url: "https://back.example", name: "Ann Lee", kind: "down", reason: "does not load (connect timeout (nothing answers at the address))", removed },
+  ];
+  const pages = {
+    "https://blank.example": "<div id=root></div>",
+    "https://gated.example": PORTFOLIO_HTML,
+    "https://linked.example": PORTFOLIO_HTML,
+    // Answers 200 now, but with a parking page: not back.
+    "https://parked.example": "<html><head><title>This domain is for sale</title></head><body>Buy this domain</body></html>",
+    // Answers 200 now, but blank in the browser too: not back.
+    "https://empty.example": "<div id=root></div>",
+    "https://back.example": PORTFOLIO_HTML,
+  };
+  const checked = [];
+  const fetchImpl = async (u) => (checked.push(u.replace(/\/$/, "")), response(200, pages[u.replace(/\/$/, "")] ?? "", u));
+  const render = async (u) => ({ status: 200, finalUrl: u, title: "", text: "", media: false, html: "" });
+  const r = await exclusions.planDeadRecheck({ excluded: list, now, answers: exclusions.passesFullCheck({ render, fetchImpl }) });
+  assert.deepEqual(r.back, ["https://back.example"]);
+  assert.deepEqual(r.still.sort(), ["https://empty.example", "https://parked.example"]);
+  for (const u of ["https://blank.example", "https://gated.example", "https://linked.example"]) assert.ok(!checked.includes(u), `${u} is never re-checked`);
+});
+
+test("review 3: failures count a week after the last counted one, not on a ladder from the first", async () => {
+  const { db } = await freshDb();
+  const url = "https://flaky.example";
+  await site(db, url);
+  const feed = [{ url, name: "Ann Lee" }, ...filler];
+  const fail = async (u) => (u.startsWith(url) ? response(500, "Internal Server Error", u) : response(200, PORTFOLIO_HTML, u));
+  const unsure = async (u) => (u.startsWith(url) ? slowBody(u) : response(200, PORTFOLIO_HTML, u));
+  const render = async (u) => (u.startsWith(url) ? { status: 500, finalUrl: `${url}/`, title: "", text: "", media: false, html: "" } : goodPage(u));
+  const blindRender = async (u) => {
+    if (u.startsWith(url)) throw new Error("page.goto: Timeout 30000ms exceeded.");
+    return goodPage(u);
+  };
+  await health.runHealthCheck({ db, feed, fetchImpl: fail, render, now: at(0), log: quiet });
+  await health.runHealthCheck({ db, feed, fetchImpl: unsure, render: blindRender, now: at(7), log: quiet });
+  await health.runHealthCheck({ db, feed, fetchImpl: fail, render, now: at(14), log: quiet });
+  // A manual re-run an hour later, on the same bad day.
+  await health.runHealthCheck({ db, feed, fetchImpl: fail, render, now: new Date(at(14).getTime() + 3600000), log: quiet });
+  assert.deepEqual([await col(db, url, "health"), Number(await col(db, url, "health_fails"))], ["suspect", 2]);
+});
+
+test("review 4: a browser that cannot start or a tab that crashes is never held against a site; a browser that never starts fails the run", async () => {
+  const spa = async (u) => response(200, "<div id=root></div><script src=app.js></script>", u);
+  const site1 = { url: "https://spa.example", name: "Ann Lee" };
+  for (const message of ["browserType.launch: Executable doesn't exist at /ms-playwright/chromium-1254/chrome-linux/chrome", "page.goto: Page crashed", "page.goto: Target crashed"]) {
+    const r = await health.checkSite(site1, { fetchImpl: spa, render: browserThrows(message) });
+    assert.equal(r.ok, null, `${message}: ${r.reason}`);
+  }
+  const unavailable = await health.checkSite(site1, {
+    fetchImpl: spa,
+    render: async () => {
+      throw new render.BrowserUnavailableError(new Error("spawn ENOENT"));
+    },
+  });
+  assert.equal(unavailable.ok, null);
+  // A failed launch is not kept: the next render launches again.
+  let launches = 0;
+  const fakeBrowser = {
+    version: () => "158.0.8127.18",
+    newContext: async () => ({
+      newPage: async () => ({
+        goto: async () => ({ status: () => 200 }),
+        waitForLoadState: async () => {},
+        waitForTimeout: async () => {},
+        url: () => "https://spa.example/",
+        title: async () => "Ann Lee",
+        evaluate: async () => ({ text: "Ann Lee builds web apps.", media: false, html: "" }),
+      }),
+      close: async () => {},
+    }),
+    close: async () => {},
+  };
+  const renderer = render.createRenderer({
+    launch: async () => {
+      launches++;
+      if (launches === 1) throw new Error("browserType.launch: Executable doesn't exist");
+      return fakeBrowser;
+    },
+  });
+  await assert.rejects(renderer.render("https://spa.example"), (e) => e.name === "BrowserUnavailableError");
+  assert.equal((await renderer.render("https://spa.example")).status, 200);
+  assert.equal(launches, 2);
+  // Every render failing to launch: the run records nothing and fails.
+  const { db } = await freshDb();
+  const feed = [{ url: site1.url, name: "Ann Lee" }, ...filler];
+  const s = await health.runHealthCheck({ db, feed, fetchImpl: spa, render: browserThrows("browserType.launch: Executable doesn't exist"), now: at(0), log: quiet });
+  assert.equal(s.aborted, true);
+  assert.match(s.message, /browser could not start/);
+  assert.equal(await col(db, site1.url, "health_checked_at"), undefined, "nothing recorded (no row written)");
+});
+
+test("review 5: a runner that could not tell for most sites fails the run; a site unknown four weeks running goes to the owner", async () => {
+  const { db } = await freshDb();
+  const feed = filler.slice(0, 25);
+  const s = await health.runHealthCheck({ db, feed, fetchImpl: async (u) => slowBody(u), render: browserThrows("page.goto: Timeout 30000ms exceeded."), now: at(0), log: quiet });
+  assert.equal(s.aborted, true);
+  assert.match(s.message, /could not tell/);
+
+  const url = "https://always-unsure.example";
+  await site(db, url);
+  const mixed = [{ url, name: "Ann Lee" }, ...filler];
+  const fetchImpl = async (u) => (u.startsWith(url) ? slowBody(u) : response(200, PORTFOLIO_HTML, u));
+  const browser = async (u) => {
+    if (u.startsWith(url)) throw new Error("page.goto: Timeout 30000ms exceeded.");
+    return goodPage(u);
+  };
+  let last;
+  for (const w of [0, 7, 14, 21]) last = await health.runHealthCheck({ db, feed: mixed, fetchImpl, render: browser, now: at(w), log: quiet });
+  assert.deepEqual(last.unknownForWeeks?.map((u) => u.url), [url]);
+  const alert = (await db.execute({ sql: "SELECT title, detail FROM owner_alerts WHERE key = ? AND cleared_at IS NULL", args: [health.UNKNOWN_ALERT_KEY] })).rows[0];
+  assert.ok(alert && String(alert.detail).includes(url), "an alert on /admin/alerts names the site");
+  // It answers again: the alert clears.
+  await health.runHealthCheck({ db, feed: mixed, fetchImpl: async (u) => response(200, PORTFOLIO_HTML, u), render: async (u) => goodPage(u), now: at(28), log: quiet });
+  assert.equal((await db.execute({ sql: "SELECT COUNT(*) AS n FROM owner_alerts WHERE key = ? AND cleared_at IS NULL", args: [health.UNKNOWN_ALERT_KEY] })).rows[0].n, 0);
+});
+
+test("review 9: 'a removal is on record' has one definition, built from the review queue's own APPLIED list", () => {
+  const root = path.join(import.meta.dirname, "..");
+  for (const file of ["pipeline/health.mjs", "pipeline/exclusions.mjs"]) {
+    const src = fs.readFileSync(path.join(root, file), "utf8");
+    assert.ok(!/'confirmed',\s*'auto_applied'/.test(src), `${file} hard-codes the applied statuses`);
+    assert.ok(!/proposed = 'remove' AND d?\.?status IN/.test(src.replace(/APPLIED_REMOVAL_WHERE[\s\S]*?;\n/, "")), `${file} writes the rule a second time`);
+  }
+  assert.match(health.APPLIED_REMOVAL_WHERE(), /status IN \('confirmed', 'auto_applied'\)/);
+});
+
+test("review 10: the pages the health check calls a bot wall (the capture's rule), pinned", () => {
+  const walls = [
+    { title: "Just a moment...", text: "Checking if the site connection is secure" },
+    { title: "Vercel Security Checkpoint", text: "We're verifying your browser" },
+    { title: "", text: "Verifying you are human. This may take a few seconds." },
+    { title: "Attention Required! | Cloudflare", text: "Please enable cookies." },
+    { title: "Verifying you are human", text: "" },
+  ];
+  const notWalls = [
+    { title: "Ann Lee | Engineer", text: `Ann Lee builds web apps. ${"Projects, about and contact. ".repeat(30)}` },
+    { title: "", text: "" },
+    { title: "Ann Lee", text: "Enter" },
+    // A long portfolio page that mentions a security check in passing.
+    { title: "Ann Lee | Security engineer", text: `I build bot detection. Just a moment... is what Cloudflare shows. ${"I write about web security and performance. ".repeat(30)}` },
+  ];
+  for (const p of walls) assert.equal(health.isBotWallPage(p), true, JSON.stringify(p));
+  for (const p of notWalls) assert.equal(health.isBotWallPage(p), false, JSON.stringify(p));
+});
+
+test("review: the summary lists under the review queue only grades that got a review row", async () => {
+  const { db } = await freshDb();
+  const url = "https://owner-kept.example";
+  await site(db, url, { rubric: legacyGrade, n: 1 });
+  // The owner confirmed it is a portfolio long ago (a relist he confirmed): the door follows him and writes no row.
+  await ensureReviewSchema(db);
+  await db.execute({
+    sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, reason, off_list, verdicts, signals, status, created_at, decided_at, decided_by)
+          VALUES ('old', ?, 'not_portfolio', 'hidden', 'relist', 0, 'old', 0, '{}', '{}', 'confirmed', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', 'admin:owner')`,
+    args: [url],
+  });
+  const s = await health.runHealthCheck({ db, feed: [{ url, name: "Ann Lee" }, ...filler], fetchImpl: async (u) => response(200, PORTFOLIO_HTML, u), now: at(0), log: quiet });
+  assert.deepEqual(s.toOwnerReview, []);
+  assert.deepEqual(s.settledAtDoor?.map((d) => [d.url, d.outcome]), [[url, "owner"]]);
+  assert.doesNotMatch(health.healthSummary(s), /sent to the review queue[\s\S]*owner-kept/);
 });

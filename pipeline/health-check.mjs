@@ -59,8 +59,9 @@ try {
   if (!result.aborted && args.includes("--exclusions")) {
     const excludedPath = path.join(ROOT, "data", "excluded.json");
     const plan = await planExclusions({ db, excluded: readJson(excludedPath, []), feed });
-    // Dead (every few months) and down (monthly) entries due for their check: back on the list if they answer now.
-    const dead = await planDeadRecheck({ excluded: plan.excluded });
+    // Dead (every few months) and down (monthly) entries due for their check: back on the list if they
+    // pass the same full check (with the browser) that removed them.
+    const dead = await planDeadRecheck({ excluded: plan.excluded, render });
     const changed = plan.added.length || dead.back.length || dead.still.length;
     if (changed && !DRY) {
       fs.writeFileSync(excludedPath, `${JSON.stringify(dead.excluded, null, 2)}\n`);
@@ -72,7 +73,7 @@ try {
         : "### Excluded\n\nNo new exclusions.\n") +
         (plan.held.length ? `\nDown but not removed: ${plan.held.map((h) => `${h.url} (${h.why})`).join("; ")}.\n` : "") +
         (dead.back.length || dead.still.length
-          ? `\n${dead.back.length} removed site(s) answered again and ${DRY ? "would leave" : "left"} the exclusion list${dead.back.length ? ` (${dead.back.join(", ")})` : ""}; ${dead.still.length} still not answering, checked again in ${DOWN_RECHECK_DAYS} days (down) or ${DEAD_RECHECK_DAYS} days (dead).\n`
+          ? `\n${dead.back.length} removed site(s) passed the full check again and ${DRY ? "would leave" : "left"} the exclusion list${dead.back.length ? ` (${dead.back.join(", ")})` : ""}; ${dead.still.length} still failing or unknown, checked again in ${DOWN_RECHECK_DAYS} days (down) or ${DEAD_RECHECK_DAYS} days (dead).\n`
           : "")
     );
   }

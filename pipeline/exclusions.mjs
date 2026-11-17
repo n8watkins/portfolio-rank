@@ -21,8 +21,7 @@
 // old format) still work.
 
 import fs from "fs";
-import { normKey } from "./health.mjs";
-import { navigationHeaders, parkingPhrase } from "./gate.mjs";
+import { APPLIED_REMOVAL_WHERE, checkSite, normKey } from "./health.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
 
@@ -49,7 +48,7 @@ export async function removalDecider(db, url) {
     r = (
       await db.execute({
         sql: `SELECT id, decided_by, verdicts, signals FROM status_reviews
-              WHERE url = ? AND proposed = 'remove' AND status IN ('confirmed', 'auto_applied')
+              WHERE url = ? AND ${APPLIED_REMOVAL_WHERE()}
               ORDER BY decided_at DESC, id DESC LIMIT 1`,
         args: [url],
       })
@@ -98,44 +97,52 @@ export const recheckDays = (kind) => (kind === "dead" ? DEAD_RECHECK_DAYS : kind
 const addDays = (day, days) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
 /**
+ * Whether a "down" entry was removed for not answering (the name, the
+ * connection, TLS, an HTTP error, a paused or missing deployment): only those
+ * can come back by answering again. One removed for what the site showed (a
+ * blank page, a blocked capture, a parked page, a redirect to a profile) is
+ * never re-checked: an answer says nothing about that.
+ */
+export const removedForNotAnswering = (reason) => /^(HTTP \d|does not load|DNS|connect timeout|TLS|timeout|connection dropped)/.test(String(reason ?? ""));
+
+/**
  * The day an excluded entry is due for its check, or null when it never is:
- * recheck_after when set; for a "down" entry without one, DOWN_RECHECK_DAYS
- * after its removal.
+ * recheck_after when set; for a "down" entry removed for not answering
+ * without one, DOWN_RECHECK_DAYS after its removal.
  */
 export function recheckDue(e) {
   if (!e || typeof e !== "object" || !recheckDays(e.kind)) return null;
+  if (e.kind === "down" && !removedForNotAnswering(e.reason)) return null;
   if (e.recheck_after) return String(e.recheck_after);
   if (e.kind === "down") return /^\d{4}-\d{2}-\d{2}$/.test(String(e.removed ?? "")) ? addDays(String(e.removed), DOWN_RECHECK_DAYS) : "";
   return "";
 }
 
 /**
- * Whether a site answers now (the excluded-entry re-check): the name
- * resolves and the page loads with a 2xx answer to a browser's navigation
- * (gate.mjs navigationHeaders) that isn't an error, paused or parked page.
- * One plain request; never throws.
+ * Whether an excluded site is back: the same full check that removed it
+ * (./health.mjs checkSite, with the browser's second opinion when `render`
+ * is given) passes. Inconclusive is not back. Never throws.
  */
-export async function siteAnswers(url, { fetchImpl = globalThis.fetch, timeoutMs = 20000 } = {}) {
-  try {
-    const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs), headers: navigationHeaders() });
-    if (!res.ok) return false;
-    const text = String(await res.text()).slice(0, 200000);
-    if (parkingPhrase({ html: text })) return false;
-    return text.length > 200 && !/site not found|there isn.t a github pages site here|deployment not found|deployment is temporarily paused|404: not found|page not found/i.test(text);
-  } catch {
-    return false;
-  }
-}
+export const passesFullCheck =
+  ({ render, fetchImpl } = {}) =>
+  async (url, entry) => {
+    try {
+      return (await checkSite({ url, name: entry?.name ?? "" }, { render, ...(fetchImpl ? { fetchImpl } : {}) })).ok === true;
+    } catch {
+      return false;
+    }
+  };
 
 /**
  * The dead and down entries due for their check (recheckDue on or before
- * today), at most `limit` a run: one that answers now leaves the list (it
- * returns with the next sync if the community list still has it, and the
- * weekly health check looks at it like any listed site); one that doesn't
- * gets its next check recheckDays(kind) later. Returns { excluded,
- * back: [urls], still: [urls] } without writing.
+ * today), at most `limit` a run: one that passes the full check now
+ * (`answers(url, entry)`, by default passesFullCheck with `render`) leaves
+ * the list (it returns with the next sync if the community list still has
+ * it, and the weekly health check looks at it like any listed site); one
+ * that doesn't gets its next check recheckDays(kind) later. Returns
+ * { excluded, back: [urls], still: [urls] } without writing.
  */
-export async function planDeadRecheck({ excluded, now = new Date(), answers = siteAnswers, limit = DEAD_RECHECK_LIMIT }) {
+export async function planDeadRecheck({ excluded, now = new Date(), render, answers = passesFullCheck({ render }), limit = DEAD_RECHECK_LIMIT }) {
   const day = now.toISOString().slice(0, 10);
   const due = excluded
     .filter((e) => {
@@ -146,7 +153,7 @@ export async function planDeadRecheck({ excluded, now = new Date(), answers = si
   const back = new Set();
   const still = new Set();
   for (const e of due) {
-    if (await answers(e.url)) back.add(e);
+    if (await answers(e.url, e)) back.add(e);
     else still.add(e);
   }
   return {

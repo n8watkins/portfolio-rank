@@ -18,22 +18,43 @@ export function browserUserAgent(version) {
   return Number.isFinite(major) && major > 0 ? chromeUA(major) : chromeUA();
 }
 
+/** The browser could not start (Playwright's Chromium missing or failing to launch): says nothing about a site. */
+export class BrowserUnavailableError extends Error {
+  /** @param {unknown} cause */
+  constructor(cause) {
+    super(`the browser could not start: ${String(/** @type {any} */ (cause)?.message ?? cause).split("\n")[0].slice(0, 160)}`);
+    this.name = "BrowserUnavailableError";
+    this.cause = cause;
+  }
+}
+
 /**
  * A lazy renderer. render(url) resolves to { status, finalUrl, title, text,
  * media, html } or throws; close() shuts the browser if one was started.
+ * A failed launch throws BrowserUnavailableError and is not kept: the next
+ * render tries to launch again.
  * The page counts as loaded once its HTML has arrived and parsed
  * (domcontentloaded); then it gets until `timeoutMs` for the load event and a
  * few seconds of network quiet, but a slow image or script never turns a
  * page that answered into an error.
  */
-export function createRenderer({ viewport = { width: 1280, height: 800 }, timeoutMs = 30000 } = {}) {
+export function createRenderer({
+  viewport = { width: 1280, height: 800 },
+  timeoutMs = 30000,
+  launch = () => import("playwright").then(({ chromium }) => chromium.launch()),
+} = {}) {
   let browser = null;
   let starting = null;
   let userAgent = null;
   const start = async () => {
     if (browser) return browser;
-    starting ??= import("playwright").then(({ chromium }) => chromium.launch());
-    browser = await starting;
+    starting ??= launch();
+    try {
+      browser = await starting;
+    } catch (e) {
+      starting = null;
+      throw new BrowserUnavailableError(e);
+    }
     userAgent ??= browserUserAgent(browser.version());
     return browser;
   };

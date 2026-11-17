@@ -353,7 +353,7 @@ test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${D
   const same = nextHealth(w, { ok: null, reason: "blocked by a bot check" }, at(21));
   assert.deepEqual([same.health, same.fails], ["down", 3]);
   // Passing recovers.
-  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, reason: "" });
+  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "" });
 });
 
 test("runHealthCheck records states and schedules a recapture for recovered failed captures; a 'not a portfolio' grade is not a failed check", async () => {

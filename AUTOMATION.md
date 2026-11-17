@@ -48,11 +48,18 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
   After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
-- **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages, duplicates and a stored `is_portfolio=false`.
-  States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row spanning at least 13 days); a pass resets to `live`.
-  Bot walls (403/429 challenges) are inconclusive and leave the state alone; free-tier apps answering 502/503/504 get a second look after 30 seconds.
+- **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages and duplicates.
+  States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row, each on a week of its own, spanning at least 13 days); a pass resets to `live`.
+  The plain request sends a current Chrome User-Agent (worked out from the date) with Accept and Accept-Language; the browser's second opinion sends its own engine's version.
+  Inconclusive results leave the state alone: a bot wall (403/429, or a page the capture's own rule calls a bot check), and anything that says nothing about the site, after a retry and the browser (a timeout, a dropped connection, a temporary DNS failure, a browser or check that crashed).
+  A definite answer from either opinion (refused, nothing answering at the address, an HTTP error) still counts as a failure.
+  A site whose capture met a bot wall is never counted down; it waits for the owner's review.
+  Free-tier apps answering 502/503/504 get a second look after 30 seconds.
   A redirect to another domain is a move, not a failure: the run summary lists moves (and flags targets that don't carry the person's name) so the stored URL can be updated.
-  When more than 30% of sites fail in one run the runner is the likelier culprit, so nothing is recorded and the job fails.
+  When more than 30% of sites fail, more than 15% are inconclusive, or the browser cannot start at all, the runner is the likelier culprit, so nothing is recorded and the job fails.
+  A site the check could not tell about for 4 weeks in a row goes to the owner as an alert on `/admin/alerts`.
+  Rows are read after the checks and every write is conditional on them, so a capture, a grade or a review decision made during the run is never overwritten.
+  A stored `is_portfolio=false` is never a failed check: a grade with no decision on record is handed to the door (`lib/reviews/door.mjs`), which records it in the review queue.
 - **Portfolio-likeness** (`pipeline/signals.mjs`, part of the health check): from each loaded page's HTML (the rendered DOM for single-page apps) it records six yes/no signals in `portfolios.signals`: projects/work section, about, contact (mailto, form or social links), resume/CV, a GitHub profile link, and the person's name in the title or h1.
   A page with at most one is flagged `needs_review`: never removed or hidden for it, listed in the run summary, and graded first by the rubric so Gemini's `is_portfolio` confirms or clears it.
   A listed site that is already graded is never graded again for it (owner, 2026-11-16: "Listed sites, health check only"); the night's free part turns the flag into a pending review row ("the site's portfolio signals collapsed") for the owner.
@@ -61,6 +68,8 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
 - **Exclusions**: newly confirmed-down sites are appended to `data/excluded.json` as `{url, name, reason, kind, removed, first_failed, last_checked, checks}` and dropped from `feed.json` in one bot pull request (branch `data/health-exclusions`, auto-merge), at most 10% of the list at once.
   `generate_feed.py` reads both these objects and the older plain URL strings.
   `/removed` lists them with the reason and date; takedown requests are counted there but never named.
+  A bot-walled site and a "not a portfolio" with no decision on record are never added.
+  Entries removed for not answering (`dead` every 91 days, `down` monthly) are checked again with the same full check, browser included, and leave the list when they pass; a paused Vercel deployment is recorded as "HTTP 402: deployment paused".
 - **Site visibility** (`lib/roster.ts hiddenUrls`): a roster site is hidden when it is confirmed down, or when its capture failed and the health check hasn't passed it since.
   Captures that fail are retried with backoff (1, 2, 4, 8, 16, then 30 days), and a passing health check schedules a recapture at once, so one transient error never hides a site for good.
 - **Owner review queue** ([lib/reviews/store.mjs](lib/reviews/store.mjs), `/admin/review`): a re-check (the first is "recheck-543") writes one `status_reviews` row per site whose listed or ranked state it would change, with fresh screenshots, each grader's verdict, the code's signals, the group and the reason.

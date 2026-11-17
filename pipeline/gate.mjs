@@ -124,12 +124,15 @@ export function visibleText(html) {
 // headers or the body), or the runner's own DNS resolver failed for a moment
 // (EAI_AGAIN). They are retried and asked of the browser like any error, and
 // the health check never counts them as a failed check (pipeline/health.mjs).
-// Connection refused, a connect timeout and a TLS failure are not on the
+// Connection refused, a connect timeout (undici's UND_ERR_CONNECT_TIMEOUT,
+// ETIMEDOUT: nothing answers at the address) and a TLS failure are not on the
 // list: those are what a site that is really down looks like.
 const TRANSIENT_CODE = /^(UND_ERR_SOCKET|ECONNRESET|EPIPE|ECONNABORTED|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|UND_ERR_ABORTED|EAI_AGAIN|ERR_HTTP2_\w+)$/;
+const CONNECT_TIMEOUT_CODE = /^(UND_ERR_CONNECT_TIMEOUT|ETIMEDOUT)$/;
 
 const errorCode = (e) => String(e?.cause?.code ?? e?.code ?? "");
-const isTimeout = (e) => e?.name === "TimeoutError" || e?.cause?.name === "TimeoutError" || /timeout/i.test(String(e?.cause?.name ?? ""));
+/** The request's own deadline ran out (AbortSignal.timeout): the answer, or its body, was too slow. */
+const isDeadline = (e) => e?.name === "TimeoutError" || e?.cause?.name === "TimeoutError";
 
 /** The gate's answer for a request (or a body read) that threw. */
 function requestFailed(e) {
@@ -137,8 +140,9 @@ function requestFailed(e) {
   const msg = String(e?.cause?.code ?? e?.cause?.message ?? e?.cause ?? e?.message ?? e);
   if (code === "ENOTFOUND" || (!code && /ENOTFOUND/.test(msg))) return { status: "dead", reason: "DNS resolution failed" };
   if (code === "EAI_AGAIN" || /EAI_AGAIN/.test(msg)) return { status: "error", reason: "DNS lookup failed for a moment (EAI_AGAIN)", transient: true };
+  if (CONNECT_TIMEOUT_CODE.test(code) || e?.cause?.name === "ConnectTimeoutError") return { status: "error", reason: "connect timeout (nothing answers at the address)" };
   if (/CERT|certificate|SSL/i.test(msg)) return { status: "error", reason: "TLS error" };
-  if (isTimeout(e)) return { status: "error", reason: "timeout", transient: true };
+  if (isDeadline(e)) return { status: "error", reason: "timeout", transient: true };
   if (TRANSIENT_CODE.test(code)) return { status: "error", reason: `connection dropped (${code})`, transient: true };
   return { status: "error", reason: msg.slice(0, 120) };
 }
@@ -147,20 +151,19 @@ function requestFailed(e) {
 const readBody = async (res, limit) => String(await res.text()).slice(0, limit);
 
 /**
- * The headers a desktop Chrome sends when a person opens a page, with the
- * User-Agent. Some hosts answer a request that carries only a User-Agent with
- * an error (juanbenito.vercel.app: HTTP 500 "Internal Server Error", 21 bytes)
- * and the page to a browser's navigation (HTTP 200, 107 KB; 2026-11-16).
+ * The page-request headers of a desktop Chrome that Node's fetch carries as
+ * given: the User-Agent, Accept and Accept-Language. Some hosts answer a
+ * request with only a User-Agent with an error (juanbenito.vercel.app: HTTP
+ * 500 "Internal Server Error", 21 bytes) and the page to these (HTTP 200,
+ * 107 KB; 2026-11-17, confirmed with Accept and Accept-Language alone).
+ * No Sec-Fetch-* or Upgrade-Insecure-Requests: Node's fetch (undici) rewrites
+ * sec-fetch-mode to "cors", and "cors" beside sec-fetch-dest "document" is a
+ * pair no browser sends.
  */
 export const navigationHeaders = (userAgent = chromeUA()) => ({
   "User-Agent": userAgent,
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "en-US,en;q=0.9",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Site": "none",
-  "Sec-Fetch-User": "?1",
-  "Upgrade-Insecure-Requests": "1",
 });
 
 /**
