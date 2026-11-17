@@ -233,6 +233,26 @@ test("a re-check that could not tell neither hides nor restores; it is tried aga
   assert.deepEqual(await standing(db, url), NOT_WORKING);
 });
 
+test("a site set back to live by hand (an Undo, the owner) is the nightly run's again, and starts the ladder over", async () => {
+  const url = "https://undone.example";
+  const { db, w, nightly, hourly } = await setup([url]);
+  await nightly(T0);
+  w.mode.set(url, "paused");
+  const F = T0 + D;
+  await nightly(F);
+  await hourly(F + H);
+  await hourly(F + D);
+  assert.deepEqual(await standing(db, url), NOT_WORKING);
+  // Set back to live by hand; the marks stay behind.
+  await db.execute({ sql: "UPDATE portfolios SET health = 'live', health_fails = 0, health_first_fail_at = NULL WHERE url = ?", args: [url] });
+  assert.equal((await dueForRecheck(db, at(F + 10 * D))).length, 0, "not the re-check's");
+  const s = await nightly(F + 3 * D);
+  assert.equal(s.leftToRecheck, 0, "the nightly run checks it");
+  // Still failing: a first failure again, not straight back to hidden.
+  assert.deepEqual(await standing(db, url), FAILING);
+  assert.equal(Number((await marks(db, url)).pool_stage), pool.FAILING);
+});
+
 test("a bot-walled site never enters the pool, whatever its answers", async () => {
   const url = "https://walled.example";
   const { db, w, hourly } = await setup([]);

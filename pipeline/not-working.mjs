@@ -161,13 +161,22 @@ export async function ensureHealthSchema(db) {
   for (const sql of HEALTH_AFTER) await db.execute(sql);
 }
 
+/** SQL condition on health_marks `m` joined to portfolios `p`: the site is on the ladder, so the hourly re-check owns it. */
+const ON_LADDER = "m.pool_next_at IS NOT NULL AND p.delisted_at IS NULL AND p.health IN ('suspect', 'down')";
+
+/**
+ * SQL: the listed sites on the ladder (url), which the nightly full run
+ * leaves to the hourly re-check. A site whose health was set back to live by
+ * hand (an Undo, the owner) is not, whatever its marks say.
+ */
+export const ON_LADDER_SQL = `SELECT p.url FROM health_marks m JOIN portfolios p ON p.url = m.url WHERE ${ON_LADDER}`;
+
 /**
  * SQL (one argument: the cut-off, now plus DUE_SLACK_MS, as ISO text): the
- * listed sites whose re-check is due, as (url, name). A site whose health
- * was set back by hand (live) is not due.
+ * sites on the ladder whose re-check is due, as (url, name).
  */
 export const DUE_SQL = `SELECT p.url, p.name FROM health_marks m JOIN portfolios p ON p.url = m.url
-  WHERE m.pool_next_at IS NOT NULL AND m.pool_next_at <= ? AND p.delisted_at IS NULL AND p.health IN ('suspect', 'down')
+  WHERE ${ON_LADDER} AND m.pool_next_at <= ?
   ORDER BY m.pool_next_at`;
 
 /** The same, counted: what the hourly workflow asks first, so an hour with nothing due costs one query. */
@@ -183,5 +192,5 @@ export const dueCutoff = (now = new Date()) => iso(now.getTime() + DUE_SLACK_MS)
 export const POOL_SQL = `SELECT p.url, p.name, p.health, p.health_reason, p.health_checked_at,
     m.pool_stage, m.pool_started_at, m.pool_next_at, m.pool_since
   FROM health_marks m JOIN portfolios p ON p.url = m.url
-  WHERE m.pool_stage IS NOT NULL AND p.delisted_at IS NULL
+  WHERE m.pool_stage IS NOT NULL AND p.delisted_at IS NULL AND p.health IN ('suspect', 'down')
   ORDER BY m.pool_stage DESC, m.pool_since, m.pool_started_at`;

@@ -61,7 +61,7 @@ import { APPLIED, OPEN_CASE_SQL, ensureReviewSchema } from "../lib/reviews/store
 import { rankForWrite } from "../lib/tiers-store.mjs";
 import { assignShownRanks } from "../lib/ranking/store.mjs";
 import { reconcileAlerts } from "./alerts.mjs";
-import { LEAVE_AFTER_DAYS, NOT_WORKING, ensureHealthSchema, failOnLadder, leavesList, notAnswering, poolOf } from "./not-working.mjs";
+import { LEAVE_AFTER_DAYS, NOT_WORKING, ON_LADDER_SQL, ensureHealthSchema, failOnLadder, leavesList, notAnswering, poolOf } from "./not-working.mjs";
 
 // Thresholds of the ladder for sites that answer with the wrong thing (a
 // site that does not answer has ./not-working.mjs's). Failures count once a
@@ -431,7 +431,9 @@ export async function runHealthCheck({
   let entries = feed.slice(0, limit);
   let leftToRecheck = 0;
   if (scheduled === "skip") {
-    const onLadder = new Set((await db.execute("SELECT url FROM health_marks WHERE pool_next_at IS NOT NULL")).rows.map((r) => String(r.url)));
+    // The same rule as the re-check's (./not-working.mjs ON_LADDER_SQL): a site set back to live by hand
+    // (an Undo, the owner) with its marks left behind is the nightly run's again.
+    const onLadder = new Set((await db.execute(ON_LADDER_SQL)).rows.map((r) => String(r.url)));
     const before = entries.length;
     entries = entries.filter((e) => !onLadder.has(e.url));
     leftToRecheck = before - entries.length;
@@ -599,7 +601,8 @@ export async function runHealthCheck({
           firstFailAt: str(row.health_first_fail_at),
           lastFailAt: str(row.last_fail_at),
           reason: row.health_reason == null ? "" : String(row.health_reason),
-          pool: poolOf(row),
+          // Marks count only while the row is failing or not working (a site set back to live by hand starts over).
+          pool: ["suspect", "down"].includes(str(row.health)) ? poolOf(row) : null,
         }
       : null;
     const next = r.decidedDown

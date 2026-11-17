@@ -224,7 +224,7 @@ export async function planExclusions({ db, excluded, feed, now = new Date() }) {
     // Not working (./not-working.mjs): hidden, but on the list until LEAVE_AFTER_DAYS have passed, so a
     // site that answers again comes back by itself. A row confirmed down for not answering before the
     // pool existed (no pool marks) counts from its first failure.
-    const inPool = Number(r.pool_stage ?? 0) === NOT_WORKING || (r.pool_stage == null && kind === "down" && notAnswering(r.health_reason));
+    const inPool = kind === "down" && (Number(r.pool_stage ?? 0) === NOT_WORKING || (r.pool_stage == null && notAnswering(r.health_reason)));
     if (inPool) {
       const since = r.pool_since ?? r.health_first_fail_at;
       if (!leavesList(since == null ? null : String(since), now)) {
