@@ -10,103 +10,49 @@ Build feed.json = (upstream README) - (our exclusions) + (our additions).
 - Additions (--add): OUR OWN entries (e.g. direct submissions) not in upstream.
   JSON array of {name, url, tagline?}.
 
-De-duplicated by normalized URL throughout. The first occurrence of a URL wins
-and its ORIGINAL url string is preserved verbatim, so existing DB/rating keys
-(which index on the exact url) are never rewritten.
+This file only reads the README. Everything that decides whether two
+addresses are one site (duplicates, exclusions) is pipeline/build-feed.mjs,
+so the rule lives in one place (pipeline/list-key.mjs); this script runs it
+with Node and passes its exit code on. Addresses are written exactly as the
+list spells them.
 
 Usage:
     python generate_feed.py [README.md] [feed.json]
         [--exclude data/excluded.json] [--add data/additions.json]
         [--max-shrink 0.05]
 
---max-shrink refuses to write (exit 2) when the new feed has more than that
-fraction fewer entries than the feed.json already there: a broken or
-truncated upstream README must never wipe the list.
+The build refuses to write (exit 2) when the new feed has more than
+--max-shrink fewer entries, or when more than 15% of the current entries'
+addresses are gone from it: a broken, truncated or rewritten upstream README
+must never reach the list. LIST_CLEANUP_SHARE (a share, e.g. 0.3) raises both
+for one run, for a real upstream cleanup.
 """
 
 import re
+import os
 import json
 import sys
 import argparse
-from urllib.parse import urlsplit
+import subprocess
 
 PATTERN = re.compile(r"^-\s+\[([^\]]+)\]\(([^)]+)\)(?:\s+\[([^\]]*)\])?")
+BUILD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "build-feed.mjs")
 
 
-def norm_key(url):
-    """Dedup/exclusion key: lowercased host (no www) + path without trailing slash."""
-    try:
-        parts = urlsplit(url.strip().lower())
-        host = parts.netloc
-        if host.startswith("www."):
-            host = host[4:]
-        path = parts.path.rstrip("/")
-        return f"{host}{path}" or url.strip().lower()
-    except Exception:
-        return url.strip().lower()
-
-
-def load_json_array(path):
-    if not path:
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []
-
-
-def build_feed(readme_path, exclude_path, add_path):
+def parse_readme(readme_path):
+    """Every `- [Name](url) [tagline]` entry, in order: [{name, url, tagline?}]."""
     with open(readme_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
-
-    excluded = {
-        norm_key(e if isinstance(e, str) else (e.get("url") or ""))
-        for e in load_json_array(exclude_path)
-    }
-    portfolios = []
-    seen = set()
-    dupes = excluded_hits = 0
-
+    entries = []
     for line in lines:
         m = PATTERN.match(line.strip())
         if not m:
             continue
-        name, url = m.group(1).strip(), m.group(2).strip()
-        tagline = m.group(3).strip() if m.group(3) else None
-        key = norm_key(url)
-        if key in excluded:
-            excluded_hits += 1
-            continue
-        if key in seen:
-            dupes += 1
-            continue
-        seen.add(key)
-        entry = {"name": name, "url": url}
-        if tagline:
-            entry["tagline"] = tagline
-        portfolios.append(entry)
-
-    added = 0
-    for entry in load_json_array(add_path):
-        url = (entry.get("url") or "").strip()
-        if not url:
-            continue
-        key = norm_key(url)
-        if key in excluded or key in seen:
-            continue
-        seen.add(key)
-        # Normalize like the README path so name is always present (required by
-        # the Portfolio type / rendered into the detail-page <h1>).
-        name = (entry.get("name") or "").strip() or url
-        norm = {"name": name, "url": url}
-        tagline = (entry.get("tagline") or "").strip()
-        if tagline:
-            norm["tagline"] = tagline
-        portfolios.append(norm)
-        added += 1
-
-    return portfolios, dupes, excluded_hits, added
+        entry = {"name": m.group(1).strip(), "url": m.group(2).strip()}
+        if m.group(3) and m.group(3).strip():
+            entry["tagline"] = m.group(3).strip()
+        entries.append(entry)
+    return entries
 
 
 def main():
@@ -120,35 +66,21 @@ def main():
     a = p.parse_args()
 
     try:
-        portfolios, dupes, excluded_hits, added = build_feed(a.readme, a.exclude, a.add)
+        entries = parse_readme(a.readme)
     except FileNotFoundError:
         print(f"Error: {a.readme} not found.")
         return 1
 
+    cmd = ["node", BUILD, "-", a.output]
+    if a.exclude:
+        cmd += ["--exclude", a.exclude]
+    if a.add:
+        cmd += ["--add", a.add]
     if a.max_shrink is not None:
-        current = load_json_array(a.output)
-        if current and len(portfolios) < len(current) * (1 - a.max_shrink):
-            print(
-                f"Error: the new feed has {len(portfolios)} entries, "
-                f"{len(current) - len(portfolios)} fewer than the current {len(current)} "
-                f"(more than {a.max_shrink:.0%}); refusing to write {a.output}."
-            )
-            return 2
-
-    with open(a.output, "w", encoding="utf-8") as f:
-        json.dump(portfolios, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-
-    extras = []
-    if dupes:
-        extras.append(f"{dupes} dup(s)")
-    if excluded_hits:
-        extras.append(f"{excluded_hits} excluded")
-    if added:
-        extras.append(f"{added} added")
-    suffix = f"  ({', '.join(extras)})" if extras else ""
-    print(f"✓ Wrote {a.output} with {len(portfolios)} entries.{suffix}")
-    return 0
+        cmd += ["--max-shrink", str(a.max_shrink)]
+    sys.stdout.flush()
+    run = subprocess.run(cmd, input=json.dumps(entries, ensure_ascii=False), text=True, encoding="utf-8")
+    return run.returncode
 
 
 if __name__ == "__main__":
