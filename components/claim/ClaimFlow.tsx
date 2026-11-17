@@ -43,6 +43,7 @@ const ERRORS: Record<string, string> = {
   not_owner: "This account isn't the verified owner of this portfolio.",
   account_too_new: "Owner actions need a GitHub account at least 30 days old. Ask through GitHub if this can't wait.",
   remove_needs_meta: "Removing your portfolio needs the meta tag on your site first.",
+  cancel_needs_meta: "Cancelling a removal needs the same proof as asking for one: the meta tag on your site first.",
   hide_needs_meta: "Hiding the grade needs the meta tag on your site first.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };

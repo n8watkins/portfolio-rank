@@ -18,17 +18,22 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 //                  owner, then hidden from the site, then moved to
 //                  data/excluded.json as an owner request by the weekly
 //                  exclusions pull request; /removed counts it without details
-//   cancel_remove  withdraws a removal that is still held
+//   cancel_remove  withdraws a removal that is still held; needs the same
+//                  proof as remove (a link from the page is not enough), from
+//                  any account that has it, logged and alerted like a removal
 //   hide_grade     the AI grade is no longer shown; show_grade shows it again
+//                  (the same proof as remove)
 //   regrade        asks the grade service for a new grade (its cooldown
 //                  applies; one open request per site)
 //   200 { state: { hideGrade, removedAt, removeAfter }, regrade? }
 //   400 bad_request | bad_action | confirm_required, 401 signin_required,
-//   403 bad_origin | not_owner | account_too_new | remove_needs_meta | hide_needs_meta,
+//   403 bad_origin | not_owner | account_too_new | remove_needs_meta | cancel_needs_meta | hide_needs_meta,
 //   429 rate_limited
 // Every action is written to the claims audit log.
 export const dynamic = "force-dynamic";
 const HOUR = 60 * 60 * 1000;
+/** ownerAction's refusals that mean "not with this proof" (403), not a bad request. */
+const FORBIDDEN = new Set(["not_owner", "remove_needs_meta", "cancel_needs_meta", "hide_needs_meta"]);
 
 export async function POST(req: Request) {
   // Remove and hide are always on, so removal is self-serve; a re-grade waits for the games (GAMES_V2).
@@ -58,12 +63,12 @@ export async function POST(req: Request) {
   // With it on, a re-grade too needs proof only the site's owner can give
   // (the verification file, the meta tag, GitHub Pages or a review;
   // lib/ownership/verify.mjs), not a link from the page to a GitHub profile.
-  // Hiding and removing already do (ownerAction: hide_needs_meta, remove_needs_meta).
+  // Hiding, removing and cancelling a removal always do (ownerAction: hide_needs_meta, remove_needs_meta, cancel_needs_meta).
   if (tools && action === "regrade" && !(await controlProof(db(), { url, owner: s.raterId }))) return fail("not_owner", 403);
   const over = await overLimit([{ key: `owner-action:${s.raterId}`, limit: 20, windowMs: HOUR }]);
   if (over) return rateLimited(over);
   const out = await ownerAction(db(), { url, owner: s.raterId, action, now: new Date() });
-  if (!out.ok) return fail(out.error ?? "bad_request", out.error === "not_owner" || out.error === "remove_needs_meta" || out.error === "hide_needs_meta" ? 403 : 400);
+  if (!out.ok) return fail(out.error ?? "bad_request", FORBIDDEN.has(String(out.error)) ? 403 : 400);
   // Its profile shows the change at once (worker/edge-cache.ts keeps profiles a day).
   await purgeProfile(url);
   if (action === "hide_grade" || action === "show_grade") {

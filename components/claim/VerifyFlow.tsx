@@ -23,9 +23,10 @@ const REASONS: Record<string, string> = {
   too_many_redirects: "The site redirected too many times.",
   unreachable: "We couldn't reach the site just now.",
   timeout: "The site took longer than 5 seconds to answer.",
+  review: "We found it. Because of this account's age or how many sites it has claimed, we check this one by hand before it's verified.",
 };
 const ERRORS: Record<string, string> = {
-  rate_limited: "That's 5 checks this hour. Try again in a little while.",
+  rate_limited: "That's the most tries for this hour. Try again in a little while.",
   unknown_portfolio: "That address isn't on PortfolioRank.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };

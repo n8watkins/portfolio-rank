@@ -167,6 +167,9 @@ test("a claim proven only by a link to a GitHub profile no longer unlocks the ow
   const cookie = await sessionCookie({ id: 750000008, login: "own-e2e-g" });
   assert.equal((await call("GET", `/api/recheck?url=${encodeURIComponent(LISTED_3)}`, undefined, { cookie })).body.owner, false);
   assert.equal((await call("POST", "/api/owner/actions", { url: LISTED_3, action: "remove", confirm: true }, { cookie })).status, 403);
+  // Nor can it cancel someone else's removal (tests/ownership-proof.test.mjs has the whole scenario).
+  const cancel = await call("POST", "/api/owner/actions", { url: LISTED_3, action: "cancel_remove" }, { cookie });
+  assert.deepEqual([cancel.status, cancel.body.error], [403, "cancel_needs_meta"]);
 });
 
 // ---------------------------------------------------------------------------

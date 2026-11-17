@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db, ensureSchema } from "@/lib/db";
 import { sameOrigin } from "@/lib/polls/server";
 import { isKnownPortfolio } from "@/lib/roster";
-import { MAX_VERIFIED, META_NAME, NOTE_MAX, autoProof, listClaims, metaProof, openClaim, ownerState, removalProof, setClaimStatus, verifiedCount } from "@/lib/games/claims.mjs";
+import { CLAIMS_PER_HOUR, META_NAME, NOTE_MAX, autoProof, claimHold, listClaims, metaProof, openClaim, ownerState, removalProof, setClaimStatus } from "@/lib/games/claims.mjs";
 import { fetchPage, githubProfile, templateOf } from "@/lib/games/owner";
 import { PRIVATE, fail, overLimit, rateLimited } from "@/lib/games/server";
 import { accountTooNew, guardConfig } from "@/lib/rater";
@@ -14,7 +14,10 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 // POST /api/owner/claims { url, method?: "auto" | "meta" | "manual", note? }
 //   auto    (default) checks that the home page links to github.com/<you>,
 //           the profile itself, not a repository (never the GitHub
-//           profile's Website field, which anyone can set)
+//           profile's Website field, which anyone can set). A page links
+//           collaborators too, so a claim verified this way may only ask
+//           for a re-grade: removing, cancelling a removal and hiding or
+//           showing the grade need the meta tag or a review (controlProof)
 //   meta    checks for <meta name="portfoliorank-verify" content="<token>">
 //           on the home page (the token is in every claim this returns);
 //           also on a claim verified by its link, since removal needs the
@@ -79,7 +82,7 @@ export async function POST(req: Request) {
 
   await ensureSchema();
   // Each attempt may fetch the portfolio and GitHub.
-  const over = await overLimit([{ key: `claim:${me.id}`, limit: 10, windowMs: HOUR }]);
+  const over = await overLimit([{ key: `claim:${me.id}`, limit: CLAIMS_PER_HOUR, windowMs: HOUR }]);
   if (over) return rateLimited(over);
 
   const now = new Date();
@@ -88,7 +91,9 @@ export async function POST(req: Request) {
   if (claim.status === "verified" && method === "meta" && claim.method !== "meta") {
     const page = await fetchPage(url);
     if (!metaProof({ url, page, token: claim.token })) return NextResponse.json({ claim: await shape(claim), reason: page ? "no_proof" : "unreachable" }, { headers: PRIVATE });
-    claim = (await setClaimStatus(db(), { claim, status: "verified", method: "meta", note: null, actor: me.id, now })) as Claim;
+    // The same limits as a first proof (claimHold): a GitHub account younger than MIN_GITHUB_ACCOUNT_AGE_DAYS waits for a review.
+    const hold = await claimHold(db(), { claim, proof: "meta", tooNew: me.tooNew, minAccountAgeDays: guardConfig().minAccountAgeDays });
+    claim = (await setClaimStatus(db(), { claim, status: hold ? "review" : "verified", method: "meta", note: hold, actor: me.id, now })) as Claim;
     return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
   }
   if (claim.status === "verified" || claim.status === "rejected") return NextResponse.json({ claim: await shape(claim) }, { headers: PRIVATE });
@@ -112,8 +117,7 @@ export async function POST(req: Request) {
 
   // Proof holds; past the automatic limit, or from a GitHub account younger
   // than MIN_GITHUB_ACCOUNT_AGE_DAYS, the site owner confirms by hand.
-  const over3 = (await verifiedCount(db(), me.id)) >= MAX_VERIFIED;
-  const hold = me.tooNew ? `proof ${proof}; the GitHub account is younger than ${guardConfig().minAccountAgeDays} days` : over3 ? `proof ${proof}; over the automatic limit of ${MAX_VERIFIED}` : null;
+  const hold = await claimHold(db(), { claim, proof, tooNew: me.tooNew, minAccountAgeDays: guardConfig().minAccountAgeDays });
   claim = (await setClaimStatus(db(), {
     claim,
     status: hold ? "review" : "verified",

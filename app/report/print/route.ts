@@ -4,7 +4,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { isHidden, isKnownPortfolio } from "@/lib/roster";
 import { heroOf, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
-import { isVerifiedOwner, ownerState } from "@/lib/games/claims.mjs";
+import { controlProof, ownerState } from "@/lib/games/claims.mjs";
 import { percentilesOf } from "@/lib/games/pool.mjs";
 import { gamesEnabled, getPool, portfolioName, sign, unsign } from "@/lib/games/server";
 import { openOneTimeLink } from "@/lib/grader/links.mjs";
@@ -69,7 +69,9 @@ export async function GET(req: Request) {
   if (!session?.raterId && !passOk) return page(401, "Sign in to download", "Reports download for signed-in visitors, or from a one-time link sent by email.");
 
   const state = await ownerState(db(), url);
-  if (state.hideGrade && !(session?.raterId && (await isVerifiedOwner(db(), { url, owner: session.raterId })))) {
+  // A hidden grade is the owner's alone: proof only someone who can deploy to the site can give
+  // (lib/games/claims.mjs controlProof), not a link from the page to a GitHub profile.
+  if (state.hideGrade && !(session?.raterId && (await controlProof(db(), { url, owner: session.raterId })))) {
     return page(403, "Grade hidden", "The owner of this portfolio chose to hide its grade.");
   }
   const row = (await db().execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0];
