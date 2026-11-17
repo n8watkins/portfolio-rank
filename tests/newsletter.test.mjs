@@ -295,3 +295,57 @@ test("the admin's test draft: marked [test], never scheduled, linked to the draf
   assert.match(b.description, /sent to nobody/);
   assert.equal((await recentIssues(db)).length, 0, "a test draft is not an issue");
 });
+
+test("production creates drafts, not scheduled sends, until the owner has checked a few (wrangler.jsonc)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { parseJsonc } = await import("../scripts/check-worker-exports.mjs");
+  const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
+  assert.equal(config.vars.KIT_BROADCAST_MODE, "draft");
+  assert.equal(config.env.staging.vars.KIT_BROADCAST_MODE, "draft");
+  assert.equal(config.vars.NEWSLETTER_ENABLED, "false");
+});
+
+test("the email carries the post's AI line, in the live email and the admin preview", async () => {
+  const db = await freshDb();
+  await addPost(db);
+  const { queuedIssues } = await import("../lib/newsletter/store.mjs");
+  const { emailForPost } = await import("../lib/newsletter/send.mjs");
+  await newsletterTick({ db, kit: null, mode: "draft", base: BASE, now: T0 + HOUR });
+  const [issue] = await queuedIssues(db);
+  for (const preview of [false, true]) {
+    const html = emailForPost(issue.post, { base: BASE, preview }).html;
+    assert.match(html, />AI <a /, "the post's ai_line");
+    assert.match(html, /href="https:\/\/portfoliorank\.example\/about-posts"[^>]*>How posts are made</);
+  }
+  const mail = postEmail({ title: "T", summary: null, url: `${BASE}/blog/t`, site: BASE, aiLine: "Written with AI <b>" });
+  assert.match(mail.html, /Written with AI &lt;b&gt;/, "escaped");
+});
+
+test("a stopped issue tells the owner once a day, naming the post and the reason, and is never retried", async () => {
+  const { reconcileStoppedIssues } = await import("../lib/newsletter/alerts.mjs");
+  const db = await freshDb();
+  await addPost(db, { id: "a" });
+  const kit = mockKit({ answer: (c) => (c.path === "/broadcasts" ? [401, { errors: ["Invalid key"] }] : null) });
+  assert.equal((await newsletterTick({ db, kit: kit.kit, mode: "send", base: BASE, now: T0 + HOUR })).stopped, 1);
+  const mails = [];
+  const email = { send: async (m) => void mails.push(m) };
+  const run = (now) => reconcileStoppedIssues(db, { now, email, to: "owner@example.com" });
+  const r1 = await run(T0 + HOUR);
+  assert.deepEqual(r1.sent.length, 1);
+  assert.match(mails[0].subject, /Title a/);
+  assert.match(mails[0].text, /401/);
+  assert.match(mails[0].text, /Check Kit/);
+  await run(T0 + 2 * HOUR); // same Pacific day: no second email
+  assert.equal(mails.length, 1);
+  await run(T0 + 26 * HOUR); // next day: reminded again
+  assert.equal(mails.length, 2);
+  // After a week it clears; and an unpublished post is not an alert.
+  assert.deepEqual((await run(T0 + 9 * 24 * HOUR)).cleared.length, 1);
+  const later = T0 + 10 * 24 * HOUR;
+  await addPost(db, { id: "b", publishAt: later - HOUR });
+  await newsletterTick({ db, kit: null, base: BASE, now: later });
+  await db.execute("UPDATE posts SET status = 'unpublished' WHERE id = 'b'");
+  assert.equal((await newsletterTick({ db, kit: kit.kit, mode: "send", base: BASE, now: later })).stopped, 1);
+  assert.equal((await run(later)).active.length, 0);
+  assert.equal(kit.calls.filter((c) => c.path === "/broadcasts").length, 1, "no retry");
+});

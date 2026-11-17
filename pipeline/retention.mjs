@@ -23,6 +23,10 @@
 //                    tick does the same hourly while it runs).
 //   badge_checks     a player's last badge check (a 15-second reuse) is
 //                    deleted after a day; the next check rebuilds it.
+//   email_sends      the email gate's log (lib/email/gate.mjs) is kept
+//                    EMAIL_SENDS_DAYS (35) days. The caps read only today's
+//                    rows and the admin's limits view this month's (at most
+//                    31 days back), so nothing notices.
 //   email_signin_tokens  sign-in links (lib/signin/store.mjs), with the
 //                    address they were for, a day after they expire or once
 //                    used (each new request also clears them).
@@ -35,6 +39,7 @@ export const GEMINI_RAW_DAYS = 90;
 export const NIGHT_RUN_DAYS = 180;
 export const COMPARISON_REASON_DAYS = 90;
 export const CLEARED_ALERT_DAYS = 180;
+export const EMAIL_SENDS_DAYS = 35;
 
 const DAY_MS = 86400000;
 
@@ -142,6 +147,10 @@ export async function pruneLogs(db, { now = new Date() } = {}) {
   }
   if (await tableExists(db, "email_signin_tokens")) {
     out.signinTokens = await pruneTokens(db, { now: now.getTime() });
+  }
+  if (await tableExists(db, "email_sends")) {
+    // day is a Pacific date ("YYYY-MM-DD"): compare dates.
+    out.emailSends = (await db.execute({ sql: "DELETE FROM email_sends WHERE day < ?", args: [quotaDay(new Date(now.getTime() - EMAIL_SENDS_DAYS * DAY_MS)).day] })).rowsAffected;
   }
   if (await tableExists(db, "badge_checks")) {
     out.badgeChecks = (await db.execute({ sql: "DELETE FROM badge_checks WHERE at < ?", args: [now.getTime() - DAY_MS] })).rowsAffected;

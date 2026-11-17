@@ -93,3 +93,20 @@ test("night runs older than 180 days go; comparisons keep everything the recompu
   // The whole pass runs on a database without some of the tables.
   assert.ok(await retention(createClient({ url: ":memory:" }), { now: NOW }));
 });
+
+test("email_sends: rows older than 35 days go, this month's and the caps' rows stay", async () => {
+  const { GRADER_TABLES } = await import("../lib/grader/schema.mjs");
+  const { applyTables } = await import("../lib/pipeline-schema.mjs");
+  const { EMAIL_SENDS_DAYS } = await import("../pipeline/retention.mjs");
+  const d = createClient({ url: ":memory:" });
+  await applyTables(d, GRADER_TABLES);
+  assert.equal(EMAIL_SENDS_DAYS, 35);
+  // NOW is 2026-11-10 Pacific: 35 days back is 2026-10-06.
+  for (const day of ["2026-09-30", "2026-10-05", "2026-10-06", "2026-11-01", "2026-11-10"]) {
+    await d.execute({ sql: "INSERT INTO email_sends (at, day, kind, to_hash, status) VALUES (?, ?, 'owner-alert', 'h', 'sent')", args: [`${day}T12:00:00.000Z`, day] });
+  }
+  const out = await pruneLogs(d, { now: NOW });
+  assert.equal(out.emailSends, 2);
+  assert.deepEqual((await d.execute("SELECT day FROM email_sends ORDER BY day")).rows.map((x) => x.day), ["2026-10-06", "2026-11-01", "2026-11-10"]);
+  assert.equal((await pruneLogs(d, { now: NOW })).emailSends, 0, "safe to run again");
+});
