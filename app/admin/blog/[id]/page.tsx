@@ -10,7 +10,7 @@ import { StatusPill, checksLine, closedReason, pacificTime, scheduledFor } from 
 import { relatedPortfolios } from "@/lib/blog-server";
 import type { BlogPost } from "@/lib/blog";
 import { scorecard } from "@/pipeline/content/scorecard.mjs";
-import { flagsOf, labelOf } from "@/pipeline/content/claim-flags.mjs";
+import { flagCounts, flagsOf, labelOf } from "@/pipeline/content/claim-flags.mjs";
 import { Scorecard } from "@/components/admin/Scorecard";
 
 // One post as readers would see it, with the owner's decision on top
@@ -127,7 +127,7 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
           ))}
           {(post.checks?.failures?.length ?? 0) > 0 && <p className="text-down">Failures: {post.checks!.failures!.join("; ")}</p>}
         </Details>
-        <Details title={`Outside claims: ${flags.length} flagged`}>
+        <Details title={`Outside claims: ${flagCounts(flags).kept} kept, ${flagCounts(flags).cut} cut`}>
           <ul className="space-y-3">
             {flags.map((c, k) => (
               <li key={k} className="border-b border-edge pb-3 last:border-0">

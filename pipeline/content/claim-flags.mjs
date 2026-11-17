@@ -9,9 +9,15 @@ export function flagsOf(history) {
   });
 }
 
-/** The one label the admin page and the preview show for a flag. */
+/** The one label the admin page and the preview show for a flag, in plain words, for every outcome. */
 export function labelOf(flag) {
   if (flag.outcome === "supported") return "Kept, with a source";
   if (flag.outcome === "cut") return "Cut";
-  return flag.outcome ?? "Flagged";
+  if (flag.outcome === "not found in the post") return "Not found in the post, so the draft was dropped";
+  return "Flagged";
+}
+
+/** { kept, cut } counts of a post's flags, for a heading. */
+export function flagCounts(flags) {
+  return { kept: flags.filter((f) => f.outcome === "supported").length, cut: flags.filter((f) => f.outcome === "cut").length };
 }
