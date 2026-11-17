@@ -30,8 +30,9 @@ emmabostian/developer-portfolios (upstream, community-curated)
 
 ## The list (two intake doors + a takedown)
 
-`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**
-(deduped by normalized URL; original URL strings preserved so DB keys never break).
+`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
+Two addresses are one site when they share the site key (`lib/grader/url.mjs` `siteKeyOf`: host without www, path without the trailing slash, lower case; scheme and port ignored) and no real query or hash route (`#/alice`) tells them apart; tracking parameters (`utm_*`, `ref`, `src`) and plain anchors (`#about`) never do (`pipeline/roster.mjs` `sameSite`, and `site_of` in `generate_feed.py`, kept equal by a test).
+A site keeps the address it already has in `feed.json` when upstream only spells it another way, because that address is its key in the database (grade, votes, ratings, screenshots).
 
 | Source | Trust | Mechanism |
 |---|---|---|
@@ -45,8 +46,10 @@ emmabostian/developer-portfolios (upstream, community-curated)
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
+  A row whose site is still in `feed.json` under another spelling with no row of its own is kept listed and logged.
+  The sync refuses (fails the job) to delist more than 10% of the list at once; for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which also raises the feed shrink guard below.
   Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries), except a row whose site is listed under another spelling: that one is kept for `scripts/repair-respelled-sites.mjs`, which moves its history (grade, screenshots, votes, ratings, likes, lists, owner settings) to the listed spelling (dry run by default, `--write` to apply).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
 - **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages, duplicates and a stored `is_portfolio=false`.
   States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row spanning at least 13 days); a pass resets to `live`.
@@ -84,6 +87,7 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Every decided row (the owner's, the rule's, or another rule's such as `rule:duplicate`) is listed under Decided with Undo: it goes back to pending, `undone_at` and `undone_by` are recorded, and what it changed is reversed: exactly when the apply kept the state before it, and for an apply from before that (the owner's 13 November verdicts) the grade only, from `rubric_history`, with the rest reported on the row; a rejection, a "Mark checked" or a rule's row changed nothing, so only the row moves.
   While rows wait, the Monday goals email carries their count and the link (see Owner goals).
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
+  `LIST_CLEANUP_SHARE` raises the limit for one run (see Roster sync).
 - **Upstream report** (`upstream-removals.yml`, monthly, report-only): the community list runs its own link checker every Saturday that removes broken and parked links (its CONTRIBUTING.md, sample report emmabostian/developer-portfolios#3696), so a removal PR for those would only duplicate it.
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
   Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
@@ -672,6 +676,7 @@ serve images.
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
+- `scripts/repair-respelled-sites.mjs [--write] [--only URL] [--feed FILE]` - one-off: move the history of rows split by an upstream respelling to the listed spelling (dry run without `--write`)
 - `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the weekly health workflow runs it)
 - `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the weekly health workflow run it)
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)
