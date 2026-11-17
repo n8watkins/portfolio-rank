@@ -51,6 +51,9 @@ test("worker/index.ts runs every hourly task through runEach", () => {
   const hourly = src.slice(src.indexOf("cron === PEOPLE_QUEUE_CRON"), src.indexOf("cron === MODEL_WATCH_CRON"));
   assert.match(hourly, /runEach\(/);
   for (const task of ["removalsTick", "purgeAfterHour", "emailAlertsTick", "nightWatchTick", "drainPeople", "libraryTick"]) {
-    assert.match(hourly, new RegExp(`\\(\\) => \\{?\\s*(removed = \\(await )?${task}\\(`), `${task} runs inside its own task`);
+    assert.match(hourly, new RegExp(`\\(\\) => ${task}\\(`), `${task} runs inside its own task`);
   }
+  // The edge purge reads what to purge from the database (lib/games/claims.mjs purgeRemovedProfiles),
+  // never from what the removals task returned this hour.
+  assert.doesNotMatch(hourly, /removalsTick\([^)]*\)\)?\.applied|removed = /);
 });

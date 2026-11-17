@@ -10,7 +10,6 @@ import { clientIp } from "@/lib/polls/server";
 import { toolsEnabled } from "@/lib/tools/server";
 import { reservePage, runAllChecks } from "@/lib/tools/run";
 import { profilePath } from "@/lib/profile";
-import { accountTooNew, guardConfig } from "@/lib/rater";
 
 // "Re-check my site" on a portfolio's profile: the verified owner (signed in,
 // proven by POST /api/owner/verify, lib/games/claims.mjs) runs every check again, at most once an hour
@@ -18,22 +17,20 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 // results replace the saved ones, so the profile's fix list updates.
 //
 // GET  /api/recheck?url=<listed address>  { owner, nextAt }
-// POST /api/recheck { url }  200 { ok, nextAt } | 403 not_owner | account_too_new | 429 too_soon { nextAt } | daily_limit
+// POST /api/recheck { url }  200 { ok, nextAt } | 403 not_owner | 429 too_soon { nextAt } | daily_limit
 export const dynamic = "force-dynamic";
 
 const HOUR = 60 * 60 * 1000;
 const lastKey = (url: string) => `recheck:${siteKeyOf(url)}`;
 
-async function ownerOf(url: string): Promise<{ owner: string; tooNew: boolean } | null> {
+async function ownerOf(url: string): Promise<string | null> {
   const session = await auth();
   const owner = session?.raterId;
   // Only an owner proven with code they deployed (the verification file or
   // meta tag) or by GitHub Pages: a link from the page to a GitHub profile
   // isn't enough (lib/ownership/verify.mjs, lib/games/claims.mjs controlProof).
   if (!owner || !(await controlProof(db(), { url, owner }))) return null;
-  // And, like every owner action (/api/owner/actions), not from a GitHub
-  // account younger than MIN_GITHUB_ACCOUNT_AGE_DAYS (lib/rater.ts).
-  return { owner, tooNew: accountTooNew({ type: "human", id: owner, accountCreatedAt: session?.accountCreatedAt }) };
+  return owner;
 }
 
 async function nextAt(url: string): Promise<string | null> {
@@ -46,9 +43,8 @@ export async function GET(req: Request) {
   if (!toolsEnabled()) return fail("not_found", 404);
   const url = new URL(req.url).searchParams.get("url") ?? "";
   await ensureSchema();
-  const found = url ? await ownerOf(url) : null;
-  const owner = Boolean(found && !found.tooNew);
-  return NextResponse.json({ owner, nextAt: owner ? await nextAt(url) : null }, { headers: PRIVATE });
+  const owner = url ? await ownerOf(url) : null;
+  return NextResponse.json({ owner: Boolean(owner), nextAt: owner ? await nextAt(url) : null }, { headers: PRIVATE });
 }
 
 export async function POST(req: Request) {
@@ -58,13 +54,8 @@ export async function POST(req: Request) {
   const url = typeof body?.url === "string" ? body.url : "";
   if (!url) return fail("bad_request", 400);
   await ensureSchema();
-  const found = await ownerOf(url);
-  if (!found) return fail("not_owner", 403, { message: "Only the portfolio's verified owner can re-check it." });
-  if (found.tooNew) {
-    const days = guardConfig().minAccountAgeDays;
-    return fail("account_too_new", 403, { minAccountAgeDays: days, message: `Re-checking needs a GitHub account at least ${days} days old.` });
-  }
-  const { owner } = found;
+  const owner = await ownerOf(url);
+  if (!owner) return fail("not_owner", 403, { message: "Only the portfolio's verified owner can re-check it." });
   // One re-check an hour per portfolio: the lease row is taken only when it is older than an hour.
   const now = Date.now();
   const took = await db().execute({

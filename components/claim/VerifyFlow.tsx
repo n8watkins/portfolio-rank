@@ -7,7 +7,6 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { btnPrimary } from "@/components/ui/styles";
 import { useClientSession } from "@/lib/session-client";
 import { ClaimFlow } from "@/components/claim/ClaimFlow";
-import { verifyMessage } from "@/components/claim/flow-rules";
 
 type Verify = {
   url: string;
@@ -18,8 +17,15 @@ type Verify = {
   meta: { tag: string };
 };
 
+const REASONS: Record<string, string> = {
+  not_found: "We didn't find it yet. Check it's deployed at exactly that address, then verify again.",
+  off_site: "The site redirected to another site, so we couldn't check it.",
+  too_many_redirects: "The site redirected too many times.",
+  unreachable: "We couldn't reach the site just now.",
+  timeout: "The site took longer than 5 seconds to answer.",
+};
 const ERRORS: Record<string, string> = {
-  rate_limited: "That's the most tries for this hour. Try again in a little while.",
+  rate_limited: "That's 5 checks this hour. Try again in a little while.",
   unknown_portfolio: "That address isn't on PortfolioRank.",
   network: "We couldn't reach PortfolioRank. Check your connection and try again.",
 };
@@ -53,22 +59,19 @@ export function VerifyFlow({ url, name, domain, hero }: { url: string; name: str
       setBusy("");
       if (!r.ok) return setMessage(ERRORS[String(r.body.error)] ?? "That didn't work. Try again in a moment.");
       setV(r.body.claim as Verify);
-      setMessage(verifyMessage(r.body.reason));
+      if (r.body.reason) setMessage(REASONS[String(r.body.reason)] ?? REASONS.not_found);
     },
     [url]
   );
 
   // Signed in: open the claim and get the code (or, for your own GitHub Pages site, the verification at once).
-  // A claim held for review or rejected says so from the start.
   useEffect(() => {
     if (!session || session === "loading") return;
     let live = true;
     post({ url, method: "start" }).then((r) => {
       if (!live) return;
-      if (r.ok) {
-        setV(r.body.claim as Verify);
-        setMessage(verifyMessage(r.body.reason));
-      } else setMessage(ERRORS[String(r.body.error)] ?? "That didn't work. Try again in a moment.");
+      if (r.ok) setV(r.body.claim as Verify);
+      else setMessage(ERRORS[String(r.body.error)] ?? "That didn't work. Try again in a moment.");
     });
     return () => {
       live = false;

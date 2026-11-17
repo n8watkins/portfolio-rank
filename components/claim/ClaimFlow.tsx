@@ -130,14 +130,7 @@ export function ClaimFlow({ url, name, domain, hero, regrade = true }: { url: st
     if (c.removable) {
       setConfirmText("");
       setStep(afterProof(c.state));
-    } else
-      setError(
-        r.body.reason === "account_too_new"
-          ? ERRORS.account_too_new
-          : r.body.reason === "unreachable"
-            ? `We couldn't open ${domain} just now. Try again in a moment.`
-            : "We didn't find the tag on the home page yet. Check it's inside <head> and deployed, then try again."
-      );
+    } else setError(r.body.reason === "unreachable" ? `We couldn't open ${domain} just now. Try again in a moment.` : "We didn't find the tag on the home page yet. Check it's inside <head> and deployed, then try again.");
   };
 
   const act = async (action: "regrade" | "hide_grade" | "show_grade" | "remove" | "cancel_remove") => {

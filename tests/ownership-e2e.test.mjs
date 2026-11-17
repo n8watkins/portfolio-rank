@@ -182,39 +182,6 @@ test("a claim proven only by a link to a GitHub profile no longer unlocks the ow
   }
 });
 
-test("verify: reloading a claim held for review writes nothing, a rejected claim stays rejected, and a too-new owner can't re-check", async () => {
-  const id = "gh:750000011";
-  const now = new Date().toISOString();
-  await db.execute({
-    sql: "INSERT INTO claims (url, owner, login, status, method, token, created_at, updated_at) VALUES (?, ?, 'own-e2e-h', 'review', 'file', 'heldtoken12345678', ?, ?)",
-    args: [LISTED_2, id, now, now],
-  });
-  const young = await sessionCookie({ id: 750000011, login: "own-e2e-h", ageDays: 5 });
-  const rows = async () => Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM claim_log WHERE url = ? AND actor = ?", args: [LISTED_2, id] })).rows[0].n);
-  const before = await rows();
-  const fetched = asked.length;
-  for (let i = 0; i < 3; i++) {
-    const r = await verify(young, LISTED_2, i ? "file" : "start");
-    assert.deepEqual([r.status, r.body.reason, r.body.claim.verified], [200, "review", false]);
-  }
-  assert.equal(await rows(), before, "nothing written");
-  assert.equal(asked.length, fetched, "nothing fetched");
-
-  await db.execute({ sql: "UPDATE claims SET status = 'rejected' WHERE url = ? AND owner = ?", args: [LISTED_2, id] });
-  assert.equal((await verify(young, LISTED_2, "file")).body.reason, "rejected");
-  assert.equal(String((await db.execute({ sql: "SELECT status FROM claims WHERE url = ? AND owner = ?", args: [LISTED_2, id] })).rows[0].status), "rejected");
-
-  // Verified with the file, but the GitHub account is younger than MIN_GITHUB_ACCOUNT_AGE_DAYS.
-  await db.execute({ sql: "UPDATE claims SET status = 'verified' WHERE url = ? AND owner = ?", args: [LISTED_2, id] });
-  try {
-    assert.equal((await call("GET", `/api/recheck?url=${encodeURIComponent(LISTED_2)}`, undefined, { cookie: young })).body.owner, false);
-    const r = await call("POST", "/api/recheck", { url: LISTED_2 }, { cookie: young });
-    assert.deepEqual([r.status, r.body.error], [403, "account_too_new"]);
-  } finally {
-    await db.execute({ sql: "DELETE FROM claims WHERE url = ? AND owner = ?", args: [LISTED_2, id] });
-  }
-});
-
 // ---------------------------------------------------------------------------
 // Adding a portfolio
 // ---------------------------------------------------------------------------
