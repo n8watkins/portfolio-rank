@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/polls/store.mjs";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { JOB_ID, readJob } from "@/lib/grader/jobs.mjs";
 import { emailState, requestEmail, sendDueEmails } from "@/lib/grader/notify.mjs";
-import { PRIVATE, authSecret, disabled, emailGate, fail, graderEnabled, readJsonBody, requester, sameOrigin, siteBase } from "@/lib/grader/server";
+import { PRIVATE, authSecret, disabled, emailGate, fail, graderEnabled, ownedJobs, readJsonBody, requester, sameOrigin, siteBase } from "@/lib/grader/server";
 
 // "Get it by email, no account needed".
 //
@@ -15,6 +15,11 @@ import { PRIVATE, authSecret, disabled, emailGate, fail, graderEnabled, readJson
 //   400 bad_request | bad_email, 403 bad_origin | turnstile_failed,
 //   404 not_found, 409 too_many (2 addresses per report) | unavailable,
 //   429 rate_limited
+// Only the report's owner (the browser that requested it, or opened its
+// emailed link; the same check as DELETE) may add an address: anyone else
+// holding the id gets 403 not_owner, and nothing is stored or sent. The
+// emailed link is how the owner opens and manages the report in another
+// browser; it must never be a way for a non-owner to become the owner.
 // The address is kept only until its email is sent; every send passes the
 // shared email gate's caps (lib/email/gate.mjs), including at most 3 emails
 // a day to one address.
@@ -34,6 +39,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const client = db();
   const job = await readJob(client, id);
   if (!job) return fail("not_found", 404);
+  if (!(await ownedJobs()).includes(id)) return fail("not_owner", 403);
   if (job.status === "unavailable") return fail("unavailable", 409, { message: "This grade can't finish right now, so there is nothing to email." });
 
   const who = await requester(req);

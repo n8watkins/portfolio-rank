@@ -101,11 +101,20 @@
     // change fingerprints and the profile's "site unchanged since" lines are
     // off until this is "true".
     "FRESHNESS_ENABLED": "false",
+    // The report card's "see the whole page" preview (lib/fullpage-flag.ts):
+    // the capture makes the tall page images either way (stored once the
+    // images bucket exists), but no page links to them until this is "true".
+    "FULLPAGE_PREVIEW_ENABLED": "false",
+    // The public images bucket's own domain (pipeline/shot-store.mjs), where
+    // the tall images and thumbnails are served straight from R2. Empty
+    // until the owner connects it (docs/audits/fullpage-images.md "Delivery").
+    "IMAGES_BASE_URL": "",
     // The review queue's automatic apply (lib/reviews/flag.ts, AUTOMATION.md):
     // with "true" the hourly cron applies rows that pass the owner's rule (both
     // models say portfolio, no code rule objects); off, every row waits for the
-    // owner on /admin/review.
-    "REVIEW_AUTO_APPLY": "false",
+    // owner on /admin/review. On since 2026-11-14 by the owner's decision:
+    // "If the graders agreed, it should be confirmed automatically."
+    "REVIEW_AUTO_APPLY": "true",
     // The blog newsletter on Kit (AUTOMATION.md "Newsletter"): the deploy-level
     // switch for the sign-up forms, their API and the newsletter's tick (on the
     // five-minute cron, no trigger of its own). Off in production: no form, no
@@ -113,8 +122,10 @@
     // to "true", the KIT_API_KEY secret and the owner's switch on
     // /admin/blog/newsletter (stored, off until turned on). KIT_BROADCAST_MODE:
     // a new post becomes a broadcast "send" (scheduled 10 minutes ahead) or a "draft".
+    // "draft" for now, so the first issues are reviewed in Kit before they go
+    // out; it moves to "send" after the owner has checked a few drafts.
     "NEWSLETTER_ENABLED": "false",
-    "KIT_BROADCAST_MODE": "send",
+    "KIT_BROADCAST_MODE": "draft",
     // Games, badges, claims, live stats and report downloads (lib/games):
     // every one of their routes answers 404 until this is "true", which
     // happens with the redesign.
@@ -129,6 +140,11 @@
     // The most drafts a week the owner may choose on /admin/blog
     // (lib/content/automation.mjs; at most 4). The page can only go lower.
     "CONTENT_DRAFTS_PER_WEEK": "2",
+    // Gemini poll generation (pipeline/polls.mjs pollGenerationOn) has its own
+    // switch, off until the owner turns it on: raising the content stage's
+    // Gemini cap does not start it. The weekly poll scheduling by code
+    // (schedulePolls) is not behind it.
+    "POLL_GENERATION_ENABLED": "false",
     // Never pay for Workers AI (lib/content/neurons.mjs, docs/COSTS.md "Workers
     // AI"): at most 40 AI images a UTC day, and behind it at most 2,500
     // neurons (40 Schnell images are about 2,320) of PortfolioRank's 5,000
@@ -256,8 +272,11 @@
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
         "FRESHNESS_ENABLED": "true",
-        // Off on staging too until the owner turns it on (lib/reviews/flag.ts).
-        "REVIEW_AUTO_APPLY": "false",
+        // Off on staging too until the report card's preview UI ships.
+        "FULLPAGE_PREVIEW_ENABLED": "false",
+        "IMAGES_BASE_URL": "",
+        // On, as in production (lib/reviews/flag.ts).
+        "REVIEW_AUTO_APPLY": "true",
         // The newsletter runs on staging first, against the owner's one Kit
         // account: sign-ups land on the real list (Kit's double opt-in), and new
         // posts only ever become drafts marked [staging] (worker/newsletter.ts).
@@ -275,6 +294,7 @@
         // "publish". Off, staging's crons write no post whatever key it has.
         "CONTENT_MODE": "off",
         "CONTENT_DRAFTS_PER_WEEK": "2",
+        "POLL_GENERATION_ENABLED": "false",
         // Staging never spends Workers AI: production's counter can't see
         // staging's database, and both share the account's free allowance.
         "MAX_AI_IMAGES_PER_DAY": "0",
@@ -299,10 +319,15 @@
       // GEMINI_BUDGET caps above. The grader's tick starts no captures
       // without GITHUB_DISPATCH_TOKEN, which staging never gets, and email
       // only reaches STAGING_EMAIL_TO (lib/email/gate.mjs).
-      // To keep staging's CPU time low, the hourly jobs run every six hours and
-      // the grader's tick every 30 minutes (worker/crons.ts maps them to the
-      // same jobs); the nightly and weekly crons match production's.
-      "triggers": { "crons": ["30 3 * * *", "30 4 * * *", "15 */6 * * *", "0 16 * * 1", "*/30 * * * *"] },
+      // Staging runs on a schedule only what makes no outside call and that
+      // it needs: the allowlist STAGING_TASKS in worker/crons.ts (owner
+      // removals, edge purge, tiers, review auto-apply, the people queue and
+      // the grader's tick). The end-of-day run, the weekly model watch and
+      // goals, freshness, the image library, night watch, email caps and the
+      // newsletter are off here. So only two triggers remain: the hourly group
+      // every six hours and the grader's tick every 30 minutes (worker/crons.ts
+      // maps them to production's crons to keep its CPU time low).
+      "triggers": { "crons": ["15 */6 * * *", "*/30 * * * *"] },
       // The same edge cache as production (worker/edge-cache.ts).
       "cache": { "enabled": false, "cross_version_cache": true },
       "exports": {

@@ -79,7 +79,7 @@ export function Report({ page, link, celebration, now }: { page: GradePage; link
         <Standing rep={rep} />
       </header>
       <div className="mt-4">
-        <ReportToolbar id={job.id} domain={job.domain} listed={!!page.listed} joinHref={joinHref} emailed={job.email.requested} games={page.games} />
+        <ReportToolbar id={job.id} domain={job.domain} listed={!!page.listed} joinHref={joinHref} emailed={job.email.requested} mine={job.mine} games={page.games} />
       </div>
 
       {/* The fixes, and beside them on a wide screen the portfolios to learn from */}

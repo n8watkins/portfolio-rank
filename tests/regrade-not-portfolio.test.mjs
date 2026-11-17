@@ -8,26 +8,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
-import { CAP, DAY_LIMIT, JOB, candidates, cappedFetch, groupOf, outcomeOf, report, usage } from "../scripts/regrade-not-portfolio.mjs";
+import { CAP, DAY_LIMIT, FINISHED_MESSAGE, JOB, candidates, groupOf, outcomeOf, report, usage } from "../scripts/regrade-not-portfolio.mjs";
 import { buildDupIndex, junkCheck } from "../pipeline/junk-rules.mjs";
 
 const dir = mkdtempSync(path.join(tmpdir(), "pr-regrade-np-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
 
-test("the caps: 160 for the job, under 480 for the day, retries counted as requests", async () => {
+test("the caps it ran under (160 for the job, under 480 for the day), shown by --dry-run; it no longer grades", () => {
+  // The grading path, and its capped fetch, were deleted once grades went through the door (2026-11-16).
   assert.equal(CAP, 160);
   assert.equal(DAY_LIMIT, 480);
-  const ok = async () => new Response("{}");
-  // 150 already spent by this job: 10 more, then every send is refused.
-  const f = cappedFetch({ job: 150, day: 0 }, { fetchImpl: ok });
-  for (let i = 0; i < 10; i++) await f("x");
-  await assert.rejects(f("x"), { name: "BudgetError" });
-  assert.equal(f.exhausted, true);
-  assert.equal(f.sent(), 10);
-  // The day: 470 used by every job together, so 9 more (stays under 480).
-  const d = cappedFetch({ job: 0, day: 470 }, { fetchImpl: ok });
-  for (let i = 0; i < 9; i++) await d("x");
-  await assert.rejects(d("x"), { name: "BudgetError" });
+  assert.match(FINISHED_MESSAGE, /refuses to write grades/);
 });
 
 test("which sites: listed and shown with a stored 'not a portfolio', in two groups; usage counts the job and the Pacific day", async () => {

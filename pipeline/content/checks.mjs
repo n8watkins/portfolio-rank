@@ -104,15 +104,16 @@ export function checkLinks(filledTexts, allowed) {
   return result("links", problems);
 }
 
-/** Whether each external URL loads (2xx or 3xx), with a short timeout. Returns a check. */
+/** Whether each external URL loads (2xx or 3xx; 401, 403 and 429 are inconclusive, not failures), with a short timeout. Returns a check. */
 export async function checkLinksLoad(urls, fetchImpl, { timeoutMs = 10000 } = {}) {
   const problems = [];
   for (const u of [...new Set(urls)]) {
     if (domainOf(u) === domainOf(SITE_URL)) continue;
     try {
       const res = await fetchImpl(u, { method: "GET", redirect: "follow", signal: AbortSignal.timeout(timeoutMs), headers: { "user-agent": "PortfolioRank link check" } });
-      // 429: the site is there and rate-limiting the checker, not broken.
-      if (!res.ok && res.status !== 429) problems.push(`link ${u} answered ${res.status}`);
+      // 401, 403 and 429: the site is there and turning the checker away (a bot wall, a rate
+      // limit), not broken, which is how the site's own health check reads them too.
+      if (!res.ok && ![401, 403, 429].includes(res.status)) problems.push(`link ${u} answered ${res.status}`);
       await res.body?.cancel?.();
     } catch (e) {
       problems.push(`link ${u} did not load (${String(e?.message ?? e).slice(0, 80)})`);

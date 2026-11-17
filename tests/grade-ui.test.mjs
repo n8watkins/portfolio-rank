@@ -117,11 +117,14 @@ async function finish(id, { perfect = false } = {}) {
 }
 
 let reportId = null;
+let ownerState = null;
 
 test("grade yours: the form, the progress page, then the report as approved", { skip: !grading }, async () => {
   const { page: p, context, errors } = await freshPage(1440);
   const id = await startGrade(p, `grade-ui-${RUN}.dev`);
   reportId = id;
+  // The owner's browser state (its owner cookie), for the email test below: only the owner asks for the email.
+  ownerState = await context.storageState();
 
   // Progress, live from GET /api/grade/<id>.
   await p.getByRole("heading", { level: 1, name: `grade-ui-${RUN}.dev` }).waitFor();
@@ -286,7 +289,14 @@ test("nothing to fix: the calm empty state, and a stranger sees no owner tools",
 
 test("the report by email: a one-time link makes another browser the owner, once", { skip: !grading }, async () => {
   assert.ok(reportId, "the first test made a report");
-  const reader = await freshPage(1440);
+  // Someone who only has the link is offered no email form at all.
+  const stranger = await freshPage(1440);
+  await stranger.page.goto(`${BASE}/grade/${reportId}`);
+  await stranger.page.getByRole("heading", { level: 1 }).first().waitFor();
+  assert.equal(await stranger.page.getByRole("button", { name: /Email me the report/ }).count(), 0);
+  await stranger.context.close();
+
+  const reader = await freshPage(1440, 900, { storageState: ownerState });
   await reader.page.goto(`${BASE}/grade/${reportId}`);
   await reader.page.getByRole("button", { name: "Email it to me" }).click();
   await reader.page.getByLabel("Your email").fill("reader@example.com");

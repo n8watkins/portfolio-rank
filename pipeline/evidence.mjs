@@ -44,9 +44,13 @@ const parseJson = (v) => {
  * captured before facts existed, measured now (free) and stored: over plain
  * HTTP, or in a browser (`renderer`, pipeline/render.mjs) when the server
  * sends little text. Motion always comes from the capture (meta.motion).
- * `force` measures again even when evidence is stored (the link re-checks).
+ * `force` is the link re-check: when evidence is stored it renews only the
+ * project link results (facts.project_links and the time of the check),
+ * never the settled, browser-rendered page text or the signals measured from
+ * it; a site with no page text or facts is measured in full as usual.
+ * `fetchImpl` is for tests (the page fetch and the link checks).
  */
-export async function pageEvidence(db, row, { renderer = null, force = false } = {}) {
+export async function pageEvidence(db, row, { renderer = null, force = false, fetchImpl = globalThis.fetch } = {}) {
   const url = String(row.url);
   const m = parseJson(row.meta)?.motion;
   const motion = typeof m === "boolean" ? m : null;
@@ -54,8 +58,10 @@ export async function pageEvidence(db, row, { renderer = null, force = false } =
   if (row.page_text != null && stored && !force) {
     return { pageText: String(row.page_text), facts: stored.motion == null && motion != null ? { ...stored, motion } : stored, measured: false };
   }
-  const gate = await httpGate(url).catch(() => null);
+  const relinkOnly = force && row.page_text != null && Boolean(stored);
+  const gate = await httpGate(url, { fetchImpl }).catch(() => null);
   if (gate?.status !== "live") {
+    if (relinkOnly) return { pageText: String(row.page_text), facts: stored, measured: false };
     return { pageText: "", facts: motion == null ? null : { source: "capture", motion }, measured: false };
   }
   let page = { html: gate.html, text: visibleText(gate.html), finalUrl: gate.finalUrl, source: "http" };
@@ -66,10 +72,25 @@ export async function pageEvidence(db, row, { renderer = null, force = false } =
     }
   }
   const { text } = page;
-  const facts = await measurePage(
+  const measuredFacts = await measurePage(
     { html: page.html, text, url, finalUrl: page.finalUrl, name: String(row.name ?? ""), motion, source: page.source },
-    { userAgent: UA }
+    { userAgent: UA, fetchImpl }
   );
+  if (relinkOnly) {
+    // The plain fetch only finds the links to check. Its text and signals are
+    // thinner than the capture's rendered ones, so they are not stored.
+    const facts = { ...stored, project_links: measuredFacts.project_links, measured_at: measuredFacts.measured_at };
+    try {
+      await db.execute({
+        sql: "UPDATE portfolios SET facts = ?, facts_at = ? WHERE url = ?",
+        args: [JSON.stringify(facts), facts.measured_at, url],
+      });
+    } catch {
+      /* the checks come due again tomorrow */
+    }
+    return { pageText: String(row.page_text), facts, measured: true };
+  }
+  const facts = measuredFacts;
   const pageText = normalizePageText(text);
   try {
     await db.execute({
@@ -89,7 +110,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false } =
  */
 export async function rowsNeedingEvidence(db, { limit = 200, rubricVersion = null } = {}) {
   const res = await db.execute({
-    sql: `SELECT url, name, meta, page_text, facts FROM portfolios
+    sql: `SELECT url, name, meta, page_text, facts, captured_at FROM portfolios
           WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
             AND (page_text IS NULL OR facts IS NULL)
             AND (ai_rubric IS NULL
@@ -101,6 +122,38 @@ export async function rowsNeedingEvidence(db, { limit = 200, rubricVersion = nul
     args: rubricVersion ? [PRIMARY_MODEL, rubricVersion, limit] : [PRIMARY_MODEL, limit],
   });
   return res.rows;
+}
+
+const DAY_MS = 86400000;
+
+/** Whole nights since a row's capture (SQLite "YYYY-MM-DD HH:MM:SS", UTC), or null. */
+export function nightsSince(capturedAt, now = Date.now()) {
+  const s = String(capturedAt ?? "");
+  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(" ", "T")}Z`);
+  return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / DAY_MS)) : null;
+}
+
+/**
+ * The sites that still have no evidence after a run: how many, and the
+ * longest-waiting `show` of them with the nights since their capture (a lower
+ * bound on the wait: the capture is when they first qualified).
+ */
+export async function sitesStillWaiting(db, { rubricVersion = null, show = 25, now = Date.now() } = {}) {
+  const all = await rowsNeedingEvidence(db, { limit: 1000000, rubricVersion });
+  const sites = all
+    .map((r) => ({ url: String(r.url), nights: nightsSince(r.captured_at, now) }))
+    .sort((a, b) => (b.nights ?? -1) - (a.nights ?? -1) || a.url.localeCompare(b.url));
+  return { total: sites.length, sites: sites.slice(0, show) };
+}
+
+/** The run's log and step-summary lines. */
+export function reportLines({ measured, waitingForRun, relinked = null, linkTotal = 0, still }) {
+  const lines = [`evidence: measured ${measured} of ${waitingForRun} row(s) waiting for a grade without page text or facts`];
+  if (relinked != null) lines.push(`links: checked again ${relinked} of ${linkTotal} site(s) whose link checks were due`);
+  lines.push(`evidence: ${still.total} site(s) still without evidence after this run${still.total ? " (not graded until the page is reachable or captured again)" : ""}`);
+  for (const s of still.sites) lines.push(`  - ${s.url} - ${s.nights == null ? "capture time unknown" : `${s.nights} night(s) since its capture`}`);
+  if (still.total > still.sites.length) lines.push(`  ... and ${still.total - still.sites.length} more`);
+  return lines;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,8 +198,8 @@ if (isMain) {
   } finally {
     await renderer?.close();
   }
-  const lines = [`evidence: measured ${measured} of ${rows.length} row(s) waiting for a grade without page text or facts`];
-  if (linksLimit > 0) lines.push(`links: checked again ${relinked} of ${linkRows.length} site(s) whose link checks were due`);
+  const still = await sitesStillWaiting(db, { rubricVersion: regradeOld ? RUBRIC_VERSION : null });
+  const lines = reportLines({ measured, waitingForRun: rows.length, relinked: linksLimit > 0 ? relinked : null, linkTotal: linkRows.length, still });
   console.log(lines.join("\n"));
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
 }

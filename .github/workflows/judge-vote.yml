@@ -28,6 +28,9 @@ name: AI votes and comparisons (manual fallback)
 on:
   workflow_dispatch:
     inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
       votes:
         description: "Max votes this run"
         required: false
@@ -58,6 +61,10 @@ jobs:
       SHOTS_BASE_URL: ${{ secrets.SHOTS_BASE_URL }} # public R2 base, e.g. https://pub-xxxx.r2.dev
     steps:
       - uses: actions/checkout@v7
+      # Production runs the last release's code (.github/actions/release-code).
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 20

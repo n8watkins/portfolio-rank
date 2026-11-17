@@ -7,10 +7,11 @@ import { EmailLink } from "@/components/grade/EmailLink";
 /**
  * The report's actions in one small row (never printed): share the link,
  * download the PDF (the browser's own print on the print styles), get the
- * report by email (a one-time link that makes any browser its owner), and,
- * for a site not on the list, the request to join it.
+ * report by email (a one-time link that makes any browser its owner; only
+ * the report's owner, `mine`, can ask for it), and, for a site not on the
+ * list, the request to join it.
  */
-export function ReportToolbar({ id, domain, listed, joinHref, emailed, games }: { id: string; domain: string; listed: boolean; joinHref: string; emailed: boolean; games: boolean }) {
+export function ReportToolbar({ id, domain, listed, joinHref, emailed, mine, games }: { id: string; domain: string; listed: boolean; joinHref: string; emailed: boolean; mine: boolean; games: boolean }) {
   const [shared, setShared] = useState<"idle" | "copied" | "shared">("idle");
   const [mailOpen, setMailOpen] = useState(false);
   const small = "inline-flex h-9 items-center gap-1.5 rounded-lg border border-edge bg-card px-3 text-[13px] font-semibold transition hover:border-edge-strong active:scale-[0.97]";
@@ -44,7 +45,7 @@ export function ReportToolbar({ id, domain, listed, joinHref, emailed, games }: 
         <button type="button" onClick={() => window.print()} className={small}>
           <Download className="h-3.5 w-3.5" aria-hidden /> PDF
         </button>
-        {emailed ? (
+        {!mine ? null : emailed ? (
           <span role="status" className="inline-flex h-9 items-center gap-1.5 px-1 text-[13px] text-mute">
             <CircleCheck className="h-3.5 w-3.5 text-up" aria-hidden /> Email link on its way
           </span>
@@ -67,7 +68,7 @@ export function ReportToolbar({ id, domain, listed, joinHref, emailed, games }: 
           {shared === "copied" ? "The report's link is copied to the clipboard" : ""}
         </span>
       </div>
-      {mailOpen && !emailed && (
+      {mine && mailOpen && !emailed && (
         <div id="report-email" className="mt-3 max-w-md">
           <EmailLink jobId={id} success="Done. Check your inbox for the link; it works once and for 7 days." />
         </div>

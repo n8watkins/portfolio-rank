@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ownKeySlot } from "@/components/grade/useGradeRequest";
 import { ACTIVE_STATES } from "@/lib/grader/jobs.mjs";
+import { pollDelay } from "@/lib/grader/poll.mjs";
 import type { Job } from "@/lib/me";
 
 const ACTIVE_STATUSES = new Set<string>(ACTIVE_STATES);
-const EVERY = 4000;
 
 /**
  * A grade on its way, kept live: GET /api/grade/<id> every few seconds while
@@ -22,10 +22,33 @@ export function useGradeJob<T extends Job>(initial: T) {
   const [busy, setBusy] = useState(false);
   const [keyError, setKeyError] = useState("");
 
+  // The tab asks every few seconds while the job is being worked on, every minute or more while it waits,
+  // and not at all while the tab is hidden (it asks at once when shown again): lib/grader/poll.mjs.
+  const [hidden, setHidden] = useState(false);
+  const since = useRef(0);
+  const shown = useRef(false);
+  useEffect(() => {
+    since.current = Date.now();
+    const sync = () => {
+      const h = document.visibilityState === "hidden";
+      if (!h) shown.current = true;
+      setHidden(h);
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
   useEffect(() => {
     if (!ACTIVE_STATUSES.has(job.status)) {
       if (job.status !== initial.status) router.refresh();
       return;
+    }
+    let delay = pollDelay(job.status, { hidden, age: Date.now() - since.current });
+    if (delay === null) return;
+    // Back from another tab: ask at once, so the page isn't a minute behind.
+    if (shown.current) {
+      shown.current = false;
+      if (Date.now() - since.current > 5000) delay = 0;
     }
     const t = setTimeout(async () => {
       try {
@@ -33,9 +56,9 @@ export function useGradeJob<T extends Job>(initial: T) {
         if (res.ok) setJob(await res.json());
         else if (res.status === 404) router.refresh();
       } catch {}
-    }, EVERY);
+    }, delay);
     return () => clearTimeout(t);
-  }, [job, initial.status, router]);
+  }, [job, hidden, initial.status, router]);
 
   const finish = useCallback(
     async (body: { geminiKey: string } | { freeTier: true }) => {

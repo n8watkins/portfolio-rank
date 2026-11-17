@@ -7,6 +7,9 @@ name: Prewarm metrics
 on:
   workflow_dispatch:
     inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
       limit:
         description: "Max sites to prewarm this run"
         required: false
@@ -34,6 +37,10 @@ jobs:
       PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
     steps:
       - uses: actions/checkout@v7
+      # Production runs the last release's code (.github/actions/release-code).
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 20

@@ -14,7 +14,11 @@ name: Weekly health check + cleanup
 # Cloudflare's end-of-day run starts this on Sunday nights (20:30 Pacific),
 # alongside the nightly checks; it does not wait for it.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
   # Fallback only: Mondays 12:00 UTC, after Cloudflare's Sunday-night start;
   # skips when Cloudflare started it in the last 30 hours (fallback-guard).
   schedule:
@@ -77,11 +81,18 @@ jobs:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      # The public images bucket (pipeline/shot-store.mjs); empty until the owner creates it.
+      R2_IMAGES_BUCKET: ${{ secrets.R2_IMAGES_BUCKET }}
     steps:
       - uses: actions/checkout@v7
         with:
           # The pull request step pushes with the bot token, not GITHUB_TOKEN.
           persist-credentials: false
+      # Production runs the last release's code (.github/actions/release-code).
+      # HEAD stays on main, so the data pull request below holds data only.
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24

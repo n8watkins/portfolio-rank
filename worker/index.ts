@@ -36,7 +36,7 @@ import { db as database } from "../lib/db";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
-import { jobCron } from "./crons";
+import { jobCron, taskRuns } from "./crons";
 import { freshnessEnabled, freshnessTick } from "./freshness";
 import { reviewAutoApplyEnabled, reviewAutoApplyTick } from "./review";
 
@@ -147,15 +147,18 @@ const worker = {
   // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
-    // Staging's less frequent crons run the same jobs (./crons.ts).
+    // Staging's less frequent crons run the same jobs (./crons.ts), and only
+    // the ones its allowlist names: production runs every task.
     const cron = jobCron(controller.cron);
+    const runs = (task: string) => taskRuns(task, env.SITE_ENV);
+    const only = (tasks: [string, () => unknown][]) => tasks.filter(([task]) => runs(task));
     if (cron === PEOPLE_QUEUE_CRON) {
       // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
       // Sentry and the log, and the rest still run this hour.
       const at = controller.scheduledTime;
       let removed: string[] = [];
       await runEach(
-        [
+        only([
           // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
           ["owner removals", async () => {
             removed = (await removalsTick(env as NightEnv, at)).applied;
@@ -177,7 +180,7 @@ const worker = {
           // The owner's rule for the review queue: passes are applied without waiting (./review.ts); only with REVIEW_AUTO_APPLY.
           ["review auto-apply", () => (reviewAutoApplyEnabled(env) ? reviewAutoApplyTick(at, { purgeTags: purgeTagsOf(ctx) }) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
-        ],
+        ]),
         {
           report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),
           log: (line) => console.log(JSON.stringify(line)),
@@ -187,8 +190,8 @@ const worker = {
     else if (cron === MODEL_WATCH_CRON) {
       // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).
       // First, since it never throws, so a model-watch failure can't skip it.
-      await goalsTick(env as NightEnv, controller.scheduledTime);
-      await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+      if (runs("goals")) await goalsTick(env as NightEnv, controller.scheduledTime);
+      if (runs("model watch")) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     }
     else if (cron === GRADER_CRON) {
       // The grader's tick, then the blog newsletter's (./newsletter.ts) on the same
@@ -196,14 +199,14 @@ const worker = {
       // at once without NEWSLETTER_ENABLED or KIT_API_KEY.
       const at = controller.scheduledTime;
       await runEach(
-        [
+        only([
           ["grader", () => graderTick(env as GraderEnv, at)],
           ["newsletter", () => newsletterTick(env as unknown as NewsletterEnv, at)],
-        ],
+        ]),
         { report: (e, task) => Sentry.captureException(e, { tags: { cron: "five-minute", task } }), log: (line) => console.log(JSON.stringify(line)) }
       );
     }
-    else await startTonight(controller.scheduledTime, env as NightEnv);
+    else if (runs("night start")) await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };
 

@@ -14,7 +14,10 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { HIDDEN_WHERE } from "../lib/hidden.mjs";
-import { OWNER_NOT_PORTFOLIO, RULE_ACTOR, autoApplyReviews, confirmedRelists, decideReviews, listReviews, passesRule, undoReviews, withOwnerVerdict } from "../lib/reviews/store.mjs";
+import { OWNER_NOT_PORTFOLIO, RULE_ACTOR, autoApplyReviews, confirmedRelists, decideReviews, listReviews, ownerGrade, ownerVerdict, passesRule, undoReviews } from "../lib/reviews/store.mjs";
+
+// A grade with the owner's verdict applied, as the door does (lib/reviews/door.mjs doorDecision).
+const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await ownerVerdict(db, url));
 import { reviewAutoApplyEnabled } from "../lib/reviews/flag.ts";
 import { planExclusions } from "../pipeline/exclusions.mjs";
 import { planReviewAdditions } from "../pipeline/review-additions.mjs";
@@ -79,8 +82,8 @@ test("the switch: off unless REVIEW_AUTO_APPLY is exactly true (any case)", () =
   assert.equal(reviewAutoApplyEnabled({ REVIEW_AUTO_APPLY: "1" }), false);
   assert.equal(reviewAutoApplyEnabled({ REVIEW_AUTO_APPLY: "TRUE" }), true);
   const wrangler = fs.readFileSync("wrangler.jsonc", "utf8");
-  assert.equal((wrangler.match(/"REVIEW_AUTO_APPLY": "false"/g) ?? []).length, 2, "off in production and on staging");
-  assert.doesNotMatch(wrangler, /"REVIEW_AUTO_APPLY": "true"/);
+  assert.equal((wrangler.match(/"REVIEW_AUTO_APPLY": "true"/g) ?? []).length, 2, "on in production and on staging (the owner's decision)");
+  assert.doesNotMatch(wrangler, /"REVIEW_AUTO_APPLY": "false"/);
 });
 
 test("the pass rule: both models say portfolio (batched, else one at a time) and no code rule objects", () => {
@@ -132,6 +135,9 @@ test("auto-apply: passes are applied like Confirm and recorded; the rest stay pe
   assert.ok(JSON.parse(String(r.verdicts)).gemini31, "the verdicts stay on the row");
   const g = await rubricOf(db, pass);
   assert.deepEqual([g.is_portfolio, g.ai_is_portfolio, g.review.by], [true, false, RULE_ACTOR]);
+  // The rule's verdict is the rule's, never the owner's (owner, 2026-11-16).
+  assert.equal(g.review.kind, "rule_applied");
+  assert.doesNotMatch(g.review.reason, /owner confirmed/i);
   assert.equal(String((await row(db, pass)).health), "live");
   assert.equal(await member(db, pass), 1);
   assert.equal(String((await reviewRow(db, idFail)).status), "pending");
@@ -141,7 +147,9 @@ test("auto-apply: passes are applied like Confirm and recorded; the rest stay pe
   const lists = await listReviews(db);
   assert.deepEqual(lists.autoApplied.map((x) => x.id), [idPass]);
   assert.deepEqual(lists.decided, [], "the owner's own decisions are listed apart");
-  assert.equal((await withOwnerVerdict(db, pass, GRADE())).is_portfolio, true, "later grades keep the applied verdict");
+  // A rule's apply is not the owner's verdict: a later grade is judged at the door (lib/reviews/door.mjs),
+  // where a "no" against this rule's "portfolio" waits for the owner instead of being applied.
+  assert.equal((await withOwnerVerdict(db, pass, GRADE())).is_portfolio, false, "a rule's verdict does not bind later grades");
 });
 
 test("undo puts the site back exactly, returns the row to pending for good, and logs who and when", async () => {
@@ -157,7 +165,7 @@ test("undo puts the site back exactly, returns the row to pending for good, and 
   assert.equal(res.ok, true);
   const r = await reviewRow(db, id);
   assert.deepEqual([r.status, r.decided_by, r.undone_by, r.undone_at], ["pending", null, "admin:owner", LATER.toISOString()]);
-  assert.deepEqual(JSON.parse(String(r.applied)).undo, { at: LATER.toISOString(), by: "admin:owner" });
+  assert.deepEqual(JSON.parse(String(r.applied)).undo, { at: LATER.toISOString(), by: "admin:owner", reversed: "exact" });
   const back = await rubricOf(db, url);
   assert.equal(back.is_portfolio, false);
   assert.equal(back.review, undefined, "the grade is the one before");
@@ -166,7 +174,7 @@ test("undo puts the site back exactly, returns the row to pending for good, and 
   assert.deepEqual([p.health, p.health_reason, Number(p.health_fails), Number(p.needs_review)], ["suspect", "AI grading says this is not a portfolio", 2, 1]);
   assert.equal(await withOwnerVerdict(db, url, GRADE()).then((g) => g.is_portfolio), false, "no verdict once undone");
   assert.deepEqual(await auto(db, new Date("2026-11-17T00:00:00Z")), [], "the rule never applies an undone row again");
-  assert.deepEqual((await undoReviews(db, { ids: [id], actor: "admin:owner", now: LATER }))[0].error, "wrong_status", "undo only on an automatic apply");
+  assert.deepEqual((await undoReviews(db, { ids: [id], actor: "admin:owner", now: LATER }))[0].error, "wrong_status", "a pending row has nothing to undo");
 
   // The owner can still decide it.
   const [c] = await decideReviews(db, { ids: [id], action: "confirm", actor: "admin:owner", onFeed: () => true, now: LATER });

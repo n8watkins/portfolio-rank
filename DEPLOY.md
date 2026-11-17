@@ -83,9 +83,44 @@ Turning it off again is the same variable: the API answers 404 and the five-minu
 
 ## How a change ships
 
+A merge to main goes to staging.
+Production is the release that was last deployed and smoke checked, and changes only when a release is deployed.
+
+- **Merge** a pull request into main: staging is rebuilt with it, and production does not change.
+- **Deploy** with `npm run release -- --push` (RELEASING.md "Cutting a release") once the merges on staging are ready to go out together.
+  It lists what will ship (`--dry-run` shows the list without cutting anything), opens the release pull request, waits for CI on it, tags the merged commit `vX.Y.Z`, and the tag deploys production.
+- **Go back** to an older release: `gh workflow run deploy.yml -f code=vX.Y.Z`.
+  It stays in force, for the site and the jobs, until another release is deployed.
+  Schema changes are additive, so older code runs on the newer database.
+
+The `production` branch is the record of what production runs.
+The last step of a deploy moves it to the release's commit, only after the smoke check passed, and nothing else writes it.
+So a release whose deploy failed (the data check, the migration, the build or the smoke check) is not production: the branch stays on the previous release, the run is red, and a person decides.
+If the failure came after the new site went live (a failed smoke check), deploy the previous tag again to put the site back as well.
+Only a plain `vX.Y.Z` tag on a commit that is on main is deployed.
+
+"Production" means the same code everywhere:
+
+- **The site** is deployed from the release.
+- **The scheduled jobs** that work on the production database (the nightly sync and capture, grading, the health check, discovery, backups and the others) run that release's code too, through `.github/actions/release-code`, although GitHub starts them from main.
+  They read the `production` branch, so a merged pipeline change reaches them once its release has been deployed, with the database changes it needs, not on the night it merged and not when its tag appears.
+  A failure to reach GitHub fails the job; it never falls back to main's code.
+  To try a branch's job by hand, run its workflow with `code=checkout`.
+- **The workflow files** are the exception: GitHub always runs main's copy of a file in `.github/workflows/`, so an edit to one is live when it merges.
+  Keep them thin, and put logic in the scripts they call.
+  A new step that calls a script production's release does not have fails every night until that release is deployed, so a pull request adding one makes the step skip while the script is missing (`if [ -f pipeline/new-step.mjs ]`).
+- **The data** (`data/`, the portfolio list) always comes from main, where the nightly sync puts it.
+  Pages import the list into the build, so a change to `data/` on main rebuilds production's release over the new data and deploys it, with no unreleased code.
+  That build first runs `node scripts/check-data.mjs`, the released code's own check of what it can read, kept no stricter than the code that reads each file; when it fails nothing is deployed, the site stays as it was and the run fails.
+  A pull request that changes both the data's shape and the code reading it must keep the old code able to read the new data, or its data waits for the release.
+
+Because main is always the next release, a change visitors can see either sits behind a flag that is off in production, or was approved on staging through the `staging` label before it merged.
+Flags live in `wrangler.jsonc`, so turning one on in production is a merge and then a release.
+Until the first release has been deployed (`npm run release -- --baseline` tags it, and the tag deploys it), there is no `production` branch, and the site and the jobs keep running main's code: a change to `data/` deploys main as it is, as before.
+
 Two workflows, so production and staging never overwrite each other:
 
-1. **Production** (`.github/workflows/deploy.yml`, every push to main): migrates the production database, builds, deploys, then runs `node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev`.
+1. **Production** (`.github/workflows/deploy.yml`; a release tag, a change to `data/` on main, or by hand): migrates the production database, builds, deploys, then runs `node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev`.
 2. **Staging** (`.github/workflows/staging.yml`): staging runs main plus every open pull request labeled `staging`, merged onto main in pull request order.
    It runs again when main moves (so a merge to main, including the automatic data syncs, never wipes what is being tried), when a pull request gets or loses the label, when a labeled pull request gets new commits, and by hand (`gh workflow run staging.yml`).
    It migrates the staging database, builds with `NEXT_PUBLIC_SITE_ENV=staging`, deploys with `opennextjs-cloudflare deploy --env staging`, then runs `node scripts/smoke.mjs https://staging.portfoliorank.dev --staging --moved-from https://staging.portfoliorank.n8builds.dev`.
@@ -97,7 +132,13 @@ To try a pull request on staging: `gh pr edit <number> --add-label staging`; to 
 Nobody merges branches into a shared staging branch by hand any more.
 The smoke check is read-only (GET requests and the start of a GitHub sign-in).
 It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt and the noindex signals match the site, sign-in redirects to GitHub with a client id and the site's own callback URL, and the old address answers a 301 to the same path.
-CI (typecheck, lint, the Worker build for both environments, E2E) runs on every pull request into main before it can merge.
+CI runs on every pull request into main before it can merge, sized to the change (`.github/workflows/ci.yml`, `scripts/ci-lanes.mjs`).
+It follows the site's code to sort the changed files: docs that no code reads run nothing; code the site cannot reach (a script, the nightly capture, a workflow file, a unit test) runs typecheck, lint and the unit tests; anything the site reaches, `data/`, and anything unknown runs everything, with the Worker build and the browser tests (E2E).
+It errs towards everything: a file is the site's when the site or a site test imports it, names its path in a string, or builds a path into its folder.
+A release pull request always runs everything, which is the full check on the batch before production deploys.
+`npm run test:unit` runs the tests that need no running site (about two minutes, no build); `npm run test:e2e` builds the app and runs every test, or with `E2E_TESTS=site` only the ones that need it, as CI does.
+A test file needs the running site when it reads one of `scripts/test-e2e.sh`'s `E2E_` variables; every other top-level `tests/*.test.mjs` is a unit test, and a test in a subfolder is run by neither, so keep tests at the top level.
+The main ruleset still requires `typecheck`, `Worker build` and `E2E` by name: GitHub counts a job CI skipped as passed, the unit tests run inside `typecheck`, and a job is skipped only when the sorting answered "false" for it, so a sorting that fails runs every job.
 Until the `STAGING_TURSO_DATABASE_URL` and `STAGING_TURSO_AUTH_TOKEN` repository secrets exist, the staging workflow skips with a notice.
 The release plan, the order open work lands in and the staging fidelity work are in [docs/audits/release-and-staging.md](docs/audits/release-and-staging.md).
 
@@ -109,9 +150,33 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   The Worker reads it from its own `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` secrets, the deploy workflow from the `STAGING_TURSO_*` repository secrets.
 - **Storage:** its own ISR cache bucket, `portfolio-rank-staging-opennext-cache`.
   It reads screenshots from the production `portfolio-rank` bucket; the Worker never writes to that bucket (the pipeline on GitHub Actions uploads captures).
-- **Scheduled jobs, low caps:** staging runs production's scheduled jobs (the end-of-day run, the people queue, the model watch and the grader's tick), the hourly ones every six hours and the grader's tick every 30 minutes to keep its CPU time low (`worker/crons.ts`).
-  It never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs; without a key every Gemini job skips and says so in the log.
-  To exercise them, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
+- **Scheduled jobs, only an allowlist:** staging prepares changes for a release, so it does not mirror production's schedule and makes no duplicate outside calls (Gemini or any AI model, other people's sites, GitHub dispatch, Kit, email).
+  It runs on a schedule only what needs no outside call and is needed for the site to look right or to finish something a person did on staging.
+  The list is `STAGING_TASKS` in `worker/crons.ts`; a task added to the Worker's `scheduled()` handler without being classified there fails `tests/staging-crons.test.mjs`.
+  Production runs every task whatever the list says.
+  Staging's triggers are the hourly group every six hours and the grader's tick every 30 minutes (`env.staging.triggers.crons`); the nightly and weekly crons are not set on staging.
+
+  | Scheduled task | On staging | Why |
+  | --- | --- | --- |
+  | End-of-day run (`startTonight`) | off | Gemini, portfolio fetches and GitHub dispatch |
+  | Owner removals | kept | Database only; its alert email reaches `STAGING_EMAIL_TO` only (empty) |
+  | Edge purge | kept | Database and edge cache only |
+  | Email caps | off | Only emails the owner |
+  | Night watch | off | Would alert that the end-of-day run never started |
+  | People queue | kept | Does nothing unless a grade asked for on staging is queued; then it calls Gemini, and only with staging's own key |
+  | Tiers | kept | Database and edge cache only |
+  | Freshness | off | Fetches every listed portfolio |
+  | Review auto-apply | kept | Database and edge cache only |
+  | Image library | off | Workers AI and Gemini |
+  | Goals | off | Only emails the owner and reads Kit |
+  | Model watch | off | Fetches Google's model list and pages |
+  | Grader tick | kept | Does nothing unless a person asked for a grade on staging; then report email (`STAGING_EMAIL_TO` only) and, with a dispatch token, a GitHub capture; staging has no token |
+  | Newsletter tick | off | Kit |
+
+  Staging never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs.
+  A job's own feature flag (`FRESHNESS_ENABLED` and the like) still decides what pages show; the allowlist only decides what runs on a schedule.
+  To try a new scheduled job, run it by hand against staging or add it to the allowlist in the pull request that proves it; once it works, it belongs to production.
+  To exercise the people queue, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
   "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).
   Email from staging reaches only the addresses in `STAGING_EMAIL_TO` (empty: none), since its database holds real people's addresses (`lib/email/gate.mjs`).
 - **Launch features on:** `GRADER_ENABLED`, `GAMES_V2` and `RANKING_V2` are `"true"` in `env.staging` (production keeps all three `"false"`), so the launch can be walked through on staging first.
@@ -132,6 +197,11 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
 - **Secrets on the staging Worker:** `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, each kept in pass as `portfolio-rank/STAGING_<NAME>` and sent with `pass-env pipe portfolio-rank/STAGING_<NAME> -- npx wrangler secret put <NAME> --env staging`.
   `PSI_API_KEY` is optional; without it PageSpeed runs on Google's keyless quota.
 - **Sentry:** events from staging carry the environment `staging`.
+- **Proving a pipeline change:** the "Staging capture" workflow (`.github/workflows/staging-capture.yml`) runs the capture and the free checks on a small sample against staging's database, on demand only: `gh workflow run staging-capture.yml --ref <branch> -f sites=20`.
+  It runs the code of the ref it is dispatched on.
+  It holds only the `STAGING_TURSO_*` secrets: no production database, no `GEMINI_API_KEY` and no `R2_*`, because staging shares production's screenshots bucket and the capture then keeps screenshots on disk.
+  It stops at once unless the database address names staging (`scripts/staging-capture.mjs guard`).
+  The run summary shows the sites captured, each failure with its reason and the seconds per site.
 - **Keeping the copy fresh:** the copy holds real votes and rater ids, and the nightly retention jobs do not run on staging.
   The "Staging data" workflow replaces it every Monday with production's newest nightly backup (`scripts/refresh-staging-db.mjs`: it reads the private backups bucket, never production, refuses any database whose address is production's or does not name staging, empties staging, restores and checks every table's count), then redeploys staging and rebuilds the leaderboards.
   Run it by hand any time: `gh workflow run staging-data.yml -f job=refresh`.

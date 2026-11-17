@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Phase 0 capture pipeline: gate every portfolio (dead/parked/blank), then
-// Playwright-capture the live ones - desktop hero and mobile - plus
+// Playwright-capture the live ones in one visit: the whole page as one tall
+// desktop and one tall phone image with small thumbnails (AVIF,
+// pipeline/fullpage.mjs), the top of each cut out as the grade's hero.jpg
+// and the old mobile.jpg - plus
 // diagnostics (console errors, page weight, broken assets, 390px overflow,
 // dark-mode support, motion from a frame difference, DOM-shape hash), the
 // page's visible text (capped) and the facts code can check
@@ -26,14 +29,25 @@
 // (scripts/detect-changes.mjs) and re-graded the same night. A refresh that
 // fails keeps the existing capture and records nothing: whether a site is
 // down is the weekly health check's call.
+//
+// Before the screenshots, a splash gate, a dialog on top and a mode picker
+// are passed the way a visitor would (./splash.mjs). A capture that still
+// does not show the site afterwards (a gate, a picker, a dialog, a bot
+// check, or under 40 words with no outbound links: ./capture-blocked.mjs)
+// is "blocked": nothing of it is stored or graded. A site with no good
+// capture records it as a failed capture and is retried (a bot wall also
+// sets needs_review for the owner); a site that has one keeps it.
 import { chromium } from "playwright";
 import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { httpGate, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
-import { actionNote, passModal, passSplashGate } from "./splash.mjs";
+import { actionNote, passModal, passModePicker, passSplashGate } from "./splash.mjs";
+import { BLOCKED_PREFIX, BOT_WALL, capturedBlocked, countOutboundLinks } from "./capture-blocked.mjs";
+import { inconclusiveGate, shot, waitForContent } from "./capture-steps.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import {
   ACTIVE,
@@ -44,75 +58,28 @@ import {
   syncRoster,
 } from "./roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
+import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
+import { imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
+import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 
-// ---------------------------------------------------------------------------
-// env (.env.local, no dotenv dependency). Optional: in CI (GitHub Actions)
-// there's no .env.local — the vars come straight from the runner env/secrets.
-// ---------------------------------------------------------------------------
-if (fs.existsSync(path.join(ROOT, ".env.local"))) {
-  for (const line of fs
-    .readFileSync(path.join(ROOT, ".env.local"), "utf8")
-    .split("\n")) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
-  }
-}
+const BUCKET = process.env.R2_BUCKET ?? "portfolio-rank";
 
-// ---------------------------------------------------------------------------
-// CLI
-// ---------------------------------------------------------------------------
-const args = process.argv.slice(2);
-const flag = (name, fallback) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 ? args[i + 1] : fallback;
-};
-const LIMIT = Number(flag("limit", "0")) || Infinity;
-const CONCURRENCY = Number(flag("concurrency", "3"));
-const ONLY = flag("only", "");
-const FORCE = args.includes("--force");
-const REFRESH = Number(flag("refresh", "0")) || 0;
-// --recapture <file>: re-capture exactly the listed addresses in the file (one
-// a line), as a refresh: a failure keeps the old capture and marks nothing
-// (scripts/regrade-not-portfolio.mjs).
-const RECAPTURE = flag("recapture", "");
-
-// ---------------------------------------------------------------------------
-// DB + R2
-// ---------------------------------------------------------------------------
-const db = pipelineDb(ROOT);
-await ensureRosterSchema(db);
-
-let s3 = null;
-if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
-  const { S3Client } = await import("@aws-sdk/client-s3");
-  s3 = new S3Client({
-    region: "auto",
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  });
-}
-
-// Only the frames the app serves go to R2 (the AI grade uses hero.jpg too).
-// No full-page frame: nothing ever showed it, and at about 250 KB it was 70%
-// of a site's storage (docs/audits/free-tier-limits.md, R2 free 10 GB).
-const SERVE_FILES = new Set(["hero.jpg", "mobile.jpg"]);
-
-async function uploadDir(key, dir) {
+// The old frames (hero.jpg, mobile.jpg; pipeline/shot-files.mjs), while
+// LEGACY_FRAMES is on (pipeline/shot-store.mjs). The tall images and
+// thumbnails go up versioned through storeVersion.
+async function uploadDir(s3, key, dir) {
   if (!s3) return;
   const { PutObjectCommand } = await import("@aws-sdk/client-s3");
   for (const f of fs.readdirSync(dir)) {
     if (!SERVE_FILES.has(f)) continue;
     await s3.send(
       new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET ?? "portfolio-rank",
+        Bucket: BUCKET,
         Key: `${key}/${f}`,
         Body: fs.readFileSync(path.join(dir, f)),
-        ContentType: f.endsWith(".jpg") ? "image/jpeg" : "image/png",
+        ContentType: contentTypeOf(f),
       })
     );
   }
@@ -121,40 +88,67 @@ async function uploadDir(key, dir) {
 // ---------------------------------------------------------------------------
 // Per-site capture
 // ---------------------------------------------------------------------------
-const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 16);
+/** The row's stored capture: { fullPage (meta.fullPage or null), good (a live row with screenshots) }. */
+async function storedCapture(db, url) {
+  const row = (await db.execute({ sql: "SELECT status, shot_key, meta FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+  const good = Boolean(row && String(row.status) === "live" && row.shot_key != null);
+  try {
+    return { good, fullPage: JSON.parse(String(row?.meta ?? "null"))?.fullPage ?? null };
+  } catch {
+    return { good, fullPage: null };
+  }
+}
 
-// A failed capture (gate said dead/parked/error, blank page, or a crash) is
-// never final: the row gets a retry date with growing backoff
-// (roster.captureRetryAt), and the weekly health check pulls the retry
-// forward once the site passes. Whether a site is shown is decided by the
-// health check (pipeline/health.mjs), not by one capture attempt.
-async function recordCaptureFailure(url, name, status, reason) {
+export const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 16);
+
+// A failed capture (gate said dead/parked/error, blank page, a blocked
+// capture, or a crash) is never final: the row gets a retry date with
+// growing backoff (roster.captureRetryAt), and the weekly health check pulls
+// the retry forward once the site passes. Whether a site is shown is decided
+// by the health check (pipeline/health.mjs), not by one capture attempt.
+// `needsReview` also sets portfolios.needs_review = 1 (a bot wall, for the
+// owner's review); without it the column is left as it is.
+export async function recordCaptureFailure(db, url, name, status, reason, { needsReview = false } = {}) {
   const row = (
     await db.execute({ sql: "SELECT capture_attempts FROM portfolios WHERE url = ?", args: [url] })
   ).rows[0];
   const attempts = Number(row?.capture_attempts ?? 0) + 1;
   await db.execute({
-    sql: `INSERT INTO portfolios (url, name, status, reason, checked_at, capture_attempts, retry_at)
-          VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+    sql: `INSERT INTO portfolios (url, name, status, reason, checked_at, capture_attempts, retry_at, needs_review)
+          VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?)
           ON CONFLICT(url) DO UPDATE SET status=excluded.status,
             reason=excluded.reason, checked_at=excluded.checked_at,
-            capture_attempts=excluded.capture_attempts, retry_at=excluded.retry_at`,
-    args: [url, name, status, reason, attempts, captureRetryAt(attempts)],
+            capture_attempts=excluded.capture_attempts, retry_at=excluded.retry_at,
+            needs_review=MAX(portfolios.needs_review, excluded.needs_review)`,
+    args: [url, name, status, reason, attempts, captureRetryAt(attempts), needsReview ? 1 : 0],
   });
 }
 
-async function captureSite(browser, entry, { refresh = false } = {}) {
+/**
+ * Captures one site into `root`/captures/<key>/ and its `portfolios` row.
+ * `db`: the pipeline database; `s3`: an R2 client or null (local only).
+ * Returns a one-line result; "live" first when the capture was stored.
+ */
+export async function captureSite(browser, entry, { refresh = false, db, s3 = null, root = ROOT } = {}) {
   const { url, name } = entry;
   // A refresh never marks a site failed (see the header).
-  const recordFailure = refresh ? async () => {} : recordCaptureFailure;
+  const recordFailure = refresh ? async () => {} : (...a) => recordCaptureFailure(db, ...a);
   const key = keyOf(url);
-  const dir = path.join(ROOT, "captures", key);
+  const dir = path.join(root, "captures", key);
+  const IMAGES_BUCKET = imagesBucket();
 
   const gate = await httpGate(url);
-  if (gate.status !== "live") {
+  // A 401/403/429/503 or a TLS failure on the plain request is often a bot filter or a
+  // certificate a browser accepts: the browser decides (./capture-steps.mjs).
+  if (gate.status !== "live" && !inconclusiveGate(gate)) {
     await recordFailure(url, name, gate.status, gate.reason);
     return `${gate.status} (${gate.reason})`;
   }
+
+  // The stored images, to keep them when the page looks the same, and
+  // whether the site already has a good capture (a blocked one never replaces it).
+  const stored = await storedCapture(db, url);
+  const prevFullPage = stored.fullPage;
 
   const ctx = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -195,10 +189,14 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     // closed the way a visitor would (./splash.mjs passModal), so the
     // capture shows the site's default view.
     const modal = await passModal(page).catch(() => null);
+    // A mode picker ("Recruiter / Developer", "Dark / Light", "2D / 3D") gets
+    // its plainest option clicked (./splash.mjs passModePicker).
+    const mode = await passModePicker(page).catch(() => null);
 
-    // Blank-page gate: needs visible text within the rendered page.
     // Blank-page gate: visible text, or visual content (canvas apps such as
-    // Flutter web have no text in the DOM).
+    // Flutter web have no text in the DOM), given up to 15 seconds to appear
+    // (slow single-page apps render nothing at first; ./capture-steps.mjs).
+    await waitForContent(page);
     const rendered = await page.evaluate(readRenderedPage);
     if (rendered.text.trim().length < 30 && !rendered.media) {
       await ctx.close();
@@ -206,19 +204,17 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       return "dead (renders blank)";
     }
 
-    fs.mkdirSync(dir, { recursive: true });
-
     // Wait out slow preloaders and intro animations: poll until both the
     // viewport and its center (spinners, percent counters) hold still for
     // two polls. Pages that churn the whole viewport every poll are
     // animated backgrounds, not loaders — bail early and call it motion.
-    let prevShot = await page.screenshot({ type: "png" });
+    let prevShot = await shot(page, { type: "png" });
     let quiet = 0,
       lively = 0,
       polls = 0;
     while (polls < 8 && quiet < 2 && lively < 2) {
       await page.waitForTimeout(3000);
-      const cur = await page.screenshot({ type: "png" });
+      const cur = await shot(page, { type: "png" });
       const full = pngDiff(prevShot, cur);
       if (full < 0.01 && pngDiff(prevShot, cur, true) < 0.005) quiet++;
       else quiet = 0;
@@ -229,20 +225,17 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
     const heroSettled = quiet >= 2;
 
     // Motion: two frames 3 seconds apart, diffed in memory. The AI grade gets
-    // the result as a fact, not the frames. Hero from the settled frame.
-    const f0 = await page.screenshot({ type: "png" });
+    // the result as a fact, not the frames. The hero is cut from the tall
+    // image below (its first screenful, after the scroll-through).
+    const f0 = await shot(page, { type: "png" });
     await page.waitForTimeout(3000);
-    const f2 = await page.screenshot({ type: "png" });
+    const f2 = await shot(page, { type: "png" });
     const motion = lively >= 2 || pngDiff(f0, f2) > 0.02;
-    fs.writeFileSync(
-      path.join(dir, "hero.jpg"),
-      await page.screenshot({ type: "jpeg", quality: 75 })
-    );
 
     // Dark-mode support: pixel-diff light vs dark.
     await page.emulateMedia({ colorScheme: "dark" });
     await page.waitForTimeout(400);
-    const dark = await page.screenshot({ type: "png" });
+    const dark = await shot(page, { type: "png" });
     const darkMode = pngDiff(f2, dark) > 0.05;
     await page.emulateMedia({ colorScheme: "light" });
 
@@ -275,30 +268,97 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       { userAgent: UA }
     ).catch(() => null);
 
-    // Mobile: 390px hero + horizontal-overflow check.
-    const mpage = await ctx.newPage();
-    await mpage.setViewportSize({ width: 390, height: 844 });
-    await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
-    await mpage.waitForTimeout(1500);
-    // The phone view starts at the gate too.
-    const mobileSplash = await passSplashGate(mpage).catch(() => null);
-    const mobileModal = await passModal(mpage).catch(() => null);
-    const overflow390 = await mpage.evaluate(
-      () => document.documentElement.scrollWidth > 395
-    );
-    fs.writeFileSync(
-      path.join(dir, "mobile.jpg"),
-      await mpage.screenshot({ type: "jpeg", quality: 75 })
-    );
-
-    await ctx.close();
-
-    const meta = {
+    // The diagnostics as they stand now: the scroll-through below loads
+    // lazy content, which must not change the page weight or the errors.
+    const diagnostics = {
       consoleErrors: consoleErrors.length,
       consoleSample: consoleErrors.slice(0, 5),
       requests,
       bytes,
       broken404s: broken,
+    };
+
+    // The tall desktop image: scroll through once, back to the top, stitch
+    // (pipeline/fullpage.mjs). Its first screenful is the grade's hero.jpg;
+    // if the stitch fails, a plain screenshot of the top stands in.
+    const desktopView = await captureView(page, "desktop");
+
+    // Blocked (./capture-blocked.mjs): the screen after the passes, the
+    // waits and the scroll-through still does not show the site. Nothing of
+    // it is stored, uploaded or graded. A site with a good capture keeps it
+    // (a refresh records nothing, see the header); one without is a failed
+    // capture with its reason, retried later with backoff.
+    const shown = await page.evaluate(readRenderedPage).catch(() => settled);
+    const blocked = capturedBlocked({
+      text: shown.text,
+      title: await page.title().catch(() => ""),
+      outboundLinks: await page.evaluate(countOutboundLinks).catch(() => 0),
+      splash,
+      modal,
+      mode,
+    });
+    if (blocked) {
+      await ctx.close();
+      if (refresh || stored.good) return `blocked (${blocked}); the existing capture is kept`;
+      // A bot wall is not called broken: it is marked for the owner's review (./capture-blocked.mjs).
+      await recordFailure(url, name, "error", `${BLOCKED_PREFIX}${blocked}`, { needsReview: blocked === BOT_WALL });
+      return `blocked (${blocked})`;
+    }
+
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "hero.jpg"), desktopView.ok ? desktopView.files.crop : await shot(page, { type: "jpeg", quality: 75 }));
+
+    // Phone: the same page at 390 wide, horizontal-overflow check, then the
+    // tall phone image, whose top is mobile.jpg.
+    const mpage = await ctx.newPage();
+    await mpage.setViewportSize({ width: 390, height: 844 });
+    await mpage.goto(url, { waitUntil: "load", timeout: 30000 });
+    await mpage.waitForTimeout(1500);
+    // The phone view starts at the gate, the dialog and the picker too.
+    const mobileSplash = await passSplashGate(mpage).catch(() => null);
+    const mobileModal = await passModal(mpage).catch(() => null);
+    const mobileMode = await passModePicker(mpage).catch(() => null);
+    // The desktop view already waited for content; the phone view gets the same chance.
+    await waitForContent(mpage);
+    // Its intro plays again on this load: a short wait for a still first screen.
+    await settleFirstScreen(mpage, { polls: 4, diff: pngDiff }).catch(() => false);
+    const overflow390 = await mpage.evaluate(
+      () => document.documentElement.scrollWidth > 395
+    );
+    const phoneView = await captureView(mpage, "phone");
+    fs.writeFileSync(path.join(dir, "mobile.jpg"), phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 }));
+
+    await ctx.close();
+
+    // The stored images: a new version, or nothing when the page looks as it
+    // did (pipeline/fullpage.mjs unchanged), so no write and every cached
+    // copy stays good. They go to the public images bucket only
+    // (R2_IMAGES_BUCKET, pipeline/shot-store.mjs); without it nothing is
+    // stored and the version is not recorded, so the backfill makes them
+    // once the bucket exists.
+    const next = nextFullPage(prevFullPage, { desktopView, phoneView, pageText, at: new Date() });
+    const { uploadImages, uploadLegacy } = next;
+    const fullPage = uploadImages && !(s3 && IMAGES_BUCKET) ? notStored(next.fullPage) : next.fullPage;
+    if (s3 && IMAGES_BUCKET && uploadImages && fullPageComplete(fullPage)) {
+      const commands = await import("@aws-sdk/client-s3");
+      await storeVersion({
+        send: (c) => s3.send(c),
+        commands,
+        bucket: IMAGES_BUCKET,
+        shotKey: key,
+        v: fullPage.v,
+        prevV: prevFullPage?.v,
+        files: {
+          [IMAGE_FILES.desktop.tall]: desktopView.files.tall,
+          [IMAGE_FILES.desktop.thumb]: desktopView.files.thumb,
+          [IMAGE_FILES.phone.tall]: phoneView.files.tall,
+          [IMAGE_FILES.phone.thumb]: phoneView.files.thumb,
+        },
+      });
+    }
+
+    const meta = {
+      ...diagnostics,
       overflow390,
       darkMode,
       motion,
@@ -309,11 +369,16 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
       ...(splash ? { splash: { ...splash, mobile: mobileSplash ? mobileSplash.passed : null } } : {}),
       // The dialog closed on the way in (./splash.mjs passModal), when there was one.
       ...(modal || mobileModal ? { modal: { ...(modal ?? {}), mobile: mobileModal ? mobileModal.passed : null } } : {}),
+      // The mode picked on the way in (./splash.mjs passModePicker), when a picker was shown.
+      ...(mode || mobileMode ? { mode: { ...(mode ?? {}), mobile: mobileMode ? mobileMode.passed : null } } : {}),
       // One line of what was done to reach the screenshots; only the screen after it is stored.
-      ...(actionNote({ splash, modal }) ? { action: actionNote({ splash, modal }) } : {}),
+      ...(actionNote({ splash, modal, mode }) ? { action: actionNote({ splash, modal, mode }) } : {}),
+      fullPage,
     };
 
-    await uploadDir(key, dir);
+    // The old frames, cut from the tall images, while the site still reads
+    // them; not when nothing changed.
+    if (legacyFramesOn() && uploadLegacy) await uploadDir(s3, key, dir);
 
     await db.execute({
       sql: `INSERT INTO portfolios
@@ -338,69 +403,111 @@ async function captureSite(browser, entry, { refresh = false } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Main (only when run as a script: the tests import captureSite)
 // ---------------------------------------------------------------------------
-if (args.includes("--upload-only")) {
-  if (!s3) {
-    console.error("R2_* env vars missing — nothing to upload to.");
-    process.exit(1);
-  }
-  const capDir = path.join(ROOT, "captures");
-  const keys = fs.existsSync(capDir) ? fs.readdirSync(capDir) : [];
-  for (const [i, key] of keys.entries()) {
-    await uploadDir(key, path.join(capDir, key));
-    console.log(`[${i + 1}/${keys.length}] uploaded ${key}`);
-  }
-  process.exit(0);
-}
-
-const feed = JSON.parse(
-  fs.readFileSync(path.join(ROOT, "data", "feed.json"), "utf8")
-);
-// Rows that left the list are marked delisted; the queue only holds roster sites.
-const roster = await syncRoster(db, feed);
-console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
-let queue = feed.filter((p) => !ONLY || p.url.includes(ONLY));
-if (RECAPTURE) {
-  const want = new Set(fs.readFileSync(RECAPTURE, "utf8").split("\n").map((l) => l.trim()).filter(Boolean));
-  queue = feed.filter((p) => want.has(p.url)).map((p) => ({ ...p, refresh: true }));
-}
-
-if (!FORCE && !RECAPTURE) {
-  queue = await dueForCapture(db, queue);
-}
-queue = queue.slice(0, LIMIT);
-// The nightly refresh: listed, healthy sites whose screenshots are due
-// (changed or asked for first, then captures past 90 days).
-if (REFRESH > 0 && !ONLY && !RECAPTURE) {
-  await ensureFreshnessSchema(db);
-  const queued = new Set(queue.map((p) => p.url));
-  const listed = new Map(feed.map((p) => [p.url, p]));
-  const due = (await screenshotsDue(db, { limit: REFRESH + queue.length, active: ACTIVE }))
-    .filter((u) => !queued.has(u) && listed.has(u))
-    .slice(0, REFRESH);
-  for (const u of due) queue.push({ ...listed.get(u), refresh: true });
-  console.log(`refresh: re-capturing ${due.length} site(s) that changed, were asked for, or are 90 days old`);
-}
-console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
-
-const browser = await chromium.launch();
-let idx = 0,
-  ok = 0,
-  skipped = 0;
-await Promise.all(
-  Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-    while (idx < queue.length) {
-      const entry = queue[idx++];
-      const t = Date.now();
-      const result = await captureSite(browser, entry, { refresh: Boolean(entry.refresh) });
-      if (result.startsWith("live")) ok++;
-      else skipped++;
-      console.log(
-        `[${idx}/${queue.length}] ${entry.url} — ${result} (${((Date.now() - t) / 1000).toFixed(1)}s)`
-      );
+async function main() {
+  // env (.env.local, no dotenv dependency). Optional: in CI (GitHub Actions)
+  // there's no .env.local — the vars come straight from the runner env/secrets.
+  if (fs.existsSync(path.join(ROOT, ".env.local"))) {
+    for (const line of fs.readFileSync(path.join(ROOT, ".env.local"), "utf8").split("\n")) {
+      const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+      if (m && !(m[1] in process.env)) process.env[m[1]] = m[2];
     }
-  })
-);
-await browser.close();
-console.log(`done: ${ok} captured, ${skipped} gated out`);
+  }
+
+  // CLI
+  const args = process.argv.slice(2);
+  const flag = (name, fallback) => {
+    const i = args.indexOf(`--${name}`);
+    return i >= 0 ? args[i + 1] : fallback;
+  };
+  const LIMIT = Number(flag("limit", "0")) || Infinity;
+  const CONCURRENCY = Number(flag("concurrency", "3"));
+  const ONLY = flag("only", "");
+  const FORCE = args.includes("--force");
+  const REFRESH = Number(flag("refresh", "0")) || 0;
+  // --recapture <file>: re-capture exactly the listed addresses in the file (one
+  // a line), as a refresh: a failure keeps the old capture and marks nothing
+  // (scripts/regrade-not-portfolio.mjs).
+  const RECAPTURE = flag("recapture", "");
+
+  // DB + R2
+  const db = pipelineDb(ROOT);
+  await ensureRosterSchema(db);
+
+  let s3 = null;
+  if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
+    const { S3Client } = await import("@aws-sdk/client-s3");
+    s3 = new S3Client({
+      region: "auto",
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+
+  if (args.includes("--upload-only")) {
+    if (!s3) {
+      console.error("R2_* env vars missing — nothing to upload to.");
+      process.exit(1);
+    }
+    const capDir = path.join(ROOT, "captures");
+    const keys = fs.existsSync(capDir) ? fs.readdirSync(capDir) : [];
+    for (const [i, key] of keys.entries()) {
+      await uploadDir(s3, key, path.join(capDir, key));
+      console.log(`[${i + 1}/${keys.length}] uploaded ${key}`);
+    }
+    process.exit(0);
+  }
+
+  const feed = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "feed.json"), "utf8"));
+  // Rows that left the list are marked delisted; the queue only holds roster sites.
+  const roster = await syncRoster(db, feed);
+  console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
+  let queue = feed.filter((p) => !ONLY || p.url.includes(ONLY));
+  if (RECAPTURE) {
+    const want = new Set(fs.readFileSync(RECAPTURE, "utf8").split("\n").map((l) => l.trim()).filter(Boolean));
+    queue = feed.filter((p) => want.has(p.url)).map((p) => ({ ...p, refresh: true }));
+  }
+
+  if (!FORCE && !RECAPTURE) {
+    queue = await dueForCapture(db, queue);
+  }
+  queue = queue.slice(0, LIMIT);
+  // The nightly refresh: listed, healthy sites whose screenshots are due
+  // (changed or asked for first, then captures past 90 days).
+  if (REFRESH > 0 && !ONLY && !RECAPTURE) {
+    await ensureFreshnessSchema(db);
+    const queued = new Set(queue.map((p) => p.url));
+    const listed = new Map(feed.map((p) => [p.url, p]));
+    const due = (await screenshotsDue(db, { limit: REFRESH + queue.length, active: ACTIVE }))
+      .filter((u) => !queued.has(u) && listed.has(u))
+      .slice(0, REFRESH);
+    for (const u of due) queue.push({ ...listed.get(u), refresh: true });
+    console.log(`refresh: re-capturing ${due.length} site(s) that changed, were asked for, or are 90 days old`);
+  }
+  console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
+
+  const browser = await chromium.launch();
+  let idx = 0,
+    ok = 0,
+    skipped = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      while (idx < queue.length) {
+        const entry = queue[idx++];
+        const t = Date.now();
+        const result = await captureSite(browser, entry, { refresh: Boolean(entry.refresh), db, s3 });
+        if (result.startsWith("live")) ok++;
+        else skipped++;
+        console.log(`[${idx}/${queue.length}] ${entry.url} — ${result} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
+      }
+    })
+  );
+  await browser.close();
+  console.log(`done: ${ok} captured, ${skipped} gated out`);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

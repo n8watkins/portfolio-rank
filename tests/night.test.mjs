@@ -85,9 +85,10 @@ function mockGemini(steps, { onCall } = {}) {
 function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, rankingV2 = false, rubricRegrade = false, rankingBudget } = {}) {
   const clock = { t: start };
   const lines = [];
-  // Re-grades are off by default (DEFAULT_PLAN); these tests turn them on
-  // unless a test sets the regrade stage itself.
-  const plan = budgetPlan(JSON.stringify({ ...budget, stages: { regrade: { cap: 300 }, ...budget.stages } }));
+  // Re-grades and grades of changed sites are off by default (DEFAULT_PLAN;
+  // owner, 2026-11-16); these tests turn them on at their old caps unless a
+  // test sets the stage itself.
+  const plan = budgetPlan(JSON.stringify({ ...budget, stages: { regrade: { cap: 300 }, grade_changed: { cap: 100 }, ...budget.stages } }));
   return {
     clock,
     lines,
@@ -104,7 +105,7 @@ function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, ra
       log: (l) => lines.push(l),
       fetchImpl: gemini.fetchImpl,
       image: async () => ({ inline_data: { mime_type: "image/jpeg", data: "AAAA" } }),
-      flags: { rankingV2, rubricRegrade, ranking: { ...rankingConfig({ RANKING_V2: rankingV2 ? "true" : "" }), ...(rankingBudget ? { budget: rankingBudget } : {}) } },
+      flags: { rankingV2, rubricRegrade, pollGeneration: "true", ranking: { ...rankingConfig({ RANKING_V2: rankingV2 ? "true" : "" }), ...(rankingBudget ? { budget: rankingBudget } : {}) } },
       runId: "test",
     },
   };

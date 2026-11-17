@@ -12,15 +12,13 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
-import { ensureRubricHistory } from "../pipeline/rubric-history.mjs";
-import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { budgetPlan } from "../pipeline/budget.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
-import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, regradeChanges, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
+import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
 import { CTA, LENGTHS, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
 import { WRITE_SYSTEM, assemble, buildWriteRequests, parseBlocks, reflow, cutBadSentences } from "../pipeline/content/compose.mjs";
@@ -46,51 +44,11 @@ import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
 import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
+import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, enableAutomation, fixture, hex, sheetAndRoster } from "./helpers/content-fixture.mjs";
 import { MANUAL_REQUESTS, runManualJob } from "../pipeline/content/manual.mjs";
 import { review } from "../lib/content/blog.mjs";
 
 // Monday 2026-11-16, 20:30 Pacific (standard time): a drafting night.
-const MONDAY = Date.parse("2026-11-17T04:30:00Z");
-const SUNDAY = Date.parse("2026-11-16T04:30:00Z");
-const TUESDAY = Date.parse("2026-11-18T04:30:00Z");
-const AXES = ["visual_design", "five_second_test", "storytelling", "writing", "memorability", "motion"];
-const hex = (n) => n.toString(16).padStart(16, "0");
-
-const rubric = (tier, score, over = {}) => ({
-  is_portfolio: true,
-  tier,
-  model: PRIMARY_MODEL,
-  rubric_version: 2,
-  ...Object.fromEntries(AXES.map((k) => [k, { score, note: "n" }])),
-  ...over,
-});
-
-// The tier by rank each fixture grade carries (lib/tiers.mjs; refreshTiers writes it as grade.rank): Gemini's S sites hold the top tier.
-const RANKED = { S: "SSS", A: "A", B: "B", C: "C", D: "D" };
-
-async function fixture({ motion = null } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "content-"));
-  const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
-  await migrate(db);
-  await ensureRosterSchema(db);
-  await ensureRubricHistory(db);
-  await ensureRankingSchema(db);
-  await ensureGeminiLog(db);
-  const add = async ({ url, name, tier, score, meta = {}, delisted = null, over = {} }) =>
-    db.execute({
-      sql: "INSERT INTO portfolios (url, name, status, shot_key, ai_rubric, meta, delisted_at) VALUES (?, ?, 'live', ?, ?, ?, ?)",
-      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, { rank: { tier: RANKED[tier] }, ...over })), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
-    });
-  for (let i = 1; i <= 30; i++) await add({ url: `https://top-${i}.dev`, name: `Top Person ${i}`, tier: i <= 8 ? "S" : "A", score: i <= 8 ? 5 : 4, over: motion ? { motion: { score: motion[0], note: "n" } } : {} });
-  for (let i = 1; i <= 30; i++) await add({ url: `https://low-${i}.dev`, name: `Low Person ${i}`, tier: ["B", "C", "D"][i % 3], score: 2, meta: { darkMode: false, overflow390: true, consoleErrors: 3, bytes: 4000000 }, over: motion ? { motion: { score: motion[1], note: "n" } } : {} });
-  // Best-scoring of all, but removed by its owner, delisted, or not a portfolio: never named.
-  await add({ url: "https://removed-star.dev", name: "Removed Star", tier: "S", score: 5, over: { writing: { score: 5 } } });
-  await db.execute("INSERT INTO portfolio_owner (url, removed_at, updated_at) VALUES ('https://removed-star.dev', '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z')");
-  await add({ url: "https://delisted-star.dev", name: "Delisted Star", tier: "S", score: 5, delisted: "2026-11-01" });
-  await add({ url: "https://not-a-portfolio.dev", name: "Not Aportfolio", tier: "S", score: 5, over: { is_portfolio: false } });
-  return db;
-}
-
 const NEVER = ["Low Person", "Removed Star", "Delisted Star", "Not Aportfolio", "low-", "removed-star", "delisted-star", "not-a-portfolio"];
 
 function assertNoBadNames(sheet) {
@@ -148,7 +106,7 @@ test("fact builders: leaderboard movement names climbers and leaders, never a fa
   for (const [week, list] of [["2026-11-02", prev], ["2026-11-09", now]]) {
     for (let i = 0; i < list.length; i++) await db.execute({ sql: "INSERT INTO rank_history (view, week, url, rank, mu, sigma) VALUES ('merged', ?, ?, ?, 25, 3)", args: [week, list[i], i + 1] });
   }
-  const s = await leaderboardMovement(db, { now: MONDAY });
+  const s = await leaderboardMovement(db, { now: MONDAY, rankingV2: true });
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.ok(s.names.some((n) => n.url === "https://top-24.dev"), "the biggest climber is named");
@@ -161,11 +119,11 @@ test("fact builders: leaderboard movement names climbers and leaders, never a fa
 test("fact builders: people's votes, who wins when grades differ and which traits win; favourites named, never a loser", async () => {
   const db = await fixture();
   // 30 top sites beat 30 low sites, once each, plus a few upsets; removed-star wins a lot but is never named.
-  for (let i = 1; i <= 30; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES (?, ?, ?)", args: [`https://top-${i}.dev`, `https://low-${i}.dev`, `r${i}`] });
-  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES (?, ?, ?)", args: [`https://low-${i}.dev`, `https://top-${i}.dev`, `u${i}`] });
-  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES ('https://removed-star.dev', ?, ?)", args: [`https://top-${i + 10}.dev`, `x${i}`] });
+  for (let i = 1; i <= 30; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES (?, ?, 'human', ?)", args: [`https://top-${i}.dev`, `https://low-${i}.dev`, `r${i}`] });
+  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES (?, ?, 'human', ?)", args: [`https://low-${i}.dev`, `https://top-${i}.dev`, `u${i}`] });
+  for (let i = 1; i <= 6; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES ('https://removed-star.dev', ?, 'human', ?)", args: [`https://top-${i + 10}.dev`, `x${i}`] });
   // top-1 wins five more: a named favourite.
-  for (let i = 1; i <= 5; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_id) VALUES ('https://top-1.dev', ?, ?)", args: [`https://top-${i + 20}.dev`, `y${i}`] });
+  for (let i = 1; i <= 5; i++) await db.execute({ sql: "INSERT INTO votes (winner, loser, rater_type, rater_id) VALUES ('https://top-1.dev', ?, 'human', ?)", args: [`https://top-${i + 20}.dev`, `y${i}`] });
   const s = await votePatterns(db, { now: MONDAY });
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
@@ -178,29 +136,6 @@ test("fact builders: people's votes, who wins when grades differ and which trait
   // Too few votes: not ready.
   const empty = await fixture();
   assert.equal((await votePatterns(empty, { now: MONDAY })).ready, false);
-});
-
-test("fact builders: before and after, same-judge re-grades only; improvers named, decliners only in aggregate", async () => {
-  const db = await fixture();
-  // 22 top sites were graded B by the same model before their page changed; low-1 dropped from A.
-  for (let i = 1; i <= 22; i++) {
-    await db.execute({
-      sql: "INSERT INTO rubric_history (url, model, tier, rubric, judged_at, replaced_at, replaced_by_model) VALUES (?, ?, 'B', ?, '2026-06-01', '2026-11-01', ?)",
-      args: [`https://top-${i}.dev`, PRIMARY_MODEL, JSON.stringify(rubric("B", 3)), PRIMARY_MODEL],
-    });
-  }
-  await db.execute({ sql: "INSERT INTO rubric_history (url, model, tier, rubric, judged_at, replaced_at, replaced_by_model) VALUES ('https://low-1.dev', ?, 'A', ?, '2026-06-01', '2026-11-01', ?)", args: [PRIMARY_MODEL, JSON.stringify(rubric("A", 4)), PRIMARY_MODEL] });
-  // A model switch is not a page change: never counted.
-  await db.execute({ sql: "INSERT INTO rubric_history (url, model, tier, rubric, judged_at, replaced_at, replaced_by_model) VALUES ('https://top-25.dev', ?, 'D', ?, '2026-06-01', '2026-11-01', ?)", args: [BACKUP_MODEL, JSON.stringify(rubric("D", 1, { model: BACKUP_MODEL })), PRIMARY_MODEL] });
-  const s = await regradeChanges(db, { now: MONDAY });
-  assert.equal(s.ready, true, s.reason);
-  assertNoBadNames(s);
-  assert.equal(s.facts.find((f) => f.label === "Portfolios re-graded after their page changed").display, "23");
-  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved up at least one letter").display, "96%");
-  assert.equal(s.facts.find((f) => f.label === "Share whose grade moved down at least one letter").about, null);
-  assert.ok(s.names.length > 0 && s.names.every((n) => /grade moved up from B to (S|A)/.test(n.reason)));
-  assert.ok(!s.names.some((n) => n.url.includes("low-") || n.url === "https://top-25.dev"));
-  assert.equal(s.charts.length, 1);
 });
 
 test("the naming rule: a sheet with a named negative fact, or an unlisted name, is refused", () => {
@@ -332,13 +267,6 @@ function goodDraft(sheet, over = {}) {
   };
 }
 
-async function sheetAndRoster(opts = { motion: [2, 1] }) {
-  const db = await fixture(opts);
-  const sheet = await topGrades(db, { now: MONDAY });
-  const roster = (await db.execute("SELECT name, url FROM portfolios")).rows.map((r) => ({ name: String(r.name), url: String(r.url) }));
-  return { db, sheet, roster };
-}
-
 test("code checks: a good draft passes; its word count is in the template's range", async () => {
   const { sheet, roster } = await sheetAndRoster();
   const d = goodDraft(sheet);
@@ -391,56 +319,6 @@ test("code checks: years, list numbers and model names are not stray numbers; a 
 // ---------------------------------------------------------------------------
 // A mocked Gemini, answering by the request's schema
 // ---------------------------------------------------------------------------
-function fakeGemini(answers) {
-  const calls = [];
-  const kindOf = (schema) => {
-    // No schema: the plain-text writer (compose.mjs): a write, or the one fix call.
-    if (!schema) return "write";
-    const p = schema?.properties ?? {};
-    if (p.claims) return "claims";
-    if (p.verdicts) return "judge";
-    if (p.on_topic) return "review";
-    if (p.ideas) return "pick";
-    if (p.choice) return "image";
-    if (p.polls) return "polls";
-    return "unknown";
-  };
-  const counts = {};
-  return {
-    calls,
-    requests: { [PRIMARY_MODEL]: 0 },
-    async generate(parts, schema, options) {
-      const kind = kindOf(schema);
-      const n = (counts[kind] = (counts[kind] ?? 0) + 1);
-      calls.push({ kind, parts, options });
-      this.requests[PRIMARY_MODEL]++;
-      // The writer answers with the deterministic mock (pipeline/content/mock-writer.mjs) unless a test says otherwise.
-      const a = answers[kind] ?? (kind === "write" ? (_n, p) => mockAnswer({ parts: p }) : undefined);
-      const result = typeof a === "function" ? await a(n, parts) : a;
-      if (result === undefined) throw new Error(`no mocked answer for ${kind}`);
-      return { result, model: PRIMARY_MODEL, usage: {} };
-    },
-  };
-}
-
-const REVIEW_OK = { topic: TOPICS[1], on_topic: true, positive: true, names_ok: true, voice_ok: true, problems: [] };
-
-function contentCtx(db, { now = MONDAY, mode = "dry-run", keys = {}, ai = null, fetchImpl, store } = {}) {
-  const stored = new Map();
-  return {
-    stored,
-    ctx: {
-      db,
-      now: () => now,
-      log: () => {},
-      fetchImpl: fetchImpl ?? (async () => new Response("ok", { status: 200 })),
-      flags: { contentMode: mode },
-      content: { env: "test", keys, ai, store: store ?? (async (key, bytes) => (stored.set(key, bytes), key)) },
-      runId: "test",
-    },
-  };
-}
-
 test("writer: a passing draft is stored privately in dry-run, with its fact sheet, checks and images", async () => {
   const { db } = await sheetAndRoster();
   const g = fakeGemini({ review: REVIEW_OK });
@@ -645,7 +523,7 @@ test("topic filter: the deny list drops politics, crime, disasters, lawsuits and
 });
 
 test("owner direction: no dev-meta story kinds; every kind is about portfolios and has a topic", () => {
-  assert.deepEqual(Object.keys(BUILDERS).sort(), ["leaderboard-movement", "page-craft", "regrade-changes", "top-grades", "vote-patterns"]);
+  assert.deepEqual(Object.keys(BUILDERS).sort(), ["leaderboard-movement", "page-craft", "top-grades", "vote-patterns"]);
   for (const k of Object.keys(BUILDERS)) {
     assert.ok(KIND_LABELS[k], k);
     assert.ok(TOPICS.includes(KIND_TOPIC[k]), k);
@@ -809,6 +687,7 @@ test("the kill switch: CONTENT_MODE is off unless it says dry-run or publish; of
 test("the schedule: pick on Sunday, drafts Monday and Wednesday, one a night, a dropped draft's reserve the next night", async () => {
   assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map(draftsDue), [0, 1, 1, 2, 2, 2, 2]);
   const db = await fixture();
+  await enableAutomation(db);
   const sunday = contentCtx(db, { now: SUNDAY }).ctx;
   assert.deepEqual((await contentJob(sunday)).job, { step: "pick" });
   assert.equal(contentWeek(SUNDAY), contentWeek(MONDAY), "Sunday night's pick serves the coming week");
@@ -842,7 +721,7 @@ test("automation: the owner's settings live in the database, inside the config's
 
   const db = await fixture();
   const read = await readAutomation(db, env);
-  assert.deepEqual(read.settings, { enabled: true, mode: "review", days: [1, 3], perWeek: 2, keepReady: 0, engineMode: "dry-run" }, "the config's schedule until the owner saves");
+  assert.deepEqual(read.settings, { enabled: false, mode: "review", days: [1, 3], perWeek: 2, keepReady: 0, engineMode: "off" }, "scheduled drafts stay off until the owner saves (audit 2026-11-16)");
   assert.equal(read.saved, null);
   assert.ok((await saveAutomation(db, { enabled: true, mode: "publish", days: [2, 4], perWeek: 2 }, { env: { CONTENT_MODE: "publish" }, by: "owner" })).settings);
   // A later config lowers what was saved; it never raises it.
@@ -999,10 +878,12 @@ async function nightRun(db, { mode, now, fetchImpl }) {
     log: (l) => lines.push(l),
     fetchImpl,
     image: async () => null,
-    flags: { contentMode: mode, rankingV2: false, rubricRegrade: false, ranking: rankingConfig({}) },
+    flags: { contentMode: mode, rankingV2: false, rubricRegrade: false, pollGeneration: "true", ranking: rankingConfig({}) },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     runId: "test",
   };
+  // Scheduled drafts need the owner's saved Automation settings (no saved row means off).
+  if (mode !== "off") await enableAutomation(db, { mode: mode === "publish" ? "publish" : "review" });
   let state = await startNight(ctx);
   state = await planNight(ctx, state);
   for (let i = 0; i < 200 && !state.done; i++) {
@@ -1391,6 +1272,7 @@ test("write a draft now: the same writer and checks, live phases, stored as a dr
   // Logged as job content, recorded as step manual, which the night's schedule ignores.
   assert.equal((await db.execute("SELECT step FROM content_runs")).rows.map((r) => r.step).join(), "manual");
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'content'")).rows[0].n, 2);
+  await enableAutomation(db);
   const { job: tonight } = await contentJob({ db, now: () => MONDAY, flags: { contentMode: "dry-run" } });
   assert.notEqual(tonight, null, "the night still drafts: a manual draft is not one of its drafts");
   // Running it again does nothing.
@@ -1414,7 +1296,7 @@ test("write a draft now: people's reserve is never touched; no key, no data and 
   await createJob(db2, { id: hex(401), by: "admin:o", now: MONDAY });
   assert.match((await runManualJob(manualCtx(db2, { answers: {}, apiKey: "" }), hex(401))).message, /GEMINI_API_KEY/);
   // A kind with no data.
-  await createJob(db2, { id: hex(402), kind: "leaderboard-movement", by: "admin:o", now: MONDAY });
+  await createJob(db2, { id: hex(402), kind: "vote-patterns", by: "admin:o", now: MONDAY });
   const nodata = await runManualJob(manualCtx(db2, { answers: {} }), hex(402));
   assert.equal(nodata.status, "skipped");
   assert.match(nodata.message, /no data yet/);

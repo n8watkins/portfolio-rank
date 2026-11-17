@@ -34,7 +34,7 @@ import { createFilteringProxy, guardedFetch } from "../pipeline/net-guard-node.m
 import { capturePage } from "../pipeline/grade-capture.mjs";
 import { ensureGraderSchema } from "../lib/grader/schema.mjs";
 import { claimCaptures, readJob, shotKeyOf } from "../lib/grader/jobs.mjs";
-import { failCapture, recordCapture } from "../lib/grader/finish.mjs";
+import { failCapture, landCapture } from "../lib/grader/finish.mjs";
 import { peopleContext, queueFreeGrade } from "../lib/grader/free-grade.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -65,6 +65,12 @@ async function upload(key, file) {
   await s3.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET ?? "portfolio-rank", Key: key, Body: fs.readFileSync(file), ContentType: "image/jpeg" }));
 }
 
+async function removeShots(shotKey) {
+  if (!s3 || !String(shotKey).startsWith("private/grades/")) return;
+  const { DeleteObjectsCommand } = await import("@aws-sdk/client-s3");
+  await s3.send(new DeleteObjectsCommand({ Bucket: process.env.R2_BUCKET ?? "portfolio-rank", Delete: { Objects: [{ Key: `${shotKey}/hero.jpg` }, { Key: `${shotKey}/mobile.jpg` }], Quiet: true } }));
+}
+
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "grade-"));
 const proxy = await createFilteringProxy();
 // Chromium gets no secrets: a minimal environment, every request through the proxy.
@@ -74,7 +80,7 @@ const browser = await chromium.launch({
   env: { PATH: process.env.PATH ?? "", HOME: work },
 });
 const linkFetch = guardedFetch();
-const counts = { claimed: 0, captured: 0, failed: 0, graded: 0, queued: 0, gradeFailed: 0, awaitingKey: 0 };
+const counts = { claimed: 0, captured: 0, failed: 0, graded: 0, queued: 0, gradeFailed: 0, awaitingKey: 0, deleted: 0 };
 const deadline = Date.now() + MINUTES * 60000;
 const local = new Map(); // shot key -> local hero file, for grading without R2
 
@@ -118,12 +124,18 @@ try {
         await upload(`${shotKey}/hero.jpg`, shot.files.hero);
         if (shot.files.mobile) await upload(`${shotKey}/mobile.jpg`, shot.files.mobile);
       } catch {
+        await removeShots(shotKey).catch(() => {});
         await failCapture(db, id, "The screenshot couldn't be stored. Please try again.");
         counts.failed++;
         continue;
       }
       local.set(shotKey, shot.files.hero);
-      const status = await recordCapture(db, id, { finalUrl: shot.finalUrl, shotKey, pageText: shot.pageText, facts: shot.facts, meta: shot.meta });
+      // A report deleted while its capture ran (or one that ended meanwhile) keeps nothing: the shots just uploaded go again.
+      const status = await landCapture(db, id, { finalUrl: shot.finalUrl, shotKey, pageText: shot.pageText, facts: shot.facts, meta: shot.meta }, { removeShots: (key) => removeShots(key).catch(() => {}) });
+      if (status === null) {
+        counts.deleted++;
+        continue;
+      }
       counts.captured++;
       if (status === "awaiting_key") {
         counts.awaitingKey++;
@@ -131,7 +143,13 @@ try {
       }
       if (status !== "grading") continue;
       const job = await readJob(db, id);
-      const out = await queueFreeGrade(ctx, job);
+      const out = job ? await queueFreeGrade(ctx, job) : "deleted";
+      // Deleted between the capture and the queue: the queue drops its request, the shots go here.
+      if (!job || !(await readJob(db, id))) {
+        await removeShots(shotKey).catch(() => {});
+        counts.deleted++;
+        continue;
+      }
       if (out === "done") counts.graded++;
       else if (out === "failed") counts.gradeFailed++;
       else counts.queued++;
@@ -143,6 +161,6 @@ try {
   fs.rmSync(work, { recursive: true, force: true });
 }
 
-const line = `grade jobs: ${counts.claimed} claimed, ${counts.captured} captured, ${counts.failed} failed to capture; ${counts.graded} graded, ${counts.queued} waiting for Gemini 3.5, ${counts.gradeFailed} grade failures, ${counts.awaitingKey} waiting for the visitor's own key; ${proxy.stats.blocked} request(s) to private or non-web addresses refused`;
+const line = `grade jobs: ${counts.claimed} claimed, ${counts.captured} captured, ${counts.failed} failed to capture; ${counts.graded} graded, ${counts.queued} waiting for Gemini 3.5, ${counts.gradeFailed} grade failures, ${counts.awaitingKey} waiting for the visitor's own key; ${counts.deleted} deleted while capturing; ${proxy.stats.blocked} request(s) to private or non-web addresses refused`;
 console.log(line);
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${line}\n`);

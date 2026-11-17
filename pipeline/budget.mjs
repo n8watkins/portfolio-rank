@@ -87,20 +87,31 @@ export const DEFAULT_PLAN = {
   breaker: 5,
   // An item that fails on this many nights in a row is parked, not retried.
   parkAfterNights: 3,
+  // A batch (one Workflow step, limited to 20 minutes) takes no new item
+  // after this many minutes of wall clock (audit F9, 2026-11-16).
+  batchMinutes: 10,
+  // A single-site grade request gives up after this many seconds (the
+  // client's default is 120); comparisons and posts keep the client's own.
+  requestTimeoutSeconds: 60,
   // Per stage: a request cap (counted over the whole quota day, retries
   // included) and a wall-clock cap in minutes. Caps add up to more than
   // the quota on purpose: what is left after people decides.
   stages: {
     grade_new: { cap: 300, minutes: 60 },
-    grade_changed: { cap: 100, minutes: 30 },
+    // No automatic re-grading (owner, 2026-11-16: "We're not doing automatic
+    // regrading on change"; docs/DECISIONS.md): a site is asked "is it a
+    // portfolio" once, when it is added. The cap is 0 by default so lifting
+    // the GEMINI_BUDGET pause does not bring it back; change detection still
+    // runs (it is free), and the stage's code stays.
+    grade_changed: { cap: 0, minutes: 30 },
     compare: { cap: 200, minutes: 45 },
     content: { cap: 100, minutes: 30 },
     // One Gemini check per library image (pipeline/content/library-stage.mjs).
     library: { cap: 40, minutes: 25 },
-    // Re-grades are off by default until rubric v3 exists (Gemini prompt
-    // audit, docs/audits/gemini-prompting.md): the nightly budget goes to new
-    // sites, and the backlog is graded once, on v3. Turn them back on with
-    // GEMINI_BUDGET {"stages":{"regrade":{"cap":300}}}.
+    // Re-grades are off by default (owner, 2026-11-16: a site is graded once,
+    // at the door; earlier, 2026-11-14, until rubric v3, Gemini prompt audit,
+    // docs/audits/gemini-prompting.md). Only an explicit GEMINI_BUDGET
+    // {"stages":{"regrade":{"cap":300}}} turns them on.
     regrade: { cap: 0, minutes: 60 },
     experiment: { cap: 50, minutes: 15 },
   },

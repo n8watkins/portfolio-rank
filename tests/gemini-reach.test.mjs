@@ -11,11 +11,12 @@
 // hourly drain grades it (fresh-eyes audit H3).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join, dirname, relative, resolve } from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+// One reader of imports for the repository: CI sorts pull requests with it too.
+import { importsOf as importedFiles } from "../scripts/ci-lanes.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const EXTS = ["", ".ts", ".tsx", ".mjs", ".js", "/index.ts", "/index.tsx", "/index.mjs"];
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -26,24 +27,10 @@ function walk(dir, out = []) {
   return out;
 }
 
-function resolveImport(from, spec) {
-  let base;
-  if (spec.startsWith("@/")) base = join(ROOT, spec.slice(2));
-  else if (spec.startsWith(".")) base = resolve(dirname(from), spec);
-  else return null;
-  for (const e of EXTS) {
-    const p = base + e;
-    if (existsSync(p) && statSync(p).isFile()) return p;
-  }
-  return null;
-}
-
 const importsOf = new Map();
 function imports(file) {
   if (!importsOf.has(file)) {
-    const src = readFileSync(file, "utf8");
-    const specs = [...src.matchAll(/(?:import|export)\s[^'"]*?from\s*["']([^"']+)["']|import\(\s*["']([^"']+)["']\s*\)/g)].map((m) => m[1] ?? m[2]);
-    importsOf.set(file, specs.map((s) => resolveImport(file, s)).filter(Boolean));
+    importsOf.set(file, importedFiles(ROOT, relative(ROOT, file)).map((f) => join(ROOT, f)));
   }
   return importsOf.get(file);
 }

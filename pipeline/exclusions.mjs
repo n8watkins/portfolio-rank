@@ -5,13 +5,23 @@
 // the same bot pull request flow as the daily upstream sync.
 //
 // data/excluded.json holds objects:
-//   { url, name, reason, kind, removed, first_failed?, last_checked?, checks? }
-// kind: "down" (failed to load, parked, hijacked or blank), "duplicate",
-// "not_portfolio" (graded so by the AI and confirmed the same way) or
-// "owner_request" (a takedown). Plain URL strings (the old format) still work.
+//   { url, name, reason, kind, removed, first_failed?, last_checked?, checks?,
+//     decided_by?, evidence?, duplicate_of?, recheck_after? }
+// kind: "down" (failed to load, parked, hijacked or blank), "dead" (the name
+// no longer resolves, or a 404 or broken deploy; checked again after
+// recheck_after, see planDeadRecheck), "duplicate" (duplicate_of: the address
+// kept), "not_portfolio" (graded so by the AI, settled by a code rule, or
+// decided by the owner) or "owner_request" (a takedown). decided_by says who
+// ("owner", "ai:<models>", "code:<rule>", "health:dns", "rule:duplicate") and
+// evidence keeps what they said; /removed shows only kind, reason and date
+// (lib/removed-kinds.mjs). Every reader matches on the URL alone
+// (generate_feed.py norm_key, normKey here, discovery's normalizeCandidate),
+// so the extra fields never change what is excluded. Plain URL strings (the
+// old format) still work.
 
 import fs from "fs";
 import { normKey } from "./health.mjs";
+import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
 export const MAX_EXCLUDE_SHARE = 0.1;
@@ -19,8 +29,47 @@ export const MAX_EXCLUDE_SHARE = 0.1;
 export function kindOf(reason) {
   const r = String(reason ?? "");
   if (r.startsWith("duplicate of")) return "duplicate";
-  if (r.startsWith("AI grading says")) return "not_portfolio";
+  if (r.startsWith(AI_SAYS_NOT_PORTFOLIO)) return "not_portfolio";
   return "down";
+}
+
+/**
+ * Who removed a "not a portfolio" site, from its latest applied "remove" row
+ * in the review queue (lib/reviews/store.mjs), in data/excluded.json's shape
+ * (#222): { decided_by: "owner" | "rule:...", evidence: { review, gemini?,
+ * signals? } }, or null when no row decided it (the health check's own
+ * failure). Never shown on the public Removed page.
+ */
+export async function removalDecider(db, url) {
+  let r;
+  try {
+    r = (
+      await db.execute({
+        sql: `SELECT id, decided_by, verdicts, signals FROM status_reviews
+              WHERE url = ? AND proposed = 'remove' AND status IN ('confirmed', 'auto_applied')
+              ORDER BY decided_at DESC, id DESC LIMIT 1`,
+        args: [url],
+      })
+    ).rows[0];
+  } catch (e) {
+    if (/no such table/i.test(String(e?.message ?? e))) return null;
+    throw e;
+  }
+  if (!r) return null;
+  const by = String(r.decided_by ?? "");
+  const parse = (v) => {
+    try {
+      return v == null ? null : JSON.parse(String(v));
+    } catch {
+      return null;
+    }
+  };
+  const gemini = parse(r.verdicts)?.gemini35?.solo?.reason ?? null;
+  const signals = parse(r.signals);
+  return {
+    decided_by: by.startsWith("rule:") ? by : "owner",
+    evidence: { review: Number(r.id), ...(gemini ? { gemini } : {}), ...(typeof signals?.score === "number" ? { signals: signals.score } : {}) },
+  };
 }
 
 export const readJson = (file, fallback) => {
@@ -33,6 +82,50 @@ export const readJson = (file, fallback) => {
 };
 
 export const excludedUrl = (e) => (typeof e === "string" ? e : e?.url);
+
+// A dead entry is checked again this long after the last check, and at most this many a run.
+export const DEAD_RECHECK_DAYS = 91;
+export const DEAD_RECHECK_LIMIT = 40;
+
+/**
+ * Whether a site answers now (the dead-entry re-check): the name resolves and
+ * the page loads with a 2xx answer that isn't an error page. One plain
+ * request; never throws.
+ */
+export async function siteAnswers(url, { fetchImpl = globalThis.fetch, timeoutMs = 20000 } = {}) {
+  try {
+    const res = await fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs), headers: { "user-agent": "Mozilla/5.0 PortfolioRank-health" } });
+    if (!res.ok) return false;
+    const text = (await res.text()).slice(0, 200000);
+    return text.length > 200 && !/site not found|there isn.t a github pages site here|deployment not found|404: not found|page not found/i.test(text);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The dead entries due for their check (recheck_after on or before today),
+ * at most `limit`: one that answers now leaves the list (it returns with the
+ * next sync if the community list still has it); one that doesn't gets its
+ * next check DEAD_RECHECK_DAYS later. Returns { excluded, back: [urls],
+ * still: [urls] } without writing.
+ */
+export async function planDeadRecheck({ excluded, now = new Date(), answers = siteAnswers, limit = DEAD_RECHECK_LIMIT }) {
+  const day = now.toISOString().slice(0, 10);
+  const next = new Date(now.getTime() + DEAD_RECHECK_DAYS * 86400000).toISOString().slice(0, 10);
+  const due = excluded.filter((e) => e && typeof e === "object" && e.kind === "dead" && String(e.recheck_after ?? "") <= day).slice(0, limit);
+  const back = new Set();
+  const still = new Set();
+  for (const e of due) {
+    if (await answers(e.url)) back.add(e);
+    else still.add(e);
+  }
+  return {
+    excluded: excluded.filter((e) => !back.has(e)).map((e) => (still.has(e) ? { ...e, last_checked: day, recheck_after: next } : e)),
+    back: [...back].map((e) => e.url),
+    still: [...still].map((e) => e.url),
+  };
+}
 
 /**
  * Add confirmed-down listed rows to the exclusion list and drop them from the
@@ -53,15 +146,19 @@ export async function planExclusions({ db, excluded, feed, now = new Date() }) {
   for (const r of rows) {
     const url = String(r.url);
     if (!onFeed.has(url) || have.has(normKey(url))) continue;
+    const kind = kindOf(r.health_reason);
+    // A removal decided in the review queue says who decided, apart from the public reason.
+    const decider = kind === "not_portfolio" ? await removalDecider(db, url) : null;
     added.push({
       url,
       name: onFeed.get(url).name ?? (r.name == null ? url : String(r.name)),
       reason: String(r.health_reason ?? ""),
-      kind: kindOf(r.health_reason),
+      kind,
       removed: day,
       first_failed: r.health_first_fail_at == null ? null : String(r.health_first_fail_at),
       last_checked: r.health_checked_at == null ? null : String(r.health_checked_at),
       checks: Number(r.health_fails ?? 0),
+      ...(decider ?? {}),
     });
   }
   if (added.length > feed.length * MAX_EXCLUDE_SHARE) {

@@ -91,7 +91,7 @@ async function load(jobId: string | null) {
     contentCosts(client, { env: process.env, now: new Date(now) }),
     recentJobs(client, { limit: 10 }),
     Promise.all(Object.entries(BUILDERS).map(async ([id, build]) => {
-      const s = await build(client, { now });
+      const s = await build(client, { now, rankingV2: /^true$/i.test(String(process.env.RANKING_V2 ?? "")) });
       return { id, label: KIND_LABELS[id] ?? id, ready: Boolean(s.ready), reason: s.ready ? null : (s.reason ?? null) };
     })),
   ]);

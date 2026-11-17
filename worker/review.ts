@@ -1,7 +1,9 @@
 // The owner's rule for the review queue (lib/reviews/store.mjs
 // autoApplyReviews), on the hourly Cron Trigger (worker/index.ts), only with
-// REVIEW_AUTO_APPLY (lib/reviews/flag.ts): every pending row that passes
-// (both models say it is a portfolio and no code rule objects) is applied
+// REVIEW_AUTO_APPLY (lib/reviews/flag.ts): every pending row that a rule
+// passes (both models say it is a portfolio and no code rule objects; or a
+// door removal the night left waiting while the switch was off,
+// lib/reviews/door.mjs) is applied
 // through the same paths as the owner's Confirm and shown on /admin/review
 // with Undo. Rows that fail, disagree, or were blocked wait for the owner.
 // The profiles it changed leave the edge cache. Plain code, no Gemini.

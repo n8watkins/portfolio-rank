@@ -360,8 +360,11 @@ export const MIN_VOTES_NAMED = 5;
 export async function votePatterns(db, { now }) {
   const kind = "vote-patterns";
   const graded = new Map((await gradedRows(db)).map((r) => [r.url, r]));
-  // People's votes only (the AI judge's comparisons live elsewhere), between two graded, visible portfolios.
-  const votes = (await db.execute("SELECT winner, loser FROM votes")).rows
+  // People's votes only, the ones that count on the board (rater_type 'human', as
+  // lib/ranking/store.mjs readVoteComparisons): never the retired AI voter's
+  // ('ai') or the practice votes of the face-off ('anon'), whose rows stay in
+  // this table. Between two graded, visible portfolios.
+  const votes = (await db.execute("SELECT winner, loser FROM votes WHERE rater_type = 'human'")).rows
     .map((v) => ({ w: graded.get(String(v.winner)), l: graded.get(String(v.loser)) }))
     .filter((v) => v.w && v.l);
   if (votes.length < MIN_GROUP * 2) return notReady(kind, `${votes.length} people's votes between graded portfolios; ${MIN_GROUP * 2} needed`);
@@ -416,77 +419,14 @@ export async function votePatterns(db, { now }) {
 }
 
 // ---------------------------------------------------------------------------
-// "How portfolios change: before and after a redesign" (same-rubric re-grades)
-// ---------------------------------------------------------------------------
-export async function regradeChanges(db, { now }) {
-  const kind = "regrade-changes";
-  let history;
-  try {
-    history = (await db.execute("SELECT url, model, rubric, replaced_by_model, replaced_at FROM rubric_history ORDER BY url, id")).rows;
-  } catch (e) {
-    if (/no such table/i.test(String(e?.message))) return notReady(kind, "no re-grades yet (rubric_history does not exist)");
-    throw e;
-  }
-  const rows = await gradedRows(db);
-  const current = new Map(rows.map((r) => [r.url, r]));
-  // A site's latest earlier grade by the same model and rubric version as its grade now: the page changed, the judge didn't.
-  const pairs = [];
-  const seen = new Set();
-  for (const h of [...history].reverse()) {
-    const url = String(h.url);
-    const now2 = current.get(url);
-    if (!now2 || seen.has(url)) continue;
-    const before = parse(h.rubric);
-    if (!before?.tier || !TIER[before.tier] || before.is_portfolio === false) continue;
-    if (String(h.model ?? "") !== String(now2.rubric.model ?? "") || (before.rubric_version ?? null) !== (now2.rubric.rubric_version ?? null)) continue;
-    seen.add(url);
-    // The grade's own letters (Gemini's S to D): the tier by ELO comes from face-offs, not from the grade.
-    if (!TIER[now2.rubric.tier]) continue;
-    pairs.push({ row: now2, before, after: now2.rubric });
-  }
-  if (pairs.length < MIN_GROUP) return notReady(kind, `${pairs.length} portfolios re-graded after a change by the same judge; ${MIN_GROUP} needed`);
-  const b = sheet(kind, {
-    now,
-    headline: "Before and after: what changed when portfolios got a better grade",
-    angle: "Portfolios whose page changed and were graded again by the same judge with the same rubric: how many moved up a grade letter, which parts of the grade improved most, and what the improvers did. A reader learns which changes pay off.",
-    dataLink: `${SITE_URL}/top`,
-    query: "rubric_history: each re-graded portfolio's previous grade by the same model and rubric version, against its grade now",
-  });
-  b.fact("Portfolios re-graded after their page changed", pairs.length, fmt.int(pairs.length));
-  const up = pairs.filter((p) => tierValue(p.after.tier) > tierValue(p.before.tier));
-  const down = pairs.filter((p) => tierValue(p.after.tier) < tierValue(p.before.tier)).length;
-  const upId = b.fact("Share whose grade moved up at least one letter", up.length / pairs.length, fmt.pct(up.length / pairs.length));
-  b.fact("Share whose grade moved down at least one letter", down / pairs.length, fmt.pct(down / pairs.length), { tone: "negative" });
-  b.notable([upId], `{{${upId}}} of re-graded portfolios moved up a grade letter after a change.`);
-  const cats = [];
-  const ids = [];
-  const gains = [];
-  for (const k of AXES) {
-    const d = pairs.map((p) => (typeof p.after?.[k]?.score === "number" && typeof p.before?.[k]?.score === "number" ? p.after[k].score - p.before[k].score : null)).filter((x) => x != null);
-    if (d.length < MIN_GROUP) continue;
-    const m = mean(d);
-    gains.push({ k, m });
-    cats.push(AXIS_LABELS[k]);
-    ids.push(b.fact(`Average change on ${AXIS_LABELS[k]} after a re-grade, in points on a 1 to 5 scale`, m, fmt.dec(m, 2)));
-  }
-  if (gains.length) {
-    const best = extremes(gains, (g) => g.m, "max", 2);
-    b.fact(best.length > 1 ? "The parts of the grade that improved most (tied)" : "The part of the grade that improved most", joinWords(best.map((g) => AXIS_LABELS[g.k])), joinWords(best.map((g) => AXIS_LABELS[g.k])));
-    b.chart({ title: "Average change per part of the grade after a re-grade (1 to 5 scale)", unit: "", max: 2, categories: cats, series: [{ name: "Average change", facts: ids }], alt: "Bar chart of how much each part of the AI grade changed, on average, when a portfolio was re-graded after a change." });
-  }
-  for (const p of up.filter((x) => x.row.name).sort((x, y) => tierValue(y.after.tier) - tierValue(x.after.tier) || x.row.url.localeCompare(y.row.url)).slice(0, 3)) {
-    b.name(p.row, `grade moved up from ${p.before.tier} to ${p.after.tier} after a redesign`);
-    const id = b.fact(`${p.row.name} (${domainOf(p.row.url)}) moved up to tier`, p.after.tier, p.after.tier, { tone: "positive", about: p.row.url });
-    b.example("a redesign that paid off", id, p.row);
-  }
-  return b.done();
-}
-
-// ---------------------------------------------------------------------------
 // "Leaderboard movement" (ranking v2's weekly snapshots)
 // ---------------------------------------------------------------------------
-export async function leaderboardMovement(db, { now, view = "merged" }) {
+export async function leaderboardMovement(db, { now, view = "merged", rankingV2 = false }) {
   const kind = "leaderboard-movement";
+  // The snapshots are written only by the comparison stage (or a hand-run
+  // script), and the board they describe is hidden while RANKING_V2 is off:
+  // a post about it would describe a board the public cannot see.
+  if (!rankingV2) return notReady(kind, 'the new leaderboard is off (RANKING_V2 is not "true"), so there is nothing public to write about');
   let weeks;
   try {
     weeks = (await db.execute({ sql: "SELECT DISTINCT week FROM rank_history WHERE view = ? ORDER BY week DESC LIMIT 2", args: [view] })).rows.map((r) => String(r.week));
@@ -555,7 +495,6 @@ export async function leaderboardMovement(db, { now, view = "merged" }) {
 export const BUILDERS = {
   "top-grades": topGrades,
   "vote-patterns": votePatterns,
-  "regrade-changes": regradeChanges,
   "leaderboard-movement": leaderboardMovement,
   "page-craft": pageCraft,
 };
@@ -567,17 +506,16 @@ export const BUILDERS = {
 export const KIND_LABELS = {
   "top-grades": "What the AI grader rewards and penalizes",
   "vote-patterns": "What people vote for and against",
-  "regrade-changes": "How portfolios change: before and after",
   "leaderboard-movement": "Trends across the leaderboard",
   "page-craft": "Dark mode, motion, phones and page weight",
 };
 
 /** Story ideas from the data (stage 1, Find): every builder that is ready. */
-export async function findIdeas(db, { now }) {
+export async function findIdeas(db, { now, rankingV2 = false }) {
   const ideas = [];
   const waiting = [];
   for (const [kind, build] of Object.entries(BUILDERS)) {
-    const s = await build(db, { now });
+    const s = await build(db, { now, rankingV2 });
     if (s.ready) ideas.push({ kind, headline: s.headline, angle: s.angle, facts: s.facts.length });
     else waiting.push({ kind, reason: s.reason });
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CheckCheck, ChevronDown, CircleAlert, ClipboardCheck, ExternalLink, RotateCcw, X } from "lucide-react";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
@@ -8,16 +8,23 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
+import { RULE_NAMES, ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
+import { ConfirmButton } from "@/components/admin/ConfirmButton";
+import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } from "@/components/admin/review-labels";
 
 // The owner's review queue (app/admin/(tools)/review/page.tsx): one card per
 // proposed status change, with a tick box. Rows where the graders agree come
-// ticked; a disagreement is flagged and starts unticked. "Confirm all where
-// everyone agrees" (or "Confirm N ticked" once the ticks change) applies the
-// ticked rows after a second click; each row also has Confirm and Reject.
-// Either thumbnail opens the large viewer (./ShotViewer.tsx) with the whole
-// capture and the same Confirm and Reject. Decisions go to POST
-// /api/admin/review.
+// ticked; a disagreement is flagged and starts unticked. Every decision asks
+// first, in the page (./ConfirmButton.tsx: the first click asks, the second
+// acts; Esc cancels), and says in plain words what happens and when it shows
+// (./review-labels.ts). "Confirm all where everyone agrees" opens a confirm
+// bar with what happens to how many sites; confirming shows its progress and
+// holds every other decision button until it is done, then says where the
+// rows went. Decided rows stay listed under Decided, newest first, each with
+// Undo (back to pending, the change reversed). Either thumbnail opens the
+// large viewer (./ShotViewer.tsx) with the whole capture and the same
+// buttons. Decisions go to POST /api/admin/review.
 
 type Verdict = { is_portfolio: boolean; reason?: string; scores?: { visual_design?: number; project_presentation?: number; writing?: number } } | null;
 type Grader = { batch?: Verdict; solo?: Verdict };
@@ -33,13 +40,24 @@ export type Review = {
   reason: string | null;
   offList: boolean;
   shotKey: string | null;
-  /** prompt: the grading prompt's version (absent on rows written before it was recorded). */
-  verdicts: { gemini31?: Grader; haiku?: Grader; prompt?: string };
+  /** prompt: the grading prompt's version (absent on rows written before it was recorded). gemini35: the nightly grade at the door. */
+  verdicts: { gemini31?: Grader; haiku?: Grader; gemini35?: Grader; prompt?: string };
   signals: { score?: number; names?: string[]; junk_rule?: string | null; capture?: { action?: string | null; blocked?: string | null; failed?: string | null } } | null;
   status: string;
   decidedAt: string | null;
   decidedBy: string | null;
-  applied: { grade?: string; visibility?: string[]; feed?: string | null; error?: string; rejected?: boolean; action?: "none" } | null;
+  applied: {
+    grade?: string;
+    visibility?: string[];
+    feed?: string | null;
+    error?: string;
+    rejected?: boolean;
+    /** Why a rule's waiting row was closed without acting (status closed). */
+    closed?: string;
+    action?: "none";
+    /** The last Undo: when, who, what it reversed, and what it could not. */
+    undo?: { at: string; by: string; reversed?: string; note?: string };
+  } | null;
   createdAt: string;
   /** An automatic apply the owner undid: when and who. */
   undoneAt?: string | null;
@@ -52,6 +70,12 @@ const GROUPS: Record<string, string> = {
   delisted_ungraded: "Delisted before grading",
   broken: "Broken or dead, never graded",
   live_ungraded: "Live, not graded yet",
+  // The nightly grade at the door (lib/reviews/door.mjs).
+  door_not_portfolio: "Gemini: not a portfolio",
+  door_strong_signals: "Gemini says no, the code says portfolio",
+  door_held: "Gemini says no, held for you",
+  bot_wall: "Bot-walled, never captured",
+  signals_collapsed: "Listed, portfolio signals collapsed",
 };
 const CURRENT: Record<string, string> = { ranked: "Listed and ranked", listed: "Listed, not ranked", hidden: "Hidden", delisted: "Off the list" };
 const PROPOSED = { relist: "List and rank it", remove: "Take it off the list", review: "A person checks it" } as const;
@@ -59,9 +83,13 @@ const TONE = { relist: "text-up", remove: "text-down", review: "text-ink" } as c
 const GRADERS = [
   ["gemini31", "Gemini 3.1"],
   ["haiku", "Haiku 5.5"],
+  ["gemini35", "Gemini 3.5"],
 ] as const;
+/** The graders a row has verdicts from: a re-check's two models, or the nightly grade alone. */
+const gradersOf = (r: Review) => GRADERS.filter(([key]) => r.verdicts[key]);
 const SIGNALS = 6;
-const CHUNK = 200;
+// Rows per request while confirming many (the progress count moves per request; the server applies 8 of them at once).
+const CHUNK = 24;
 // The static tag in a colour (its own text colour replaces the tag's muted one, which would win otherwise).
 const tagDown = `${tag.replace("text-mute", "")} text-down ring-down/40`;
 const tagUp = `${tag.replace("text-mute", "")} text-up`;
@@ -115,7 +143,9 @@ function VerdictCell({ v }: { v: Verdict | undefined }) {
 }
 
 function Verdicts({ r }: { r: Review }) {
-  const reasons = GRADERS.flatMap(([key, label]) =>
+  const graders = gradersOf(r);
+  if (graders.length === 0) return null;
+  const reasons = graders.flatMap(([key, label]) =>
     (["batch", "solo"] as const).flatMap((mode) => {
       const v = r.verdicts[key]?.[mode];
       return v?.reason ? [{ who: `${label}, ${mode === "batch" ? "batched" : "one at a time"}`, v }] : [];
@@ -139,7 +169,7 @@ function Verdicts({ r }: { r: Review }) {
           </tr>
         </thead>
         <tbody>
-          {GRADERS.map(([key, label]) => (
+          {graders.map(([key, label]) => (
             <tr key={key} className="border-t border-edge align-baseline">
               <th scope="row" className="py-1.5 pr-2 font-semibold whitespace-nowrap">
                 {label}
@@ -177,11 +207,11 @@ function Verdicts({ r }: { r: Review }) {
   );
 }
 
-function Signals({ s }: { s: Review["signals"] }) {
+function Signals({ s, small = false }: { s: Review["signals"]; small?: boolean }) {
   if (!s) return null;
   const failed = s.capture?.failed;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 ${small ? "text-xs" : "text-sm"}`}>
       {typeof s.score === "number" && (
         <p>
           <span className="font-semibold">
@@ -220,6 +250,7 @@ function Row({
   const box = `review-${r.id}`;
   const action = r.signals?.capture?.action ?? null;
   const blocked = r.signals?.capture?.blocked ?? null;
+  const outcome = outcomeOf(r);
   return (
     <li className={`card p-4 sm:p-5 ${r.agreed ? "" : "ring-1 ring-inset ring-down/35"}`} data-review-row={r.id} data-agreed={r.agreed ? "true" : "false"}>
       <div className="flex items-start gap-3">
@@ -237,7 +268,7 @@ function Row({
               <span className={`${tagDown} font-semibold`}>
                 <CircleAlert className="h-3.5 w-3.5" aria-hidden /> Capture blocked
               </span>
-            ) : r.agreed ? (
+            ) : gradersOf(r).length < 2 ? null : r.agreed ? (
               <span className={tagUp}>
                 <CheckCheck className="h-3.5 w-3.5" aria-hidden /> Graders agree
               </span>
@@ -250,10 +281,15 @@ function Row({
             {r.offList && <span className={tag}>No longer on the community list</span>}
             {r.undoneAt && (
               <span className={tagWrap} data-review-undone>
-                Applied automatically, then undone{r.undoneBy ? ` by ${r.undoneBy.replace(/^admin:/, "")}` : ""}, {when(r.undoneAt)}
+                Decided, then undone{r.undoneBy ? ` by ${r.undoneBy.replace(/^admin:/, "")}` : ""}, {when(r.undoneAt)}
               </span>
             )}
           </div>
+          {r.applied?.undo?.note && (
+            <p className="mt-1.5 text-xs text-down text-pretty" data-review-undo-note>
+              {r.applied.undo.note}
+            </p>
+          )}
           <p className="mt-1.5 text-sm">
             <span className="text-mute">Now:</span> {CURRENT[r.current] ?? r.current} <span className="text-mute">→ Proposed:</span>{" "}
             <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span>{" "}
@@ -303,12 +339,27 @@ function Row({
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-edge pt-3">
-            <button type="button" className={btnSecondary} disabled={busy} onClick={() => onDecide("confirm")} data-review-confirm>
-              <Check className="h-4 w-4" aria-hidden /> {r.proposed === "review" ? "Mark checked" : "Confirm"}
-            </button>
-            <button type="button" className={btnGhost} disabled={busy} onClick={() => onDecide("reject")} data-review-reject>
-              <X className="h-4 w-4" aria-hidden /> Reject
-            </button>
+            <ConfirmButton
+              className={btnSecondary}
+              disabled={busy}
+              icon={<Check className="h-4 w-4" aria-hidden />}
+              label={outcome.label}
+              question={outcome.question}
+              onConfirm={() => onDecide("confirm")}
+              data-review-confirm
+            />
+            <ConfirmButton
+              className={btnGhost}
+              disabled={busy}
+              icon={<X className="h-4 w-4" aria-hidden />}
+              label="Reject"
+              question={REJECT_QUESTION}
+              onConfirm={() => onDecide("reject")}
+              data-review-reject
+            />
+            <p className="text-xs text-mute text-pretty" data-review-when>
+              {ifConfirmed(outcome.when)}
+            </p>
             {r.applied?.error && !error && <p className="text-sm text-down">The last try failed: {r.applied.error}</p>}
             {error && (
               <p className="text-sm text-down" role="alert">
@@ -323,18 +374,25 @@ function Row({
 }
 
 /**
- * Rows the owner's rule applied without waiting (status auto_applied,
- * lib/reviews/store.mjs autoApplyReviews), newest first, each with Undo: the
- * site goes back to what it was and the row waits for the owner again.
+ * Rows the owner's rules applied without waiting (status auto_applied,
+ * lib/reviews/store.mjs autoApplyReviews and the night's door,
+ * lib/reviews/door.mjs), newest first, each with Undo: the site goes back to
+ * what it was and the row waits for the owner again. A removal shows what it
+ * was judged on: Gemini's reason, the code's signals and the screenshot.
  */
 function AutoApplied({
   rows,
+  shotsBase,
   busy,
+  locked = false,
   errors,
   onUndo,
 }: {
   rows: Review[];
+  shotsBase: string | null;
   busy: Set<number>;
+  /** Every Undo waits while many rows are being decided. */
+  locked?: boolean;
   errors: Record<number, string>;
   onUndo: (id: number) => void;
 }) {
@@ -345,27 +403,58 @@ function AutoApplied({
         Applied automatically ({rows.length.toLocaleString("en-US")})
       </h2>
       <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">
-        These passed the rule: both models say it is a portfolio and no code rule objects. Undo puts the site back as it was, and the row waits for you above.
+        Two rules apply without waiting: both models say it is a portfolio and no code rule objects (brought back), or Gemini says a new site is not a portfolio and the
+        code found too little to dispute it (taken off). Undo puts the site back as it was, the row waits for you above, and the rule never applies it again.
       </p>
       <ul className="card mt-3 divide-y divide-edge">
         {rows.map((r) => {
           const domain = domainOf(r.url);
-          const said = GRADERS.map(([key, label]) => {
-            const v = r.verdicts[key]?.batch ?? r.verdicts[key]?.solo;
-            return `${label}: ${v ? (v.is_portfolio ? "portfolio" : "not a portfolio") : "no verdict"}`;
-          }).join(" · ");
+          const said = gradersOf(r)
+            .map(([key, label]) => {
+              const v = r.verdicts[key]?.batch ?? r.verdicts[key]?.solo;
+              return `${label}: ${v ? (v.is_portfolio ? "portfolio" : "not a portfolio") : "no verdict"}`;
+            })
+            .join(" · ");
+          const base = shotsBase && r.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${r.shotKey}` : null;
+          const removed = r.proposed === "remove";
           return (
             <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-review-auto-row={r.id}>
+              {/* Every row has the same left column, so the text starts at the same edge; on a phone an empty one takes no room. */}
+              {base ? (
+                <a
+                  href={frameOf(base, "hero.jpg")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`The screenshot ${domain} was judged on`}
+                  className={`${thumb} w-28 shrink-0`}
+                  data-review-auto-shot
+                >
+                  <ScreenshotFrame src={frameOf(base, "hero.jpg")} alt="" domain={domain} />
+                </a>
+              ) : (
+                <div className="hidden w-28 shrink-0 sm:block" aria-hidden />
+              )}
               <div className="min-w-0 flex-1 basis-64">
                 <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1 font-semibold break-all hover:text-accent">
                   {domain}
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
                 </a>
                 <p className="text-xs text-mute">
-                  <span className="font-semibold text-up">{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
+                  <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
                   {r.offList ? " · no longer on the community list" : ""} · applied {when(r.decidedAt)}
+                  {r.decidedBy ? ` by ${decider(r.decidedBy)}` : ""}
                 </p>
-                <p className="mt-0.5 text-xs text-mute">{said}</p>
+                {said && <p className="mt-0.5 text-xs text-mute">{said}</p>}
+                {removed && r.reason && (
+                  <p className="mt-0.5 text-xs text-pretty" data-review-auto-reason>
+                    {r.reason}
+                  </p>
+                )}
+                {removed && (
+                  <div className="mt-1">
+                    <Signals s={r.signals} small />
+                  </div>
+                )}
                 {r.applied?.visibility?.length ? <p className="mt-0.5 text-xs text-mute text-pretty">{sentence(r.applied.visibility)}</p> : null}
               </div>
               <div className="flex items-center gap-3">
@@ -374,9 +463,7 @@ function AutoApplied({
                     {errors[r.id]}
                   </p>
                 )}
-                <button type="button" className={btnSecondary} disabled={busy.has(r.id)} onClick={() => onUndo(r.id)} data-review-undo aria-label={`Undo: ${domain}`}>
-                  <RotateCcw className="h-4 w-4" aria-hidden /> {busy.has(r.id) ? "Undoing..." : "Undo"}
-                </button>
+                <UndoButton id={r.id} domain={domain} busy={busy.has(r.id) || locked} onUndo={onUndo} />
               </div>
             </li>
           );
@@ -386,39 +473,117 @@ function AutoApplied({
   );
 }
 
-function Decided({ rows }: { rows: Review[] }) {
-  if (rows.length === 0) return null;
+/** Undo on a decided row: asks first (./ConfirmButton.tsx), then puts the row back to pending and reverses what it applied. */
+function UndoButton({ id, domain, busy, onUndo }: { id: number; domain: string; busy: boolean; onUndo: (id: number) => void }) {
   return (
-    <details className="group/decided mt-8" data-review-decided>
-      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-lg font-bold tracking-tight [&::-webkit-details-marker]:hidden">
-        <ChevronDown className="h-5 w-5 text-mute transition group-open/decided:rotate-180" aria-hidden /> Decided ({rows.length.toLocaleString("en-US")})
-      </summary>
+    <ConfirmButton
+      className={btnSecondary}
+      disabled={busy}
+      icon={<RotateCcw className="h-4 w-4" aria-hidden />}
+      label={busy ? "Undoing..." : "Undo"}
+      question={UNDO_QUESTION}
+      onConfirm={() => onUndo(id)}
+      target={domain}
+      data-review-undo
+      data-review-undo-for={domain}
+    />
+  );
+}
+
+/** Who decided, in words: the admin's login, "the duplicate rule", "the owner's list of 13 November". */
+function decider(by: string | null) {
+  if (!by) return "";
+  if (by.startsWith("admin:")) return by.slice(6);
+  // The review rules by their plain names ("Gemini said not a portfolio"); other rules as before ("the duplicate rule").
+  if (by.startsWith("rule:")) return RULE_NAMES[by] ? `the rule "${RULE_NAMES[by]}"` : `the ${ruleName(by)} rule`;
+  if (by.startsWith("owner:")) return "the owner's verdict list";
+  return by;
+}
+
+/** What a decision did, in one sentence. */
+function effect(r: Review) {
+  if (r.status === "closed") return `Closed without acting: ${r.applied?.closed ?? "a newer decision made it stale"}.`;
+  if (r.status === "rejected") return r.applied?.grade === "settled" ? "Kept listed; the grade records your decision." : "Nothing changed.";
+  if (r.applied && "action" in r.applied) return "Marked checked; nothing to apply.";
+  if (r.applied?.visibility?.length) return sentence(r.applied.visibility);
+  return "Recorded; the grade already matched.";
+}
+
+/** Rows shown in Decided before "Show all". */
+const DECIDED_SHOWN = 25;
+
+/**
+ * Every decided row, newest first (the server's list, so it is the same after
+ * a refresh), always open: a decision moves its row here, marked "just now",
+ * each with Undo.
+ */
+function Decided({
+  rows,
+  busy,
+  locked = false,
+  recent,
+  errors,
+  onUndo,
+}: {
+  rows: Review[];
+  busy: Set<number>;
+  locked?: boolean;
+  /** Rows decided on this page since it loaded. */
+  recent: Set<number>;
+  errors: Record<number, string>;
+  onUndo: (id: number) => void;
+}) {
+  const [all, setAll] = useState(false);
+  if (rows.length === 0) return null;
+  const shown = all ? rows : rows.slice(0, DECIDED_SHOWN);
+  return (
+    <section id="review-decided" className="mt-8 scroll-mt-24" aria-labelledby="review-decided-heading" data-review-decided>
+      <h2 id="review-decided-heading" className="text-lg font-bold tracking-tight">
+        Decided ({rows.length.toLocaleString("en-US")})
+      </h2>
+      <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">Newest first. Undo puts a row back to pending and reverses what it changed, so it waits for you above.</p>
       <ul className="card mt-3 divide-y divide-edge">
-        {rows.map((r) => (
-          <li key={r.id} className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] sm:gap-4" data-review-decided-row={r.id}>
-            <div className="min-w-0">
-              <p className="font-semibold break-all">{domainOf(r.url)}</p>
-              <p className="text-xs text-mute">
-                <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
-                {" · "}
-                {PROPOSED[r.proposed]}
-                {r.decidedBy && ` · ${r.decidedBy.replace(/^admin:/, "")}`}
-                {r.decidedAt && `, ${when(r.decidedAt)}`}
-              </p>
-            </div>
-            <p className="text-mute text-pretty">
-              {r.status === "rejected"
-                ? "Nothing changed."
-                : r.applied && "action" in r.applied
-                  ? "Marked checked; nothing to apply."
-                  : r.applied?.visibility?.length
-                    ? sentence(r.applied.visibility)
-                    : "Recorded; the grade already matched."}
-            </p>
-          </li>
-        ))}
+        {shown.map((r) => {
+          const domain = domainOf(r.url);
+          return (
+            <li
+              key={r.id}
+              className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm ${recent.has(r.id) ? "bg-accent-soft" : ""}`}
+              data-review-decided-row={r.id}
+            >
+              <div className="min-w-0 flex-1 basis-64">
+                <p className="font-semibold break-all">
+                  {domain}
+                  {recent.has(r.id) && <span className="ml-2 align-[1px] text-xs font-semibold text-accent">just now</span>}
+                </p>
+                <p className="text-xs text-mute">
+                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "closed" ? "Closed" : r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
+                  {" · "}
+                  {PROPOSED[r.proposed]}
+                  {r.decidedBy && ` · by ${decider(r.decidedBy)}`}
+                  {r.decidedAt && `, ${when(r.decidedAt)}`}
+                </p>
+                <p className="mt-0.5 text-xs text-mute text-pretty">{effect(r)}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {errors[r.id] && (
+                  <p className="text-sm text-down" role="alert">
+                    {errors[r.id]}
+                  </p>
+                )}
+                {/* A closed row changed nothing and has nothing to undo. */}
+                {r.status !== "closed" && <UndoButton id={r.id} domain={domain} busy={busy.has(r.id) || locked} onUndo={onUndo} />}
+              </div>
+            </li>
+          );
+        })}
       </ul>
-    </details>
+      {rows.length > DECIDED_SHOWN && (
+        <button type="button" className={`${btnGhost} mt-2`} onClick={() => setAll((v) => !v)} aria-expanded={all}>
+          {all ? `Show the latest ${DECIDED_SHOWN}` : `Show all ${rows.length.toLocaleString("en-US")}`}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -440,14 +605,36 @@ export function StatusReviewQueue({
   const [ticked, setTicked] = useState<Set<number>>(() => new Set(agreedIds));
   const [filter, setFilter] = useState<Filter>("all");
   const [asking, setAsking] = useState(false);
+  const bulkRef = useRef<HTMLButtonElement>(null);
+  const yesRef = useRef<HTMLButtonElement>(null);
+  // The bulk confirmation takes focus when it opens, and gives it back to the button that opened it when cancelled.
+  const refocusBulk = useRef(false);
+  useEffect(() => {
+    if (asking) yesRef.current?.focus();
+    else if (refocusBulk.current) {
+      refocusBulk.current = false;
+      bulkRef.current?.focus();
+    }
+  }, [asking]);
+  const cancelBulk = () => {
+    refocusBulk.current = true;
+    setAsking(false);
+  };
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const [errors, setErrors] = useState<Record<number, string>>({});
-  const [notice, setNotice] = useState<string | null>(null);
-  const [done, setDone] = useState<Record<number, "confirm" | "reject">>({});
+  const [notice, setNotice] = useState<{ text: string; failures: string[]; toDecided: boolean } | null>(null);
+  const [progress, setProgress] = useState<{ action: string; done: number; total: number } | null>(null);
+  const running = progress !== null;
+  const all = useMemo(() => new Map([...pending, ...autoApplied, ...decided].map((r) => [r.id, r.url])), [pending, autoApplied, decided]);
+  const urlOf = (id: number) => all.get(id) ?? "";
+  const [done, setDone] = useState<Record<number, "confirm" | "reject" | "undo">>({});
+  // Rows confirmed or rejected on this page since it loaded, marked "just now" under Decided.
+  const recentIds = useMemo(() => new Set(Object.entries(done).filter(([, a]) => a !== "undo").map(([id]) => Number(id))), [done]);
   // The large viewer: the row (kept as it was, so a decided row stays on screen until closed), the view and its thumbnail.
   const [viewing, setViewing] = useState<{ review: Review; frame: ViewerFrame; from: HTMLElement } | null>(null);
 
   const live = pending.filter((r) => ticked.has(r.id));
+  const words = bulkWords(live);
   const onlyAgreed = live.length === agreedIds.length && live.every((r) => r.agreed);
   const shown = pending.filter((r) => (filter === "agreed" ? r.agreed : filter === "flagged" ? !r.agreed : true));
   const flagged = pending.length - agreedIds.length;
@@ -455,10 +642,14 @@ export function StatusReviewQueue({
   async function decide(ids: number[], action: "confirm" | "reject" | "undo") {
     setBusy((b) => new Set([...b, ...ids]));
     setNotice(null);
+    // Several rows (the bulk confirm): requests of CHUNK rows, the count shown as they come back; every decision
+    // button waits until the last one (the server applies DECIDE_CONCURRENCY rows of each at once).
+    if (ids.length > 1) setProgress({ action, done: 0, total: ids.length });
     const failed: Record<number, string> = {};
     const okIds: number[] = [];
     try {
       for (let i = 0; i < ids.length; i += CHUNK) {
+        if (i > 0 && ids.length > 1) setProgress({ action, done: i, total: ids.length });
         const part = ids.slice(i, i + CHUNK);
         const res = await fetch("/api/admin/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ids: part, action }) });
         const body = (await res.json().catch(() => ({}))) as { error?: string; results?: { id: number; ok: boolean; error?: string }[] };
@@ -483,7 +674,19 @@ export function StatusReviewQueue({
     setBusy((b) => new Set([...b].filter((id) => !ids.includes(id))));
     setDone((d) => ({ ...d, ...Object.fromEntries(okIds.map((id) => [id, action])) }));
     setAsking(false);
-    if (ids.length > 1) setNotice(`${okIds.length.toLocaleString("en-US")} ${action === "confirm" ? "confirmed" : action === "undo" ? "undone" : "rejected"}${Object.keys(failed).length ? `, ${Object.keys(failed).length} failed (marked below)` : ""}.`);
+    setProgress(null);
+    // Where the rows went, and what failed, by name.
+    const verb = action === "confirm" ? "Confirmed" : action === "undo" ? "Undone" : "Rejected";
+    const fails = Object.entries(failed);
+    const where = action === "undo" ? "They wait for you again above." : "They are under Decided below, each with Undo.";
+    setNotice({
+      text:
+        ids.length === 1 && fails.length === 0
+          ? `${verb}: ${domainOf(urlOf(ids[0]))}. ${action === "undo" ? "It waits for you again above." : "It is under Decided below, with Undo."}`
+          : `${verb} ${okIds.length.toLocaleString("en-US")} of ${ids.length.toLocaleString("en-US")}. ${okIds.length ? where : ""}`,
+      failures: fails.map(([id, why]) => `${domainOf(urlOf(Number(id)))}: ${why}`),
+      toDecided: action !== "undo" && okIds.length > 0,
+    });
     router.refresh();
   }
 
@@ -498,10 +701,14 @@ export function StatusReviewQueue({
       proposed={viewing.review.proposed}
       busy={busy.has(viewing.review.id)}
       error={errors[viewing.review.id] ?? null}
-      done={done[viewing.review.id] ?? null}
+      done={(() => {
+        const d = done[viewing.review.id];
+        return d === "confirm" || d === "reject" ? d : null;
+      })()}
       onDecide={(action) => decide([viewing.review.id], action)}
       onClose={() => setViewing(null)}
       returnFocus={viewing.from}
+      outcome={outcomeOf(viewing.review)}
       prompt={viewing.review.verdicts.prompt ?? null}
     />
   );
@@ -510,10 +717,10 @@ export function StatusReviewQueue({
     return (
       <>
         <EmptyState icon={ClipboardCheck} title="Nothing to review">
-          When a re-check proposes status changes, they wait here for you.
+          When a re-check or the nightly grade proposes a status change, it waits here for you.
         </EmptyState>
-        <AutoApplied rows={autoApplied} busy={busy} errors={errors} onUndo={(id) => decide([id], "undo")} />
-        <Decided rows={decided} />
+        <AutoApplied rows={autoApplied} shotsBase={shotsBase} busy={busy} locked={running} errors={errors} onUndo={(id) => decide([id], "undo")} />
+        <Decided rows={decided} busy={busy} locked={running} recent={recentIds} errors={errors} onUndo={(id) => decide([id], "undo")} />
         {viewer}
       </>
     );
@@ -533,42 +740,94 @@ export function StatusReviewQueue({
           </ChipButton>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {asking ? (
-            <>
-              <button type="button" className={btnPrimary} onClick={() => decide(live.map((r) => r.id), "confirm")} disabled={busy.size > 0} data-review-bulk-yes>
-                <CheckCheck className="h-4 w-4" aria-hidden /> Yes, apply {live.length.toLocaleString("en-US")} {live.length === 1 ? "change" : "changes"}
+          {!onlyAgreed && agreedIds.length > 0 && !asking && !running && (
+            <button type="button" className={btnGhost} onClick={() => setTicked(new Set(agreedIds))}>
+              Tick where graders agree
+            </button>
+          )}
+          <button ref={bulkRef} type="button" className={btnPrimary} disabled={live.length === 0 || busy.size > 0 || asking || running} onClick={() => setAsking(true)} data-review-bulk>
+            <CheckCheck className="h-4 w-4" aria-hidden />
+            {onlyAgreed ? (
+              <>
+                {/* The long label on one line from the small breakpoint up; the short one on a phone. */}
+                <span className="hidden sm:inline">Confirm all where everyone agrees ({live.length.toLocaleString("en-US")})</span>
+                <span className="sm:hidden">Confirm all agreed ({live.length.toLocaleString("en-US")})</span>
+              </>
+            ) : (
+              `Confirm ${live.length.toLocaleString("en-US")} ticked`
+            )}
+          </button>
+        </div>
+        {running ? (
+          // Many rows take a while: how far it is, and every decision button waits.
+          <div className="basis-full rounded-xl bg-raised p-3" data-review-progress>
+            <p className="text-sm font-semibold" aria-live="polite">
+              {progress.action === "confirm" ? "Confirming" : progress.action === "undo" ? "Undoing" : "Rejecting"} {progress.done.toLocaleString("en-US")} of {progress.total.toLocaleString("en-US")}...
+            </p>
+            <div
+              role="progressbar"
+              aria-label="Rows done"
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.done}
+              className="mt-2 h-2 overflow-hidden rounded-full bg-card ring-1 ring-edge"
+            >
+              <div className="h-full rounded-full bg-fill transition-[width] duration-300" style={{ width: `${Math.max(2, (progress.done / progress.total) * 100)}%` }} />
+            </div>
+          </div>
+        ) : asking ? (
+          // The bulk confirmation, in the page: what happens to how many sites, and when it shows; Esc or Cancel goes back.
+          <div
+            role="group"
+            aria-label="Confirm the ticked rows"
+            className="basis-full rounded-xl bg-raised p-3 ring-2 ring-down/50"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                cancelBulk();
+              }
+            }}
+            data-review-bulk-ask
+          >
+            <p className="text-sm font-semibold" aria-live="polite">
+              {words.button}?
+            </p>
+            <ul className="mt-1 grid gap-0.5 text-xs text-mute">
+              {words.timing.map((t) => (
+                <li key={t.when}>
+                  <span className="font-semibold text-ink tabular-nums">{t.count.toLocaleString("en-US")}</span> · {t.when}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button ref={yesRef} type="button" className={btnPrimary} onClick={() => decide(live.map((r) => r.id), "confirm")} disabled={busy.size > 0} data-review-bulk-yes>
+                <CheckCheck className="h-4 w-4" aria-hidden /> {words.button}
               </button>
-              <button type="button" className={btnGhost} onClick={() => setAsking(false)}>
+              <button type="button" className={btnGhost} onClick={cancelBulk}>
                 Cancel
               </button>
-            </>
-          ) : (
-            <>
-              {!onlyAgreed && agreedIds.length > 0 && (
-                <button type="button" className={btnGhost} onClick={() => setTicked(new Set(agreedIds))}>
-                  Tick where graders agree
-                </button>
-              )}
-              <button type="button" className={btnPrimary} disabled={live.length === 0 || busy.size > 0} onClick={() => setAsking(true)} data-review-bulk>
-                <CheckCheck className="h-4 w-4" aria-hidden />
-                {onlyAgreed ? (
-                  <>
-                    {/* The long label on one line from the small breakpoint up; the short one on a phone. */}
-                    <span className="hidden sm:inline">Confirm all where everyone agrees ({live.length.toLocaleString("en-US")})</span>
-                    <span className="sm:hidden">Confirm all agreed ({live.length.toLocaleString("en-US")})</span>
-                  </>
-                ) : (
-                  `Confirm ${live.length.toLocaleString("en-US")} ticked`
-                )}
-              </button>
-            </>
-          )}
-        </div>
+            </div>
+          </div>
+        ) : null}
       </div>
       {notice && (
-        <p className="mt-3 text-sm" role="status">
-          {notice}
-        </p>
+        <div className="mt-3 text-sm" role="status" data-review-notice>
+          <p>
+            {notice.text}{" "}
+            {notice.toDecided && (
+              <a href="#review-decided" className="font-semibold text-accent underline-offset-2 hover:underline">
+                Go to Decided
+              </a>
+            )}
+          </p>
+          {notice.failures.length > 0 && (
+            <ul className="mt-1 grid gap-0.5 text-down">
+              {notice.failures.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
       <ul className="mt-4 grid gap-4" data-review-list>
         {shown.map((r) => (
@@ -585,15 +844,15 @@ export function StatusReviewQueue({
                 return next;
               })
             }
-            busy={busy.has(r.id)}
+            busy={busy.has(r.id) || running}
             error={errors[r.id] ?? null}
             onDecide={(action) => decide([r.id], action)}
             onView={(frame, from) => setViewing({ review: r, frame, from })}
           />
         ))}
       </ul>
-      <AutoApplied rows={autoApplied} busy={busy} errors={errors} onUndo={(id) => decide([id], "undo")} />
-      <Decided rows={decided} />
+      <AutoApplied rows={autoApplied} shotsBase={shotsBase} busy={busy} locked={running} errors={errors} onUndo={(id) => decide([id], "undo")} />
+      <Decided rows={decided} busy={busy} locked={running} recent={recentIds} errors={errors} onUndo={(id) => decide([id], "undo")} />
       {viewer}
     </>
   );

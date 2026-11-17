@@ -38,6 +38,7 @@ import { isRemovalAlert } from "../lib/games/claims.mjs";
 import { isEmailCapAlert } from "../lib/email/gate.mjs";
 import { drainPeopleQueue } from "../pipeline/people.mjs";
 import { contentMode } from "../lib/content/store.mjs";
+import { reviewAutoApplyEnabled } from "../lib/reviews/flag";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
@@ -118,6 +119,8 @@ export function engine(env: NightEnv, runId: string) {
       contentDraftsPerWeek: env.CONTENT_DRAFTS_PER_WEEK,
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
       rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
+      // The door's automatic removal of a Gemini "not a portfolio" shares the review queue's switch (lib/reviews/door.mjs).
+      reviewAutoApply: reviewAutoApplyEnabled(env),
       ranking: rankingConfig({
         RANKING_V2: env.RANKING_V2,
         RANKING_BUDGET: env.RANKING_BUDGET,
@@ -147,9 +150,17 @@ export function engine(env: NightEnv, runId: string) {
 
 // Batches never throw (pipeline/night.mjs ends the run instead); a step that
 // fails for another reason (the platform) is tried once more. The engine's
-// steps are idempotent.
+// steps are idempotent. A batch stops taking new items after the plan's
+// batchMinutes (10) and requests time out after requestTimeoutSeconds (60),
+// so a stalled Gemini ends a batch well inside the 20-minute step timeout.
 const ONCE_MORE = { retries: { limit: 1, delay: "1 minute", backoff: "constant" as const }, timeout: "20 minutes" };
-const MAX_BATCHES = 1500;
+// A ceiling, never the plan: a full night at the normal caps is about 40
+// batches of 20 requests, a few to open and close each stage, and at most 36
+// five-minute pauses for people in the three-hour window, so about 100. A run
+// that reaches this is stuck, and ends as "stopped" (finishNight). Every
+// batch must make progress or its stage ends (runBatch), so this is the
+// second line of defence, not the first.
+export const MAX_BATCHES = 250;
 
 export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> {
   async run(event: WorkflowEvent<NightParams>, step: WorkflowStep) {

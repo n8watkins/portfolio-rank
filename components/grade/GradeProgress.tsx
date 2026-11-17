@@ -10,6 +10,8 @@ import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import type { Job } from "@/lib/me";
 
 type Step = Job["steps"][number];
+/** A job as the report page loads it: `mine` says whether this browser owns the report. */
+type OwnedJob = Job & { mine: boolean };
 
 function Dot({ state }: { state: Step["state"] }) {
   if (state === "done") return <CircleCheck className="h-5 w-5 shrink-0 text-up" aria-hidden />;
@@ -33,8 +35,10 @@ function Dot({ state }: { state: Step["state"] }) {
  * from GET /api/grade/<id>, kept live; "get it by email" (the main path when
  * the grade waits for tomorrow's share); the own-key step; and a face-off to
  * play meanwhile. The page turns into the report when the grade is done.
+ * Email and the own-key step belong to the report's owner: anyone else who
+ * only has the link sees the progress (and the face-off), not those controls.
  */
-export function GradeProgress({ job: initial, faceOff, faceOffHref }: { job: Job; faceOff: { url: string; domain: string; hero: string }[]; faceOffHref: string | null }) {
+export function GradeProgress({ job: initial, faceOff, faceOffHref }: { job: OwnedJob; faceOff: { url: string; domain: string; hero: string }[]; faceOffHref: string | null }) {
   const { job, finish, busy, keyError } = useGradeJob(initial);
   const [key, setKey] = useState("");
   const steps = job.steps;
@@ -71,7 +75,11 @@ export function GradeProgress({ job: initial, faceOff, faceOffHref }: { job: Job
         </ol>
         <p className="mt-6 text-[15px] text-mute text-pretty">{waitingLine(job)}</p>
 
-        {job.status === "awaiting_key" && (
+        {job.status === "awaiting_key" && !job.mine && (
+          <p className="mt-5 text-sm text-mute">This grade is waiting for its owner&apos;s Gemini key. Only they can finish it; it ends on its own if they don&apos;t.</p>
+        )}
+
+        {job.status === "awaiting_key" && job.mine && (
           <form
             className="mt-5"
             onSubmit={(e) => {
@@ -117,25 +125,27 @@ export function GradeProgress({ job: initial, faceOff, faceOffHref }: { job: Job
         <FreeTierNote className="mt-6 border-t border-edge pt-5" />
       </section>
 
-      <section aria-labelledby="by-email" className="card rise p-5 sm:p-6" style={{ "--d": "80ms" } as React.CSSProperties}>
-        <h2 id="by-email" className="flex items-center gap-2 font-semibold">
-          <Mail className="h-4 w-4 text-mute" aria-hidden /> {later ? "We'll email your report" : "Get it by email, no account needed"}
-        </h2>
-        {job.email.requested ? (
-          <p className="mt-1 flex items-center gap-2 text-sm" role="status">
-            <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden /> We&apos;ll email you the link when it&apos;s ready. You can close this page.
-          </p>
-        ) : (
-          <>
-            <p className="mt-1 text-[15px] text-mute">
-              {later ? "Leave your email and we send a one-time link to your report when it's ready." : "We send a one-time link to your report. You can close this page."}
+      {job.mine && (
+        <section aria-labelledby="by-email" className="card rise p-5 sm:p-6" style={{ "--d": "80ms" } as React.CSSProperties}>
+          <h2 id="by-email" className="flex items-center gap-2 font-semibold">
+            <Mail className="h-4 w-4 text-mute" aria-hidden /> {later ? "We'll email your report" : "Get it by email, no account needed"}
+          </h2>
+          {job.email.requested ? (
+            <p className="mt-1 flex items-center gap-2 text-sm" role="status">
+              <CircleCheck className="h-4 w-4 shrink-0 text-up" aria-hidden /> We&apos;ll email you the link when it&apos;s ready. You can close this page.
             </p>
-            <div className="mt-4">
-              <EmailLink jobId={job.id} />
-            </div>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              <p className="mt-1 text-[15px] text-mute">
+                {later ? "Leave your email and we send a one-time link to your report when it's ready." : "We send a one-time link to your report. You can close this page."}
+              </p>
+              <div className="mt-4">
+                <EmailLink jobId={job.id} />
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       {faceOffHref && faceOff.length === 2 && (
         <a href={faceOffHref} className="card card-hover rise group block p-5" style={{ "--d": "160ms" } as React.CSSProperties}>

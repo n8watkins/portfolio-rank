@@ -4,13 +4,15 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, ExternalLink, X } from "lucide-react";
 import { btnGhost, btnIcon, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
+import { ConfirmButton } from "./ConfirmButton";
+import { REJECT_QUESTION, ifConfirmed } from "./review-labels";
 
 // The large screenshot viewer of the owner's review queue
 // (components/admin/StatusReviewQueue.tsx): a thumbnail opens it on that view.
-// It shows the whole capture, scrollable inside the viewer: the full-page
-// frame (full.jpg, lib/shots.ts fullOf) when the capture has one, else the
-// stored top screenshot at full size (hero.jpg on a desktop, mobile.jpg on a
-// phone). Desktop and Phone are tabs (the tablist pattern: arrow keys, Home
+// It shows the stored top screenshot at full size, scrollable inside the
+// viewer (hero.jpg on a desktop, mobile.jpg on a phone). The old full-page
+// full.jpg is gone; the tall page images (lib/shots.ts fullPagePreview) can
+// take its place once their domain exists (docs/audits/fullpage-images.md). Desktop and Phone are tabs (the tablist pattern: arrow keys, Home
 // and End move between them). Confirm and Reject act on the row, through the
 // same handler as the row's own buttons, with the same pending, done and
 // error states.
@@ -40,6 +42,7 @@ export function ShotViewer({
   onClose,
   returnFocus,
   prompt = null,
+  outcome,
 }: {
   domain: string;
   url: string;
@@ -57,12 +60,12 @@ export function ShotViewer({
   returnFocus: HTMLElement | null;
   /** The grading prompt's version, when the row recorded it. */
   prompt?: string | null;
+  /** What Confirm does and when it shows (./review-labels.ts outcomeOf). */
+  outcome: { label: string; question: string; when: string };
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const [frame, setFrame] = useState<ViewerFrame>(initial);
-  // The desktop view tries the full-page frame first and falls back to the top screenshot.
-  const [noFull, setNoFull] = useState(false);
   const id = useId();
   const title = `${id}-title`;
   const panel = `${id}-panel`;
@@ -84,7 +87,7 @@ export function ShotViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const src = !base ? null : frame === "phone" ? frameOf(base, "mobile.jpg") : frameOf(base, noFull ? "hero.jpg" : "full.jpg");
+  const src = !base ? null : frameOf(base, frame === "phone" ? "mobile.jpg" : "hero.jpg");
 
   function onTabKey(e: React.KeyboardEvent, i: number) {
     const last = TABS.length - 1;
@@ -95,8 +98,7 @@ export function ShotViewer({
     tabs.current[next]?.focus();
   }
 
-  const confirmLabel = proposed === "review" ? "Mark checked" : "Confirm";
-  const doneText = done === "confirm" ? (proposed === "review" ? "Marked checked." : "Confirmed: the change is applied.") : done === "reject" ? "Rejected: nothing changed." : null;
+  const doneText = done === "confirm" ? (proposed === "review" ? "Marked checked. It is under Decided, with Undo." : `Confirmed. ${outcome.when} It is under Decided, with Undo.`) : done === "reject" ? "Rejected: nothing changed. It is under Decided, with Undo." : null;
 
   return (
     <dialog
@@ -179,9 +181,6 @@ export function ShotViewer({
               key={src}
               src={src}
               alt={`${domain} on a ${frame}, the whole capture`}
-              onError={() => {
-                if (frame === "desktop" && !noFull) setNoFull(true);
-              }}
               className={`mx-auto block h-auto ${frame === "phone" ? "w-[390px] max-w-full" : "w-full max-w-[1440px]"}`}
               data-review-viewer-image={frame}
             />
@@ -197,12 +196,25 @@ export function ShotViewer({
             </p>
           ) : (
             <>
-              <button type="button" className={btnSecondary} disabled={busy} onClick={() => onDecide("confirm")} data-review-viewer-confirm>
-                <Check className="h-4 w-4" aria-hidden /> {busy ? "Working..." : confirmLabel}
-              </button>
-              <button type="button" className={btnGhost} disabled={busy} onClick={() => onDecide("reject")} data-review-viewer-reject>
-                <X className="h-4 w-4" aria-hidden /> Reject
-              </button>
+              <ConfirmButton
+                className={btnSecondary}
+                disabled={busy}
+                icon={<Check className="h-4 w-4" aria-hidden />}
+                label={busy ? "Working..." : outcome.label}
+                question={outcome.question}
+                onConfirm={() => onDecide("confirm")}
+                data-review-viewer-confirm
+              />
+              <ConfirmButton
+                className={btnGhost}
+                disabled={busy}
+                icon={<X className="h-4 w-4" aria-hidden />}
+                label="Reject"
+                question={REJECT_QUESTION}
+                onConfirm={() => onDecide("reject")}
+                data-review-viewer-reject
+              />
+              <p className="text-xs text-mute">{ifConfirmed(outcome.when)}</p>
               {error && (
                 <p className="text-sm text-down" role="alert">
                   {error}

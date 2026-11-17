@@ -7,6 +7,12 @@
 // content, and goes on as normal. At most MAX_GATE_CLICKS clicks, so a page
 // that keeps asking never loops. The capture records what it passed in its
 // meta (pipeline/capture.mjs, meta.splash).
+//
+// The capture runs three passes in this order, each on the desktop and the
+// phone view: the splash gate (passSplashGate), a dialog on top
+// (passModal, meta.modal) and a mode picker (passModePicker, meta.mode).
+// Whether the screen still does not show the site afterwards is decided by
+// pipeline/capture-blocked.mjs.
 
 /** A first screen with fewer words than this can be a gate. */
 export const GATE_MAX_WORDS = 40;
@@ -14,13 +20,49 @@ export const MAX_GATE_CLICKS = 2;
 export const GATE_WAIT_MS = 3000;
 /** How long a loader still counting up ("72 %") is given to reach 100% before the gate is clicked. */
 export const LOADER_WAIT_MS = 8000;
+/**
+ * How long a first screen with no text at all (a boot screen, a black
+ * loader) is given to show some before the gate check gives up: a fake
+ * desktop's lock screen ("Press Enter or Click to continue") appears only
+ * after a few seconds of black.
+ */
+export const BOOT_WAIT_MS = 8000;
 
 // Gate wording, matched on whole words in the visible text (lower case).
-// Plain words ("enter", "start", "continue") also appear on short real
-// pages ("Start a project"), so they count only on a nearly empty screen
-// (WEAK_MAX_WORDS) and only as an element's whole text.
-const STRONG = ["click to continue", "click to enter", "tap to continue", "tap to enter", "press any key", "press enter", "skip intro", "enter site", "enter the site"];
-const WEAK = ["enter", "start", "continue"];
+// Plain words ("enter", "start", "continue", "come in", "unlock") also
+// appear on short real pages ("Start a project"), so they count only on a
+// nearly empty screen (WEAK_MAX_WORDS) and only as an element's whole text.
+const STRONG = [
+  "click to continue",
+  "click to enter",
+  "click to unlock",
+  "tap to continue",
+  "tap to enter",
+  "tap to unlock",
+  "press any key",
+  "press enter",
+  "skip intro",
+  "enter site",
+  "enter the site",
+];
+const WEAK = ["enter", "start", "continue", "come in", "unlock"];
+/**
+ * In the browser: whether the screen now asks for a password or passcode (a
+ * visible password field, or a passcode prompt). The capture never types
+ * one, so a gate that leads there is not passable by a default action.
+ */
+function asksForPassword() {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
+  };
+  if ([...document.querySelectorAll("input[type=password]")].some(visible)) return true;
+  return /(^|[^a-z])enter\s+(your\s+)?(password|passcode|pin)([^a-z]|$)/i.test(document.body?.innerText ?? "");
+}
+
+/** Screen text that asks for a key: Enter is pressed as well as the click. */
+const ASKS_FOR_KEY = /(^|[^a-z])press\s+(enter|any\s+key|return)([^a-z]|$)/;
 export const WEAK_MAX_WORDS = 10;
 
 /**
@@ -71,25 +113,32 @@ function markGateTarget([phrase, exact]) {
 
 const wordsOf = (t) => (String(t ?? "").replace(/\s+/g, " ").trim() ? String(t).replace(/\s+/g, " ").trim().split(" ").length : 0);
 
+/** A URL's host without www, to tell a click that left the site; "" for a bad URL. */
+const hostOf = (u) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
 /**
  * Passes a splash gate on a loaded Playwright page, if there is one.
  * Returns null when the first screen isn't a gate, else
  * { passed, clicks, phrase, how: ("element" | "centre" | "key")[], words }.
  * @param {import("playwright").Page} page
  */
-export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs = GATE_WAIT_MS } = {}) {
+export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs = GATE_WAIT_MS, bootWaitMs = BOOT_WAIT_MS } = {}) {
   let text = await page.evaluate(visibleText).catch(() => "");
+  // A screen with no text yet may be booting: give it a few seconds to show some.
+  for (const until = Date.now() + bootWaitMs; wordsOf(text) === 0 && Date.now() < until; ) {
+    await page.waitForTimeout(250);
+    text = await page.evaluate(visibleText).catch(() => text);
+  }
   let found = detectGate(text);
   if (!found.gate) return null;
   const first = found;
   const start = page.url();
-  const host = (u) => {
-    try {
-      return new URL(u).hostname.replace(/^www\./, "");
-    } catch {
-      return "";
-    }
-  };
   const how = [];
   let clicks = 0;
   while (found.gate && clicks < maxClicks) {
@@ -115,7 +164,8 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
       await page.mouse.click(Math.round(v.width / 2), Math.round(v.height / 2)).catch(() => {});
       how.push("centre");
     }
-    if (found.phrase === "press any key" || found.phrase === "press enter") {
+    // The screen asks for a key ("Press Enter or Click to continue"): press it too.
+    if (ASKS_FOR_KEY.test(String(text).replace(/\s+/g, " ").toLowerCase())) {
       await page.keyboard.press("Enter").catch(() => {});
       how.push("key");
     }
@@ -130,9 +180,17 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
     }
     await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {});
     // A click that left the site (a contact link, a social profile) is undone: the capture is of the portfolio.
-    if (host(page.url()) !== host(start)) {
+    if (hostOf(page.url()) !== hostOf(start)) {
       await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
       return { passed: false, clicks, phrase: first.phrase, how, left: true, words: { before: first.words, after: first.words } };
+    }
+    // A gate that leads to a password or passcode prompt is undone too: no
+    // password is ever typed, and the welcome screen (often with the
+    // person's name) shows more than a password box.
+    if (await page.evaluate(asksForPassword).catch(() => false)) {
+      await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+      return { passed: false, clicks, phrase: first.phrase, how, password: true, words: { before: first.words, after: first.words } };
     }
     text = await page.evaluate(visibleText).catch(() => text);
     found = detectGate(text);
@@ -149,7 +207,8 @@ export async function passSplashGate(page, { maxClicks = MAX_GATE_CLICKS, waitMs
 // MODAL_MIN_DIALOG of the screen, or a fixed overlay covering more than
 // MODAL_MIN_OVERLAY of it), the capture does what a visitor does to get the
 // site's default view: it clicks the dialog's primary button (Continue,
-// Enter, Start, Get started, else Close), or presses Escape when there is
+// Enter, Start, Get started, Come in, Unlock, Click/Tap/Press to enter,
+// continue or unlock, else Close), or presses Escape when there is
 // none, then checks once more. A cookie bar is too small to count.
 export const MODAL_MIN_DIALOG = 0.2;
 export const MODAL_MIN_OVERLAY = 0.5;
@@ -220,7 +279,8 @@ function findModal([minDialog, minOverlay]) {
   }
   if (!found) return null;
   // A gate's wording counts too: "CLICK TO ENTER" over a page with plenty of text never trips the splash check.
-  const PRIMARY = /^(continue|enter|start|get started|let'?s go|explore|(click|tap) to (enter|continue)|skip intro)\b/i;
+  // "COME IN" on a door, "Tap to unlock" on a fake lock screen are the way in too.
+  const PRIMARY = /^(continue|enter|start|get started|let'?s go|explore|come in|unlock|(click|tap|press) (to )?(enter|continue|unlock)|skip intro)\b/i;
   const CLOSE = /^(close|dismiss|skip|×|✕|x)$/i;
   // Buttons and links, and anything a visitor can click (a pointer cursor): gates often draw their
   // button as a div. A label matches when any of its lines does ("LOADING 100%" then "CLICK TO ENTER").
@@ -248,13 +308,6 @@ export async function passModal(page, { waitMs = MODAL_WAIT_MS } = {}) {
   const first = await page.evaluate(findModal, args).catch(() => null);
   if (!first) return null;
   const start = page.url();
-  const host = (u) => {
-    try {
-      return new URL(u).hostname.replace(/^www\./, "");
-    } catch {
-      return "";
-    }
-  };
   const how = [];
   let found = first;
   for (let i = 0; i < 2 && found; i++) {
@@ -268,13 +321,123 @@ export async function passModal(page, { waitMs = MODAL_WAIT_MS } = {}) {
     }
     await page.waitForTimeout(waitMs);
     // A button that left the site (a download page, a social profile) is undone.
-    if (host(page.url()) !== host(start)) {
+    if (hostOf(page.url()) !== hostOf(start)) {
       await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
       return { kind: first.kind, button: first.button, how, passed: false, left: true };
     }
     found = await page.evaluate(findModal, args).catch(() => null);
   }
   return { kind: first.kind, button: first.button, how, passed: !found };
+}
+
+// Mode pickers (owner, 2026-11-13 in recheck-543, and 2026-11-16 for the
+// nightly capture): a first screen that offers a choice of how to see the
+// site ("dark / light", "recruiter / developer", "terminal / GUI", "2D /
+// 3D") before showing it. The capture picks the first sensible option: a
+// plain, graphical one when offered ("GUI", "classic", "light"), never a
+// terminal or a game when anything else is on offer, else the first. Only a
+// short screen (at most MODE_MAX_WORDS) with 2 to MODE_MAX_OPTIONS short
+// options, at least two of them mode words, counts; an ordinary page with a
+// few links never does. It runs after the gate and the dialog (a gate can
+// lead to a picker) and is recorded in the capture's meta (meta.mode).
+export const MODE_MAX_WORDS = 60;
+export const MODE_MAX_OPTIONS = 5;
+export const MODE_WAIT_MS = 5000;
+const MODE_WORD = /\b(dark|light|terminal|gui|cli|shell|command[- ]line|graphical|developer|designer|recruiter|engineer|hiring manager|visitor|simple|classic|normal|basic|minimal|interactive|professional|casual|fun|boring|3d|2d|lite|game|standard|regular|fancy|plain|text mode|os mode)\b/i;
+const MODE_PREFER = /\b(gui|graphical|classic|normal|simple|basic|professional|recruiter|hiring manager|light|standard|regular|plain|boring|2d|lite)\b/i;
+const MODE_AVOID = /\b(terminal|cli|shell|command[- ]line|game|3d|text mode)\b/i;
+
+/**
+ * Whether a first screen is a mode picker, from its visible text and its
+ * visible short clickable options (in page order): { picker: false, words }
+ * or { picker: true, pick, options, words } with the index of the option to
+ * click.
+ * @param {string} text
+ * @param {string[]} options
+ */
+export function detectModePicker(text, options) {
+  const words = wordsOf(text);
+  const opts = (options ?? []).map((o) => String(o ?? "").replace(/\s+/g, " ").trim());
+  if (words === 0 || words > MODE_MAX_WORDS) return { picker: false, words };
+  if (opts.length < 2 || opts.length > MODE_MAX_OPTIONS) return { picker: false, words };
+  const modal = opts.filter((o) => MODE_WORD.test(o)).length;
+  if (modal < 2) return { picker: false, words };
+  let pick = opts.findIndex((o) => MODE_PREFER.test(o) && !MODE_AVOID.test(o));
+  if (pick < 0) pick = opts.findIndex((o) => !MODE_AVOID.test(o));
+  if (pick < 0) pick = 0;
+  return { picker: true, pick, options: opts, words };
+}
+
+/** In the browser: the visible short clickable options (1 to 4 words) in the first screen, in page order, marked data-pr-mode=<index>. */
+function markModeOptions() {
+  for (const el of document.querySelectorAll("[data-pr-mode]")) el.removeAttribute("data-pr-mode");
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+  const shown = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) return false;
+    const s = getComputedStyle(el);
+    return s.visibility !== "hidden" && s.display !== "none" && Number(s.opacity) >= 0.05;
+  };
+  const els = [...document.querySelectorAll("button, a[href], [role=button], [role=radio], [onclick], label")].filter(shown);
+  // Nested matches (a span inside a button) count once: keep the outermost.
+  const top = els.filter((el) => !els.some((o) => o !== el && o.contains(el)));
+  const out = [];
+  for (const el of top) {
+    const t = (el.innerText || el.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+    const n = t ? t.split(" ").length : 0;
+    if (n < 1 || n > 4) continue;
+    el.setAttribute("data-pr-mode", String(out.length));
+    out.push(t);
+  }
+  return out;
+}
+
+const unmarkModeOptions = () => {
+  for (const el of document.querySelectorAll("[data-pr-mode]")) el.removeAttribute("data-pr-mode");
+};
+
+/**
+ * Passes a mode picker on a loaded Playwright page, if there is one: clicks
+ * the chosen option (a real click at its position, as the gate does) and
+ * waits up to waitMs for the screen to change. A click that left the site is
+ * undone. Returns null when the first screen isn't a picker, else
+ * { passed, picked, options, left?, words: { before, after } }; passed is
+ * false when the same picker is still on screen.
+ * @param {import("playwright").Page} page
+ */
+export async function passModePicker(page, { waitMs = MODE_WAIT_MS } = {}) {
+  const text = await page.evaluate(visibleText).catch(() => "");
+  const options = await page.evaluate(markModeOptions).catch(() => []);
+  const found = detectModePicker(text, options);
+  if (!found.picker) {
+    await page.evaluate(unmarkModeOptions).catch(() => {});
+    return null;
+  }
+  const picked = options[found.pick];
+  const start = page.url();
+  const box = await page.locator(`[data-pr-mode="${found.pick}"]`).first().boundingBox().catch(() => null);
+  if (!box) {
+    await page.evaluate(unmarkModeOptions).catch(() => {});
+    return { passed: false, picked, options, words: { before: found.words, after: found.words } };
+  }
+  await page.mouse.click(Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)).catch(() => {});
+  let after = text;
+  for (const until = Date.now() + waitMs; ; ) {
+    await page.waitForTimeout(250);
+    after = await page.evaluate(visibleText).catch(() => after);
+    if (after !== text || Date.now() >= until) break;
+  }
+  await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+  after = await page.evaluate(visibleText).catch(() => after);
+  // A choice that left the site (a link to another host) is undone: the capture is of the portfolio.
+  if (hostOf(page.url()) !== hostOf(start)) {
+    await page.goto(start, { waitUntil: "load", timeout: 30000 }).catch(() => {});
+    return { passed: false, picked, options, left: true, words: { before: found.words, after: found.words } };
+  }
+  const still = after === text && detectModePicker(after, await page.evaluate(markModeOptions).catch(() => [])).picker;
+  await page.evaluate(unmarkModeOptions).catch(() => {});
+  return { passed: !still, picked, options, words: { before: found.words, after: wordsOf(after) } };
 }
 
 /**
@@ -287,7 +450,8 @@ export async function passModal(page, { waitMs = MODAL_WAIT_MS } = {}) {
  */
 export function actionNote({ splash = null, modal = null, mode = null } = {}) {
   const parts = [];
-  const tail = (r) => (r?.left ? " (it left the site, so it was undone)" : r?.passed === false ? " (still blocked)" : "");
+  const tail = (r) =>
+    r?.left ? " (it left the site, so it was undone)" : r?.password ? " (it led to a password prompt, so it was undone)" : r?.passed === false ? " (still blocked)" : "";
   if (splash && !splash.error) {
     const what = splash.phrase ? `clicked "${splash.phrase}"` : "clicked the centre of a loader screen";
     parts.push(`${what}${splash.how?.includes("key") ? " and pressed Enter" : ""}${tail(splash)}`);

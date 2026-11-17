@@ -8,6 +8,7 @@
 // source page. Everything else is cut. Without a Tavily key every outside
 // claim is cut.
 import { denied } from "./topic.mjs";
+import { fill } from "./writer.mjs";
 
 /** Claims searched per post per pass, and Tavily searches a post and a week may use (gate 6). */
 export const MAX_CLAIMS = 6;
@@ -91,13 +92,16 @@ export async function tavilySearch(query, { apiKey, fetchImpl, maxResults = 5 })
 }
 
 const QUOTE_RE = /["“]([^"”]{8,})["”]/g;
-const norm = (s) =>
+/** Quote, dash and whitespace differences ignored, for matching text that was copied. */
+export const norm = (s) =>
   String(s)
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;|&#160;/g, " ")
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
+    .trim()
     .toLowerCase();
 
 /** Loads a source page: { ok, text }. */
@@ -139,7 +143,10 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
   // whatever the lister thought (a staging draft lost three such sentences).
   const ours = (s) => /\{\{f\d+\}\}/.test(s) || names.some((n) => n && s.includes(n));
   const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))].filter((s) => !ours(s));
-  const present = sentences.filter((s) => draftText.includes(s));
+  // Found whatever the quotes or spacing, the way a model copies a sentence;
+  // one that cannot be found is reported in listedNotFound and the caller fails closed.
+  const haystack = norm(draftText);
+  const present = sentences.filter((s) => haystack.includes(norm(s)));
   for (const s of sentences) if (!present.includes(s)) out.listedNotFound = [...(out.listedNotFound ?? []), s];
   if (!present.length) return out;
   if (!tavilyKey) {
@@ -202,4 +209,55 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
     out.supported.push({ sentence: c.sentence, url: src.url, title: src.title });
   }
   return out;
+}
+
+// A sentence the review flagged was copied from the FILLED post (numbers in
+// place), so it is looked for in every text field of the draft after filling
+// each unfilled sentence, with quote, dash and whitespace differences ignored.
+const SENTENCE_BREAK = /((?<=[.!?])\s+(?=[A-Z0-9"[{(]))/;
+/** The draft's text fields as [name, read, write] over strings and the TL;DR list. */
+const FIELDS = ["title", "alt_title_a", "alt_title_b", "subtitle", "share_line", "newsletter_blurb", "body"];
+
+/** `text` without the sentences that match any of `claims` (already normalised); returns { text, hit: Set of claim indexes }. */
+function withoutClaims(text, facts, claims) {
+  const hit = new Set();
+  const lines = String(text ?? "")
+    .split("\n")
+    .map((line) => {
+      const parts = line.split(SENTENCE_BREAK);
+      const kept = [];
+      for (let i = 0; i < parts.length; i += 2) {
+        const filled = norm(fill(parts[i], facts));
+        const matched = claims.map((c, k) => (c && (filled.includes(c) || (filled.length >= 12 && c.includes(filled))) ? k : -1)).filter((k) => k >= 0);
+        if (matched.length && filled) matched.forEach((k) => hit.add(k));
+        else kept.push(parts[i], parts[i + 1] ?? "");
+      }
+      return kept.join("").trimEnd();
+    });
+  return { text: lines.join("\n").replace(/\n{3,}/g, "\n\n"), hit };
+}
+
+/**
+ * Removes the flagged sentences from every text field of an unfilled draft.
+ * Returns { draft, cut: sentences removed somewhere, notFound: sentences
+ * found nowhere }. The caller fails closed on a non-empty notFound.
+ */
+export function cutClaimSentences(draft, facts, sentences) {
+  const claims = sentences.map((s) => norm(s));
+  const found = new Set();
+  const out = { ...draft };
+  for (const f of FIELDS) {
+    if (typeof draft[f] !== "string") continue;
+    const r = withoutClaims(draft[f], facts, claims);
+    r.hit.forEach((k) => found.add(k));
+    out[f] = f === "body" ? r.text : r.text.trim();
+  }
+  if (Array.isArray(draft.tldr)) {
+    out.tldr = draft.tldr.filter((b) => {
+      const r = withoutClaims(String(b), facts, claims);
+      r.hit.forEach((k) => found.add(k));
+      return !r.hit.size;
+    });
+  }
+  return { draft: out, cut: sentences.filter((_, k) => found.has(k)), notFound: sentences.filter((_, k) => !found.has(k)) };
 }

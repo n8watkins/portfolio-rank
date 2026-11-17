@@ -60,13 +60,35 @@ test("a 200 without cookies is kept for its path's time; anything else is not", 
   assert.equal(error.headers.get("Cloudflare-CDN-Cache-Control"), "no-store");
 });
 
-test("scanner probes get a plain 404; real paths and .well-known are left alone", () => {
-  for (const path of ["/.env", "/.git/config", "/.claude/settings.json", "/wp-login.php", "/x/info.php"]) {
+test("scanner probes and file-like paths that are not routes get a small, briefly cached 404", async () => {
+  for (const path of [
+    "/.env", "/.git/config", "/.claude/settings.json", "/wp-login.php", "/x/info.php",
+    "/config.json", "/.s3cfg", "/secrets.json", "/www.zip", "/terraform.tfvars", "/vercel.json",
+    "/backup.sql", "/images/gone.png", "/_next/static/chunks/gone.js", "/api/config.json",
+    "/blog/x.zip", "/shot.jpg", "/sitemap.xml.bak", "/sitemap/other.xml", "/sitemap/profiles-0.xml",
+    "/api/grade/abc/shot/other.jpg", "/api/grade/abc/shot/hero.png", "/.well-known/.env",
+    "/.well-known/security.txt", "/favicon.ico",
+  ]) {
     const response = probeAnswer(get(path));
     assert.equal(response?.status, 404, path);
-    assert.equal(response?.headers.get("Cache-Control"), "no-store");
+    assert.equal(response?.headers.get("Content-Type"), "text/plain; charset=utf-8", path);
+    assert.equal(response?.headers.get("Cache-Control"), "public, max-age=60, s-maxage=300", path);
+    assert.equal(response?.headers.has("Set-Cookie"), false, path);
+    assert.equal(await response?.text(), "Not found", path);
   }
-  for (const path of ["/", "/top", "/.well-known/security.txt", "/healthz", "/p/x"]) {
+});
+
+test("every real route, dotted or not, is left to the app", () => {
+  for (const path of [
+    "/", "/top", "/healthz", "/nope", "/blog/some-post", "/blog/media/0123456789abcdef/hero",
+    "/api/polls", "/api/grade/abc", "/_next/image", "/opengraph-image", "/twitter-image",
+    "/grade/abc/opengraph-image", "/report/print",
+    "/sitemap.xml", "/robots.txt", "/manifest.webmanifest", "/icon.png", "/icon.svg", "/blog/rss.xml",
+    "/sitemap/pages.xml", "/sitemap/blog.xml", "/sitemap/profiles-1.xml", "/sitemap/profiles-12.xml",
+    "/api/grade/0123456789abcdef/shot/hero.jpg", "/api/grade/0123456789abcdef/shot/mobile.jpg",
+    "/p/example.com", "/p/https%3A%2F%2Fexample.com", "/favicon/example.com",
+    "/shots/0123456789abcdef/hero.jpg",
+  ]) {
     assert.equal(probeAnswer(get(path)), null, path);
   }
 });

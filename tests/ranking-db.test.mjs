@@ -220,13 +220,13 @@ test("compare job: stores one-on-one and batched comparisons with their full rec
     assert.ok(row.match_seed && row.match_kind && row.created_at && row.shown);
   }
   const [first, second, skipped, batch] = rows;
-  assert.equal(first.prompt_version, "compare-v1");
+  assert.equal(first.prompt_version, "compare-v1.1");
   assert.deepEqual(JSON.parse(String(first.ranking))[0], [JSON.parse(String(first.shown))[0]], "A is the site shown first");
   assert.deepEqual(JSON.parse(String(second.ranking))[0], [JSON.parse(String(second.shown))[1]]);
   assert.equal(skipped.outcome, "skip");
   assert.equal(skipped.ranking, null);
   assert.equal(batch.method, "batched");
-  assert.equal(batch.prompt_version, "batch-v1");
+  assert.equal(batch.prompt_version, "batch-v1.1");
   const shown = JSON.parse(String(batch.shown));
   assert.deepEqual(JSON.parse(String(batch.ranking)), [...shown].reverse().map((u) => [u]));
   assert.deepEqual(await comparisonsToday(db, { model: "gemini-3.5-flash-lite" }), { one_on_one: 3, batched: 1 });

@@ -8,6 +8,8 @@
 // It only sends GETs plus the sign-in start (which writes nothing), so it is
 // safe against production. Retries cover the minute a new custom domain or
 // version can take to answer everywhere.
+import { closedToEveryone, openToEveryone } from "./lib/robots.mjs";
+
 const [base, ...flags] = process.argv.slice(2);
 if (!base || !/^https?:\/\//.test(base)) {
   console.error("usage: node scripts/smoke.mjs BASE_URL [--staging]");
@@ -99,8 +101,11 @@ await check("robots.txt", async () => {
   const res = await get("/robots.txt");
   expect(res.status === 200, `HTTP ${res.status}`);
   const text = await res.text();
-  if (staging) expect(/^Disallow: \/\s*$/m.test(text), "does not disallow everything");
-  else expect(/^Allow: \/\s*$/im.test(text) && !/^Disallow: \/\s*$/m.test(text), "production robots.txt blocks crawlers");
+  // By group (scripts/lib/robots.mjs): only the rules for every crawler count.
+  // Cloudflare's managed robots.txt adds "Disallow: /" for named AI training
+  // crawlers in front of ours, and that is not the site closing itself.
+  if (staging) expect(closedToEveryone(text), "does not disallow everything");
+  else expect(openToEveryone(text), "production robots.txt blocks crawlers");
 });
 
 await check("GitHub sign-in starts with this site's callback", async () => {

@@ -70,7 +70,8 @@ import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content
 import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
-import { withOwnerVerdict } from "../lib/reviews/store.mjs";
+import { ensureReviewSchema } from "../lib/reviews/store.mjs";
+import { atTheDoor, syncReviewRows } from "../lib/reviews/door.mjs";
 import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
@@ -145,19 +146,27 @@ const READY = (p = "p") => `${p}.status = 'live' AND ${p}.shot_key IS NOT NULL A
 const NOT_PARKED = (job, p = "p") =>
   `NOT EXISTS (SELECT 1 FROM night_item_failures f WHERE f.job = '${job}' AND f.item = ${p}.url AND f.parked_at IS NOT NULL)`;
 const NOT_TRIED = (p = "p") => `${p}.url NOT IN (SELECT value FROM json_each(?))`;
-const GRADE_COLS = "p.url, p.name, p.shot_key, p.meta, p.ai_rubric, p.page_text, p.facts";
+const GRADE_COLS = "p.url, p.name, p.shot_key, p.meta, p.ai_rubric, p.page_text, p.facts, p.signals";
+// A new site's screenshot was missing when its grade was tried: the marker
+// (gradeItem) keeps it from being asked for every night, and a capture newer
+// than the marker makes it eligible again (audit F4, 2026-11-16).
+const MISSING_IMAGE = (p = "p") =>
+  `(json_valid(${p}.ai_rubric) AND json_extract(${p}.ai_rubric, '$.error') = 'no_usable_captures')`;
+const RECAPTURED = (p = "p") => `COALESCE(datetime(${p}.captured_at) > datetime(json_extract(${p}.ai_rubric, '$.judged_at')), 0)`;
+/** Not graded yet: no grade, or a missing-screenshot marker older than the site's latest capture. */
+const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR (${MISSING_IMAGE(p)} AND ${RECAPTURED(p)}))`;
 const CHANGED = `json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL
   AND EXISTS (SELECT 1 FROM rating_resets r WHERE r.url = p.url AND r.reason = 'page_changed'
               AND r.at > COALESCE(json_extract(p.ai_rubric, '$.judged_at'), ''))`;
 
 const queues = {
   grade_new: {
-    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND p.ai_rubric IS NULL AND ${NOT_PARKED("grade-new")}`),
+    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")}`),
     next: async (ctx, stage, n) =>
       (
         await ctx.db.execute({
           sql: `SELECT ${GRADE_COLS} FROM portfolios p
-                WHERE ${READY()} AND p.ai_rubric IS NULL AND ${NOT_PARKED("grade-new")} AND ${NOT_TRIED()}
+                WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")} AND ${NOT_TRIED()}
                 ORDER BY p.needs_review DESC, p.captured_at DESC, p.url LIMIT ?`,
           args: [JSON.stringify(stage.tried), n],
         })
@@ -213,8 +222,10 @@ async function count(db, from) {
 }
 
 // One grade from stored evidence: the R2 hero, the page text and facts.
-// Returns "ok", "skipped" (screenshot unavailable for now) or "sentinel"
-// (screenshot gone for good). Throws Gemini errors and malformed answers.
+// Returns { status: "ok", door } (door: what the door did with Gemini's
+// answer, lib/reviews/door.mjs), "skipped" (screenshot unavailable for now)
+// or "sentinel" (screenshot gone for good). Throws Gemini errors and
+// malformed answers.
 async function gradeItem(ctx, gemini, { row }, { replace }) {
   const url = String(row.url);
   const image = await ctx.image(String(row.shot_key));
@@ -229,12 +240,18 @@ async function gradeItem(ctx, gemini, { row }, { replace }) {
   }
   if (!image) return "skipped";
   const now = new Date(ctx.now());
-  // The owner's confirmed verdict (lib/reviews/store.mjs) holds over the AI's is_portfolio; then the new
-  // grade carries its tier rank (lib/tiers-store.mjs; a background write, shown only with RANKING_V2).
-  const graded = await withOwnerVerdict(ctx.db, url, await gradeFromEvidence(gemini, { row, image, now }));
-  const rubric = await rankForWrite(ctx.db, graded, { url, now: ctx.now() });
-  await ctx.db.batch(replaceGradeStatements(url, row.ai_rubric, rubric, now), "write");
-  return "ok";
+  const grade = await gradeFromEvidence(gemini, { row, image, now });
+  // "Is it a portfolio" is decided at the door (lib/reviews/door.mjs): the owner's own verdict holds; a
+  // "no" is removed by the rule with a record and Undo, or held for the owner. The grade (ranked,
+  // lib/tiers-store.mjs; a background write, shown only with RANKING_V2) and its review row are one write.
+  const door = await atTheDoor(ctx.db, {
+    grade,
+    row,
+    now,
+    autoApply: Boolean(ctx.flags?.reviewAutoApply),
+    gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(ctx.db, g, { url, now: ctx.now() }), now),
+  });
+  return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
 }
 
 /**
@@ -256,8 +273,9 @@ export async function gradeFromEvidence(gemini, { row, image, now }) {
 // The stages
 // ---------------------------------------------------------------------------
 const handlers = {
-  grade_new: { ...queues.grade_new, parkable: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: false }) },
-  grade_changed: { ...queues.grade_changed, parkable: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
+  // sites: each item is a site (its id the URL), logged per request and listed in the summary.
+  grade_new: { ...queues.grade_new, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: false }) },
+  grade_changed: { ...queues.grade_changed, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   compare: {
     off: (ctx) => (ctx.flags.rankingV2 ? null : 'off: RANKING_V2 is not "true" (the ELO-era AI votes run only by hand, judge-vote.yml)'),
     count: async (ctx) => {
@@ -277,7 +295,7 @@ const handlers = {
   content: contentStage,
   // The blog's image library, a few house-style illustrations a night (pipeline/content/library-stage.mjs).
   library: libraryStage,
-  regrade: { ...queues.regrade, parkable: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
+  regrade: { ...queues.regrade, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   experiment: { off: () => "nothing scheduled" },
 };
 
@@ -380,6 +398,7 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
   await ensureRubricHistory(db);
   await ensureRankingSchema(db);
   await ensurePollsSchema(db);
+  await ensureReviewSchema(db);
   const claimed = await db.execute({
     sql: "INSERT INTO night_runs (night, started_at, status, run_id) VALUES (?, ?, 'running', ?) ON CONFLICT(night) DO NOTHING RETURNING night",
     args: [timeline.night, iso(now), ctx.runId ?? null],
@@ -431,6 +450,23 @@ export async function planNight(ctx, state) {
   } catch (e) {
     s.polls = { error: msg(e) };
     ctx.log(`Polls: scheduling failed: ${msg(e)}`);
+  }
+  // Free too: bot-walled sites and listed sites whose signals collapsed go to
+  // the owner's review queue (lib/reviews/door.mjs). A failure never stops the night.
+  try {
+    const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()) });
+    for (const url of sent.botWall) noteSite(s, "review", { url, why: "bot wall: the capture never got past a bot check" });
+    for (const url of sent.collapsed) noteSite(s, "review", { url, why: "the portfolio signals collapsed (weekly health check)" });
+    if (sent.botWall.length || sent.collapsed.length) ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.collapsed.length} collapsed site(s) sent to the owner`);
+  } catch (e) {
+    ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);
+  }
+  // New sites set aside for a missing screenshot: waiting for a newer capture, or back in the queue tonight (audit F4).
+  try {
+    const marked = `FROM portfolios p WHERE ${READY()} AND ${MISSING_IMAGE()}`;
+    s.missingImage = { waiting: await count(ctx.db, `${marked} AND NOT ${RECAPTURED()}`), retried: await count(ctx.db, `${marked} AND ${RECAPTURED()}`) };
+  } catch {
+    s.missingImage = null;
   }
   const usage = await usageToday(ctx.db, { now: new Date(ctx.now()), plan: ctx.plan });
   let room = Math.max(0, (ctx.quota[ctx.plan.model] ?? 0) - (usage.byModel[ctx.plan.model] ?? 0) - Math.max(ctx.plan.reserve, ctx.plan.demandFactor * usage.peopleLastHour));
@@ -502,6 +538,45 @@ async function stopRun(ctx, s, reason, status) {
 }
 
 /**
+ * The sites tonight touched, for the summary (night_runs.summary.sites) and
+ * whatever reads it later (a weekly digest): each list holds at most
+ * SITE_LIST_MAX entries, and counts holds how many there were in all.
+ *   graded    [{ url, stage, verdict, tier }]  every grade written tonight
+ *   removed   [{ url, reviewId }]              removed automatically (the door's rule)
+ *   review    [{ url, why, reviewId? }]        sent to the owner's review queue
+ *   failed    [{ url, stage, reason }]
+ *   setAside  [{ url, stage, why }]            a screenshot missing or unavailable
+ */
+export const SITE_LIST_MAX = 50;
+export const SITE_LISTS = ["graded", "removed", "review", "failed", "setAside"];
+export const emptySites = () => ({ ...Object.fromEntries(SITE_LISTS.map((k) => [k, []])), counts: Object.fromEntries(SITE_LISTS.map((k) => [k, 0])) });
+
+function noteSite(s, list, entry) {
+  s.sites ??= emptySites();
+  s.sites.counts[list]++;
+  if (s.sites[list].length < SITE_LIST_MAX) s.sites[list].push(entry);
+}
+
+const VERDICT_WORDS = {
+  portfolio: "portfolio",
+  owner: "the owner's verdict",
+  remove: "not a portfolio: removed automatically",
+  review: "not a portfolio: waits for the owner (automatic removal is off)",
+  strong_signals: "not a portfolio, but the code found a portfolio: kept, sent to review",
+  held: "not a portfolio, held for the owner: sent to review",
+};
+
+/** Everything a batch can move on a stage: items done, failed, skipped, set aside, or marked tried. */
+export const stageTally = (stage) =>
+  (stage.ok ?? 0) + (stage.failed ?? 0) + (stage.skipped ?? 0) + (stage.noImage ?? 0) + (stage.tried?.length ?? 0);
+
+/**
+ * Whether a batch got anywhere: an item was counted or set aside, or a request
+ * was spent. A batch that did neither would be handed the same items again.
+ */
+export const madeProgress = (tallyBefore, tallyAfter, requestsSpent) => tallyAfter > tallyBefore || requestsSpent > 0;
+
+/**
  * One batch of the current stage. Returns { state, pauseMs, pauseReason? }
  * where pauseMs asks the caller to wait before the next batch: people are
  * using Gemini right now, or (pauseReason "busy") Google's AI was busy on a
@@ -550,7 +625,7 @@ export async function runBatch(ctx, state) {
     }
     const a = backgroundAllowance(stage.key, usage, { plan, quota: ctx.quota });
     if (a.allowed <= 0) {
-      if (a.limitedBy === "cap") await closeStage(ctx, s, `cap reached (${a.cap} requests today)`);
+      if (a.limitedBy === "cap") await closeStage(ctx, s, a.cap === 0 ? "off: its cap is 0 (GEMINI_BUDGET turns it on)" : `cap reached (${a.cap} requests today)`);
       else await stopRun(ctx, s, `only the reserve for people is left (${Math.max(0, a.remaining)} of the quota, reserve ${a.reserve}); the rest waits for tomorrow`, "stopped");
       return { state: s };
     }
@@ -571,7 +646,12 @@ export async function runBatch(ctx, state) {
     const gemini = createGemini({
       apiKey: ctx.apiKey,
       models: [PRIMARY_MODEL],
+      // A single-site grade (the stages whose items are sites) gives up after plan.requestTimeoutSeconds
+      // (60) instead of the client's 120, so one item's four tries fit well inside a batch (audit F9).
+      // Comparisons (five sites with images) and posts keep the client's own timeout: there is no latency
+      // data to say they finish in 60 s. The batch's wall-clock stop covers every stage.
       ...(posts ? CONTENT_GEMINI : {}),
+      ...(h.sites ? { timeoutMs: plan.requestTimeoutSeconds * 1000 } : {}),
       limiter,
       onRequest: (r) => requestLog.record(r),
       onDailyQuota: "stop",
@@ -582,26 +662,53 @@ export async function runBatch(ctx, state) {
       log: ctx.log,
     });
     const spent = () => Object.values(gemini.requests).reduce((x, y) => x + y, 0);
+    const tallyBefore = stageTally(stage);
     let stop = null;
     let busyPauseMs = 0;
+    // A batch is one Workflow step, which may run 20 minutes (worker/night.ts ONCE_MORE): it takes no new
+    // item after plan.batchMinutes of wall clock and returns normally, so a stalled Gemini (one item can take
+    // four timed-out tries plus the retry waits) never kills the night (audit F9). The next batch goes on.
+    const batchStartedAt = ctx.now();
     for (const item of items) {
       let later = false;
       if (spent() >= budget) break;
+      if (ctx.now() - batchStartedAt >= plan.batchMinutes * 60000) {
+        stage.batchCapped = (stage.batchCapped ?? 0) + 1;
+        ctx.log(`${stage.label}: the batch ran ${plan.batchMinutes} min; the next batch takes the rest`);
+        break;
+      }
       // The deadlines count from when the request would go out, after the pace.
       if (limiter.nextAt >= Date.parse(stage.deadlineAt) || limiter.nextAt >= Date.parse(s.timeline.hardStop)) {
         stage.timeCapped = true;
         break;
       }
+      // Each request is logged with the site it was for (gemini_requests.item).
+      requestLog.item = h.sites ? item.id : null;
       try {
         // left: what this batch may still spend, for an item that makes several requests (a post).
-        const out = await h.run(ctx, gemini, item, stage, { left: budget - spent() });
+        const res = await h.run(ctx, gemini, item, stage, { left: budget - spent() });
+        const out = res && typeof res === "object" ? res.status : res;
         if (out === "skipped") {
           stage.skipped++;
           stage.tried.push(item.id);
+          if (h.sites) noteSite(s, "setAside", { url: item.id, stage: stage.key, why: "screenshot unavailable for now; tried again tomorrow" });
+        } else if (out === "sentinel") {
+          // No usable image and nothing written (a re-grade keeps its grade): set aside for tonight, not picked again.
+          stage.noImage = (stage.noImage ?? 0) + 1;
+          stage.tried.push(item.id);
+          if (h.sites) noteSite(s, "setAside", { url: item.id, stage: stage.key, why: "screenshot missing; graded after its next capture" });
         } else {
           stage.ok++;
           stage.consecutive = 0;
           if (h.parkable) await clearItemFailure(db, stage.job, item.id);
+          const door = res && typeof res === "object" ? res.door : null;
+          if (h.sites && door) {
+            noteSite(s, "graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome, tier: door.tier ?? null });
+            if (door.outcome === "remove") noteSite(s, "removed", { url: item.id, reviewId: door.reviewId });
+            else if (["review", "strong_signals", "held"].includes(door.outcome)) {
+              noteSite(s, "review", { url: item.id, why: VERDICT_WORDS[door.outcome], reviewId: door.reviewId });
+            }
+          }
         }
       } catch (e) {
         if (e instanceof GeminiAuthError) {
@@ -633,6 +740,7 @@ export async function runBatch(ctx, state) {
         stage.tried.push(item.id);
         stage.lastError = msg(e);
         ctx.log(`${stage.label}: ${item.id} failed: ${msg(e)}`);
+        if (h.sites) noteSite(s, "failed", { url: item.id, stage: stage.key, reason: msg(e) });
         // Only the item's own failures count towards parking, never a busy 3.5.
         if (h.parkable && !(e instanceof GeminiUnavailableError)) {
           const f = await recordItemFailure(db, { job: stage.job, item: item.id, night: s.night, reason: msg(e), parkAfter: plan.parkAfterNights, now: ctx.now() });
@@ -653,6 +761,12 @@ export async function runBatch(ctx, state) {
         await stopRun(ctx, s, `hard stop ${plan.stopBeforeResetMinutes} minutes before the quota resets (${pacificTime(s.timeline.hardStop)} Pacific); the rest waits for tomorrow`, "stopped");
       } else await closeStage(ctx, s, "time cap reached");
     } else if (busyPauseMs) return { state: s, pauseMs: busyPauseMs, pauseReason: "busy" };
+    // A batch that had items but graded, failed, skipped and spent nothing would get the same
+    // items again next time, and the next, until the time cap: the stage ends here instead.
+    else if (!madeProgress(tallyBefore, stageTally(stage), spent())) {
+      ctx.log(`${stage.label}: a batch of ${items.length} item(s) made no progress; ending the stage`);
+      await closeStage(ctx, s, `stopped: a batch made no progress (${items.length} item(s) could not be worked on)`);
+    }
     return { state: s };
   } catch (e) {
     ctx.log(`night ${s.night}: unexpected error: ${msg(e)}`);
@@ -669,6 +783,8 @@ const minutes = (from, to) => Math.max(0, Math.round((Date.parse(to) - Date.pars
  */
 export async function finishNight(ctx, state) {
   const s = structuredClone(state);
+  // The Workflow's batch limit ran out before the run was done: stopped, not complete (worker/night.ts).
+  if (!s.done) await stopRun(ctx, s, "the Workflow's batch limit ran out before every stage finished; the rest waits for tomorrow", "stopped");
   const finishedAt = iso(ctx.now());
   // Stages never reached (a stop, or the hard stop) are listed too.
   const seen = new Set(s.stages.map((x) => x.key));
@@ -686,10 +802,20 @@ export async function finishNight(ctx, state) {
     checks: s.checks,
     estimate: s.estimate,
     actual: { requests, minutes: s.aiStartedAt ? minutes(s.aiStartedAt, finishedAt) : 0, retries: s.retriesUsed, pauses: s.pauses },
-    stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
+    stages: stages.map((x) => ({ key: x.key, label: x.label, requests: x.requests ?? 0, done: x.ok ?? 0, failed: x.failed ?? 0, skipped: x.skipped ?? 0, noImage: x.noImage ?? 0, parked: x.parked ?? [], minutes: x.startedAt && x.finishedAt ? minutes(x.startedAt, x.finishedAt) : 0, result: x.result ?? "" })),
     parked,
     humanVotes: HUMAN_VOTES_NOTE,
     polls: s.polls ?? null,
+    // The sites tonight touched (SITE_LISTS; at most SITE_LIST_MAX each, counts in sites.counts).
+    sites: s.sites ?? emptySites(),
+    // New sites set aside for a missing screenshot: waiting for a newer capture, and back in the queue tonight.
+    missingImage: s.missingImage ?? null,
+  };
+  const siteLines = (title, list, line, note = null) => {
+    const n = summary.sites.counts[list];
+    if (!n) return [];
+    const shown = summary.sites[list];
+    return [`### ${title} (${n})`, "", ...(note ? [note, ""] : []), ...shown.map((x) => `- ${line(x)}`), ...(n > shown.length ? [`- and ${n - shown.length} more`] : []), ""];
   };
   const est = s.estimate ? `${s.estimate.requests} request(s), about ${s.estimate.minutes} min at ${ctx.rpm}/min` : "none (the AI stages never started)";
   const md = [
@@ -702,7 +828,7 @@ export async function finishNight(ctx, state) {
     "",
     "| Stage | Requests | Done | Failed | Skipped | Minutes | Result |",
     "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
-    ...summary.stages.map((x) => `| ${x.label} | ${x.requests} | ${x.done} | ${x.failed} | ${x.skipped} | ${x.minutes} | ${x.result} |`),
+    ...summary.stages.map((x) => `| ${x.label} | ${x.requests} | ${x.done} | ${x.failed} | ${x.skipped} | ${x.minutes} | ${x.result}${x.noImage ? `; ${x.noImage} set aside for a missing image` : ""} |`),
     "",
     HUMAN_VOTES_NOTE,
     "",
@@ -710,6 +836,14 @@ export async function finishNight(ctx, state) {
       ? [`Parked (failed on ${ctx.plan.parkAfterNights} nights in a row, not retried until cleared from night_item_failures):`, ...parked.map((p) => `- ${p.job}: ${p.item} (${p.reason})`)].join("\n")
       : "Nothing parked.",
     "",
+    summary.missingImage && summary.missingImage.waiting + summary.missingImage.retried > 0
+      ? `New sites with a missing screenshot: ${summary.missingImage.waiting} waiting for a newer capture, ${summary.missingImage.retried} captured again and back in the queue.\n`
+      : "",
+    ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.tier ? ` (tier ${x.tier})` : ""}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
+    ...siteLines("Removed automatically", "removed", (x) => `${x.url}${x.reviewId ? ` (review ${x.reviewId})` : ""}`, "Each one has Undo on /admin/review."),
+    ...siteLines("Sent to review", "review", (x) => `${x.url}: ${x.why}`),
+    ...siteLines("Failed", "failed", (x) => `${x.url}: ${x.reason}`),
+    ...siteLines("Set aside", "setAside", (x) => `${x.url}: ${x.why}`),
   ]
     .filter((l) => l !== null)
     .join("\n");

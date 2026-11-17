@@ -33,8 +33,9 @@ import { profilePath } from "@/lib/profile";
 // out. Grading stays inside the grader's own caps (a few a day per visitor
 // and network, a site-wide day and a short waiting line, lib/grader/caps.mjs),
 // and nothing here calls Gemini (tests/gemini-reach.test.mjs): however many
-// sites are added, the grades wait in the queue for the day's Gemini budget,
-// which is zero while Gemini is frozen.
+// sites are added, the grades wait in the queue for people's own share of
+// the day's Gemini quota (pipeline/budget.mjs peopleAllowance), which the
+// background run's pause does not stop.
 //
 // Lighthouse runs while the visitor waits (about a minute): Workers can't
 // finish it in the background after answering. Past the day's speed checks

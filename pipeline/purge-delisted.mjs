@@ -7,8 +7,9 @@
 // Usage: node pipeline/purge-delisted.mjs [--dry-run]
 import fs from "fs";
 import path from "path";
-import { S3Client, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import * as commands from "@aws-sdk/client-s3";
 import { pipelineDb, purgeDelisted } from "./roster.mjs";
+import { deleteAllShots, imagesBucket } from "./shot-store.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const DRY = process.argv.includes("--dry-run");
@@ -17,7 +18,7 @@ if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID) {
   console.error("::error::R2_* credentials are needed to delete screenshots");
   process.exit(1);
 }
-const s3 = new S3Client({
+const s3 = new commands.S3Client({
   region: "auto",
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
@@ -25,15 +26,12 @@ const s3 = new S3Client({
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   },
 });
-// The frames capture.mjs uploads (pipeline/capture.mjs SERVE_FILES).
+// Everything under the shot key, in both buckets: the old frames and the
+// old full.jpg in SHOTS, every version of the tall images and thumbnails in
+// the images bucket once it exists (pipeline/shot-store.mjs).
+const buckets = [process.env.R2_BUCKET ?? "portfolio-rank", imagesBucket()].filter(Boolean);
 const deleteShots = async (key) => {
-  const out = await s3.send(
-    new DeleteObjectsCommand({
-      Bucket: process.env.R2_BUCKET ?? "portfolio-rank",
-      Delete: { Objects: ["hero.jpg", "mobile.jpg", "full.jpg"].map((f) => ({ Key: `${key}/${f}` })) },
-    })
-  );
-  if (out.Errors?.length) throw new Error(`R2: ${out.Errors[0].Code} ${out.Errors[0].Message}`);
+  for (const bucket of buckets) await deleteAllShots({ send: (c) => s3.send(c), commands, bucket, shotKey: key });
 };
 
 const result = await purgeDelisted(pipelineDb(ROOT), { deleteShots, dryRun: DRY });

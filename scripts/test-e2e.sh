@@ -128,4 +128,15 @@ done
 echo "e2e: app on port $PORT, stand-ins on $E2E_PSI_PORT, $E2E_GRADER_MOCK_PORT and $E2E_GAMES_GH_PORT; server log $E2E_SERVER_LOG"
 # A test or hook that never settles (a stand-in port taken by another run,
 # say) fails after five minutes instead of stalling the whole run.
-node --test --test-concurrency=1 --test-timeout=300000 "tests/*.test.mjs"
+# Every test by default. E2E_TESTS=site runs only the ones that need this
+# server, for CI, where npm run test:unit has already run the rest.
+if [ "${E2E_TESTS:-all}" = "site" ]; then
+  mapfile -t site_tests < <(node scripts/test-unit.mjs --list-site)
+  if [ "${#site_tests[@]}" -eq 0 ]; then
+    echo "e2e: no tests that need the site were found" >&2
+    exit 1
+  fi
+  node --test --test-concurrency=1 --test-timeout=300000 "${site_tests[@]}"
+else
+  node --test --test-concurrency=1 --test-timeout=300000 "tests/*.test.mjs"
+fi
