@@ -1,0 +1,116 @@
+name: Hourly re-check of sites that stopped working
+
+# The not-working pool (pipeline/not-working.mjs, AUTOMATION.md "Not
+# working"): a listed site that stops answering is out of the AI's work at
+# its first failed check, re-checked about an hour later and the next day,
+# hidden when it still fails, then re-checked daily for a week, weekly to day
+# 30 and monthly after that. This job runs those re-checks, and only those:
+# the nightly full check (health.yml) leaves the sites on that ladder to it.
+# Free: no Gemini, and nobody is emailed.
+#
+# An hour with nothing due costs one database query: the first job counts the
+# due sites with plain fetch, before any `npm ci` or browser install, and the
+# re-check job runs only when at least one is due.
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
+  schedule:
+    - cron: "40 * * * *"
+
+# Its own group: the nightly run never checks a site on the ladder, and this
+# job checks nothing else, so the two never look at the same site.
+concurrency:
+  group: recheck
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  due:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      due: ${{ steps.due.outputs.due }}
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Production runs the last release's code (.github/actions/release-code).
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
+      - name: Count the sites due
+        id: due
+        run: |
+          if [ -z "$TURSO_DATABASE_URL" ]; then
+            echo "::error::Missing secret TURSO_DATABASE_URL"
+            exit 1
+          fi
+          # A release from before the pool has no re-check yet: nothing to do until one is deployed.
+          if [ ! -f pipeline/recheck-due.mjs ]; then
+            echo "::notice::The release in production has no re-check yet; nothing to do."
+            echo "due=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node pipeline/recheck-due.mjs
+          echo "Sites due for their re-check: $(grep '^due=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2)" >> "$GITHUB_STEP_SUMMARY"
+
+  recheck:
+    needs: due
+    if: needs.due.outputs.due != '0'
+    # Same pin as health.yml: Playwright's Chromium needs ubuntu 24.04.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Re-check the due sites
+        run: node pipeline/recheck-run.mjs
+
+  # A job that fails, is cancelled or times out ends its own later steps, and
+  # `if: failure()` is false for a cancelled or timed-out job. So the notice is
+  # a job of its own: always() runs it whatever happened to the jobs it needs,
+  # and it reads their results (the same notice as the other scheduled jobs).
+  notify-failure:
+    needs: [due, recheck]
+    if: ${{ always() && (needs.due.result == 'failure' || needs.due.result == 'cancelled' || needs.recheck.result == 'failure' || needs.recheck.result == 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULTS: 'due: ${{ needs.due.result }}, recheck: ${{ needs.recheck.result }}'
+    steps:
+      - name: File or update the failure issue
+        run: |
+          title="⚠️ Scheduled job failed: ${{ github.workflow }}"
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          num=$(gh issue list --state open --search "$title" --json number,title \
+            --jq ".[] | select(.title==\"$title\") | .number" | head -1)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "Failed again ($RESULTS): $url"
+          else
+            gh issue create --title "$title" --body "A scheduled run did not finish ($RESULTS): $url" >/dev/null
+          fi

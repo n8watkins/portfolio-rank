@@ -32,11 +32,16 @@ export const PORTFOLIO_HTML = `<!doctype html><html><head><title>Ann Lee | Engin
 /** A page with no portfolio signals at all. */
 export const EMPTY_HTML = `<!doctype html><html><head><title>Welcome</title></head><body><p>${"Lorem ipsum dolor sit amet. ".repeat(20)}</p></body></html>`;
 
-export async function freshDb() {
+/** `health: false` leaves out health_marks, as on a database from before the not-working pool. */
+export async function freshDb({ health = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "door-"));
   const file = path.join(dir, "db.sqlite");
   const db = createClient({ url: `file:${file}` });
   await ensureRosterSchema(db);
+  if (!health) {
+    await db.execute("DROP TRIGGER IF EXISTS health_marks_follow_purge");
+    await db.execute("DROP TABLE IF EXISTS health_marks");
+  }
   await ensureGeminiLog(db);
   await ensureRankingSchema(db);
   await ensureRubricHistory(db);

@@ -38,7 +38,7 @@ import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary 
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { quotaDay } from "./quota-day.mjs";
 import { judgeOutcome } from "./judge-outcome.mjs";
-import { ACTIVE, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
+import { AI_WORK, NOT_PORTFOLIO, loadFeed, pipelineDb, syncRoster } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import {
   PAIR_COOLDOWN_DAYS,
@@ -137,7 +137,7 @@ async function run() {
   const rows = (
     await db.execute(
       `SELECT url, name, shot_key, page_text FROM portfolios p
-       WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")} AND NOT ${NOT_PORTFOLIO("p")}`
+       WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")} AND NOT ${NOT_PORTFOLIO("p")}`
     )
   ).rows;
   const info = new Map(rows.map((r) => [String(r.url), { name: String(r.name ?? ""), key: String(r.shot_key), pageText: r.page_text == null ? "" : String(r.page_text) }]));

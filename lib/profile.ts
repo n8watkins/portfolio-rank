@@ -5,7 +5,7 @@ import { ownerState } from "@/lib/games/claims.mjs";
 import { BASE_ELO } from "@/lib/elo";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { seen } from "@/lib/discovery/sites.mjs";
-import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
+import { GONE_WHERE, HIDDEN_WHERE } from "@/lib/hidden.mjs";
 import { indexable, profilePageLd, socialsFrom, type SeoFacts } from "@/lib/profile-seo";
 import { breadcrumbList, graph } from "@/lib/json-ld";
 import { SITE, SITE_URL } from "@/lib/site";
@@ -85,6 +85,11 @@ export type Profile = {
   /** The newest grade job for this site, while it isn't finished or it explains why. */
   job: { id: string; status: string; reason: string | null } | null;
   hideGrade: boolean;
+  /**
+   * A listed site that is not working (lib/hidden.mjs GONE_WHERE): its public page answers not found
+   * (app/p/[slug]), while its owner's tools (claim, verify, owner actions) still find it.
+   */
+  gone: boolean;
   saved: { quick: Saved<QuickFacts>; share: Saved<ShareResult>; mobile: Saved<PsiResult>; desktop: Saved<PsiResult> };
   stars: number;
   saves: number;
@@ -115,7 +120,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   if (owner.removedAt) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
-    listed ? client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,
+    listed ? client.execute({ sql: `SELECT ai_rubric, (${GONE_WHERE}) AS gone FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]) : null,
     client.execute({ sql: "SELECT id, status, reason, result FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [siteKey] }).then((r) => r.rows[0]),
     listed ? null : seen(client, url),
     client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url)] }).then((r) => r.rows),
@@ -163,6 +168,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
     report,
     job: jobRow && jobRow.status !== "done" ? { id: String(jobRow.id), status: String(jobRow.status), reason: jobRow.reason == null ? null : String(jobRow.reason) } : null,
     hideGrade: owner.hideGrade,
+    gone: Boolean(listed) && Number(rubricRow?.gone ?? 0) === 1,
     saved: { quick, share, mobile: read<PsiResult>(psiKey("mobile", url)), desktop: read<PsiResult>(psiKey("desktop", url)) },
     stars,
     saves,

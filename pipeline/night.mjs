@@ -73,7 +73,7 @@ import { rankForWrite } from "../lib/tiers-store.mjs";
 import { FRESH_GRADE_DUE_SQL, ensureReviewSchema, freshGradeDue } from "../lib/reviews/store.mjs";
 import { atTheDoor, setAsideCapture, setAsideCaptures, syncReviewRows, withCaptureColumns } from "../lib/reviews/door.mjs";
 import { CAPTURED_BEFORE_CHECK_SQL, storedCaptureBlocked } from "../lib/reviews/stored-capture.mjs";
-import { ACTIVE, NOT_PORTFOLIO } from "./roster.mjs";
+import { AI_WORK, NOT_PORTFOLIO } from "./roster.mjs";
 import { PAIR_SCHEMA, buildBatchRequest, buildPairRequest, parseBatchAnswer, parsePairAnswer } from "./compare-prompts.mjs";
 import { PAIR_COOLDOWN_DAYS, PROMPT_VERSION_BATCHED, PROMPT_VERSION_ONE_ON_ONE } from "../lib/ranking/config.mjs";
 import { planBatches, planPairs, pairKey } from "../lib/ranking/matchmaking.mjs";
@@ -143,7 +143,7 @@ export async function parkedItems(db) {
 
 // Listed, healthy, captured, with the evidence a grade reads (page text and
 // facts; pipeline/evidence.mjs measures it on Actions for older rows).
-const READY = (p = "p") => `${p}.status = 'live' AND ${p}.shot_key IS NOT NULL AND ${ACTIVE(p)} AND ${p}.page_text IS NOT NULL AND ${p}.facts IS NOT NULL`;
+const READY = (p = "p") => `${p}.status = 'live' AND ${p}.shot_key IS NOT NULL AND ${AI_WORK(p)} AND ${p}.page_text IS NOT NULL AND ${p}.facts IS NOT NULL`;
 const NOT_PARKED = (job, p = "p") =>
   `NOT EXISTS (SELECT 1 FROM night_item_failures f WHERE f.job = '${job}' AND f.item = ${p}.url AND f.parked_at IS NOT NULL)`;
 const NOT_TRIED = (p = "p") => `${p}.url NOT IN (SELECT value FROM json_each(?))`;
@@ -331,7 +331,7 @@ async function prepareComparisons(ctx, stage, allowed) {
   const batched = Math.min(Math.max(0, config.budget.batched - done.batched), allowed - oneOnOne);
   const rows = (
     await db.execute(
-      `SELECT url FROM portfolios p WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${ACTIVE("p")} AND NOT ${NOT_PORTFOLIO("p")}`
+      `SELECT url FROM portfolios p WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")} AND NOT ${NOT_PORTFOLIO("p")}`
     )
   ).rows;
   const comparable = new Set(rows.map((r) => String(r.url)));

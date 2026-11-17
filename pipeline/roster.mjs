@@ -22,6 +22,7 @@
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
+import { VALID_MARKS, ensureHealthSchema } from "./not-working.mjs";
 import { listKey, splitSites } from "./list-key.mjs";
 import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, jobSummary } from "./list-util.mjs";
 
@@ -105,13 +106,45 @@ export async function ensureRosterSchema(db) {
   }
   // Needs the health column above (lib/hidden.mjs).
   await db.execute(HIDDEN_INDEX);
+  // The health check's own table, which ACTIVE reads (pipeline/not-working.mjs).
+  await ensureHealthSchema(db);
 }
 
 /**
- * SQL condition for rows background jobs may work on: on the list and not
- * confirmed down. `p` is the table alias.
+ * SQL condition for rows the free background jobs may work on (captures and
+ * their retries, the screenshot refresh, tall images, fingerprints,
+ * Lighthouse, link checks, PageSpeed prewarm, the door's review rows): the
+ * rule main has always had (on the list, not taken off it: 'down'), less the
+ * sites on the not-answering ladder while its marks hold
+ * (pipeline/not-working.mjs VALID_MARKS). Everything else keeps its capture
+ * work: a site 'suspect' for a blocked capture or a page with the wrong
+ * thing (that is how it recovers), and one whose row something else changed
+ * since (the review queue's confirm, which queues a capture). Reads the
+ * health_marks table, which ensureRosterSchema creates (as lib/schema.mjs
+ * does). `p` is the table alias.
  */
 export const ACTIVE = (p = "portfolios") =>
+  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'
+   AND NOT EXISTS (SELECT 1 FROM health_marks lm WHERE lm.url = ${p}.url AND ${VALID_MARKS("lm", p)})`;
+
+/**
+ * SQL condition for rows the AI may spend on (grading, re-grading, AI
+ * comparisons, polls, blog facts, page evidence for a grade, the grader's
+ * comparison pool): on the list and passing its last health check, or not
+ * checked yet. A site that failed its last check ('suspect', for any reason)
+ * is out at once, while it is still shown to visitors (owner, 2026-11-16: the
+ * AI never spends a comparison on a site that does not work).
+ */
+export const AI_WORK = (p = "portfolios") =>
+  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') IN ('', 'live')`;
+
+/**
+ * SQL condition: on the list and not taken off it by the health check
+ * ('down': not working, or confirmed down). A failing ('suspect') site still
+ * counts: it is still shown to visitors, in the library and its tiers
+ * (lib/tiers-store.mjs, the same rule as lib/tiers-db.mjs's trigger).
+ */
+export const LISTED_NOT_DOWN = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'`;
 
 /** SQL condition (never NULL): the AI rubric said this is not a portfolio. */

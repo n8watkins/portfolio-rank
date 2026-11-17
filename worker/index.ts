@@ -34,6 +34,8 @@ import { libraryTick } from "./library";
 import { applyRemovalsTick, removalAlertsTick } from "./owner-removals";
 import { purgeRemovedProfiles } from "../lib/games/claims.mjs";
 import { db as database, ensureSchema } from "../lib/db";
+import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
+import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { runEach } from "../pipeline/hourly.mjs";
@@ -109,6 +111,36 @@ async function purgeOwnerRemovals(purgeTags: PurgeTags, scheduledTime: number) {
   }
 }
 
+/**
+ * Profiles the health check hid or showed (the not-working pool, ../pipeline/not-working.mjs): marked when the
+ * write happened. Each hour the app drops its own cached copies (path revalidation), is asked for the page past
+ * the edge (which also makes Next render a stale copy again), the edge copy is purged, and the mark is cleared
+ * only once the app already answers as it should, so a stale page the edge took in between is purged again.
+ */
+async function purgeNotWorkingProfiles(purgeTags: PurgeTags, env: CloudflareEnv, ctx: { exports?: unknown }) {
+  try {
+    const waitUntil = (p: Promise<unknown>) => (ctx as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil?.(p);
+    const secret = String((env as unknown as { AUTH_SECRET?: string }).AUTH_SECRET ?? "");
+    const revalidate = async (urls: string[]) => {
+      if (!secret) return;
+      await app.fetch(
+        new Request(`${env.SITE_URL}/api/internal/revalidate-profiles`, {
+          method: "POST",
+          headers: { "content-type": "application/json", [INTERNAL_TOKEN_HEADER]: await internalToken(secret, REVALIDATE_PROFILES) },
+          body: JSON.stringify({ urls }),
+        }),
+        env,
+        { waitUntil }
+      );
+    };
+    const origin = async (url: string) => (await app.fetch(new Request(`${env.SITE_URL}/p/${encodeURIComponent(url)}`), env, { waitUntil })).status;
+    const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => purgeTags(urls.map(profileTag)), origin, revalidate });
+    if (out.failed.length) purgeFailed("hourly-not-working", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
+  } catch (e) {
+    purgeFailed("hourly-not-working", e);
+  }
+}
+
 /** The blog, when a post's scheduled time came in the last hour. Best effort: a failure only means the page refreshes when its day is up. */
 async function purgeScheduledPosts(purgeTags: PurgeTags, scheduledTime: number) {
   try {
@@ -123,11 +155,12 @@ async function purgeScheduledPosts(purgeTags: PurgeTags, scheduledTime: number) 
 }
 
 /** The hourly purges (./edge-cache.ts keeps profiles and the blog a day): one helper per source of pages to purge, each on its own. */
-async function purgeAfterHour(ctx: { exports?: unknown }, scheduledTime: number) {
+async function purgeAfterHour(ctx: { exports?: unknown }, env: CloudflareEnv, scheduledTime: number) {
   const purgeTags = purgeTagsOf(ctx);
   if (!purgeTags) return;
   await purgeOwnerRemovals(purgeTags, scheduledTime);
   await purgeScheduledPosts(purgeTags, scheduledTime);
+  await purgeNotWorkingProfiles(purgeTags, env, ctx);
 }
 const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerprint ?? "dev");
 
@@ -184,9 +217,9 @@ const worker = {
           ["owner removals", () => applyRemovalsTick(at)],
           // Every removal still held alerts the owner, as a task of its own so a failure is reported (./owner-removals.ts).
           ["removal alerts", () => removalAlertsTick(env as NightEnv, at)],
-          // Removed profiles not purged yet (retried until it works) and blog posts whose scheduled time came this hour
-          // leave or join the edge cache (./edge-cache.ts).
-          ["edge purge", () => purgeAfterHour(ctx, at)],
+          // Removed profiles not purged yet (retried until it works), blog posts whose scheduled time came this hour,
+          // and profiles the health check hid or showed leave or join the edge cache (./edge-cache.ts).
+          ["edge purge", () => purgeAfterHour(ctx, env, at)],
           // An alert at 80% of any email cap (./email-alerts.ts).
           ["email caps", () => emailAlertsTick(env as NightEnv, at)],
           // An alert when last night's run never started or died (./night-watch.ts).

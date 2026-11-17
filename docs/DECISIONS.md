@@ -80,8 +80,18 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **The capture gives a working site every chance before calling it failed** (agent, 2026-11-14). Status: building (this PR).
   A 401, 403, 429 or 503 or a TLS failure on the plain pre-check is left to the browser (often a bot filter, or a certificate the browser accepts); a page with no text yet gets up to 15 seconds to render before it counts as blank; a screenshot that times out or hits Chrome's "Unable to capture screenshot" is taken again through the DevTools protocol.
   Why: 30 sites the owner confirmed as portfolios on 14 November failed the nightly capture (13 on a 403 to the pre-check alone, 9 blank after 3 seconds, 6 on a screenshot error) while a browser loaded all of them.
+- **A site that stops working leaves the AI's work at once and the site a day later** (owner, 2026-11-16: "I don't want the AI to waste a comparison if we're comparing it against something that's lost"; "if it's not working, it's not in the profile, it's not available for people to search for"; "we're not going to tell the site owner"). Status: building (this PR).
+  A site that does not answer (paused hosting, a deleted deployment, a dead domain, a refused connection) is out of grading and AI comparisons at its first failed check, still shown; re-checked about an hour later and the next day with the full check; still failing, it is hidden everywhere and its profile answers not found.
+  Nothing is deleted, and a site that passes comes back as it was; a not-working site is re-checked daily for a week, weekly to day 30, then monthly, and leaves the list after 90 days.
+  Bot walls, checks that could not tell and pages that answer with the wrong thing (parked, blank, a duplicate) never enter it; nobody is emailed.
+  The numbers (the next day, the cadence, 90 days) are constants in `pipeline/not-working.mjs`.
+  Why: of 30 failed sites on 2026-11-16, 21 were really down (9 paused hosting, 1 deleted deployment, 11 not answering) and stayed visible and in the AI's work for about two weeks; 2 came back by themselves within a day, hence the next-day re-check.
+- **The full health check runs every night** (owner, 2026-11-16: "we should probably just check it every day"). Status: building (this PR).
+  One plain request per site per night, the browser only for unclear answers; the sites on the not-working ladder are the hourly re-check's, never checked twice in an hour.
+  Everything that counted weeks counts time: the 3-week rule for pages that answer with the wrong thing counts a failure once a week however many runs, and the owner's alert for sites the check cannot tell about comes after 28 days, not 4 runs.
+  The export to `data/excluded.json` stays weekly, so its bot pull request does not become daily.
 - **Health check thresholds** (owner, 2026-11-10). Status: built (#53).
-  Weekly check; `live` to `suspect` on any failure, `down` only after 3 failed checks in a row, each on a week of its own, spanning at least 13 days; a pass resets to `live`.
+  Weekly check (nightly since 2026-11-16, above); for a page that answers with the wrong thing, `live` to `suspect` on any failure, `down` only after 3 failed checks in a row, each on a week of its own, spanning at least 13 days; a pass resets to `live`.
   Bot walls are inconclusive, a redirect to another domain is a move, a run where more than 30% fail records nothing, and at most 10% of the list leaves at once.
   Updated after the 2026-11-16 audit (agent, owner's rules: a bot-walled site is never removed, a removal always leaves a record the owner can see and undo): a timeout, a dropped connection, a temporary DNS failure or a crash of the check is inconclusive, never a failure; a run where more than 15% are inconclusive, or the browser cannot start, records nothing; a site unknown for 4 weeks goes to the owner; a "not a portfolio" grade leaves only through the review queue; a removed "down" site that passes the full check again comes back by itself (checked monthly).
   Why: a pinned 2.5-year-old User-Agent and a slow page body made live sites fail every week, and a bot wall the check did not recognise could remove a site the owner wanted to review.
@@ -154,7 +164,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A "no" on a site with no recorded signals (and no junk rule) waits for the owner as a pending row instead of being removed; measuring them here would need the page's HTML, which the night does not have.
 - **When the code says it looks like a portfolio, the owner reviews it** (owner, 2026-11-16: "If Gemini says it's not a portfolio, and then the code says it looks like a portfolio, we can review it."). Status: building.
   With 4 or more of the six code signals (`STRONG_SIGNALS` in [pipeline/portfolio-guard.mjs](../pipeline/portfolio-guard.mjs)) the site stays listed and a pending review row says Gemini said no, the code found N of 6, with the screenshots.
-  The weekly health check keeps such a site's `needs_review` mark instead of overwriting it, until the owner decides.
+  The health check keeps such a site's `needs_review` mark instead of overwriting it, until the owner decides.
   His Confirm takes it off; his Reject settles the grade as his choice to keep it (review kind `owner_kept`, `needs_review` cleared), so nothing re-flags it, and Undo of that Reject restores the hold.
 - **A junk rule is not protected by the signals** (agent, 2026-11-16). Status: building.
   The junk rules ([pipeline/junk-rules.mjs](../pipeline/junk-rules.mjs): an unedited template, a placeholder name such as "John Doe", a parked or for-sale page, a code host or link-in-bio address) run before the guard, and a hit is removed automatically like any other "no", even with 6 of 6 signals.
@@ -177,7 +187,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **The night says which sites it touched** (agent, 2026-11-16). Status: building.
   Every grading request in `gemini_requests` names its site (`item`), and `night_runs.summary.sites` lists, 50 at most each with full counts, the sites graded with their verdict, removed automatically, sent to review, failed and set aside.
 - **Decided, not built here: sites added by their owner** (owner, 2026-11-16). Status: planned.
-  A site added by its owner always gets a grade and a profile, joins the leaderboard when it passes a short checklist of the code signals, is never put on the rejected list, and gets the same weekly health check as every other site.
+  A site added by its owner always gets a grade and a profile, joins the leaderboard when it passes a short checklist of the code signals, is never put on the rejected list, and gets the same nightly health check as every other site.
 - **Decided, not built here: a blank site is retried, then treated as broken** (owner, 2026-11-16). Status: planned (#235 builds the capture side).
 - **Accepted: Gemini over-awards top scores** (owner, 2026-11-16). Status: accepted, no change.
   Why: the owner accepts it for now rather than adding a second model or calibration.
@@ -526,7 +536,7 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   A GitHub link doesn't count on a site the capture found built from a known template (template footers link the template's author), nor on a page that redirected elsewhere; an account verifies at most 3 portfolios by itself, more go to review.
   Why: a template author must not be able to remove every clone of their template.
 - **An owner's removal is immediate on the site, permanent through the exclusions pull request** (owner, 2026-11-10; the timing is the agent's). Status: building.
-  The site hides it at once; the weekly health workflow adds it to `data/excluded.json` with reason "owner request", without the name, through its bot pull request; `/removed` counts these without details.
+  The site hides it at once; the nightly health workflow adds it to `data/excluded.json` with reason "owner request", without the name, through its bot pull request; `/removed` counts these without details.
   Why: the owner's existing removal flow, with no wait for the person asking.
   Superseded 2026-11-11 (security review M4, owner-approved): a removal needs the meta tag or a reviewed claim, is held 24 hours with an owner alert, can be cancelled by the claimant and undone by the admin.
   Why: a link to someone's GitHub profile or repository is common on portfolios, so a link alone let collaborators remove a site for good with no one told.

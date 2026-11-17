@@ -4,6 +4,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { workerEnv } from "@/lib/grader/server";
 import { activeAlerts } from "@/pipeline/alerts.mjs";
 import { TestAlert } from "@/components/admin/TestAlert";
+import { LEAVE_AFTER_DAYS, POOL_SQL } from "@/pipeline/not-working.mjs";
 
 // The owner alerts (AUTOMATION.md "Owner alerts"): whether alerts can be
 // emailed on this site, a button that sends a test alert through the normal
@@ -11,6 +12,8 @@ import { TestAlert } from "@/components/admin/TestAlert";
 // gets a 404.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Alerts - PortfolioRank admin", robots: { index: false, follow: false } };
+
+type PoolSite = { url: string; name: string; hidden: boolean; reason: string; started: string | null; since: string | null; next: string | null };
 
 type Alert = { key: string; kind: string; title: string; detail: string | null; first_seen: string; last_seen: string; last_sent_day: string | null; sends: number };
 
@@ -34,6 +37,21 @@ export default async function AdminAlertsPage() {
     alerts = (await activeAlerts(db())) as Alert[];
   } catch (e) {
     if (!/no such table/i.test(String((e as Error)?.message))) throw e;
+  }
+  // The not-working pool (pipeline/not-working.mjs): the owner's only view of it, besides the job summaries.
+  let pool: PoolSite[] = [];
+  try {
+    pool = (await db().execute(POOL_SQL)).rows.map((r) => ({
+      url: String(r.url),
+      name: r.name == null ? "" : String(r.name),
+      hidden: String(r.health) === "down",
+      reason: r.health_reason == null ? "" : String(r.health_reason),
+      started: r.pool_started_at == null ? null : String(r.pool_started_at),
+      since: r.pool_since == null ? null : String(r.pool_since),
+      next: r.pool_next_at == null ? null : String(r.pool_next_at),
+    }));
+  } catch (e) {
+    if (!/no such (table|column)/i.test(String((e as Error)?.message))) throw e;
   }
 
   return (
@@ -80,6 +98,40 @@ export default async function AdminAlertsPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="mt-6" aria-labelledby="pool-heading" data-not-working>
+        <h2 id="pool-heading" className="text-lg font-bold tracking-tight">
+          Sites that stopped working
+        </h2>
+        <p className="mt-1 text-sm text-mute">
+          Failing: out of grading and AI comparisons, still shown. Not working: hidden everywhere until a check passes, then back as it was. Off the list after{" "}
+          {LEAVE_AFTER_DAYS} days. Nobody is emailed.
+        </p>
+        {pool.length === 0 ? (
+          <p className="card mt-3 p-5 text-sm text-mute">None. Every listed site answered its last check.</p>
+        ) : (
+          <>
+            <p className="mt-3 text-sm" data-pool-counts>
+              <span className="font-semibold">{pool.filter((p) => p.hidden).length}</span> not working ·{" "}
+              <span className="font-semibold">{pool.filter((p) => !p.hidden).length}</span> failing
+            </p>
+            <ul className="mt-3 grid gap-2">
+              {pool.map((p) => (
+                <li key={p.url} className="card p-4 text-sm" data-pool-site={p.url}>
+                  <p className="flex flex-wrap items-baseline gap-x-2">
+                    <span className={`text-xs font-semibold ${p.hidden ? "text-down" : "text-mute"}`}>{p.hidden ? "Not working" : "Failing"}</span>
+                    <span className="min-w-0 break-all font-semibold">{p.name || p.url}</span>
+                  </p>
+                  <p className="mt-1 break-all text-mute">
+                    {p.reason || "no reason recorded"} · {p.hidden ? `hidden since ${day(p.since ?? p.started ?? "")}` : `failing since ${day(p.started ?? "")}`}
+                    {p.next ? ` · next check ${p.next.slice(0, 16).replace("T", " ")} UTC` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
     </div>

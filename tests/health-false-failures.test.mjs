@@ -237,6 +237,8 @@ test("d: a decision made in /admin/review during the run is never overwritten", 
   const url = "https://failing.example";
   await site(db, url);
   await db.execute({ sql: "UPDATE portfolios SET health = 'suspect', health_fails = 2, health_reason = 'HTTP 500', health_first_fail_at = ? WHERE url = ?", args: [at(-14).toISOString(), url] });
+  // A database the pool already ran on: this failing row is not one of those it adopted when it shipped.
+  await db.execute({ sql: "INSERT INTO cache (k, v, at) VALUES ('health:pool-adopted', '{}', 0)" });
   const feed = [{ url, name: "Ann Lee" }, ...filler];
   let decided = false;
   const fetchImpl = async (u) => {
@@ -271,10 +273,11 @@ test("d: a decision made in /admin/review during the run is never overwritten", 
       };
     },
   });
-  const s = await health.runHealthCheck({ db: racing, feed, fetchImpl: async (u) => (u.startsWith(url) ? response(500, "Internal Server Error", u) : response(200, PORTFOLIO_HTML, u)), render, now: at(7), concurrency: 1, log: quiet });
+  // The site is on the not-working ladder now, so the hourly re-check is the one that looks at it.
+  const s = await health.runHealthCheck({ db: racing, feed, scheduled: "check", fetchImpl: async (u) => (u.startsWith(url) ? response(500, "Internal Server Error", u) : response(200, PORTFOLIO_HTML, u)), render, now: at(7), concurrency: 1, log: quiet });
   assert.ok(raced);
   assert.equal(await col(db, url, "health"), "live");
-  assert.ok(s.changedDuringRun?.includes(url), "reported, for next week's check");
+  assert.ok(s.changedDuringRun?.includes(url), "reported, for the next check");
 });
 
 // ---------------------------------------------------------------------------
@@ -343,7 +346,8 @@ test("f: a temporary DNS failure (EAI_AGAIN) is retried and inconclusive, not de
 });
 
 test("f: failed checks count on distinct weeks: two runs on one bad day and one 13 days later are two, not three", () => {
-  const fail = { ok: false, reason: "HTTP 500" };
+  // A page that answers with the wrong thing (one that does not answer has the not-working pool's ladder).
+  const fail = { ok: false, reason: "renders blank" };
   let s = health.nextHealth(null, fail, at(0));
   s = health.nextHealth(s, fail, at(0.4));
   s = health.nextHealth(s, fail, at(13));
@@ -364,17 +368,17 @@ test("f: the summary says needs-review sites go to the owner, not the grading qu
 // ---------------------------------------------------------------------------
 // Removed "down" sites come back by themselves (owner, 2026-11-16)
 
-test("a removed 'down' site is checked again monthly and leaves the exclusion list when it answers", async () => {
+test("a removed 'down' site is checked again (days 7, 14, 21, then monthly) and leaves the exclusion list when it answers", async () => {
   const now = new Date("2026-12-20T00:00:00Z");
   const list = [
     { url: "https://paused.example", kind: "down", reason: "HTTP 402: deployment paused", removed: "2026-11-16" },
     { url: "https://still-paused.example", kind: "down", reason: "HTTP 402: deployment paused", removed: "2026-11-16" },
-    { url: "https://recent.example", kind: "down", reason: "HTTP 500", removed: "2026-12-10" },
+    { url: "https://recent.example", kind: "down", reason: "HTTP 500", removed: "2026-12-15" },
     { url: "https://np.example", kind: "not_portfolio", removed: "2026-01-01" },
   ];
   const checked = [];
   const r = await exclusions.planDeadRecheck({ excluded: list, now, answers: async (u) => (checked.push(u), u === "https://paused.example") });
-  assert.deepEqual(checked, ["https://paused.example", "https://still-paused.example"], "due 30 days after removal; never a not_portfolio entry");
+  assert.deepEqual(checked, ["https://paused.example", "https://still-paused.example"], "due 7 days after removal; never a not_portfolio entry");
   assert.deepEqual(r.back, ["https://paused.example"]);
   const still = r.excluded.find((e) => e.url === "https://still-paused.example");
   assert.equal(still.recheck_after, "2027-01-19");
@@ -468,9 +472,10 @@ test("review 3: failures count a week after the last counted one, not on a ladde
   const url = "https://flaky.example";
   await site(db, url);
   const feed = [{ url, name: "Ann Lee" }, ...filler];
-  const fail = async (u) => (u.startsWith(url) ? response(500, "Internal Server Error", u) : response(200, PORTFOLIO_HTML, u));
+  // A page that answers blank: the weekly-counted ladder (a site that does not answer has the not-working pool's).
+  const fail = async (u) => (u.startsWith(url) ? response(200, "<div id=root></div>", u) : response(200, PORTFOLIO_HTML, u));
   const unsure = async (u) => (u.startsWith(url) ? slowBody(u) : response(200, PORTFOLIO_HTML, u));
-  const render = async (u) => (u.startsWith(url) ? { status: 500, finalUrl: `${url}/`, title: "", text: "", media: false, html: "" } : goodPage(u));
+  const render = async (u) => (u.startsWith(url) ? { status: 200, finalUrl: `${url}/`, title: "", text: "", media: false, html: "" } : goodPage(u));
   const blindRender = async (u) => {
     if (u.startsWith(url)) throw new Error("page.goto: Timeout 30000ms exceeded.");
     return goodPage(u);
@@ -533,7 +538,7 @@ test("review 4: a browser that cannot start or a tab that crashes is never held 
   assert.equal(await col(db, site1.url, "health_checked_at"), undefined, "nothing recorded (no row written)");
 });
 
-test("review 5: a runner that could not tell for most sites fails the run; a site unknown four weeks running goes to the owner", async () => {
+test("review 5: a runner that could not tell for most sites fails the run; a site unknown for four weeks of nightly runs goes to the owner", async () => {
   const { db } = await freshDb();
   const feed = filler.slice(0, 25);
   const s = await health.runHealthCheck({ db, feed, fetchImpl: async (u) => slowBody(u), render: browserThrows("page.goto: Timeout 30000ms exceeded."), now: at(0), log: quiet });
@@ -548,13 +553,18 @@ test("review 5: a runner that could not tell for most sites fails the run; a sit
     if (u.startsWith(url)) throw new Error("page.goto: Timeout 30000ms exceeded.");
     return goodPage(u);
   };
+  // The full check runs every night: four runs are not four weeks; 28 days are.
   let last;
-  for (const w of [0, 7, 14, 21]) last = await health.runHealthCheck({ db, feed: mixed, fetchImpl, render: browser, now: at(w), log: quiet });
+  for (let d = 0; d < health.UNKNOWN_DAYS_TO_OWNER; d++) {
+    last = await health.runHealthCheck({ db, feed: mixed, fetchImpl, render: browser, now: at(d), log: quiet });
+    assert.deepEqual(last.unknownForWeeks, [], `no alert on day ${d}`);
+  }
+  last = await health.runHealthCheck({ db, feed: mixed, fetchImpl, render: browser, now: at(health.UNKNOWN_DAYS_TO_OWNER), log: quiet });
   assert.deepEqual(last.unknownForWeeks?.map((u) => u.url), [url]);
   const alert = (await db.execute({ sql: "SELECT title, detail FROM owner_alerts WHERE key = ? AND cleared_at IS NULL", args: [health.UNKNOWN_ALERT_KEY] })).rows[0];
   assert.ok(alert && String(alert.detail).includes(url), "an alert on /admin/alerts names the site");
   // It answers again: the alert clears.
-  await health.runHealthCheck({ db, feed: mixed, fetchImpl: async (u) => response(200, PORTFOLIO_HTML, u), render: async (u) => goodPage(u), now: at(28), log: quiet });
+  await health.runHealthCheck({ db, feed: mixed, fetchImpl: async (u) => response(200, PORTFOLIO_HTML, u), render: async (u) => goodPage(u), now: at(health.UNKNOWN_DAYS_TO_OWNER + 1), log: quiet });
   assert.equal((await db.execute({ sql: "SELECT COUNT(*) AS n FROM owner_alerts WHERE key = ? AND cleared_at IS NULL", args: [health.UNKNOWN_ALERT_KEY] })).rows[0].n, 0);
 });
 
