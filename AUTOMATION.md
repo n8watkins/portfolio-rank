@@ -149,7 +149,7 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
 | 23:30 | Workflow | Hard stop, 30 minutes before the reset; the summary and owner alerts |
 | Then | Workflow | Roll-ups and retention of the log tables ([pipeline/retention.mjs](pipeline/retention.mjs)): `gemini_requests` older than 90 Pacific days becomes `gemini_daily`, `night_runs` older than 180 days and the free-text reason of comparisons older than 90 days go |
-| Mondays 08:00 or 09:00 | Worker cron `0 16 * * 1` | Model watch (below): Google's model list, deprecations and release notes; no Gemini generate calls |
+| Mondays 08:00 or 09:00 | Worker cron `0 16 * * MON` | Model watch (below): Google's model list, deprecations and release notes; no Gemini generate calls |
 
 The cron: Cron Triggers run in UTC, so `wrangler.jsonc` has `30 3 * * *` (20:30 under daylight time) and `30 4 * * *` (20:30 under standard time); the handler starts the run only from the one that is 20:30 in Los Angeles, so the run starts at the same local time all year ([pipeline/budget.mjs](pipeline/budget.mjs) `isNightStart`, tested for every day of 2026 and 2027).
 The Workflow instance is `night-<Pacific date>` and the night is claimed in the `night_runs` table, so a night runs once: a failed or stopped run never restarts itself.
@@ -496,8 +496,8 @@ Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12,
   The answer is the same `{ ok: true }` for a new, pending or confirmed address; 400 `bad_email`, 403 `bad_origin` or `turnstile_failed`, 429 `rate_limited`, 503 `email_unavailable` (Kit not set up or not answering).
 - **Double opt-in and unsubscribe** are Kit's: the form has double opt-in on, so Kit sends its confirm email and only confirmed subscribers get posts; every broadcast carries Kit's unsubscribe link (`{{ unsubscribe_url }}`) and one-click header, and Kit handles bounces and complaints.
 - **The form:** `KIT_FORM_ID` when set, else the account's only active form (asked once a day, cached); with several forms and no `KIT_FORM_ID`, sign-ups answer 503.
-- **New posts** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the newsletter's tick (on the five-minute grader cron `*/5 * * * *`, no trigger of its own; production and staging) turns each such post, once it is live, into an issue and the issue into one Kit broadcast to every subscriber.
-  `KIT_BROADCAST_MODE` `"send"` (production) schedules it 10 minutes ahead (the V4 API has no "send now"); `"draft"` saves a draft, and so does a 403 when scheduling.
+- **New posts** ([lib/newsletter/send.mjs](lib/newsletter/send.mjs), [worker/newsletter.ts](worker/newsletter.ts)): publishing a post sets `posts.newsletter_pending`; the newsletter's tick (on the five-minute grader cron `*/5 * * * *`, no trigger of its own; production only, staging's task list leaves it out) turns each such post, once it is live, into an issue and the issue into one Kit broadcast to every subscriber.
+  `KIT_BROADCAST_MODE` `"send"` schedules it 10 minutes ahead (the V4 API has no "send now"); `"draft"` (the value in production today, and always on staging) saves a draft, and so does a 403 when scheduling.
   A draft emails the owner one line, "Newsletter: draft ready in Kit", through the owner-alert gate to `OWNER_EMAIL`.
   Staging always makes drafts, with `[staging]` in the subject: it shares the owner's one Kit account.
   A post that went live more than 3 days before the newsletter saw it is recorded as "Not sent", so switching the newsletter on never mails a backlog; an unpublished post's issue stops.
@@ -516,7 +516,7 @@ Kit (kit.com, free plan) keeps the list and sends the emails (owner, 2026-11-12,
 ## Model watch
 
 Owner decision of 2026-11-10: model watch is news only; nothing switches on its own.
-Every Monday at 16:00 UTC (08:00 or 09:00 Pacific) a Cron Trigger on the Worker (`0 16 * * 1` in `wrangler.jsonc`, [worker/model-watch.ts](worker/model-watch.ts)) runs [pipeline/model-watch.mjs](pipeline/model-watch.mjs).
+Every Monday at 16:00 UTC (08:00 or 09:00 Pacific) a Cron Trigger on the Worker (`0 16 * * MON` in `wrangler.jsonc`, [worker/model-watch.ts](worker/model-watch.ts)) runs [pipeline/model-watch.mjs](pipeline/model-watch.mjs).
 
 | Source | What it gives | Cost |
 | --- | --- | --- |
