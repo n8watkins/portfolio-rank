@@ -184,6 +184,8 @@ export const BROWSER_GONE = "retry (the browser went away)";
  * moment later, so the call that failed first cannot tell.
  */
 const GONE_GRACE_MS = 5000;
+/** How long the capture's page gets to answer a probe (lost()). */
+const PROBE_MS = 2000;
 /** Error text that suggests the browser went away: only a reason to wait for the browser's own word, never the answer. */
 const CLOSED_TEXT = /has been closed|target closed|browser closed|disconnected|crashed|connection closed/i;
 
@@ -202,14 +204,27 @@ function watchBrowser(browser) {
     ctxLost: false,
     /** Whether the browser is gone now. */
     now: () => w.gone || !browser.isConnected(),
+    /** The capture's page, once there is one: lost() asks it whether it still answers. */
+    page: null,
     /**
-     * Whether the browser went away, after `err` (or nothing) went wrong:
-     * when the context closed under the capture, or the error text points
-     * that way, the browser gets GONE_GRACE_MS to say so.
+     * Whether the browser went away, after something went wrong. When Chromium
+     * dies, the call that fails first (a navigation aborted, a wait on a page
+     * being closed) does so while the browser still says it is connected. So
+     * the capture's page is asked to answer (PROBE_MS): one that answers means
+     * the browser is there. When it does not, or the context closed under the
+     * capture, or the error text points that way, the browser gets
+     * GONE_GRACE_MS to report itself disconnected.
      */
     async lost(err) {
       if (w.now()) return true;
-      if (!w.ctxLost && !CLOSED_TEXT.test(String(err?.message ?? err ?? ""))) return false;
+      const hinted = w.ctxLost || CLOSED_TEXT.test(String(err?.message ?? err ?? ""));
+      if (!hinted && w.page && !w.page.isClosed()) {
+        const answers = await within(w.page.evaluate(() => 1), PROBE_MS, "the page answering").then(
+          () => true,
+          () => false
+        );
+        if (answers && !w.ctxLost) return w.now();
+      }
       let timer;
       await Promise.race([goneEvent, new Promise((r) => (timer = setTimeout(r, GONE_GRACE_MS)))]);
       clearTimeout(timer);
@@ -419,6 +434,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
   };
 
   const page = await ctx.newPage();
+  run.watch.page = page;
   const doc = trackDocument(page);
 
   const consoleErrors = [];
