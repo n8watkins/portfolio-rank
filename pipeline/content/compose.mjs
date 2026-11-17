@@ -23,6 +23,7 @@ import { planPost } from "./plan.mjs";
 import { checkLinksLoad, codeChecks, urlsIn, wordCount } from "./checks.mjs";
 import { buildReviewRequest, reviewCheck } from "./topic.mjs";
 import { checkClaims, cutClaimSentences } from "./claims.mjs";
+import { splitFlags } from "./backing.mjs";
 
 /** The writer's standing rules: voice and safety only; the shape is code's. */
 export const WRITE_SYSTEM = [
@@ -373,7 +374,7 @@ export async function composeDraft(sheet, ctx) {
   // 4. Checks, then one targeted fix.
   await phase("checking");
   let code = codeChecks(draft, sheet, { roster: ctx.roster ?? [] });
-  history.push({ round: 0, checks: code.checks, repairs: notes, claims: { supported: [], cut: [], unchecked: false } });
+  history.push({ round: 0, checks: code.checks, repairs: notes, claims: { flagged: [], unchecked: false } });
   if (!code.ok && ctx.left() >= 2) {
     const which = blocksToFix(blocks, code.failures, plan);
     if (which.length) {
@@ -382,7 +383,7 @@ export async function composeDraft(sheet, ctx) {
       Object.assign(blocks, parseBlocks(await call(buildFixRequest(sheet, plan, blocks, code.failures, which))));
       ({ draft, notes } = assemble(sheet, plan, blocks));
       code = codeChecks(draft, sheet, { roster: ctx.roster ?? [] });
-      history.push({ round: 1, checks: code.checks, repairs: notes, claims: { supported: [], cut: [], unchecked: false } });
+      history.push({ round: 1, checks: code.checks, repairs: notes, claims: { flagged: [], unchecked: false } });
     }
   }
   const words = wordCount(fill(draft.body, sheet.facts));
@@ -412,9 +413,16 @@ export async function composeDraft(sheet, ctx) {
   const review = reviewCheck(answer);
   history.at(-1).checks.push(review);
   if (!review.ok) return { passed: false, draft, plan, history, failures: review.problems.map((p) => `review: ${p}`), supported: [], requests, searches: 0, words };
-  const flagged = answer.outside_claims.map((s) => String(s).trim()).filter(Boolean);
+  const reviewFlags = answer.outside_claims.map((s) => String(s).trim()).filter(Boolean);
+  // Do not rely on the reviewer alone (pipeline/content/backing.mjs): a flagged sentence that code can show is
+  // built only from sheet facts is "ours" (not searched, not cut); a sentence that names a listed site with no
+  // sheet fact about it is checked whether or not the reviewer flagged it.
+  const { check, ours } = splitFlags(draft, sheet, reviewFlags);
+  const flagged = check.map((c) => c.sentence);
+  const byOf = new Map(check.map((c) => [c.sentence, c.by]));
   let supported = [];
   let searches = 0;
+  history.at(-1).claims = { flagged: ours.map((o) => ({ sentence: o.sentence, by: o.by, outcome: "ours", facts: o.facts })), unchecked: false };
   if (flagged.length) {
     await phase("researching");
     const claims = await checkClaims(filled, {
@@ -427,15 +435,16 @@ export async function composeDraft(sheet, ctx) {
     });
     searches = claims.searches;
     supported = claims.supported;
-    // Every flag and what became of it, so the owner sees each one.
-    const flags = flagged.map((s) => {
+    // Every flag and what became of it, each sentence once, so the owner sees each one.
+    const flags = [...new Set(flagged)].map((s) => {
+      const by = byOf.get(s);
       const sup = claims.supported.find((c) => c.sentence === s);
-      if (sup) return { sentence: s, outcome: "supported", url: sup.url };
+      if (sup) return { sentence: s, by, outcome: "supported", url: sup.url };
       const cut = claims.cut.find((c) => c.sentence === s);
-      if (cut) return { sentence: s, outcome: "cut", reason: cut.reason };
-      return { sentence: s, outcome: "not found in the post" };
+      if (cut) return { sentence: s, by, outcome: "cut", reason: cut.reason };
+      return { sentence: s, by, outcome: "not found in the post" };
     });
-    history.at(-1).claims = { supported: claims.supported, cut: claims.cut, flagged: flags, unchecked: false };
+    history.at(-1).claims.flagged.push(...flags);
     // Fail closed: a flagged claim that can't be found, or can't be removed, drops the draft.
     const drop = (failures) => ({ passed: false, draft, plan, history, failures, supported, requests, searches, words });
     if (claims.listedNotFound?.length) return drop(claims.listedNotFound.map((s) => `claims: the review flagged a sentence that is not in the post, so it could not be checked or cut: "${s.slice(0, 120)}"`));

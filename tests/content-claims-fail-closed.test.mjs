@@ -13,6 +13,7 @@ import { TAVILY_API, TAVILY_PER_WEEK } from "../pipeline/content/claims.mjs";
 import { REVIEW_SCHEMA, reviewCheck } from "../pipeline/content/topic.mjs";
 import { listPosts, tavilyThisWeek } from "../lib/content/store.mjs";
 import { creditsFor } from "../lib/content/tavily-credits.mjs";
+import { flagsOf } from "../pipeline/content/claim-flags.mjs";
 
 const NIGHT = { kind: "top-grades", night: "2026-11-16", budget: 20 };
 const CLAIM = "Recruiters spend about seven seconds on a portfolio before deciding.";
@@ -61,7 +62,6 @@ test("a: a flagged outside claim that names a listed site is searched and cut, a
     const [post] = await postsOf(db);
     assert.ok(!post.body.includes("LinkedIn study"), `${mode}: the claim is not in the stored post`);
     const claims = post.checks.history.at(-1).claims;
-    assert.equal(claims.cut.length, 1);
     assert.deepEqual(claims.flagged.map((f) => [f.sentence, f.outcome]), [[claim, "cut"]]);
   }
 });
@@ -192,10 +192,9 @@ test("every ending of a claim check is a cut sentence or a failed run, never a p
     if (e.outcome === "cut") {
       assert.equal(thrown, null, e.name);
       assert.equal(r.status, "ok", `${e.name}: ${r?.failures?.join("; ")}`);
-      const claims = posts.find((p) => p.status === "draft").checks.history.at(-1).claims;
-      assert.equal(claims.supported.length, 0, e.name);
-      assert.match(claims.cut.map((c) => c.reason).join("; "), e.reason, e.name);
-      assert.deepEqual(claims.flagged.map((f) => f.outcome), ["cut"], e.name);
+      const flags = flagsOf(posts.find((p) => p.status === "draft").checks.history);
+      assert.deepEqual(flags.map((f) => f.outcome), ["cut"], e.name);
+      assert.match(flags[0].reason, e.reason, e.name);
     } else if (e.outcome === "throws") {
       assert.ok(thrown, `${e.name}: the run fails`);
       assert.equal(posts.length, 0, `${e.name}: nothing stored`);

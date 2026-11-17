@@ -10,6 +10,7 @@ import { StatusPill, checksLine, closedReason, pacificTime, scheduledFor } from 
 import { relatedPortfolios } from "@/lib/blog-server";
 import type { BlogPost } from "@/lib/blog";
 import { scorecard } from "@/pipeline/content/scorecard.mjs";
+import { flagsOf } from "@/pipeline/content/claim-flags.mjs";
 import { Scorecard } from "@/components/admin/Scorecard";
 
 // One post as readers would see it, with the owner's decision on top
@@ -21,7 +22,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Review post - PortfolioRank admin", robots: { index: false, follow: false } };
 
 type Check = { name: string; ok: boolean; problems: string[] };
-type Round = { round: number; checks: Check[]; claims?: { cut?: { sentence: string; reason: string }[] } };
+type Round = { round: number; checks: Check[]; claims?: unknown };
+type Flag = { sentence: string; by?: string; outcome: string; url?: string; reason?: string; facts?: string[] };
 
 function Details({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
   return (
@@ -51,7 +53,7 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
   const live = post.status === "published" && post.publishAt != null && Date.parse(post.publishAt) <= now;
   const history = (post.checks?.history ?? []) as Round[];
   const last = history.at(-1);
-  const cut = history.flatMap((h) => h.claims?.cut ?? []);
+  const flags = flagsOf(history) as Flag[];
   const facts = post.facts?.facts ?? [];
   const reason = closedReason(post);
   const card = scorecard(post);
@@ -125,21 +127,29 @@ export default async function AdminPostPage({ params }: { params: Promise<{ id: 
           ))}
           {(post.checks?.failures?.length ?? 0) > 0 && <p className="text-down">Failures: {post.checks!.failures!.join("; ")}</p>}
         </Details>
-        <Details title={`Outside claims: ${post.claims.length} kept, ${cut.length} cut`}>
-          {post.claims.map((c) => (
-            <p key={c.url + c.sentence} className="mb-2">
-              Kept: {c.sentence}{" "}
-              <a href={c.url} className="inline-flex items-center gap-1 text-accent underline" target="_blank" rel="noopener noreferrer">
-                source <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
-            </p>
-          ))}
-          {cut.map((c, i) => (
-            <p key={i} className="mb-2 text-mute">
-              Cut: {c.sentence} <em>({c.reason})</em>
-            </p>
-          ))}
-          {post.claims.length + cut.length === 0 && <p className="text-mute">The draft made no outside claims.</p>}
+        <Details title={`Outside claims: ${flags.length} flagged`}>
+          <ul className="space-y-3">
+            {flags.map((c, k) => {
+              const factRows = (c.facts ?? []).map((id) => facts.find((f) => f.id === id)).filter(Boolean);
+              return (
+                <li key={k} className="border-b border-edge pb-3 last:border-0">
+                  <p className="font-semibold">
+                    {c.outcome === "supported" ? "Kept, with a source" : c.outcome === "ours" ? "Ours: built from the sheet" : c.outcome === "cut" ? "Cut" : c.outcome}
+                    {c.by === "code" && <span className="font-normal text-mute"> (found by code, not the review)</span>}
+                  </p>
+                  <p className="mt-1">{c.sentence}</p>
+                  {c.url && (
+                    <a href={c.url} className="mt-1 inline-flex items-center gap-1 text-accent underline" target="_blank" rel="noopener noreferrer">
+                      source <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  )}
+                  {c.reason && <p className="mt-1 text-mute">{c.reason}</p>}
+                  {c.outcome === "ours" && <p className="mt-1 text-mute">Facts: {factRows.length ? factRows.map((f) => `${f!.id} ${f!.label} = ${f!.display}`).join("; ") : (c.facts ?? []).join(", ")}</p>}
+                </li>
+              );
+            })}
+          </ul>
+          {flags.length === 0 && <p className="text-mute">The draft made no outside claims.</p>}
         </Details>
         <Details title={`The data: ${facts.length} facts`}>
           <table className="w-full border-collapse text-left">

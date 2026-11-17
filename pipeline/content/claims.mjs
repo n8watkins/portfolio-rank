@@ -104,6 +104,12 @@ export const norm = (s) =>
     .trim()
     .toLowerCase();
 
+/**
+ * `norm` with Markdown link markup removed (a link becomes its text), for
+ * comparing a sentence the review copied as plain text with the post's own.
+ */
+export const plain = (s) => norm(String(s).replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1"));
+
 /** Loads a source page: { ok, text }. */
 async function loadPage(url, fetchImpl) {
   try {
@@ -145,8 +151,8 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
   const sentences = [...new Set((listed?.claims ?? []).map((s) => String(s).trim()).filter(Boolean))];
   // Found whatever the quotes or spacing, the way a model copies a sentence;
   // one that cannot be found is reported in listedNotFound and the caller fails closed.
-  const haystack = norm(draftText);
-  const present = sentences.filter((s) => haystack.includes(norm(s)));
+  const haystack = plain(draftText);
+  const present = sentences.filter((s) => haystack.includes(plain(s)));
   for (const s of sentences) if (!present.includes(s)) out.listedNotFound = [...(out.listedNotFound ?? []), s];
   if (!present.length) return out;
   if (!tavilyKey) {
@@ -166,8 +172,10 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
       continue;
     }
     try {
+      const results = await tavilySearch(s, { apiKey: tavilyKey, fetchImpl });
+      // Counted once Tavily answered: a search it did not answer is given back below.
       out.searches++;
-      searched.push({ sentence: s, results: await tavilySearch(s, { apiKey: tavilyKey, fetchImpl }) });
+      searched.push({ sentence: s, results });
     } catch (e) {
       await credits?.release().catch(() => {});
       out.cut.push({ sentence: s, reason: `search failed: ${String(e?.message ?? e).slice(0, 80)}` });
@@ -214,9 +222,9 @@ export async function checkClaims(draftText, { tavilyKey, fetchImpl, budget, gen
 // A sentence the review flagged was copied from the FILLED post (numbers in
 // place), so it is looked for in every text field of the draft after filling
 // each unfilled sentence, with quote, dash and whitespace differences ignored.
-const SENTENCE_BREAK = /((?<=[.!?])\s+(?=[A-Z0-9"[{(]))/;
+export const SENTENCE_BREAK = /((?<=[.!?])\s+(?=[A-Z0-9"[{(]))/;
 /** The draft's text fields as [name, read, write] over strings and the TL;DR list. */
-const FIELDS = ["title", "alt_title_a", "alt_title_b", "subtitle", "share_line", "newsletter_blurb", "body"];
+export const FIELDS = ["title", "alt_title_a", "alt_title_b", "subtitle", "share_line", "newsletter_blurb", "body"];
 
 /** `text` without the sentences that match any of `claims` (already normalised); returns { text, hit: Set of claim indexes }. */
 function withoutClaims(text, facts, claims) {
@@ -227,7 +235,7 @@ function withoutClaims(text, facts, claims) {
       const parts = line.split(SENTENCE_BREAK);
       const kept = [];
       for (let i = 0; i < parts.length; i += 2) {
-        const filled = norm(fill(parts[i], facts));
+        const filled = plain(fill(parts[i], facts));
         const matched = claims.map((c, k) => (c && (filled.includes(c) || (filled.length >= 12 && c.includes(filled))) ? k : -1)).filter((k) => k >= 0);
         if (matched.length && filled) matched.forEach((k) => hit.add(k));
         else kept.push(parts[i], parts[i + 1] ?? "");
@@ -243,7 +251,7 @@ function withoutClaims(text, facts, claims) {
  * found nowhere }. The caller fails closed on a non-empty notFound.
  */
 export function cutClaimSentences(draft, facts, sentences) {
-  const claims = sentences.map((s) => norm(s));
+  const claims = sentences.map((s) => plain(s));
   const found = new Set();
   const out = { ...draft };
   for (const f of FIELDS) {

@@ -27,12 +27,15 @@
 //                    EMAIL_SENDS_DAYS (35) days. The caps read only today's
 //                    rows and the admin's limits view this month's (at most
 //                    31 days back), so nothing notices.
+//   tavily_searches  the weekly Tavily counter (lib/content/tavily-credits.mjs): rows older than
+//                    the 7-day window plus a day are deleted.
 //   email_signin_tokens  sign-in links (lib/signin/store.mjs), with the
 //                    address they were for, a day after they expire or once
 //                    used (each new request also clears them).
 import { pruneTokens } from "../lib/signin/store.mjs";
 import { GEMINI_DAILY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
+import { WEEK_ROW_KEEP_MS } from "../lib/content/tavily-credits.mjs";
 import { pruneLinks } from "../lib/grader/links.mjs";
 
 export const GEMINI_RAW_DAYS = 90;
@@ -151,6 +154,10 @@ export async function pruneLogs(db, { now = new Date() } = {}) {
   if (await tableExists(db, "email_sends")) {
     // day is a Pacific date ("YYYY-MM-DD"): compare dates.
     out.emailSends = (await db.execute({ sql: "DELETE FROM email_sends WHERE day < ?", args: [quotaDay(new Date(now.getTime() - EMAIL_SENDS_DAYS * DAY_MS)).day] })).rowsAffected;
+  }
+  if (await tableExists(db, "tavily_searches")) {
+    // The weekly Tavily counter only reads the last 7 days (lib/content/tavily-credits.mjs).
+    out.tavilySearches = (await db.execute({ sql: "DELETE FROM tavily_searches WHERE at < ?", args: [new Date(now.getTime() - WEEK_ROW_KEEP_MS).toISOString()] })).rowsAffected;
   }
   if (await tableExists(db, "badge_checks")) {
     out.badgeChecks = (await db.execute({ sql: "DELETE FROM badge_checks WHERE at < ?", args: [now.getTime() - DAY_MS] })).rowsAffected;
