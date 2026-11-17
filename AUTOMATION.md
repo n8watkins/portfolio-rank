@@ -39,7 +39,9 @@ Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pi
 A site's address is its key everywhere in the database (grade, votes, ratings, screenshots, likes, lists, claims, review history).
 When the list respells a site, the old row is delisted and the new spelling gets a row of its own, captured and graded like a new site, so an upstream fix to a broken address takes effect at once.
 Nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N" (sites respelled more than once, and keys with two listed rows, separately).
-Merging them is a separate change.
+[scripts/repair-respelled-sites.mjs](scripts/repair-respelled-sites.mjs) merges them by hand ([pipeline/site-move.mjs](pipeline/site-move.mjs)): each delisted row into the listed row with the same key on origin/main's feed, oldest first, with the better grade (a real grade it does not keep goes to `rubric_history`), the live capture, every vote, rating, claim, like and list entry, its screenshots and its tier and leaderboard rows; a key with two listed rows is left alone.
+Each merge is planned right before it is applied and runs as one transaction that first checks nothing it read has changed; screenshots a merge leaves unused are recorded in `cache` as `orphan-shot:<key>` for a later clean-up of R2.
+Run a dry run against production first, then `--write --then-recompute` (where both rows had tier or leaderboard rows, those are recomputed; without the flag the script exits 2 and says what to run).
 
 | Source | Trust | Mechanism |
 |---|---|---|
