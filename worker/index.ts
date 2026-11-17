@@ -31,8 +31,9 @@ import { goalsTick } from "./goals";
 import { GRADER_CRON, graderTick, type GraderEnv } from "./grader";
 import { newsletterTick, type NewsletterEnv } from "./newsletter";
 import { libraryTick } from "./library";
-import { removalsTick } from "./owner-removals";
-import { db as database } from "../lib/db";
+import { applyRemovalsTick, removalAlertsTick } from "./owner-removals";
+import { purgeRemovedProfiles } from "../lib/games/claims.mjs";
+import { db as database, ensureSchema } from "../lib/db";
 import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
 import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 import { emailAlertsTick } from "./email-alerts";
@@ -83,24 +84,40 @@ export class CachedPages extends WorkerEntrypoint<CloudflareEnv> {
 
 type CachedPagesExports = { exports: { CachedPages: { fetch(request: Request): Promise<Response>; purgeTags(tags: string[]): Promise<boolean> } } };
 
-/**
- * The hourly purges (./edge-cache.ts keeps profiles and the blog a day): profiles whose
- * owner's removal took effect, and the blog when a post's scheduled time came in the
- * last hour. Best effort: a failure only means the page refreshes when its day is up.
- */
 /** CachedPages.purgeTags for scheduled work, when this Worker exposes it (./edge-cache.ts). */
 function purgeTagsOf(ctx: { exports?: unknown }) {
   const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
   return cached ? (tags: string[]) => cached.purgeTags(tags) : undefined;
 }
 
-async function purgeAfterHour(ctx: { exports?: unknown }, env: CloudflareEnv, removed: string[], scheduledTime: number) {
-  const cached = (ctx as Partial<CachedPagesExports>).exports?.CachedPages;
-  if (!cached) return;
-  // Profiles the health check hid or showed (the not-working pool, ../pipeline/not-working.mjs): marked when the
-  // write happened. Each hour the app drops its own cached copy (path revalidation), is asked for the page past the
-  // edge (which also makes Next render a stale copy again), the edge copy is purged, and the mark is cleared only
-  // once the app already answers as it should, so a stale page the edge took in between is purged again.
+type PurgeTags = (tags: string[]) => Promise<boolean>;
+const purgeFailed = (where: string, e: unknown) =>
+  console.log(JSON.stringify({ event: "edge.purge_failed", where, error: String((e as Error)?.message ?? e).slice(0, 200) }));
+
+/**
+ * Profiles whose owner's removal took effect, read from the database
+ * (lib/games/claims.mjs purgeRemovedProfiles), not from what the removals task
+ * returned: each is purged however that task's other steps went, and one whose
+ * purge fails is tried again the next hour until it works.
+ */
+async function purgeOwnerRemovals(purgeTags: PurgeTags, scheduledTime: number) {
+  try {
+    // The hourly cron may run before a deploy's migration (portfolio_owner.purged_at).
+    await ensureSchema();
+    const out = await purgeRemovedProfiles(database(), { now: new Date(scheduledTime), purge: (urls: string[]) => purgeTags(urls.map(profileTag)) });
+    if (out.failed.length) purgeFailed("hourly-removals", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
+  } catch (e) {
+    purgeFailed("hourly-removals", e);
+  }
+}
+
+/**
+ * Profiles the health check hid or showed (the not-working pool, ../pipeline/not-working.mjs): marked when the
+ * write happened. Each hour the app drops its own cached copies (path revalidation), is asked for the page past
+ * the edge (which also makes Next render a stale copy again), the edge copy is purged, and the mark is cleared
+ * only once the app already answers as it should, so a stale page the edge took in between is purged again.
+ */
+async function purgeNotWorkingProfiles(purgeTags: PurgeTags, env: CloudflareEnv, ctx: { exports?: unknown }) {
   try {
     const waitUntil = (p: Promise<unknown>) => (ctx as { waitUntil?: (p: Promise<unknown>) => void }).waitUntil?.(p);
     const secret = String((env as unknown as { AUTH_SECRET?: string }).AUTH_SECRET ?? "");
@@ -117,22 +134,33 @@ async function purgeAfterHour(ctx: { exports?: unknown }, env: CloudflareEnv, re
       );
     };
     const origin = async (url: string) => (await app.fetch(new Request(`${env.SITE_URL}/p/${encodeURIComponent(url)}`), env, { waitUntil })).status;
-    const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => cached.purgeTags(urls.map(profileTag)), origin, revalidate });
-    if (out.failed.length) console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly-not-working", error: `purge refused for ${out.failed.length} profile(s); tried again next hour` }));
+    const out = await purgeGoneProfiles(database(), { purge: (urls: string[]) => purgeTags(urls.map(profileTag)), origin, revalidate });
+    if (out.failed.length) purgeFailed("hourly-not-working", `purge refused for ${out.failed.length} profile(s); tried again next hour`);
   } catch (e) {
-    console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly-not-working", error: String((e as Error)?.message ?? e).slice(0, 200) }));
+    purgeFailed("hourly-not-working", e);
   }
-  const tags = removed.map(profileTag);
+}
+
+/** The blog, when a post's scheduled time came in the last hour. Best effort: a failure only means the page refreshes when its day is up. */
+async function purgeScheduledPosts(purgeTags: PurgeTags, scheduledTime: number) {
   try {
     const r = await database().execute({
       sql: "SELECT 1 FROM posts WHERE status = 'published' AND publish_at > ? AND publish_at <= ? LIMIT 1",
       args: [new Date(scheduledTime - 3600_000).toISOString(), new Date(scheduledTime).toISOString()],
     });
-    if (r.rows.length) tags.push(BLOG_TAG);
-    if (tags.length) await cached.purgeTags(tags);
+    if (r.rows.length) await purgeTags([BLOG_TAG]);
   } catch (e) {
-    console.log(JSON.stringify({ event: "edge.purge_failed", where: "hourly", error: String((e as Error)?.message ?? e).slice(0, 200) }));
+    purgeFailed("hourly", e);
   }
+}
+
+/** The hourly purges (./edge-cache.ts keeps profiles and the blog a day): one helper per source of pages to purge, each on its own. */
+async function purgeAfterHour(ctx: { exports?: unknown }, env: CloudflareEnv, scheduledTime: number) {
+  const purgeTags = purgeTagsOf(ctx);
+  if (!purgeTags) return;
+  await purgeOwnerRemovals(purgeTags, scheduledTime);
+  await purgeScheduledPosts(purgeTags, scheduledTime);
+  await purgeNotWorkingProfiles(purgeTags, env, ctx);
 }
 const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerprint ?? "dev");
 
@@ -183,15 +211,15 @@ const worker = {
       // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
       // Sentry and the log, and the rest still run this hour.
       const at = controller.scheduledTime;
-      let removed: string[] = [];
       await runEach(
         only([
-          // Owners' removals held a day take effect, and those still held alert the owner (./owner-removals.ts).
-          ["owner removals", async () => {
-            removed = (await removalsTick(env as NightEnv, at)).applied;
-          }],
-          // Removed profiles and blog posts whose scheduled time came this hour leave or join the edge cache (./edge-cache.ts).
-          ["edge purge", () => purgeAfterHour(ctx, env, removed, at)],
+          // Owners' removals held a day take effect (./owner-removals.ts).
+          ["owner removals", () => applyRemovalsTick(at)],
+          // Every removal still held alerts the owner, as a task of its own so a failure is reported (./owner-removals.ts).
+          ["removal alerts", () => removalAlertsTick(env as NightEnv, at)],
+          // Removed profiles not purged yet (retried until it works), blog posts whose scheduled time came this hour,
+          // and profiles the health check hid or showed leave or join the edge cache (./edge-cache.ts).
+          ["edge purge", () => purgeAfterHour(ctx, env, at)],
           // An alert at 80% of any email cap (./email-alerts.ts).
           ["email caps", () => emailAlertsTick(env as NightEnv, at)],
           // An alert when last night's run never started or died (./night-watch.ts).

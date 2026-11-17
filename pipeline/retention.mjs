@@ -12,7 +12,9 @@
 //   night_runs       the summary of each end-of-day run is kept
 //                    NIGHT_RUN_DAYS (180) days; its Gemini use lives on in
 //                    gemini_daily.
-//   comparisons      every row stays: the open method and the recompute
+//   night_sites      the sites each run touched (its summary keeps the
+//                    lists) are kept NIGHT_SITES_DAYS (90) days.
+//   comparisons     every row stays: the open method and the recompute
 //                    need who compared what, how, in which order and with
 //                    which result. Only the free-text `reason` (the model's
 //                    one-sentence explanation, which no recompute reads) is
@@ -27,16 +29,20 @@
 //                    EMAIL_SENDS_DAYS (35) days. The caps read only today's
 //                    rows and the admin's limits view this month's (at most
 //                    31 days back), so nothing notices.
+//   tavily_searches  the weekly Tavily counter (lib/content/tavily-credits.mjs): rows older than
+//                    the 7-day window plus a day are deleted.
 //   email_signin_tokens  sign-in links (lib/signin/store.mjs), with the
 //                    address they were for, a day after they expire or once
 //                    used (each new request also clears them).
 import { pruneTokens } from "../lib/signin/store.mjs";
 import { GEMINI_DAILY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
+import { WEEK_ROW_KEEP_MS } from "../lib/content/tavily-credits.mjs";
 import { pruneLinks } from "../lib/grader/links.mjs";
 
 export const GEMINI_RAW_DAYS = 90;
 export const NIGHT_RUN_DAYS = 180;
+export const NIGHT_SITES_DAYS = 90;
 export const COMPARISON_REASON_DAYS = 90;
 export const CLEARED_ALERT_DAYS = 180;
 export const EMAIL_SENDS_DAYS = 35;
@@ -123,10 +129,13 @@ export async function rollUpGeminiRequests(db, { now = new Date(), keepDays = GE
 /** Deletes and clears what the retention rules above say. Returns the counts. */
 export async function pruneLogs(db, { now = new Date() } = {}) {
   const before = (days) => new Date(now.getTime() - days * DAY_MS).toISOString();
-  const out = { nightRuns: 0, reasons: 0, alerts: 0, links: 0, badgeChecks: 0 };
+  const out = { nightRuns: 0, nightSites: 0, reasons: 0, alerts: 0, links: 0, badgeChecks: 0 };
   if (await tableExists(db, "night_runs")) {
     // night is a Pacific date ("YYYY-MM-DD"): compare dates.
     out.nightRuns = (await db.execute({ sql: "DELETE FROM night_runs WHERE night < ?", args: [before(NIGHT_RUN_DAYS).slice(0, 10)] })).rowsAffected;
+  }
+  if (await tableExists(db, "night_sites")) {
+    out.nightSites = (await db.execute({ sql: "DELETE FROM night_sites WHERE at < ?", args: [before(NIGHT_SITES_DAYS)] })).rowsAffected;
   }
   if (await tableExists(db, "comparisons")) {
     out.reasons = (
@@ -151,6 +160,10 @@ export async function pruneLogs(db, { now = new Date() } = {}) {
   if (await tableExists(db, "email_sends")) {
     // day is a Pacific date ("YYYY-MM-DD"): compare dates.
     out.emailSends = (await db.execute({ sql: "DELETE FROM email_sends WHERE day < ?", args: [quotaDay(new Date(now.getTime() - EMAIL_SENDS_DAYS * DAY_MS)).day] })).rowsAffected;
+  }
+  if (await tableExists(db, "tavily_searches")) {
+    // The weekly Tavily counter only reads the last 7 days (lib/content/tavily-credits.mjs).
+    out.tavilySearches = (await db.execute({ sql: "DELETE FROM tavily_searches WHERE at < ?", args: [new Date(now.getTime() - WEEK_ROW_KEEP_MS).toISOString()] })).rowsAffected;
   }
   if (await tableExists(db, "badge_checks")) {
     out.badgeChecks = (await db.execute({ sql: "DELETE FROM badge_checks WHERE at < ?", args: [now.getTime() - DAY_MS] })).rowsAffected;

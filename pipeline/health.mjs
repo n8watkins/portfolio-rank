@@ -78,13 +78,14 @@ import {
 } from "./not-working.mjs";
 import { isHiddenRow } from "../lib/hidden.mjs";
 import { GRADER_POOL_KEY } from "../lib/grader/report.mjs";
+import { clearPoolStatement } from "../lib/games/pool.mjs";
 
 /**
  * Drops the cached pools a visitor's games and grade reports draw from, so a
- * site the run hid or showed leaves or joins them at once. After #252 merges,
- * the games half is lib/games/pool.mjs clearPoolStatement().
+ * site the run hid or showed leaves or joins them at once: the games pool as
+ * every other hide path does (lib/games/pool.mjs), and the grader's pool.
  */
-const CLEAR_POOLS = { sql: "DELETE FROM cache WHERE k IN (?, ?)", args: ["games:pool", GRADER_POOL_KEY] };
+const CLEAR_POOLS = [clearPoolStatement(), { sql: "DELETE FROM cache WHERE k = ?", args: [GRADER_POOL_KEY] }];
 
 // Thresholds of the ladder for sites that answer with the wrong thing (a
 // site that does not answer has ./not-working.mjs's). Failures count once a
@@ -787,8 +788,8 @@ export async function runHealthCheck({
       const chunk = plans.slice(i, i + 100);
       const stmts = chunk.flatMap((p) => p.stmts);
       // A site hidden or shown leaves the cached games pool and grader pool in the same write, as every
-      // other hide path does (lib/games/pool.mjs; after #252, clearPoolStatement() does the first).
-      if (chunk.some((p) => p.hiddenBefore !== p.hiddenAfter)) stmts.push(CLEAR_POOLS);
+      // other hide path does (CLEAR_POOLS).
+      if (chunk.some((p) => p.hiddenBefore !== p.hiddenAfter)) stmts.push(...CLEAR_POOLS);
       const res = await db.batch(stmts, "write");
       let at = 0;
       for (const p of chunk) {

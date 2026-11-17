@@ -30,8 +30,16 @@ emmabostian/developer-portfolios (upstream, community-curated)
 
 ## The list (two intake doors + a takedown)
 
-`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**
-(deduped by normalized URL; original URL strings preserved so DB keys never break).
+`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
+Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`, exactly the health check's `normKey`: the address lower-cased, host without www, path without the trailing slash; scheme, port, query and fragment ignored).
+`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address exactly as the list spells it.
+
+#### Respelled sites
+
+A site's address is its key everywhere in the database (grade, votes, ratings, screenshots, likes, lists, claims, review history).
+When the list respells a site, the old row is delisted and the new spelling gets a row of its own, captured and graded like a new site, so an upstream fix to a broken address takes effect at once.
+Nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N" (sites respelled more than once, and keys with two listed rows, separately).
+Merging them is a separate change.
 
 | Source | Trust | Mechanism |
 |---|---|---|
@@ -45,8 +53,9 @@ emmabostian/developer-portfolios (upstream, community-curated)
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
+  The feed build refuses a feed that drops more than 15% of the current addresses (before the data pull request), and the sync refuses to delist more than 15% at once (above the exclusions' 10% cap): the nightly sync job fails, every other job logs a warning and leaves the roster as it is for that run; for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which raises both and the shrink guard below (the share only ever raises a limit).
   Grading, AI comparisons, polls, blog facts and page evidence only use listed rows that passed their last health check, or were never checked (`AI_WORK`); captures, the screenshot refresh and the free measurements use listed rows that are not down, less the sites on the not-answering ladder while its marks hold (`ACTIVE`); the site shows listed rows that are not hidden (`lib/hidden.mjs`), and the comparison pool the home page, `/me`, the grade page and grade reports show keeps every listed row that is not down (`LISTED_NOT_DOWN`).
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries and its health marks), except a row whose site is listed under another address (see Respelled sites).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
 - **Health check** (`pipeline/health.mjs`, every night since 2026-11-16, weekly before): every listed site is checked for loading, parking, blank pages and duplicates, with one plain request per site (the browser only for unclear answers).
   A site that does not answer goes on the not-working ladder (below); one that answers with the wrong thing (parked, blank, a redirect to a social profile, a duplicate, a blocked capture) goes `live` → `suspect` (any failure) → `down` (3 failed checks in a row, each on a week of its own, spanning at least 13 days, however many runs); a pass resets to `live`.
@@ -123,6 +132,7 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Every decided row (the owner's, the rule's, or another rule's such as `rule:duplicate`) is listed under Decided with Undo: it goes back to pending, `undone_at` and `undone_by` are recorded, and what it changed is reversed: exactly when the apply kept the state before it, and for an apply from before that (the owner's 13 November verdicts) the grade only, from `rubric_history`, with the rest reported on the row; a rejection, a "Mark checked" or a rule's row changed nothing, so only the row moves.
   While rows wait, the Monday goals email carries their count and the link (see Owner goals).
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
+  `LIST_CLEANUP_SHARE` raises the limit for one run (see Roster sync).
 - **Upstream report** (`upstream-removals.yml`, monthly, report-only): the community list runs its own link checker every Saturday that removes broken and parked links (its CONTRIBUTING.md, sample report emmabostian/developer-portfolios#3696), so a removal PR for those would only duplicate it.
   The monthly run summary lists only what that checker misses: entries we confirmed down for a reason a link checker can't see (blank page, redirect to a social profile, re-checked right before), entries graded "not a portfolio", and possible hijacks (redirects to an unrelated domain, recorded by the health check); entries their checker will catch are only counted.
   Opening one pull request for the first group (never `suspect` or AI-only entries, at most 25, in the list's own removal format, from the fork `n8watkins/developer-portfolios`) is off: it needs a manual run with `dry_run` off, or the repository variable `UPSTREAM_PR_ENABLED` set to `true` for the schedule, plus the `UPSTREAM_PR_TOKEN` secret.
@@ -301,10 +311,10 @@ The automatic blog's back end ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md),
 - **The switch:** the Worker variable `CONTENT_MODE`: "off" (the default in both environments; the stage does no post work), "dry-run" (drafts stay private, status `draft`) or "publish" (posts go live at the next 08:00 Pacific); only the owner sets "publish".
   It is the ceiling for the owner's Automation panel on `/admin/blog` (on or off, nights, drafts a week up to `CONTENT_DRAFTS_PER_WEEK`, review or publish, a topic queue), saved in the database and read by every night; unreadable settings mean no drafts ([docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#automation)).
 - **Schedule:** Sunday night picks the week's 2 ideas and a reserve (one request, or none when there is only one idea); Monday and Wednesday nights each draft one post for Tuesday and Thursday; a dropped or deferred draft is made up on a later night of the week.
-- **A draft:** facts from code, then the write request, the claim listing, the claim judgement (only with Tavily results) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
-- **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 50 a week, 1 fresh illustration, 2 Pexels searches and 3 Gemini image checks a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes; the owner's "Write a draft now" adds at most 5 drafts a Pacific day under the same per-post caps.
+- **A draft:** facts from code, then the write request, the claim judgement (only with Tavily results; the final review lists the outside claims) and the final review; at most two revisions, then it is stored as `dropped` with its failed checks; about 3 to 9 requests when it passes, never more than its batch has left.
+- **Caps:** 1 draft a night, 2 revisions, Tavily 10 a post and 50 a week (the `tavily_searches` table is the weekly counter, reserved before each search), 1 fresh illustration, 2 Pexels searches and 3 Gemini image checks a post, 2 published posts in any 7 days (counted in the insert that publishes), and the stage's 100 requests and 30 minutes; the owner's "Write a draft now" adds at most 5 drafts a Pacific day under the same per-post caps.
 - **Never pay for images:** at most 40 AI images a UTC day (`MAX_AI_IMAGES_PER_DAY`) with no hourly cap of its own (the `portfoliorank-ai` AI Gateway's 40 an hour is the burst backstop), and behind it at most 2,500 neurons (`AI_NEURON_CEILING`) of the account's free 10,000; every Workers AI call reserves its image and neurons first and is skipped when there is no room; a setting above its maximum is rejected and turns Workers AI off ([lib/content/neurons.mjs](lib/content/neurons.mjs)).
-- **Optional keys** (Worker secrets): `TAVILY_API_KEY` (without it outside claims are cut) and `PEXELS_API_KEY` (without it no stock photos); the `AI` binding (Workers AI) makes illustrations.
+- **Optional keys** (Worker secrets): `TAVILY_API_KEY` (without it outside claims are cut; a flagged sentence that names a listed site is cut without a search either way) and `PEXELS_API_KEY` (without it no stock photos); the `AI` binding (Workers AI) makes illustrations.
 - **Tables:** `posts` (body, fact sheet, checks, images with source, licence and credit, claims with sources, `publish_at`, `newsletter_pending`) and `content_runs` (each night's picks and drafts, and the Gemini, Tavily and Workers AI calls they used).
 - **The owner:** `GET /api/admin/content[?status=draft|published|dropped|unpublished|all]` (admin only) lists posts with their fact sheet, checks and images, the latest runs and the mode; on Sunday nights while the engine is on, an owner alert `content-weekly` summarises the week.
 
@@ -342,9 +352,16 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   An account verifies at most 3 portfolios by itself; more go to review.
 - **Owner actions:** remove, hide or show the grade, and re-grade.
   A link to the GitHub profile is enough only to ask for a re-grade: pages link collaborators', designers' and template authors' profiles too.
-  Hiding or showing the grade and removing need proof only the site's owner can give (`controlProof`): the meta tag, `github_pages`, or a claim the admin reviewed; and a removal is held for 24 hours: the hourly cron alerts the owner of PortfolioRank about each held removal (`worker/owner-removals.ts`), the claimant can cancel it, and the admin can undo it before or after it takes effect (`/api/admin/removals`).
-  Once the day is up the site is hidden (`lib/roster.ts`), then added to `data/excluded.json` as `owner_request` with reason "owner request" by the nightly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
-  A hidden grade is left out of the portfolio page, the print report (except for the owner) and the quiz pool.
+  Hiding or showing the grade, removing, cancelling a held removal and reading a hidden grade in the print report need proof that you can deploy to the site (`controlProof`): the verification file, the meta tag, `github_pages`, or a claim the admin reviewed.
+  Without it the actions route answers 403 `remove_needs_meta`, `cancel_needs_meta` or `hide_needs_meta` (`not_owner` without a verified claim; `account_too_new` for an account younger than `MIN_GITHUB_ACCOUNT_AGE_DAYS`).
+  A removal is held for 24 hours, and any account with that proof can cancel it, not only the one that asked: both can deploy to the site.
+  The cancel is logged with who cancelled and whether it was the account that asked (no account id in the log's detail), and the admin can undo a removal before or after it takes effect (`/api/admin/removals`).
+  The hourly cron alerts the owner of PortfolioRank about each held removal while it waits (`removal:<url>`, emailed when asked for, then once a day; `worker/owner-removals.ts`, `removalConditions`).
+  A cancel sends no email by itself (the site stays listed); it is in the audit log.
+  A removal asked for again after a cancel in the last day says so, under its own key (`removal:<url>#again`), so it is emailed the same day: a key is emailed at most once a day, so a site's removals send at most two emails a day however often they flip.
+  Once the day is up the site is hidden (`lib/roster.ts`) and the quiz pool's cache dropped in the same transaction; the hourly edge purge then takes its profile out of the edge cache and records `portfolio_owner.purged_at`, trying again each hour until the purge works, whatever the rest of the hourly tick did (`purgeRemovedProfiles`).
+  It is then added to `data/excluded.json` as `owner_request` with reason "owner request" by the nightly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
+  A hidden grade is left out of the portfolio page, the print report (except for an owner with that proof) and the quiz pool.
   A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
   Every claim step and action is written to `claim_log`, the audit log.
 - **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, sites changed this month from `rating_resets`, the newest entry) come from one pass over the listed portfolios, cached an hour.
@@ -372,12 +389,12 @@ The API:
 | `POST /api/badges` `{ kind: "share" }` or `{ kind: "visit", url }` | `{ recorded, badges }` |
 | `GET /api/owner/claims` | `{ claims: [{ url, status, method, meta, state }] }`; 401 |
 | `POST /api/owner/claims` `{ url, method?, note? }` | `{ claim }` with status `verified`, `pending`, `review` or `rejected`; 400, 401, 403, 429 |
-| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new` or `remove_needs_meta`, 429 |
+| `POST /api/owner/actions` `{ url, action, confirm? }` | `{ state: { hideGrade, removedAt, removeAfter }, regrade? }`; action `remove`, `cancel_remove`, `hide_grade`, `show_grade` or `regrade`; 400 `confirm_required`, 401, 403 `not_owner`, `account_too_new`, `remove_needs_meta`, `cancel_needs_meta` or `hide_needs_meta`, 429 |
 | `GET`/`POST /api/admin/removals` `{ url, action: "undo" }` | the admin's view of held and done removals, and their undo; `{ state, wasRemoved, note? }` (when `wasRemoved`, the weekly exclusions pull request takes its `data/excluded.json` entry out again, logged as `removal_restored`; the daily sync lists the site again) |
 | `GET /api/admin/claims`, `POST /api/admin/claims` `{ id, decision, note? }` | the review queue, and a decision; admin login only |
 | `GET /api/stats/live` | the live numbers; public, 60 s, edge cache |
 | `POST /api/report/email` `{ url, email, turnstileToken? }` | 202 `{ sent }`; 400, 403, 429, 503 `email_unavailable` with `reason` |
-| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden), 404, 410 (link used, expired or forged) |
+| `GET /report/print?url=<portfolio>` or `?t=<token>` | the print page; 401, 403 (grade hidden, except for an owner with control proof), 404, 410 (link used, expired or forged) |
 
 A quiz is `{ id, kind, day, challenge, hit, rounds: [{ index, url, name, tagline, domain, path, shot, hero }], progress: { results, finished, score, hits } }`.
 
@@ -709,9 +726,9 @@ serve images.
 - `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
 - `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
 - `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
-- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json
+- `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - the nightly health check; `--exclusions` plans the export once a week and applies it until it lands; `--dry-run` checks every site and writes nothing, not even the roster sync (`LOCAL_DB_FILE=...` for a scratch database)
-- `node pipeline/recheck-due.mjs` - how many sites the hourly re-check has due; `node pipeline/recheck-run.mjs [--no-browser] [--controls N] [--dry-run]` - run it (`--dry-run`: writes nothing; on a database the pool never ran on it also checks the rows its one-time adoption would make due)
+- `node pipeline/recheck-due.mjs` - how many sites the hourly re-check has due; `node pipeline/recheck-run.mjs [--no-browser] [--controls N] [--dry-run]` - run it (`--dry-run`: writes nothing)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
 - `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the nightly health workflow runs it)
 - `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the nightly health workflow run it)

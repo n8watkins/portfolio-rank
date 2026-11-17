@@ -20,6 +20,7 @@
 /** The length the owner asked for (2026-11-12, after 500 to 800 on 2026-11-11): 700 to 1,000 words. */
 import { WORDS as TARGET_WORDS } from "./checks.mjs";
 import { lengthOf } from "./writer.mjs";
+import { flagsOf } from "./claim-flags.mjs";
 export { TARGET_WORDS };
 /** A takeaway must be stated within this many words of the start. */
 export const PAYOFF_WITHIN = 150;
@@ -136,7 +137,7 @@ export function scorecard(post) {
   const names = (post.facts?.names ?? []).filter((x) => x?.name);
   const examples = names.filter((x) => body.includes(x.name) || String(post.body ?? "").includes(x.url)).map((x) => x.name);
   const sources = [...new Set((post.claims ?? []).map((c) => c.url).filter(Boolean))];
-  const claimsCut = (post.checks?.history ?? []).reduce((a, h) => a + (h?.claims?.cut?.length ?? 0), 0);
+  const claimsCut = flagsOf(post.checks?.history).filter((x) => x.outcome === "cut").length;
   const imgs = post.images ?? [];
   const withAlt = imgs.filter((i) => String(i.alt ?? "").trim().length >= 8).length;
   const repeated = repeatedPhrases(body);

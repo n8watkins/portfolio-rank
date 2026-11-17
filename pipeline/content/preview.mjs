@@ -4,6 +4,7 @@
 // captions (full width on phones), and the fact sheet folded into a
 // collapsed "Show the data" section that scrolls at 320px. Light and dark.
 // Pure: no I/O; `imageSrc(image)` says where each image is served from.
+import { flagsOf, labelOf } from "./claim-flags.mjs";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -104,8 +105,10 @@ export function figureHtml(im, src) {
 export function renderPreview(post, { imageSrc = (im) => im.url, banner = "" } = {}) {
   const images = new Map(post.images.map((im) => [im.slot, figureHtml(im, imageSrc(im))]));
   const checks = (post.checks?.history ?? []).flatMap((h) => h.checks.map((c) => `<tr><td>${h.round}</td><td>${esc(c.name)}</td><td>${c.ok ? "pass" : "fail"}</td><td>${esc(c.problems.join("; "))}</td></tr>`));
-  const cut = (post.checks?.history ?? []).flatMap((h) => h.claims.cut.map((c) => `<li>${esc(c.sentence)} <em>(${esc(c.reason)})</em></li>`));
-  const kept = (post.claims ?? []).map((c) => `<li>${esc(c.sentence)} - <a href="${esc(c.url)}">source</a></li>`);
+  const flags = flagsOf(post.checks?.history).map((c) => {
+    const detail = c.url ? ` - <a href="${esc(c.url)}">source</a>` : c.reason ? ` <em>(${esc(c.reason)})</em>` : "";
+    return `<li><strong>${esc(labelOf(c))}</strong><br>${esc(c.sentence)}${detail}</li>`;
+  });
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>${esc(post.title)}</title><style>${PREVIEW_CSS}</style></head><body><main>
 ${banner ? `<p class="banner"><strong>${esc(banner)}</strong></p>` : ""}
 <p class="status">${esc(post.status)} - ${esc(post.kind)} - ${post.requests} Gemini requests - would publish ${esc(post.publishAt ?? "-")}</p>
@@ -118,7 +121,6 @@ ${bodyHtml(post.body, images)}
 ${dataHtml(post)}
 <details><summary>Checks</summary><div class="scroll"><p>Passed: ${post.checks?.passed} after ${post.checks?.rounds} round(s).${post.checks?.failures?.length ? ` Failures: ${esc(post.checks.failures.join("; "))}` : ""}</p>
 <table><tr><th>round</th><th>check</th><th>result</th><th>problems</th></tr>${checks.join("")}</table>
-${cut.length ? `<p>Outside claims cut</p><ul>${cut.join("")}</ul>` : "<p>No outside claims were cut.</p>"}
-${kept.length ? `<p>Outside claims kept</p><ul>${kept.join("")}</ul>` : ""}</div></details>
+${flags.length ? `<p>Outside claims flagged: ${flags.length}</p><ul>${flags.join("")}</ul>` : "<p>No outside claims were flagged.</p>"}</div></details>
 </main></body></html>`;
 }

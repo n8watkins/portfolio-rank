@@ -167,6 +167,19 @@ test("a claim proven only by a link to a GitHub profile no longer unlocks the ow
   const cookie = await sessionCookie({ id: 750000008, login: "own-e2e-g" });
   assert.equal((await call("GET", `/api/recheck?url=${encodeURIComponent(LISTED_3)}`, undefined, { cookie })).body.owner, false);
   assert.equal((await call("POST", "/api/owner/actions", { url: LISTED_3, action: "remove", confirm: true }, { cookie })).status, 403);
+  // Nor can it cancel someone else's removal (tests/ownership-proof.test.mjs has the whole scenario).
+  const cancel = await call("POST", "/api/owner/actions", { url: LISTED_3, action: "cancel_remove" }, { cookie });
+  assert.deepEqual([cancel.status, cancel.body.error], [403, "cancel_needs_meta"]);
+  // Nor read a grade the owner hid.
+  await db.execute({
+    sql: "INSERT INTO portfolio_owner (url, hide_grade, updated_at) VALUES (?, 1, ?) ON CONFLICT(url) DO UPDATE SET hide_grade = 1",
+    args: [LISTED_3, now],
+  });
+  try {
+    assert.equal((await call("GET", `/report/print?url=${encodeURIComponent(LISTED_3)}`, undefined, { cookie })).status, 403);
+  } finally {
+    await db.execute({ sql: "UPDATE portfolio_owner SET hide_grade = 0 WHERE url = ?", args: [LISTED_3] });
+  }
 });
 
 // ---------------------------------------------------------------------------

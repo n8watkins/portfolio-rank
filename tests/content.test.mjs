@@ -38,6 +38,7 @@ import jpeg from "jpeg-js";
 import crypto from "node:crypto";
 import { contentJob, contentStage, contentSummaryConditions, draftsDue, runDraft, runPick } from "../pipeline/content/engine.mjs";
 import { addTopic, automationBounds, listTopics, nextRun, readAutomation, removeTopic, saveAutomation, validateAutomation } from "../lib/content/automation.mjs";
+import { flagsOf } from "../pipeline/content/claim-flags.mjs";
 import { PUBLISH_CAP, contentMode, contentWeek, listPosts, nextMorning, recordRun, storePost } from "../lib/content/store.mjs";
 import { MANUAL_PER_DAY, cleanNotes, cleanTopic, createJob, getJob, jobCalls, jobsToday } from "../lib/content/jobs.mjs";
 import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
@@ -420,7 +421,7 @@ test("claims: an outside claim the review flags is cut without a Tavily key, and
   assert.ok(!g.calls.some((c) => c.kind === "claims"), "no separate claim-listing request: the review lists them");
   const [post] = await listPosts(db, { status: "draft" });
   assert.ok(!post.body.includes("seven seconds"));
-  assert.match(post.checks.history.at(-1).claims.cut[0].reason, /TAVILY_API_KEY/);
+  assert.match(flagsOf(post.checks.history)[0].reason, /TAVILY_API_KEY/);
 });
 
 function fakeWeb({ results, page = "<p>Recruiters spend about 7 seconds on a portfolio before deciding.</p>" }) {
@@ -487,9 +488,9 @@ test("claims: a quote must be word for word in the source; the Tavily caps cut w
   assert.ok(!web.seen.slice(1).some((u) => u.startsWith("https://api.tavily.com/")) || web.seen.filter((u) => u.startsWith("https://api.tavily.com/")).length === 1);
 });
 
-test("claims: the weekly Tavily cap is counted from content_runs", async () => {
+test("claims: the weekly Tavily cap is counted from the reserved searches (tavily_searches)", async () => {
   const { db } = await sheetAndRoster();
-  await recordRun(db, { night: "2026-11-15", now: MONDAY - 86400000, step: "draft", mode: "dry-run", status: "ok", kind: "x", tavily: TAVILY_PER_WEEK });
+  for (let i = 0; i < TAVILY_PER_WEEK; i++) await db.execute({ sql: "INSERT INTO tavily_searches (at) VALUES (?)", args: [new Date(MONDAY - 86400000).toISOString()] });
   const claim = "Recruiters spend about seven seconds on a portfolio before deciding.";
   const write = (_n, parts) => mockAnswer({ parts }).replace("=== CLOSING ===\n", `=== CLOSING ===\n${claim}\n`);
   const web = fakeWeb({ results: [] });
@@ -947,12 +948,12 @@ test("quality: substance (owner, 2026-11-12): robotic phrasing, TL;DR the body s
   fails({ body: d.body.replace(/\[(Top Person [23])\]\([^)]+\)/g, "$1") }, /1 named example site\(s\) linked; link at least 3/);
 });
 
-test("staging fixes (2026-11-12): the hero marker leaves the body, and sentences on our own facts or named sites are not outside claims", async () => {
+test("staging fixes (2026-11-12): the hero marker leaves the body; a flagged sentence is always cut or searched, and one that names a listed site is cut unsearched (2026-11-16)", async () => {
   assert.equal(normalizeDraft({ body: "Opener one.\nOpener two.\n\n[[image:hero]]\n\n### A\nText." }).body, "Opener one.\nOpener two.\n\n\n### A\nText.");
   const listed = ["Consider Top Person 1, who earns {{f30}} on visual design.", "Projects by Top Person 2 are clear.", "Recruiters spend six seconds on a portfolio."];
   const text = listed.join("\n");
-  const r = await checkClaims(text, { tavilyKey: null, budget: { gemini: 5, tavily: 5 }, generate: async () => ({ claims: listed }), names: ["Top Person 1", "Top Person 2"] });
-  assert.deepEqual(r.cut.map((c) => c.sentence), ["Recruiters spend six seconds on a portfolio."]);
+  const r = await checkClaims(text, { tavilyKey: null, budget: { gemini: 5, tavily: 5 }, generate: async () => ({ claims: listed }) });
+  assert.deepEqual(r.cut.map((c) => c.sentence), listed);
   assert.equal(r.listedNotFound, undefined);
 });
 

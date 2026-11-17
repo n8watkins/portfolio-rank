@@ -1,11 +1,13 @@
-name: Weekly health check + cleanup
+name: Nightly health check + cleanup
 
 # PortfolioRank's own cleanup (owner decision 2026-11-10: our list wins, and
 # background jobs only work on sites on the current list). Free: no Gemini.
 #   1. mark database rows that left data/feed.json as delisted
 #   2. check every listed site (loads, not parked, not blank, not a duplicate,
-#      not graded "not a portfolio") and advance live -> suspect -> down;
-#      down only after 3 failed checks in a row spanning 13+ days
+#      not graded "not a portfolio"): a site that does not answer goes on the
+#      not-working ladder (hidden after the next day's re-check fails, off the
+#      list on a failed check on or after day 90); a page with the wrong thing
+#      is confirmed down after 3 failed checks on different weeks over 13+ days
 #   3. add newly confirmed-down sites to data/excluded.json (and drop them
 #      from data/feed.json) through one bot pull request that auto-merges,
 #      same flow as the daily upstream sync
@@ -181,9 +183,9 @@ jobs:
           git commit -m "$title" -m "Release-note: skip"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push --force origin "HEAD:refs/heads/$BRANCH"
-          body="Sites the weekly health check confirmed down (3 failed checks in a row over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json; owner requests the admin undid come back out of data/excluded.json (the daily sync lists them again); sites the owner confirmed as portfolios on /admin/review that had left the list go into data/additions.json. They show on /removed once this merges; owner requests are counted there, never named.
+          body="Sites the health check took off the list (not working for 90+ days and failing a check made on or after that day, or answering with the wrong thing for 3 checks over 13+ days), and sites their verified owners removed (\"owner request\"), move to data/excluded.json and out of data/feed.json; owner requests the admin undid come back out of data/excluded.json (the daily sync lists them again); sites the owner confirmed as portfolios on /admin/review that had left the list go into data/additions.json. They show on /removed once this merges; owner requests are counted there, never named.
 
-          Opened by the [Weekly health check run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
+          Opened by the [nightly health check run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}); it squash-merges itself once the required checks pass."
           open=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then
             gh pr edit "$open" --title "$title" --body "$body"

@@ -5,6 +5,7 @@ import { isKnownPortfolio } from "@/lib/roster";
 import { decideReviews, listReviews, undoReviews } from "@/lib/reviews/store.mjs";
 import { purgeProfile } from "@/lib/edge-purge";
 import { PRIVATE, fail, forgetPool } from "@/lib/games/server";
+import { clearPoolCache } from "@/lib/games/pool.mjs";
 
 // The owner's review queue (lib/reviews/store.mjs), for the admin
 // (ADMIN_GITHUB_ID) only.
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
   if (changed.length) {
     // What a profile shows changed (worker/edge-cache.ts keeps profiles a day), and so may the quiz pool.
     await Promise.all(changed.map((r) => purgeProfile(r.url as string)));
-    await db().execute({ sql: "DELETE FROM cache WHERE k = 'games:pool'", args: [] });
+    await clearPoolCache(db());
     forgetPool();
   }
   return NextResponse.json({ results }, { headers: PRIVATE });

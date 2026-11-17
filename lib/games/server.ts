@@ -6,7 +6,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { currentVoter } from "@/lib/polls/server";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { heroOf, shotBases } from "@/lib/shots";
-import { buildPool } from "@/lib/games/pool.mjs";
+import { POOL_CACHE, buildPool } from "@/lib/games/pool.mjs";
 import { progress } from "@/lib/games/quiz.mjs";
 import { HIT } from "@/lib/games/pool.mjs";
 
@@ -49,7 +49,7 @@ export async function getPool(): Promise<Pool> {
   if (poolMemo && now - poolMemo.at < POOL_MEMO_MS) return poolMemo.pool;
   const pool = (async () => {
     await ensureSchema();
-    const p = await cached<Pool>("games", "pool", { ttlMs: POOL_TTL_MS }, async () => (await buildPool(db())) as Pool);
+    const p = await cached<Pool>(POOL_CACHE[0], POOL_CACHE[1], { ttlMs: POOL_TTL_MS }, async () => (await buildPool(db())) as Pool);
     return { source: p.source, totals: p.totals, sites: p.sites };
   })();
   const entry = { at: now, pool };

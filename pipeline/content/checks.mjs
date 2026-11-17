@@ -4,7 +4,7 @@
 // draft passes only when every one is ok. They run on the draft before its
 // placeholders are filled (numbers) and after (names and links), so a
 // figure in a post can only have come from the fact sheet.
-import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, fill, lengthOf, oneSentencePerLine } from "./writer.mjs";
+import { PLACEHOLDER, SLOTS, assembleBody, draftTexts, escapeRegExp, fill, lengthOf, oneSentencePerLine, trimUrl } from "./writer.mjs";
 import { checkActions, checkCallout, checkHook, checkParagraphs, checkSubstance, checkSuperlatives } from "./quality.mjs";
 import { SITE_URL, domainOf } from "./facts.mjs";
 import { editorialChecks } from "./scorecard.mjs";
@@ -28,6 +28,27 @@ const ALLOWED_NUMBERS = [
 
 const URL_RE = /\bhttps?:\/\/[^\s)<>\]"']+/gi;
 const DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|dev|io|me|app|net|org|co|ai|xyz|tech|site|page|pro|vercel\.app|netlify\.app|github\.io|pages\.dev|onrender\.com|in|uk|ca|de|fr)\b/gi;
+
+/**
+ * The first listed site `text` names, or null: by its name (case-insensitive,
+ * a whole word, spaces of any kind alike; a single-word name only from 6
+ * letters, like checkNames), by its address, or by its bare domain. `sites`
+ * is the names list [{ name, url, domain }]. The one matcher the outside-claim
+ * check and the search boundary share.
+ */
+export function listedSiteIn(text, sites) {
+  const t = String(text ?? "").replace(/\s+/g, " ");
+  const low = t.toLowerCase();
+  for (const n of sites ?? []) {
+    const name = String(n.name ?? "").replace(/\s+/g, " ").trim();
+    if (name && (name.includes(" ") || name.length >= 6) && new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(name)}(?=$|[^\\p{L}\\p{N}])`, "iu").test(t)) return n;
+    const url = trimUrl(n.url).toLowerCase();
+    if (url && low.includes(url)) return n;
+    const dom = String(n.domain ?? (url ? domainOf(url) : "") ?? "").toLowerCase();
+    if (dom && [...low.matchAll(DOMAIN_RE)].some((m) => m[0].replace(/^www\./, "") === dom || m[0].endsWith(`.${dom}`))) return n;
+  }
+  return null;
+}
 
 const result = (name, problems) => ({ name, ok: problems.length === 0, problems });
 
@@ -75,7 +96,7 @@ export function checkNames(filledTexts, sheet, roster, { extraDomains = [] } = {
   for (const r of roster) {
     const name = String(r.name ?? "").trim();
     if (name && (name.includes(" ") || name.length >= 6) && !allowedNames.has(name.toLowerCase()) && !allowedUrls.has(r.url)) {
-      matchers.push({ re: new RegExp(`(^|[^\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^\\p{L}])`, "iu"), label: name });
+      matchers.push({ re: new RegExp(`(^|[^\\p{L}])${escapeRegExp(name)}(?=$|[^\\p{L}])`, "iu"), label: name });
     }
   }
   for (const [field, text] of filledTexts) {
