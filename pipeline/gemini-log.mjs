@@ -61,17 +61,20 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
     // The job new requests are logged under; a run that moves from one kind
     // of work to another (new grades, then re-grades) changes it.
     job,
+    // The site the next requests are for (its URL), or null; the night sets it per item.
+    item: null,
     get writeErrors() {
       return writeErrors;
     },
     async record(r) {
-      rows.push({ ...r, job: log.job });
+      const item = r.item ?? log.item ?? null;
+      rows.push({ ...r, job: log.job, item });
       if (!db) return;
       try {
         await db.execute({
           sql: `INSERT INTO gemini_requests (at, run_id, job, model, status, reason, latency_ms,
-                                             input_tokens, output_tokens, thoughts_tokens, retry, fallback, finish_reason, detail, prompt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                             input_tokens, output_tokens, thoughts_tokens, retry, fallback, finish_reason, detail, prompt, item)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             r.at,
             runId,
@@ -88,6 +91,7 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
             r.finishReason ?? null,
             r.detail ?? null,
             r.prompt ?? null,
+            item,
           ],
         });
       } catch {

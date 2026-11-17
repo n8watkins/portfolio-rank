@@ -29,9 +29,9 @@ export default async function AdminReviewPage() {
   return (
     <>
       <AdminHeader title="Review">
-        Status changes a re-check proposes.{" "}
+        Status changes a re-check or the nightly grade proposes.{" "}
         {auto
-          ? "Rows that pass (both models say portfolio, no code rule objects) are applied automatically, each with Undo; the rest wait for you. "
+          ? "Rows that pass a rule (both models say portfolio; or Gemini says a new site is not a portfolio and the code does not dispute it) are applied automatically, each with Undo; the rest wait for you. "
           : "Nothing changes until you confirm a row. "}
         {pending.length > 0 && (
           <span data-review-summary>

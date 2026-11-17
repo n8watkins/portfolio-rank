@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ChipButton, tag } from "@/components/ui/Chip";
 import { btnGhost, btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
+import { RULE_NAMES, ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } from "@/components/admin/review-labels";
@@ -39,8 +40,8 @@ export type Review = {
   reason: string | null;
   offList: boolean;
   shotKey: string | null;
-  /** prompt: the grading prompt's version (absent on rows written before it was recorded). */
-  verdicts: { gemini31?: Grader; haiku?: Grader; prompt?: string };
+  /** prompt: the grading prompt's version (absent on rows written before it was recorded). gemini35: the nightly grade at the door. */
+  verdicts: { gemini31?: Grader; haiku?: Grader; gemini35?: Grader; prompt?: string };
   signals: { score?: number; names?: string[]; junk_rule?: string | null; capture?: { action?: string | null; blocked?: string | null; failed?: string | null } } | null;
   status: string;
   decidedAt: string | null;
@@ -51,6 +52,8 @@ export type Review = {
     feed?: string | null;
     error?: string;
     rejected?: boolean;
+    /** Why a rule's waiting row was closed without acting (status closed). */
+    closed?: string;
     action?: "none";
     /** The last Undo: when, who, what it reversed, and what it could not. */
     undo?: { at: string; by: string; reversed?: string; note?: string };
@@ -67,6 +70,12 @@ const GROUPS: Record<string, string> = {
   delisted_ungraded: "Delisted before grading",
   broken: "Broken or dead, never graded",
   live_ungraded: "Live, not graded yet",
+  // The nightly grade at the door (lib/reviews/door.mjs).
+  door_not_portfolio: "Gemini: not a portfolio",
+  door_strong_signals: "Gemini says no, the code says portfolio",
+  door_held: "Gemini says no, held for you",
+  bot_wall: "Bot-walled, never captured",
+  signals_collapsed: "Listed, portfolio signals collapsed",
 };
 const CURRENT: Record<string, string> = { ranked: "Listed and ranked", listed: "Listed, not ranked", hidden: "Hidden", delisted: "Off the list" };
 const PROPOSED = { relist: "List and rank it", remove: "Take it off the list", review: "A person checks it" } as const;
@@ -74,7 +83,10 @@ const TONE = { relist: "text-up", remove: "text-down", review: "text-ink" } as c
 const GRADERS = [
   ["gemini31", "Gemini 3.1"],
   ["haiku", "Haiku 5.5"],
+  ["gemini35", "Gemini 3.5"],
 ] as const;
+/** The graders a row has verdicts from: a re-check's two models, or the nightly grade alone. */
+const gradersOf = (r: Review) => GRADERS.filter(([key]) => r.verdicts[key]);
 const SIGNALS = 6;
 // Rows per request while confirming many (the progress count moves per request; the server applies 8 of them at once).
 const CHUNK = 24;
@@ -131,7 +143,9 @@ function VerdictCell({ v }: { v: Verdict | undefined }) {
 }
 
 function Verdicts({ r }: { r: Review }) {
-  const reasons = GRADERS.flatMap(([key, label]) =>
+  const graders = gradersOf(r);
+  if (graders.length === 0) return null;
+  const reasons = graders.flatMap(([key, label]) =>
     (["batch", "solo"] as const).flatMap((mode) => {
       const v = r.verdicts[key]?.[mode];
       return v?.reason ? [{ who: `${label}, ${mode === "batch" ? "batched" : "one at a time"}`, v }] : [];
@@ -155,7 +169,7 @@ function Verdicts({ r }: { r: Review }) {
           </tr>
         </thead>
         <tbody>
-          {GRADERS.map(([key, label]) => (
+          {graders.map(([key, label]) => (
             <tr key={key} className="border-t border-edge align-baseline">
               <th scope="row" className="py-1.5 pr-2 font-semibold whitespace-nowrap">
                 {label}
@@ -193,11 +207,11 @@ function Verdicts({ r }: { r: Review }) {
   );
 }
 
-function Signals({ s }: { s: Review["signals"] }) {
+function Signals({ s, small = false }: { s: Review["signals"]; small?: boolean }) {
   if (!s) return null;
   const failed = s.capture?.failed;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 ${small ? "text-xs" : "text-sm"}`}>
       {typeof s.score === "number" && (
         <p>
           <span className="font-semibold">
@@ -254,7 +268,7 @@ function Row({
               <span className={`${tagDown} font-semibold`}>
                 <CircleAlert className="h-3.5 w-3.5" aria-hidden /> Capture blocked
               </span>
-            ) : r.agreed ? (
+            ) : gradersOf(r).length < 2 ? null : r.agreed ? (
               <span className={tagUp}>
                 <CheckCheck className="h-3.5 w-3.5" aria-hidden /> Graders agree
               </span>
@@ -360,18 +374,22 @@ function Row({
 }
 
 /**
- * Rows the owner's rule applied without waiting (status auto_applied,
- * lib/reviews/store.mjs autoApplyReviews), newest first, each with Undo: the
- * site goes back to what it was and the row waits for the owner again.
+ * Rows the owner's rules applied without waiting (status auto_applied,
+ * lib/reviews/store.mjs autoApplyReviews and the night's door,
+ * lib/reviews/door.mjs), newest first, each with Undo: the site goes back to
+ * what it was and the row waits for the owner again. A removal shows what it
+ * was judged on: Gemini's reason, the code's signals and the screenshot.
  */
 function AutoApplied({
   rows,
+  shotsBase,
   busy,
   locked = false,
   errors,
   onUndo,
 }: {
   rows: Review[];
+  shotsBase: string | null;
   busy: Set<number>;
   /** Every Undo waits while many rows are being decided. */
   locked?: boolean;
@@ -385,27 +403,58 @@ function AutoApplied({
         Applied automatically ({rows.length.toLocaleString("en-US")})
       </h2>
       <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">
-        These passed the rule: both models say it is a portfolio and no code rule objects. Undo puts the site back as it was, and the row waits for you above.
+        Two rules apply without waiting: both models say it is a portfolio and no code rule objects (brought back), or Gemini says a new site is not a portfolio and the
+        code found too little to dispute it (taken off). Undo puts the site back as it was, the row waits for you above, and the rule never applies it again.
       </p>
       <ul className="card mt-3 divide-y divide-edge">
         {rows.map((r) => {
           const domain = domainOf(r.url);
-          const said = GRADERS.map(([key, label]) => {
-            const v = r.verdicts[key]?.batch ?? r.verdicts[key]?.solo;
-            return `${label}: ${v ? (v.is_portfolio ? "portfolio" : "not a portfolio") : "no verdict"}`;
-          }).join(" · ");
+          const said = gradersOf(r)
+            .map(([key, label]) => {
+              const v = r.verdicts[key]?.batch ?? r.verdicts[key]?.solo;
+              return `${label}: ${v ? (v.is_portfolio ? "portfolio" : "not a portfolio") : "no verdict"}`;
+            })
+            .join(" · ");
+          const base = shotsBase && r.shotKey ? `${shotsBase.replace(/\/+$/, "")}/${r.shotKey}` : null;
+          const removed = r.proposed === "remove";
           return (
             <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-review-auto-row={r.id}>
+              {/* Every row has the same left column, so the text starts at the same edge; on a phone an empty one takes no room. */}
+              {base ? (
+                <a
+                  href={frameOf(base, "hero.jpg")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`The screenshot ${domain} was judged on`}
+                  className={`${thumb} w-28 shrink-0`}
+                  data-review-auto-shot
+                >
+                  <ScreenshotFrame src={frameOf(base, "hero.jpg")} alt="" domain={domain} />
+                </a>
+              ) : (
+                <div className="hidden w-28 shrink-0 sm:block" aria-hidden />
+              )}
               <div className="min-w-0 flex-1 basis-64">
                 <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1 font-semibold break-all hover:text-accent">
                   {domain}
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
                 </a>
                 <p className="text-xs text-mute">
-                  <span className="font-semibold text-up">{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
+                  <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
                   {r.offList ? " · no longer on the community list" : ""} · applied {when(r.decidedAt)}
+                  {r.decidedBy ? ` by ${decider(r.decidedBy)}` : ""}
                 </p>
-                <p className="mt-0.5 text-xs text-mute">{said}</p>
+                {said && <p className="mt-0.5 text-xs text-mute">{said}</p>}
+                {removed && r.reason && (
+                  <p className="mt-0.5 text-xs text-pretty" data-review-auto-reason>
+                    {r.reason}
+                  </p>
+                )}
+                {removed && (
+                  <div className="mt-1">
+                    <Signals s={r.signals} small />
+                  </div>
+                )}
                 {r.applied?.visibility?.length ? <p className="mt-0.5 text-xs text-mute text-pretty">{sentence(r.applied.visibility)}</p> : null}
               </div>
               <div className="flex items-center gap-3">
@@ -445,14 +494,16 @@ function UndoButton({ id, domain, busy, onUndo }: { id: number; domain: string; 
 function decider(by: string | null) {
   if (!by) return "";
   if (by.startsWith("admin:")) return by.slice(6);
-  if (by.startsWith("rule:")) return `the ${by.slice(5).replace(/-/g, " ")} rule`;
+  // The review rules by their plain names ("Gemini said not a portfolio"); other rules as before ("the duplicate rule").
+  if (by.startsWith("rule:")) return RULE_NAMES[by] ? `the rule "${RULE_NAMES[by]}"` : `the ${ruleName(by)} rule`;
   if (by.startsWith("owner:")) return "the owner's verdict list";
   return by;
 }
 
 /** What a decision did, in one sentence. */
 function effect(r: Review) {
-  if (r.status === "rejected") return "Nothing changed.";
+  if (r.status === "closed") return `Closed without acting: ${r.applied?.closed ?? "a newer decision made it stale"}.`;
+  if (r.status === "rejected") return r.applied?.grade === "settled" ? "Kept listed; the grade records your decision." : "Nothing changed.";
   if (r.applied && "action" in r.applied) return "Marked checked; nothing to apply.";
   if (r.applied?.visibility?.length) return sentence(r.applied.visibility);
   return "Recorded; the grade already matched.";
@@ -506,7 +557,7 @@ function Decided({
                   {recent.has(r.id) && <span className="ml-2 align-[1px] text-xs font-semibold text-accent">just now</span>}
                 </p>
                 <p className="text-xs text-mute">
-                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
+                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "closed" ? "Closed" : r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
                   {" · "}
                   {PROPOSED[r.proposed]}
                   {r.decidedBy && ` · by ${decider(r.decidedBy)}`}
@@ -520,7 +571,8 @@ function Decided({
                     {errors[r.id]}
                   </p>
                 )}
-                <UndoButton id={r.id} domain={domain} busy={busy.has(r.id) || locked} onUndo={onUndo} />
+                {/* A closed row changed nothing and has nothing to undo. */}
+                {r.status !== "closed" && <UndoButton id={r.id} domain={domain} busy={busy.has(r.id) || locked} onUndo={onUndo} />}
               </div>
             </li>
           );
@@ -665,9 +717,9 @@ export function StatusReviewQueue({
     return (
       <>
         <EmptyState icon={ClipboardCheck} title="Nothing to review">
-          When a re-check proposes status changes, they wait here for you.
+          When a re-check or the nightly grade proposes a status change, it waits here for you.
         </EmptyState>
-        <AutoApplied rows={autoApplied} busy={busy} locked={running} errors={errors} onUndo={(id) => decide([id], "undo")} />
+        <AutoApplied rows={autoApplied} shotsBase={shotsBase} busy={busy} locked={running} errors={errors} onUndo={(id) => decide([id], "undo")} />
         <Decided rows={decided} busy={busy} locked={running} recent={recentIds} errors={errors} onUndo={(id) => decide([id], "undo")} />
         {viewer}
       </>
@@ -799,7 +851,7 @@ export function StatusReviewQueue({
           />
         ))}
       </ul>
-      <AutoApplied rows={autoApplied} busy={busy} locked={running} errors={errors} onUndo={(id) => decide([id], "undo")} />
+      <AutoApplied rows={autoApplied} shotsBase={shotsBase} busy={busy} locked={running} errors={errors} onUndo={(id) => decide([id], "undo")} />
       <Decided rows={decided} busy={busy} locked={running} recent={recentIds} errors={errors} onUndo={(id) => decide([id], "undo")} />
       {viewer}
     </>

@@ -20,6 +20,7 @@ import { httpGate, isParkingDomain, netloc, parkingPhrase, visibleText } from ".
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
+import { AI_SAYS_NOT_PORTFOLIO, HELD_SQL } from "./portfolio-guard.mjs";
 
 // Thresholds. The check runs weekly, so 3 failed checks in a row span 14 days.
 // Requiring both means extra manual runs can't confirm a site down faster.
@@ -305,13 +306,23 @@ export async function runHealthCheck({
   // Duplicates and "not a portfolio" are failures too, only after loading.
   const dupes = findDuplicates(results.filter((r) => r.ok));
   for (const r of results) {
+    // A removal decided in the review queue (the owner's, or the door's rule) stays down with its reason,
+    // whatever this check sees (loaded, failed, inconclusive or a duplicate), until an Undo or an owner
+    // decision changes the grade or the health: it was decided, not seen failing.
+    const was = rows.get(r.url);
+    if (Number(was?.not_portfolio ?? 0) === 1 && String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith(AI_SAYS_NOT_PORTFOLIO)) {
+      r.ok = false;
+      r.decidedDown = true;
+      r.reason = String(was.health_reason);
+      continue;
+    }
     if (!r.ok) continue;
     if (dupes.has(r.url)) {
       r.ok = false;
       r.reason = `duplicate of ${dupes.get(r.url)}`;
-    } else if (Number(rows.get(r.url)?.not_portfolio ?? 0) === 1) {
+    } else if (Number(was?.not_portfolio ?? 0) === 1) {
       r.ok = false;
-      r.reason = "AI grading says this is not a portfolio";
+      r.reason = AI_SAYS_NOT_PORTFOLIO;
     }
   }
   // A site that has never had a good capture and whose last one was blocked
@@ -366,6 +377,7 @@ export async function runHealthCheck({
         }
       : null;
     const next = nextHealth(prev, r, now);
+    if (r.decidedDown) next.health = "down";
     if (next.health) summary[next.health]++;
     else summary.unchecked++;
     if (r.ok === null) summary.inconclusive.push({ url: r.url, reason: r.reason });
@@ -396,6 +408,8 @@ export async function runHealthCheck({
               final_url = COALESCE(excluded.final_url, portfolios.final_url),
               signals = COALESCE(excluded.signals, portfolios.signals),
               needs_review = CASE WHEN excluded.signals IS NULL THEN portfolios.needs_review
+                                  -- A "not a portfolio" held for the owner (lib/reviews/door.mjs) stays marked until he decides.
+                                  WHEN ${HELD_SQL("portfolios.ai_rubric")} THEN 1
                                   ELSE excluded.needs_review END
               ${retryNow ? ", retry_at = excluded.health_checked_at" : ""}`,
       args: [

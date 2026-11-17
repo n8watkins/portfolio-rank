@@ -87,7 +87,7 @@ export function clearGradeStatements(url, oldJson, now = new Date()) {
 export async function regradeQueue(db, { primary, limit, where = "", whereArgs = [] }) {
   if (limit <= 0) return [];
   const res = await db.execute({
-    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
+    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
           WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
             AND json_valid(ai_rubric)
             AND json_extract(ai_rubric, '$.error') IS NULL
@@ -110,7 +110,7 @@ export async function regradeQueue(db, { primary, limit, where = "", whereArgs =
 export async function versionRegradeQueue(db, { primary, version, limit, where = "", whereArgs = [] }) {
   if (limit <= 0) return [];
   const res = await db.execute({
-    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
+    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
           WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
             AND json_valid(ai_rubric)
             AND json_extract(ai_rubric, '$.error') IS NULL

@@ -8,6 +8,10 @@
 // a portfolio). Owner requests and duplicates always stay excluded: a site its
 // owner removed is never relisted here, and neither is a copy. An entry this
 // script added whose relist was undone comes back out.
+// Removals taken back (a "remove" row undone, such as the door's automatic
+// removal, lib/reviews/door.mjs) count as relists too: when the weekly export
+// already moved the site to data/excluded.json and off the feed, this is what
+// lists it again (store.mjs undoneRemovals, owner 2026-11-16).
 //
 // Run by the daily upstream sync before it rebuilds the feed
 // (.github/workflows/sync-upstream.yml), so a relist is listed within a day,
@@ -21,7 +25,7 @@ import { fileURLToPath } from "url";
 import { normKey } from "./health.mjs";
 import { excludedUrl, readJson } from "./exclusions.mjs";
 import { pipelineDb } from "./roster.mjs";
-import { confirmedRelists } from "../lib/reviews/store.mjs";
+import { confirmedRelists, undoneRemovals } from "../lib/reviews/store.mjs";
 
 /** Exclusion kinds a confirmed relist overrides. */
 export const OVERRIDABLE = new Set(["down", "not_portfolio"]);
@@ -30,9 +34,19 @@ export const OVERRIDABLE = new Set(["down", "not_portfolio"]);
  * Pure: { added, unexcluded, blocked, additions, excluded, feed } without
  * writing. `relists`: [{ url, name }]; a site already on the feed or in
  * additions is left alone; one kept out by an owner request or as a
- * duplicate is `blocked`.
+ * duplicate is `blocked`. `undone`: removals taken back ([{ url, name }],
+ * store.mjs undoneRemovals); one counts as a relist only while our own
+ * removal keeps it out (a "not_portfolio" exclusion) or this script already
+ * brought it back (its additions entry), so an undo never relists a site the
+ * community list itself dropped.
  */
-export function planReviewAdditions({ relists, additions: allAdditions, excluded, feed: allFeed }) {
+export function planReviewAdditions({ relists: confirmed, undone = [], additions: allAdditions, excluded, feed: allFeed }) {
+  const ours = new Set([
+    ...excluded.filter((e) => typeof e === "object" && e?.kind === "not_portfolio").map((e) => normKey(e.url)),
+    ...allAdditions.filter((a) => a?.source === "review").map((a) => normKey(a.url)),
+  ]);
+  const have = new Set(confirmed.map((r) => normKey(r.url)));
+  const relists = [...confirmed, ...undone.filter((u) => ours.has(normKey(u.url)) && !have.has(normKey(u.url)))];
   // A relist taken back (an automatic apply undone): its entry, marked source "review", leaves additions and the feed.
   const wanted = new Set(relists.map((r) => normKey(r.url)));
   const withdrawn = allAdditions.filter((a) => a?.source === "review" && !wanted.has(normKey(a.url))).map((a) => a.url);
@@ -79,6 +93,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const file = (f) => path.join(ROOT, "data", f);
   const plan = planReviewAdditions({
     relists: await confirmedRelists(pipelineDb(ROOT)),
+    undone: await undoneRemovals(pipelineDb(ROOT)),
     additions: readJson(file("additions.json"), []),
     excluded: readJson(file("excluded.json"), []),
     feed: readJson(file("feed.json"), []),

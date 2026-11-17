@@ -18,10 +18,13 @@ import {
   decideReviews,
   listReviews,
   ownerGrade,
+  ownerVerdict,
   pendingReviewCount,
   planConfirm,
-  withOwnerVerdict,
 } from "../lib/reviews/store.mjs";
+
+// A grade with the owner's verdict applied, as the door does (lib/reviews/door.mjs doorDecision).
+const withOwnerVerdict = async (db, url, grade) => ownerGrade(grade, await ownerVerdict(db, url));
 import { planReviewAdditions } from "../pipeline/review-additions.mjs";
 
 const NOW = new Date("2026-11-16T18:00:00Z");

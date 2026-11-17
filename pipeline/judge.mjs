@@ -41,7 +41,8 @@ import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary 
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
-import { withOwnerVerdict } from "../lib/reviews/store.mjs";
+import { ensureReviewSchema } from "../lib/reviews/store.mjs";
+import { atTheDoor } from "../lib/reviews/door.mjs";
 import { applyFaceoff, ensureTierSchema } from "../lib/tiers-db.mjs";
 import {
   RESPONSE_SCHEMA,
@@ -340,7 +341,7 @@ async function gradeRow(row) {
   const { result, model, usage } = await gemini.generate(request.parts, RESPONSE_SCHEMA, request.options);
   const parsed = parseRubricResponse(result);
   const rubric = gradeRecord({ parsed, model, usage, facts, source });
-  return { status: "ok", rubric, model };
+  return { status: "ok", rubric, model, pageText, facts };
 }
 
 // Grading stays inside a daily budget per model (GEMINI_GRADING_BUDGET;
@@ -350,11 +351,13 @@ async function gradeRow(row) {
 
 async function runRubric() {
   await ensureRubricHistory(db);
+  // Every grade goes through the door (lib/reviews/door.mjs), which writes the owner's review rows.
+  await ensureReviewSchema(db);
   // Only sites on the current list that aren't confirmed down get graded.
   // Sites the health check flagged needs_review (little that looks like a
   // portfolio) go first, so is_portfolio confirms or clears them soon.
   const res = await db.execute(
-    `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
+    `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
      WHERE status = 'live' AND shot_key IS NOT NULL AND ${ACTIVE()}
        ${FORCE ? "" : "AND ai_rubric IS NULL"}
      ORDER BY needs_review DESC, captured_at DESC, url`
@@ -425,12 +428,21 @@ async function runRubric() {
         console.log(`${label} ${url} - answered by ${out.model}, not ${PRIMARY_MODEL}; re-grading stops`);
         return false;
       }
-      // The owner's confirmed verdict (lib/reviews/store.mjs) holds over the AI's is_portfolio.
-      await db.batch(replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, await withOwnerVerdict(db, url, out.rubric), { url })), "write");
+      // "Is it a portfolio" is decided at the door (lib/reviews/door.mjs), as in the night run: the owner's
+      // own verdict holds, a "no" is written as a held grade with its review row in one write. This
+      // fallback never applies a removal itself; the hourly rule on the Worker does (REVIEW_AUTO_APPLY).
+      const now = new Date();
+      const door = await atTheDoor(db, {
+        grade: out.rubric,
+        row: { ...row, page_text: out.pageText ?? row.page_text, facts: out.facts == null ? row.facts : JSON.stringify(out.facts) },
+        now,
+        autoApply: false,
+        gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, g, { url }), now),
+      });
       if (regrade) regraded++;
       else ok++;
       console.log(
-        `${label} ${url} - tier ${out.rubric.tier}, portfolio=${out.rubric.is_portfolio}, design=${out.rubric.visual_design?.score}, checks=${out.rubric.checks_score ?? "-"} (${out.model}, v${RUBRIC_VERSION})${regrade ? " [re-grade]" : ""}`
+        `${label} ${url} - tier ${out.rubric.tier}, portfolio=${out.rubric.is_portfolio}, door=${door.outcome}, design=${out.rubric.visual_design?.score}, checks=${out.rubric.checks_score ?? "-"} (${out.model}, v${RUBRIC_VERSION})${regrade ? " [re-grade]" : ""}`
       );
       return true;
     } catch (e) {
