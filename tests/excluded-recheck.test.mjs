@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { listedKeys } from "../pipeline/discovery/run.mjs";
+import { Known, PATH_SIGNIFICANT, PROJECT_PAGE_HOST } from "../pipeline/discovery/known.mjs";
 import { normalizeCandidate } from "../pipeline/discovery/normalize.mjs";
 import { DEAD_RECHECK_DAYS, planDeadRecheck } from "../pipeline/exclusions.mjs";
 import { normKey } from "../pipeline/health.mjs";
@@ -67,12 +68,22 @@ test("generate_feed.py drops an excluded site whatever the spelling, with the ne
   assert.deepEqual(out.map((p) => p.url), ["https://example-kept.dev"]);
 });
 
-test("discovery treats every excluded site as already known, so it never comes back as new", () => {
-  const keys = listedKeys(path.join(ROOT, "data"));
+test("discovery treats every excluded site as already known, also found at its root or with a path added", () => {
+  // The old version looked each entry up by its own key and could never fail. Here each real entry is
+  // found under another spelling of the same site: its root when it has a path, a path when it is a root.
+  const known = new Known(listedKeys(path.join(ROOT, "data")));
+  const apart = (host) => PROJECT_PAGE_HOST.test(host) || PATH_SIGNIFICANT.some((h) => host === h || host.endsWith(`.${h}`));
+  let checked = 0;
   for (const e of objects) {
     const n = normalizeCandidate(e.url);
-    if (n.ok) assert.ok(keys.has(n.key), e.url);
+    if (!n.ok) continue;
+    assert.ok(known.has(n.key), e.url);
+    if (apart(n.host)) continue;
+    const variant = new URL(n.url).pathname === "/" ? `${n.host}/en` : n.host;
+    assert.ok(known.has(variant), `${e.url} found as ${variant}`);
+    checked++;
   }
+  assert.ok(checked > 100, `${checked} entries probed`);
 });
 
 test("dead entries: due ones are checked; one that answers leaves, the others wait three months", async () => {

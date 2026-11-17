@@ -316,5 +316,5 @@ export async function checkPage(row, { fetchPage, fetchText = async () => null }
   const readme = row.context?.repo ? await fetchText(`https://raw.githubusercontent.com/${row.context.repo}/HEAD/README.md`).catch(() => null) : null;
   const j = judgePage({ status: res.status, type: res.headers.get("content-type") ?? "", html, url: row.url, finalUrl, context: row.context, readme });
   if (j.reason) return { status: "dropped", reason: j.reason, detail: j.detail };
-  return { status: "screen", finalKey: siteKeyOf(finalUrl), evidence: evidenceOf(j.page, { url: row.url, finalUrl, context: row.context, jsShell: j.jsShell }) };
+  return { status: "screen", finalKey: siteKeyOf(finalUrl), finalUrl, evidence: evidenceOf(j.page, { url: row.url, finalUrl, context: row.context, jsShell: j.jsShell }) };
 }
