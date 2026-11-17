@@ -95,7 +95,8 @@ export function context(db, { gemini = {}, autoApply = true, start = T0, budget 
       log: () => {},
       fetchImpl: fetchImpl ?? mockGemini(gemini),
       image: async () => ({ inline_data: { mime_type: "image/jpeg", data: "AAAA" } }),
-      flags: { rankingV2: false, rubricRegrade: false, reviewAutoApply: autoApply, ranking: rankingConfig({}) },
+      // pollGeneration: the content stage's weekly poll has its own switch (default off); these nights run with it on.
+      flags: { rankingV2: false, rubricRegrade: false, reviewAutoApply: autoApply, pollGeneration: "true", ranking: rankingConfig({}) },
       runId: "test",
     },
   };
