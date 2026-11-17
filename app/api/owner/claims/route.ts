@@ -14,7 +14,10 @@ import { accountTooNew, guardConfig } from "@/lib/rater";
 // POST /api/owner/claims { url, method?: "auto" | "meta" | "manual", note? }
 //   auto    (default) checks that the home page links to github.com/<you>,
 //           the profile itself, not a repository (never the GitHub
-//           profile's Website field, which anyone can set)
+//           profile's Website field, which anyone can set). A page links
+//           collaborators too, so a claim verified this way may only ask
+//           for a re-grade: removing, cancelling a removal and hiding or
+//           showing the grade need the meta tag or a review (controlProof)
 //   meta    checks for <meta name="portfoliorank-verify" content="<token>">
 //           on the home page (the token is in every claim this returns);
 //           also on a claim verified by its link, since removal needs the

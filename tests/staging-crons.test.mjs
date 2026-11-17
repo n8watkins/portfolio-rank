@@ -32,7 +32,7 @@ test("production runs every scheduled task", () => {
 test("staging runs exactly its allowlist", () => {
   assert.deepEqual(all.filter((t) => taskRuns(t, "staging")).sort(), [...STAGING_TASKS].sort());
   assert.equal(taskRuns("brand new task", "staging"), false, "an unknown task stays off on staging");
-  assert.deepEqual([...STAGING_TASKS].sort(), ["edge purge", "grader", "owner removals", "people queue", "review auto-apply", "tiers"]);
+  assert.deepEqual([...STAGING_TASKS].sort(), ["edge purge", "grader", "owner removals", "people queue", "removal alerts", "review auto-apply", "tiers"]);
 });
 
 test("the allowlist names only tasks that exist, once each", () => {
