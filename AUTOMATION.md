@@ -31,23 +31,17 @@ emmabostian/developer-portfolios (upstream, community-curated)
 ## The list (two intake doors + a takedown)
 
 `data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
-The rule for "the same listed site" is in one place, [pipeline/list-key.mjs](pipeline/list-key.mjs).
-Rule 1: two addresses are one site when their site keys are equal (`lib/grader/url.mjs` `siteKeyOf`: host without www, path without the trailing slash, lower case; scheme, port, query and fragment ignored).
-Rule 2: only while the community list itself (the README plus our additions, before exclusions) holds two or more entries with one key do a real query or a hash route (`#/alice`; tracking parameters and plain anchors never count) tell them apart, and then an exclusion of one does not hit the other.
-The build marks such entries `"siblings": true` in `feed.json`, so every later job (roster sync, purge, owner removals, review relists, the repair) applies rule 2 over the same list, also after one sibling was excluded (`feedKeyer`).
-`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) applies the rule (duplicates, exclusions) in Node.
+Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`: `lib/grader/url.mjs` `siteKeyOf`, host without www, path without the trailing slash, lower case; scheme, port, query and fragment ignored; the same as the health check's `normKey`).
+`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address exactly as the list spells it.
 
-#### Address moves
+#### Respelled sites
 
 A site's address is its key everywhere in the database (grade, votes, ratings, screenshots, likes, lists, claims, review history).
-When the list spells a stored site another way, nothing is lost and nothing changes for visitors: the build reads the database (`TURSO_DATABASE_URL` in the nightly sync; a configured database that cannot be read fails the build) and keeps the entry at the address its row has, so the app, every job and the database agree.
-Such sites are listed every night in the job summary under "Waiting for an address move"; until they are moved, a fix upstream made to a broken spelling waits too.
-The roster sync does the same for any feed built without the database, in place on the entries the calling job holds, so capture and the health check never insert a second row and the row is never delisted.
-Moving a row to the new spelling ([pipeline/site-move.mjs](pipeline/site-move.mjs): the row and everything keyed by its address, one transaction per site) only happens once that spelling is on main and deployed, so the deployed app never shows the site without its row.
-Today that is by hand, `scripts/repair-respelled-sites.mjs`, which reads origin/main's `data/feed.json`: it merges sites split before this existed (the listed spelling has a row and an older one has another) and moves rows whose spelling main's feed already has.
-Run it with the production database as a dry run first, then `--write --then-recompute` (a merge needs the leaderboards and tiers recomputed; without the flag the script exits 2 and says what to run).
-A rename keeps everything, including the tier and leaderboard rows and every vote; the row keeps its `shot_key`, so its screenshots stay (the next capture writes under the new address's key).
-An automatic move after deploy is designed in a separate pull request.
+When the list respells a site, the old row is delisted and the new spelling gets a row of its own, captured and graded like a new site, so an upstream fix to a broken address takes effect at once.
+Nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N".
+[scripts/repair-respelled-sites.mjs](scripts/repair-respelled-sites.mjs) merges them by hand ([pipeline/site-move.mjs](pipeline/site-move.mjs)): each delisted row into the listed row with the same key (exactly one of each; anything else is reported and left alone), with the better grade, the live capture, every vote, rating, claim, like and list entry, its screenshots and its tier and leaderboard rows.
+It reads origin/main's `data/feed.json`; run a dry run against production first, then `--write --then-recompute` (where both rows had tier or leaderboard rows, those are recomputed; without the flag the script exits 2 and says what to run).
+An automatic merge after deploy is designed in a separate pull request.
 
 | Source | Trust | Mechanism |
 |---|---|---|
@@ -61,10 +55,9 @@ An automatic move after deploy is designed in a separate pull request.
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
-  A site the list now spells another way keeps its row (see Address moves).
-  The sync refuses (fails the job) to delist more than 15% of the list at once (above the exclusions' 10% cap); for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which also raises the feed shrink guard below (the share only ever raises a limit).
+  The feed build refuses a feed that drops more than 15% of the current addresses (before the data pull request), and the sync refuses to delist more than 15% at once (above the exclusions' 10% cap); for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which raises both and the shrink guard below (the share only ever raises a limit).
   Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries), except a row whose site is listed under another address: that one is kept for `scripts/repair-respelled-sites.mjs` (see Address moves).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries), except a row whose site is listed under another address: that one is kept for `scripts/repair-respelled-sites.mjs` (see Respelled sites).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
 - **Health check** (`pipeline/health.mjs`, weekly): every listed site is checked for loading, parking, blank pages, duplicates and a stored `is_portfolio=false`.
   States: `live` → `suspect` (any failure) → `down` (3 failed checks in a row spanning at least 13 days); a pass resets to `live`.
@@ -691,7 +684,7 @@ serve images.
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - weekly health check (`LOCAL_DB_FILE=...` for a scratch database)
 - `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
-- `scripts/repair-respelled-sites.mjs [--write --then-recompute] [--only URL] [--feed FILE]` - address moves by hand, from origin/main's feed, after it is deployed (dry run without `--write`; `--feed` only for dry runs)
+- `scripts/repair-respelled-sites.mjs [--write --then-recompute] [--only URL] [--feed FILE]` - merge split sites by hand, with origin/main's feed (dry run without `--write`; `--feed` only for dry runs)
 - `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the weekly health workflow runs it)
 - `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the weekly health workflow run it)
 - `pipeline/upstream-removals.mjs --readme <upstream README> --out <dir> [--cap 25]` - the monthly community-list report (and the optional PR)

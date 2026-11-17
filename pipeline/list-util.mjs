@@ -8,6 +8,13 @@ import fs from "node:fs";
 /** The owner's one-off allowance for a big upstream cleanup, read from the environment. */
 export const CLEANUP_SHARE_ENV = "LIST_CLEANUP_SHARE";
 
+// The most of the list one run may take off it: the feed build refuses a feed
+// that drops more of the current entries (before the data pull request is
+// opened), and the roster sync refuses to delist more rows. The feed keeps its
+// length when upstream rewrites every address, so a count alone never
+// notices. Above the weekly exclusions' own 10% cap.
+export const DELIST_MAX_SHARE = 0.15;
+
 /** LIST_CLEANUP_SHARE as a share between 0 and 1, or null when unset; anything else is an error. */
 export function cleanupShare(env = process.env) {
   const raw = String(env[CLEANUP_SHARE_ENV] ?? "").trim();

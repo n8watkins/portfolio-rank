@@ -23,7 +23,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 // One listed site, one key (the feed build's rule), so an entry is matched whatever its spelling.
-import { feedKeyer } from "./list-key.mjs";
+import { listKey } from "./list-key.mjs";
 import { excludedUrl, readJson } from "./list-util.mjs";
 import { pipelineDb } from "./roster.mjs";
 import { confirmedRelists, undoneRemovals } from "../lib/reviews/store.mjs";
@@ -42,8 +42,6 @@ export const OVERRIDABLE = new Set(["down", "not_portfolio"]);
  * community list itself dropped.
  */
 export function planReviewAdditions({ relists: confirmed, undone = [], additions: allAdditions, excluded, feed: allFeed }) {
-  // The feed's rule (rules 1 and 2 with its siblings marks), the one the build excludes by.
-  const listKey = feedKeyer(allFeed);
   const ours = new Set([
     ...excluded.filter((e) => typeof e === "object" && e?.kind === "not_portfolio").map((e) => listKey(e.url)),
     ...allAdditions.filter((a) => a?.source === "review").map((a) => listKey(a.url)),

@@ -14,18 +14,18 @@ This file only reads the README. Everything that decides whether two
 addresses are one site (duplicates, exclusions) is pipeline/build-feed.mjs,
 so the rule lives in one place (pipeline/list-key.mjs); this script runs it
 with Node and passes its exit code on. Addresses are written exactly as the
-list spells them; the roster sync moves a respelled site's row
-(pipeline/site-move.mjs).
+list spells them.
 
 Usage:
     python generate_feed.py [README.md] [feed.json]
         [--exclude data/excluded.json] [--add data/additions.json]
         [--max-shrink 0.05]
 
---max-shrink refuses to write (exit 2) when the new feed has more than that
-fraction fewer entries than the feed.json already there: a broken or
-truncated upstream README must never wipe the list. LIST_CLEANUP_SHARE (a
-share, e.g. 0.3) raises it for one run, for a real upstream cleanup.
+The build refuses to write (exit 2) when the new feed has more than
+--max-shrink fewer entries, or when more than 15% of the current entries'
+addresses are gone from it: a broken, truncated or rewritten upstream README
+must never reach the list. LIST_CLEANUP_SHARE (a share, e.g. 0.3) raises both
+for one run, for a real upstream cleanup.
 """
 
 import re

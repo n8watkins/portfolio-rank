@@ -58,7 +58,8 @@ export function checkData({ feed, additions, excluded }) {
   list("feed.json", feed, (e, at) => {
     if (!isText(e.name)) say(`${at} has no name`);
     if (!isWebAddress(e.url)) say(`${at} has no web address (url: ${JSON.stringify(e.url)})`);
-    if (e.tagline !== undefined && typeof e.tagline !== "string") say(`${at} has a tagline that is not text`);  });
+    if (e.tagline !== undefined && typeof e.tagline !== "string") say(`${at} has a tagline that is not text`);
+  });
   if (Array.isArray(feed) && feed.length < MIN_FEED) {
     say(`feed.json lists ${feed.length} portfolios, fewer than ${MIN_FEED}: it looks cut short`);
   }

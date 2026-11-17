@@ -1,53 +1,42 @@
-// Moving a listed site's row to the address the community list spells it with
-// now, with everything keyed by that address (votes, ratings, likes, lists,
-// owner settings, claims, review and grade history, ...), one transaction per
-// site. Run by hand only (scripts/repair-respelled-sites.mjs), after the feed
-// carrying the new spelling is on main and deployed, so the app, every job and
-// the database agree (AUTOMATION.md, "Address moves").
+// Merging a split site: when the community list respells a site, the old row
+// (delisted, with the grade, votes and screenshots) and the new row (listed)
+// have the same key (pipeline/list-key.mjs). A merge moves the old row and
+// everything keyed by its address into the listed row, one transaction per
+// site. Run by hand: scripts/repair-respelled-sites.mjs.
 //
-//   rename  the new spelling has no row: the row and everything keyed by it
-//           take the new address. Nothing is dropped: no vote, no rating, no
-//           tier or leaderboard row.
-//   merge   both spellings have a row (sites split before this existed): the
-//           old row merges into the listed one. The grade is the better of the
-//           two (a real grade beats an error or none; the other goes to
-//           rubric_history), the capture is whichever is live; votes that the
-//           merge makes duplicate (one from each side, same rater and pair) or
-//           a site against itself are dropped and their ELO points taken back;
-//           tier and leaderboard rows of the old address are dropped and the
-//           caller must recompute them (plan.needsRecompute).
+//   - the grade: the better of the two (a real grade beats an error or none),
+//     the other one goes to rubric_history; the capture: whichever is live;
+//   - votes move; a moved vote that duplicates one the listed row already has
+//     (same rater and pair) or a vote of the site against itself is dropped,
+//     and its ELO points are taken back; ratings add up;
+//   - tier and leaderboard rows move when the listed row has none; when both
+//     have one the old goes and the caller recomputes (plan.needsRecompute);
+//     tier membership is then set by the same trigger rule as any row change.
 //
 // What happens to each table is SITE_TABLES below; a test checks every table
 // of lib/schema.mjs is in SITE_TABLES, LEFT_AS_IS or NO_SITE_ADDRESS, and that
 // every unique constraint on a moved column survives a clash.
-//
-// Screenshots: the row keeps its shot_key, so the images stored under the old
-// address's key stay the row's images. Nothing derives a key from the address
-// except a new capture (pipeline/capture.mjs keyOf), which writes the new
-// spelling's key; the old key's files are then no longer used (R2 keeps them).
 
-import { feedKeyer } from "./list-key.mjs";
-
-// What a capture measured, and what a grade decided: taken separately in a merge.
+// What a capture measured: taken from the old row when only it is live.
 const CAPTURE_COLUMNS = [
   "status", "reason", "shot_key", "meta", "checked_at", "captured_at", "final_url", "signals", "needs_review",
   "page_text", "facts", "facts_at", "capture_attempts", "retry_at",
 ];
 
-/** Every table that holds a site's address, and what a move does with it. */
+/** Every table that holds a site's address, and what a merge does with it. */
 export const SITE_TABLES = {
-  portfolios: "renamed; a merge keeps the better grade and the live capture",
-  votes: "moved; a merge drops only votes it makes duplicate (one from each side) or of the site against itself",
+  portfolios: "the old row merges into the listed one: the better grade, the live capture",
+  votes: "moved; drops only a moved vote that duplicates one of the listed row (same rater and pair) or of the site against itself",
   star_counts: "kept by the votes triggers (lib/schema.mjs); recounted only where they are missing",
-  ratings: "moved; a merge adds up the ELO points each won, less those of dropped votes",
+  ratings: "moved; ELO points added up, less those of dropped votes",
   likes: "moved",
   list_items: "moved",
-  portfolio_owner: "moved; when both have one, a hidden grade or a removal from either is kept",
+  portfolio_owner: "moved; a hidden grade or a removal from either is kept",
   claims: "moved; when an owner claimed both, the stronger claim is kept (verified, review, pending)",
   claim_log: "moved",
   regrade_requests: "moved",
   status_reviews: "moved",
-  rubric_history: "moved; a merge also records the grade it did not keep",
+  rubric_history: "moved; also records the grade the merge did not keep",
   rating_resets: "moved",
   rank_history: "moved",
   comparisons: "addresses in shown and ranking rewritten",
@@ -56,10 +45,10 @@ export const SITE_TABLES = {
   poll_options: "portfolio_url moved",
   gem_watch: "moved",
   player_visits: "moved",
-  site_fingerprints: "follow the capture: moved with it, else dropped",
-  site_freshness: "follow the capture: moved with it, else dropped",
-  tier_ratings: "renamed; a merge drops the old row and needs scripts/refresh-tiers.mjs",
-  site_ratings: "renamed; a merge drops the old rows and needs scripts/recompute-ratings.mjs",
+  site_fingerprints: "follow the capture",
+  site_freshness: "follow the capture",
+  tier_ratings: "moved when the listed row has none; else dropped and recomputed (scripts/refresh-tiers.mjs)",
+  site_ratings: "moved when the listed row has none; else dropped and recomputed (scripts/recompute-ratings.mjs)",
   night_item_failures: "old rows dropped (failure counts of an address no job uses any more)",
   cache: "psi: and inspect: entries of the old address dropped",
 };
@@ -97,19 +86,13 @@ export const NO_SITE_ADDRESS = [
   "tier_undo", "vote_totals",
 ];
 
-// Claim statuses, strongest first (lib/games/claims.mjs).
 const CLAIM_STRENGTH = { verified: 3, review: 2, pending: 1 };
-// The triggers that keep star_counts in step with votes (lib/schema.mjs COUNTERS).
 const STAR_TRIGGERS = ["votes_star_insert", "votes_star_delete", "votes_star_update"];
-
+const JSON_COLUMNS = [["comparisons", "shown"], ["comparisons", "ranking"], ["quizzes", "urls"]];
 // lib/elo.ts pairKey (a TypeScript file this module cannot import).
 const pairKey = (a, b) => [a, b].sort().join("\n");
 
-/**
- * How good a stored grade is: 3 a real grade of a portfolio (a tier, no
- * error; lib/tiers-store.mjs usable), 2 a real grade that says "not a
- * portfolio", 1 an error or anything unreadable, 0 none.
- */
+/** 3 a real grade of a portfolio (a tier, no error), 2 a real "not a portfolio", 1 an error or unreadable, 0 none. */
 export function gradeRank(json) {
   if (json == null) return 0;
   let g;
@@ -122,17 +105,13 @@ export function gradeRank(json) {
   return g.is_portfolio === false ? 2 : 3;
 }
 
-/**
- * A statement that uses ?1 (the old address) and maybe ?2 (the new one),
- * with exactly the arguments it uses: a remote libSQL server (Turso, sqld)
- * rejects extra ones ("too many parameters").
- */
+/** A statement using ?1 (old address) and maybe ?2 (listed), with exactly those arguments (a remote server refuses extras). */
 function bind(sql, from, to) {
   const used = Math.max(0, ...[...sql.matchAll(/\?(\d+)/g)].map((m) => Number(m[1])));
   return { sql, args: [from, to].slice(0, used) };
 }
 
-/** The database's tables: Map(table -> { columns: Set, unique: [Set of columns] }) and its triggers. */
+/** The database's tables: Map(table -> { columns, unique: [Set] }) and its triggers. */
 export async function schemaOf(db) {
   const tables = new Map();
   const master = (await db.execute("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'trigger')")).rows;
@@ -152,39 +131,23 @@ export async function schemaOf(db) {
 }
 
 /**
- * The moves a feed asks for, by the feed's own rule (pipeline/list-key.mjs
- * feedKeyer, so a sibling that left the feed is never taken for another):
- *   moves   an entry with no row while exactly one stored row has its key
- *   merges  an entry with a row while other rows have its key
- *   skipped several rows could be the entry's: nothing is done, a person decides.
+ * The JSON columns that name any of `froms`, read once for all pairs (a full
+ * read of each table, outside any transaction): Map(from -> [{ table, col, id, value }]).
  */
-export async function findRespellings(db, feed) {
-  const urls = feed.map((p) => p.url);
-  const keyOf = feedKeyer(feed);
-  const onFeed = new Set(urls);
-  const rows = (await db.execute("SELECT url FROM portfolios ORDER BY delisted_at IS NULL, delisted_at, url")).rows.map((r) => String(r.url));
-  const stored = new Set(rows);
-  const offFeed = new Map();
-  for (const u of rows) {
-    if (onFeed.has(u)) continue;
-    const k = keyOf(u);
-    if (!offFeed.has(k)) offFeed.set(k, []);
-    offFeed.get(k).push(u);
+export async function jsonHits(db, froms, schema) {
+  const hits = new Map(froms.map((f) => [f, []]));
+  const needles = froms.map((f) => [f, JSON.stringify(f)]);
+  for (const [t, c] of JSON_COLUMNS) {
+    if (!schema.has(t) || !schema.get(t).columns.has(c)) continue;
+    for (const r of (await db.execute(`SELECT id, ${c} AS v FROM ${t} WHERE ${c} IS NOT NULL`)).rows) {
+      // One object per row, shared by every pair it names, so each plan rewrites what the last one left.
+      const hit = { table: t, col: c, id: r.id, value: String(r.v) };
+      for (const [f, needle] of needles) if (hit.value.includes(needle)) hits.get(f).push(hit);
+    }
   }
-  const moves = [];
-  const merges = [];
-  const skipped = [];
-  for (const to of urls) {
-    const cands = offFeed.get(keyOf(to)) ?? [];
-    if (!cands.length) continue;
-    if (stored.has(to)) for (const from of cands) merges.push({ from, to });
-    else if (cands.length === 1) moves.push({ from: cands[0], to });
-    else skipped.push({ key: keyOf(to), entry: to, rows: cands });
-  }
-  return { moves, merges, skipped };
+  return hits;
 }
 
-/** Rewrites every string equal to `from` inside parsed JSON. */
 function rewriteJson(value, from, to) {
   if (value === from) return to;
   if (Array.isArray(value)) return value.map((v) => rewriteJson(v, from, to));
@@ -192,28 +155,13 @@ function rewriteJson(value, from, to) {
   return value;
 }
 
-/** A rubric_history row for a grade a merge does not keep. */
-function historyOf(url, json, now) {
-  let g = {};
-  try {
-    g = JSON.parse(String(json)) ?? {};
-  } catch {
-    // An unreadable grade is still kept, as text.
-  }
-  return {
-    sql: `INSERT INTO rubric_history (url, model, tier, is_portfolio, rubric, judged_at, replaced_at, replaced_by_model)
-          VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-    args: [url, g.model ?? null, g.tier ?? null, g.is_portfolio == null ? null : g.is_portfolio ? 1 : 0, String(json), g.judged_at ?? null, now.toISOString()],
-  };
-}
-
 /**
- * What moving `from` to `to` takes: { from, to, kind, portfolios, counts,
- * orphanShots, needsRecompute, statements }. Reads only; `statements` is the
- * transaction to run (moveSite reads and runs them in one transaction).
+ * What merging the old row `from` into the listed row `to` takes:
+ * { from, to, portfolios, counts, orphanShots, needsRecompute, guard, statements }.
+ * Reads only. `guard` is the first statement of the transaction: it aborts it
+ * when the votes or claims of the two addresses changed since this plan.
  */
-export async function planMove(db, { from, to, now = new Date() }, schema = null) {
-  schema ??= await schemaOf(db);
+export async function planMove(db, { from, to, now = new Date() }, { schema, json = null } = {}) {
   const has = (t, ...c) => schema.has(t) && c.every((x) => schema.get(t).columns.has(x));
   const uniqueOn = (t, c) => schema.get(t).unique.some((u) => u.has(c));
   const S = (sql) => bind(sql, from, to);
@@ -223,64 +171,57 @@ export async function planMove(db, { from, to, now = new Date() }, schema = null
   const orphanShots = [];
   let needsRecompute = false;
 
-  // portfolios: one row per site.
   const row = async (u) => (await db.execute({ sql: "SELECT * FROM portfolios WHERE url = ?", args: [u] })).rows[0];
   const old = await row(from);
   const cur = await row(to);
-  if (!old) throw new Error(`${from} has no row`);
-  const merge = Boolean(cur);
-  let portfolios;
-  let captureMoves = true;
-  const shot = (r) => (r?.shot_key == null ? null : String(r.shot_key));
-  if (!merge) {
-    portfolios = "renamed";
-    stmts.push(S("UPDATE portfolios SET url = ?2 WHERE url = ?1"));
-  } else {
-    const takeGrade = gradeRank(old.ai_rubric) > gradeRank(cur.ai_rubric);
-    captureMoves = cur.status !== "live" && old.status === "live";
-    const cols = [...(takeGrade ? ["ai_rubric"] : []), ...(captureMoves ? CAPTURE_COLUMNS : [])].filter((x) => schema.get("portfolios").columns.has(x));
-    // The grade not kept goes to rubric_history, under the site's address.
-    const lost = takeGrade ? cur.ai_rubric : old.ai_rubric;
-    if (lost != null && has("rubric_history", "url", "rubric", "replaced_at")) stmts.push(historyOf(to, lost, now));
-    if (cols.length) stmts.push(S(`UPDATE portfolios SET (${cols.join(", ")}) = (SELECT ${cols.join(", ")} FROM portfolios WHERE url = ?1) WHERE url = ?2`));
-    portfolios = `merged: the row keeps ${takeGrade ? "the old grade" : "its own grade"} and ${captureMoves ? "the old capture" : "its own capture"}`;
-    if (captureMoves && shot(cur) && shot(cur) !== shot(old)) orphanShots.push(shot(cur));
-    if (!captureMoves && shot(old) && shot(old) !== shot(cur)) orphanShots.push(shot(old));
-    stmts.push(S("DELETE FROM portfolios WHERE url = ?1"));
+  if (!old || !cur) throw new Error(`${!old ? from : to} has no row`);
+  const takeGrade = gradeRank(old.ai_rubric) > gradeRank(cur.ai_rubric);
+  const captureMoves = cur.status !== "live" && old.status === "live";
+  const lost = takeGrade ? cur.ai_rubric : old.ai_rubric;
+  if (lost != null && has("rubric_history", "url", "rubric", "replaced_at")) {
+    let g = {};
+    try {
+      g = JSON.parse(String(lost)) ?? {};
+    } catch {
+      // Kept as text.
+    }
+    stmts.push({
+      sql: "INSERT INTO rubric_history (url, model, tier, is_portfolio, rubric, judged_at, replaced_at, replaced_by_model) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
+      args: [to, g.model ?? null, g.tier ?? null, g.is_portfolio == null ? null : g.is_portfolio ? 1 : 0, String(lost), g.judged_at ?? null, now.toISOString()],
+    });
   }
+  const cols = [...(takeGrade ? ["ai_rubric"] : []), ...(captureMoves ? CAPTURE_COLUMNS : [])].filter((x) => schema.get("portfolios").columns.has(x));
+  if (cols.length) stmts.push(S(`UPDATE portfolios SET (${cols.join(", ")}) = (SELECT ${cols.join(", ")} FROM portfolios WHERE url = ?1) WHERE url = ?2`));
+  const shot = (r) => (r.shot_key == null ? null : String(r.shot_key));
+  if (captureMoves && shot(cur) && shot(cur) !== shot(old)) orphanShots.push(shot(cur));
+  if (!captureMoves && shot(old) && shot(old) !== shot(cur)) orphanShots.push(shot(old));
+  stmts.push(S("DELETE FROM portfolios WHERE url = ?1"));
+  const portfolios = `the row keeps ${takeGrade ? "the old grade" : "its own grade"} and ${captureMoves ? "the old capture" : "its own capture"}`;
 
-  // votes: moved. Only a merge drops any: a vote of the site against itself,
-  // and a moved vote whose rater already voted on that pair under the new address.
+  // votes
+  let voteCount = 0;
   const ratingFixes = [];
-  const winners = new Set([to]);
   if (has("votes", "id", "winner", "loser", "rater_id")) {
     const withDelta = has("votes", "delta");
-    const votes = (
-      await db.execute(S(`SELECT id, winner, loser, rater_id${withDelta ? ", delta" : ""} FROM votes
-                          WHERE winner IN (?1, ?2) OR loser IN (?1, ?2) ORDER BY id`))
-    ).rows;
+    const votes = (await db.execute(S(`SELECT id, winner, loser, rater_id${withDelta ? ", delta" : ""} FROM votes WHERE winner IN (?1, ?2) OR loser IN (?1, ?2) ORDER BY id`))).rows;
+    voteCount = votes.length;
     const map = (u) => (String(u) === from ? to : String(u));
     const isMoved = (v) => String(v.winner) === from || String(v.loser) === from;
-    const drop = [];
-    const rekey = [];
-    if (merge) {
-      const groups = new Map();
-      for (const v of votes) {
-        const k = `${v.rater_id}\n${pairKey(map(v.winner), map(v.loser))}`;
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push(v);
-      }
-      for (const group of groups.values()) {
-        const self = group.filter((v) => map(v.winner) === map(v.loser));
-        drop.push(...self);
-        const rest = group.filter((v) => !self.includes(v));
-        if (rest.some(isMoved) && rest.some((v) => !isMoved(v))) drop.push(...rest.filter(isMoved));
-      }
+    const groups = new Map();
+    for (const v of votes) {
+      const k = `${v.rater_id}\n${pairKey(map(v.winner), map(v.loser))}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(v);
     }
-    for (const v of votes) if (isMoved(v) && !drop.includes(v)) rekey.push({ id: v.id, key: pairKey(map(v.winner), map(v.loser)) });
+    const drop = [];
+    for (const group of groups.values()) {
+      const self = group.filter((v) => map(v.winner) === map(v.loser));
+      const rest = group.filter((v) => !self.includes(v));
+      drop.push(...self);
+      if (rest.some((v) => !isMoved(v))) drop.push(...rest.filter(isMoved));
+    }
     counts.votes = votes.filter(isMoved).length;
-    if (drop.length) counts["votes dropped (made duplicate or self-vote by the merge)"] = drop.length;
-    for (const v of votes) winners.add(String(v.winner));
+    if (drop.length) counts["votes dropped"] = drop.length;
     for (const v of drop) {
       stmts.push({ sql: "DELETE FROM votes WHERE id = ?", args: [v.id] });
       if (has("tier_undo", "vote_id")) stmts.push({ sql: "DELETE FROM tier_undo WHERE vote_id = ?", args: [v.id] });
@@ -289,12 +230,11 @@ export async function planMove(db, { from, to, now = new Date() }, schema = null
     if (counts.votes) {
       stmts.push(S("UPDATE votes SET winner = ?2 WHERE winner = ?1"));
       stmts.push(S("UPDATE votes SET loser = ?2 WHERE loser = ?1"));
-      // OR IGNORE: an old duplicate that already shares a pair key keeps its old one rather than being dropped.
-      if (has("votes", "pair_key")) for (const r of rekey) stmts.push({ sql: "UPDATE OR IGNORE votes SET pair_key = ? WHERE id = ?", args: [r.key, r.id] });
+      // OR IGNORE: an old duplicate that shares a pair key keeps its old key rather than being dropped.
+      if (has("votes", "pair_key")) for (const v of votes) if (isMoved(v) && !drop.includes(v)) stmts.push({ sql: "UPDATE OR IGNORE votes SET pair_key = ? WHERE id = ?", args: [pairKey(map(v.winner), map(v.loser)), v.id] });
     }
-    // The triggers keep star_counts in this same transaction; without them, recount.
     if (has("star_counts", "url", "n") && has("votes", "starred") && !STAR_TRIGGERS.every((t) => schema.triggers?.has(t))) {
-      for (const w of winners) {
+      for (const w of new Set([to, ...votes.map((v) => String(v.winner))])) {
         stmts.push({ sql: "DELETE FROM star_counts WHERE url = ?", args: [w] });
         stmts.push({ sql: "INSERT INTO star_counts (url, n) SELECT winner, COUNT(*) FROM votes WHERE starred = 1 AND winner = ? GROUP BY winner", args: [w] });
       }
@@ -305,11 +245,7 @@ export async function planMove(db, { from, to, now = new Date() }, schema = null
   if (has("ratings", "url", "elo", "votes")) {
     counts.ratings = await count("SELECT COUNT(*) AS n FROM ratings WHERE url = ?1");
     if (counts.ratings) {
-      stmts.push(
-        S(`UPDATE ratings SET elo = elo + (SELECT elo - 1200 FROM ratings WHERE url = ?1),
-             votes = votes + (SELECT votes FROM ratings WHERE url = ?1)
-           WHERE url = ?2 AND EXISTS (SELECT 1 FROM ratings WHERE url = ?1)`)
-      );
+      stmts.push(S("UPDATE ratings SET elo = elo + (SELECT elo - 1200 FROM ratings WHERE url = ?1), votes = votes + (SELECT votes FROM ratings WHERE url = ?1) WHERE url = ?2 AND EXISTS (SELECT 1 FROM ratings WHERE url = ?1)"));
       stmts.push(S("UPDATE OR IGNORE ratings SET url = ?2 WHERE url = ?1"));
       stmts.push(S("DELETE FROM ratings WHERE url = ?1"));
     }
@@ -340,8 +276,10 @@ export async function planMove(db, { from, to, now = new Date() }, schema = null
   }
 
   // claims: one per owner and site; the stronger one stays.
+  let claimCount = 0;
   if (has("claims", "id", "url", "owner", "status")) {
     const claims = (await db.execute(S("SELECT id, url, owner, status FROM claims WHERE url IN (?1, ?2) ORDER BY id"))).rows;
+    claimCount = claims.length;
     counts.claims = claims.filter((c) => String(c.url) === from).length;
     const strength = (c) => CLAIM_STRENGTH[String(c.status)] ?? 0;
     for (const c of claims.filter((x) => String(x.url) === from)) {
@@ -351,7 +289,7 @@ export async function planMove(db, { from, to, now = new Date() }, schema = null
     if (counts.claims) stmts.push(S("UPDATE claims SET url = ?2 WHERE url = ?1"));
   }
 
-  // Plain moves; where a unique constraint covers the column, the new address's row wins a clash.
+  // Plain moves; where a unique constraint covers the column, the listed row's wins a clash.
   for (const [t, c] of MOVED_COLUMNS) {
     if (!has(t, c)) continue;
     const n = await count(`SELECT COUNT(*) AS n FROM ${t} WHERE ${c} = ?1`);
@@ -368,88 +306,70 @@ export async function planMove(db, { from, to, now = new Date() }, schema = null
   // State that belongs to a capture.
   for (const t of ["site_fingerprints", "site_freshness"]) {
     if (!has(t, "url")) continue;
-    counts[t] = await count(`SELECT COUNT(*) AS n FROM ${t} WHERE url = ?1`);
-    if (!counts[t]) continue;
     if (captureMoves) {
-      stmts.push(S(`DELETE FROM ${t} WHERE url = ?2`));
+      stmts.push(S(`DELETE FROM ${t} WHERE url = ?2 AND EXISTS (SELECT 1 FROM ${t} WHERE url = ?1)`));
       stmts.push(S(`UPDATE ${t} SET url = ?2 WHERE url = ?1`));
     } else {
       stmts.push(S(`DELETE FROM ${t} WHERE url = ?1`));
     }
   }
 
-  // Addresses inside JSON.
-  for (const [t, c] of [["comparisons", "shown"], ["comparisons", "ranking"], ["quizzes", "urls"]]) {
-    if (!has(t, "id", c)) continue;
-    const hits = (await db.execute({ sql: `SELECT id, ${c} AS v FROM ${t} WHERE instr(${c}, ?) > 0`, args: [JSON.stringify(from)] })).rows;
-    let n = 0;
-    for (const h of hits) {
-      let parsed;
-      try {
-        parsed = JSON.parse(String(h.v));
-      } catch {
-        continue;
-      }
-      const next = JSON.stringify(rewriteJson(parsed, from, to));
-      if (next === JSON.stringify(parsed)) continue;
-      n++;
-      stmts.push({ sql: `UPDATE ${t} SET ${c} = ? WHERE id = ?`, args: [next, h.id] });
+  // Addresses inside JSON (read once for all pairs: jsonHits).
+  for (const h of json?.get(from) ?? []) {
+    let parsed;
+    try {
+      parsed = JSON.parse(h.value);
+    } catch {
+      continue;
     }
-    counts[`${t}.${c}`] = n;
+    const next = JSON.stringify(rewriteJson(parsed, from, to));
+    if (next === JSON.stringify(parsed)) continue;
+    counts[`${h.table}.${h.col}`] = (counts[`${h.table}.${h.col}`] ?? 0) + 1;
+    stmts.push({ sql: `UPDATE ${h.table} SET ${h.col} = ? WHERE id = ?`, args: [next, h.id] });
+    h.value = next;
   }
 
-  // Tier and leaderboard rows: renamed with the site; where both addresses
-  // have one (a merge), the old one goes and the caller must recompute.
+  // Tier and leaderboard rows: moved when the listed row has none; else the caller recomputes.
   for (const t of ["tier_ratings", "site_ratings"]) {
     if (!has(t, "url")) continue;
     counts[t] = await count(`SELECT COUNT(*) AS n FROM ${t} WHERE url = ?1`);
     if (!counts[t]) continue;
-    const clash = await count(`SELECT COUNT(*) AS n FROM ${t} WHERE url = ?2`);
+    if (await count(`SELECT COUNT(*) AS n FROM ${t} WHERE url = ?2`)) needsRecompute = true;
     stmts.push(S(`UPDATE OR IGNORE ${t} SET url = ?2 WHERE url = ?1`));
-    if (clash) {
-      stmts.push(S(`DELETE FROM ${t} WHERE url = ?1`));
-      if (t === "tier_ratings" && has(t, "dirty")) stmts.push(S("UPDATE tier_ratings SET dirty = 1 WHERE url = ?2"));
-      needsRecompute = true;
-    }
+    stmts.push(S(`DELETE FROM ${t} WHERE url = ?1`));
   }
-  if (has("night_item_failures", "item")) {
-    counts.night_item_failures = await count("SELECT COUNT(*) AS n FROM night_item_failures WHERE item = ?1");
-    if (counts.night_item_failures) stmts.push(S("DELETE FROM night_item_failures WHERE item = ?1"));
-  }
+  if (has("night_item_failures", "item")) stmts.push(S("DELETE FROM night_item_failures WHERE item = ?1"));
   if (has("cache", "k")) stmts.push({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi:${from}`, `inspect:${from}`] });
+  // Last: touch the listed row so lib/tiers-db.mjs tier_member_sync sets its tier
+  // membership from the final state (the moved tier row may carry member = 0 from its delisted days).
+  stmts.push(S("UPDATE portfolios SET delisted_at = delisted_at WHERE url = ?2"));
 
+  // The guard: aborts the transaction (a NOT NULL failure) when what the plan read has changed.
+  const guard = {
+    sql: `INSERT INTO cache (k, v, at) SELECT 'repair:stale-plan', NULL, 0
+          WHERE NOT EXISTS (SELECT 1 FROM portfolios WHERE url = ?1) OR NOT EXISTS (SELECT 1 FROM portfolios WHERE url = ?2)
+             ${has("votes", "winner") ? "OR (SELECT COUNT(*) FROM votes WHERE winner IN (?1, ?2) OR loser IN (?1, ?2)) != ?3" : "OR ?3 IS NULL"}
+             ${has("claims", "url") ? "OR (SELECT COUNT(*) FROM claims WHERE url IN (?1, ?2)) != ?4" : "OR ?4 IS NULL"}`,
+    args: [from, to, voteCount, claimCount],
+  };
   for (const k of Object.keys(counts)) if (!counts[k]) delete counts[k];
-  return { from, to, kind: merge ? "merge" : "rename", portfolios, counts, orphanShots, needsRecompute, statements: stmts };
+  return { from, to, portfolios, counts, orphanShots, needsRecompute, guard, statements: stmts };
 }
 
-/** Runs a plan's statements as one transaction (all of it or none of it). */
+/** A plan whose guard found the database changed since it was planned. */
+export class StalePlan extends Error {}
+
+/** Runs a plan as one transaction, its guard first: all of it, or nothing (StalePlan when the guard tripped). */
 export async function applyMove(db, plan) {
-  await db.batch(plan.statements, "write");
-}
-
-/**
- * Plans and runs one site's move inside a single write transaction, so
- * nothing written between the plan and the write (a new vote, another run)
- * can make them disagree. `edit(statements)` is for tests. Returns the plan.
- */
-export async function moveSite(db, pair, { schema = null, dryRun = false, edit = null } = {}) {
-  schema ??= await schemaOf(db);
-  if (dryRun) return planMove(db, pair, schema);
-  const tx = await db.transaction("write");
   try {
-    const plan = await planMove(tx, pair, schema);
-    await tx.batch(edit ? edit(plan.statements) : plan.statements);
-    await tx.commit();
-    return plan;
+    await db.batch([plan.guard, ...plan.statements], "write");
   } catch (e) {
-    await tx.rollback().catch(() => {});
+    if (/NOT NULL constraint failed: cache\.v/.test(String(e?.message ?? e))) throw new StalePlan(`${plan.from} changed since it was planned; skipped`);
     throw e;
-  } finally {
-    tx.close();
   }
 }
 
-/** One line for logs and the run summary. */
+/** One line for logs. */
 export function describeMove(plan) {
   const what = Object.entries(plan.counts).map(([t, n]) => `${t} ${n}`).join(", ") || "no other rows";
   return `${plan.from} -> ${plan.to}: ${plan.portfolios}; ${what}`;

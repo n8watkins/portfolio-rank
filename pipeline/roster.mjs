@@ -13,21 +13,18 @@
 //   retry_at      when capture may try a site again after a failed capture
 //                 (backoff), so one transient error never hides a site forever.
 //
-// A row's url is its key in many tables (votes, ratings, likes, lists, owner
-// settings, review history...). When the list spells a site's address another
-// way (a trailing slash, www, http, upper case, the default port, a dropped
-// query; pipeline/list-key.mjs), nothing is lost: the feed build keeps the
-// stored address in the feed, syncRoster does the same for the entries a job
-// hands it (so no job delists the row or inserts a second one), and
-// purgeDelisted never deletes a row whose site is listed under another
-// address. Moving a row to the new spelling is done by hand after that
-// spelling is deployed (scripts/repair-respelled-sites.mjs).
+// When the list respells a site (pipeline/list-key.mjs: same key), the old row
+// is delisted and the new spelling gets a row of its own, as for any new site.
+// The old row holds the site's grade, votes and screenshots, so it is never
+// purged while its key is listed (a split site), the sync counts split sites
+// in the job summary every night, and scripts/repair-respelled-sites.mjs
+// merges them by hand.
 
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
-import { feedKeyer, listKey, pinWaiting, waitingSummary } from "./list-key.mjs";
-import { CLEANUP_SHARE_ENV, allowedShare, cleanupShare, jobSummary } from "./list-util.mjs";
+import { listKey, splitSites } from "./list-key.mjs";
+import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, jobSummary } from "./list-util.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -35,14 +32,6 @@ export const PURGE_AFTER_DAYS = 30;
 export const PURGE_MAX_SHARE = 0.2;
 // A roster this small is a broken feed, not a real list.
 export const MIN_ROSTER = 500;
-// Refuse to delist more than this share of the list in one sync: the feed
-// keeps its length when upstream rewrites every address, so only this
-// notices. Above the weekly exclusions' own 10% cap (pipeline/exclusions.mjs),
-// so a full exclusions week plus the day's upstream removals still passes.
-// A real upstream cleanup that is bigger is let through once by setting
-// CLEANUP_SHARE_ENV (also read by the feed build's --max-shrink).
-export const DELIST_MAX_SHARE = 0.15;
-export { CLEANUP_SHARE_ENV, allowedShare, cleanupShare };
 
 /** Pipeline DB client: Turso when TURSO_DATABASE_URL is set, else a local file. */
 export function pipelineDb(root) {
@@ -111,7 +100,8 @@ export async function ensureRosterSchema(db) {
     }
   }
   // Needs the health column above (lib/hidden.mjs).
-  await db.execute(HIDDEN_INDEX);}
+  await db.execute(HIDDEN_INDEX);
+}
 
 /**
  * SQL condition for rows background jobs may work on: on the list and not
@@ -128,33 +118,22 @@ const chunks = (arr, n = 400) =>
   Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
 /**
- * First gives every entry the list now spells another way, while exactly one
- * stored row has its key, that row's address, IN PLACE (pipeline/list-key.mjs
- * pinWaiting; the feed build does the same when it has the database). The job
- * goes on with the same entries, so its inserters (pipeline/capture.mjs
- * captureSite via dueForCapture, pipeline/health.mjs runHealthCheck) work on
- * that row and never insert a second one, and the row is never delisted.
- * Each such site is logged and listed under "Waiting for an address move" in
- * the job summary. Then marks rows whose address left the roster as delisted
- * (with the date), and restores rows that came back.
- *
- * Refuses (throws) to delist more than DELIST_MAX_SHARE of the list at once,
- * unless the owner set CLEANUP_SHARE_ENV for a real upstream cleanup.
- * Returns { delisted, relisted, listed, waiting }.
+ * Mark rows whose URL left the roster as delisted (with the date), and restore
+ * rows that came back. Refuses (throws) to delist more than DELIST_MAX_SHARE of
+ * the list at once, unless the owner set LIST_CLEANUP_SHARE for a real upstream
+ * cleanup (the feed build refuses such a feed first). Writes the split sites
+ * (pipeline/list-key.mjs splitSites) to the job summary. Returns
+ * { delisted, relisted, listed, split }.
  */
-export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = allowedShare(DELIST_MAX_SHARE), log = console.warn } = {}) {
+export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = allowedShare(DELIST_MAX_SHARE) } = {}) {
   if (!Array.isArray(feed) || feed.length < MIN_ROSTER) {
     throw new Error(
       `syncRoster: refusing a roster of ${feed?.length ?? 0} entries (minimum ${MIN_ROSTER}); the feed looks broken`
     );
   }
   await ensureRosterSchema(db);
-  const rows = (await db.execute("SELECT url, delisted_at FROM portfolios")).rows;
-  const pins = pinWaiting(feed, rows.map((r) => String(r.url)), feedKeyer(feed));
-  for (const w of pins.waiting) log(`syncRoster: ${w.stored} is listed as ${w.spelled}; it keeps its row until the address move`);
-  const section = waitingSummary(pins);
-  if (section) jobSummary(section);
   const roster = new Set(feed.map((p) => p.url));
+  const rows = (await db.execute("SELECT url, delisted_at FROM portfolios")).rows;
   const toDelist = [];
   const toRelist = [];
   let listed = 0;
@@ -190,7 +169,28 @@ export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = 
     });
   }
   if (stmts.length) await db.batch(stmts, "write");
-  return { delisted: toDelist.length, relisted: toRelist.length, listed, waiting: pins.waiting.length };
+  const delisted = new Set(toDelist);
+  const relisted = new Set(toRelist);
+  const split = splitSites(
+    rows.map((r) => {
+      const url = String(r.url);
+      return { url, listed: relisted.has(url) || (r.delisted_at == null && !delisted.has(url)) };
+    })
+  );
+  if (split.pairs.length || split.unclear.length) {
+    jobSummary(
+      [
+        `### Split sites waiting for a merge: ${split.pairs.length}`,
+        "",
+        "Each old row holds the site's grade, votes and screenshots; scripts/repair-respelled-sites.mjs merges it into the listed row (AUTOMATION.md, \"Respelled sites\").",
+        "",
+        ...split.pairs.map((p) => `- ${p.from} -> ${p.to}`),
+        ...split.unclear.map((u) => `- unclear, a person decides: ${u.join(", ")}`),
+        "",
+      ].join("\n")
+    );
+  }
+  return { delisted: toDelist.length, relisted: toRelist.length, listed, split: split.pairs.length };
 }
 
 /**
@@ -198,36 +198,29 @@ export async function syncRoster(db, feed, { now = new Date(), maxDelistShare = 
  * Votes and ratings are kept: the vote log is the source of truth for ELO and
  * the leaderboard only shows roster URLs, so rankings stay consistent.
  * `deleteShots(shotKey)` removes a capture's files from R2; when it throws,
- * that row is kept and retried on the next run.
- *
- * A row whose site is still listed under another address (the feed's rule,
- * pipeline/list-key.mjs feedKeyer, when `feed` is given; rule 1 alone
- * without it, which only ever keeps more) holds that site's grade, votes and
- * screenshots and is never purged; scripts/repair-respelled-sites.mjs merges it.
+ * that row is kept and retried on the next run. A row whose key is listed
+ * under another address (a split site) is never purged: it holds the site's
+ * history until scripts/repair-respelled-sites.mjs merges it.
  */
 export async function purgeDelisted(
   db,
-  { now = new Date(), days = PURGE_AFTER_DAYS, deleteShots, dryRun = false, log = console.log, feed = null } = {}
+  { now = new Date(), days = PURGE_AFTER_DAYS, deleteShots, dryRun = false, log = console.log } = {}
 ) {
   await ensureRosterSchema(db);
   const cutoff = new Date(now.getTime() - days * 86400000).toISOString();
-  const due = (
+  const listedKeys = new Set(
+    (await db.execute("SELECT url FROM portfolios WHERE delisted_at IS NULL")).rows.map((r) => listKey(String(r.url)))
+  );
+  const due = [];
+  for (const r of (
     await db.execute({
       sql: "SELECT url, shot_key FROM portfolios WHERE delisted_at IS NOT NULL AND delisted_at <= ?",
       args: [cutoff],
     })
-  ).rows.map((r) => ({ url: String(r.url), shotKey: r.shot_key == null ? null : String(r.shot_key) }));
-  if (due.length) {
-    const keyOf = feed ? feedKeyer(feed) : listKey;
-    const listedKeys = new Set(
-      (await db.execute("SELECT url FROM portfolios WHERE delisted_at IS NULL")).rows.map((r) => keyOf(String(r.url)))
-    );
-    for (let i = due.length - 1; i >= 0; i--) {
-      if (listedKeys.has(keyOf(due[i].url))) {
-        log(`kept ${due[i].url}: the same site is listed under another spelling (run scripts/repair-respelled-sites.mjs)`);
-        due.splice(i, 1);
-      }
-    }
+  ).rows) {
+    const url = String(r.url);
+    if (listedKeys.has(listKey(url))) log(`kept ${url}: its site is listed under another address (scripts/repair-respelled-sites.mjs merges it)`);
+    else due.push({ url, shotKey: r.shot_key == null ? null : String(r.shot_key) });
   }
   const total = Number((await db.execute("SELECT COUNT(*) AS n FROM portfolios")).rows[0].n);
   if (due.length && due.length > total * PURGE_MAX_SHARE) {
