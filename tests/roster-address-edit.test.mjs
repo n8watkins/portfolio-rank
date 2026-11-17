@@ -187,18 +187,18 @@ test("syncRoster never delists a row whose site is still listed under another sp
 // ---------------------------------------------------------------------------
 // (b) a mass delist
 
-test("syncRoster refuses to delist more than 10% of the list at once, unless the owner allows a cleanup", async () => {
+test("syncRoster refuses to delist more than 15% of the list at once, unless the owner allows a cleanup", async () => {
   const db = await freshDb();
   const feed = Array.from({ length: 600 }, (_, i) => ({ name: `P${i}`, url: `https://site${i}.dev` }));
   await liveRows(db, feed);
   const other = Array.from({ length: 600 }, (_, i) => ({ name: `Q${i}`, url: `https://other${i}.dev` }));
   await assert.rejects(syncRoster(db, other, { now: NOW, log: quiet }), new RegExp(`600 of 600 listed sites.*refusing.*${CLEANUP_SHARE_ENV}`, "s"));
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM portfolios WHERE delisted_at IS NOT NULL")).rows[0].n, 0);
-  // 60 of 600 (10%) is allowed; 61 is not.
-  const sixty = feed.map((p, i) => (i < 60 ? other[i] : p));
-  const sixtyOne = feed.map((p, i) => (i < 61 ? other[i] : p));
-  await assert.rejects(syncRoster(db, sixtyOne, { now: NOW, log: quiet }), /61 of 600/);
-  assert.equal((await syncRoster(db, sixty, { now: NOW, log: quiet })).delisted, 60);
+  // 90 of 600 (15%) is allowed; 91 is not.
+  const ninety = feed.map((p, i) => (i < 90 ? other[i] : p));
+  const ninetyOne = feed.map((p, i) => (i < 91 ? other[i] : p));
+  await assert.rejects(syncRoster(db, ninetyOne, { now: NOW, log: quiet }), /91 of 600/);
+  assert.equal((await syncRoster(db, ninety, { now: NOW, log: quiet })).delisted, 90);
   // The owner's override for a real upstream cleanup, as an option and from the environment.
   const db2 = await freshDb();
   await liveRows(db2, feed);

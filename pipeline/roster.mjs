@@ -35,9 +35,11 @@ export const PURGE_MAX_SHARE = 0.2;
 export const MIN_ROSTER = 500;
 // Refuse to delist more than this share of the list in one sync: the feed
 // keeps its length when upstream rewrites every address, so only this
-// notices. A real upstream cleanup that is bigger is let through once by
-// setting CLEANUP_SHARE_ENV (also read by generate_feed.py --max-shrink).
-export const DELIST_MAX_SHARE = 0.1;
+// notices. Above the weekly exclusions' own 10% cap (pipeline/exclusions.mjs),
+// so a full exclusions week plus the day's upstream removals still passes.
+// A real upstream cleanup that is bigger is let through once by setting
+// CLEANUP_SHARE_ENV (also read by generate_feed.py --max-shrink).
+export const DELIST_MAX_SHARE = 0.15;
 export const CLEANUP_SHARE_ENV = "LIST_CLEANUP_SHARE";
 
 /** The owner's one-off allowance for a big upstream cleanup (a share, 0 to 1), or null. */

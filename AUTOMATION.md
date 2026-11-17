@@ -47,7 +47,7 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
   A row whose site is still in `feed.json` under another spelling with no row of its own is kept listed and logged.
-  The sync refuses (fails the job) to delist more than 10% of the list at once; for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which also raises the feed shrink guard below.
+  The sync refuses (fails the job) to delist more than 15% of the list at once (above the exclusions' 10% cap); for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which also raises the feed shrink guard below.
   Grading, the AI voting pool, prewarm and the site only use listed rows that are not confirmed down.
   After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries), except a row whose site is listed under another spelling: that one is kept for `scripts/repair-respelled-sites.mjs`, which moves its history (grade, screenshots, votes, ratings, likes, lists, owner settings) to the listed spelling (dry run by default, `--write` to apply).
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
