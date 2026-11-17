@@ -1,6 +1,6 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
-import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
+import { GONE_WHERE, HIDDEN_WHERE } from "@/lib/hidden.mjs";
 
 // A site its verified owner removed (lib/games/claims.mjs ownerAction).
 const OWNER_REMOVED = "removed_at IS NOT NULL";
@@ -20,12 +20,12 @@ let hiddenCache: { at: number; urls: Promise<Set<string>> } | null = null;
 
 /**
  * Roster URLs the site should not show (browse, matchups, leaderboards):
- * - confirmed down by the weekly health check (pipeline/health.mjs), on their
- *   way into data/excluded.json;
+ * - not working or confirmed down by the health check (pipeline/not-working.mjs,
+ *   pipeline/health.mjs); back as they were when the site works again;
  * - a failed capture (dead/parked/error) the health check hasn't cleared yet.
  *   Captures are retried with backoff, and a passing health check shows the
  *   site again, so one transient error no longer hides a site for good.
- * "Suspect" sites stay visible: one failed check proves nothing.
+ * "Suspect" sites stay visible: one failed check proves nothing (they are out of the AI's work only).
  * - removed by their verified owner (lib/games/claims.mjs), until the
  *   weekly exclusions pull request takes them off the list for good.
  * The rule itself is lib/hidden.mjs, shared with the ranking recompute.
@@ -59,5 +59,16 @@ export async function isHidden(url: string): Promise<boolean> {
     sql: `SELECT 1 FROM portfolios WHERE url = ?1 AND (${HIDDEN_WHERE}) UNION ALL SELECT 1 FROM portfolio_owner WHERE url = ?1 AND ${OWNER_REMOVED}`,
     args: [url],
   });
+  return res.rows.length > 0;
+}
+
+/**
+ * Whether a listed site has no profile right now: not working, or confirmed
+ * down (lib/hidden.mjs GONE_WHERE). Its page answers not found until the site
+ * works again. A primary-key lookup, never cached.
+ */
+export async function isGone(url: string): Promise<boolean> {
+  await ensureSchema();
+  const res = await db().execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND ${GONE_WHERE}`, args: [url] });
   return res.rows.length > 0;
 }

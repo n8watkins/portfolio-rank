@@ -59,6 +59,7 @@ import { replaceGradeStatements } from "./rubric-history.mjs";
 import { atTheDoor } from "../lib/reviews/door.mjs";
 import { APPLIED, OPEN_CASE_SQL, ensureReviewSchema } from "../lib/reviews/store.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
+import { assignShownRanks } from "../lib/ranking/store.mjs";
 import { reconcileAlerts } from "./alerts.mjs";
 import { LEAVE_AFTER_DAYS, NOT_WORKING, ensureHealthSchema, failOnLadder, leavesList, notAnswering, poolOf } from "./not-working.mjs";
 
@@ -718,6 +719,16 @@ export async function runHealthCheck({
       log(`door: ${url} - left for the next run: ${String(e?.message ?? e).slice(0, 160)}`);
     }
   }
+  // The boards' shown ranks (lib/ranking/store.mjs assignShownRanks) follow what the check hid or showed
+  // now, not at the next recompute: a hidden site leaves its place and the ranks close up.
+  const shownChanged = plans.some((p, i) => written[i] && (p.prev?.health === "down") !== (p.next.health === "down"));
+  if (shownChanged) {
+    try {
+      await assignShownRanks(db);
+    } catch (e) {
+      if (!/no such table/i.test(String(e?.message ?? e))) log(`shown ranks: not updated (${String(e?.message ?? e).slice(0, 160)}); the next recompute does it`);
+    }
+  }
   // The owner's alert (/admin/alerts): sites the check has not been able to judge for weeks. The nightly
   // full run owns it; a re-check of a few sites would clear it for the rest.
   if (alerts) {
@@ -803,7 +814,7 @@ const cell = (s) => String(s ?? "").replace(/\|/g, "/");
 /** The not-working pool's one line for a job summary: re-checked, back, failing for the first time, hidden, leaving the list. */
 export function poolLine(s) {
   const n = (a) => (Array.isArray(a) ? a.length : Number(a ?? 0));
-  return `Not-working pool: ${s.checked} re-checked, ${n(s.returned)} back, ${n(s.newlyFailing)} failing for the first time (out of AI work), ${n(s.newlyHidden)} newly hidden, ${n(s.leavingList)} not working ${LEAVE_AFTER_DAYS}+ days (leave the list with the weekly export).`;
+  return `Not-working pool: ${s.due != null ? `${s.checked} re-checked, ` : ""}${n(s.returned)} back, ${n(s.newlyFailing)} failing for the first time (out of AI work), ${n(s.newlyHidden)} newly hidden, ${n(s.leavingList)} not working ${LEAVE_AFTER_DAYS}+ days (leave the list with the weekly export).`;
 }
 
 /** Markdown summary for GITHUB_STEP_SUMMARY. */

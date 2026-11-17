@@ -5,7 +5,7 @@ import { ownerState } from "@/lib/games/claims.mjs";
 import { BASE_ELO } from "@/lib/elo";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { seen } from "@/lib/discovery/sites.mjs";
-import { HIDDEN_WHERE } from "@/lib/hidden.mjs";
+import { GONE_WHERE, HIDDEN_WHERE } from "@/lib/hidden.mjs";
 import { indexable, profilePageLd, socialsFrom, type SeoFacts } from "@/lib/profile-seo";
 import { breadcrumbList, graph } from "@/lib/json-ld";
 import { SITE, SITE_URL } from "@/lib/site";
@@ -113,6 +113,8 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   const listed = listedBy.get(url) ?? null;
   const owner = await ownerState(client, url);
   if (owner.removedAt) return null;
+  // A listed site that is not working has no profile until it works again (lib/hidden.mjs GONE_WHERE).
+  if (listed && (await client.execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND ${GONE_WHERE}`, args: [url] })).rows.length) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
     listed ? client.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] }).then((r) => r.rows[0]) : null,

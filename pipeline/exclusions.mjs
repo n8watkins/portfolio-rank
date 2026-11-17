@@ -164,6 +164,27 @@ export async function planDeadRecheck({ excluded, now = new Date(), render, answ
   };
 }
 
+// The full health check runs every night (owner, 2026-11-16), but the export to data/excluded.json
+// (and the re-check of removed entries) stays weekly, so its bot pull request does not become a daily
+// one: a not-working site leaves the list only after 90 days anyway. Six days, not seven, so a
+// run that starts a little early still exports. The last export's time is kept in the cache table.
+export const EXPORT_EVERY_DAYS = 6;
+const EXPORT_KEY = "health:last-export";
+
+/** Whether the weekly export is due at `now` (none in the last EXPORT_EVERY_DAYS). */
+export async function exportDue(db, now = new Date()) {
+  const row = (await db.execute({ sql: "SELECT at FROM cache WHERE k = ?", args: [EXPORT_KEY] })).rows[0];
+  return !row || now.getTime() - Number(row.at) >= EXPORT_EVERY_DAYS * 86400000;
+}
+
+/** Records an export at `now` (the run that opened or updated the pull request). */
+export async function markExported(db, now = new Date()) {
+  await db.execute({
+    sql: "INSERT INTO cache (k, v, at) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, at = excluded.at",
+    args: [EXPORT_KEY, now.toISOString(), now.getTime()],
+  });
+}
+
 /**
  * Add confirmed-down listed rows to the exclusion list and drop them from the
  * feed. Returns { added: [...entries], excluded, feed } without writing; the

@@ -11,18 +11,21 @@ name: Weekly health check + cleanup
 #      same flow as the daily upstream sync
 #   4. delete screenshots and rows delisted for 30+ days (votes are kept)
 # See pipeline/health.mjs and AUTOMATION.md.
-# Cloudflare's end-of-day run starts this on Sunday nights (20:30 Pacific),
-# alongside the nightly checks; it does not wait for it.
+# Cloudflare's end-of-day run starts this every night (20:30 Pacific),
+# alongside the nightly checks; it does not wait for it. The export in step 3
+# runs once a week (pipeline/exclusions.mjs EXPORT_EVERY_DAYS); sites on the
+# not-working ladder are re-checked by recheck.yml, hourly.
 on:
   workflow_dispatch:
     inputs:
       code:
         description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
         required: false
-  # Fallback only: Mondays 12:00 UTC, after Cloudflare's Sunday-night start;
-  # skips when Cloudflare started it in the last 30 hours (fallback-guard).
+  # Fallback only: daily 12:00 UTC, after Cloudflare's 20:30 Pacific start
+  # (every night since 2026-11-16); skips when Cloudflare started it in the
+  # last 30 hours (fallback-guard).
   schedule:
-    - cron: "0 12 * * 1"
+    - cron: "0 12 * * *"
 
 concurrency:
   group: health

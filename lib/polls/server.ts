@@ -6,6 +6,7 @@ import feed from "@/data/feed.json";
 import { readAnonId, signAnonId } from "@/lib/matchup";
 import { ANON_COOKIE } from "@/lib/rater";
 import { heroOf, shotBases } from "@/lib/shots";
+import { hiddenUrls } from "@/lib/roster";
 import { SITE_URL } from "@/lib/site";
 
 // Request-side helpers for the polls API (app/api/polls): who is voting,
@@ -56,15 +57,20 @@ const domainOf = (url: string) => {
   }
 };
 
-/** Adds each screenshot option's site (name, domain, page, screenshot). */
+/**
+ * Adds each screenshot option's site (name, domain, page, screenshot). A site
+ * the site does not show right now (not working, a failed capture, removed by
+ * its owner: lib/roster.ts hiddenUrls) keeps its option and its votes, with
+ * no screenshot and no link, until it comes back.
+ */
 export async function publicPolls(polls: StoredPoll[]): Promise<PublicPoll[]> {
   const urls = [...new Set(polls.flatMap((p) => p.options.flatMap((o) => (o.url ? [o.url] : []))))];
-  const shots = await shotBases(urls);
+  const [shots, hidden] = await Promise.all([shotBases(urls), urls.length ? hiddenUrls() : Promise.resolve(new Set<string>())]);
   return polls.map((p) => ({
     ...p,
     kind: p.kind === "hero" ? "hero" : "text",
     options: p.options.map(({ url, ...o }) => {
-      if (!url) return o;
+      if (!url || hidden.has(url)) return o;
       const shot = shots.get(url) ?? null;
       return {
         ...o,
