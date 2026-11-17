@@ -73,3 +73,39 @@ test("a screenshot that fails is taken again through the DevTools protocol; othe
   page.screenshot = real;
   await page.close();
 });
+
+test("the DevTools screenshot is asked for again while Chrome has no frame ready, three times at most", async () => {
+  // A stand-in page: no browser, so the count of tries is exact.
+  const fake = (failures, message = "Protocol error (Page.captureScreenshot): Unable to capture screenshot") => {
+    const seen = { sends: 0, waits: 0, detached: 0 };
+    const page = {
+      screenshot: async () => {
+        throw new Error("page.screenshot: Timeout 30000ms exceeded");
+      },
+      waitForTimeout: async () => {
+        seen.waits++;
+      },
+      context: () => ({
+        newCDPSession: async () => ({
+          send: async () => {
+            if (++seen.sends <= failures) throw new Error(message);
+            return { data: Buffer.from("ok").toString("base64") };
+          },
+          detach: async () => {
+            seen.detached++;
+          },
+        }),
+      }),
+    };
+    return { page, seen };
+  };
+  const twice = fake(2);
+  assert.equal(String(await shot(twice.page)), "ok");
+  assert.deepEqual(twice.seen, { sends: 3, waits: 2, detached: 1 });
+  const always = fake(9);
+  await assert.rejects(() => shot(always.page), /Unable to capture screenshot/);
+  assert.deepEqual(always.seen, { sends: 3, waits: 2, detached: 1 });
+  const other = fake(9, "Target closed");
+  await assert.rejects(() => shot(other.page), /Target closed/);
+  assert.deepEqual(other.seen, { sends: 1, waits: 0, detached: 1 }, "another error is not retried");
+});

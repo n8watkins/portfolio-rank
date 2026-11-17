@@ -44,8 +44,12 @@ export async function waitForContent(page, maxMs = CONTENT_WAIT_MS) {
   }
 }
 
+/** The DevTools screenshot is asked for up to this many times, this far apart, while Chrome has no frame ready. */
+const CDP_SHOT_TRIES = 3;
+const CDP_SHOT_PAUSE_MS = 500;
+
 /**
- * page.screenshot, with one retry through the DevTools protocol when it times
+ * page.screenshot, with a retry through the DevTools protocol when it times
  * out or Chrome can't capture the page. Other errors are thrown as they are.
  * @param {import("playwright").Page} page
  * @param {{ type?: "png" | "jpeg", quality?: number }} [opts]
@@ -57,8 +61,16 @@ export async function shot(page, { type = "png", quality } = {}) {
     if (!/Timeout|Unable to capture screenshot|Protocol error/i.test(String(e?.message ?? e))) throw e;
     const cdp = await page.context().newCDPSession(page);
     try {
-      const r = await cdp.send("Page.captureScreenshot", { format: type === "jpeg" ? "jpeg" : "png", ...(quality ? { quality } : {}), captureBeyondViewport: false, fromSurface: true });
-      return Buffer.from(r.data, "base64");
+      // Chrome answers "Unable to capture screenshot" when it has no frame ready (a busy machine): that passes, so ask again.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const r = await cdp.send("Page.captureScreenshot", { format: type === "jpeg" ? "jpeg" : "png", ...(quality ? { quality } : {}), captureBeyondViewport: false, fromSurface: true });
+          return Buffer.from(r.data, "base64");
+        } catch (again) {
+          if (attempt >= CDP_SHOT_TRIES || !/Unable to capture screenshot/i.test(String(again?.message ?? again))) throw again;
+          await page.waitForTimeout(CDP_SHOT_PAUSE_MS);
+        }
+      }
     } finally {
       await cdp.detach().catch(() => {});
     }
