@@ -83,7 +83,7 @@ jobs:
         env:
           SOURCES: ${{ inputs.sources || 'all' }}
         run: node pipeline/discovery/run.mjs --sources "$SOURCES" --summary "$RUNNER_TEMP/discovery.json"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: discovery-summary
