@@ -4,6 +4,31 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.6.0",
+      "tag": "v0.6.0",
+      "date": "2026-11-18",
+      "time": "2026-11-18T23:07:40Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.6.0",
+      "previous": "v0.5.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "health",
+          "text": "Sites that stopped working are now re-checked on time, every hour one is due.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "70e0442d6adb7e0c8221e7c7bda38a4bed1db93e",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/70e0442d6adb7e0c8221e7c7bda38a4bed1db93e"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.5.0",
       "tag": "v0.5.0",
       "date": "2026-11-18",

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 - 2026-11-18
+
+### New
+
+- Sites that stopped working are now re-checked on time, every hour one is due.
+
 ## 0.5.0 - 2026-11-18
 
 ### New
