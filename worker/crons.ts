@@ -49,6 +49,7 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
     "freshness",
     "review auto-apply",
     "image library",
+    "recheck start",
   ],
   weekly: ["goals", "model watch"],
   "five-minute": ["grader", "newsletter"],
@@ -60,6 +61,7 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
  *  - removal alerts: database, and its alert emails reach STAGING_EMAIL_TO only.
  *  - edge purge: database and the edge cache only.
  *  - tiers: database and the edge cache only, no AI request.
+ *  - recheck start (not here): dispatches a GitHub workflow, so production only.
  *  - review auto-apply: database and the edge cache only, plain code.
  *  - people queue: does nothing unless a grade a person asked for on staging
  *    is queued; then it calls Gemini, and only with a staging key of its own.

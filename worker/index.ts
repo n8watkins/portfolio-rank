@@ -38,6 +38,7 @@ import { purgeGoneProfiles } from "../pipeline/not-working.mjs";
 import { INTERNAL_TOKEN_HEADER, REVALIDATE_PROFILES, internalToken } from "../lib/internal-token.mjs";
 import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
+import { recheckStartTick } from "./recheck-start";
 import { runEach } from "../pipeline/hourly.mjs";
 import { jobCron, taskRuns } from "./crons";
 import { freshnessEnabled, freshnessTick } from "./freshness";
@@ -235,6 +236,8 @@ const worker = {
           // The owner's rule for the review queue: passes are applied without waiting (./review.ts); only with REVIEW_AUTO_APPLY.
           ["review auto-apply", () => (reviewAutoApplyEnabled(env) ? reviewAutoApplyTick(at, { purgeTags: purgeTagsOf(ctx) }) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
+          // Starts the not-working pool's hourly re-check on GitHub Actions when a site is due (./recheck-start.ts).
+          ["recheck start", () => recheckStartTick(env as NightEnv, at, { db: database() })],
         ]),
         {
           report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),
