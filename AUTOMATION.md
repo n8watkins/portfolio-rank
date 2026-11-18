@@ -88,9 +88,12 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   The re-check's own guard is 5 sites that were live at their last check, loaded beside the due ones: when fewer than 3 of them load, or its browser never starts, it records nothing and fails.
   The nightly run's share guards (30% failing, 15% unknown) do not apply to it: its sites are expected to fail.
   An hour with nothing due costs one database query: the workflow counts the due sites with plain `fetch` before any `npm ci` or browser install.
-  The Worker's hourly Cron Trigger starts it ([worker/recheck-start.ts](worker/recheck-start.ts), production only): it counts the due sites with the same query and dispatches `recheck.yml` only when at least one is due, so an empty hour costs one query and no GitHub run.
+  The Worker's hourly Cron Trigger starts it ([worker/recheck-start.ts](worker/recheck-start.ts), production only): it counts the due sites with the same query and dispatches `recheck.yml` only when at least one is due, so on an empty hour the Worker spends one query and starts nothing (GitHub's fallback schedule, when it fires, then runs its own cheap count: no install, no browser).
+  It is the first task of the hour, so a slow task cannot delay it.
   GitHub's own schedule (`:40`) is the fallback, because it is best-effort (it ran 3 times in its first 27 hours instead of 27): a scheduled run skips when a Cloudflare-started run succeeded or is still going in the last hour, and runs when there is none (no `GITHUB_DISPATCH_TOKEN`, or the Worker is down).
-  A refused dispatch goes to Sentry and the next hour tries again; a missing or expiring token raises the same owner alert as the night's (`dispatch-token:missing`, `dispatch-token:expiring`).
+  A refused dispatch is tried once more, then goes to Sentry, and the next hour tries again.
+  A count that cannot be read starts the workflow anyway (it counts again) and is reported.
+  Without the token nothing starts and the fallback does the work; the night raises the owner's alert about the token.
   A run takes at most 120 due sites, oldest due first, 8 at a time, writes each batch as soon as its checks are done, and starts no batch after 20 minutes; the rest stay due for the next hour.
   Each site is stamped with the real time its own check finished.
   Bot-walled sites and checks that could not tell never enter the ladder.

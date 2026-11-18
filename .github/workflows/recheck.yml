@@ -63,13 +63,16 @@ jobs:
           since=$(date -u -d "$WINDOW hours ago" +%Y-%m-%dT%H:%M:%SZ)
           # Only a run that succeeded or is still going counts: a run that
           # failed, was cancelled or timed out did not do the hour's work.
+          # A list GitHub will not give counts as none: the fallback then runs
+          # its cheap count, which is the safe side when Cloudflare may be down.
           n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since&per_page=100" \
-            --jq '[.workflow_runs[] | select(.status != "completed" or .conclusion == "success")] | length')
+            --jq '[.workflow_runs[] | select(.status != "completed" or .conclusion == "success")] | length') || n=0
           if [ "${n:-0}" -gt 0 ]; then
             echo "::notice::Cloudflare's hourly run already started $WORKFLOW in the last $WINDOW hours; the GitHub schedule (fallback) skips."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No run started by Cloudflare in the last $WINDOW hours; the GitHub schedule runs as the fallback."
+            # The usual case is an hour with nothing due, when Cloudflare starts no run: not a warning.
+            echo "::notice::No run started by Cloudflare in the last $WINDOW hours (nothing was due, or it could not start one); the GitHub schedule counts the due sites itself."
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 

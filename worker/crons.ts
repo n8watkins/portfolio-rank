@@ -39,6 +39,7 @@ export const CRON_GROUPS: Readonly<Record<string, string>> = {
 export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
   nightly: ["night start"],
   hourly: [
+    "recheck start",
     "owner removals",
     "removal alerts",
     "edge purge",
@@ -49,7 +50,6 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
     "freshness",
     "review auto-apply",
     "image library",
-    "recheck start",
   ],
   weekly: ["goals", "model watch"],
   "five-minute": ["grader", "newsletter"],

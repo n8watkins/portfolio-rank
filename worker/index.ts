@@ -196,6 +196,7 @@ const worker = {
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
+  // starts the re-check of sites that stopped working when one is due (./recheck-start.ts),
   // applies owners' held removals (./owner-removals.ts), checks that last
   // night's run started and finished (./night-watch.ts),
   // finishes people's grade requests that waited for Gemini 3.5 and makes the
@@ -214,6 +215,9 @@ const worker = {
       const at = controller.scheduledTime;
       await runEach(
         only([
+          // Starts the not-working pool's hourly re-check on GitHub Actions when a site is due (./recheck-start.ts).
+          // First, because it is the task with a time to keep: a slow task ahead of it must not delay it.
+          ["recheck start", () => recheckStartTick(env as NightEnv, at, { db: database() })],
           // Owners' removals held a day take effect (./owner-removals.ts).
           ["owner removals", () => applyRemovalsTick(at)],
           // Every removal still held alerts the owner, as a task of its own so a failure is reported (./owner-removals.ts).
@@ -236,8 +240,6 @@ const worker = {
           // The owner's rule for the review queue: passes are applied without waiting (./review.ts); only with REVIEW_AUTO_APPLY.
           ["review auto-apply", () => (reviewAutoApplyEnabled(env) ? reviewAutoApplyTick(at, { purgeTags: purgeTagsOf(ctx) }) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
-          // Starts the not-working pool's hourly re-check on GitHub Actions when a site is due (./recheck-start.ts).
-          ["recheck start", () => recheckStartTick(env as NightEnv, at, { db: database() })],
         ]),
         {
           report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),

@@ -40,7 +40,18 @@ test("does not dispatch when nothing is due", async () => {
   assert.equal(dispatched, 0);
 });
 
-test("a refused dispatch reaches the hourly report callback, and is not retried", async () => {
+test("a dispatch refused once is tried once more and starts", async () => {
+  let attempts = 0;
+  const flaky = async () => {
+    if (++attempts === 1) throw new Error("starting recheck.yml on GitHub failed: HTTP 502 ");
+    return { runId: 9, url: "u", tokenExpires: null };
+  };
+  const out = await recheckStartTick({ GITHUB_DISPATCH_TOKEN: "t" }, AT, { db: dbWith(1), dispatch: flaky });
+  assert.deepEqual(out, { due: 1, started: true, runId: 9 });
+  assert.equal(attempts, 2);
+});
+
+test("a dispatch refused twice reaches the hourly report callback", async () => {
   let attempts = 0;
   const reported = [];
   const refuse = async () => {
@@ -51,24 +62,29 @@ test("a refused dispatch reaches the hourly report callback, and is not retried"
     report: (e, task) => reported.push([task, e.message]),
     log: () => {},
   });
-  assert.equal(attempts, 1);
+  assert.equal(attempts, 2);
   assert.deepEqual(reported, [["recheck start", "starting recheck.yml on GitHub failed: HTTP 403 "]]);
 });
 
-test("a missing token raises the dispatch-token alert and starts nothing; an expiring one too", async () => {
-  const alerts = [];
-  const alert = async (conditions) => alerts.push(conditions.map((c) => c.key));
-  const missing = await recheckStartTick({}, AT, { db: dbWith(2), alert, dispatch: async () => ({ skipped: "GITHUB_DISPATCH_TOKEN is not set: skipped" }) });
-  assert.equal(missing.started, false);
-  assert.deepEqual(alerts, [["dispatch-token:missing"]]);
-  const soon = new Date(AT + 3 * 86400000).toISOString();
-  const expiring = await recheckStartTick({ GITHUB_DISPATCH_TOKEN: "t" }, AT, { db: dbWith(2), alert, dispatch: async () => ({ runId: 1, url: null, tokenExpires: soon }) });
-  assert.equal(expiring.started, true);
-  assert.deepEqual(alerts[1], ["dispatch-token:expiring"]);
+test("a missing token starts nothing and does not throw (the GitHub schedule is the fallback)", async () => {
+  const missing = await recheckStartTick({}, AT, { db: dbWith(2), dispatch: async () => ({ skipped: "GITHUB_DISPATCH_TOKEN is not set: skipped" }) });
+  assert.deepEqual(missing, { due: 2, started: false, skipped: "GITHUB_DISPATCH_TOKEN is not set: skipped" });
 });
 
-test("a count that cannot be read throws, so it is reported and tried again next hour", async () => {
-  await assert.rejects(recheckStartTick({}, AT, { db: { execute: async () => { throw new Error("no such column"); } } }), /no such column/);
+test("a count that cannot be read still starts the workflow, then throws so it is reported", async () => {
+  let dispatched = 0;
+  const db = { execute: async () => { throw new Error("no such column"); } };
+  await assert.rejects(recheckStartTick({ GITHUB_DISPATCH_TOKEN: "t" }, AT, { db, dispatch: async () => (dispatched++, { runId: 1, url: null, tokenExpires: null }) }), /no such column/);
+  assert.equal(dispatched, 1);
+});
+
+test("the first hourly task, so a slow task cannot delay it", () => {
+  assert.equal(SCHEDULED_TASKS.hourly[0], "recheck start");
+  assert.match(readFileSync("worker/index.ts", "utf8"), /only\(\[\n(\s*\/\/.*\n)*\s*\["recheck start"/);
+});
+
+test("the fallback guard runs the count when GitHub will not list the runs", () => {
+  assert.match(readFileSync(".github/workflows/recheck.yml", "utf8"), /\| length'\) \|\| n=0/);
 });
 
 test("production-only: in the hourly group, never in the staging allowlist", () => {
