@@ -325,8 +325,8 @@
       // it needs: the allowlist STAGING_TASKS in worker/crons.ts (owner
       // removals, edge purge, tiers, review auto-apply, the people queue and
       // the grader's tick). The end-of-day run, the weekly model watch and
-      // goals, freshness, the image library, night watch, email caps and the
-      // newsletter are off here. So only two triggers remain: the hourly group
+      // goals, freshness, the image library, night watch, email caps, the start
+      // of the hourly re-check and the newsletter are off here. So only two triggers remain: the hourly group
       // every six hours and the grader's tick every 30 minutes (worker/crons.ts
       // maps them to production's crons to keep its CPU time low).
       "triggers": { "crons": ["15 */6 * * *", "*/30 * * * *"] },

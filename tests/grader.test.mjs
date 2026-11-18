@@ -416,7 +416,7 @@ test("report emails: sent once the report is ready, through the gate, with a one
   assert.match(box.sent[0].text, /tier A/);
   const link = box.sent[0].text.match(/https:\/\/pr\.test\/api\/grade\/link\?t=(\S+)/);
   assert.ok(link, box.sent[0].text);
-  assert.deepEqual(await openLinkToken(db, decodeURIComponent(link[1]), { secret: SECRET }), { ok: true, jobId: id });
+  assert.deepEqual(await openLinkToken(db, decodeURIComponent(link[1]), { secret: SECRET, now: T0 }), { ok: true, jobId: id });
   assert.ok(box.sent[0].html.includes("Open my report"));
   const rows = (await db.execute("SELECT email, status FROM grade_emails")).rows;
   assert.deepEqual(rows.map((r) => [r.email, r.status]), [[null, "sent"], [null, "sent"]], "addresses are erased once sent");

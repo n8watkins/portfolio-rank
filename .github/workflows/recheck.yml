@@ -11,6 +11,12 @@ name: Hourly re-check of sites that stopped working
 # An hour with nothing due costs one database query: the first job counts the
 # due sites with plain fetch, before any `npm ci` or browser install, and the
 # re-check job runs only when at least one is due.
+#
+# Who starts it: the Worker's hourly Cron Trigger at :15 (worker/recheck-start.ts)
+# counts the due sites itself and dispatches this workflow only when one is
+# due, because GitHub's own schedule is best-effort (it ran 3 times in its
+# first 27 hours instead of 27). The schedule below stays as the fallback,
+# guarded the way health.yml's is.
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +36,49 @@ permissions:
   contents: read
 
 jobs:
+  # The GitHub schedule is only the fallback: the Worker's hourly cron starts
+  # this workflow with a workflow_dispatch whenever a site is due. A scheduled
+  # run skips when a dispatched run started in the last WINDOW hours, so it
+  # only does the work when Cloudflare could not (no GITHUB_DISPATCH_TOKEN, or
+  # the Worker is down). Two runs never overlap (the concurrency group above).
+  fallback-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.guard.outputs.run }}
+    steps:
+      - id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WORKFLOW: recheck.yml
+          WINDOW: "1"
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          since=$(date -u -d "$WINDOW hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          # Only a run that succeeded or is still going counts: a run that
+          # failed, was cancelled or timed out did not do the hour's work.
+          # A list GitHub will not give counts as none: the fallback then runs
+          # its cheap count, which is the safe side when Cloudflare may be down.
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?event=workflow_dispatch&created=%3E%3D$since&per_page=100" \
+            --jq '[.workflow_runs[] | select(.status != "completed" or .conclusion == "success")] | length') || n=0
+          if [ "${n:-0}" -gt 0 ]; then
+            echo "::notice::Cloudflare's hourly run already started $WORKFLOW in the last $WINDOW hours; the GitHub schedule (fallback) skips."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            # The usual case is an hour with nothing due, when Cloudflare starts no run: not a warning.
+            echo "::notice::No run started by Cloudflare in the last $WINDOW hours (nothing was due, or it could not start one); the GitHub schedule counts the due sites itself."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   due:
+    needs: fallback-guard
+    if: needs.fallback-guard.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -92,8 +140,8 @@ jobs:
   # a job of its own: always() runs it whatever happened to the jobs it needs,
   # and it reads their results (the same notice as the other scheduled jobs).
   notify-failure:
-    needs: [due, recheck]
-    if: ${{ always() && (needs.due.result == 'failure' || needs.due.result == 'cancelled' || needs.recheck.result == 'failure' || needs.recheck.result == 'cancelled') }}
+    needs: [fallback-guard, due, recheck]
+    if: ${{ always() && (needs.fallback-guard.result == 'failure' || needs.fallback-guard.result == 'cancelled' || needs.due.result == 'failure' || needs.due.result == 'cancelled' || needs.recheck.result == 'failure' || needs.recheck.result == 'cancelled') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -101,7 +149,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      RESULTS: 'due: ${{ needs.due.result }}, recheck: ${{ needs.recheck.result }}'
+      RESULTS: 'fallback-guard: ${{ needs.fallback-guard.result }}, due: ${{ needs.due.result }}, recheck: ${{ needs.recheck.result }}'
     steps:
       - name: File or update the failure issue
         run: |
