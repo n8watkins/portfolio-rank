@@ -58,7 +58,9 @@ function Featured({ post }: { post: BlogListItem }) {
   );
 }
 
-function Card({ post }: { post: BlogListItem }) {
+/** One post as a card: the grid on /blog, and "More articles" under a post (h3 there). */
+export function Card({ post, level = 2 }: { post: BlogListItem; level?: 2 | 3 }) {
+  const H = level === 3 ? "h3" : "h2";
   return (
     <a href={`/blog/${post.slug}`} className="card card-hover group flex h-full flex-col overflow-hidden">
       <div className="overflow-hidden border-b border-edge">
@@ -66,7 +68,7 @@ function Card({ post }: { post: BlogListItem }) {
       </div>
       <div className="flex flex-1 flex-col p-5">
         {post.tags[0] && <span className={`${tagClass} self-start`}>{post.tags[0]}</span>}
-        <h2 className="mt-3 text-lg font-bold leading-snug tracking-tight text-balance">{post.title}</h2>
+        <H className="mt-3 text-lg font-bold leading-snug tracking-tight text-balance">{post.title}</H>
         {post.subtitle && <p className="mt-2 line-clamp-3 text-[15px] leading-relaxed text-mute">{post.subtitle}</p>}
         <div className="mt-auto pt-4">
           <Meta post={post} />
@@ -104,7 +106,7 @@ export function BlogIndex({ posts, tags, current }: { posts: BlogListItem[]; tag
           <nav aria-label="Tags" className="-mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <ul className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
               <li>
-                <Link href="/blog" aria-current={current ? undefined : "true"} className={chip}>
+                <Link href="/blog" prefetch={false} aria-current={current ? undefined : "true"} className={chip}>
                   All posts
                 </Link>
               </li>
@@ -126,7 +128,7 @@ export function BlogIndex({ posts, tags, current }: { posts: BlogListItem[]; tag
             title="No posts yet"
             className="mx-auto mt-10 max-w-xl"
             action={
-              <Link href="/top" className={btnSecondary}>
+              <Link href="/top" prefetch={false} className={btnSecondary}>
                 See the leaderboard
               </Link>
             }

@@ -1,13 +1,16 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BarChart3, Bot, ExternalLink, Trophy } from "lucide-react";
-import { Markdown } from "@/components/blog/Markdown";
+import { ArrowLeft, ArrowRight, BarChart3, ExternalLink, Trophy } from "lucide-react";
+import { Markdown, headingsOf } from "@/components/blog/Markdown";
+import { type TocItem, TocRail, TocToggle } from "@/components/blog/Toc";
 import { ShareLinks } from "@/components/blog/ShareLinks";
 import { tag as tagClass } from "@/components/ui/Chip";
 import { btnSecondary, eyebrow } from "@/components/ui/styles";
 import { tagSlug } from "@/lib/content/blog.mjs";
-import { type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
+import { Card } from "@/components/blog/BlogIndex";
+import { type BlogListItem, type BlogPost, type PostImage, coverOf, creditOf, imageSrc, postDate, postUrl } from "@/lib/blog";
 import { ROUTES } from "@/lib/nav";
-import { sitePath } from "@/lib/site";
+import { postLinkFor } from "@/lib/portfolio-links";
+import { SITE, sitePath } from "@/lib/site";
 import { NewsletterSignup } from "@/components/newsletter/NewsletterSignup";
 
 // One post, as readers see it on /blog/[slug] and as the owner previews a
@@ -20,10 +23,11 @@ export type Related = { name: string; url: string; domain: string; reason?: stri
 function Figure({ postId, image, cover = false }: { postId: string; image: PostImage; cover?: boolean }) {
   const credit = creditOf(image);
   const chart = image.kind === "chart";
-  const href = image.kind === "screenshot" && credit.href ? `/p/${encodeURIComponent(credit.href)}` : credit.href;
+  const href = image.kind === "screenshot" && credit.href ? postLinkFor(credit.href) : credit.href;
   return (
-    <figure className={cover ? "" : "my-9"}>
-      <div className={`overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
+    <figure className={`post-figure ${cover ? "" : "my-9"}`}>
+      {/* .post-frame lifts and its image zooms a touch on hover (globals.css, never with reduced motion). */}
+      <div className={`post-frame overflow-hidden rounded-xl border border-edge ${chart ? "bg-[#0a0a0b]" : "bg-raised"} shadow-[var(--card-hi),var(--card-drop)]`}>
         {/* eslint-disable-next-line @next/next/no-img-element -- our own media route and Pexels hotlinks, sized by CSS */}
         <img
           src={imageSrc(postId, image)}
@@ -71,11 +75,13 @@ export function Article({
   post,
   related,
   banner,
+  more = [],
   signup = false,
 }: {
   post: BlogPost;
   related: Related[];
   banner?: ReactNode;
+  more?: BlogListItem[];
   /** Show the newsletter sign-up (the public post; not the owner's draft preview). */
   signup?: boolean;
 }) {
@@ -85,6 +91,8 @@ export function Article({
   const dataLink = post.facts?.dataLink ?? "/top";
   const date = post.publishAt ?? post.createdAt;
   const blog = ROUTES.blog ?? "/blog";
+  // The contents: the body's subheads, then the post's own Sources section.
+  const toc: TocItem[] = [...headingsOf(post.body), { id: "sources", text: "Sources" }];
   return (
     <article className="pb-20">
       {banner}
@@ -104,8 +112,13 @@ export function Article({
         <h1 className="mt-3 text-[2rem] font-bold leading-[1.12] tracking-tight text-balance sm:text-5xl">{post.title}</h1>
         {post.subtitle && <p className="mt-4 text-lg leading-relaxed text-mute text-pretty sm:text-xl">{post.subtitle}</p>}
         <p className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-mute">
-          <span className="inline-flex items-center gap-1.5">
-            <Bot className="h-4 w-4" aria-hidden /> {post.aiLine}
+          {/* The byline (owner, 2026-11-13): the person who publishes the post, with the AI help said plainly. */}
+          <span>
+            By{" "}
+            <a href={SITE.n8builds} className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
+              Nathan Watkins
+            </a>
+            , with AI assistance
           </span>
           <a href="/about-posts" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
             How posts are made
@@ -122,10 +135,27 @@ export function Article({
         </div>
       )}
 
-      <div className="mx-auto max-w-[42rem] px-4 pt-8 text-[17px] leading-[1.75] sm:px-6 sm:text-lg sm:leading-[1.75]">
+      {/* The reading column stays centred under the header; on wide screens the
+          contents rail sits in the left gutter and the newsletter sign-up in the
+          right one (only while the newsletter is live). */}
+      <div className="mx-auto max-w-[78rem] px-4 sm:px-6 xl:grid xl:grid-cols-[minmax(0,1fr)_39rem_minmax(0,1fr)] xl:gap-12">
+        {toc.length > 1 && (
+          <aside className="hidden pt-8 xl:block xl:justify-self-end">
+            <div className="h-full w-56">
+              <TocRail items={toc} />
+            </div>
+          </aside>
+        )}
+      <div className="mx-auto w-full max-w-[39rem] pt-8 text-[17px] leading-[1.75] sm:text-lg sm:leading-[1.75] xl:col-start-2 xl:mx-0">
+        {toc.length > 1 && (
+          <div className="sticky top-[4.5rem] z-10 mb-6 xl:hidden">
+            <TocToggle items={toc} />
+          </div>
+        )}
         <Markdown
           body={post.body}
           sources={sources}
+          linkFor={postLinkFor}
           figure={(slot) => {
             const im = bySlot.get(slot);
             return im && im !== cover ? <Figure postId={post.id} image={im} /> : null;
@@ -137,11 +167,11 @@ export function Article({
             <ul className="mt-4 grid gap-3 sm:grid-cols-2">
               {related.map((r) => (
                 <li key={r.url}>
-                  <a href={`/p/${encodeURIComponent(r.url)}`} className="card card-hover flex items-center gap-3 p-3">
+                  <a href={postLinkFor(r.url)} className="post-related card card-hover flex items-center gap-3 p-3">
                     <span className="h-12 w-20 shrink-0 overflow-hidden rounded-md border border-edge bg-raised">
                       {r.shot && (
                         // eslint-disable-next-line @next/next/no-img-element -- a small screenshot thumbnail
-                        <img src={r.shot} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
+                        <img src={r.shot} alt="" loading="lazy" className="post-thumb h-full w-full object-cover object-top" />
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -190,18 +220,13 @@ export function Article({
           </ol>
         </Section>
 
-        <aside aria-label="How this post was made" className="card mt-10 p-5 text-sm leading-relaxed text-mute">
-          <p className="flex items-center gap-2 font-semibold text-ink">
-            <Bot className="h-4 w-4" aria-hidden /> How this post was made
-          </p>
-          <p className="mt-2">
-            Written with AI from PortfolioRank data, data as of {postDate(post.dataAsOf)}. Code computed every number and drew every chart; Gemini wrote the words around them,
-            code and a second Gemini pass checked them, and a person read it before it went out.{" "}
-            <a href="/about-posts" className="font-medium text-ink underline decoration-edge-strong underline-offset-2 hover:decoration-accent">
-              How posts are made
-            </a>
-          </p>
-        </aside>
+        {/* How the post was made, as one quiet line (owner, 2026-11-13: no big AI section). */}
+        <p className="mt-8 text-xs leading-relaxed text-mute">
+          Numbers from PortfolioRank data as of {postDate(post.dataAsOf)}. Drafted with AI, checked and published by Nathan.{" "}
+          <a href="/about-posts" className="underline decoration-edge-strong underline-offset-2 hover:text-ink hover:decoration-accent">
+            How posts are made
+          </a>
+        </p>
 
         {post.tags.length > 0 && (
           <ul className="mt-8 flex flex-wrap gap-2" aria-label="Tags">
@@ -221,8 +246,40 @@ export function Article({
         </div>
 
         {/* The newsletter sign-up for readers (not the owner's draft preview); it shows only while the newsletter is live. */}
-        {signup && <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal" />}
+        {signup && (
+          <div className="xl:hidden">
+            <NewsletterSignup form="after-post" className="mt-10 text-base leading-normal" />
+          </div>
+        )}
       </div>
+        {signup && (
+          <aside aria-label="Newsletter" className="hidden pt-8 xl:col-start-3 xl:row-start-1 xl:block">
+            <div className="sticky top-24 w-72">
+              <NewsletterSignup form="sidebar" />
+            </div>
+          </aside>
+        )}
+      </div>
+
+      {more.length > 0 && (
+        <section aria-labelledby="more-articles" className="mx-auto mt-16 max-w-6xl border-t border-edge px-4 pt-10 sm:px-6">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="more-articles" className="text-2xl font-bold tracking-tight">
+              More articles
+            </h2>
+            <a href={blog} className="group inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-mute transition hover:text-ink">
+              All posts <ArrowRight className="nudge h-4 w-4" aria-hidden />
+            </a>
+          </div>
+          <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {more.map((p) => (
+              <li key={p.id}>
+                <Card post={p} level={3} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </article>
   );
 }

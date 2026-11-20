@@ -10,6 +10,7 @@ export function CopyButton({
   className = "",
   buttonClass,
   icon: Icon = Copy,
+  ariaLabel,
   onCopied,
 }: {
   text: string;
@@ -18,6 +19,8 @@ export function CopyButton({
   /** Replaces the default look (btnPrimary, say). */
   buttonClass?: string;
   icon?: LucideIcon;
+  /** The button's accessible name when the visible label is too short to say what it copies. */
+  ariaLabel?: string;
   onCopied?: () => void;
 }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
@@ -38,6 +41,7 @@ export function CopyButton({
     <button
       type="button"
       onClick={copy}
+      aria-label={ariaLabel}
       className={`${buttonClass ?? "inline-flex h-11 items-center gap-1.5 rounded-lg border border-edge bg-card px-3 text-sm font-semibold shadow-[var(--card-hi)] transition hover:border-edge-strong sm:h-9"} ${className}`}
     >
       {state === "done" ? <Check className={`h-4 w-4 ${buttonClass ? "" : "text-up"}`} aria-hidden /> : <Icon className="h-4 w-4" aria-hidden />}
