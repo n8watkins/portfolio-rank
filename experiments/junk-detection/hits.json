@@ -1,0 +1,362 @@
+[
+ {
+  "hid": 1,
+  "url": "https://aaabadcode.com",
+  "shot_key": "ff65621f04a62951",
+  "rules": "ac",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 2,
+  "url": "https://www.abhisheksah.dev",
+  "shot_key": "d825b41b4c380aaa",
+  "rules": "a",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 3,
+  "url": "https://adittya.site",
+  "shot_key": "1752993147c81a1a",
+  "rules": "d",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 4,
+  "url": "https://ross.aleksei.digital/98?ref=emmabostian",
+  "shot_key": "bd140a8b3403abd4",
+  "rules": "e",
+  "strong": true,
+  "junk": false
+ },
+ {
+  "hid": 5,
+  "url": "https://alisaleem252.com",
+  "shot_key": "d822b8dc8d42e162",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 6,
+  "url": "https://amit-sah.com.np",
+  "shot_key": "1509b5e705bc3cfe",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 7,
+  "url": "https://thecodehead.com",
+  "shot_key": "bdc911184950d790",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 8,
+  "url": "https://www.bobmatyas.com",
+  "shot_key": "b224d173a302e31a",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 9,
+  "url": "https://chaitanya-sai-meka.vercel.app",
+  "shot_key": "07f1601fcecc3e1e",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 10,
+  "url": "https://www.chrisryczke.com",
+  "shot_key": "4cd45ec9c467ee19",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 11,
+  "url": "https://www.dilipmaurya.in",
+  "shot_key": "1603e095835827f3",
+  "rules": "de",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 12,
+  "url": "https://www.jeremyerikleong.com",
+  "shot_key": "f57cead9288877f9",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 13,
+  "url": "https://portfolio-john2.netlify.app",
+  "shot_key": "0027fff8ed44462a",
+  "rules": "c",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 14,
+  "url": "https://ychof.com",
+  "shot_key": "682766c7b6f1d014",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 15,
+  "url": "https://www.michaellalavedra.com",
+  "shot_key": "c03a0b22b92aa1b0",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 16,
+  "url": "https://williamson922.github.io",
+  "shot_key": "69c063727b2b7982",
+  "rules": "c",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 17,
+  "url": "https://toukoum.fr",
+  "shot_key": "22c0affff42c423b",
+  "rules": "ac",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 18,
+  "url": "https://www.redoyanulhaque.me",
+  "shot_key": "ed4c068b2f69cde3",
+  "rules": "b",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 19,
+  "url": "https://sayantan-basu.vercel.app",
+  "shot_key": "88d7b68843e74775",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 20,
+  "url": "https://sayyedrabeeh.github.io/portfoliyo/",
+  "shot_key": "7989f88e9b104a61",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 21,
+  "url": "https://thesoham2203.vercel.app",
+  "shot_key": "f0d677517707354b",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 22,
+  "url": "https://ssoad.github.io",
+  "shot_key": "ebab4e116e3bb2dd",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 23,
+  "url": "https://thomas-david-portfolio.netlify.app",
+  "shot_key": "1f981262ead45ce5",
+  "rules": "c",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 24,
+  "url": "https://ujjwalsoni-portfolio.vercel.app",
+  "shot_key": "034a4fe1fad25053",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 25,
+  "url": "https://vaibhav5860.vercel.app",
+  "shot_key": "6f12d427e51ea68a",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 26,
+  "url": "https://portfolio-2-0-murex-three.vercel.app",
+  "shot_key": "9469f4843de28329",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 27,
+  "url": "https://vauth.github.io/hueco",
+  "shot_key": "0b015d9fc7cdf709",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 28,
+  "url": "http://vedant-athavale.byethost31.com/portfolio.html?i=1",
+  "shot_key": "f0ca74e69a90983d",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 29,
+  "url": "https://yeshwanth-kr.github.io",
+  "shot_key": "4a84ac1bc5a3a6d7",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 30,
+  "url": "http://valentinpotie.github.io/portfolio",
+  "shot_key": "3ac8bdc4ae97074d",
+  "rules": "a",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 31,
+  "url": "https://liukonen.dev",
+  "shot_key": "1efade0d4ec0cb83",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 32,
+  "url": "https://hangga.web.id",
+  "shot_key": "58d4c77449fe7ff8",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 33,
+  "url": "https://prs2rnn.github.io",
+  "shot_key": "68f25aa1b97f176f",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 34,
+  "url": "https://g-dea.com",
+  "shot_key": "250f97fe3b154dfe",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 35,
+  "url": "https://yashwanth-patam-portfolio.vercel.app",
+  "shot_key": "8359be6d7b623227",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 36,
+  "url": "https://web.stimmie.dev",
+  "shot_key": "a999ed1acd253fe1",
+  "rules": "c",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 37,
+  "url": "https://yourtarikur.vercel.app",
+  "shot_key": "7fb9fe5d766c4da2",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 38,
+  "url": "https://www.pradipchaudhary.com.np",
+  "shot_key": "834eb244445d7040",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 39,
+  "url": "https://www.donnaszeto.com",
+  "shot_key": "7b1d6c62b4d07de1",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 40,
+  "url": "https://www.abhisheksharma.codes",
+  "shot_key": "e01a3ead4a735335",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 41,
+  "url": "https://ganesh-vscode.netlify.app",
+  "shot_key": "20c3ce8cc0768c71",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ },
+ {
+  "hid": 42,
+  "url": "https://red1-for-hek-demo.vercel.app",
+  "shot_key": "e0c543a8efe5a59f",
+  "rules": "b",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 43,
+  "url": "https://ali-wordpress-developer.com",
+  "shot_key": "3aee3f098b3cd5c4",
+  "rules": "a",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 44,
+  "url": "https://www.ayushdoesdev.in",
+  "shot_key": "a768de094ee3fc44",
+  "rules": "d",
+  "strong": true,
+  "junk": true
+ },
+ {
+  "hid": 45,
+  "url": "https://sarfarosh.vercel.app",
+  "shot_key": "df8f09095ac13cd0",
+  "rules": "e",
+  "strong": false,
+  "junk": true
+ }
+]
