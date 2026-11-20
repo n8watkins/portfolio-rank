@@ -87,7 +87,7 @@ test("a public job gets its letters by ELO, marked, and nothing else changes", a
   assert.equal(job.report.tier, "S");
 });
 
-test("the report email names the tier by ELO with RANKING_V2, Gemini's letter without", async () => {
+test("the report email names the tier by rank with RANKING_V2, Gemini's letter without", async () => {
   // Gemini's plain letters read as before.
   assert.match(reportEmail({ url: url(1), link: "https://x/l", status: "done", tier: "A" }).text, /tier A\b/);
   assert.match(reportEmail({ url: url(1), link: "https://x/l", status: "done", tier: "A-" }).text, /tier A−/);
@@ -100,7 +100,8 @@ test("the report email names the tier by ELO with RANKING_V2, Gemini's letter wi
     const gate = { send: async (m) => (sent.push(m), { sent: true }) };
     await sendDueEmails(db, { gate, secret: "s", base: "https://pr.test", now: Date.parse("2026-11-13T00:01:00Z"), eloTiers });
     assert.equal(sent.length, 1);
-    const want = eloTiers ? standingOf(await readSiteRow(db, url(10)), await readTierMeta(db)).tier.replace(/-$/, "−") : "S";
-    assert.ok(sent[0].text.includes(`tier ${want}`), `${eloTiers}: ${sent[0].text.split("\n")[0]}`);
+    // With RANKING_V2 the tier by rank the report carries is named, never Gemini's letter: this report has no rank.
+    if (eloTiers) assert.ok(!/\btier [SABCD]/.test(sent[0].text), `${eloTiers}: ${sent[0].text.split("\n")[0]}`);
+    else assert.ok(sent[0].text.includes("tier S"), `${eloTiers}: ${sent[0].text.split("\n")[0]}`);
   }
 });

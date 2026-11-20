@@ -31,6 +31,9 @@ export const rubric = (tier, score, over = {}) => ({
   ...over,
 });
 
+// The tier by rank each fixture grade carries (lib/tiers.mjs; refreshTiers writes it as grade.rank): Gemini's S sites hold the top tier.
+const RANKED = { S: "SSS", A: "A", B: "B", C: "C", D: "D" };
+
 export async function fixture({ motion = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "content-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
@@ -42,7 +45,7 @@ export async function fixture({ motion = null } = {}) {
   const add = async ({ url, name, tier, score, meta = {}, delisted = null, over = {} }) =>
     db.execute({
       sql: "INSERT INTO portfolios (url, name, status, shot_key, ai_rubric, meta, delisted_at) VALUES (?, ?, 'live', ?, ?, ?, ?)",
-      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, over)), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
+      args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, { rank: { tier: RANKED[tier] }, ...over })), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
     });
   for (let i = 1; i <= 30; i++) await add({ url: `https://top-${i}.dev`, name: `Top Person ${i}`, tier: i <= 8 ? "S" : "A", score: i <= 8 ? 5 : 4, over: motion ? { motion: { score: motion[0], note: "n" } } : {} });
   for (let i = 1; i <= 30; i++) await add({ url: `https://low-${i}.dev`, name: `Low Person ${i}`, tier: ["B", "C", "D"][i % 3], score: 2, meta: { darkMode: false, overflow390: true, consoleErrors: 3, bytes: 4000000 }, over: motion ? { motion: { score: motion[1], note: "n" } } : {} });

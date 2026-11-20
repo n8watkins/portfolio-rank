@@ -90,6 +90,9 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
   assert.deepEqual([body.aiImages.images, body.aiImages.maxImages, body.aiImages.ceiling, body.aiImages.slice, body.aiImages.free], [0, 40, 2500, 5000, 10000]);
   assert.equal(body.aiImages.problem, null);
   assert.equal(body.library.subjects, 130);
+  // When checks re-run (lib/freshness.mjs): the counts are numbers, even on a database with no checks yet.
+  for (const k of ["unchanged", "changedThisWeek", "unchecked", "checkedToday"]) assert.equal(typeof body.freshness[k], "number", k);
+  assert.equal(typeof body.freshness.remeasuredToday.total, "number");
 });
 
 test("admin quota API: the latest model watch report, recorded even while email is off", async () => {
@@ -132,6 +135,7 @@ test("admin usage page: plain-language meters for the admin, a 404 for everyone 
       await page.getByRole("meter", { name: "AI images today" }).or(page.getByText("No AI images yet.")).first().waitFor();
       await page.getByRole("meter", { name: "Tavily credits" }).waitFor();
       await page.getByRole("heading", { name: "Grades on their way" }).waitFor();
+      await page.getByText(/Site checks: \d[\d,]* unchanged, \d[\d,]* changed this week, \d[\d,]* re-measured today/).waitFor();
       await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Images" }).waitFor();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       assert.equal(overflow, 0, `no sideways scroll at ${width}px`);

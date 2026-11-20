@@ -74,7 +74,7 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "has the AI judge's highest grade" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason.startsWith("has the AI judge's highest grade") && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
   assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);

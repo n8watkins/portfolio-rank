@@ -81,14 +81,18 @@ test("reading the counters scans a few rows, not the vote log", async () => {
   assert.deepEqual(await counters(db), await truth(db));
 });
 
-test("board: shown ranks skip hidden and delisted sites, and a page is one indexed range read", async () => {
+test("board: shown ranks skip hidden, delisted and ungraded sites, and a page is one indexed range read", async () => {
   const db = tempDb();
   await migrate(db);
   await db.execute("ALTER TABLE portfolios ADD COLUMN delisted_at TEXT").catch(() => {});
   await ensureRankingSchema(db);
-  const sites = ["a", "down", "b", "gone", "c", "failed", "d"];
+  const sites = ["a", "down", "b", "gone", "c", "failed", "d", "ungraded", "notone"];
+  const graded = JSON.stringify({ tier: "B", is_portfolio: true });
   await db.batch([
-    ...sites.map((u) => ({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live')", args: [u] })),
+    ...sites.map((u) => ({ sql: "INSERT INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: [u, graded] })),
+    // Only graded portfolios are shown (owner rule): no grade, or "not a portfolio", stays off every board.
+    "UPDATE portfolios SET ai_rubric = NULL WHERE url = 'ungraded'",
+    `UPDATE portfolios SET ai_rubric = '{"tier":"C","is_portfolio":false}' WHERE url = 'notone'`,
     "UPDATE portfolios SET health = 'down' WHERE url = 'down'",
     "UPDATE portfolios SET delisted_at = '2026-11-01' WHERE url = 'gone'",
     "UPDATE portfolios SET status = 'dead' WHERE url = 'failed'",

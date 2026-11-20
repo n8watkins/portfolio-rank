@@ -6,6 +6,7 @@ import { BADGES, checkBadges, listBadges, recordEvent } from "@/lib/games/badges
 import { PRIVATE, currentPlayer, earlyUntil, fail, gamesEnabled, getPool, off, overLimit, rateLimited } from "@/lib/games/server";
 import { readJob } from "@/lib/grader/jobs.mjs";
 import { celebrationLevel } from "@/lib/grader/present.mjs";
+import { isTier } from "@/lib/tiers.mjs";
 import { graderEnabled, ownedJobs } from "@/lib/grader/server";
 
 // Badges (GAMES_V2), for the signed-in account or the guest's cookie (a
@@ -17,7 +18,7 @@ import { graderEnabled, ownedJobs } from "@/lib/grader/server";
 // POST /api/badges { kind: "share" } | { kind: "visit", url } | { kind: "report", id }
 //   records what only a badge needs (a share; a portfolio opened, on the
 //   list; the level a grade report this browser owns reached, for the
-//   Top 25% to S tier badges) -> { recorded, badges: [ids earned now] }
+//   Top 25% to SSS tier badges) -> { recorded, badges: [ids earned now] }
 //   400 bad_request | unknown_portfolio | not_yours, 403 bad_origin,
 //   429 rate_limited
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     if (!graderEnabled() || !(await ownedJobs()).includes(id)) return fail("not_yours", 400);
     const job = await readJob(db(), id);
     if (job?.status !== "done") return fail("not_yours", 400);
-    level = celebrationLevel({ tier: job.result?.tier, percentile: job.report?.percentile });
+    level = celebrationLevel({ tier: isTier(job.report?.rank?.tier) ? job.report?.rank?.tier : null, percentile: job.report?.percentile });
   }
   const player = (await currentPlayer({ create: true }))!;
   const ip = clientIp(req);

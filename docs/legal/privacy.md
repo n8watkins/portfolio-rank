@@ -115,6 +115,40 @@ Any other site waits, privately, to be graded: it's shown on PortfolioRank only 
   Report links in those emails stop working after 7 days.
 - A grade request, its hashes, its report and its screenshots are deleted 180 days after the request.
 
+## If you check a site with the free tools (when the tools launch)
+
+The free tools (speed check, share preview checker, portfolio checklist) work without an account.
+
+- I store the address you check and what the tools measured: Lighthouse scores and timings, the page's title, description and share image address, and the checklist results (resume, GitHub and contact links found, project links that load, own domain, HTTPS, footer year, template).
+  The same results are reused for a day, so checking again costs nothing.
+- Every site the tools can load is added to PortfolioRank.
+  A site that's already listed gets its saved results refreshed on its page.
+  Any other site waits, privately, to be graded; it's shown on PortfolioRank only once it's graded, and never if it turns out not to be a portfolio.
+- To stop abuse, I count checks per browser and per network; network addresses are stored only as a one-way hash, kept for at most 30 days.
+- The tools use Google PageSpeed Insights, which loads the page you checked; nothing about you is sent to Google.
+- To take a site off PortfolioRank: if it's listed, use "Remove my portfolio" (see "Your choices"); if it's still waiting to be graded, email me at nate@n8builds.dev from any address and I'll remove it within 14 days.
+  [owner: confirm this flow, and whether a waiting site gets a self-serve removal too]
+
+## If your site was found on a public list (when discovery launches)
+
+PortfolioRank also looks for portfolios on public pages: GitHub repositories tagged as a portfolio, Hacker News posts where people share their own site, and community lists people add themselves to (personalsit.es, uses.tech).
+
+- I store the site's address and where it was found, then load its home page once (respecting robots.txt) to check it is a live, English, personal portfolio.
+- A site that isn't one keeps only a one-way hash of its address, the reason and the date, so it is never checked again; a site that couldn't load keeps its address until it is checked again, at most three times.
+- A site that passes waits, privately, to be graded; it's shown on PortfolioRank only once it's graded, and never if it turns out not to be a portfolio.
+- To keep your site out, email me at nate@n8builds.dev or use "Remove my portfolio"; it goes on the takedown list and discovery never adds it again.
+  [owner: confirm before discovery is switched on]
+
+## If you subscribe to the newsletter (when it launches)
+
+- Kit (kit.com), the newsletter service, stores your email address, when you signed up and when you confirmed.
+  PortfolioRank itself keeps no copy.
+- You only get emails after you click the confirmation link in Kit's email.
+- Every email has a one-click unsubscribe.
+- After you unsubscribe, Kit keeps the address only as unsubscribed, so it's never emailed again.
+- Kit counts opens and clicks of the newsletter emails.
+- Terms: [newsletter.md](newsletter.md).
+
 ## Google Gemini and the free tier
 
 PortfolioRank only works with portfolios their owners published for the public to see.
@@ -137,6 +171,8 @@ If you grade with your own Gemini key, the request goes to Google under your key
 | GitHub | Sign-in, and the scheduled jobs that update the site |
 | Google | Gemini (grades, writing) and PageSpeed Insights (speed scores) |
 | Sentry | Error reports |
+| Cloudflare Email Service | Sending queued reports and sign-in links |
+| Kit (kit.com) | Keeping the newsletter list and sending the newsletter |
 
 None of them get your data to sell, and neither do I.
 
@@ -155,6 +191,10 @@ None of them get your data to sell, and neither do I.
 | An email address for a report | Until the email is sent, or 30 days if it never is |
 | Gemini request log (which job asked, when, tokens used; no visitor data) | 90 days, then only daily totals |
 | Nightly database backups | 35 days |
+| Free tool results for a site | Until the site is checked again (each check replaces the last) [owner: confirm, or set a limit] |
+| A site waiting to be graded (from the free tools) | Its address until it's graded or turned down; a site turned down for good keeps only a one-way hash, the reason and the date |
+| Newsletter sign-up that's never confirmed | Kept by Kit as unconfirmed; never emailed again |
+| Newsletter address | At Kit, until you unsubscribe; after that, only on Kit's do-not-email list |
 
 The nightly backup is a copy of the database in private storage.
 Anything deleted from the database can stay in a backup until that backup expires, so every deletion on this page is complete within 35 days.

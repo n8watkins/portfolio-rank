@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { runPrewarm, classify } from "../scripts/lib/prewarm.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
+import { ensureFreshnessSchema } from "../lib/freshness.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -64,9 +65,10 @@ test("error classes", () => {
   assert.equal(classify("fetch failed"), "unreachable");
 });
 
-// A tier-C site (prewarmed: Gemini's letter no longer gates Lighthouse),
-// roster sites that must never be prewarmed, and one with an old PSI result.
-const [tierC, fresh, down, old, notPortfolio, failedGrade] = feed.slice(4, 10).map((p) => p.url);
+// Roster sites that must never be prewarmed, one with a PSI result past 90
+// days, one whose page changed after it was measured, one whose PSI run
+// failed two hours ago and one that failed ten minutes ago.
+const [tierC, fresh, down, old, changed, failedLong, failedNow] = feed.slice(4, 11).map((p) => p.url);
 const DAY = 86400000;
 
 async function runScript(handler, { limit = 4 } = {}) {
@@ -80,23 +82,32 @@ async function runScript(handler, { limit = 4 } = {}) {
   const dbFile = join(dir, "db.sqlite");
   const db = createClient({ url: `file:${dbFile}` });
   await ensureRosterSchema(db);
+  await ensureFreshnessSchema(db);
   const add = (url, tier, extra = {}) =>
     db.execute({
       sql: "INSERT INTO portfolios (url, status, ai_rubric, health) VALUES (?, ?, ?, ?)",
-      args: [url, extra.status ?? "live", JSON.stringify(extra.rubric ?? { tier }), extra.health ?? null],
+      args: [url, extra.status ?? "live", JSON.stringify({ tier }), extra.health ?? null],
     });
   for (const [i, u] of urls.entries()) await add(u, ["S", "A", "B", "A"][i]);
   await add(tierC, "C");
   await add(fresh, "A");
   await add(down, "A", { health: "down" });
   await add(old, "S");
-  await add(notPortfolio, "D", { rubric: { tier: "D", is_portfolio: false } });
-  await add(failedGrade, null, { rubric: { error: "no_usable_captures" } });
+  await add(changed, "B");
+  await add(failedLong, "A");
+  await add(failedNow, "A");
   // Gone from the roster (delisted on start), or a variant of a roster URL.
   for (const u of ["https://left-upstream.example", `${urls[0]}/`]) await add(u, "S");
   const now = Date.now();
-  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${fresh}`, now - DAY] });
-  await db.execute({ sql: "INSERT INTO cache VALUES (?, '{}', ?)", args: [`psi:${old}`, now - 40 * DAY] });
+  const store = (kind, url, at, ok = true) => db.execute({ sql: "INSERT INTO cache VALUES (?, ?, ?)", args: [`${kind}:${url}`, JSON.stringify({ ok }), at] });
+  for (const [url, at] of [[fresh, now - DAY], [old, now - 100 * DAY], [changed, now - 10 * DAY], [failedLong, now - 2 * 3600000], [failedNow, now - 600000]]) {
+    await store("psi", url, at, url !== failedLong && url !== failedNow);
+    await store("inspect", url, now - DAY);
+  }
+  // The weekly fingerprint check found the page changed five days ago, after its Lighthouse run.
+  await db.execute({ sql: "INSERT INTO site_freshness (url, hash, checked_at, changed_at) VALUES (?, 'h2', ?, ?)", args: [changed, now - 5 * DAY, now - 5 * DAY] });
+  // Checked yesterday and unchanged: its day-old results stay.
+  await db.execute({ sql: "INSERT INTO site_freshness (url, hash, checked_at) VALUES (?, 'h1', ?)", args: [fresh, now - 3600000] });
   db.close();
   const summaryFile = join(dir, "summary.md");
   const child = spawn(process.execPath, ["scripts/prewarm-metrics.mjs", `--limit=${limit}`], {
@@ -147,14 +158,16 @@ test("the script exits 0 when lookups succeed", async () => {
   assert.match(r.summary, /OK: 8 of 8 lookups succeeded/);
 });
 
-test("the script picks every listed graded portfolio without a fresh PSI result, whatever its letter, never-measured first, then the oldest", async () => {
+test("the script picks listed graded sites of any letter whose results are due: never measured, then changed, then failed or past 90 days", async () => {
   const r = await runScript((req, res) => {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ ok: true }));
   }, { limit: 50 });
   assert.equal(r.code, 0);
-  // Never measured (by URL, tier C included), then the 40-day-old result.
-  // Not: fresh, confirmed down, "not a portfolio", a failed grade, delisted,
-  // or not on the roster.
-  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), old]);
+  // Never measured (by URL), then the changed site, then the oldest due
+  // results (the 100-day-old one, the failure past its hour); tier C too, since
+  // Gemini's letter no longer gates Lighthouse. Not:
+  // fresh and unchanged, a failure still in its hour, confirmed down,
+  // delisted, or not on the roster.
+  assert.deepEqual(r.psi, [...[...urls, tierC].sort(), changed, old, failedLong]);
 });

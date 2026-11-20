@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Heart } from "lucide-react";
 import { useSignIn } from "@/components/SignInModal";
 
-type Variant = "button" | "icon";
+type Variant = "button" | "icon" | "action";
+
+const SAVE_SIGN_IN_PROMPT = {
+  title: "Sign in to save portfolios",
+  body: "Saved portfolios stay on your profile so you can find them later. Saving is separate from your vote.",
+};
 
 const SIGN_IN_PROMPT = {
   title: "Sign in to like portfolios",
@@ -24,6 +30,7 @@ export function LikeButton({
   count,
   showCount = false,
   variant = "button",
+  verb = "Like",
   className = "",
   onChange,
 }: {
@@ -36,6 +43,8 @@ export function LikeButton({
   count?: number;
   showCount?: boolean;
   variant?: Variant;
+  /** The action's word (the games call it Save): Like and Liked, or Save and Saved. */
+  verb?: "Like" | "Save";
   className?: string;
   /** createdAt is the removed like's date on an unlike, for an Undo that restores its place. */
   onChange?: (liked: boolean, info?: { createdAt?: string }) => void;
@@ -92,7 +101,7 @@ export function LikeButton({
         committed = !next;
         setLiked(!next);
         setN((c) => Math.max(0, c + (next ? -1 : 1)));
-        openSignIn(SIGN_IN_PROMPT);
+        openSignIn(verb === "Save" ? SAVE_SIGN_IN_PROMPT : SIGN_IN_PROMPT);
       } else if (res.ok) {
         const data = await res.json();
         if (typeof data.liked === "boolean") {
@@ -117,6 +126,27 @@ export function LikeButton({
 
   const heart = liked ? "♥" : "♡";
   const label = `${liked ? "Liked" : "Like"}${showCount && n > 0 ? ` · ${n}` : ""}`;
+
+  // The games' action row (components/play/PlayCardParts.tsx): an outline
+  // heart and a word, in the caller's button shape; filled when liked.
+  if (variant === "action") {
+    const done = verb === "Save" ? "Saved" : "Liked";
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy}
+        aria-pressed={liked}
+        aria-label={name ? `${liked ? done : verb} ${name}` : undefined}
+        title={liked ? `${done} to your profile. Click to remove.` : `${verb} to your profile (separate from your vote)`}
+        // The caller styles the saved state (aria-pressed); the heart fills.
+        className={className}
+      >
+        <Heart className={`h-4 w-4 shrink-0 ${liked ? "fill-current" : ""}`} aria-hidden />
+        <span>{liked ? done : verb}</span>
+      </button>
+    );
+  }
 
   if (variant === "icon") {
     return (

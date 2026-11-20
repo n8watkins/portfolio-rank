@@ -204,7 +204,7 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
       : { key: "sGrades", label: "Portfolios graded S", value: n(sGrades), tone: 3 },
     counts.votes > 0 ? { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 } : null,
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
-    site.averageTier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
+    site.averageTier?.tier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
     site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
     site.changedThisMonth > 0 ? { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 } : null,
     gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,

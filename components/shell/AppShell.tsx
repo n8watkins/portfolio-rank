@@ -3,6 +3,8 @@ import { MobileTabBar } from "@/components/shell/MobileTabBar";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { SiteHeader } from "@/components/shell/SiteHeader";
 import { RevealObserver } from "@/components/ui/RevealObserver";
+import { BlogLiveProvider } from "@/components/shell/useBlogLive";
+import { blogLiveAtRender } from "@/lib/blog-live";
 
 /**
  * The one frame every page shares (app/layout.tsx): header, <main id="main">,
@@ -10,10 +12,13 @@ import { RevealObserver } from "@/components/ui/RevealObserver";
  * out full-width bands; pages put their content in a `.wrap` (the one content
  * width) or their own narrower column.
  */
-export function AppShell({ children }: { children: React.ReactNode }) {
+export async function AppShell({ children }: { children: React.ReactNode }) {
   // The visitor's grade state joins here when the grade pages ship.
   const action = primaryAction();
+  // The Blog links are part of the server's HTML once a post is live (lib/blog-live.ts).
+  const blogLive = await blogLiveAtRender();
   return (
+    <BlogLiveProvider live={blogLive}>
     <div className="flex min-h-dvh flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
       <div className="contents print:hidden">
         <SiteHeader action={action} />
@@ -29,5 +34,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <RevealObserver />
     </div>
+    </BlogLiveProvider>
   );
 }

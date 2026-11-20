@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createClient } from "@libsql/client";
 import feed from "../data/feed.json" with { type: "json" };
+import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 import { listen } from "./helpers/listen.mjs";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 
@@ -254,4 +255,78 @@ test("the admin's Re-measure makes Lighthouse run again; nobody else may ask", a
   await sleep(SLOW_MS + 1500);
   assert.equal(calls, 1);
   assert.equal((await get("psi", url)).body.stale, undefined);
+});
+
+test("?cached=1 never runs PageSpeed, and says when a stored result is due by the change rule", async () => {
+  const url = feed[110].url;
+  await clean(url);
+  calls = 0;
+  assert.equal((await get("psi", `${url}&cached=1`)).body.error, "unknown_url", "the flag is a separate parameter");
+  const peek = async () => (await (await fetch(`${BASE}/api/psi?url=${encodeURIComponent(url)}&cached=1`)).json());
+  assert.equal((await peek()).error, "not_measured");
+  await seedPsi(url, Date.now() - 40 * DAY, 0.6);
+  await page(url, { checked: Date.now() - DAY });
+  const unchanged = await peek();
+  assert.equal(unchanged.scores.performance, 60);
+  assert.equal(unchanged.stale, undefined);
+  assert.ok(unchanged.unchangedSince);
+  await page(url, { checked: Date.now() - DAY, changed: Date.now() - DAY });
+  const changed = await peek();
+  assert.deepEqual([changed.stale, changed.staleReason], [true, "changed"]);
+  await sleep(300);
+  assert.equal(calls, 0, "a cached-only read never measures");
+});
+
+test("desktop is measured and stored apart from mobile, and cached=1 reads it without measuring", async () => {
+  const url = feed[111].url;
+  await clean(url);
+  await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi-desktop:${url}`, `lease:psi-desktop:${url}`] });
+  calls = 0;
+  const q = (extra) => fetch(`${BASE}/api/psi?url=${encodeURIComponent(url)}${extra}`).then((r) => r.json());
+  // Play reads the stored result first: a miss says so and spends nothing.
+  assert.equal((await q("&cached=1")).error, "not_measured");
+  assert.equal((await q("&strategy=desktop&cached=1")).error, "not_measured");
+  assert.equal(calls, 0);
+  // Measuring desktop fills only the desktop entry.
+  perf = 0.9;
+  const desktop = await q("&strategy=desktop");
+  assert.equal(desktop.ok, true);
+  assert.equal(desktop.scores.performance, 90);
+  assert.equal(calls, 1);
+  assert.equal((await q("&strategy=desktop&cached=1")).scores.performance, 90);
+  assert.equal((await q("&cached=1")).error, "not_measured");
+  assert.ok(await row("psi-desktop", url));
+  assert.equal(calls, 1);
+  await db.execute({ sql: "DELETE FROM cache WHERE k = ?", args: [`psi-desktop:${url}`] });
+});
+
+test("Play's details carry the stored results, never measure, and only for listed sites", async () => {
+  const url = feed[113].url;
+  await clean(url);
+  await db.execute({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi-desktop:${url}`, `lease:psi-desktop:${url}`] });
+  calls = 0;
+  const details = (qs) => fetch(`${BASE}/api/play/details?${qs}`);
+  // A miss is null: nothing is fetched or measured to answer.
+  let r = await details(`url=${encodeURIComponent(url)}`);
+  assert.equal(r.status, 200);
+  let d = (await r.json()).details[url];
+  assert.equal(d.inspect, null);
+  assert.deepEqual(d.psi, { mobile: null, desktop: null });
+  assert.ok(d.card && typeof d.card.votes === "number");
+  assert.equal(calls, 0);
+  // Once measured, the stored result rides along.
+  perf = 0.7;
+  assert.equal((await get("psi", url)).body.ok, true);
+  d = (await (await details(`url=${encodeURIComponent(url)}`)).json()).details[url];
+  assert.equal(d.psi.mobile.scores.performance, 70);
+  assert.equal(d.psi.desktop, null);
+  assert.equal(calls, 1);
+  // Unknown sites are refused; at most two sites per request.
+  assert.equal((await details("url=https%3A%2F%2Fnot-listed.example")).status, 404);
+  const three = [feed[113].url, feed[114].url, feed[115].url].map((u) => `url=${encodeURIComponent(u)}`).join("&");
+  assert.equal(Object.keys((await (await details(three)).json()).details).length, 2);
+  // A face-off pair carries both cards' details, so a pair is one request.
+  const pair = await (await fetch(`${BASE}/api/rank`)).json();
+  for (const side of [pair.a, pair.b]) assert.ok(side.details && "inspect" in side.details && "psi" in side.details && "card" in side.details);
+  await clean(url);
 });

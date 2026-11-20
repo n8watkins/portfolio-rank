@@ -1120,10 +1120,12 @@ test("review 3.5: hiding a site drops the cached games and grader pools in the s
   const { db, w, nightly, hourly } = await setup([url]);
   await failingSince(nightly, w, [url], T0);
   await hourly(T0 + H);
-  for (const k of ["games:pool", "grader:pool"]) await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '[]', ?)", args: [k, T0] });
+  // The grader pool's key by its exported name: the staging branch versions it (grader:pool:v5).
+  const { GRADER_POOL_KEY } = await import("../lib/grader/report.mjs");
+  for (const k of ["games:pool", GRADER_POOL_KEY]) await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '[]', ?)", args: [k, T0] });
   await hourly(T0 + D);
   assert.equal(await col(db, url, "health"), "down");
-  const left = (await db.execute("SELECT k FROM cache WHERE k IN ('games:pool', 'grader:pool')")).rows;
+  const left = (await db.execute({ sql: "SELECT k FROM cache WHERE k IN ('games:pool', ?)", args: [GRADER_POOL_KEY] })).rows;
   assert.deepEqual(left, []);
 });
 

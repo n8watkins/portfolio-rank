@@ -40,7 +40,7 @@ import {
 import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, runSummary } from "./gemini-log.mjs";
 import { backgroundAllowance, budgetPlan, usageToday } from "./budget.mjs";
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
-import { rankForWrite } from "../lib/tiers-store.mjs";
+import { rankForWrite, refreshTiers } from "../lib/tiers-store.mjs";
 import { ensureReviewSchema } from "../lib/reviews/store.mjs";
 import { atTheDoor, setAsideCapture, withCaptureColumns } from "../lib/reviews/door.mjs";
 import { freshGradeDue } from "../lib/reviews/store.mjs";
@@ -812,6 +812,8 @@ try {
     console.log(`roster: ${roster.delisted} delisted, ${roster.relisted} relisted`);
   }
   const counts = MODE === "rubric" ? await runRubric().finally(() => renderer?.close()) : await runPairwise();
+  // New grades move the library: every tier by rank is placed again (lib/tiers-store.mjs, no AI request).
+  if (MODE === "rubric") await refreshTiers(db, { log: console.log });
   const outcome = judgeOutcome({ mode: MODE, ...counts });
   await writeSummary(outcome, counts.stopped);
   console.log(outcome.verdict);

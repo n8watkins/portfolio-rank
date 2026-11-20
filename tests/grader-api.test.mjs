@@ -196,7 +196,9 @@ test("a grade: free checks at once, one capture dispatched with no inputs, then 
   assert.equal(g.body.status, "done");
   assert.equal(g.body.mine, false, "anyone with the link can read it; only the owner owns it");
   const rep = g.body.report;
-  assert.equal(rep.tier, "A");
+  // The tier is the rank in the library (lib/tiers.mjs), never Gemini's letter; this database's library may be empty.
+  const stored = JSON.parse(String((await db.execute({ sql: "SELECT report FROM grade_jobs WHERE id = ?", args: [reportId] })).rows[0].report));
+  assert.equal(rep.tier, stored.rank?.tier ?? null);
   assert.equal(rep.model, PRIMARY_MODEL);
   assert.equal(rep.ownKey, false);
   assert.deepEqual(rep.roles, ["frontend developer"]);
