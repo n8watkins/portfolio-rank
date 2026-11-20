@@ -1,8 +1,7 @@
 // Small helpers for the list's data files and guards, with no dependencies, so
 // the feed build, the roster sync and the review scripts can share them
 // without loading the database client or the health check.
-// (pipeline/exclusions.mjs has its own readJson and excludedUrl; after the
-// health lane's pull request #247 it should import these.)
+// (pipeline/exclusions.mjs re-exports readJson and excludedUrl from here.)
 import fs from "node:fs";
 
 /** The owner's one-off allowance for a big upstream cleanup, read from the environment. */

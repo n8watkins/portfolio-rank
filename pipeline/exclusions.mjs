@@ -21,8 +21,8 @@
 // so the extra fields never change what is excluded. Plain URL strings (the
 // old format) still work.
 
-import fs from "fs";
 import { APPLIED_REMOVAL_WHERE, checkSite, mapPool, normKey } from "./health.mjs";
+import { excludedUrl, readJson } from "./list-util.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
 import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesOnFreshFailure, notAnswering } from "./not-working.mjs";
@@ -76,16 +76,7 @@ export async function removalDecider(db, url) {
   };
 }
 
-export const readJson = (file, fallback) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (e) {
-    if (e.code === "ENOENT") return fallback;
-    throw e;
-  }
-};
-
-export const excludedUrl = (e) => (typeof e === "string" ? e : e?.url);
+export { excludedUrl, readJson };
 
 // A dead entry is checked again this long after the last check, and at most this many a run.
 export const DEAD_RECHECK_DAYS = 91;

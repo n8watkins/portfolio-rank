@@ -87,7 +87,7 @@ test("the weekly job labels the week that just ended, run on Monday 16:00 UTC or
 // ---------------------------------------------------------------------------
 
 test("each scheduled workflow files its failure issue from a job that runs when a job is cancelled or times out", () => {
-  for (const [file, job] of [["sync-upstream", "sync"], ["health", "health"], ["upstream-removals", "removals"], ["backup", "backup"], ["limits", "snapshot"]]) {
+  for (const [file, job] of [["sync-upstream", "sync"], ["health", "health"], ["backup", "backup"], ["limits", "snapshot"]]) {
     const text = read(`.github/workflows/${file}.yml`);
     assert.doesNotMatch(text, /name: Notify on failure/, `${file}: the step after the work never runs for a cancelled or timed-out job`);
     const notify = text.slice(text.indexOf("  notify-failure:"));

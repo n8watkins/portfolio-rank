@@ -18,7 +18,7 @@ import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
 import { regradeQueue, versionRegradeQueue } from "../pipeline/rubric-history.mjs";
 import { rowsNeedingEvidence } from "../pipeline/evidence.mjs";
 import { heroCandidates } from "../pipeline/polls.mjs";
-import { gradedPool } from "../lib/grader/report.mjs";
+import { GRADER_POOL_KEY, gradedPool } from "../lib/grader/report.mjs";
 import { dueForFingerprint, ensureFreshnessSchema, lighthouseDue, linksDue, screenshotsDue } from "../lib/freshness.mjs";
 import { fullPageDue } from "../pipeline/fullpage.mjs";
 import { prewarmQueue } from "../scripts/lib/prewarm.mjs";
@@ -1120,10 +1120,10 @@ test("review 3.5: hiding a site drops the cached games and grader pools in the s
   const { db, w, nightly, hourly } = await setup([url]);
   await failingSince(nightly, w, [url], T0);
   await hourly(T0 + H);
-  for (const k of ["games:pool", "grader:pool"]) await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '[]', ?)", args: [k, T0] });
+  for (const k of ["games:pool", GRADER_POOL_KEY]) await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, '[]', ?)", args: [k, T0] });
   await hourly(T0 + D);
   assert.equal(await col(db, url, "health"), "down");
-  const left = (await db.execute("SELECT k FROM cache WHERE k IN ('games:pool', 'grader:pool')")).rows;
+  const left = (await db.execute({ sql: "SELECT k FROM cache WHERE k IN ('games:pool', ?)", args: [GRADER_POOL_KEY] })).rows;
   assert.deepEqual(left, []);
 });
 
