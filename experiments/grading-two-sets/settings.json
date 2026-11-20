@@ -1,0 +1,29 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "temperature": 0.2,
+ "thinkingLevel": "low",
+ "maxOutputTokens": {
+  "solo": 8192,
+  "batch": 32768
+ },
+ "rpm": 8,
+ "hard_stop": 120,
+ "retry_delays_ms": [
+  30000,
+  60000,
+  120000,
+  300000
+ ],
+ "max_tries": 5,
+ "broken_answer_retries": 1,
+ "day_cap": 485,
+ "prompt_ids": {
+  "solo": "grade-two-sets-solo",
+  "solo_freetext": "grade-two-sets-solo-freetext",
+  "batch": "grade-two-sets-batch"
+ },
+ "amendments": [
+  "2026-11-13: batch schema level_line is free text; 10 solo-freetext control requests added"
+ ],
+ "job": "exp-grading-two-sets"
+}

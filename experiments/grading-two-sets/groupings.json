@@ -1,0 +1,1298 @@
+{
+ "seed": 20261115,
+ "batch_size": 5,
+ "sets": {
+  "A": {
+   "solo_order": [
+    "A12",
+    "A08",
+    "A10",
+    "A11",
+    "A15",
+    "A07",
+    "A16",
+    "A06",
+    "A09",
+    "A14",
+    "A04",
+    "A05",
+    "A01",
+    "A17",
+    "A20",
+    "A03",
+    "A18",
+    "A13",
+    "A19",
+    "A02"
+   ],
+   "solo_repeat": [
+    "A05",
+    "A01",
+    "A07",
+    "A15",
+    "A06"
+   ],
+   "passes": {
+    "pass1": [
+     [
+      "A14",
+      "A04",
+      "A12",
+      "A03",
+      "A02"
+     ],
+     [
+      "A01",
+      "A19",
+      "A06",
+      "A08",
+      "A11"
+     ],
+     [
+      "A09",
+      "A18",
+      "A20",
+      "A13",
+      "A16"
+     ],
+     [
+      "A17",
+      "A07",
+      "A10",
+      "A15",
+      "A05"
+     ]
+    ],
+    "pass2": [
+     [
+      "A10",
+      "A15",
+      "A03",
+      "A04",
+      "A09"
+     ],
+     [
+      "A08",
+      "A20",
+      "A02",
+      "A07",
+      "A19"
+     ],
+     [
+      "A11",
+      "A14",
+      "A05",
+      "A18",
+      "A01"
+     ],
+     [
+      "A13",
+      "A12",
+      "A16",
+      "A17",
+      "A06"
+     ]
+    ],
+    "pass3": [
+     [
+      "A16",
+      "A08",
+      "A04",
+      "A05",
+      "A20"
+     ],
+     [
+      "A07",
+      "A13",
+      "A11",
+      "A01",
+      "A03"
+     ],
+     [
+      "A19",
+      "A10",
+      "A15",
+      "A14",
+      "A18"
+     ],
+     [
+      "A12",
+      "A06",
+      "A09",
+      "A02",
+      "A17"
+     ]
+    ]
+   },
+   "pairs_sharing_a_batch_twice": 12
+  },
+  "B": {
+   "solo_order": [
+    "B05",
+    "B09",
+    "B10",
+    "B13",
+    "B15",
+    "B11",
+    "B07",
+    "B14",
+    "B12",
+    "B06",
+    "B16",
+    "B20",
+    "B19",
+    "B03",
+    "B08",
+    "B01",
+    "B17",
+    "B18",
+    "B04",
+    "B02"
+   ],
+   "solo_repeat": [
+    "B02",
+    "B08",
+    "B11",
+    "B10",
+    "B19"
+   ],
+   "passes": {
+    "pass1": [
+     [
+      "B02",
+      "B03",
+      "B06",
+      "B07",
+      "B17"
+     ],
+     [
+      "B19",
+      "B16",
+      "B09",
+      "B10",
+      "B01"
+     ],
+     [
+      "B20",
+      "B15",
+      "B11",
+      "B18",
+      "B04"
+     ],
+     [
+      "B14",
+      "B13",
+      "B12",
+      "B08",
+      "B05"
+     ]
+    ],
+    "pass2": [
+     [
+      "B08",
+      "B14",
+      "B17",
+      "B11",
+      "B03"
+     ],
+     [
+      "B18",
+      "B12",
+      "B19",
+      "B06",
+      "B10"
+     ],
+     [
+      "B09",
+      "B04",
+      "B16",
+      "B13",
+      "B20"
+     ],
+     [
+      "B01",
+      "B05",
+      "B15",
+      "B02",
+      "B07"
+     ]
+    ],
+    "pass3": [
+     [
+      "B11",
+      "B17",
+      "B18",
+      "B05",
+      "B13"
+     ],
+     [
+      "B10",
+      "B20",
+      "B03",
+      "B15",
+      "B19"
+     ],
+     [
+      "B04",
+      "B08",
+      "B01",
+      "B14",
+      "B06"
+     ],
+     [
+      "B16",
+      "B09",
+      "B07",
+      "B12",
+      "B02"
+     ]
+    ]
+   },
+   "pairs_sharing_a_batch_twice": 10
+  }
+ },
+ "requests": [
+  {
+   "key": "solo/A12",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A12"
+   ]
+  },
+  {
+   "key": "solo/A08",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A08"
+   ]
+  },
+  {
+   "key": "solo/A10",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A10"
+   ]
+  },
+  {
+   "key": "solo/A11",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A11"
+   ]
+  },
+  {
+   "key": "solo/A15",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A15"
+   ]
+  },
+  {
+   "key": "solo/A07",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A07"
+   ]
+  },
+  {
+   "key": "solo/A16",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A16"
+   ]
+  },
+  {
+   "key": "solo/A06",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A06"
+   ]
+  },
+  {
+   "key": "solo/A09",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A09"
+   ]
+  },
+  {
+   "key": "solo/A14",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A14"
+   ]
+  },
+  {
+   "key": "solo/A04",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A04"
+   ]
+  },
+  {
+   "key": "solo/A05",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A05"
+   ]
+  },
+  {
+   "key": "solo/A01",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A01"
+   ]
+  },
+  {
+   "key": "solo/A17",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A17"
+   ]
+  },
+  {
+   "key": "solo/A20",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A20"
+   ]
+  },
+  {
+   "key": "solo/A03",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A03"
+   ]
+  },
+  {
+   "key": "solo/A18",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A18"
+   ]
+  },
+  {
+   "key": "solo/A13",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A13"
+   ]
+  },
+  {
+   "key": "solo/A19",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A19"
+   ]
+  },
+  {
+   "key": "solo/A02",
+   "step": "solo",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A02"
+   ]
+  },
+  {
+   "key": "solo/B05",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B05"
+   ]
+  },
+  {
+   "key": "solo/B09",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B09"
+   ]
+  },
+  {
+   "key": "solo/B10",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B10"
+   ]
+  },
+  {
+   "key": "solo/B13",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B13"
+   ]
+  },
+  {
+   "key": "solo/B15",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B15"
+   ]
+  },
+  {
+   "key": "solo/B11",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B11"
+   ]
+  },
+  {
+   "key": "solo/B07",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B07"
+   ]
+  },
+  {
+   "key": "solo/B14",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B14"
+   ]
+  },
+  {
+   "key": "solo/B12",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B12"
+   ]
+  },
+  {
+   "key": "solo/B06",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B06"
+   ]
+  },
+  {
+   "key": "solo/B16",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B16"
+   ]
+  },
+  {
+   "key": "solo/B20",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B20"
+   ]
+  },
+  {
+   "key": "solo/B19",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B19"
+   ]
+  },
+  {
+   "key": "solo/B03",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B03"
+   ]
+  },
+  {
+   "key": "solo/B08",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B08"
+   ]
+  },
+  {
+   "key": "solo/B01",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B01"
+   ]
+  },
+  {
+   "key": "solo/B17",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B17"
+   ]
+  },
+  {
+   "key": "solo/B18",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B18"
+   ]
+  },
+  {
+   "key": "solo/B04",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B04"
+   ]
+  },
+  {
+   "key": "solo/B02",
+   "step": "solo",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B02"
+   ]
+  },
+  {
+   "key": "pass1/A-b1",
+   "step": "pass1",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 1,
+   "ids": [
+    "A14",
+    "A04",
+    "A12",
+    "A03",
+    "A02"
+   ]
+  },
+  {
+   "key": "pass1/A-b2",
+   "step": "pass1",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 2,
+   "ids": [
+    "A01",
+    "A19",
+    "A06",
+    "A08",
+    "A11"
+   ]
+  },
+  {
+   "key": "pass1/A-b3",
+   "step": "pass1",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 3,
+   "ids": [
+    "A09",
+    "A18",
+    "A20",
+    "A13",
+    "A16"
+   ]
+  },
+  {
+   "key": "pass1/A-b4",
+   "step": "pass1",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 4,
+   "ids": [
+    "A17",
+    "A07",
+    "A10",
+    "A15",
+    "A05"
+   ]
+  },
+  {
+   "key": "pass1/B-b1",
+   "step": "pass1",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 1,
+   "ids": [
+    "B02",
+    "B03",
+    "B06",
+    "B07",
+    "B17"
+   ]
+  },
+  {
+   "key": "pass1/B-b2",
+   "step": "pass1",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 2,
+   "ids": [
+    "B19",
+    "B16",
+    "B09",
+    "B10",
+    "B01"
+   ]
+  },
+  {
+   "key": "pass1/B-b3",
+   "step": "pass1",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 3,
+   "ids": [
+    "B20",
+    "B15",
+    "B11",
+    "B18",
+    "B04"
+   ]
+  },
+  {
+   "key": "pass1/B-b4",
+   "step": "pass1",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 4,
+   "ids": [
+    "B14",
+    "B13",
+    "B12",
+    "B08",
+    "B05"
+   ]
+  },
+  {
+   "key": "pass2/A-b1",
+   "step": "pass2",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 1,
+   "ids": [
+    "A10",
+    "A15",
+    "A03",
+    "A04",
+    "A09"
+   ]
+  },
+  {
+   "key": "pass2/A-b2",
+   "step": "pass2",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 2,
+   "ids": [
+    "A08",
+    "A20",
+    "A02",
+    "A07",
+    "A19"
+   ]
+  },
+  {
+   "key": "pass2/A-b3",
+   "step": "pass2",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 3,
+   "ids": [
+    "A11",
+    "A14",
+    "A05",
+    "A18",
+    "A01"
+   ]
+  },
+  {
+   "key": "pass2/A-b4",
+   "step": "pass2",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 4,
+   "ids": [
+    "A13",
+    "A12",
+    "A16",
+    "A17",
+    "A06"
+   ]
+  },
+  {
+   "key": "pass2/B-b1",
+   "step": "pass2",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 1,
+   "ids": [
+    "B08",
+    "B14",
+    "B17",
+    "B11",
+    "B03"
+   ]
+  },
+  {
+   "key": "pass2/B-b2",
+   "step": "pass2",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 2,
+   "ids": [
+    "B18",
+    "B12",
+    "B19",
+    "B06",
+    "B10"
+   ]
+  },
+  {
+   "key": "pass2/B-b3",
+   "step": "pass2",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 3,
+   "ids": [
+    "B09",
+    "B04",
+    "B16",
+    "B13",
+    "B20"
+   ]
+  },
+  {
+   "key": "pass2/B-b4",
+   "step": "pass2",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass2",
+   "batch": 4,
+   "ids": [
+    "B01",
+    "B05",
+    "B15",
+    "B02",
+    "B07"
+   ]
+  },
+  {
+   "key": "pass3/A-b1",
+   "step": "pass3",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 1,
+   "ids": [
+    "A16",
+    "A08",
+    "A04",
+    "A05",
+    "A20"
+   ]
+  },
+  {
+   "key": "pass3/A-b2",
+   "step": "pass3",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 2,
+   "ids": [
+    "A07",
+    "A13",
+    "A11",
+    "A01",
+    "A03"
+   ]
+  },
+  {
+   "key": "pass3/A-b3",
+   "step": "pass3",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 3,
+   "ids": [
+    "A19",
+    "A10",
+    "A15",
+    "A14",
+    "A18"
+   ]
+  },
+  {
+   "key": "pass3/A-b4",
+   "step": "pass3",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 4,
+   "ids": [
+    "A12",
+    "A06",
+    "A09",
+    "A02",
+    "A17"
+   ]
+  },
+  {
+   "key": "pass3/B-b1",
+   "step": "pass3",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 1,
+   "ids": [
+    "B11",
+    "B17",
+    "B18",
+    "B05",
+    "B13"
+   ]
+  },
+  {
+   "key": "pass3/B-b2",
+   "step": "pass3",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 2,
+   "ids": [
+    "B10",
+    "B20",
+    "B03",
+    "B15",
+    "B19"
+   ]
+  },
+  {
+   "key": "pass3/B-b3",
+   "step": "pass3",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 3,
+   "ids": [
+    "B04",
+    "B08",
+    "B01",
+    "B14",
+    "B06"
+   ]
+  },
+  {
+   "key": "pass3/B-b4",
+   "step": "pass3",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass3",
+   "batch": 4,
+   "ids": [
+    "B16",
+    "B09",
+    "B07",
+    "B12",
+    "B02"
+   ]
+  },
+  {
+   "key": "solo-repeat/A05",
+   "step": "solo-repeat",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A05"
+   ]
+  },
+  {
+   "key": "solo-repeat/A01",
+   "step": "solo-repeat",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A01"
+   ]
+  },
+  {
+   "key": "solo-repeat/A07",
+   "step": "solo-repeat",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A07"
+   ]
+  },
+  {
+   "key": "solo-repeat/A15",
+   "step": "solo-repeat",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A15"
+   ]
+  },
+  {
+   "key": "solo-repeat/A06",
+   "step": "solo-repeat",
+   "set": "A",
+   "kind": "solo",
+   "ids": [
+    "A06"
+   ]
+  },
+  {
+   "key": "solo-repeat/B02",
+   "step": "solo-repeat",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B02"
+   ]
+  },
+  {
+   "key": "solo-repeat/B08",
+   "step": "solo-repeat",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B08"
+   ]
+  },
+  {
+   "key": "solo-repeat/B11",
+   "step": "solo-repeat",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B11"
+   ]
+  },
+  {
+   "key": "solo-repeat/B10",
+   "step": "solo-repeat",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B10"
+   ]
+  },
+  {
+   "key": "solo-repeat/B19",
+   "step": "solo-repeat",
+   "set": "B",
+   "kind": "solo",
+   "ids": [
+    "B19"
+   ]
+  },
+  {
+   "key": "pass1-repeat/A-b1",
+   "step": "pass1-repeat",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 1,
+   "ids": [
+    "A14",
+    "A04",
+    "A12",
+    "A03",
+    "A02"
+   ]
+  },
+  {
+   "key": "pass1-repeat/A-b2",
+   "step": "pass1-repeat",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 2,
+   "ids": [
+    "A01",
+    "A19",
+    "A06",
+    "A08",
+    "A11"
+   ]
+  },
+  {
+   "key": "pass1-repeat/A-b3",
+   "step": "pass1-repeat",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 3,
+   "ids": [
+    "A09",
+    "A18",
+    "A20",
+    "A13",
+    "A16"
+   ]
+  },
+  {
+   "key": "pass1-repeat/A-b4",
+   "step": "pass1-repeat",
+   "set": "A",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 4,
+   "ids": [
+    "A17",
+    "A07",
+    "A10",
+    "A15",
+    "A05"
+   ]
+  },
+  {
+   "key": "pass1-repeat/B-b1",
+   "step": "pass1-repeat",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 1,
+   "ids": [
+    "B02",
+    "B03",
+    "B06",
+    "B07",
+    "B17"
+   ]
+  },
+  {
+   "key": "pass1-repeat/B-b2",
+   "step": "pass1-repeat",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 2,
+   "ids": [
+    "B19",
+    "B16",
+    "B09",
+    "B10",
+    "B01"
+   ]
+  },
+  {
+   "key": "pass1-repeat/B-b3",
+   "step": "pass1-repeat",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 3,
+   "ids": [
+    "B20",
+    "B15",
+    "B11",
+    "B18",
+    "B04"
+   ]
+  },
+  {
+   "key": "pass1-repeat/B-b4",
+   "step": "pass1-repeat",
+   "set": "B",
+   "kind": "batch",
+   "pass": "pass1",
+   "batch": 4,
+   "ids": [
+    "B14",
+    "B13",
+    "B12",
+    "B08",
+    "B05"
+   ]
+  },
+  {
+   "key": "solo-freetext/A05",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A05"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A01",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A01"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A07",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A07"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A15",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A15"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/A06",
+   "step": "solo-freetext",
+   "set": "A",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "A06"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B02",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B02"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B08",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B08"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B11",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B11"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B10",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B10"
+   ],
+   "gemini_only": true
+  },
+  {
+   "key": "solo-freetext/B19",
+   "step": "solo-freetext",
+   "set": "B",
+   "kind": "solo",
+   "schema": "solo_freetext",
+   "ids": [
+    "B19"
+   ],
+   "gemini_only": true
+  }
+ ],
+ "created_at": "2026-11-13T18:25:49.940Z",
+ "amended_at": "2026-11-13"
+}

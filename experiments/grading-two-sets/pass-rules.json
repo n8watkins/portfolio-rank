@@ -1,0 +1,21 @@
+{
+ "applies_to": "Gemini 3.5 Flash-Lite, each set of 20 separately unless a rule says otherwise. The expert's own numbers are reported as consistency, not judged.",
+ "key": "The expert's (Claude Sonnet's) first one-at-a-time pass on each set.",
+ "checklist_answer": "A checklist question counts as yes only when it is yes on both the desktop and the phone screenshot; desktop and phone agreement are also reported separately.",
+ "rules": {
+  "spread": { "text": "Under 25% of sites get a 5 on any score (one-at-a-time pass).", "max_share_of_fives": 0.25 },
+  "agreement": { "text": "Within 1 point of the key on at least 16 of 20 sites, per score, in each set (one-at-a-time pass).", "min_within1": 16 },
+  "checklist": { "text": "Five-second questions 2 and 4 (clear role, something notable): the same yes or no as the key on at least 17 of 20.", "questions": ["clear_role", "notable"], "min_same": 17 },
+  "consistency": { "text": "The same site sent again with an identical one-at-a-time request: the same score on at least 4 of 5 per set, and on at least 8 of 10 across both sets, per score.", "min_same_per_set": 4, "min_same_both_sets": 8 },
+  "junk": { "text": "The junk site in each set is flagged as not a real portfolio (one-at-a-time pass). Both must be flagged." },
+  "batching": { "text": "5 at a time gives the same scores as one at a time: each batched pass (1, 2 and 3) within 1 point of the same model's one-at-a-time score on at least 16 of 20, per score, in each set.", "min_within1": 16 },
+  "position": { "text": "No consistent boost for a position in a batch: fails when one position's mean offset from one-at-a-time (all three scores) has the same sign in all three passes and averages at least 0.3 points.", "max_consistent_offset": 0.3 }
+ },
+ "reported_without_a_rule": [
+  "the same batch sent again with an identical request (pass 1 against its exact repeat)",
+  "the same site in a different batch (passes 1, 2 and 3)",
+  "batched passes against the key",
+  "the expert's own consistency, batch effect and position effect"
+ ],
+ "what_we_do_with_the_result": "As on the plan page: Set A's one-at-a-time result decides AI scores on report cards; the batching rules decide whether discovered sites are graded 5 at a time; anything that fails goes back to Opus for one revised prompt and one more small round on the same sets."
+}
