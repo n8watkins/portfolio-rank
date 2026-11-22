@@ -37,7 +37,10 @@ Each GitHub schedule stays only as a fallback and skips itself when Cloudflare a
 
 Times below are Pacific, with UTC in brackets, for winter.
 
-1. **00:00 (08:00 UTC)**: Gemini's free quota resets.
+1. **00:00 (08:00 UTC in winter, 07:00 UTC in summer)**: Gemini's free quota resets.
+   Google's rule is midnight Pacific time for the requests-per-day limit, so the UTC time moves with the clocks; the code counts the day in Pacific time and never uses a fixed UTC hour.
+   Per-minute limits are separate and reset on their own short windows.
+   This is Google's published rule (checked 2026-11-22) and Google can change it.
    Unused requests are lost, which is why the AI work runs at the end of the day.
 2. **Every 5 minutes**: the grader's tick and the newsletter tick (`worker/grader.ts`, `worker/newsletter.ts`).
    Both are Off today.
@@ -64,13 +67,11 @@ Times below are Pacific, with UTC in brackets, for winter.
     Paused.
 13. **22:00 (06:00 UTC)**: the GitHub fallback for the free checks (`sync-upstream.yml`).
     It skips when Cloudflare started the run in the last 20 hours, which is normal.
-14. **23:30 (07:30 UTC)**: hard stop, 30 minutes before the quota resets.
+14. **23:30 (07:30 UTC in winter, 06:30 UTC in summer)**: hard stop, 30 minutes before the quota resets.
     Then the summary, a purge of cached profiles, the owner alerts, and the log clean-up.
 
 Once a week:
 
-- **Sunday 10:00 (18:00 UTC)**: the weekly comparison of two Gemini versions' grades (`grade-compare.yml`).
-  Going.
 - **Monday 07:00 (15:00 UTC)**: the security scan of dependencies (`security.yml`).
   It also runs on any pull request that changes a lock file.
 - **Monday 08:00 (16:00 UTC; 09:00 in summer)**: model watch, then your goals email (`worker/model-watch.ts`, `worker/goals.ts`).
@@ -106,7 +107,8 @@ Each task runs on its own, so one that fails is reported to Sentry and the rest 
    Running.
 9. **Change fingerprints** (`freshness`, `worker/freshness.ts`): checks one 168th of the list a tick to see whether pages changed.
    Off (`FRESHNESS_ENABLED` is false, per `wrangler.jsonc`).
-   Going.
+   Going, but not removed yet: "when checks re-run" (`lib/freshness.mjs`) uses the same fingerprints to decide when Lighthouse, polish, screenshots and link checks are measured again, so removing it waits for the owner.
+   It never triggered a re-grade.
 10. **Apply review decisions** (`review auto-apply`, `worker/review.ts`): applies waiting rows in the review queue that pass the owner's rule.
     On with `REVIEW_AUTO_APPLY` true (per `wrangler.jsonc`).
     Running.
@@ -139,19 +141,19 @@ Whether the key is set is not confirmed.
 
 ### The AI stages
 
-The seven stages are in `pipeline/budget.mjs` `STAGES`.
+The five stages are in `pipeline/budget.mjs` `STAGES`.
 The caps and time caps are in `DEFAULT_PLAN`.
 Today every cap is 0 in production, so every stage closes as "off: its cap is 0".
+A site is graded once and never re-graded automatically: the only grade a graded site gets again is one a person asked for (the owner's "Re-grade"), done by stage 1 once the site has been captured again after the request, ahead of new sites and inside the same cap.
+A `GEMINI_BUDGET` key for a stage that no longer exists (the production one still names `grade_changed` and `regrade`) is ignored.
 
 | Order | Stage | Works on | Default cap a day | Time cap | State today |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | Grade new sites (`grade_new`) | listed, captured, healthy, not yet graded | 300 | 60 min | Paused |
-| 2 | Grade changed sites (`grade_changed`) | graded sites whose page changed | 0 | 30 min | Going |
-| 3 | AI ranking comparisons (`compare`) | pairs of sites, then the boards are rebuilt | 200 | 45 min | Off (`RANKING_V2` is false) and Paused |
-| 4 | Content (`content`) | poll writing, then blog picks and drafts | 100 | 30 min | Paused |
-| 5 | Image library (`library`) | nothing at night | 40 | 25 min | Off at night, see the hourly task 11 |
-| 6 | Re-grades (`regrade`) | grades from an older model or rubric | 0 | 60 min | Going |
-| 7 | Experiments (`experiment`) | nothing scheduled | 50 | 15 min | Off |
+| 1 | Grade new sites (`grade_new`) | listed, captured, healthy, not yet graded; and re-grades people asked for | 300 | 60 min | Paused |
+| 2 | AI ranking comparisons (`compare`) | pairs of sites, then the boards are rebuilt | 200 | 45 min | Off (`RANKING_V2` is false) and Paused |
+| 3 | Content (`content`) | poll writing, then blog picks and drafts | 100 | 30 min | Paused |
+| 4 | Image library (`library`) | nothing at night | 40 | 25 min | Off at night, see the hourly task 11 |
+| 5 | Experiments (`experiment`) | nothing scheduled | 50 | 15 min | Off |
 
 The run begins at 20:30, the AI stages get going after the free checks (by 21:15 at the latest), and nothing starts after 23:30.
 People always come first: the reserve for visitors is at least 25 requests and grows with demand, and the run pauses 5 minutes whenever a visitor asked for a grade in the last 10 minutes.
@@ -187,7 +189,7 @@ Each chain is a list of steps in the order they happen.
       A site that was never captured gets a row on your review page at the night's plan step.
    3. A page with only a canvas or video is held back and marked for review, but no review row is written for it yet.
       The fix is open as #266.
-7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), project link checks that are due (up to 120), then "Record page changes" (`scripts/detect-changes.mjs`, Going).
+7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), and project link checks that are due (up to 120).
 8. **Grade** (night stage 1, `grade_new`).
    One Gemini request with the screenshot, the page text and the facts.
    It answers how good the site is and whether it is a portfolio.
@@ -210,7 +212,7 @@ Each chain is a list of steps in the order they happen.
     Votes move it from there.
     Tier letters are hidden from visitors while `RANKING_V2` is false, so the leaderboard visitors see today is the older votes board.
 12. **After that** the site takes part in votes and gets the nightly health check.
-    It is not graded again, except for one fresh grade after you undo or reject a removal, and for the manual tools.
+    It is not graded again, except for one fresh grade after you undo or reject a removal, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.
 
 ### A site stops working
 
@@ -271,7 +273,7 @@ The rank is a number that moves with face-off votes.
    An anonymous practice vote is stored but moves nothing.
    A starred vote counts twice.
    Running.
-2. **AI comparisons** (night stage 3).
+2. **AI comparisons** (night stage 2).
    Gemini makes the same kind of pick, counted as a quarter of a person's vote (`lib/tiers.mjs` `AI_VOTE_WEIGHT`).
    Off (`RANKING_V2` false) and Paused.
 3. **Tiers** (hourly task 8).
@@ -300,13 +302,13 @@ The routes answer 404 and the five-minute tick returns at once.
 1. **Poll scheduling** (night plan step, `pipeline/polls.mjs`).
    Free and made by code: this week's poll exists, and so does next week's when it starts before tomorrow's run.
    It depends on the night running at all.
-2. **Poll writing** (night stage 4, `content`).
+2. **Poll writing** (night stage 3, `content`).
    Gemini writes 4 candidate questions when fewer than 2 future weeks have a poll.
    Off: `POLL_GENERATION_ENABLED` is false (per `wrangler.jsonc`), and the stage is Paused.
-3. **Topic pick** (night stage 4, Sunday night).
+3. **Topic pick** (night stage 3, Sunday night).
    Chooses the week's post ideas from the site's own data.
    Paused.
-4. **Draft** (night stage 4, Monday and Wednesday nights by default, set in the admin blog page).
+4. **Draft** (night stage 3, Monday and Wednesday nights by default, set in the admin blog page).
    Gemini writes a post and outside claims are checked or cut.
    Paused.
    `CONTENT_MODE` is `dry-run` (per `wrangler.jsonc`), which allows drafts for review only, so nothing publishes without you.
@@ -333,11 +335,10 @@ Off, and the last step has never been connected to the list.
    A manual run works, and points at the staging database unless `DISCOVERY_TARGET` is `production`.
 2. **Read the sources** (`pipeline/discovery/sources`): GitHub topics, Hacker News and two directories.
 3. **Free check and filter** (`pipeline/discovery/check.mjs`, `filter.mjs`): code drops known sites and obvious junk.
-4. **AI screening** (`pipeline/discovery/screen.mjs`).
-   Runs only with `DISCOVERY_SCREEN` on.
-   Off.
-   Going.
-5. **Hand-off to grading** (`handoff.mjs`).
+   A site that passes waits for the hand-off (`pending`).
+   There is no AI screen: Gemini is asked about a site once, when it is graded.
+   Sites an earlier run left waiting for the removed screen stay where they are and are never handed off (`docs/DISCOVERY.md` says how to check them again by hand).
+4. **Hand-off to grading** (`handoff.mjs`).
    Runs only with `DISCOVERY_HANDOFF` on.
    Off.
    Found sites are handed to the visitor grading queue, not to the list, so discovery cannot add a site to the list today.
@@ -350,7 +351,7 @@ Each one watches the jobs above.
 | When | What | State |
 | --- | --- | --- |
 | a failed run | The jobs with their own failure notice file or update a GitHub issue: `sync-upstream.yml`, `health.yml`, `recheck.yml`, `backup.yml`, `limits.yml`, `prewarm.yml`, `judge-vote.yml`, `discover.yml`. | Running |
-| a failed run | The others file nothing: `grade.yml`, `grade-compare.yml`, `security.yml`, `staging-data.yml`, `staging-capture.yml`, `regrade-not-portfolio.yml`. | Running |
+| a failed run | The others file nothing: `grade.yml`, `security.yml`, `staging-data.yml`, `staging-capture.yml`, `regrade-not-portfolio.yml`. | Running |
 | hourly | Night watch: an alert when last night's run never started or died. | Running |
 | hourly | Email caps: an alert at 80% of a cap. | Running |
 | after each night | Owner alerts: quota used up, a stage stopped, parked items, traction, a missing or expiring dispatch token. | Running |
@@ -369,9 +370,9 @@ Each one watches the jobs above.
 | `health.yml` (Nightly health check + cleanup) | started by the night; fallback 12:00 UTC; manual | health check, owner removals, weekly exclusions, purge | Running |
 | `recheck.yml` (Hourly re-check of sites that stopped working) | started by the hourly task when due; fallback :40; manual | re-checks failing sites | Running |
 | `grade.yml` (Grade my portfolio) | started by the Worker per request | captures visitor requests | Off |
-| `grade-compare.yml` (Weekly grade comparison) | Sunday 18:00 UTC; manual | compares old and new model grades, no Gemini | Running, Going |
-| `judge-vote.yml` (AI votes and comparisons, manual fallback) | manual only | the older AI votes, or the ranking v2 comparisons | Off, Going (the older votes) |
+| `judge-vote.yml` (AI comparisons, manual fallback) | manual only | the ranking v2 comparisons and the boards rebuilt, only when the repository variable `RANKING_V2` is `true` | Off (that variable is not set, so a manual run does nothing) |
 | `regrade-not-portfolio.yml` (Re-check not-a-portfolio grades) | manual only | a one-off re-check tool | Off |
+| `remeasure-all.yml` (Re-capture and re-measure the whole list) | manual only | re-captures every listed site in parallel shards after the measuring code changed, no AI | Off |
 | `discover.yml` (Discover portfolios) | daily 22:00 UTC, gated; manual | finds new sites | Off |
 | `backup.yml` (Backup DB to R2) | daily 05:00 UTC; manual | database snapshot | Running |
 | `limits.yml` (Free limits snapshot) | daily 13:30 UTC; manual | free-limit numbers, backup freshness | Running |
@@ -419,20 +420,18 @@ Dependabot (`.github/dependabot.yml`) opens pull requests daily for release-kit 
 | `grader` | report emails, stuck captures | Off (`GRADER_ENABLED`) |
 | `newsletter` | sends posts through Kit | Off (`NEWSLETTER_ENABLED`) |
 
-Other settings, per `wrangler.jsonc`: `RANKING_V2` false, `GAMES_V2` false, `TOOLS_ENABLED` false, `EMAIL_SIGNIN_ENABLED` false, `CONTENT_MODE` `dry-run`, `RUBRIC_REGRADE` true, `KIT_BROADCAST_MODE` `draft`, `POLL_GENERATION_ENABLED` false.
+Other settings, per `wrangler.jsonc`: `RANKING_V2` false, `GAMES_V2` false, `TOOLS_ENABLED` false, `EMAIL_SIGNIN_ENABLED` false, `CONTENT_MODE` `dry-run`, `KIT_BROADCAST_MODE` `draft`, `POLL_GENERATION_ENABLED` false.
 
 ### Decided, not yet done
 
-Decided to be removed by the owner on 2026-11-21.
-They still exist in code, and some still run.
+Decided to be removed by the owner on 2026-11-21, and still in code:
 
-- Change detection: the "Record page changes" step in `sync-upstream.yml` (still runs) and the hourly change fingerprints (Off).
-- The weekly comparison of two Gemini versions (`grade-compare.yml`, still runs).
-- The older AI votes (`judge-vote.yml`, the part that runs when `RANKING_V2` is not a repository variable).
-- The "grade changed sites" and "re-grades" night stages (caps are 0).
-- Discovery's AI screening step.
+- The hourly change fingerprints (hourly task 9, Off).
+  "When checks re-run" uses the same fingerprints, so this waits for the owner's word on what replaces them.
 
-Already removed: the monthly report to the community list.
+Already removed: the monthly report to the community list; and, on 2026-11-22, the nightly "Record page changes" step, the weekly comparison of two Gemini versions (`grade-compare.yml`), the older AI votes in `judge-vote.yml`, the "grade changed sites" and "re-grades" night stages, and discovery's AI screen.
+Their tables stay, with what they hold: `rating_resets` and `site_fingerprints` are no longer written.
+Scheduled jobs run released code, so these stop in production only with the next release.
 
 ## 8. How to keep this page true
 

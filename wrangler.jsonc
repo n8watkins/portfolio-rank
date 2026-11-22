@@ -74,8 +74,6 @@
     // The end-of-day run (worker/night.ts, AUTOMATION.md "End of day").
     // Ranking v2's AI comparisons run only when this is "true" (RANKING.md).
     "RANKING_V2": "false",
-    // "true" re-grades 3.5 grades from an older rubric, lowest priority.
-    "RUBRIC_REGRADE": "true",
     // Gemini requests a minute, for the whole run.
     "GEMINI_RPM": "8",
     // Sites the nightly checks re-capture (oldest first) to find redesigns.
@@ -263,7 +261,6 @@
         // switches the leaderboard views; the boards come from
         // scripts/recompute-ratings.mjs run against the staging database.
         "RANKING_V2": "true",
-        "RUBRIC_REGRADE": "false",
         "GEMINI_RPM": "8",
         "NIGHTLY_REFRESH": "150",
         "ADMIN_GITHUB_ID": "8055935",
@@ -306,7 +303,7 @@
         // Low caps for staging's own Gemini key, when it has one (DEPLOY.md
         // "Staging"): a tenth of production's day, most stages off.
         "GEMINI_DAILY_QUOTA": "{\"gemini-3.5-flash-lite\":50,\"gemini-3.1-flash-lite\":50}",
-        "GEMINI_BUDGET": "{\"reserve\":5,\"batch\":5,\"stages\":{\"grade_new\":{\"cap\":10},\"grade_changed\":{\"cap\":5},\"compare\":{\"cap\":15},\"content\":{\"cap\":5},\"library\":{\"cap\":0},\"regrade\":{\"cap\":0},\"experiment\":{\"cap\":0}}}",
+        "GEMINI_BUDGET": "{\"reserve\":5,\"batch\":5,\"stages\":{\"grade_new\":{\"cap\":10},\"compare\":{\"cap\":15},\"content\":{\"cap\":5},\"library\":{\"cap\":0},\"experiment\":{\"cap\":0}}}",
         // "Write a draft now" on staging (lib/content/jobs.mjs draftNowPolicy).
         "STAGING_DRAFTS_PER_DAY": "1",
         // The only addresses staging may email (lib/email/gate.mjs); empty

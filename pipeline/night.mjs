@@ -10,7 +10,7 @@
 //
 //   ctx = { db, apiKey, plan, quota, rpm, now() -> ms, sleep(ms), log(line),
 //           fetchImpl, image(shotKey) -> inline image part | "missing" | null,
-//           flags: { rankingV2, rubricRegrade, ranking (lib/ranking/config),
+//           flags: { rankingV2, ranking (lib/ranking/config),
 //                    contentMode },
 //           content: { env, keys, ai, store } (pipeline/content/engine.mjs),
 //           runId }
@@ -31,21 +31,20 @@
 // The stages, in order (pipeline/budget.mjs STAGES), each with a request cap
 // and a wall-clock cap, and all of them stopping 30 minutes before the
 // reset:
-//   1. Grade new sites: listed, captured, ungraded, with page text and facts
-//   2. Grade changed sites: graded before the page fingerprint changed (the
-//      nightly checks re-capture sites and record changes in rating_resets)
-//   3. AI ranking comparisons (ranking v2, only when RANKING_V2 is on), then
+//   1. Grade new sites: listed, captured, ungraded, with page text and facts.
+//      A site is graded once and never re-graded automatically (owner,
+//      2026-11-21).
+//   2. AI ranking comparisons (ranking v2, only when RANKING_V2 is on), then
 //      the boards are rebuilt. Human face-off votes use no Gemini and are
 //      never scheduled.
-//   4. Content: the weekly polls (pipeline/polls.mjs), at most one request a
+//   3. Content: the weekly polls (pipeline/polls.mjs), at most one request a
 //      night and two a week, then the content engine (pipeline/content/
 //      engine.mjs, docs/CONTENT-ENGINE.md) while CONTENT_MODE is not "off":
 //      the week's pick on Sunday, one post a night on the drafting nights
-//   5. Image library: no work in the night, only the cap for the library's
+//   4. Image library: no work in the night, only the cap for the library's
 //      Gemini checks, which run in the daily run at 23:15 UTC and in the
 //      owner's Make now (worker/library.ts, pipeline/content/library-stage.mjs)
-//   6. Re-grades: 3.1 grades on 3.5, then (RUBRIC_REGRADE) older rubrics
-//   7. Experiments (none scheduled)
+//   5. Experiments (none scheduled)
 //
 // No endless retries: each request has the client's own retries (10, 30,
 // 60 s for a busy 3.5), the night has a retry budget (plan.retryBudget), a
@@ -67,8 +66,9 @@ import {
 } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
-import { RESPONSE_SCHEMA, RUBRIC_VERSION, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
-import { ensureRubricHistory, regradeQueue, replaceGradeStatements, versionRegradeQueue } from "./rubric-history.mjs";
+import { RESPONSE_SCHEMA, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
+import { ensureRubricHistory, parseRubric, replaceGradeStatements } from "./rubric-history.mjs";
+import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
 import { FRESH_GRADE_DUE_SQL, ensureReviewSchema, freshGradeDue } from "../lib/reviews/store.mjs";
 import { atTheDoor, setAsideCapture, setAsideCaptures, syncReviewRows, withCaptureColumns } from "../lib/reviews/door.mjs";
@@ -131,9 +131,20 @@ export async function recordItemFailure(db, { job, item, night, reason, parkAfte
 const clearItemFailure = (db, job, item) =>
   db.execute({ sql: "DELETE FROM night_item_failures WHERE job = ? AND item = ? AND parked_at IS NULL", args: [job, item] });
 
-/** Every parked item, for the summary and the admin view. */
+/**
+ * Every parked item of a stage that still exists, for the summary, the
+ * owner's "parked" alert and the admin view. Rows parked under a removed
+ * stage's job (grade-changed, regrade) stay in the table but are never
+ * retried, so they are not reported.
+ */
 export async function parkedItems(db) {
-  const res = await db.execute("SELECT job, item, nights, reason, parked_at FROM night_item_failures WHERE parked_at IS NOT NULL ORDER BY parked_at DESC, job, item");
+  const jobs = STAGES.map((s) => s.job);
+  const res = await db.execute({
+    sql: `SELECT job, item, nights, reason, parked_at FROM night_item_failures
+          WHERE parked_at IS NOT NULL AND job IN (${jobs.map(() => "?").join(",")})
+          ORDER BY parked_at DESC, job, item`,
+    args: jobs,
+  });
   return res.rows.map((r) => ({ job: String(r.job), item: String(r.item), nights: Number(r.nights), reason: r.reason == null ? "" : String(r.reason), parkedAt: String(r.parked_at) }));
 }
 
@@ -160,66 +171,35 @@ const RECAPTURED = (p = "p") => `COALESCE(datetime(${p}.captured_at) > datetime(
  * FRESH_GRADE_DUE), which the bad capture's scores never were.
  */
 const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
-const CHANGED = `json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL AND NOT ${FRESH_GRADE_DUE_SQL("p")}
-  AND EXISTS (SELECT 1 FROM rating_resets r WHERE r.url = p.url AND r.reason = 'page_changed'
-              AND r.at > COALESCE(json_extract(p.ai_rubric, '$.judged_at'), ''))`;
+/**
+ * A person asked for a re-grade (regrade_requests, the owner's "Re-grade" action, lib/games/claims.mjs), and
+ * the site has been captured again since: the request asks for that capture (site_freshness.forced_at, the
+ * nightly refresh's queue), so the grade reads the page as it is now. Graded once, then the request is closed.
+ * Nothing re-grades a site on its own (owner, 2026-11-21); only such a request does.
+ */
+const REQUESTED = (p = "p") =>
+  `EXISTS (SELECT 1 FROM regrade_requests q WHERE q.url = ${p}.url AND q.status = 'pending' AND datetime(${p}.captured_at) > datetime(q.requested_at))`;
 
 const queues = {
+  // New sites, and re-grades people asked for (first: someone is waiting), in one cap.
   grade_new: {
-    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")}`),
+    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND (${UNGRADED()} OR ${REQUESTED()}) AND ${NOT_PARKED("grade-new")}`),
     next: async (ctx, stage, n) =>
       (
         await ctx.db.execute({
           sql: `SELECT ${GRADE_COLS} FROM portfolios p
-                WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")} AND ${NOT_TRIED()}
-                ORDER BY p.needs_review DESC, p.captured_at DESC, p.url LIMIT ?`,
+                WHERE ${READY()} AND (${UNGRADED()} OR ${REQUESTED()}) AND ${NOT_PARKED("grade-new")} AND ${NOT_TRIED()}
+                ORDER BY ${REQUESTED()} DESC, p.needs_review DESC, p.captured_at DESC, p.url LIMIT ?`,
           args: [JSON.stringify(stage.tried), n],
         })
       ).rows.map((row) => ({ id: String(row.url), row })),
-  },
-  grade_changed: {
-    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND ${CHANGED} AND ${NOT_PARKED("grade-changed")}`),
-    next: async (ctx, stage, n) =>
-      (
-        await ctx.db.execute({
-          sql: `SELECT ${GRADE_COLS} FROM portfolios p
-                WHERE ${READY()} AND ${CHANGED} AND ${NOT_PARKED("grade-changed")} AND ${NOT_TRIED()}
-                ORDER BY p.captured_at DESC, p.url LIMIT ?`,
-          args: [JSON.stringify(stage.tried), n],
-        })
-      ).rows.map((row) => ({ id: String(row.url), row })),
-  },
-  regrade: {
-    count: async (ctx) => {
-      const old = await count(
-        ctx.db,
-        `FROM portfolios p WHERE ${READY()} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL
-           AND json_extract(p.ai_rubric, '$.tier') IS NOT NULL AND COALESCE(json_extract(p.ai_rubric, '$.model'), '') != '${PRIMARY_MODEL}'
-           AND ${NOT_PARKED("regrade")}`
-      );
-      if (!ctx.flags.rubricRegrade) return old;
-      return (
-        old +
-        (await count(
-          ctx.db,
-          `FROM portfolios p WHERE ${READY()} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL
-             AND json_extract(p.ai_rubric, '$.model') = '${PRIMARY_MODEL}' AND COALESCE(json_extract(p.ai_rubric, '$.rubric_version'), 1) < ${RUBRIC_VERSION}
-             AND ${NOT_PARKED("regrade")}`
-        ))
-      );
-    },
-    next: async (ctx, stage, n) => {
-      // rubric-history.mjs queues on the bare table name.
-      const where = `AND ${READY("portfolios")} AND ${NOT_PARKED("regrade", "portfolios")} AND ${NOT_TRIED("portfolios")}`;
-      const whereArgs = [JSON.stringify(stage.tried)];
-      let rows = await regradeQueue(ctx.db, { primary: PRIMARY_MODEL, limit: n, where, whereArgs });
-      if (rows.length < n && ctx.flags.rubricRegrade) {
-        rows = [...rows, ...(await versionRegradeQueue(ctx.db, { primary: PRIMARY_MODEL, version: RUBRIC_VERSION, limit: n - rows.length, where, whereArgs }))];
-      }
-      return rows.map((row) => ({ id: String(row.url), row }));
-    },
   },
 };
+
+/** Closes a site's pending re-grade request: `done` once it was graded, `failed` when no screenshot was usable. */
+async function closeRegradeRequest(db, url, status, now) {
+  await db.execute({ sql: "UPDATE regrade_requests SET status = ?, done_at = ? WHERE url = ? AND status = 'pending'", args: [status, iso(now), url] });
+}
 
 async function count(db, from) {
   const res = await db.execute(`SELECT COUNT(*) AS n ${from}`);
@@ -232,10 +212,10 @@ async function count(db, from) {
 // capture does not show the site: set aside for a new capture, nothing sent
 // to Gemini), "skipped" (screenshot unavailable for now) or "sentinel"
 // (screenshot gone for good). Throws Gemini errors and malformed answers.
-async function gradeItem(ctx, gemini, item, { replace }) {
+async function gradeItem(ctx, gemini, item) {
   // Never grade a capture that does not show the site (lib/reviews/stored-capture.mjs); planNight set
   // most of them aside already, this catches the rest before any request. Checked once, here: the door
-  // is told so (captureChecked). The re-grade queue's rows come without captured_at, read once.
+  // is told so (captureChecked). Rows without captured_at have it read once.
   const row = await withCaptureColumns(ctx.db, item.row);
   const url = String(row.url);
   const blocked = storedCaptureBlocked(row);
@@ -249,7 +229,11 @@ async function gradeItem(ctx, gemini, item, { replace }) {
         sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.judged_at', ?, '$.missing_image_at', ?) WHERE url = ?",
         args: [iso(ctx.now()), iso(ctx.now()), url],
       });
-    } else if (!replace) {
+    } else if (parseRubric(row.ai_rubric)) {
+      // A re-grade someone asked for, on a site whose new screenshot is gone: its grade stays, and the request
+      // is closed as failed (they may ask again), so it is not tried every night.
+      await closeRegradeRequest(ctx.db, url, "failed", ctx.now());
+    } else {
       await ctx.db.execute({
         sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
         args: [JSON.stringify({ error: "no_usable_captures", judged_at: iso(ctx.now()) }), url],
@@ -271,6 +255,8 @@ async function gradeItem(ctx, gemini, item, { replace }) {
     captureChecked: true,
     gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(ctx.db, g, { url, now: ctx.now() }), now),
   });
+  // A re-grade someone asked for is answered: they may ask again later.
+  await closeRegradeRequest(ctx.db, url, "done", now);
   return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
 }
 
@@ -294,10 +280,9 @@ export async function gradeFromEvidence(gemini, { row, image, now }) {
 // ---------------------------------------------------------------------------
 const handlers = {
   // sites: each item is a site (its id the URL), logged per request and listed in the summary.
-  grade_new: { ...queues.grade_new, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: false }) },
-  grade_changed: { ...queues.grade_changed, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
+  grade_new: { ...queues.grade_new, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item) },
   compare: {
-    off: (ctx) => (ctx.flags.rankingV2 ? null : 'off: RANKING_V2 is not "true" (the ELO-era AI votes run only by hand, judge-vote.yml)'),
+    off: (ctx) => (ctx.flags.rankingV2 ? null : 'off: RANKING_V2 is not "true"'),
     count: async (ctx) => {
       const done = await comparisonsToday(ctx.db, { now: new Date(ctx.now()), model: PRIMARY_MODEL });
       return Math.max(0, ctx.flags.ranking.budget.one_on_one - done.one_on_one) + Math.max(0, ctx.flags.ranking.budget.batched - done.batched);
@@ -315,7 +300,6 @@ const handlers = {
   content: contentStage,
   // The blog's image library, a few house-style illustrations a night (pipeline/content/library-stage.mjs).
   library: libraryStage,
-  regrade: { ...queues.regrade, parkable: true, sites: true, run: (ctx, g, item) => gradeItem(ctx, g, item, { replace: true }) },
   experiment: { off: () => "nothing scheduled" },
 };
 
@@ -388,8 +372,7 @@ async function compareItem(ctx, gemini, { job, index }, stage) {
 }
 
 // After the comparisons: the People, AI and Merged boards from every stored
-// comparison (scripts/recompute-ratings.mjs does the same by hand). Page
-// changes were already recorded by the nightly checks.
+// comparison (scripts/recompute-ratings.mjs does the same by hand).
 async function rebuildBoards(ctx, stage) {
   if (!stage.ok) return;
   const config = ctx.flags.ranking;
@@ -419,6 +402,8 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
   await ensureRankingSchema(db);
   await ensurePollsSchema(db);
   await ensureReviewSchema(db);
+  // The owners' re-grade requests "grade new sites" reads (made by the games schema too; safe to repeat).
+  await db.batch(REGRADE_REQUEST_TABLES, "write");
   const claimed = await db.execute({
     sql: "INSERT INTO night_runs (night, started_at, status, run_id) VALUES (?, ?, 'running', ?) ON CONFLICT(night) DO NOTHING RETURNING night",
     args: [timeline.night, iso(now), ctx.runId ?? null],
@@ -522,7 +507,20 @@ export async function planNight(ctx, state) {
   return s;
 }
 
+/**
+ * The next stage to open, by key: the first stage in STAGES that tonight has
+ * not closed yet. A run's state outlives a release (a Workflow resumes from
+ * its last step on new code), so the stored stageIndex is never trusted to
+ * name a stage: a stage list that changed under a running night still opens
+ * every remaining stage once, in order, and never the wrong one. -1 when none is left.
+ */
+export function nextStageIndex(s) {
+  const closed = new Set((s.stages ?? []).map((x) => x.key));
+  return STAGES.findIndex((d) => !closed.has(d.key));
+}
+
 function openStage(ctx, s) {
+  s.stageIndex = nextStageIndex(s);
   const def = STAGES[s.stageIndex];
   const now = ctx.now();
   const cap = ctx.plan.stages[def.key] ?? { cap: 0, minutes: 0 };
@@ -551,15 +549,15 @@ async function closeStage(ctx, s, result) {
   stage.result ??= result;
   stage.finishedAt = iso(ctx.now());
   try {
-    await handlers[stage.key].close?.(ctx, stage);
+    await handlers[stage.key]?.close?.(ctx, stage);
   } catch (e) {
     stage.result += `; rebuilding the boards failed: ${msg(e)}`;
   }
   const { plan, tried, ...kept } = stage;
-  s.stages.push({ ...kept, planned: plan ? plan.length : undefined, triedTonight: tried.length });
+  s.stages.push({ ...kept, planned: plan ? plan.length : undefined, triedTonight: tried?.length ?? 0 });
   s.stage = null;
-  s.stageIndex++;
-  if (s.stageIndex >= STAGES.length) s.done = true;
+  s.stageIndex = nextStageIndex(s);
+  if (s.stageIndex < 0) s.done = true;
 }
 
 async function stopRun(ctx, s, reason, status) {
@@ -752,10 +750,16 @@ export async function runBatch(ctx, state) {
       await stopRun(ctx, s, `hard stop ${plan.stopBeforeResetMinutes} minutes before the quota resets (${pacificTime(s.timeline.hardStop)} Pacific); the rest waits for tomorrow`, "stopped");
       return { state: s };
     }
+    // A stage left open by a run that began on older code, and that this code no longer has (a release
+    // deployed mid-run), closes as off; the run goes on with the next stage that exists.
+    if (s.stage && !handlers[s.stage.key]) {
+      await closeStage(ctx, s, "off: this stage was removed by a release during the run");
+      if (s.done) return { state: s };
+    }
     // Open the next stage that has work (stages that are off close at once).
     let stage = s.stage;
     while (!stage) {
-      if (s.stageIndex >= STAGES.length) {
+      if (nextStageIndex(s) < 0) {
         s.done = true;
         return { state: s };
       }
@@ -856,7 +860,7 @@ export async function runBatch(ctx, state) {
           stage.tried.push(item.id);
           notes = [["setAside", { url: item.id, stage: stage.key, why: "screenshot unavailable for now; tried again tomorrow" }]];
         } else if (out === "sentinel") {
-          // No usable image and nothing written (a re-grade keeps its grade): set aside for tonight, not picked again.
+          // No usable image: set aside for tonight, not picked again.
           stage.noImage = (stage.noImage ?? 0) + 1;
           stage.tried.push(item.id);
           notes = [["setAside", { url: item.id, stage: stage.key, why: "screenshot missing; graded after its next capture" }]];

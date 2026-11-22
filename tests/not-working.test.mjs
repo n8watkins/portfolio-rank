@@ -15,14 +15,12 @@ import { EXPORT_EVERY_DAYS, exportDue, markExported, planDeadRecheck, planExclus
 import { ACTIVE, AI_WORK, LISTED_NOT_DOWN, dueForCapture } from "../pipeline/roster.mjs";
 import { GONE_WHERE, HIDDEN_WHERE } from "../lib/hidden.mjs";
 import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
-import { regradeQueue, versionRegradeQueue } from "../pipeline/rubric-history.mjs";
 import { rowsNeedingEvidence } from "../pipeline/evidence.mjs";
 import { heroCandidates } from "../pipeline/polls.mjs";
 import { GRADER_POOL_KEY, gradedPool } from "../lib/grader/report.mjs";
 import { dueForFingerprint, ensureFreshnessSchema, lighthouseDue, linksDue, screenshotsDue } from "../lib/freshness.mjs";
 import { fullPageDue } from "../pipeline/fullpage.mjs";
 import { prewarmQueue } from "../scripts/lib/prewarm.mjs";
-import { PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { PORTFOLIO_HTML, T0, answer, col, context, drive, freshDb, site } from "./helpers/door-night.mjs";
 import { ensureReviewSchema, planConfirm } from "../lib/reviews/store.mjs";
 import { assignShownRanks } from "../lib/ranking/store.mjs";
@@ -567,9 +565,6 @@ test("per consumer: the AI's queues take only healthy sites; the free jobs (capt
   const shown = (name, rows) => assert.deepEqual(only(rows), [blank, failing, ok].sort(), `LISTED_NOT_DOWN: ${name}`);
 
   // AI_WORK: grading, comparisons, polls, blog facts, evidence for a grade.
-  ai("re-grade queue (pipeline/rubric-history.mjs regradeQueue)", await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 10 }));
-  await db.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.model', ?)", args: [PRIMARY_MODEL] });
-  ai("rubric-version queue (versionRegradeQueue)", await versionRegradeQueue(db, { primary: PRIMARY_MODEL, version: 99, limit: 10 }));
   ai("poll hero candidates (pipeline/polls.mjs heroCandidates)", await heroCandidates(db, { known: [], now: T0 }));
   // Visitors: the comparison pool the home page, /me, the grade page and a grade report show keeps a failing
   // site until it is not working, as every other page does (review 2.9).
@@ -647,7 +642,7 @@ test("one shared definition: no background job writes its own health condition",
   const spelled = files.filter((f) => !allowed.has(f) && /COALESCE\(\s*[\w.]*health\s*,\s*''\s*\)\s*(!=|=|IN|NOT IN)/.test(fs.readFileSync(f, "utf8")));
   assert.deepEqual(spelled, []);
   // Every query that picks sites for the AI uses AI_WORK, and never ACTIVE.
-  for (const f of ["pipeline/night.mjs", "pipeline/judge.mjs", "pipeline/compare.mjs", "pipeline/polls.mjs", "pipeline/rubric-history.mjs", "pipeline/content/facts.mjs", "scripts/eval-rubric.mjs", "scripts/regrade-not-portfolio.mjs"]) {
+  for (const f of ["pipeline/night.mjs", "pipeline/judge.mjs", "pipeline/compare.mjs", "pipeline/polls.mjs", "pipeline/content/facts.mjs", "scripts/eval-rubric.mjs", "scripts/regrade-not-portfolio.mjs"]) {
     const src = fs.readFileSync(f, "utf8");
     assert.match(src, /\$\{AI_WORK\(/, f);
     assert.doesNotMatch(src, /\$\{ACTIVE\(/, f);

@@ -1,7 +1,7 @@
 // The language and topic filter of the discovery pipeline (docs/DISCOVERY.md),
 // ported from the pilot's filter.py (about 95% right on its random sample of
 // 100): keep English, computer-field personal portfolios. Free and instant,
-// so the AI screen only sees what passes.
+// so only what passes is handed to grading.
 //
 // Language: the page's own words decide when they are clear; the
 // <html lang> attribute (the pilot's suggested first signal) decides when

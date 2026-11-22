@@ -1,16 +1,8 @@
-// Grades are never overwritten silently. When a site is re-graded (by the
-// re-grade queues, or --force), its previous grade moves to rubric_history
-// first. Every re-grade of a 3.1 Flash-Lite grade by 3.5 Flash-Lite therefore
-// yields a free 3.1-vs-3.5 pair, which scripts/grade-compare.mjs reports on.
-//
-// Two re-grade queues, both after new and ungraded sites:
-//   regradeQueue         grades not made by the primary model (3.1 -> 3.5)
-//   versionRegradeQueue  grades by the primary model from an older rubric
-//                        version (pipeline/rubric.mjs RUBRIC_VERSION); lowest
-//                        priority, and only when RUBRIC_REGRADE is "true"
+// Grades are never overwritten silently. When a site is graded again (its
+// one fresh grade after the owner's review, a manual tool, or --force), its
+// previous grade moves to rubric_history first.
 
 import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
-import { AI_WORK } from "./roster.mjs";
 import { guardedForReview } from "./portfolio-guard.mjs";
 
 export async function ensureRubricHistory(db) {
@@ -75,52 +67,4 @@ export function clearGradeStatements(url, oldJson, now = new Date()) {
   }
   stmts.push({ sql: "UPDATE portfolios SET ai_rubric = NULL WHERE url = ?", args: [url] });
   return stmts;
-}
-
-/**
- * The re-grade queue: listed, healthy, captured sites whose current grade was
- * not made by `primary` (older grades without a model count too), oldest
- * grade first. Error sentinels are not grades and are left alone. `where`
- * (an SQL fragment starting with AND, on the portfolios table) narrows it,
- * with its arguments in `whereArgs`.
- */
-export async function regradeQueue(db, { primary, limit, where = "", whereArgs = [] }) {
-  if (limit <= 0) return [];
-  const res = await db.execute({
-    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
-          WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
-            AND json_valid(ai_rubric)
-            AND json_extract(ai_rubric, '$.error') IS NULL
-            AND json_extract(ai_rubric, '$.tier') IS NOT NULL
-            AND COALESCE(json_extract(ai_rubric, '$.model'), '') != ?
-            ${where}
-          ORDER BY COALESCE(json_extract(ai_rubric, '$.judged_at'), ''), url
-          LIMIT ?`,
-    args: [primary, ...whereArgs, limit],
-  });
-  return res.rows;
-}
-
-/**
- * The rubric-version re-grade queue (lowest priority): listed, healthy,
- * captured sites whose grade was made by `primary` with a rubric older than
- * `version` (grades from before versions were recorded count as 1), oldest
- * grade first. Grades by other models are on regradeQueue already.
- */
-export async function versionRegradeQueue(db, { primary, version, limit, where = "", whereArgs = [] }) {
-  if (limit <= 0) return [];
-  const res = await db.execute({
-    sql: `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts, signals FROM portfolios
-          WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
-            AND json_valid(ai_rubric)
-            AND json_extract(ai_rubric, '$.error') IS NULL
-            AND json_extract(ai_rubric, '$.tier') IS NOT NULL
-            AND json_extract(ai_rubric, '$.model') = ?
-            AND COALESCE(json_extract(ai_rubric, '$.rubric_version'), 1) < ?
-            ${where}
-          ORDER BY COALESCE(json_extract(ai_rubric, '$.judged_at'), ''), url
-          LIMIT ?`,
-    args: [primary, version, ...whereArgs, limit],
-  });
-  return res.rows;
 }

@@ -12,17 +12,20 @@
 //   2. recheck   dropped rows whose recheck date has come go back to `found`
 //   3. check     up to caps.found `found` rows: one fetch each, the code
 //                checks and the language and topic filter; each becomes
-//                `dropped` (with a reason) or `screen` (with its evidence)
-//   4. screen    the AI screen on Gemini 3.1 Flash-Lite, 20 sites a
-//                request, within caps.screenRequests a quota day; only with
-//                DISCOVERY_SCREEN=on and a GEMINI_API_KEY
-//   5. hand-off  `pending` rows to the grader's queue at caps.handoffPerDay;
+//                `dropped` (with a reason) or `pending` (with its evidence)
+//   4. hand-off  `pending` rows to the grader's queue at caps.handoffPerDay;
 //                only with DISCOVERY_HANDOFF=on
 //
+// No AI screen: Gemini is asked about a site once, when it is graded (owner,
+// 2026-11-22: code filter first, then grading). Rows an earlier run left in
+// the old `screen` status stay there, inert: they were never screened, and
+// they must not go ahead of sites people add (docs/DISCOVERY.md says how to
+// put them through the code checks again by hand). Nothing writes `screen`.
+//
 // Environment: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (or LOCAL_DB_FILE),
-// GITHUB_TOKEN (GitHub search and profiles), GEMINI_API_KEY,
-// DISCOVERY_SCREEN, DISCOVERY_HANDOFF, DISCOVERY_CAPS (JSON, over the
-// defaults below), GRADER_CAPS, GITHUB_STEP_SUMMARY.
+// GITHUB_TOKEN (GitHub search and profiles), DISCOVERY_HANDOFF,
+// DISCOVERY_CAPS (JSON, over the defaults below), GRADER_CAPS,
+// GITHUB_STEP_SUMMARY.
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@libsql/client";
@@ -30,14 +33,11 @@ import { DISCOVERY_TABLES, addFound, adoptRedirects, queue, reopenDue, seenKey, 
 import { siteKeyOf } from "../../lib/grader/url.mjs";
 import { asKnown, siteScope } from "./known.mjs";
 import { guardedFetch } from "../net-guard-node.mjs";
-import { createGemini } from "../gemini.mjs";
-import { createRequestLog, ensureGeminiLog } from "../gemini-log.mjs";
 import { checkPage } from "./check.mjs";
 import { filterPage } from "./filter.mjs";
 import { createHttp, mapLimit } from "./http.mjs";
 import { handoff } from "./handoff.mjs";
 import { normalizeCandidate } from "./normalize.mjs";
-import { SCREEN_JOB, SCREEN_MODEL, BATCH, screenRows, screenedToday } from "./screen.mjs";
 import { TOPICS, readTopic } from "./sources/github.mjs";
 import { readComments, readHired, readShare } from "./sources/hn.mjs";
 import { readPersonalSites, readUses } from "./sources/lists.mjs";
@@ -54,8 +54,6 @@ export const DEFAULT_CAPS = {
   // `found` rows fetched and checked per run, and rechecks reopened per run.
   found: 600,
   recheck: 200,
-  // AI screen requests per quota day (20 sites each) of Gemini 3.1 Flash-Lite's 500.
-  screenRequests: 25,
   // Hand-offs to the grader: per quota day, discovery jobs waiting at once,
   // and places in today's grading share always left for people.
   handoffPerDay: 10,
@@ -137,10 +135,10 @@ export async function judgeRow(row, io) {
   if (!row.url) return { key: row.key, status: "dropped", reason: "dead", detail: "no_address" };
   if (row.work?.sharedLink) return { key: row.key, status: "dropped", reason: "not_portfolio", detail: "shared_link_many_authors" };
   const c = await checkPage({ url: row.url, context: row.work }, io);
-  if (c.status === "dropped") return { key: row.key, status: "dropped", reason: c.reason, detail: c.detail };
+  if (c.status !== "passed") return { key: row.key, status: "dropped", reason: c.reason ?? "dead", detail: c.detail };
   const f = filterPage(c.evidence);
   if (!f.keep) return { key: row.key, status: "dropped", reason: f.reason, detail: f.detail };
-  return { key: row.key, status: "screen", finalKey: c.finalKey, finalUrl: c.finalUrl, siteKey: siteKeyOf(row.url), work: { evidence: c.evidence, priority: f.priority } };
+  return { key: row.key, status: "pending", finalKey: c.finalKey, finalUrl: c.finalUrl, siteKey: siteKeyOf(row.url), work: { evidence: c.evidence, priority: f.priority } };
 }
 
 const bump = (o, k, n = 1) => (o[k] = (o[k] ?? 0) + n);
@@ -149,9 +147,9 @@ const bump = (o, k, n = 1) => (o[k] = (o[k] ?? 0) + n);
  * One run. Everything outside the database comes in through `io`, so the
  * tests run it end to end with stand-ins.
  */
-export async function runDiscovery({ db, io, caps, sources = SOURCES, now = new Date(), screen = null, handoffOn = false, listed = new Set(), log = console.log }) {
+export async function runDiscovery({ db, io, caps, sources = SOURCES, now = new Date(), handoffOn = false, listed = new Set(), log = console.log }) {
   await db.batch(DISCOVERY_TABLES, "write");
-  const summary = { at: now.toISOString(), caps, sources: {}, recheck: 0, check: { rows: 0, outcomes: {}, details: {} }, screen: { ran: false }, handoff: { ran: false } };
+  const summary = { at: now.toISOString(), caps, sources: {}, recheck: 0, check: { rows: 0, outcomes: {}, details: {} }, handoff: { ran: false } };
 
   // 1. Sources: rows first, then the watermark.
   const taken = new Set();
@@ -187,12 +185,12 @@ export async function runDiscovery({ db, io, caps, sources = SOURCES, now = new 
   // A page that redirects to a site already listed or rejected (by site, known.mjs), seen, or kept
   // earlier in this run is a duplicate. One that ends on a new address moves there: see adoptRedirects.
   const known = asKnown(listed);
-  const finals = results.filter((r) => r.status === "screen" && r.finalKey !== r.siteKey);
+  const finals = results.filter((r) => r.status === "pending" && r.finalKey !== r.siteKey);
   const finalSeen = await seenMany(db, finals.map((r) => `https://${r.finalKey}`));
   const keptFinal = new Set();
   const moves = [];
   for (const r of results) {
-    if (r.status !== "screen") continue;
+    if (r.status !== "pending") continue;
     const redirected = r.finalKey !== r.siteKey;
     const dup = keptFinal.has(siteScope(r.finalKey)) || (redirected && (known.has(r.finalKey) || finalSeen.has(seenKey(`https://${r.finalKey}`))));
     keptFinal.add(siteScope(r.finalKey));
@@ -216,25 +214,14 @@ export async function runDiscovery({ db, io, caps, sources = SOURCES, now = new 
   }
   log(`check: ${rows.length} rows, ${JSON.stringify(summary.check.outcomes)}`);
 
-  // 4. The AI screen.
-  if (screen) {
-    const used = await screenedToday(db, now);
-    const requests = Math.max(0, caps.screenRequests - used);
-    const todo = requests ? await queue(db, "screen", requests * BATCH) : [];
-    const res = await screenRows(todo, { generate: screen.generate, requests, log });
-    await settle(db, res.outcomes, { now });
-    summary.screen = { ran: true, usedBefore: used, requests: res.requests, stopped: res.stopped, outcomes: {} };
-    for (const o of res.outcomes) bump(summary.screen.outcomes, o.status === "dropped" ? o.reason : o.status);
-  }
-
-  // 5. Hand-off to the grader.
+  // 4. Hand-off to the grader.
   if (handoffOn) {
     summary.handoff = { ran: true, ...(await handoff(db, { perDay: caps.handoffPerDay, waiting: caps.handoffWaiting, reserve: caps.handoffReserve, now, graderCapsRaw: io.graderCaps, log })) };
   }
 
   // Queue sizes after the run: each count reads only its status's partial index.
   summary.queues = {};
-  for (const q of ["found", "screen", "pending", "queued"]) {
+  for (const q of ["found", "pending", "queued"]) {
     const r = await db.execute({ sql: "SELECT COUNT(*) AS n FROM discovery_sites WHERE status = ?", args: [q] });
     summary.queues[q] = Number(r.rows[0]?.n ?? 0);
   }
@@ -249,8 +236,7 @@ export function markdownSummary(s) {
   for (const [k, n] of Object.entries(s.check.outcomes)) lines.push(`| ${k} | ${n} |`);
   lines.push("", "| Check detail | Sites |", "|---|---:|");
   for (const [k, n] of Object.entries(s.check.details).sort((a, b) => b[1] - a[1])) lines.push(`| ${k} | ${n} |`);
-  lines.push("", s.screen.ran ? `AI screen: ${s.screen.requests} request(s), ${JSON.stringify(s.screen.outcomes)}${s.screen.stopped ? `, stopped: ${s.screen.stopped}` : ""}.` : "AI screen: off.");
-  lines.push(s.handoff.ran ? `Hand-off: ${s.handoff.handed} handed to the grader; ${s.handoff.graded} graded, ${s.handoff.notPortfolio} not a portfolio, ${s.handoff.failed} failed.` : "Hand-off: off.");
+  lines.push("", s.handoff.ran ? `Hand-off: ${s.handoff.handed} handed to the grader; ${s.handoff.graded} graded, ${s.handoff.notPortfolio} not a portfolio, ${s.handoff.failed} failed.` : "Hand-off: off.");
   lines.push("", `Queues after the run: ${Object.entries(s.queues).map(([k, n]) => `${k} ${n}`).join(", ")}.`);
   return lines.join("\n");
 }
@@ -292,19 +278,11 @@ async function main() {
     },
     graderCaps: env.GRADER_CAPS,
   };
-  let screen = null;
-  if (/^on$/i.test(env.DISCOVERY_SCREEN ?? "") && env.GEMINI_API_KEY) {
-    await ensureGeminiLog(db);
-    const reqLog = createRequestLog({ db, job: SCREEN_JOB });
-    const gemini = createGemini({ apiKey: env.GEMINI_API_KEY, models: [SCREEN_MODEL], rpm: 10, retryBudget: 6, onRequest: (r) => reqLog.record(r) });
-    screen = { generate: gemini.generate };
-  }
   const summary = await runDiscovery({
     db,
     io,
     caps,
     sources,
-    screen,
     handoffOn: /^on$/i.test(env.DISCOVERY_HANDOFF ?? ""),
     listed: listedKeys(path.join(process.cwd(), "data")),
   });
