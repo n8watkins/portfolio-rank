@@ -25,8 +25,8 @@
 // the weekly change fingerprint found the page changed, the admin pressed
 // "Re-measure" or the owner asked for a re-grade, or the capture is 90 days
 // old (the nightly checks, sync-upstream.yml). Their screenshots, text,
-// facts and page fingerprint are renewed, so a redesign is found
-// (scripts/detect-changes.mjs) and re-graded the same night. A refresh that
+// facts and page fingerprint are renewed; the grade stays (a site is graded
+// once, owner 2026-11-21). A refresh that
 // fails keeps the existing capture and never marks the site failed (whether
 // a site is down is the weekly health check's call); it only waits out a
 // growing backoff before it is refreshed again (lib/freshness.mjs

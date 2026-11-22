@@ -13,7 +13,10 @@ import { HELD_KINDS, guardedForReview } from "../pipeline/portfolio-guard.mjs";
 import { REMOVED_KINDS } from "../lib/removed-kinds.mjs";
 import * as store from "../lib/reviews/store.mjs";
 import { autoApplyReviews, decideReviews, ensureReviewSchema, listReviews, undoReviews } from "../lib/reviews/store.mjs";
-import { syncReviewRows } from "../lib/reviews/door.mjs";
+import { atTheDoor, syncReviewRows } from "../lib/reviews/door.mjs";
+import { gradeRecord, parseRubricResponse } from "../pipeline/rubric.mjs";
+import { replaceGradeStatements } from "../pipeline/rubric-history.mjs";
+import { rankForWrite } from "../lib/tiers-store.mjs";
 import { BOT_WALL_REASON, isBotWallReason } from "../pipeline/capture-blocked.mjs";
 import { DAY, EMPTY_HTML, PORTFOLIO_HTML, T0, answer, col, context, drive, faulty, freshDb, grade, hidden, reviewsOf, signals, site } from "./helpers/door-night.mjs";
 
@@ -32,11 +35,21 @@ async function assertOneCase(db, when) {
   }
 }
 
-/** A page change after the last grade, so the "grade changed sites" stage grades the site again. */
-const changed = (db, url, at) => db.execute({ sql: "INSERT INTO rating_resets (url, at, reason) VALUES (?, ?, 'page_changed')", args: [url, new Date(at).toISOString()] });
-const regradeNight = (db, url, start, no = true) => {
-  const { ctx, clock } = context(db, { gemini: { [url]: answer(!no) }, budget: { stages: { grade_changed: { cap: 50 } } }, start, autoApply: false });
-  return drive(ctx, clock);
+/**
+ * The site graded again by hand, through the same door every grade goes through (a manual tool or
+ * judge.mjs --force; the night never re-grades a graded site, owner 2026-11-21), automatic decisions off.
+ */
+const gradeAgain = async (db, url, at, no = true) => {
+  const row = { ...(await db.execute({ sql: "SELECT * FROM portfolios WHERE url = ?", args: [url] })).rows[0] };
+  const now = new Date(at);
+  const grade = gradeRecord({ parsed: parseRubricResponse(answer(!no)), model: PRIMARY_MODEL, facts: JSON.parse(String(row.facts)), source: "r2", now });
+  return atTheDoor(db, {
+    grade,
+    row,
+    now,
+    autoApply: false,
+    gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(db, g, { url, now: at }), now),
+  });
 };
 
 test("1: a site the owner kept by rejecting a door removal is not reopened as 'signals collapsed' after the weekly check", async () => {
@@ -112,9 +125,8 @@ test("4: a held grade always has exactly one open row describing it, whatever th
   const { ctx, clock } = context(db, { gemini: { [url]: answer(false) }, autoApply: false });
   await drive(ctx, clock);
   await assertOneCase(db, "after the first grade");
-  // Night 2: graded again while that row waits.
-  await changed(db, url, T0 + 12 * 3600000);
-  await regradeNight(db, url, T0 + DAY);
+  // Graded again while that row waits.
+  await gradeAgain(db, url, T0 + DAY);
   await assertOneCase(db, "after a re-grade");
   const open = (await reviewsOf(db, url)).filter((r) => String(r.status) === "pending");
   assert.equal(String(open[0].created_at), (await grade(db, url)).judged_at, "the open row describes the current grade");
@@ -125,19 +137,16 @@ test("4: a held grade always has exactly one open row describing it, whatever th
   // Undo, then graded again: held for the owner (he took it back), one open row.
   await undoReviews(db, { ids: [applied[0].id], actor: owner, now: new Date(T0 + DAY + 2 * 3600000) });
   await assertOneCase(db, "after the undo");
-  await changed(db, url, T0 + DAY + 12 * 3600000);
-  await regradeNight(db, url, T0 + 2 * DAY);
+  await gradeAgain(db, url, T0 + 2 * DAY);
   await assertOneCase(db, "after a re-grade of an undone removal");
   // Reject settles it; graded again: still one open row at most, and the site is listed.
   const pending = (await reviewsOf(db, url)).find((r) => String(r.status) === "pending");
   await decideReviews(db, { ids: [Number(pending.id)], action: "reject", actor: owner, onFeed: () => true, now: new Date(T0 + 2 * DAY + 3600000) });
   await assertOneCase(db, "after the reject");
-  await changed(db, url, T0 + 2 * DAY + 12 * 3600000);
-  await regradeNight(db, url, T0 + 3 * DAY);
+  await gradeAgain(db, url, T0 + 3 * DAY);
   await assertOneCase(db, "after a re-grade of a kept site");
   // And a re-grade that says portfolio closes the open door row.
-  await changed(db, url, T0 + 3 * DAY + 12 * 3600000);
-  await regradeNight(db, url, T0 + 4 * DAY, false);
+  await gradeAgain(db, url, T0 + 4 * DAY, false);
   await assertOneCase(db, "after a re-grade that says portfolio");
   assert.equal(await hidden(db, url), false);
 });

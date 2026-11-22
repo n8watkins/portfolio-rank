@@ -351,7 +351,7 @@ const RUN = Date.parse("2026-11-11T23:15:00Z");
 
 test("daily run: makes what Make now left of the day's 40, logged as job library, then stops cleanly at the cap", async () => {
   const { db } = await freshDb();
-  assert.deepEqual(STAGES.map((s) => s.key), ["grade_new", "grade_changed", "compare", "content", "library", "regrade", "experiment"]);
+  assert.deepEqual(STAGES.map((s) => s.key), ["grade_new", "compare", "content", "library", "experiment"]);
   assert.deepEqual(budgetPlan().stages.library, { cap: 40, minutes: 25 });
   const calls = [];
   // The owner made 3 earlier in the day.

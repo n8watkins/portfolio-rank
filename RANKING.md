@@ -119,16 +119,14 @@ The owner's rule: batched results join the ranking once they agree well enough w
 
 ## Change detection
 
-When a site's page fingerprint changes (a hash of the capture's DOM shape and CSS classes, `portfolios.meta`), the recompute records a reset in `rating_resets` and the site's uncertainty goes back to unsure from that moment; its mean stays.
-The first fingerprint of a site is its baseline, never a reset.
-Some sites change hashed class names on every build: a false alarm only costs a few extra comparisons, never the site's place.
-The hook is `recordFingerprint(db, url, fingerprint, at)` in `lib/ranking/store.mjs`, and `detectPageChanges(db)` runs it over every captured site.
+Removed by the owner on 2026-11-21: nothing records page changes any more, and nothing writes `rating_resets` or `site_fingerprints`.
+The resets already stored stay, and the recompute still reads them (a reset puts a site's uncertainty back to unsure from that moment; its mean stays), so the boards rebuild the same from the same input.
 
 ## Running it
 
 | Command | What |
 | --- | --- |
-| `node scripts/recompute-ratings.mjs` | mirror votes, detect page changes, rebuild every view into `site_ratings` and `rank_history`, record the run in `ranking_runs` |
+| `node scripts/recompute-ratings.mjs` | mirror votes, rebuild every view into `site_ratings` and `rank_history`, record the run in `ranking_runs` |
 | `node scripts/recompute-ratings.mjs --read-only` | the same summary without writing anything (works with a read-only token) |
 | `node scripts/recompute-ratings.mjs --export FILE` | also write the input (sites, grades used for seeding, comparisons, resets) as an export |
 | `node scripts/recompute-ratings.mjs --from FILE` | recompute from an export, no database: anyone can check the board |

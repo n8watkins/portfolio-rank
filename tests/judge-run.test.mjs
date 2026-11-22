@@ -150,38 +150,16 @@ test("rubric fails when every row is skipped because screenshots are unavailable
   assert.match(r.summary, /\| 2 \| 0 \| 0 \| 0 \| 2 \|/);
 });
 
-test("pairwise leaves out sites graded not-a-portfolio, delisted or down", async () => {
-  const [a, b, c, d, e] = feed;
+test("pairwise (the ELO-era AI votes) is gone: refused before any request or vote", async () => {
   const { dir, dbFile, db } = await setup([
-    { url: a.url, rubric: rubric({ tier: "A" }) },
-    { url: b.url, rubric: rubric({ tier: "A" }) },
-    { url: c.url, rubric: rubric({ tier: "S", is_portfolio: false }) },
-    { url: d.url, rubric: rubric({ tier: "A" }), health: "down" },
-    { url: "https://left-the-list.example", rubric: rubric({ tier: "S" }) },
-    { url: e.url, rubric: rubric({ tier: "B" }) },
-  ]);
-  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "3"], {
-    MOCK_GEMINI: JSON.stringify([{ json: { winner: "A", reason: "cleaner" } }]),
-  });
-  assert.equal(r.code, 0, r.out);
-  const votes = (await db.execute("SELECT winner, loser FROM votes")).rows;
-  assert.equal(votes.length, 3);
-  const allowed = new Set([a.url, b.url, e.url]);
-  for (const v of votes) {
-    assert.ok(allowed.has(v.winner) && allowed.has(v.loser), `${v.winner} vs ${v.loser}`);
-  }
-  assert.match(r.summary, /## AI judge: pairwise/);
-});
-
-test("pairwise fails when no pair has screenshots", async () => {
-  const { dir, dbFile } = await setup([
     { url: feed[0].url, rubric: rubric({ tier: "A" }) },
     { url: feed[1].url, rubric: rubric({ tier: "A" }) },
   ]);
-  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "2"], { MOCK_SHOTS: "error" });
+  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "2"], { MOCK_GEMINI: JSON.stringify([{ json: { winner: "A", reason: "cleaner" } }]) });
   assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /pairwise \(the ELO-era AI votes\) was removed/);
   assert.equal(r.calls, 0);
-  assert.match(r.out, /nothing was judged/);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM votes")).rows[0].n, 0);
 });
 
 const FACTS = {
@@ -294,10 +272,7 @@ test("a model that rejects the thinking level is asked again without it", async 
   assert.equal((await gradeOf(db, a.url)).rubric_version, RUBRIC_VERSION);
 });
 
-// Re-grades are off by default until rubric v3 (pipeline/budget.mjs DEFAULT_PLAN).
-const REGRADE_ON = JSON.stringify({ stages: { regrade: { cap: 300 } } });
-
-test("grades from an older rubric version are re-graded last, and only with RUBRIC_REGRADE", async () => {
+test("a graded site is never graded again, whatever its model or rubric version, even with the old re-grade settings", async () => {
   const [a, b, c] = feed;
   const v1 = (model, judged_at) => ({ ...rubric(), motion: { score: 2, note: "static" }, model, judged_at });
   const rows = [
@@ -306,26 +281,14 @@ test("grades from an older rubric version are re-graded last, and only with RUBR
     { url: c.url, page_text: "c", facts: FACTS, rubric: v1(PRIMARY_MODEL, "2026-10-01T00:00:00Z") },
   ];
   const answer = JSON.stringify([{ json: rubric({ tier: "A" }) }]);
-
-  let t = await setup(rows);
-  let r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, GEMINI_BUDGET: REGRADE_ON });
+  const t = await setup(rows);
+  // Settings that turned the removed re-grades on (owner, 2026-11-21: graded once).
+  const r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, RUBRIC_REGRADE: "true", GEMINI_BUDGET: JSON.stringify({ stages: { regrade: { cap: 300 } } }) });
   assert.equal(r.code, 0, r.out);
-  assert.deepEqual(r.requests.map(urlOf), [a.url, b.url], "without RUBRIC_REGRADE the 3.5 v1 grade stays");
+  assert.deepEqual(r.requests.map(urlOf), [a.url], "only the new site is graded");
   assert.equal((await gradeOf(t.db, c.url)).rubric_version, undefined);
-
-  t = await setup(rows);
-  r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, RUBRIC_REGRADE: "true" });
-  assert.equal(r.code, 0, r.out);
-  assert.deepEqual(r.requests.map(urlOf), [a.url], "re-grades are off by default (regrade cap 0), even with RUBRIC_REGRADE");
-
-  t = await setup(rows);
-  r = await runJudge(t.dir, t.dbFile, ["rubric"], { MOCK_GEMINI: answer, RUBRIC_REGRADE: "true", GEMINI_BUDGET: REGRADE_ON });
-  assert.equal(r.code, 0, r.out);
-  assert.deepEqual(r.requests.map(urlOf), [a.url, b.url, c.url], "new first, then 3.1 -> 3.5, then the older rubric");
-  assert.equal((await gradeOf(t.db, c.url)).rubric_version, RUBRIC_VERSION);
-  const hist = (await t.db.execute({ sql: "SELECT rubric FROM rubric_history WHERE url = ?", args: [c.url] })).rows;
-  assert.equal(hist.length, 1, "the v1 grade is kept in rubric_history");
-  assert.equal(JSON.parse(String(hist[0].rubric)).motion.score, 2);
+  assert.equal((await gradeOf(t.db, b.url)).model, BACKUP_MODEL);
+  assert.equal((await t.db.execute("SELECT COUNT(*) AS n FROM rubric_history")).rows[0].n, 0);
 });
 
 // Owner decision 2026-11-10: grades and votes come from 3.5 only. A spent
@@ -382,28 +345,3 @@ test("rubric: GEMINI_FALLBACK=on (experiments only) brings back the 3.1 chain, l
   assert.equal((await gradeOf(db, a.url)).model, BACKUP_MODEL);
 });
 
-test("pairwise: a spent 3.5 daily quota casts what it could, never asks 3.1, and passes", async () => {
-  const [a, b, c, d] = feed;
-  const { dir, dbFile, db } = await setup([a, b, c, d].map((p) => ({ url: p.url, rubric: rubric({ tier: "A" }) })));
-  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "5"], {
-    MOCK_GEMINI: JSON.stringify([{ json: { winner: "A", reason: "cleaner" } }, DAILY_429]),
-  });
-  assert.equal(r.code, 0, r.out);
-  assert.deepEqual(modelsOf(r), [PRIMARY_MODEL]);
-  const votes = (await db.execute("SELECT model FROM votes")).rows;
-  assert.deepEqual(votes.map((v) => v.model), [PRIMARY_MODEL]);
-  assert.match(r.summary, /OK: 1 of 1 pair\(s\) judged/);
-  assert.match(r.summary, /4 vote\(s\) wait for tomorrow \(no fallback to a lower model/);
-});
-
-test("pairwise: --model gemini-3.1-flash-lite is refused without --allow-model", async () => {
-  const { dir, dbFile, db } = await setup([
-    { url: feed[0].url, rubric: rubric({ tier: "A" }) },
-    { url: feed[1].url, rubric: rubric({ tier: "A" }) },
-  ]);
-  const r = await runJudge(dir, dbFile, ["pairwise", "--votes", "1", "--model", BACKUP_MODEL]);
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /pairwise voting is gemini-3\.5-flash-lite only/);
-  assert.equal(r.calls, 0);
-  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM votes")).rows[0].n, 0);
-});

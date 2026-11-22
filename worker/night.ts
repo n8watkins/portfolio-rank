@@ -8,7 +8,7 @@
 //   EndOfDayWorkflow (NIGHT)  ->  1. the free checks: starts sync-upstream.yml
 //                                    on GitHub Actions (feed, capture of new
 //                                    sites, a re-capture of the oldest ones,
-//                                    page evidence, fingerprint changes) and,
+//                                    page evidence, link checks) and,
 //                                    health.yml (every night); waits for the
 //                                    first until 21:15 at the latest
 //                                 2. the AI stages, one batch per step, paced
@@ -121,7 +121,6 @@ export function engine(env: NightEnv, runId: string) {
       // Gemini poll generation's own switch (pipeline/polls.mjs pollGenerationOn), off unless "true".
       pollGeneration: env.POLL_GENERATION_ENABLED,
       rankingV2: /^true$/i.test(String(env.RANKING_V2 ?? "")),
-      rubricRegrade: /^true$/i.test(String(env.RUBRIC_REGRADE ?? "")),
       // The door's automatic removal of a Gemini "not a portfolio" shares the review queue's switch (lib/reviews/door.mjs).
       reviewAutoApply: reviewAutoApplyEnabled(env),
       ranking: rankingConfig({

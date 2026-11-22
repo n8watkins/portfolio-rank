@@ -41,7 +41,7 @@ test("staging keeps a few of production's crons, with its Gemini held far below 
   const quota = JSON.parse(staging.vars.GEMINI_DAILY_QUOTA);
   for (const n of Object.values(quota)) assert.ok(n <= 50, `staging quota ${n}`);
   const budget = JSON.parse(staging.vars.GEMINI_BUDGET);
-  for (const stage of ["library", "regrade", "experiment"]) assert.equal(budget.stages[stage].cap, 0, stage);
+  for (const stage of ["library", "experiment"]) assert.equal(budget.stages[stage].cap, 0, stage);
   assert.ok(Number(staging.vars.STAGING_DRAFTS_PER_DAY) <= 1);
 });
 

@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { createRequestLog, dailyTotals, ensureGeminiLog, runSummary } from "../pipeline/gemini-log.mjs";
-import { ensureRubricHistory, regradeQueue, replaceGradeStatements } from "../pipeline/rubric-history.mjs";
+import { ensureRubricHistory, replaceGradeStatements } from "../pipeline/rubric-history.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { buildPairs, compareGrades } from "../pipeline/grade-pairs.mjs";
@@ -91,26 +91,6 @@ test("replacing a grade keeps the old one in rubric_history", async () => {
   assert.equal(stmts.length, 1);
 });
 
-test("the re-grade queue holds listed, healthy grades not made by 3.5, oldest first", async () => {
-  const { db } = tempDb();
-  await ensureRosterSchema(db);
-  const add = (url, rubric, extra = "") =>
-    db.execute({
-      sql: `INSERT INTO portfolios (url, status, shot_key, ai_rubric${extra ? ", " + extra.split("=")[0] : ""}) VALUES (?, 'live', 'k', ?${extra ? ", ?" : ""})`,
-      args: extra ? [url, JSON.stringify(rubric), extra.split("=")[1]] : [url, JSON.stringify(rubric)],
-    });
-  await add("https://new31.dev", grade(BACKUP_MODEL, "B", 3, { judged_at: "2026-10-05T00:00:00Z" }));
-  await add("https://old31.dev", grade(BACKUP_MODEL, "B", 3, { judged_at: "2026-09-01T00:00:00Z" }));
-  await add("https://nomodel.dev", grade(undefined, "C", 3, { judged_at: "2026-09-15T00:00:00Z" }));
-  await add("https://done35.dev", grade(PRIMARY_MODEL, "A"));
-  await add("https://down.dev", grade(BACKUP_MODEL, "B"), "health=down");
-  await add("https://gone.dev", grade(BACKUP_MODEL, "B"), "delisted_at=2026-11-01");
-  await db.execute(`INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES ('https://sentinel.dev', 'live', 'k', '{"error":"no_usable_captures"}')`);
-  const urls = (await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 10 })).map((r) => r.url);
-  assert.deepEqual(urls, ["https://old31.dev", "https://nomodel.dev", "https://new31.dev"]);
-  assert.equal((await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 0 })).length, 0);
-});
-
 test("grade pairs: tier agreement, per-axis difference, is_portfolio disagreement", () => {
   const history = [
     { url: "a", model: BACKUP_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(BACKUP_MODEL, "A", 4)) },
@@ -158,8 +138,8 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, env = {} }
       GEMINI_API_KEY: "test-key-not-real",
       SHOTS_BASE_URL: "https://shots.test",
       GITHUB_STEP_SUMMARY: summary,
-      // The accountant's caps for new grades and re-grades (pipeline/budget.mjs), no reserve.
-      GEMINI_BUDGET: JSON.stringify({ reserve: 0, stages: { grade_new: { cap: budget[PRIMARY_MODEL] }, regrade: { cap: budget[PRIMARY_MODEL] } } }),
+      // The accountant's cap for new grades (pipeline/budget.mjs), no reserve.
+      GEMINI_BUDGET: JSON.stringify({ reserve: 0, stages: { grade_new: { cap: budget[PRIMARY_MODEL] } } }),
       GEMINI_DAILY_QUOTA: JSON.stringify(quota),
       MOCK_GEMINI: JSON.stringify([{ json: grade(null, "A", 4) }]),
       ...env,
@@ -173,8 +153,8 @@ async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, env = {} }
   return { code, out, db, md: fs.existsSync(summary) ? fs.readFileSync(summary, "utf8") : "" };
 }
 
-test("judge.mjs re-grades 3.1 grades with 3.5 while the budget lasts, keeps history, and logs every request", async () => {
-  // A 3.5 budget of 5: 1 new grade, then 4 of the 5 old grades.
+test("judge.mjs grades new sites on 3.5, never re-grades older grades, and logs every request", async () => {
+  // One new site and five old 3.1 grades: only the new site is graded (owner, 2026-11-21).
   const { code, out, db, md } = await judgeRun({
     newSites: 1,
     oldGrades: 5,
@@ -182,21 +162,17 @@ test("judge.mjs re-grades 3.1 grades with 3.5 while the budget lasts, keeps hist
     budget: { [PRIMARY_MODEL]: 5, [BACKUP_MODEL]: 0 },
   });
   assert.equal(code, 0, out);
-  const hist = (await db.execute("SELECT model, replaced_by_model FROM rubric_history")).rows;
-  assert.equal(hist.length, 4);
-  assert.ok(hist.every((h) => h.model === BACKUP_MODEL && h.replaced_by_model === PRIMARY_MODEL));
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM rubric_history")).rows[0].n, 0);
   const models = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows.map((r) => r.m);
-  assert.equal(models.filter((m) => m === PRIMARY_MODEL).length, 5);
-  assert.equal(models.filter((m) => m === BACKUP_MODEL).length, 1);
+  assert.equal(models.filter((m) => m === PRIMARY_MODEL).length, 1);
+  assert.equal(models.filter((m) => m === BACKUP_MODEL).length, 5);
   const logged = Object.fromEntries(
     (await db.execute("SELECT job, COUNT(*) AS n FROM gemini_requests WHERE status = 200 GROUP BY job")).rows.map((r) => [r.job, Number(r.n)])
   );
-  assert.deepEqual(logged, { "grade-new": 1, regrade: 4 }, "each request is logged under the budget's job name");
+  assert.deepEqual(logged, { "grade-new": 1 }, "each request is logged under the budget's job name");
   assert.match(md, /### Gemini requests this run/);
   assert.match(md, /### Gemini today/);
-  assert.match(md, /\*\*Warning:\*\*/); // 5 of 5 used
-  // 1 new + 4 re-grades queued (the queue is cut to the budget), all judged.
-  assert.match(md, /\| 5 \| 5 \| 0 \| 0 \| 0 \| 0 \|/);
+  assert.match(md, /\| 1 \| 1 \| 0 \| 0 \| 0 \| 0 \|/);
 });
 
 test("with today's 3.5 budget used up, grading waits for tomorrow instead of failing or using 3.1", async () => {
@@ -235,27 +211,24 @@ test("once 3.5's grading budget is used the rest waits for tomorrow: no catch-up
   assert.match(md, /Stopped early: today's gemini-3\.5-flash-lite budget for new grades is used \(4 request\(s\) allowed this run\); 2 site\(s\) wait for tomorrow \(no fallback to a lower model: GEMINI_FALLBACK is off\)/);
 });
 
-test("existing 3.1 grades are re-graded on 3.5, and nothing new is written by 3.1, even when 3.5 is busy", async () => {
-  // 1 new site and 3 old 3.1 grades; 3.5 answers twice, then stays at 503.
+test("nothing is written by 3.1, even when 3.5 is busy, and old 3.1 grades are left as they are", async () => {
+  // 2 new sites and 1 old 3.1 grade; 3.5 answers once, then stays at 503.
   const { code, out, db, md } = await judgeRun({
-    newSites: 1,
-    oldGrades: 3,
+    newSites: 2,
+    oldGrades: 1,
     quota: { [PRIMARY_MODEL]: 500, [BACKUP_MODEL]: 500 },
     budget: { [PRIMARY_MODEL]: 400, [BACKUP_MODEL]: 450 },
     env: {
       MOCK_FAST_TIMERS: "1",
-      MOCK_GEMINI: JSON.stringify([{ json: grade(null, "A", 4) }, { json: grade(null, "A", 4) }, { status: 503, raw: "{}" }]),
+      MOCK_GEMINI: JSON.stringify([{ json: grade(null, "A", 4) }, { status: 503, raw: "{}" }]),
     },
   });
   assert.equal(code, 0, out); // graded what it could
   const requested = (await db.execute("SELECT DISTINCT model FROM gemini_requests")).rows.map((r) => r.model);
   assert.deepEqual(requested, [PRIMARY_MODEL]);
-  const rows = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows.map((r) => r.m).sort();
-  // The new site and one re-grade on 3.5; the two 3.1 grades left are untouched
-  // and stay on the queue for the next run.
-  assert.deepEqual(rows, [BACKUP_MODEL, BACKUP_MODEL, PRIMARY_MODEL, PRIMARY_MODEL]);
-  assert.equal((await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 10 })).length, 2);
-  const hist = (await db.execute("SELECT model, replaced_by_model FROM rubric_history")).rows;
-  assert.deepEqual(hist.map((h) => [h.model, h.replaced_by_model]), [[BACKUP_MODEL, PRIMARY_MODEL]]);
+  const rows = (await db.execute("SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios WHERE ai_rubric IS NOT NULL")).rows.map((r) => r.m).sort();
+  // One new site graded on 3.5; the other waits for the next run, and the 3.1 grade is untouched.
+  assert.deepEqual(rows, [BACKUP_MODEL, PRIMARY_MODEL]);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM rubric_history")).rows[0].n, 0);
   assert.match(md, /Stopped early: gemini unavailable: gemini-3\.5-flash-lite HTTP 503 after 3 retries; the rest waits for the next run \(no fallback to a lower model/);
 });

@@ -73,7 +73,7 @@ test("admin quota API: today's and the last 30 days' use by job and model, the a
   assert.ok(yesterday.requests >= 1 && yesterday.ok === 0);
   assert.deepEqual(
     body.now.background.map((s) => s.label),
-    ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Image library", "Re-grades (3.1 and older rubric)", "Experiments"]
+    ["Grade new sites", "AI ranking comparisons", "Content", "Image library", "Experiments"]
   );
   assert.equal(typeof body.now.people, "number");
   assert.ok(Array.isArray(body.nights) && Array.isArray(body.parked) && Array.isArray(body.alerts));

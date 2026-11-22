@@ -13,6 +13,7 @@ import {
   backgroundAllowance,
   budgetPlan,
   isNightStart,
+  jobLabel,
   nightCrons,
   nightTimeline,
   pacificParts,
@@ -212,7 +213,25 @@ test("GEMINI_BUDGET overrides merge over the defaults; a broken value keeps the 
   assert.deepEqual(p.stages.compare, { cap: 50, minutes: 45 });
   assert.deepEqual(p.stages.grade_new, DEFAULT_PLAN.stages.grade_new);
   assert.deepEqual(budgetPlan("{not json"), DEFAULT_PLAN);
-  assert.deepEqual(STAGES.map((s) => s.label), ["Grade new sites", "Grade changed sites", "AI ranking comparisons", "Content", "Image library", "Re-grades (3.1 and older rubric)", "Experiments"]);
+  assert.deepEqual(STAGES.map((s) => s.label), ["Grade new sites", "AI ranking comparisons", "Content", "Image library", "Experiments"]);
+});
+
+test("GEMINI_BUDGET keys for stages that no longer exist are ignored, and the stages that exist still read theirs", () => {
+  // The production GitHub variable as read on 2026-11-22: it still names the removed stages.
+  const prod = JSON.stringify({ stages: { grade_new: { cap: 0 }, grade_changed: { cap: 0 }, compare: { cap: 0 }, content: { cap: 0 }, library: { cap: 0 }, regrade: { cap: 0 }, experiment: { cap: 0 } } });
+  const p = budgetPlan(prod);
+  assert.deepEqual(Object.keys(p.stages).sort(), STAGES.map((s) => s.key).sort());
+  for (const s of STAGES) assert.equal(p.stages[s.key].cap, 0, s.key);
+  assert.deepEqual(p.stages.compare, { cap: 0, minutes: 45 });
+  // A removed stage turned on does not come back, and a stage name nobody knows does not fail.
+  const q = budgetPlan(JSON.stringify({ stages: { regrade: { cap: 300 }, grade_changed: { cap: 100 }, someday: { cap: 5 }, grade_new: { cap: 7 } } }));
+  assert.deepEqual(Object.keys(q.stages).sort(), STAGES.map((s) => s.key).sort());
+  assert.equal(q.stages.grade_new.cap, 7);
+  assert.equal(budgetPlan(JSON.stringify({ stages: null })).stages.grade_new.cap, DEFAULT_PLAN.stages.grade_new.cap);
+  assert.throws(() => backgroundAllowance("regrade", { byModel: {}, byJob: {} }), /unknown stage regrade/);
+  // Their old requests keep a name in the admin's history.
+  assert.equal(jobLabel("regrade"), "Re-grades (removed)");
+  assert.equal(jobLabel("grade-changed"), "Grade changed sites (removed)");
 });
 
 test("usage history: 30 Pacific days, per job and model, newest first, for the admin view", async () => {
