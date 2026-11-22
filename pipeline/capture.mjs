@@ -337,7 +337,7 @@ const RESTORE_FIXED = () => {
  * @param {import("playwright").Page} page
  * @param {"desktop" | "phone"} name
  */
-async function captureViewAsSeen(page, name) {
+export async function captureViewAsSeen(page, name) {
   await page.evaluate(MARK_FIXED).catch(() => {});
   const view = await captureView(page, name);
   await page.evaluate(RESTORE_FIXED).catch(() => {});

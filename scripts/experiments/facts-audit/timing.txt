@@ -1,0 +1,8 @@
+sites with a capture reading: 70
+R (render.mjs point) had under half of the settled words: 13 (https://yeabsiras-portfolio.vercel.app 1/491, https://nitishkr.fun 0/3550, https://www.mujtabasaqib.com 1/389, https://krishnananda.netlify.app 0/10, https://kalpsenghani.com 0/973, https://adityapillai.dev 0/372, https://yashitanamdeo.github.io 4/676, https://hellosagar.vercel.app 3/404, https://sagar-adulkar.vercel.app 1/304, https://dhirajbhawsar-portfolio.vercel.app 0/593, https://eduardconstantin.github.io 1/30, https://adityathakur.me 0/1072, https://carterogunsola.com 43/163)
+A (the capture's reading) had 5% fewer characters than the settled page: 1 (https://carterogunsola.com 550->604)
+text still changing after the capture's reading: 26 site(s)
+settle rule quiet 1500 ms, ceiling 8000 ms: median 1858 ms, p90 6595 ms, max 8345 ms; reaches the settled length on 63 of 70
+settle rule quiet 2000 ms, ceiling 10000 ms: median 2403 ms, p90 10105 ms, max 13621 ms; reaches the settled length on 65 of 70
+settle rule quiet 3000 ms, ceiling 10000 ms: median 3536 ms, p90 10235 ms, max 13621 ms; reaches the settled length on 67 of 70
+capture replay, load to the capture's reading: median 44 s, max 159 s (machine load inflates these)
