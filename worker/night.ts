@@ -41,6 +41,7 @@ import { contentMode } from "../lib/content/store.mjs";
 import { reviewAutoApplyEnabled } from "../lib/reviews/flag";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 import { isNewsletterAlert } from "../lib/newsletter/alerts.mjs";
+import { captureProblemConditions } from "../lib/capture-problems.mjs";
 import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
@@ -256,6 +257,9 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         ...dispatchTokenConditions((state.checks as { nightly?: { skipped?: string; tokenExpires?: string | null } } | undefined)?.nightly, { now: new Date(startedAt) }),
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
+        // Open capture problems per group, with the admin page's link (lib/capture-problems.mjs):
+        // only while a count is above zero or changed. Never on staging, which emails no one.
+        ...(String(this.env.SITE_ENV ?? "production") === "staging" ? [] : await captureProblemConditions(ctx.db, { siteUrl: String(this.env.SITE_URL ?? "") })),
       ];
       // The weekly model watch, the hourly removals, the hourly email caps
       // and the hourly dead-man check and the newsletter tick own their alerts

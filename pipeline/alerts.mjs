@@ -17,6 +17,9 @@
 //                            GitHub Actions: GITHUB_DISPATCH_TOKEN is not set
 //   dispatch-token:expiring  that token expires within 14 days, or has
 //                            (dispatchTokenConditions)
+//   capture-problems         open capture problems per group, with the admin
+//                            page's link, while a count is above zero or
+//                            changed (lib/capture-problems.mjs)
 // Levels: ALERT_TRACTION (JSON, {"peopleGrades": 50, "humanVotes": 300}).
 //
 // Email: one interface, { send({ to, subject, text }) }, which throws when
