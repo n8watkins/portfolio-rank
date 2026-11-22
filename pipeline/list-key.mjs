@@ -60,6 +60,24 @@ function decodeParamName(pair) {
   }
 }
 
+/**
+ * Whether `url` is a plain web address: http(s), written out in full, with a
+ * host name of two or more labels and none of the characters a README line
+ * misread as an address carries (whitespace, `<`, `>`, brackets, a
+ * backslash). False for `<[Portfolio-Link](https://khushm.netlify.app`,
+ * `https\://shreyanshportfolio.in` and `abass.wanecrea.com`, which an older
+ * parser read from the community list's README (data/feed.json history).
+ */
+export function isWebAddress(url) {
+  const s = String(url ?? "");
+  if (!/^https?:\/\/[^\s<>[\]()\\]+$/i.test(s)) return false;
+  try {
+    return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(new URL(s).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** Groups items by the key of their address: Map(key -> items, in order). */
 export function byListKey(items, urlOf = (x) => x) {
   const groups = new Map();
