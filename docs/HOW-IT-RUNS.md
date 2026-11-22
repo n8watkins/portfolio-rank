@@ -144,12 +144,12 @@ Whether the key is set is not confirmed.
 The five stages are in `pipeline/budget.mjs` `STAGES`.
 The caps and time caps are in `DEFAULT_PLAN`.
 Today every cap is 0 in production, so every stage closes as "off: its cap is 0".
-A site is graded once and never re-graded automatically, so no stage grades a site that already has a grade.
+A site is graded once and never re-graded automatically: the only grade a graded site gets again is one a person asked for (the owner's "Re-grade"), done by stage 1 once the site has been captured again after the request, ahead of new sites and inside the same cap.
 A `GEMINI_BUDGET` key for a stage that no longer exists (the production one still names `grade_changed` and `regrade`) is ignored.
 
 | Order | Stage | Works on | Default cap a day | Time cap | State today |
 | ---: | --- | --- | ---: | ---: | --- |
-| 1 | Grade new sites (`grade_new`) | listed, captured, healthy, not yet graded | 300 | 60 min | Paused |
+| 1 | Grade new sites (`grade_new`) | listed, captured, healthy, not yet graded; and re-grades people asked for | 300 | 60 min | Paused |
 | 2 | AI ranking comparisons (`compare`) | pairs of sites, then the boards are rebuilt | 200 | 45 min | Off (`RANKING_V2` is false) and Paused |
 | 3 | Content (`content`) | poll writing, then blog picks and drafts | 100 | 30 min | Paused |
 | 4 | Image library (`library`) | nothing at night | 40 | 25 min | Off at night, see the hourly task 11 |
@@ -212,7 +212,7 @@ Each chain is a list of steps in the order they happen.
     Votes move it from there.
     Tier letters are hidden from visitors while `RANKING_V2` is false, so the leaderboard visitors see today is the older votes board.
 12. **After that** the site takes part in votes and gets the nightly health check.
-    It is not graded again, except for one fresh grade after you undo or reject a removal, and for the manual tools.
+    It is not graded again, except for one fresh grade after you undo or reject a removal, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.
 
 ### A site stops working
 

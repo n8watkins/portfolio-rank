@@ -222,7 +222,7 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 
 | Order | Stage (job name in `gemini_requests`) | Works on | Cap a day | Time cap |
 | ---: | --- | --- | ---: | ---: |
-| 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts; a site whose screenshot was missing comes back once it is captured again; every answer goes through the door (the owner review queue, above) | 300 | 60 min |
+| 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts, plus the re-grades people asked for (first, once the site is captured again; "Games, badges, claims" below); a site whose screenshot was missing comes back once it is captured again; every answer goes through the door (the owner review queue, above) | 300 | 60 min |
 | 2 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
 | 3 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
 | 4 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
@@ -377,7 +377,10 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   Once the day is up the site is hidden (`lib/roster.ts`) and the quiz pool's cache dropped in the same transaction; the hourly edge purge then takes its profile out of the edge cache and records `portfolio_owner.purged_at`, trying again each hour until the purge works, whatever the rest of the hourly tick did (`purgeRemovedProfiles`).
   It is then added to `data/excluded.json` as `owner_request` with reason "owner request" by the nightly health workflow's bot pull request ([pipeline/owner-removals.mjs](pipeline/owner-removals.mjs)); `/removed` counts these and never names them.
   A hidden grade is left out of the portfolio page, the print report (except for an owner with that proof) and the quiz pool.
-  A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
+  A re-grade is a pending row in `regrade_requests`, one open request per site, and asks for a new capture (`site_freshness.forced_at`, so the nightly refresh re-captures the site first).
+  The night's "grade new sites" stage then grades the site once from a capture newer than the request, ahead of never-graded sites and inside that stage's cap, through the door like any grade; the old grade moves to `rubric_history`, and the request is marked `done`, so the owner can ask again later.
+  A request whose site has not been captured again since waits; one whose new screenshot is gone keeps the grade and is marked `failed`.
+  Nothing else re-grades a site: a person asking is the only way (owner, 2026-11-21 and 2026-11-22).
   Every claim step and action is written to `claim_log`, the audit log.
 - **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, the newest entry) come from one pass over the listed portfolios, cached an hour.
   Stars and the community list's contributors come from the GitHub API, cached a day.

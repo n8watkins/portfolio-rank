@@ -67,7 +67,8 @@ import {
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
 import { RESPONSE_SCHEMA, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
-import { ensureRubricHistory, replaceGradeStatements } from "./rubric-history.mjs";
+import { ensureRubricHistory, parseRubric, replaceGradeStatements } from "./rubric-history.mjs";
+import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
 import { FRESH_GRADE_DUE_SQL, ensureReviewSchema, freshGradeDue } from "../lib/reviews/store.mjs";
 import { atTheDoor, setAsideCapture, setAsideCaptures, syncReviewRows, withCaptureColumns } from "../lib/reviews/door.mjs";
@@ -170,21 +171,35 @@ const RECAPTURED = (p = "p") => `COALESCE(datetime(${p}.captured_at) > datetime(
  * FRESH_GRADE_DUE), which the bad capture's scores never were.
  */
 const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
+/**
+ * A person asked for a re-grade (regrade_requests, the owner's "Re-grade" action, lib/games/claims.mjs), and
+ * the site has been captured again since: the request asks for that capture (site_freshness.forced_at, the
+ * nightly refresh's queue), so the grade reads the page as it is now. Graded once, then the request is closed.
+ * Nothing re-grades a site on its own (owner, 2026-11-21); only such a request does.
+ */
+const REQUESTED = (p = "p") =>
+  `EXISTS (SELECT 1 FROM regrade_requests q WHERE q.url = ${p}.url AND q.status = 'pending' AND datetime(${p}.captured_at) > datetime(q.requested_at))`;
 
 const queues = {
+  // New sites, and re-grades people asked for (first: someone is waiting), in one cap.
   grade_new: {
-    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")}`),
+    count: async (ctx) => count(ctx.db, `FROM portfolios p WHERE ${READY()} AND (${UNGRADED()} OR ${REQUESTED()}) AND ${NOT_PARKED("grade-new")}`),
     next: async (ctx, stage, n) =>
       (
         await ctx.db.execute({
           sql: `SELECT ${GRADE_COLS} FROM portfolios p
-                WHERE ${READY()} AND ${UNGRADED()} AND ${NOT_PARKED("grade-new")} AND ${NOT_TRIED()}
-                ORDER BY p.needs_review DESC, p.captured_at DESC, p.url LIMIT ?`,
+                WHERE ${READY()} AND (${UNGRADED()} OR ${REQUESTED()}) AND ${NOT_PARKED("grade-new")} AND ${NOT_TRIED()}
+                ORDER BY ${REQUESTED()} DESC, p.needs_review DESC, p.captured_at DESC, p.url LIMIT ?`,
           args: [JSON.stringify(stage.tried), n],
         })
       ).rows.map((row) => ({ id: String(row.url), row })),
   },
 };
+
+/** Closes a site's pending re-grade request: `done` once it was graded, `failed` when no screenshot was usable. */
+async function closeRegradeRequest(db, url, status, now) {
+  await db.execute({ sql: "UPDATE regrade_requests SET status = ?, done_at = ? WHERE url = ? AND status = 'pending'", args: [status, iso(now), url] });
+}
 
 async function count(db, from) {
   const res = await db.execute(`SELECT COUNT(*) AS n ${from}`);
@@ -214,6 +229,10 @@ async function gradeItem(ctx, gemini, item) {
         sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.judged_at', ?, '$.missing_image_at', ?) WHERE url = ?",
         args: [iso(ctx.now()), iso(ctx.now()), url],
       });
+    } else if (parseRubric(row.ai_rubric)) {
+      // A re-grade someone asked for, on a site whose new screenshot is gone: its grade stays, and the request
+      // is closed as failed (they may ask again), so it is not tried every night.
+      await closeRegradeRequest(ctx.db, url, "failed", ctx.now());
     } else {
       await ctx.db.execute({
         sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?",
@@ -236,6 +255,8 @@ async function gradeItem(ctx, gemini, item) {
     captureChecked: true,
     gradeStatements: async (g) => replaceGradeStatements(url, row.ai_rubric, await rankForWrite(ctx.db, g, { url, now: ctx.now() }), now),
   });
+  // A re-grade someone asked for is answered: they may ask again later.
+  await closeRegradeRequest(ctx.db, url, "done", now);
   return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
 }
 
@@ -381,6 +402,8 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
   await ensureRankingSchema(db);
   await ensurePollsSchema(db);
   await ensureReviewSchema(db);
+  // The owners' re-grade requests "grade new sites" reads (made by the games schema too; safe to repeat).
+  await db.batch(REGRADE_REQUEST_TABLES, "write");
   const claimed = await db.execute({
     sql: "INSERT INTO night_runs (night, started_at, status, run_id) VALUES (?, ?, 'running', ?) ON CONFLICT(night) DO NOTHING RETURNING night",
     args: [timeline.night, iso(now), ctx.runId ?? null],

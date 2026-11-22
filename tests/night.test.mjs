@@ -16,6 +16,7 @@ import { AI_CRITERIA } from "../pipeline/rubric.mjs";
 import { ensureNightSchema, finishNight, nextStageIndex, parkedItems, planNight, recentNights, recordItemFailure, runBatch, startNight } from "../pipeline/night.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
+import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const answer = (over = {}) => ({
@@ -370,6 +371,57 @@ test("AI ranking comparisons (RANKING_V2 on): within the budget, stored once, th
   assert.ok(rows.every((x) => x.model === PRIMARY_MODEL && x.method === "one_on_one"));
   assert.ok(Number((await db.execute("SELECT COUNT(*) AS n FROM site_ratings")).rows[0].n) > 0, "boards rebuilt");
   assert.equal(r.summary.stages.find((s) => s.key === "compare").done, 3);
+});
+
+// A person's re-grade request (the owner's "Re-grade", lib/games/claims.mjs) asks for a new capture; the
+// night grades the site once from a capture made after the request, then closes the request.
+test("a re-grade request: graded once from a newer capture, first in the queue, then closed; an older capture waits", async () => {
+  const { db, made } = await setup({ fresh: 1, old31: 2 });
+  await db.batch(REGRADE_REQUEST_TABLES, "write");
+  const [asked, waiting] = made.old31; // captured 2026-11-02 and 2026-11-03
+  await db.execute({ sql: "INSERT INTO regrade_requests (url, requested_by, requested_at) VALUES (?, 'gh:1', '2026-10-15T00:00:00.000Z')", args: [asked] });
+  await db.execute({ sql: "INSERT INTO regrade_requests (url, requested_by, requested_at) VALUES (?, 'gh:2', '2026-11-05T00:00:00.000Z')", args: [waiting] });
+  const modelOf = async (url) => (await db.execute({ sql: "SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios WHERE url = ?", args: [url] })).rows[0].m;
+  const statusOf = async (url) => (await db.execute({ sql: "SELECT status, done_at FROM regrade_requests WHERE url = ?", args: [url] })).rows[0];
+
+  const first = context(db, { gemini: mockGemini([ok()]) });
+  const r = await drive(first.ctx, first.clock);
+  assert.equal(r.status, "complete");
+  const graded = (await db.execute("SELECT item FROM gemini_requests WHERE job = 'grade-new' ORDER BY id")).rows.map((x) => String(x.item));
+  assert.deepEqual(graded, [asked, made.fresh[0]], "the requested re-grade goes first, inside the grade_new cap");
+  assert.equal(await modelOf(asked), PRIMARY_MODEL, "graded again on 3.5");
+  const hist = (await db.execute("SELECT url, model FROM rubric_history")).rows.map((x) => [String(x.url), String(x.model)]);
+  assert.deepEqual(hist, [[asked, BACKUP_MODEL]], "the old grade is kept in rubric_history");
+  assert.equal(String((await statusOf(asked)).status), "done");
+  assert.ok((await statusOf(asked)).done_at);
+  // A request whose site has not been captured again since waits, its grade untouched.
+  assert.equal(await modelOf(waiting), BACKUP_MODEL);
+  assert.equal(String((await statusOf(waiting)).status), "pending");
+
+  // The next night grades nothing again.
+  const second = context(db, { start: T0 + 86400000, gemini: mockGemini([ok()]) });
+  await drive(second.ctx, second.clock);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'grade-new'")).rows[0].n), 2);
+  // Once the site is captured after its request, it is graded once too.
+  await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-06 00:00:00' WHERE url = ?", args: [waiting] });
+  const third = context(db, { start: T0 + 2 * 86400000, gemini: mockGemini([ok()]) });
+  await drive(third.ctx, third.clock);
+  assert.equal(await modelOf(waiting), PRIMARY_MODEL);
+  assert.equal(String((await statusOf(waiting)).status), "done");
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'grade-new'")).rows[0].n), 3);
+});
+
+test("a re-grade request whose new screenshot is gone keeps the grade and closes the request as failed", async () => {
+  const { db, made } = await setup({ old31: 1 });
+  await db.batch(REGRADE_REQUEST_TABLES, "write");
+  const [asked] = made.old31;
+  await db.execute({ sql: "INSERT INTO regrade_requests (url, requested_by, requested_at) VALUES (?, 'gh:1', '2026-10-15T00:00:00.000Z')", args: [asked] });
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]) });
+  ctx.image = async () => "missing";
+  await drive(ctx, clock);
+  const g = JSON.parse(String((await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [asked] })).rows[0].ai_rubric));
+  assert.equal(g.model, BACKUP_MODEL, "the grade stays");
+  assert.equal(String((await db.execute("SELECT status FROM regrade_requests")).rows[0].status), "failed");
 });
 
 test("parked items of removed stages are never reported, so they raise no 'parked' alert", async () => {
