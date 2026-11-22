@@ -130,9 +130,20 @@ export async function recordItemFailure(db, { job, item, night, reason, parkAfte
 const clearItemFailure = (db, job, item) =>
   db.execute({ sql: "DELETE FROM night_item_failures WHERE job = ? AND item = ? AND parked_at IS NULL", args: [job, item] });
 
-/** Every parked item, for the summary and the admin view. */
+/**
+ * Every parked item of a stage that still exists, for the summary, the
+ * owner's "parked" alert and the admin view. Rows parked under a removed
+ * stage's job (grade-changed, regrade) stay in the table but are never
+ * retried, so they are not reported.
+ */
 export async function parkedItems(db) {
-  const res = await db.execute("SELECT job, item, nights, reason, parked_at FROM night_item_failures WHERE parked_at IS NOT NULL ORDER BY parked_at DESC, job, item");
+  const jobs = STAGES.map((s) => s.job);
+  const res = await db.execute({
+    sql: `SELECT job, item, nights, reason, parked_at FROM night_item_failures
+          WHERE parked_at IS NOT NULL AND job IN (${jobs.map(() => "?").join(",")})
+          ORDER BY parked_at DESC, job, item`,
+    args: jobs,
+  });
   return res.rows.map((r) => ({ job: String(r.job), item: String(r.item), nights: Number(r.nights), reason: r.reason == null ? "" : String(r.reason), parkedAt: String(r.parked_at) }));
 }
 
@@ -473,7 +484,20 @@ export async function planNight(ctx, state) {
   return s;
 }
 
+/**
+ * The next stage to open, by key: the first stage in STAGES that tonight has
+ * not closed yet. A run's state outlives a release (a Workflow resumes from
+ * its last step on new code), so the stored stageIndex is never trusted to
+ * name a stage: a stage list that changed under a running night still opens
+ * every remaining stage once, in order, and never the wrong one. -1 when none is left.
+ */
+export function nextStageIndex(s) {
+  const closed = new Set((s.stages ?? []).map((x) => x.key));
+  return STAGES.findIndex((d) => !closed.has(d.key));
+}
+
 function openStage(ctx, s) {
+  s.stageIndex = nextStageIndex(s);
   const def = STAGES[s.stageIndex];
   const now = ctx.now();
   const cap = ctx.plan.stages[def.key] ?? { cap: 0, minutes: 0 };
@@ -502,15 +526,15 @@ async function closeStage(ctx, s, result) {
   stage.result ??= result;
   stage.finishedAt = iso(ctx.now());
   try {
-    await handlers[stage.key].close?.(ctx, stage);
+    await handlers[stage.key]?.close?.(ctx, stage);
   } catch (e) {
     stage.result += `; rebuilding the boards failed: ${msg(e)}`;
   }
   const { plan, tried, ...kept } = stage;
-  s.stages.push({ ...kept, planned: plan ? plan.length : undefined, triedTonight: tried.length });
+  s.stages.push({ ...kept, planned: plan ? plan.length : undefined, triedTonight: tried?.length ?? 0 });
   s.stage = null;
-  s.stageIndex++;
-  if (s.stageIndex >= STAGES.length) s.done = true;
+  s.stageIndex = nextStageIndex(s);
+  if (s.stageIndex < 0) s.done = true;
 }
 
 async function stopRun(ctx, s, reason, status) {
@@ -703,10 +727,16 @@ export async function runBatch(ctx, state) {
       await stopRun(ctx, s, `hard stop ${plan.stopBeforeResetMinutes} minutes before the quota resets (${pacificTime(s.timeline.hardStop)} Pacific); the rest waits for tomorrow`, "stopped");
       return { state: s };
     }
+    // A stage left open by a run that began on older code, and that this code no longer has (a release
+    // deployed mid-run), closes as off; the run goes on with the next stage that exists.
+    if (s.stage && !handlers[s.stage.key]) {
+      await closeStage(ctx, s, "off: this stage was removed by a release during the run");
+      if (s.done) return { state: s };
+    }
     // Open the next stage that has work (stages that are off close at once).
     let stage = s.stage;
     while (!stage) {
-      if (s.stageIndex >= STAGES.length) {
+      if (nextStageIndex(s) < 0) {
         s.done = true;
         return { state: s };
       }

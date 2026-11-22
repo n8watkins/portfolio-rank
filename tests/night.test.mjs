@@ -13,7 +13,7 @@ import { budgetPlan } from "../pipeline/budget.mjs";
 import { createRequestLog, ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { PRIMARY_MODEL, BACKUP_MODEL } from "../pipeline/gemini.mjs";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
-import { ensureNightSchema, finishNight, planNight, recentNights, recordItemFailure, runBatch, startNight } from "../pipeline/night.mjs";
+import { ensureNightSchema, finishNight, nextStageIndex, parkedItems, planNight, recentNights, recordItemFailure, runBatch, startNight } from "../pipeline/night.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import feed from "../data/feed.json" with { type: "json" };
@@ -370,4 +370,59 @@ test("AI ranking comparisons (RANKING_V2 on): within the budget, stored once, th
   assert.ok(rows.every((x) => x.model === PRIMARY_MODEL && x.method === "one_on_one"));
   assert.ok(Number((await db.execute("SELECT COUNT(*) AS n FROM site_ratings")).rows[0].n) > 0, "boards rebuilt");
   assert.equal(r.summary.stages.find((s) => s.key === "compare").done, 3);
+});
+
+test("parked items of removed stages are never reported, so they raise no 'parked' alert", async () => {
+  const { db } = await setup();
+  await ensureNightSchema(db);
+  for (const [job, item] of [["grade-new", "https://a.dev"], ["grade-changed", "https://b.dev"], ["regrade", "https://c.dev"]]) {
+    await db.execute({
+      sql: "INSERT INTO night_item_failures (job, item, nights, last_night, reason, parked_at) VALUES (?, ?, 3, '2026-11-10', 'bad answer', '2026-11-11T05:00:00.000Z')",
+      args: [job, item],
+    });
+  }
+  assert.deepEqual((await parkedItems(db)).map((p) => [p.job, p.item]), [["grade-new", "https://a.dev"]]);
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]) });
+  const r = await drive(ctx, clock);
+  assert.doesNotMatch(r.markdown, /b\.dev|c\.dev/);
+  assert.match(r.markdown, /grade-new: https:\/\/a\.dev/);
+});
+
+// A release deployed while a night is running: the Workflow resumes from its last step on the new code,
+// with a state written by the old seven-stage list.
+const closedStage = (key, job, result = "nothing waiting") => ({ key, job, label: key, requests: 0, ok: 0, failed: 0, skipped: 0, parked: [], result });
+const jobsLogged = async (db) => (await db.execute("SELECT job FROM gemini_requests ORDER BY id")).rows.map((r) => String(r.job));
+
+test("a run resumed on a new release with a removed stage open closes it as off and goes on with the stages that exist", async () => {
+  const { db } = await setup({ fresh: 2 });
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]) });
+  let state = await planNight(ctx, await startNight(ctx));
+  // Old code had closed grade_new and opened grade_changed (old index 1).
+  const t = new Date(clock.t).toISOString();
+  state = {
+    ...state,
+    stages: [closedStage("grade_new", "grade-new", "done: nothing left")],
+    stageIndex: 1,
+    stage: { key: "grade_changed", job: "grade-changed", label: "Grade changed sites", night: state.night, startedAt: t, deadlineAt: new Date(clock.t + 30 * 60000).toISOString(), requests: 0, ok: 0, failed: 0, skipped: 0, consecutive: 0, parked: [], tried: [], result: null },
+  };
+  for (let n = 0; !state.done && n < 50; n++) state = (await runBatch(ctx, state)).state;
+  assert.ok(state.done);
+  assert.equal(state.status, "running", "not failed");
+  assert.deepEqual(state.stages.map((s) => s.key), ["grade_new", "grade_changed", "compare", "content", "library", "experiment"], "each remaining stage once, in order");
+  assert.match(state.stages[1].result, /off: this stage was removed by a release during the run/);
+  assert.deepEqual(await jobsLogged(db), ["content"], "grade_new is not opened again");
+});
+
+test("a run resumed with an index from the old stage list never opens the wrong stage", async () => {
+  const { db } = await setup({ fresh: 2 });
+  const { ctx } = context(db, { gemini: mockGemini([ok()]) });
+  let state = await planNight(ctx, await startNight(ctx));
+  // Old code closed grade_new, grade_changed and compare and was about to open content (old index 3);
+  // in the new list index 3 is the image library.
+  state = { ...state, stages: [closedStage("grade_new", "grade-new"), closedStage("grade_changed", "grade-changed"), closedStage("compare", "compare")], stageIndex: 3, stage: null };
+  for (let n = 0; !state.done && n < 50; n++) state = (await runBatch(ctx, state)).state;
+  assert.ok(state.done);
+  assert.deepEqual(state.stages.slice(3).map((s) => s.key), ["content", "library", "experiment"], "content runs, nothing is skipped or run twice");
+  assert.deepEqual(await jobsLogged(db), ["content"]);
+  assert.equal(nextStageIndex(state), -1);
 });
