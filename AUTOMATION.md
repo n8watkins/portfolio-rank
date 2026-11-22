@@ -2,6 +2,7 @@
 
 How PortfolioRank stays current with **no manual work**. This is the source of
 truth for the data flow and the GitHub Actions.
+The short version, every job and the order they run in, is [docs/HOW-IT-RUNS.md](docs/HOW-IT-RUNS.md).
 
 ## Data flow
 
