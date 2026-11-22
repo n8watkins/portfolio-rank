@@ -142,8 +142,9 @@ test("exclusions, duplicates and the guards see the kept spelling exactly as the
   const previous = Array.from({ length: 100 }, (_, i) => ({ name: `P${i}`, url: `https://p${i}.dev/` }));
   const respelled = buildFeed({ entries: previous.map((p) => ({ ...p, url: p.url.replace(/\/$/, "") })), current: previous });
   assert.equal(refuseFeed(previous, respelled.feed, { env: {} }), null);
+  // Every address moved: the old ones would all stay as dropped by the community list, so the list-drop guard refuses.
   const moved = buildFeed({ entries: previous.map((p, i) => ({ ...p, url: `https://q${i}.dev/` })), current: previous });
-  assert.match(refuseFeed(previous, moved.feed, { env: {} }), /100 of the current 100 addresses are gone/);
+  assert.match(refuseFeed(previous, moved.feed, { stayed: moved.stayed.length, env: {} }), /the community list dropped 100 of the current 100 sites/);
 });
 
 test("the real data/feed.json as both the current feed and the list changes nothing", () => {

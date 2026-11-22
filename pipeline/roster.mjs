@@ -3,11 +3,14 @@
 //
 // Owner decisions (2026-11-10): background jobs only work on sites on the
 // current list, and PortfolioRank runs its own cleanup instead of trusting the
-// community list to be right.
+// community list to be right. Since 2026-11-22 a site the community list
+// drops stays on feed.json (pipeline/build-feed.mjs LEFT_LIST), so a row is
+// delisted only by our own removals (data/excluded.json) or a respelling.
 //
 //   delisted_at   set when a row's URL is no longer in feed.json; cleared when
-//                 it comes back. Rows delisted for PURGE_AFTER_DAYS lose their
-//                 screenshots and their row (votes and ratings stay).
+//                 it comes back. Rows delisted for PURGE_AFTER_DAYS that we
+//                 removed lose their screenshots and their row (votes and
+//                 ratings stay; purgeDelisted).
 //   health        weekly health check state: live -> suspect -> down
 //                 (pipeline/health.mjs). NULL until first checked.
 //   retry_at      when capture may try a site again after a failed capture
@@ -25,8 +28,8 @@ import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
 import { VALID_MARKS, ensureHealthSchema } from "./not-working.mjs";
-import { listKey, splitSites } from "./list-key.mjs";
-import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, jobSummary } from "./list-util.mjs";
+import { isWebAddress, listKey, spellingKey, splitSites } from "./list-key.mjs";
+import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, excludedUrl, jobSummary } from "./list-util.mjs";
 
 export const PURGE_AFTER_DAYS = 30;
 // Refuse to purge when this share of all rows would go at once: something
@@ -162,7 +165,9 @@ const chunks = (arr, n = 400) =>
  *
  * More than DELIST_MAX_SHARE of the list at once (unless LIST_CLEANUP_SHARE
  * allows it) is a broken or rewritten feed; the feed build refuses such a feed
- * first. In the job that owns the sync (`owner`, default: the nightly sync
+ * first. A community list removal no longer delists (the feed build keeps the
+ * site), so what this guards is our own removals and respellings reaching
+ * feed.json, and a feed.json damaged on its way here. In the job that owns the sync (`owner`, default: the nightly sync
  * workflow) it fails the job; in every other job (judge, compare, prewarm,
  * the health check) nothing is delisted or relisted this run, a loud warning
  * is logged, and the job carries on with the rows as they are, so one upstream
@@ -249,7 +254,16 @@ export async function syncRoster(
 }
 
 /**
- * Delete rows delisted for at least `days` days, and their screenshots.
+ * Delete rows delisted for at least `days` days, and their screenshots, when
+ * we removed the site (owner, 2026-11-22: a community list removal changes
+ * nothing on our side):
+ *   - its key is in our exclusions (`excluded`: data/excluded.json's entries;
+ *     dead, down, duplicate, not a portfolio, an owner's removal), or
+ *   - it is an old spelling of a listed row (the same spellingKey under
+ *     another list key), or not a web address at all (a README line an older
+ *     parser misread, fixed upstream since).
+ * Any other delisted row (one the community list dropped before the feed
+ * build kept such sites) is kept and counted as `notOurs`.
  * Votes and ratings are kept: the vote log is the source of truth for ELO and
  * the leaderboard only shows roster URLs, so rankings stay consistent.
  * `deleteShots(shotKey)` removes a capture's files from R2; when it throws,
@@ -259,14 +273,17 @@ export async function syncRoster(
  */
 export async function purgeDelisted(
   db,
-  { now = new Date(), days = PURGE_AFTER_DAYS, deleteShots, dryRun = false, log = console.log } = {}
+  { now = new Date(), days = PURGE_AFTER_DAYS, excluded, deleteShots, dryRun = false, log = console.log } = {}
 ) {
+  if (!Array.isArray(excluded)) throw new Error("purgeDelisted: needs our exclusions (data/excluded.json) to know which sites we removed");
   await ensureRosterSchema(db);
   const cutoff = new Date(now.getTime() - days * 86400000).toISOString();
-  const listedKeys = new Set(
-    (await db.execute("SELECT url FROM portfolios WHERE delisted_at IS NULL")).rows.map((r) => listKey(String(r.url)))
-  );
+  const ours = new Set(excluded.map((e) => excludedUrl(e)).filter(Boolean).map((u) => listKey(String(u))));
+  const listed = (await db.execute("SELECT url FROM portfolios WHERE delisted_at IS NULL")).rows.map((r) => String(r.url));
+  const listedKeys = new Set(listed.map(listKey));
+  const listedSpellings = new Set(listed.map(spellingKey).filter(Boolean));
   const due = [];
+  let notOurs = 0;
   for (const r of (
     await db.execute({
       sql: "SELECT url, shot_key FROM portfolios WHERE delisted_at IS NOT NULL AND delisted_at <= ?",
@@ -274,8 +291,13 @@ export async function purgeDelisted(
     })
   ).rows) {
     const url = String(r.url);
-    if (listedKeys.has(listKey(url))) log(`kept ${url}: its site is listed under another address (a split site, kept until it is merged)`);
-    else due.push({ url, shotKey: r.shot_key == null ? null : String(r.shot_key) });
+    const key = listKey(url);
+    if (listedKeys.has(key)) log(`kept ${url}: its site is listed under another address (a split site, kept until it is merged)`);
+    else if (ours.has(key) || !isWebAddress(url) || listedSpellings.has(spellingKey(url))) due.push({ url, shotKey: r.shot_key == null ? null : String(r.shot_key) });
+    else {
+      notOurs++;
+      log(`kept ${url}: delisted but not removed by us (not in data/excluded.json); only our own removals are purged`);
+    }
   }
   const total = Number((await db.execute("SELECT COUNT(*) AS n FROM portfolios")).rows[0].n);
   if (due.length && due.length > total * PURGE_MAX_SHARE) {
@@ -305,7 +327,7 @@ export async function purgeDelisted(
       log(`purge failed for ${row.url}: ${String(e?.message ?? e).slice(0, 120)}`);
     }
   }
-  return { due: due.length, purged, failed };
+  return { due: due.length, purged, failed, notOurs };
 }
 
 // Capture retry backoff after an `error`: 1, 2, 4, 8, 16 days, then 30 days.
