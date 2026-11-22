@@ -43,10 +43,8 @@ export function listedUrl(url: string): string | null {
 }
 
 export type Gate = Awaited<ReturnType<typeof requester>> & {
-  /** The listed portfolio's address when it is on the list, else the address as checked. */
+  /** The address as checked (normalized, https assumed). */
   url: string;
-  /** The address as checked (normalized, https assumed), before the listed lookup. */
-  checked: string;
   siteKey: string;
   /** The listed portfolio's address when it is on the list: its saved results are the ones refreshed. */
   listed: string | null;
@@ -71,7 +69,7 @@ export async function gate(req: Request, action: string): Promise<Gate | Respons
   if (over) return fail("rate_limited", 429, { message: "That's a lot of checks in a short time. Try again in a little while." }, { "retry-after": String(over.retryAfterSec) });
   if ((await verifyTurnstile(body.turnstileToken, who.ip, { action })) === "failed") return fail("turnstile_failed", 403, { message: "We couldn't check that you're a person. Reload the page and try again." });
   const listedAs = listedUrl(target.url);
-  return { ...who, url: listedAs ?? target.url, checked: target.url, siteKey: target.siteKey, listed: listedAs, body };
+  return { ...who, url: listedAs ?? target.url, siteKey: target.siteKey, listed: listedAs, body };
 }
 
 /** Reserves one fresh run of `tool` for this visitor; a Response when a cap is reached. */
@@ -110,7 +108,7 @@ export const wantsFresh = (g: Gate) => g.body.fresh === true;
  */
 export async function remember(g: Gate, loaded: boolean): Promise<{ status: string; added: boolean } | null> {
   if (g.listed || !loaded) return null;
-  if (await addRefusal(db(), [g.url, g.checked])) return null;
+  if (await addRefusal(db(), [g.url])) return null;
   return addPending(db(), { url: g.url, source: "tools" });
 }
 

@@ -1,7 +1,7 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
 import { GONE_WHERE, HIDDEN_WHERE } from "@/lib/hidden.mjs";
-import { markedOwnerRows, ownerSiteKey } from "@/lib/ownership/same-site.mjs";
+import { ownerMarks, ownerSiteKey } from "@/lib/ownership/same-site.mjs";
 
 const known = new Set((feed as { url: string }[]).map((p) => p.url));
 
@@ -18,14 +18,8 @@ for (const url of known) {
  * the addresses the removals were asked under and every listed address of the same site.
  */
 async function ownerRemovedUrls(): Promise<string[]> {
-  const removed = (await markedOwnerRows(db())).filter((r) => r.removedAt);
-  return removed.flatMap((r) => [r.url, ...(listedByOwnerKey.get(r.key) ?? [])]);
-}
-
-/** Whether `url` is a spelling of a site its verified owner removed (the removal applied). */
-async function ownerRemoved(url: string): Promise<boolean> {
-  const key = ownerSiteKey(url);
-  return (await markedOwnerRows(db())).some((r) => r.removedAt && r.key === key);
+  const marks = await ownerMarks(db());
+  return [...marks.removedUrls, ...[...marks.removed].flatMap((key) => listedByOwnerKey.get(key) ?? [])];
 }
 
 /** True if the URL is an actual portfolio from the list. */
@@ -70,13 +64,14 @@ export async function hiddenUrls(): Promise<Set<string>> {
 }
 
 /**
- * Whether one site is hidden right now (the same rule as hiddenUrls): a
- * primary-key lookup, never cached, for checks about a single site.
+ * Whether one site is hidden right now (the same rule as hiddenUrls), for
+ * checks about a single site: a primary-key lookup, never cached, plus the
+ * owners' marked rows (cached a minute per isolate, lib/ownership/same-site.mjs).
  */
 export async function isHidden(url: string): Promise<boolean> {
   await ensureSchema();
-  const [res, removed] = await Promise.all([db().execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND (${HIDDEN_WHERE})`, args: [url] }), ownerRemoved(url)]);
-  return res.rows.length > 0 || removed;
+  const [res, marks] = await Promise.all([db().execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND (${HIDDEN_WHERE})`, args: [url] }), ownerMarks(db())]);
+  return res.rows.length > 0 || marks.isRemoved(url);
 }
 
 /**

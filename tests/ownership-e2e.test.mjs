@@ -196,19 +196,28 @@ test("add: a listed site says so with its profile, and runs nothing", async () =
   assert.equal(asked.length, before);
 });
 
-test("add: a site its owner removed, applied or held, is refused under that spelling and any other; nothing runs or is saved", async () => {
+test("add: a site its owner removed is refused under any spelling; a held removal only when the site isn't listed; nothing runs or is saved", async () => {
   const now = new Date().toISOString();
   const later = new Date(Date.now() + 86400e3).toISOString();
+  const removedRow = "https://Removed-own-e2e.dev/#home";
+  const heldRow = "https://held-own-e2e.dev/?ref=x";
+  const heldListed = LISTED.replace("https://", "https://www.") + "/";
   await db.execute({
     sql: "INSERT INTO portfolio_owner (url, hide_grade, removed_at, updated_at) VALUES (?, 0, ?, ?) ON CONFLICT(url) DO UPDATE SET removed_at = excluded.removed_at",
-    args: ["https://Removed-own-e2e.dev", now, now],
+    args: [removedRow, now, now],
   });
-  await db.execute({
-    sql: "INSERT INTO portfolio_owner (url, hide_grade, remove_after, updated_at) VALUES (?, 0, ?, ?) ON CONFLICT(url) DO UPDATE SET remove_after = excluded.remove_after",
-    args: ["https://held-own-e2e.dev/", later, now],
-  });
+  for (const url of [heldRow, heldListed]) {
+    await db.execute({
+      sql: "INSERT INTO portfolio_owner (url, hide_grade, remove_after, updated_at) VALUES (?, 0, ?, ?) ON CONFLICT(url) DO UPDATE SET remove_after = excluded.remove_after",
+      args: [url, later, now],
+    });
+  }
   try {
-    for (const url of ["removed-own-e2e.dev", "http://www.removed-own-e2e.dev/", "https://REMOVED-own-e2e.dev//", "held-own-e2e.dev", "www.held-own-e2e.dev"]) {
+    // A stranger learns nothing of a held removal on a listed site: the usual answer.
+    const listed = await add(LISTED);
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.equal(listed.body.already, "listed");
+    for (const url of ["removed-own-e2e.dev", "https://removed-own-e2e.dev/", "http://www.removed-own-e2e.dev/?x=1", "https://REMOVED-own-e2e.dev//", "held-own-e2e.dev", "www.held-own-e2e.dev"]) {
       const before = asked.length;
       const r = await add(url);
       assert.equal(r.status, 409, `${url}: ${JSON.stringify(r.body)}`);
@@ -223,7 +232,7 @@ test("add: a site its owner removed, applied or held, is refused under that spel
     assert.equal(kept.status, 200, JSON.stringify(kept.body));
     assert.equal((await seen(db, "https://kept-own-e2e.dev/"))?.status, "pending");
   } finally {
-    await db.execute({ sql: "DELETE FROM portfolio_owner WHERE url IN (?, ?)", args: ["https://Removed-own-e2e.dev", "https://held-own-e2e.dev/"] });
+    await db.execute({ sql: "DELETE FROM portfolio_owner WHERE url IN (?, ?, ?)", args: [removedRow, heldRow, heldListed] });
   }
 });
 

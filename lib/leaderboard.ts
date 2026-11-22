@@ -5,7 +5,7 @@ import { rankingConfig } from "@/lib/ranking/config.mjs";
 import { hiddenUrls } from "@/lib/roster";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
-import { ownerMarks, ownerSiteKey } from "@/lib/ownership/same-site.mjs";
+import { ownerMarks } from "@/lib/ownership/same-site.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
 
@@ -98,10 +98,10 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
     args: urls,
   });
   // A grade hidden under any spelling of the site (lib/ownership/same-site.mjs).
-  const { hideGrade } = await ownerMarks(db());
+  const { gradeHidden } = await ownerMarks(db());
   for (const r of grades.rows) {
     const url = String(r.url);
-    if (hideGrade.has(ownerSiteKey(url))) continue;
+    if (gradeHidden(url)) continue;
     let g: Record<string, unknown> | null = null;
     try {
       g = JSON.parse(String(r.ai_rubric));
