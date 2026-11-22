@@ -1,13 +1,6 @@
-// Grades are never overwritten silently. When a site is re-graded (by the
-// re-grade queues, or --force), its previous grade moves to rubric_history
-// first. Every re-grade of a 3.1 Flash-Lite grade by 3.5 Flash-Lite therefore
-// yields a free 3.1-vs-3.5 pair, which scripts/grade-compare.mjs reports on.
-//
-// Two re-grade queues, both after new and ungraded sites:
-//   regradeQueue         grades not made by the primary model (3.1 -> 3.5)
-//   versionRegradeQueue  grades by the primary model from an older rubric
-//                        version (pipeline/rubric.mjs RUBRIC_VERSION); lowest
-//                        priority, and only when RUBRIC_REGRADE is "true"
+// Grades are never overwritten silently. When a site is graded again (its
+// one fresh grade after the owner's review, a manual tool, or --force), its
+// previous grade moves to rubric_history first.
 
 import { RUBRIC_HISTORY_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { AI_WORK } from "./roster.mjs";

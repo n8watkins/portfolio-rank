@@ -1,6 +1,6 @@
 // Gemini monitoring (pipeline/gemini-log.mjs), grade history and the
 // re-grade queue (pipeline/rubric-history.mjs), and the 3.1-vs-3.5
-// comparison report (scripts/grade-compare.mjs). Offline: Gemini is a
+// grade pairs (pipeline/grade-pairs.mjs). Offline: Gemini is a
 // stand-in, the database a throwaway file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { createRequestLog, dailyTotals, ensureGeminiLog, runSummary } from "../p
 import { ensureRubricHistory, regradeQueue, replaceGradeStatements } from "../pipeline/rubric-history.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
-import { buildPairs, compareGrades, compareMarkdown } from "../scripts/grade-compare.mjs";
+import { buildPairs, compareGrades } from "../pipeline/grade-pairs.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 function tempDb() {
@@ -111,7 +111,7 @@ test("the re-grade queue holds listed, healthy grades not made by 3.5, oldest fi
   assert.equal((await regradeQueue(db, { primary: PRIMARY_MODEL, limit: 0 })).length, 0);
 });
 
-test("the comparison report: tier agreement, per-axis difference, is_portfolio disagreement", () => {
+test("grade pairs: tier agreement, per-axis difference, is_portfolio disagreement", () => {
   const history = [
     { url: "a", model: BACKUP_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(BACKUP_MODEL, "A", 4)) },
     { url: "b", model: BACKUP_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(BACKUP_MODEL, "S", 5)) },
@@ -131,10 +131,6 @@ test("the comparison report: tier agreement, per-axis difference, is_portfolio d
   assert.equal(r.withinOne, 2); // A=A, B~C
   assert.equal(r.portfolioDisagree, 1);
   assert.equal(r.mae.visual_design, (0 + 2 + 1) / 3);
-  const md = compareMarkdown(r);
-  assert.match(md, /3 site\(s\) graded by both/);
-  assert.match(md, /\| Same tier \| 33\.3% \(1\) \|/);
-  assert.match(md, /\| visual_design \| 1\.00 \|/);
 });
 
 async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, env = {} }) {

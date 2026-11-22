@@ -44,7 +44,7 @@ import { measurePage } from "../pipeline/facts.mjs";
 import { httpGate, UA, visibleText } from "../pipeline/gate.mjs";
 import { AI_WORK, pipelineDb } from "../pipeline/roster.mjs";
 import { createRenderer } from "../pipeline/render.mjs";
-import { compareGrades } from "./grade-compare.mjs";
+import { compareGrades } from "../pipeline/grade-pairs.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const args = process.argv.slice(2);
