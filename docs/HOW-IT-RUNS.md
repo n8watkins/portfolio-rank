@@ -173,13 +173,13 @@ Each chain is a list of steps in the order they happen.
 2. **The owner's confirmed relists go in first** (`sync-upstream.yml`, `pipeline/review-additions.mjs`).
    Sites you confirmed as portfolios on the review page that had left the list are added to `data/additions.json`.
 3. **Our list is rebuilt** (`sync-upstream.yml`, `pipeline/generate_feed.py`).
-   It is the community list, minus our exclusions, plus our additions.
-   Two guards refuse a list that shrinks by more than 5%, or that loses more than 15% of the current addresses.
+   It is the community list, minus our exclusions, plus our additions, plus every site already on our list that the community list dropped (see "The community list drops a site" below).
+   Three guards refuse a list that shrinks by more than 5%, a community list that drops more than 5% of our list in one night (a README cut short or rewritten), or a list that loses more than 15% of the current addresses.
    A refusal fails the run, which files an issue.
 4. **The list change becomes a pull request that merges itself** (`sync-upstream.yml`, branch `data/sync-upstream`).
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
-   The database roster is synced first: rows not on the list are marked delisted, with a 15% safety limit.
+   The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
    A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`).
 6. **Capture checks** (same step, code only).
@@ -235,12 +235,33 @@ Each chain is a list of steps in the order they happen.
 6. **The weekly export** (`health.yml`, `pipeline/exclusions.mjs`, every 6 or more days).
    The site is added to `data/excluded.json` and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
    Removed sites are re-checked later (days 7, 14 and 21, then monthly) and come back when they pass.
-7. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots.
+7. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
+   Any other delisted row is kept and counted in the run summary.
    Votes and ratings stay.
 
 No one is emailed at any step.
 A site the check could not tell about for 28 days gives you an alert on the alerts page.
 A different path exists for a site that answers with the wrong thing (parked, blank, a duplicate): 3 failed checks, a week apart, spanning at least 13 days.
+
+### The community list drops a site
+
+Your rule (2026-11-22): a removal on the community list changes nothing on our side.
+The community list drops lines mostly through its own broken-link reports (paused hosting, a 404, an expired domain), which is not a judgement that the site is not a portfolio.
+
+1. **The nightly list rebuild keeps it** (`sync-upstream.yml`, `pipeline/generate_feed.py`, `pipeline/build-feed.mjs` `buildFeed`).
+   A site on our list that the community list no longer has stays on `data/feed.json`.
+   It is recorded in `data/additions.json` with `"source": "left_community_list"` and `left_on`, the day the rebuild first saw it gone, and both files go into the same self-merging pull request.
+   Not kept: a site in `data/excluded.json` (under either spelling key), an old spelling of a site the list now spells differently, and a line that was never a web address (such as `https\://shreyanshportfolio.in`, misread by an older parser).
+2. **Nothing changes in the database.**
+   The roster sync sees the site still on the list, so its row, grade, votes, ratings and screenshots stay as they are.
+3. **Only our own checks decide from then on.**
+   The nightly health check hides it while it fails and shows it again when it passes, as for any listed site.
+   It leaves the list only through our exclusions (dead, down, duplicate, not a portfolio) or an owner's removal through the claim process.
+   A recorded site that we exclude stays recorded, so lifting the exclusion (an undone owner removal, a removed site that passes its re-check) lists it again.
+4. **If the community list lists it again**, the rebuild takes the community list's entry (with our spelling, if it respelled it), and the site leaves the record.
+
+Nothing is sent to the community list.
+The 25 sites the community list had dropped before this rule were put back into the record by hand on 2026-11-22, each with the day our list lost it.
 
 ### An owner removes their site
 
