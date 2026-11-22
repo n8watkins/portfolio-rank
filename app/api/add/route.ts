@@ -7,6 +7,7 @@ import { runAllChecks } from "@/lib/tools/run";
 import { EXISTS_TIMEOUT_MS, siteExists } from "@/lib/tools/exists.mjs";
 import { siteHop } from "@/lib/ownership/hop";
 import { seen } from "@/lib/discovery/sites.mjs";
+import { addRefusal } from "@/lib/ownership/same-site.mjs";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { profilePath } from "@/lib/profile";
 
@@ -23,6 +24,9 @@ import { profilePath } from "@/lib/profile";
 //   400 bad_request | <address error> { message }
 //   403 bad_origin | turnstile_failed
 //   404 not_found (TOOLS_ENABLED is off)
+//   409 owner_removed { message }: its verified owner removed the site (or
+//       asked to, the removal still held), under this spelling or another
+//       one of the same site; nothing runs or is saved
 //   422 unreachable | not_ok | not_html | empty | parked | redirects_away |
 //       redirect_loop { message }: the site isn't really there (one GET,
 //       lib/tools/exists.mjs); nothing is saved or added
@@ -50,6 +54,11 @@ export async function POST(req: Request) {
   const g = await gate(req, "add");
   if (g instanceof Response) return g;
   await ensureSchema();
+
+  // Removed by its verified owner, applied or still held, under this spelling or another one
+  // (lib/ownership/same-site.mjs): refused before anything is checked or written.
+  const removed = await addRefusal(db(), [g.checked, g.url]);
+  if (removed) return fail(removed.error, 409, { message: removed.message });
 
   // Already on PortfolioRank: say so, with its profile.
   if (g.listed) return NextResponse.json({ url: g.listed, listed: true, path: profilePath(g.listed), already: "listed" }, { headers: PRIVATE });

@@ -196,6 +196,37 @@ test("add: a listed site says so with its profile, and runs nothing", async () =
   assert.equal(asked.length, before);
 });
 
+test("add: a site its owner removed, applied or held, is refused under that spelling and any other; nothing runs or is saved", async () => {
+  const now = new Date().toISOString();
+  const later = new Date(Date.now() + 86400e3).toISOString();
+  await db.execute({
+    sql: "INSERT INTO portfolio_owner (url, hide_grade, removed_at, updated_at) VALUES (?, 0, ?, ?) ON CONFLICT(url) DO UPDATE SET removed_at = excluded.removed_at",
+    args: ["https://Removed-own-e2e.dev", now, now],
+  });
+  await db.execute({
+    sql: "INSERT INTO portfolio_owner (url, hide_grade, remove_after, updated_at) VALUES (?, 0, ?, ?) ON CONFLICT(url) DO UPDATE SET remove_after = excluded.remove_after",
+    args: ["https://held-own-e2e.dev/", later, now],
+  });
+  try {
+    for (const url of ["removed-own-e2e.dev", "http://www.removed-own-e2e.dev/", "https://REMOVED-own-e2e.dev//", "held-own-e2e.dev", "www.held-own-e2e.dev"]) {
+      const before = asked.length;
+      const r = await add(url);
+      assert.equal(r.status, 409, `${url}: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.error, "owner_removed");
+      assert.match(r.body.message, /removed from PortfolioRank/);
+      assert.equal(asked.length, before, "nothing was fetched");
+    }
+    assert.equal(await seen(db, "https://removed-own-e2e.dev/"), null, "not added");
+    assert.equal(await seen(db, "https://held-own-e2e.dev/"), null, "not added");
+    // A site never removed is added as before.
+    const kept = await add("kept-own-e2e.dev");
+    assert.equal(kept.status, 200, JSON.stringify(kept.body));
+    assert.equal((await seen(db, "https://kept-own-e2e.dev/"))?.status, "pending");
+  } finally {
+    await db.execute({ sql: "DELETE FROM portfolio_owner WHERE url IN (?, ?)", args: ["https://Removed-own-e2e.dev", "https://held-own-e2e.dev/"] });
+  }
+});
+
 test("add: a site must answer 200 with HTML that isn't parked; nothing is added otherwise", async () => {
   sites.set("https://parked-own-e2e.dev/", [200, "<title>parked-own-e2e.dev</title><h1>This domain is for sale</h1>"]);
   sites.set("https://gone-own-e2e.dev/", [404, "gone"]);

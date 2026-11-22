@@ -17,6 +17,7 @@ import { siteKeyOf } from "../../lib/grader/url.mjs";
 import { createJob } from "../../lib/grader/jobs.mjs";
 import { graderCaps, siteLeft } from "../../lib/grader/caps.mjs";
 import { queue, settle } from "../../lib/discovery/sites.mjs";
+import { ownerMarks, ownerSiteKey } from "../../lib/ownership/same-site.mjs";
 import { quotaDay } from "../quota-day.mjs";
 import { moveWatermark, readWatermark } from "./watermark.mjs";
 
@@ -78,8 +79,17 @@ export async function handoff(db, { perDay, waiting, reserve, now = new Date(), 
     return out;
   }
   const rows = (await queue(db, "pending", room)).filter((r) => r.url);
+  // A site its verified owner removed (applied or held, under any spelling;
+  // lib/ownership/same-site.mjs) is never graded into PortfolioRank again:
+  // dropped for good, and not counted as handed off.
+  const marks = await ownerMarks(db);
+  const removed = rows.filter((r) => marks.removed.has(ownerSiteKey(r.url)) || marks.held.has(ownerSiteKey(r.url)));
+  if (removed.length) {
+    await settle(db, removed.map((r) => ({ key: r.key, status: "dropped", reason: "owner_removed" })), { now });
+    out.ownerRemoved = removed.length;
+  }
   const moved = [];
-  for (const row of rows) {
+  for (const row of rows.filter((r) => !removed.includes(r))) {
     await createJob(db, {
       url: row.url,
       siteKey: siteKeyOf(row.url),
