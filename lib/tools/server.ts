@@ -6,6 +6,7 @@ import { normalizeGradeUrl, siteKeyOf } from "@/lib/grader/url.mjs";
 import { fail, readJsonBody, requester, sameOrigin } from "@/lib/grader/server";
 import { reserveTool, toolCaps } from "./caps.mjs";
 import { addPending } from "@/lib/discovery/sites.mjs";
+import { addRefusal } from "@/lib/ownership/same-site.mjs";
 
 // Request-side helpers for the free tools (app/api/tools/*, docs/TOOLS.md).
 // Every tool request goes through gate(): the switch, same origin, a sane
@@ -102,9 +103,12 @@ export const wantsFresh = (g: Gate) => g.body.fresh === true;
  * as pending (private until graded; lib/discovery/sites.mjs). Owner
  * decision 2026-11-12: no opt-in box, said under the button and in the
  * privacy policy.
+ * A site whose owner removed it (applied or held, under any spelling;
+ * lib/ownership/same-site.mjs) is never added again.
  */
 export async function remember(g: Gate, loaded: boolean): Promise<{ status: string; added: boolean } | null> {
   if (g.listed || !loaded) return null;
+  if (await addRefusal(db(), [g.url])) return null;
   return addPending(db(), { url: g.url, source: "tools" });
 }
 

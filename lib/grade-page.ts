@@ -10,6 +10,7 @@ import { tiersShown } from "@/lib/tiers-view";
 import { emailState } from "@/lib/grader/notify.mjs";
 import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
+import { ownerMarks } from "@/lib/ownership/same-site.mjs";
 import { fixEffects, hiringGroups, placeIn, verdictOf } from "@/lib/grader/present.mjs";
 import { listedSite, type Job } from "@/lib/me";
 import { reportPath } from "@/lib/home";
@@ -57,13 +58,10 @@ const domainOf = (url: string) => {
 };
 
 /** Sites whose grade the page must not show: removed by their owner or with the grade hidden, or down. */
-async function gradeHiddenUrls(): Promise<Set<string>> {
-  const out = new Set(await hiddenUrls());
-  try {
-    const rows = (await db().execute("SELECT url FROM portfolio_owner WHERE removed_at IS NOT NULL OR hide_grade = 1")).rows;
-    for (const r of rows) out.add(String(r.url));
-  } catch {}
-  return out;
+// Under any spelling of the site (lib/ownership/same-site.mjs). `has(url)`.
+async function gradeHiddenUrls(): Promise<{ has: (url: string) => boolean }> {
+  const [hidden, marks] = await Promise.all([hiddenUrls(), ownerMarks(db())]);
+  return { has: (url) => hidden.has(url) || marks.gradeHidden(url) };
 }
 
 /** The note the AI wrote for one axis of a listed portfolio's grade (one row by primary key). */

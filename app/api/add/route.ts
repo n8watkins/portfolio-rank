@@ -7,6 +7,7 @@ import { runAllChecks } from "@/lib/tools/run";
 import { EXISTS_TIMEOUT_MS, siteExists } from "@/lib/tools/exists.mjs";
 import { siteHop } from "@/lib/ownership/hop";
 import { seen } from "@/lib/discovery/sites.mjs";
+import { OWNER_REMOVED_MESSAGE, removalOf } from "@/lib/ownership/same-site.mjs";
 import { rateLimit } from "@/lib/polls/store.mjs";
 import { profilePath } from "@/lib/profile";
 
@@ -23,6 +24,10 @@ import { profilePath } from "@/lib/profile";
 //   400 bad_request | <address error> { message }
 //   403 bad_origin | turnstile_failed
 //   404 not_found (TOOLS_ENABLED is off)
+//   409 owner_removed { message }: its verified owner removed the site, under
+//       this spelling or another one of the same site (or asked to, the
+//       removal still held, for a site that isn't listed: a listed one
+//       answers "listed" until the removal applies); nothing runs or is saved
 //   422 unreachable | not_ok | not_html | empty | parked | redirects_away |
 //       redirect_loop { message }: the site isn't really there (one GET,
 //       lib/tools/exists.mjs); nothing is saved or added
@@ -51,8 +56,16 @@ export async function POST(req: Request) {
   if (g instanceof Response) return g;
   await ensureSchema();
 
+  // Removed by its verified owner, under any spelling of the site (lib/ownership/same-site.mjs):
+  // refused before anything is checked or written. A removal still in its hold is the owner's
+  // to cancel, so a listed site answers as listed until it applies (a stranger learns nothing).
+  const removal = await removalOf(db(), [g.url]);
+  const refuse = () => fail("owner_removed", 409, { message: OWNER_REMOVED_MESSAGE });
+  if (removal === "removed") return refuse();
+
   // Already on PortfolioRank: say so, with its profile.
   if (g.listed) return NextResponse.json({ url: g.listed, listed: true, path: profilePath(g.listed), already: "listed" }, { headers: PRIVATE });
+  if (removal === "held") return refuse();
   const before = await seen(db(), g.url);
   if (before && before.status !== "dropped") return NextResponse.json({ url: g.url, listed: false, path: profilePath(g.url), already: "added" }, { headers: PRIVATE });
 
