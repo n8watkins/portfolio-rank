@@ -17,8 +17,9 @@ name: Re-capture and re-measure the whole list
 # sites whose stored facts already carry that facts version (portfolios.facts.v).
 # To re-run one shard, give `only_shard`; the split is the same every time.
 #
-# Do not start it around the night's run (03:30 and 04:30 UTC, which is 20:30
-# Pacific): see the note at `concurrency` below.
+# It refuses to start from 14:00 to 21:59 Pacific (the `plan` job), so no shard
+# can still be capturing when the night's run starts at 20:30 Pacific: see the
+# note at `concurrency` below.
 on:
   workflow_dispatch:
     inputs:
@@ -75,6 +76,16 @@ jobs:
           SHARDS: ${{ inputs.shards || '4' }}
           ONLY_SHARD: ${{ inputs.only_shard }}
         run: |
+          # Never overlap the night's capture (20:30 Pacific, about 45 minutes): a
+          # shard may run 330 minutes, so a start is allowed only from 22:00 to
+          # 13:59 Pacific, which ends by 19:30 at the latest. Pacific, not UTC, so
+          # the window holds in summer and winter.
+          hour=$(TZ=America/Los_Angeles date +%H)
+          hour=$((10#$hour))
+          if [ "$hour" -ge 14 ] && [ "$hour" -lt 22 ]; then
+            echo "::error::Refused: it is $(TZ=America/Los_Angeles date +%H:%M) Pacific. This run may only start from 22:00 to 13:59 Pacific, so no shard can still be capturing when the night's run starts at 20:30."
+            exit 1
+          fi
           if ! [[ "$SHARDS" =~ ^[0-9]+$ ]] || [ "$SHARDS" -lt 1 ] || [ "$SHARDS" -gt 20 ]; then
             echo "::error::shards must be a whole number from 1 to 20, got \"$SHARDS\"."
             exit 1
