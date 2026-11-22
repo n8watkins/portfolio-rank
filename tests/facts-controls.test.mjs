@@ -13,6 +13,7 @@ import { FACTS_VERSION, measureFacts, pageLinks, projectLinkCandidates } from ".
 import { extractControls, LABEL_MAX } from "../pipeline/page-controls.mjs";
 import { portfolioSignals } from "../pipeline/signals.mjs";
 import { settleText } from "../pipeline/render.mjs";
+import { readRenderedPage } from "../pipeline/gate.mjs";
 
 const fixture = (name) => fs.readFileSync(path.join(import.meta.dirname, "fixtures", "facts", name), "utf8");
 
@@ -86,6 +87,25 @@ test("controls: labels from text, aria-label, title and image alt; long text is 
       ["input", "Send"],
     ]
   );
+});
+
+test("a page over 400,000 characters drops inline images, srcsets and style attributes before the cut, so its footer links stay", (t) => {
+  const footer = `<footer><a href="https://github.com/eduard">Github</a><a href="mailto:e@x.dev">Mail</a></footer>`;
+  const img = `<img src="data:image/png;base64,${"A".repeat(380000)}" srcset="${"a.png 1x, ".repeat(3000)}" style="${"color:red;".repeat(2000)}">`;
+  const page = `<html><head><title>Eduard</title></head><body><h1>Eduard</h1>${img}${footer}</body></html>`;
+  assert.ok(page.length > 400000);
+  const saved = globalThis.document;
+  t.after(() => {
+    globalThis.document = saved;
+  });
+  globalThis.document = { body: { innerText: "Eduard Github Mail" }, documentElement: { outerHTML: page }, querySelectorAll: () => [] };
+  const { html } = readRenderedPage();
+  assert.ok(html.length < 400000);
+  const f = measureFacts({ html, url: "https://eduard.github.io", name: "Eduard" });
+  assert.equal(f.github, true);
+  assert.equal(f.contact, true);
+  globalThis.document = { body: { innerText: "" }, documentElement: { outerHTML: "<html><body><img style=\"x\"></body></html>" }, querySelectorAll: () => [] };
+  assert.equal(readRenderedPage().html, "<html><body><img style=\"x\"></body></html>", "a page under the cap is read as it is");
 });
 
 /** A fake page whose text length follows `lengths`, one value per sample. */

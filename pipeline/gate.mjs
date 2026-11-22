@@ -102,14 +102,17 @@ export function readRenderedPage() {
   const media = [...document.querySelectorAll("canvas, img, svg, video, flt-glass-pane, flutter-view")].some(visible);
   // The rendered DOM, for the portfolio-likeness signals and facts of
   // single-page apps, at most 400,000 characters. A page longer than that
-  // (inline scripts, styles and SVG path data in the head can fill it before
-  // the body starts) loses those first, so the cut takes its footer's
-  // GitHub and email links last (facts audit, 2026-11-21).
+  // loses what no fact reads first (inline script and style bodies, image
+  // srcsets, style attributes, inline data: images, SVG path data), so the
+  // cut no longer takes its footer's GitHub and email links (facts audit,
+  // 2026-11-21: two of 70 listed sites lost them to inline images and
+  // srcsets).
   let html = document.documentElement.outerHTML;
   if (html.length > 400000) {
     html = html
       .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3")
-      .replace(/\s(?:d|points)="[^"]{120,}"/g, "");
+      .replace(/\s(?:srcset|sizes|style|d|points)="[^"]*"/g, "")
+      .replace(/data:[\w.+-]+\/[\w.+-]+[^"')\s]{64,}/g, "data:");
   }
   html = html.slice(0, 400000);
   return { text, media, html };

@@ -10,7 +10,7 @@
 // broad probe and the code disagree). Neither version of the code under test
 // takes part in it.
 //
-//   node scripts/experiments/facts-audit/analyze.mjs <before-dir> [<after-dir>] [--list] [--json out.json]
+//   node scripts/experiments/facts-audit/analyze.mjs <before-dir> [<after-dir>] [--render <render-dir>] [--list] [--json out.json]
 import fs from "node:fs";
 import path from "node:path";
 import * as v1 from "./baseline/facts-v1.mjs";
@@ -18,7 +18,7 @@ import * as now from "../../../pipeline/facts.mjs";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
-const [beforeDir, afterDir] = args.filter((a, i) => !a.startsWith("--") && !(args[i - 1] === "--json"));
+const [beforeDir, afterDir] = args.filter((a, i) => !a.startsWith("--") && !["--json", "--render"].includes(args[i - 1]));
 const jsonOut = args.includes("--json") ? args[args.indexOf("--json") + 1] : null;
 const sample = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "sample.json"), "utf8"));
 const overrides = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "truth.json"), "utf8"));
@@ -265,6 +265,44 @@ for (const r of table) {
   console.log(`${pad(r.group, 9)}${pad(r.fact, 15)}${pad(f(r.before), 22)}${pad(f(r.fixedOnA), 26)}${pad(r.after.n ? `${f(r.after)} of ${r.after.n}` : "-", 22)}${Object.entries(r.causes).map(([c, n]) => `${c}: ${n}`).join("; ")}`);
 }
 console.log(`facts    footer_year    ${fy.before} of ${fy.n} right; fixed code ${fy.fixedOnA}; after ${fy.afterN ? `${fy.after} of ${fy.afterN}` : "-"}`);
+// The browser second opinion (pipeline/render.mjs, used by the health check's
+// signals and by evidence.mjs): the old code at its old reading point (R) and
+// the current code on a load through the current renderer (--render <dir>).
+const renderDir = args.includes("--render") ? args[args.indexOf("--render") + 1] : null;
+if (renderDir) {
+  const { createHash } = await import("node:crypto");
+  console.log("\nrender.mjs (health check signals, evidence.mjs): old code at network idle + 1 s  ->  current code after settleText");
+  for (const group of ["facts", "signals"]) {
+    for (const k of keysOf(group)) {
+      const b = { right: 0, fn: 0, fp: 0 };
+      const a = { right: 0, fn: 0, fp: 0, n: 0 };
+      for (const s of scored) {
+        const t = s.truth[k];
+        const get = (ans) => (group === "facts" ? ans.facts[k] : ans.signals[k]);
+        const tally = (bucket, v) => (v === t ? bucket.right++ : t ? bucket.fn++ : bucket.fp++);
+        tally(b, get(s.old.R));
+        const rd = path.join(renderDir, createHash("sha1").update(s.url).digest("hex").slice(0, 12));
+        const html = readMaybe(path.join(rd, "render.html"));
+        const meta = JSON.parse(readMaybe(path.join(rd, "meta-render.json")) ?? "null");
+        if (html != null && meta && !meta.error) {
+          a.n++;
+          tally(a, get(codeAnswer(now, html, readMaybe(path.join(rd, "render.txt")), { url: s.url, name: sample.find((x) => x.url === s.url).name }, meta.finalUrl)));
+        }
+      }
+      console.log(`${pad(group, 9)}${pad(k, 15)}${pad(`${b.right}/${b.fn}/${b.fp}`, 22)}${a.right}/${a.fn}/${a.fp} of ${a.n}`);
+    }
+  }
+  const scores = { before: [], after: [] };
+  for (const s of scored) {
+    scores.before.push(s.old.R.score);
+    const rd = path.join(renderDir, createHash("sha1").update(s.url).digest("hex").slice(0, 12));
+    const html = readMaybe(path.join(rd, "render.html"));
+    if (html != null) scores.after.push(codeAnswer(now, html, "", { url: s.url, name: sample.find((x) => x.url === s.url).name }, s.url).score);
+  }
+  const low = (xs) => xs.filter((x) => x <= 1).length;
+  console.log(`signal score <= 1 (needs_review): ${low(scores.before)} of ${scores.before.length} before, ${low(scores.after)} of ${scores.after.length} after`);
+}
+
 if (flags.has("--list")) {
   for (const m of misses) console.log(`MISS ${m.group}.${m.fact} ${m.url} truth=${m.truth} before=${m.before} fixed=${m.fixedOnA} after=${m.after} [${m.cause}]${m.decided ? ` decided: ${m.decided}` : ""}\n     ${m.ev.join("\n     ")}`);
 }
