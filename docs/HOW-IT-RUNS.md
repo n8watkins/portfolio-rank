@@ -420,7 +420,7 @@ Dependabot (`.github/dependabot.yml`) opens pull requests daily for release-kit 
 | `grader` | report emails, stuck captures | Off (`GRADER_ENABLED`) |
 | `newsletter` | sends posts through Kit | Off (`NEWSLETTER_ENABLED`) |
 
-Other settings, per `wrangler.jsonc`: `RANKING_V2` false, `GAMES_V2` false, `TOOLS_ENABLED` false, `EMAIL_SIGNIN_ENABLED` false, `CONTENT_MODE` `dry-run`, `RUBRIC_REGRADE` true (it now only lets the free checks measure page evidence for grades from an older rubric; nothing re-grades them), `KIT_BROADCAST_MODE` `draft`, `POLL_GENERATION_ENABLED` false.
+Other settings, per `wrangler.jsonc`: `RANKING_V2` false, `GAMES_V2` false, `TOOLS_ENABLED` false, `EMAIL_SIGNIN_ENABLED` false, `CONTENT_MODE` `dry-run`, `KIT_BROADCAST_MODE` `draft`, `POLL_GENERATION_ENABLED` false.
 
 ### Decided, not yet done
 

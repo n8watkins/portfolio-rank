@@ -35,8 +35,11 @@ on:
         description: "Most sites to give tall page images that have none (pipeline/fullpage-backfill.mjs)"
         required: false
         default: "100"
+      # Ignored. Kept only because the released Worker (worker/night.ts up to
+      # v0.6.1) still sends it, and GitHub refuses a dispatch with an input the
+      # workflow does not declare; remove it once a release without it is live.
       rubric_regrade:
-        description: "Also measure evidence for grades from an older rubric (the Worker's RUBRIC_REGRADE)"
+        description: "Unused (re-grades were removed on 2026-11-22)"
         required: false
         default: "false"
       cleanup_share:
@@ -270,8 +273,6 @@ jobs:
       # reads only stored evidence. Then the project link checks that are
       # due (about 70 a night: the list over 30 days, plus changed sites).
       - name: Measure page evidence for the grading queue, re-check due links
-        env:
-          RUBRIC_REGRADE: ${{ inputs.rubric_regrade || vars.RUBRIC_REGRADE || 'false' }}
         run: node pipeline/evidence.mjs --limit 300 --links 120
       # Fallback only (the "grade" input, or a scheduled run because
       # Cloudflare did not start this one): grades needs_review and

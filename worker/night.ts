@@ -186,7 +186,7 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       const nightly = await dispatchWorkflow({
         token: this.env.GITHUB_DISPATCH_TOKEN,
         workflow: "sync-upstream.yml",
-        inputs: { refresh: String(this.env.NIGHTLY_REFRESH ?? "150"), rubric_regrade: String(this.env.RUBRIC_REGRADE ?? "false") },
+        inputs: { refresh: String(this.env.NIGHTLY_REFRESH ?? "150") },
         log: (line) => log("night.checks", { line }),
       });
       const health = await dispatchWorkflow({ token: this.env.GITHUB_DISPATCH_TOKEN, workflow: "health.yml", log: (line) => log("night.checks", { line }) });
