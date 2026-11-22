@@ -5,6 +5,7 @@ import { rankingConfig } from "@/lib/ranking/config.mjs";
 import { hiddenUrls } from "@/lib/roster";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
+import { ownerMarks } from "@/lib/ownership/same-site.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
 
@@ -96,19 +97,11 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
     sql: `SELECT url, ai_rubric FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL`,
     args: urls,
   });
-  let hidden = new Set<string>();
-  try {
-    const h = await db().execute({
-      sql: `SELECT url FROM portfolio_owner WHERE hide_grade = 1 AND url IN (${marks(urls.length)})`,
-      args: urls,
-    });
-    hidden = new Set(h.rows.map((r) => String(r.url)));
-  } catch (e) {
-    if (!noTable(e)) throw e;
-  }
+  // A grade hidden under any spelling of the site (lib/ownership/same-site.mjs).
+  const { gradeHidden } = await ownerMarks(db());
   for (const r of grades.rows) {
     const url = String(r.url);
-    if (hidden.has(url)) continue;
+    if (gradeHidden(url)) continue;
     let g: Record<string, unknown> | null = null;
     try {
       g = JSON.parse(String(r.ai_rubric));
