@@ -37,7 +37,10 @@ Each GitHub schedule stays only as a fallback and skips itself when Cloudflare a
 
 Times below are Pacific, with UTC in brackets, for winter.
 
-1. **00:00 (08:00 UTC)**: Gemini's free quota resets.
+1. **00:00 (08:00 UTC in winter, 07:00 UTC in summer)**: Gemini's free quota resets.
+   Google's rule is midnight Pacific time for the requests-per-day limit, so the UTC time moves with the clocks; the code counts the day in Pacific time and never uses a fixed UTC hour.
+   Per-minute limits are separate and reset on their own short windows.
+   This is Google's published rule (checked 2026-11-22) and Google can change it.
    Unused requests are lost, which is why the AI work runs at the end of the day.
 2. **Every 5 minutes**: the grader's tick and the newsletter tick (`worker/grader.ts`, `worker/newsletter.ts`).
    Both are Off today.
@@ -64,7 +67,7 @@ Times below are Pacific, with UTC in brackets, for winter.
     Paused.
 13. **22:00 (06:00 UTC)**: the GitHub fallback for the free checks (`sync-upstream.yml`).
     It skips when Cloudflare started the run in the last 20 hours, which is normal.
-14. **23:30 (07:30 UTC)**: hard stop, 30 minutes before the quota resets.
+14. **23:30 (07:30 UTC in winter, 06:30 UTC in summer)**: hard stop, 30 minutes before the quota resets.
     Then the summary, a purge of cached profiles, the owner alerts, and the log clean-up.
 
 Once a week:
@@ -369,6 +372,7 @@ Each one watches the jobs above.
 | `grade.yml` (Grade my portfolio) | started by the Worker per request | captures visitor requests | Off |
 | `judge-vote.yml` (AI comparisons, manual fallback) | manual only | the ranking v2 comparisons and the boards rebuilt, only when the repository variable `RANKING_V2` is `true` | Off (that variable is not set, so a manual run does nothing) |
 | `regrade-not-portfolio.yml` (Re-check not-a-portfolio grades) | manual only | a one-off re-check tool | Off |
+| `remeasure-all.yml` (Re-capture and re-measure the whole list) | manual only | re-captures every listed site in parallel shards after the measuring code changed, no AI | Off |
 | `discover.yml` (Discover portfolios) | daily 22:00 UTC, gated; manual | finds new sites | Off |
 | `backup.yml` (Backup DB to R2) | daily 05:00 UTC; manual | database snapshot | Running |
 | `limits.yml` (Free limits snapshot) | daily 13:30 UTC; manual | free-limit numbers, backup freshness | Running |
