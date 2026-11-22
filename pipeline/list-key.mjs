@@ -1,11 +1,9 @@
 // One site on the list, one key: the rule every job uses to decide whether two
-// addresses on the community list are the same listed site. It is exactly the
-// health check's pipeline/health.mjs normKey (and the old Python norm_key):
-// lower-case the whole address first, then host without www and the path
-// without the trailing slash; scheme, port, query and fragment ignored.
-// tests/roster-address-edit.test.mjs checks the two agree on a generated table
-// of addresses (non-ASCII, mixed-case percent escapes, spaces, braces), so the
-// health lane can import this one instead.
+// addresses on the community list are the same listed site (the health check's
+// normKey in pipeline/health.mjs is this function; the Python norm_key follows
+// the same rule): lower-case the whole address first, then host without www
+// and the path without the trailing slash; scheme, port, query and fragment
+// ignored.
 
 /** The key of one listed address. */
 export function listKey(url) {

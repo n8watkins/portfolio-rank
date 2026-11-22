@@ -76,6 +76,7 @@ import {
   notAnswering,
   poolOf,
 } from "./not-working.mjs";
+import { listKey } from "./list-key.mjs";
 import { isHiddenRow } from "../lib/hidden.mjs";
 import { GRADER_POOL_KEY } from "../lib/grader/report.mjs";
 import { clearPoolStatement } from "../lib/games/pool.mjs";
@@ -327,16 +328,8 @@ export async function checkSite(
   return { ok: true, reason: "", finalUrl, signals };
 }
 
-/** Normalized URL for duplicate detection (same rule as generate_feed.py norm_key). */
-export function normKey(url) {
-  try {
-    const u = new URL(String(url).trim().toLowerCase());
-    const host = u.hostname.replace(/^www\./, "");
-    return `${host}${u.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return String(url).trim().toLowerCase();
-  }
-}
+/** Normalized URL for duplicate detection: the list's one key (pipeline/list-key.mjs, same rule as generate_feed.py norm_key). */
+export const normKey = listKey;
 
 /**
  * Entries that duplicate an earlier one: same normalized URL, or the same

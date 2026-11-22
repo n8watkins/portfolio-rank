@@ -40,6 +40,10 @@ on:
         description: "Also measure evidence for grades from an older rubric (the Worker's RUBRIC_REGRADE)"
         required: false
         default: "false"
+      cleanup_share:
+        description: "One run only: the largest share of the list that may leave it, for a real upstream cleanup (e.g. 0.3); empty = normal guards"
+        required: false
+        default: ""
       grade:
         description: "Also AI-grade here (manual fallback; the end-of-day run on Cloudflare grades every night)"
         type: boolean
@@ -114,6 +118,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     env:
+      # This job owns the roster sync whatever the workflow is named (pipeline/roster.mjs ownsSync).
+      ROSTER_SYNC_OWNER: "1"
+      # Empty on every scheduled or dispatched run without the input: the normal guards apply.
+      LIST_CLEANUP_SHARE: ${{ inputs.cleanup_share }}
       HAS_PAT: ${{ secrets.GH_SYNC_TOKEN != '' }}
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
