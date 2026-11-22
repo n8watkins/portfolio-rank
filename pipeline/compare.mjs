@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // The new daily AI comparison job (ranking v2, RANKING.md). Off unless the
 // RANKING_V2 variable is "true": until the owner switches the leaderboard
-// over, the daily vote job (judge.mjs pairwise) keeps running as before and
-// this script exits at once without touching Gemini or the database.
+// over, this script exits at once without touching Gemini or the database
+// (the ELO-era AI votes it was to replace were removed on 2026-11-21).
 //
 // When on, each run:
 //   1. rebuilds the AI view in memory from the stored comparisons

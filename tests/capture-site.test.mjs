@@ -189,7 +189,7 @@ test("only the capture that shows the site reaches the grading queue", async () 
     now: () => Date.parse("2026-11-17T04:30:00Z"),
     sleep: async () => {},
     log: () => {},
-    flags: { rankingV2: false, rubricRegrade: false, ranking: rankingConfig({}) },
+    flags: { rankingV2: false,ranking: rankingConfig({}) },
     runId: "test",
   };
   const state = await planNight(ctx, await startNight(ctx));

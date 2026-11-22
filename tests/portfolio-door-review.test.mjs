@@ -107,7 +107,7 @@ function context(db, { gemini = {}, autoApply = true, start = T0 } = {}) {
       log: () => {},
       fetchImpl: mockGemini(gemini),
       image: async () => ({ inline_data: { mime_type: "image/jpeg", data: "AAAA" } }),
-      flags: { rankingV2: false, rubricRegrade: false, reviewAutoApply: autoApply, ranking: rankingConfig({}) },
+      flags: { rankingV2: false,reviewAutoApply: autoApply, ranking: rankingConfig({}) },
       runId: "test",
     },
   };

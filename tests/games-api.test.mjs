@@ -348,7 +348,8 @@ test("live stats: many numbers in one cached answer, GitHub numbers included", a
   assert.equal(res.status, 200);
   assert.match(res.headers.get("cache-control"), /public, max-age=60/);
   const s = await res.json();
-  for (const k of ["portfolios", "graded", "gradedThisWeek", "votesToday", "votes", "quizzesPlayed", "changedThisMonth"]) assert.equal(typeof s[k], "number", k);
+  for (const k of ["portfolios", "graded", "gradedThisWeek", "votesToday", "votes", "quizzesPlayed"]) assert.equal(typeof s[k], "number", k);
+  assert.equal("changedThisMonth" in s, false, "no longer measured");
   assert.equal(s.portfolios, feed.length);
   assert.ok(s.graded >= 1);
   assert.ok(s.quizzesPlayed >= 3);

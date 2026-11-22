@@ -45,7 +45,7 @@ import {
   verifiedCount,
 } from "../lib/games/claims.mjs";
 import { planOwnerRemovals } from "../pipeline/owner-removals.mjs";
-import { githubStats, liveCounts, pacificMonthStart, siteStats, sqliteTime } from "../lib/games/stats.mjs";
+import { githubStats, liveCounts, siteStats, sqliteTime } from "../lib/games/stats.mjs";
 import { createOneTimeLink, openLinkToken, openOneTimeLink, pruneLinks } from "../lib/grader/links.mjs";
 import { printView, renderReportHtml } from "../lib/grader/report.mjs";
 import { createRng } from "../lib/ranking/prng.mjs";
@@ -556,7 +556,6 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
     "write"
   );
   await db.execute({ sql: "INSERT INTO portfolios (url, status, ai_rubric, delisted_at) VALUES ('https://gone.dev', 'live', ?, ?)", args: [grade("S", 5), old] });
-  await db.execute({ sql: "INSERT INTO rating_resets (url, at, reason) VALUES ('https://a.dev', ?, 'page_changed'), ('https://a.dev', ?, 'page_changed'), ('https://b.dev', ?, 'page_changed')", args: [recent, recent, old] });
   const feed = [
     { url: "https://a.dev", name: "A", tagline: "Full Stack Developer" },
     { url: "https://b.dev", name: "B", tagline: "Frontend engineer" },
@@ -571,9 +570,8 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   assert.equal(s.resumePct, 67);
   assert.deepEqual(s.commonRole, { key: "fullstack", label: "Full stack", pct: 67 });
   assert.deepEqual(s.averageTier, { value: 3.33, tier: "B" });
-  assert.equal(s.changedThisMonth, 1);
+  assert.equal("changedThisMonth" in s, false, "change detection was removed, so there is no such number");
   assert.deepEqual(s.newest, { url: "https://d.dev", name: "D" });
-  assert.equal(pacificMonthStart(T0).toISOString(), "2026-11-01T07:00:00.000Z");
 
   // Midnight Pacific on the 10th is 08:00 UTC.
   for (const at of ["2026-11-10T07:59:00Z", "2026-11-10T08:00:00Z", "2026-11-10T19:00:00Z"]) {

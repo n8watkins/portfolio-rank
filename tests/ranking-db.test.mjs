@@ -12,13 +12,11 @@ import { createClient } from "@libsql/client";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import {
   comparisonsToday,
-  detectPageChanges,
   ensureRankingSchema,
   inputDigest,
   insertComparison,
   loadInput,
   pageFingerprint,
-  recordFingerprint,
   syncVotes,
 } from "../lib/ranking/store.mjs";
 import feed from "../data/feed.json" with { type: "json" };
@@ -120,19 +118,16 @@ test("syncVotes: human and AI votes are mirrored with their models, practice vot
   assert.deepEqual(after, ["ai:flash-lite", "u2"]);
 });
 
-test("change detection: the first fingerprint is a baseline; a new one adds a reset", async () => {
-  const { db, urls } = await setup();
-  await ensureRankingSchema(db);
-  assert.equal(await detectPageChanges(db), 0, "first sight is a baseline");
-  assert.equal(await detectPageChanges(db), 0, "unchanged pages add nothing");
-  await db.execute({ sql: "UPDATE portfolios SET meta = ?, captured_at = '2026-11-09 08:00:00' WHERE url = ?", args: [JSON.stringify({ domHash: "new", classHash: "new" }), urls[4]] });
-  assert.equal(await detectPageChanges(db), 1);
-  const resets = (await db.execute("SELECT url, at, reason FROM rating_resets")).rows;
-  assert.deepEqual(resets.map((r) => [r.url, r.at, r.reason]), [[urls[4], "2026-11-09T08:00:00.000Z", "page_changed"]]);
-  assert.equal(await recordFingerprint(db, "https://x.dev", null), false);
+test("page fingerprint: from the capture's DOM and class hashes; stored uncertainty resets still reach the recompute", async () => {
   assert.equal(pageFingerprint("not json"), null);
   assert.equal(pageFingerprint({}), null);
   assert.equal(pageFingerprint({ domHash: "a" }).length, 20);
+  // Change detection was removed (owner, 2026-11-21): nothing writes rating_resets any more, but the rows already there count.
+  const { db, urls } = await setup();
+  await ensureRankingSchema(db);
+  await db.execute({ sql: "INSERT INTO rating_resets (url, at, reason) VALUES (?, '2026-11-09T08:00:00.000Z', 'page_changed')", args: [urls[4]] });
+  const input = await loadInput(db);
+  assert.deepEqual(input.resets, [{ url: urls[4], at: "2026-11-09T08:00:00.000Z", reason: "page_changed" }]);
 });
 
 test("recompute script: rebuilds the views into site_ratings and rank_history; read-only writes nothing; an export reproduces it", async () => {

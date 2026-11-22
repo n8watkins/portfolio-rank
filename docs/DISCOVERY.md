@@ -6,19 +6,19 @@ The design, the trial run and the open decisions are in [audits/discovery-pipeli
 
 ## One run
 
-`node pipeline/discovery/run.mjs` runs five stages.
+`node pipeline/discovery/run.mjs` runs four stages.
 Each stage reads only its own queue in `discovery_sites`, so a run can stop anywhere and the next one carries on.
+There is no AI screen: the owner removed it on 2026-11-22, so Gemini is asked about a site once, when it is graded, and the code check and filter come first.
+Rows an earlier run left in the old `screen` status stay there, inert: they were never screened, so they must not go ahead of sites people add, and nothing hands them off or writes that status again.
+To put them through this pipeline's code checks and filter by hand, set them back to `found` (`UPDATE discovery_sites SET status = 'found' WHERE status = 'screen'`, they still have their address); the next runs fetch each once, at `found` a run, and the ones that pass wait for the hand-off like any new site.
 
 1. **Sources.** Each source that is due reads from its watermark.
    Every address is normalized (`normalize.mjs`), checked against the list (`data/feed.json`, `additions.json`, `excluded.json`) and the seen-set (one primary-key read each), and new ones are written as `found`.
    Only then does the watermark move, so a crash never skips anything.
 2. **Recheck.** Dropped rows whose recheck date has come go back to `found`.
 3. **Check.** Up to `found` rows a run are fetched once (robots.txt first, private addresses refused), run through the code checks (`check.mjs`) and the language and topic filter (`filter.mjs`).
-   Each becomes `dropped` with a reason, or `screen` with its evidence (title, description, headings, 1,200 characters of text, link counts).
-4. **AI screen** (`screen.mjs`, off unless `DISCOVERY_SCREEN=on`).
-   Gemini 3.1 Flash-Lite, 20 sites a request, at most `screenRequests` a quota day, logged as `discovery-screen` in `gemini_requests`.
-   A "yes" becomes `pending`; "no", "template" and "unsure" are dropped.
-5. **Hand-off** (`handoff.mjs`, off unless `DISCOVERY_HANDOFF=on`).
+   Each becomes `dropped` with a reason, or `pending` with its evidence (title, description, headings, 1,200 characters of text, link counts).
+4. **Hand-off** (`handoff.mjs`, off unless `DISCOVERY_HANDOFF=on`).
    `pending` rows become waiting jobs in the grader's queue (`grade_jobs`, visitor `discovery`), at most `handoffPerDay` a day, at most `handoffWaiting` waiting at once, and never while today's grading share has fewer than `handoffReserve` places left.
    People's waiting requests always start first, and discovery's jobs don't count against people's waiting line.
    Finished grades come back as `graded`, or `dropped` when the grade says it is not a portfolio.
@@ -45,20 +45,21 @@ One row per normalized address, keyed by the first 64 bits of its SHA-256 (see `
 | Status | Means | Keeps the address |
 |---|---|---|
 | `found` | Collected, waiting for the fetch | Yes |
-| `screen` | Passed the free checks, waiting for the AI screen | Yes |
-| `pending` | Waiting to be graded (screened, or added by the free tools) | Yes |
+| `screen` | Only in old rows: waited for the removed AI screen; inert, never handed off, never written again (see above) | Yes |
+| `pending` | Waiting to be graded (passed the free checks, or added by the free tools) | Yes |
 | `queued` | Handed to the grader | Yes |
 | `graded` | Graded | Yes |
 | `dropped` | Left out, with a reason | Only for `dead`, `empty`, `parked`, `blocked`, `unsure` |
 
 A rechecked reason comes back after 90 days (dead, empty, parked), 30 (blocked) or 180 (unsure), each wait longer than the last, and its third failure forgets the address.
 `template`, `not_english`, `not_portfolio` and `duplicate` keep only the hash, the reason and the dates.
-`discovery_work` holds a row's working data (its repo, then its evidence, then the screen's answer) and is deleted when the row leaves the queues.
+`discovery_work` holds a row's working data (its repo, then its evidence; older rows may also hold the removed screen's answer) and is deleted when the row leaves the queues.
 `discovery_sources` holds one watermark per source, and the hand-off's count for the day.
 
 ## Caps
 
 `DISCOVERY_CAPS` (a repository variable, JSON) changes any default in `pipeline/discovery/run.mjs` `DEFAULT_CAPS`; a manual run can pass its own.
+A key that is not a cap (the removed `screenRequests`, for one) is ignored.
 
 | Cap | Default | What it limits |
 |---|---:|---|
@@ -67,7 +68,6 @@ A rechecked reason comes back after 90 days (dead, empty, parked), 30 (blocked) 
 | `backMonths` | 2 | Older GitHub months a topic reads a run |
 | `hnBackThreads`, `hnShareThreads` | 1, 1 | Older Hacker News threads a run |
 | `recheck` | 200 | Rechecks reopened a run |
-| `screenRequests` | 25 | AI screen requests a quota day (500 sites) |
 | `handoffPerDay` | 10 | Sites handed to the grader a quota day |
 | `handoffWaiting` | 10 | Discovery jobs waiting in the grader's queue at once |
 | `handoffReserve` | 40 | Places in today's grading share always left for people |
@@ -76,14 +76,13 @@ A rechecked reason comes back after 90 days (dead, empty, parked), 30 (blocked) 
 
 - `DISCOVERY_SCHEDULE`: `on` lets the daily schedule (22:00 UTC) run. Off until the owner turns it on: until then nothing runs unless someone starts the workflow by hand.
 - `DISCOVERY_TARGET`: `production` points the job at the production database; anything else (the default) at staging.
-- `DISCOVERY_SCREEN`: `on` runs the AI screen. Off until the owner turns it on.
 - `DISCOVERY_HANDOFF`: `on` hands sites to the grader. Off until the owner turns it on.
 
 ## The pilot
 
-`scripts/discovery-import.mjs <pilot folder>` imports the pilot of 2026-11-12 once: its 10,000 checked sites (dropped ones under the rules above, the 3,616 that passed as `screen` with their evidence) and the 1,685 GitHub rows that did not fit its cap as `found`.
+`scripts/discovery-import.mjs <pilot folder>` imports the pilot of 2026-11-12 once: its 10,000 checked sites (dropped ones under the rules above, and the 3,616 that passed as `found`, so this pipeline checks them once more; an import made before 2026-11-22 wrote those as `screen`, which stay inert) and the 1,685 GitHub rows that did not fit its cap as `found`.
 It sets `github:portfolio` and `hn:comments` to where the pilot stopped.
 
 ## Tests
 
-`tests/discovery.test.mjs`: normalize, the seen-check, settle and rechecks, the filter, the code checks, the sources' planning, the watermark, the screen with a stand-in for Gemini, the hand-off, the pilot import's mapping, and one whole run with stand-ins for every source and page.
+`tests/discovery.test.mjs`: normalize, the seen-check, settle and rechecks, the filter, the code checks, the sources' planning, the watermark, old screen rows staying inert, the hand-off, the pilot import's mapping, and one whole run with stand-ins for every source and page.

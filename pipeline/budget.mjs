@@ -35,13 +35,22 @@ export { QUOTA_TZ, pacificParts, previousDay, quotaDay } from "./quota-day.mjs";
  */
 export const STAGES = [
   { key: "grade_new", job: "grade-new", label: "Grade new sites" },
-  { key: "grade_changed", job: "grade-changed", label: "Grade changed sites" },
   { key: "compare", job: "compare", label: "AI ranking comparisons" },
   { key: "content", job: "content", label: "Content" },
   { key: "library", job: "library", label: "Image library" },
-  { key: "regrade", job: "regrade", label: "Re-grades (3.1 and older rubric)" },
   { key: "experiment", job: "experiment", label: "Experiments" },
 ];
+
+// Jobs the owner removed: the "grade changed sites" and re-grade stages
+// (2026-11-21: a site is graded once and never re-graded automatically) and
+// discovery's AI screen (2026-11-22: Gemini is asked about a site once, when
+// it is graded). Their requests stay in gemini_requests under these job
+// names, so the admin's history still names them.
+const RETIRED_JOBS = {
+  "grade-changed": "Grade changed sites (removed)",
+  regrade: "Re-grades (removed)",
+  "discovery-screen": "Discovery screen (removed)",
+};
 
 /** Jobs that serve a person who is waiting. They always come before the background. */
 export const PEOPLE_JOBS = { "people-grade": "Grade my portfolio (people)", "people-regrade": "Re-grade requests (people)" };
@@ -55,9 +64,8 @@ export const canonicalJob = (job) => JOB_ALIASES[job] ?? String(job ?? "unknown"
 
 const LABELS = {
   ...Object.fromEntries(STAGES.map((s) => [s.job, s.label])),
+  ...RETIRED_JOBS,
   ...PEOPLE_JOBS,
-  // The discovery pipeline's AI screen, on 3.1 Flash-Lite's own allowance (pipeline/discovery/screen.mjs).
-  "discovery-screen": "Discovery screen (3.1)",
 };
 export const jobLabel = (job) => LABELS[canonicalJob(job)] ?? canonicalJob(job);
 
@@ -77,7 +85,7 @@ export const DEFAULT_PLAN = {
   // in UTC at both possible offsets, see isNightStart).
   startHour: 20,
   startMinute: 30,
-  // The free checks (capture, fingerprints) get this long before the AI stages start anyway.
+  // The free checks (capture, page evidence) get this long before the AI stages start anyway.
   checksMinutes: 45,
   // Nothing starts later than this many minutes before the quota resets.
   stopBeforeResetMinutes: 30,
@@ -96,28 +104,23 @@ export const DEFAULT_PLAN = {
   // Per stage: a request cap (counted over the whole quota day, retries
   // included) and a wall-clock cap in minutes. Caps add up to more than
   // the quota on purpose: what is left after people decides.
+  // A site is graded once, when it is added, and never re-graded
+  // automatically (owner, 2026-11-16 and 2026-11-21; docs/DECISIONS.md).
   stages: {
     grade_new: { cap: 300, minutes: 60 },
-    // No automatic re-grading (owner, 2026-11-16: "We're not doing automatic
-    // regrading on change"; docs/DECISIONS.md): a site is asked "is it a
-    // portfolio" once, when it is added. The cap is 0 by default so lifting
-    // the GEMINI_BUDGET pause does not bring it back; change detection still
-    // runs (it is free), and the stage's code stays.
-    grade_changed: { cap: 0, minutes: 30 },
     compare: { cap: 200, minutes: 45 },
     content: { cap: 100, minutes: 30 },
     // One Gemini check per library image (pipeline/content/library-stage.mjs).
     library: { cap: 40, minutes: 25 },
-    // Re-grades are off by default (owner, 2026-11-16: a site is graded once,
-    // at the door; earlier, 2026-11-14, until rubric v3, Gemini prompt audit,
-    // docs/audits/gemini-prompting.md). Only an explicit GEMINI_BUDGET
-    // {"stages":{"regrade":{"cap":300}}} turns them on.
-    regrade: { cap: 0, minutes: 60 },
     experiment: { cap: 50, minutes: 15 },
   },
 };
 
-/** DEFAULT_PLAN with a GEMINI_BUDGET JSON override merged in (one level deep for stages). */
+/**
+ * DEFAULT_PLAN with a GEMINI_BUDGET JSON override merged in (one level deep
+ * for stages). A stage key that is not in STAGES is ignored: the production
+ * settings may still name stages that were removed (grade_changed, regrade).
+ */
 export function budgetPlan(raw = globalThis.process?.env?.GEMINI_BUDGET) {
   let over = {};
   try {
@@ -126,7 +129,8 @@ export function budgetPlan(raw = globalThis.process?.env?.GEMINI_BUDGET) {
     over = {};
   }
   const stages = { ...DEFAULT_PLAN.stages };
-  for (const [k, v] of Object.entries(over.stages ?? {})) stages[k] = { ...(stages[k] ?? { cap: 0, minutes: 0 }), ...v };
+  const given = over.stages && typeof over.stages === "object" ? over.stages : {};
+  for (const [k, v] of Object.entries(given)) if (Object.hasOwn(stages, k)) stages[k] = { ...stages[k], ...v };
   return { ...DEFAULT_PLAN, ...over, stages };
 }
 

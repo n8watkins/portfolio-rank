@@ -22,9 +22,8 @@ const answer = { is_portfolio: true, tier: "B", ...Object.fromEntries(AI_CRITERI
 const facts = JSON.stringify({ source: "http", measured_at: "2026-11-01T00:00:00Z", github: true });
 const T0 = Date.parse("2026-11-11T04:30:00Z"); // 20:30 Pacific on 2026-11-10
 
-// `kind` "changed": a graded site whose page changed (grade_changed queue);
-// "old31": graded by the backup model (regrade queue). Index 0 has no image.
-async function setup(kind) {
+// Three new sites waiting for their grade (grade_new queue). Index 0 has no image.
+async function setup() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "night-img-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
   await ensureRosterSchema(db);
@@ -37,16 +36,11 @@ async function setup(kind) {
   for (let i = 0; i < 3; i++) {
     const url = feed[i].url;
     urls.push(url);
-    const grade =
-      kind === "changed"
-        ? { tier: "C", is_portfolio: true, model: PRIMARY_MODEL, rubric_version: 2, judged_at: "2026-11-01T00:00:00.000Z" }
-        : { tier: "B", is_portfolio: true, model: BACKUP_MODEL, judged_at: `2026-10-0${1 + i}T00:00:00.000Z` };
     await db.execute({
-      sql: `INSERT INTO portfolios (url, name, status, shot_key, captured_at, ai_rubric, page_text, facts, meta) VALUES (?, ?, 'live', ?, ?, ?, 'Hi', ?, ?)`,
+      sql: `INSERT INTO portfolios (url, name, status, shot_key, captured_at, ai_rubric, page_text, facts, meta) VALUES (?, ?, 'live', ?, ?, NULL, 'Hi', ?, ?)`,
       // Newest capture first, so the site without an image is the first one every batch asks for.
-      args: [url, `Person ${i}`, `k${i}`, `2026-11-0${9 - i} 00:00:00`, JSON.stringify(grade), facts, JSON.stringify({ motion: false })],
+      args: [url, `Person ${i}`, `k${i}`, `2026-11-0${9 - i} 00:00:00`, facts, JSON.stringify({ motion: false })],
     });
-    if (kind === "changed") await db.execute({ sql: "INSERT INTO rating_resets (url, at, reason) VALUES (?, '2026-11-09T00:00:00.000Z', 'page_changed')", args: [url] });
   }
   return { db, urls };
 }
@@ -67,8 +61,7 @@ function context(db) {
     ctx: {
       db,
       apiKey: "test-key-not-real",
-      // Both re-grading stages are off by default (owner, 2026-11-16); this test runs them.
-      plan: budgetPlan(JSON.stringify({ stages: { regrade: { cap: 300 }, grade_changed: { cap: 100 } } })),
+      plan: budgetPlan(),
       quota: { [PRIMARY_MODEL]: 500, [BACKUP_MODEL]: 500 },
       rpm: 8,
       now: () => clock.t,
@@ -82,7 +75,7 @@ function context(db) {
         looked[key] = (looked[key] ?? 0) + 1;
         return key === "k0" ? "missing" : { inline_data: { mime_type: "image/jpeg", data: "AAAA" } };
       },
-      flags: { rankingV2: false, rubricRegrade: false, ranking: rankingConfig({}) },
+      flags: { rankingV2: false, ranking: rankingConfig({}) },
       runId: "test",
     },
   };
@@ -101,33 +94,31 @@ async function drive(ctx, clock, maxBatches) {
   return { state, batches, ...(await finishNight(ctx, state)) };
 }
 
-for (const [kind, stageKey] of [["changed", "grade_changed"], ["old31", "regrade"]]) {
-  test(`${stageKey}: a site with no image is set aside once, the stage grades the rest and ends`, async () => {
-    const { db, urls } = await setup(kind);
-    const { ctx, clock, requests, looked } = context(db);
-    // 40 is only this test's patience: before the fix the run was still on
-    // the same site when it ran out. A whole night of three sites needs a
-    // handful of batches (one or two per stage that has work or closes).
-    const r = await drive(ctx, clock, 40);
-    assert.ok(r.state.done, `the run ends (took ${r.batches} batches)`);
-    assert.ok(r.batches <= 12, `a night of three sites takes a handful of batches, not ${r.batches}`);
-    assert.equal(looked.k0, 1, "the site without a screenshot is looked at once tonight, never again");
-    assert.equal(r.status, "complete");
-    const stage = r.summary.stages.find((x) => x.key === stageKey);
-    assert.equal(stage.noImage, 1);
-    assert.equal(stage.done, 2);
-    assert.equal(stage.requests, 2);
-    assert.equal(requests(), 2 + (r.summary.stages.find((x) => x.key === "content")?.requests ?? 0));
-    assert.match(r.markdown, /set aside for a missing image/);
-    // The two sites with images were graded on 3.5.
-    const graded = (await db.execute("SELECT url, json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows;
-    assert.equal(graded.filter((g) => g.m === PRIMARY_MODEL).length, kind === "changed" ? 3 : 2);
-    assert.ok(urls.length === 3);
-  });
-}
+test("grade_new: a site with no image is set aside once, the stage grades the rest and ends", async () => {
+  const { db, urls } = await setup();
+  const { ctx, clock, requests, looked } = context(db);
+  // 40 is only this test's patience: before the fix the run was still on
+  // the same site when it ran out. A whole night of three sites needs a
+  // handful of batches (one or two per stage that has work or closes).
+  const r = await drive(ctx, clock, 40);
+  assert.ok(r.state.done, `the run ends (took ${r.batches} batches)`);
+  assert.ok(r.batches <= 12, `a night of three sites takes a handful of batches, not ${r.batches}`);
+  assert.equal(looked.k0, 1, "the site without a screenshot is looked at once tonight, never again");
+  assert.equal(r.status, "complete");
+  const stage = r.summary.stages.find((x) => x.key === "grade_new");
+  assert.equal(stage.noImage, 1);
+  assert.equal(stage.done, 2);
+  assert.equal(stage.requests, 2);
+  assert.equal(requests(), 2 + (r.summary.stages.find((x) => x.key === "content")?.requests ?? 0));
+  assert.match(r.markdown, /set aside for a missing image/);
+  // The two sites with images were graded on 3.5.
+  const graded = (await db.execute("SELECT url, json_extract(ai_rubric, '$.model') AS m FROM portfolios")).rows;
+  assert.equal(graded.filter((g) => g.m === PRIMARY_MODEL).length, 2);
+  assert.ok(urls.length === 3);
+});
 
 test("a run that uses up the Workflow's batch limit is reported as stopped, not complete", async () => {
-  const { db } = await setup("changed");
+  const { db } = await setup();
   const { ctx, clock } = context(db);
   // Too few batches to finish: three stages, each needing more than one batch.
   const r = await drive(ctx, clock, 1);

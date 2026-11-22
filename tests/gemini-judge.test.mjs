@@ -1,12 +1,7 @@
-// The AI judge's Gemini client (pipeline/gemini.mjs) and AI vote identity
-// (pipeline/ai-votes.mjs). No server or network: fetch is a stand-in that
-// records each request and answers from a script.
+// The AI judge's Gemini client (pipeline/gemini.mjs). No server or network:
+// fetch is a stand-in that records each request and answers from a script.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { createClient } from "@libsql/client";
 import {
   BACKUP_MODEL,
   createGemini,
@@ -21,7 +16,6 @@ import {
   PRIMARY_MODEL,
   retryDelayFrom,
 } from "../pipeline/gemini.mjs";
-import { FLASH_LITE_RATER_ID, prepareAiVotes, raterIdFor } from "../pipeline/ai-votes.mjs";
 
 const KEY = "AQ.test-key-not-real";
 const answer = (obj, usage = { promptTokenCount: 1200, candidatesTokenCount: 80 }) =>
@@ -262,45 +256,3 @@ test("a bad request fails the call without falling back", async () => {
   assert.deepEqual(seen.map((s) => s.model), [PRIMARY_MODEL]);
 });
 
-test("one logical rater id for the flash-lite chain, a separate one for other models", () => {
-  assert.equal(raterIdFor(FLASH_LITE_CHAIN), FLASH_LITE_RATER_ID);
-  assert.equal(raterIdFor([BACKUP_MODEL]), FLASH_LITE_RATER_ID);
-  assert.equal(raterIdFor(["gemini-3.5-pro"]), "ai:gemini-3.5-pro");
-});
-
-test("prepareAiVotes folds per-model AI votes into the logical rater, idempotently", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "judge-votes-"));
-  const db = createClient({ url: `file:${path.join(dir, "votes.db")}` });
-  try {
-    await db.execute(`CREATE TABLE votes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, winner TEXT NOT NULL, loser TEXT NOT NULL,
-      pair_key TEXT, rater_type TEXT NOT NULL DEFAULT 'anon', rater_id TEXT NOT NULL)`);
-    await db.execute("CREATE UNIQUE INDEX votes_rater_pair_idx ON votes (rater_id, pair_key)");
-    await db.batch([
-      "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id) VALUES ('a', 'b', 'a\nb', 'ai', 'ai:gemini-3.1-flash-lite')",
-      "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id) VALUES ('c', 'd', 'c\nd', 'ai', 'ai:gemini-3.1-flash-lite')",
-      "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id) VALUES ('a', 'b', 'a\nb', 'human', 'gh:1')",
-    ]);
-
-    assert.equal(await prepareAiVotes(db), 2);
-    assert.equal(await prepareAiVotes(db), 0, "second run changes nothing");
-
-    const rows = (await db.execute("SELECT rater_type, rater_id, model FROM votes ORDER BY id")).rows.map((r) => ({ ...r }));
-    assert.deepEqual(rows, [
-      { rater_type: "ai", rater_id: FLASH_LITE_RATER_ID, model: "gemini-3.1-flash-lite" },
-      { rater_type: "ai", rater_id: FLASH_LITE_RATER_ID, model: "gemini-3.1-flash-lite" },
-      { rater_type: "human", rater_id: "gh:1", model: null },
-    ]);
-    // The unique index now stops the backup model from re-voting a judged pair.
-    await assert.rejects(
-      db.execute({
-        sql: "INSERT INTO votes (winner, loser, pair_key, rater_type, rater_id, model) VALUES ('b', 'a', 'a\nb', 'ai', ?, ?)",
-        args: [FLASH_LITE_RATER_ID, PRIMARY_MODEL],
-      }),
-      /UNIQUE constraint failed/
-    );
-  } finally {
-    db.close();
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});

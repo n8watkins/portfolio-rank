@@ -135,7 +135,7 @@ function context(db, { gemini, autoApply = true, budget = {}, missing = new Set(
       log: (l) => lines.push(l),
       fetchImpl: gemini.fetchImpl,
       image: async (key) => (missing.has(key) ? "missing" : { inline_data: { mime_type: "image/jpeg", data: "AAAA" } }),
-      flags: { rankingV2: false, rubricRegrade: false, reviewAutoApply: autoApply, ranking: rankingConfig({}) },
+      flags: { rankingV2: false,reviewAutoApply: autoApply, ranking: rankingConfig({}) },
       runId: "test",
     },
   };
@@ -294,11 +294,12 @@ test("F6: what a rule decided before is weighed at the door: a later 'no' agains
   assert.equal(doorDecision({ grade: gradeRecord({ parsed: answer(true), model: PRIMARY_MODEL, facts: null, source: "r2" }), row }).outcome, "portfolio");
 });
 
-test("F2: the 'grade changed sites' and 're-grade' stages are off by default", () => {
-  assert.equal(DEFAULT_PLAN.stages.grade_changed.cap, 0);
-  assert.equal(DEFAULT_PLAN.stages.regrade.cap, 0);
-  assert.equal(budgetPlan(undefined).stages.grade_changed.cap, 0, "no GEMINI_BUDGET: no automatic re-grading");
-  assert.equal(budgetPlan(JSON.stringify({ stages: { grade_new: { cap: 10 } } })).stages.grade_changed.cap, 0, "lifting the pause does not bring it back");
+test("F2: no stage re-grades automatically, and no GEMINI_BUDGET brings one back", () => {
+  assert.equal(DEFAULT_PLAN.stages.grade_changed, undefined);
+  assert.equal(DEFAULT_PLAN.stages.regrade, undefined);
+  const on = budgetPlan(JSON.stringify({ stages: { grade_new: { cap: 10 }, grade_changed: { cap: 100 }, regrade: { cap: 300 } } }));
+  assert.equal(on.stages.grade_changed, undefined, "the removed stages stay removed");
+  assert.equal(on.stages.regrade, undefined);
 });
 
 test("F9: a stalled Gemini ends the batch within the wall-clock limit, and the night goes on", async () => {

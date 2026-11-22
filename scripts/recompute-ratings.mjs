@@ -10,15 +10,16 @@
 //
 // With the database (Turso when TURSO_DATABASE_URL is set, else the local
 // file), a normal run first mirrors the vote log into comparisons
-// (lib/ranking/store.mjs syncVotes) and runs the redesign hook over the
-// captured sites (detectPageChanges); both are idempotent. Nothing the live
-// site reads is changed: the current leaderboard keeps reading `ratings`.
+// (lib/ranking/store.mjs syncVotes), which is idempotent. Uncertainty resets
+// already stored in rating_resets still count; nothing adds new ones since
+// the owner removed change detection (2026-11-21). Nothing the live site
+// reads is changed: the current leaderboard keeps reading `ratings`.
 import fs from "node:fs";
 import path from "node:path";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import { recompute } from "../lib/ranking/views.mjs";
 import { summarize, summaryMarkdown } from "../lib/ranking/report.mjs";
-import { detectPageChanges, ensureRankingSchema, inputDigest, loadInput, syncVotes, writeResults } from "../lib/ranking/store.mjs";
+import { ensureRankingSchema, inputDigest, loadInput, syncVotes, writeResults } from "../lib/ranking/store.mjs";
 
 export const EXPORT_FORMAT = "portfoliorank-comparisons/1";
 
@@ -46,8 +47,7 @@ if (flag("from")) {
   } else {
     await ensureRankingSchema(db);
     const synced = await syncVotes(db);
-    const resets = await detectPageChanges(db);
-    console.log(`votes mirrored: ${synced.imported} added or updated, ${synced.removed} removed; page changes: ${resets} new reset(s)`);
+    console.log(`votes mirrored: ${synced.imported} added or updated, ${synced.removed} removed`);
     input = await loadInput(db);
   }
 }

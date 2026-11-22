@@ -79,7 +79,7 @@ const web = (redirects = {}, bodies = {}) => async (url) => {
   return res;
 };
 const run = (db, items, fetchPage, listed = new Set(), at = NOW) =>
-  runDiscovery({ db, io: { fetchPage }, caps: discoveryCaps('{"found": 50, "screenRequests": 0}'), sources: [{ key: `s${at.getTime()}`, every: 1, read: async () => ({ items, cursor: {} }) }], now: at, listed, log: () => {} });
+  runDiscovery({ db, io: { fetchPage }, caps: discoveryCaps('{"found": 50}'), sources: [{ key: `s${at.getTime()}`, every: 1, read: async () => ({ items, cursor: {} }) }], now: at, listed, log: () => {} });
 const src = (...urls) => urls.map((url) => ({ url, source: "github" }));
 const row = (db, url) => seen(db, url);
 
@@ -97,30 +97,30 @@ test("redirect: a page that ends on an excluded host is a duplicate, whatever pa
 test("redirect: a redirect to a sibling github.io project does not hide a site", async () => {
   const db = await fresh();
   const s = await run(db, src("https://old-alex.dev/"), web({ "https://old-alex.dev/": "https://alex.github.io/new" }), list("https://alex.github.io/excluded-one"));
-  assert.deepEqual(s.check.outcomes, { screen: 1 });
+  assert.deepEqual(s.check.outcomes, { pending: 1 });
 });
 
 test("redirect: a redirect to a domain not seen yet is remembered, so finding that domain later is the same site", async () => {
   const db = await fresh();
   const fetchPage = web({ "https://old-alex.dev/": "https://alexkim.dev/" });
   const first = await run(db, src("https://old-alex.dev/"), fetchPage);
-  assert.deepEqual(first.check.outcomes, { screen: 1 });
+  assert.deepEqual(first.check.outcomes, { pending: 1 });
   // The live row now sits at the address the visitor ends on, and the old address is remembered as the same site.
   const live = await row(db, "https://alexkim.dev/");
-  assert.equal(live.status, "screen");
+  assert.equal(live.status, "pending");
   assert.equal((await row(db, "https://old-alex.dev/")).status, "dropped");
   assert.equal((await row(db, "https://old-alex.dev/")).reason, "duplicate");
   // Later the new domain is found (and the old one again): neither becomes a second candidate.
   const later = await run(db, src("https://alexkim.dev/", "https://www.old-alex.dev/"), fetchPage, new Set(), new Date(NOW.getTime() + 86_400_000));
   assert.deepEqual(later.sources[Object.keys(later.sources)[0]].new, 0);
   const rows = await db.execute("SELECT status, COUNT(*) AS n FROM discovery_sites GROUP BY status ORDER BY status");
-  assert.deepEqual(rows.rows.map((r) => [r.status, Number(r.n)]), [["dropped", 1], ["screen", 1]]);
+  assert.deepEqual(rows.rows.map((r) => [r.status, Number(r.n)]), [["dropped", 1], ["pending", 1]]);
 });
 
 test("redirect: the row at the final address is the one that moves on, with the source and the address it was found at", async () => {
   const db = await fresh();
   await addFound(db, [{ url: "https://old-alex.dev/", source: "hn" }], { now: NOW });
   await run(db, [], web({ "https://old-alex.dev/": "https://alexkim.dev/About" }));
-  const r = await db.execute("SELECT status, source, url FROM discovery_sites WHERE status = 'screen'");
-  assert.deepEqual(r.rows.map((x) => [x.status, x.source, x.url]), [["screen", "hn", "https://alexkim.dev/About"]]);
+  const r = await db.execute("SELECT status, source, url FROM discovery_sites WHERE status = 'pending'");
+  assert.deepEqual(r.rows.map((x) => [x.status, x.source, x.url]), [["pending", "hn", "https://alexkim.dev/About"]]);
 });

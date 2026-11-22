@@ -1,5 +1,5 @@
 // Pairs of grades of the same site by two models, and how they compare:
-// shared by the weekly report (scripts/grade-compare.mjs) and the content
+// used by the rubric evaluation (scripts/eval-rubric.mjs) and the content
 // engine's "3.1 vs 3.5" fact builder (pipeline/content/facts.mjs). Pure, no
 // database or file access, so the Worker can bundle it.
 import { BACKUP_MODEL, PRIMARY_MODEL } from "./gemini.mjs";

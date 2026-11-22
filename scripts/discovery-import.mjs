@@ -1,6 +1,6 @@
 // Imports the discovery pilot of 2026-11-12 (~/research/portfoliorank-discovery)
-// into the seen-set, once, so the pipeline never checks those sites again
-// (docs/DISCOVERY.md "The pilot").
+// into the seen-set, once, so the pipeline never checks the sites the pilot
+// dropped again (docs/DISCOVERY.md "The pilot").
 //
 //   node scripts/discovery-import.mjs <pilot folder> [--dry-run]
 //
@@ -14,9 +14,10 @@
 //     reason; dead, blocked, parked and empty keep the address and get a
 //     recheck date counted from the pilot; anything else keeps only the
 //     hash, the reason and the dates;
-//   - passed both (the 3,620 "kept"): `screen`, with the pilot's evidence
-//     (title, description, headings, 1,200 characters, link counts) as
-//     their working data, so the AI screen needs no new fetch;
+//   - passed both (the 3,620 "kept"): `found`, so the next runs put them
+//     through this pipeline's code checks and filter before any of them
+//     waits for grading (an import made before 2026-11-22 wrote them as
+//     `screen`, for the AI screen that is gone; those rows stay inert);
 //   - the 1,690 GitHub rows that did not fit the pilot's cap: `found`, with
 //     their repo, so the next run checks them.
 // Watermarks: github:portfolio is set to the creation days the pilot read
@@ -69,10 +70,8 @@ const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\
 /** The pilot's rows as seen-set rows (pure apart from reading the files). */
 export function pilotRows(dir) {
   const at = fs.statSync(path.join(dir, "candidates.jsonl")).mtime;
-  const kept = readJsonl(path.join(dir, "kept.jsonl"));
-  const enriched = readJsonl(path.join(dir, "enriched.jsonl"));
   const dropped = new Map(readJsonl(path.join(dir, "dropped.jsonl")).map((r) => [r.url, r]));
-  const keptAt = new Map(kept.map((r, i) => [r.url, { r, e: enriched[i] ?? {} }]));
+  const keptAt = new Set(readJsonl(path.join(dir, "kept.jsonl")).map((r) => r.url));
   const rows = [];
   const add = (raw, fields) => {
     const n = normalizeCandidate(raw.url);
@@ -84,23 +83,9 @@ export function pilotRows(dir) {
     if (!c.likely) add(c, { status: "dropped", reason: checkReason(c.reasons) });
     else if (dropped.has(c.url)) add(c, { status: "dropped", reason: filterReason(dropped.get(c.url).filter?.reason) });
     else if (keptAt.has(c.url)) {
-      const { r, e } = keptAt.get(c.url);
-      const evidence = {
-        url: r.url,
-        finalUrl: r.final_url ?? r.url,
-        lang: null,
-        title: String(r.title ?? "").slice(0, 200),
-        description: String(r.description ?? "").slice(0, 300),
-        headings: e.headings ?? [],
-        text: String(e.text ?? r.snippet ?? "").slice(0, 1200),
-        repoLinks: e.repo_links ?? 0,
-        liveLinks: e.live_demo_links ?? 0,
-        socials: e.socials ?? [],
-        resume: Boolean(e.resume),
-        linksGithub: Boolean(r.links_github),
-        jsShell: (r.flags ?? []).includes("js_rendered"),
-      };
-      add(c, { status: "screen", work: { evidence, priority: r.filter?.priority ?? "normal", from: "pilot" } });
+      // Passed the pilot's checks: `found`, so this pipeline's own code checks and filter look at it
+      // once more (one fetch) before it can wait for grading, like any new site.
+      add(c, { status: "found", work: null });
     }
   }
   const checked = new Set(candidates.map((c) => c.url));

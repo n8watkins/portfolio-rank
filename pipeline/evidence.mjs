@@ -7,8 +7,9 @@
 // (pipeline/night.mjs) grades only rows that already have their evidence.
 //
 // As a script (the nightly checks in sync-upstream.yml): measures and stores
-// the evidence for listed, captured rows that are waiting for a grade or a
-// re-grade and have none, at most --limit of them; then, with --links N,
+// the evidence for listed, captured rows that are waiting for their first
+// grade and have none, at most --limit of them (a site is graded once and
+// never re-graded automatically, owner 2026-11-21); then, with --links N,
 // measures again up to N rows whose project link checks are due by the
 // check rule (lib/freshness.mjs: the page changed, the admin or the owner
 // asked, or the checks are 30 days old, since links rot without the page
@@ -22,7 +23,6 @@ import { measurePage } from "./facts.mjs";
 import { httpGate, UA, visibleText } from "./gate.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import { ACTIVE, AI_WORK } from "./roster.mjs";
-import { PRIMARY_MODEL } from "./gemini.mjs";
 import { storedMs } from "../lib/stored-time.mjs";
 
 // Below this much server-rendered text a page is treated as client-rendered
@@ -105,22 +105,18 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
 }
 
 /**
- * Listed, captured rows with no stored evidence that are waiting for a grade
- * (no grade yet) or a re-grade (a grade not made by the primary model, or,
- * with `versionRegrade`, one from an older rubric), oldest work first.
+ * Listed, captured rows with no stored evidence that are waiting for their
+ * first grade (no grade yet), most urgent first.
  */
-export async function rowsNeedingEvidence(db, { limit = 200, rubricVersion = null } = {}) {
+export async function rowsNeedingEvidence(db, { limit = 200 } = {}) {
   const res = await db.execute({
     sql: `SELECT url, name, meta, page_text, facts, captured_at FROM portfolios
           WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
             AND (page_text IS NULL OR facts IS NULL)
-            AND (ai_rubric IS NULL
-                 OR (json_extract(ai_rubric, '$.error') IS NULL
-                     AND (COALESCE(json_extract(ai_rubric, '$.model'), '') != ?
-                          ${rubricVersion ? "OR COALESCE(json_extract(ai_rubric, '$.rubric_version'), 1) < ?" : ""})))
-          ORDER BY ai_rubric IS NOT NULL, needs_review DESC, captured_at DESC, url
+            AND ai_rubric IS NULL
+          ORDER BY needs_review DESC, captured_at DESC, url
           LIMIT ?`,
-    args: rubricVersion ? [PRIMARY_MODEL, rubricVersion, limit] : [PRIMARY_MODEL, limit],
+    args: [limit],
   });
   return res.rows;
 }
@@ -138,8 +134,8 @@ export function nightsSince(capturedAt, now = Date.now()) {
  * longest-waiting `show` of them with the nights since their capture (a lower
  * bound on the wait: the capture is when they first qualified).
  */
-export async function sitesStillWaiting(db, { rubricVersion = null, show = 25, now = Date.now() } = {}) {
-  const all = await rowsNeedingEvidence(db, { limit: 1000000, rubricVersion });
+export async function sitesStillWaiting(db, { show = 25, now = Date.now() } = {}) {
+  const all = await rowsNeedingEvidence(db, { limit: 1000000 });
   const sites = all
     .map((r) => ({ url: String(r.url), nights: nightsSince(r.captured_at, now) }))
     .sort((a, b) => (b.nights ?? -1) - (a.nights ?? -1) || a.url.localeCompare(b.url));
@@ -163,7 +159,6 @@ const isMain = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fil
 if (isMain) {
   const { pipelineDb, ensureRosterSchema } = await import("./roster.mjs");
   const { createRenderer } = await import("./render.mjs");
-  const { RUBRIC_VERSION } = await import("./rubric.mjs");
   const args = process.argv.slice(2);
   const i = args.indexOf("--limit");
   const limit = i >= 0 ? Number(args[i + 1]) : 200;
@@ -173,8 +168,7 @@ if (isMain) {
   const ROOT = path.join(import.meta.dirname, "..");
   const db = pipelineDb(ROOT);
   await ensureRosterSchema(db);
-  const regradeOld = String(process.env.RUBRIC_REGRADE ?? "").toLowerCase() === "true";
-  const rows = await rowsNeedingEvidence(db, { limit, rubricVersion: regradeOld ? RUBRIC_VERSION : null });
+  const rows = await rowsNeedingEvidence(db, { limit });
   const renderer = args.includes("--no-browser") ? null : createRenderer();
   let measured = 0;
   let relinked = 0;
@@ -198,7 +192,7 @@ if (isMain) {
   } finally {
     await renderer?.close();
   }
-  const still = await sitesStillWaiting(db, { rubricVersion: regradeOld ? RUBRIC_VERSION : null });
+  const still = await sitesStillWaiting(db);
   const lines = reportLines({ measured, waitingForRun: rows.length, relinked: linksLimit > 0 ? relinked : null, linkTotal: linkRows.length, still });
   console.log(lines.join("\n"));
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);

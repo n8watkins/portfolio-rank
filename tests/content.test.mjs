@@ -879,7 +879,7 @@ async function nightRun(db, { mode, now, fetchImpl }) {
     log: (l) => lines.push(l),
     fetchImpl,
     image: async () => null,
-    flags: { contentMode: mode, rankingV2: false, rubricRegrade: false, pollGeneration: "true", ranking: rankingConfig({}) },
+    flags: { contentMode: mode, rankingV2: false,pollGeneration: "true", ranking: rankingConfig({}) },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     runId: "test",
   };

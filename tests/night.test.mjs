@@ -9,13 +9,14 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
-import { DEFAULT_PLAN, budgetPlan } from "../pipeline/budget.mjs";
+import { budgetPlan } from "../pipeline/budget.mjs";
 import { createRequestLog, ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { PRIMARY_MODEL, BACKUP_MODEL } from "../pipeline/gemini.mjs";
 import { AI_CRITERIA } from "../pipeline/rubric.mjs";
-import { ensureNightSchema, finishNight, planNight, recentNights, recordItemFailure, runBatch, startNight } from "../pipeline/night.mjs";
+import { ensureNightSchema, finishNight, nextStageIndex, parkedItems, planNight, recentNights, recordItemFailure, runBatch, startNight } from "../pipeline/night.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
+import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 const answer = (over = {}) => ({
@@ -82,13 +83,10 @@ function mockGemini(steps, { onCall } = {}) {
   return { fetchImpl, calls };
 }
 
-function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, rankingV2 = false, rubricRegrade = false, rankingBudget } = {}) {
+function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, rankingV2 = false, rankingBudget } = {}) {
   const clock = { t: start };
   const lines = [];
-  // Re-grades and grades of changed sites are off by default (DEFAULT_PLAN;
-  // owner, 2026-11-16); these tests turn them on at their old caps unless a
-  // test sets the stage itself.
-  const plan = budgetPlan(JSON.stringify({ ...budget, stages: { regrade: { cap: 300 }, grade_changed: { cap: 100 }, ...budget.stages } }));
+  const plan = budgetPlan(JSON.stringify(budget));
   return {
     clock,
     lines,
@@ -105,7 +103,7 @@ function context(db, { start = T0, budget = {}, quota = 500, rpm = 8, gemini, ra
       log: (l) => lines.push(l),
       fetchImpl: gemini.fetchImpl,
       image: async () => ({ inline_data: { mime_type: "image/jpeg", data: "AAAA" } }),
-      flags: { rankingV2, rubricRegrade, pollGeneration: "true", ranking: { ...rankingConfig({ RANKING_V2: rankingV2 ? "true" : "" }), ...(rankingBudget ? { budget: rankingBudget } : {}) } },
+      flags: { rankingV2, pollGeneration: "true", ranking: { ...rankingConfig({ RANKING_V2: rankingV2 ? "true" : "" }), ...(rankingBudget ? { budget: rankingBudget } : {}) } },
       runId: "test",
     },
   };
@@ -131,7 +129,7 @@ async function drive(ctx, clock, { checksMinutes = 0, maxSteps = 500 } = {}) {
 const jobsInOrder = async (db) => (await db.execute("SELECT job FROM gemini_requests ORDER BY id")).rows.map((r) => String(r.job));
 const requestTimes = async (db) => (await db.execute("SELECT at FROM gemini_requests ORDER BY id")).rows.map((r) => Date.parse(String(r.at)));
 
-test("stages run in priority order: new sites, then changed sites, then re-grades; off stages say why", async () => {
+test("stages run in priority order; graded sites are never graded again; off stages say why", async () => {
   const { db, made } = await setup({ fresh: 3, changed: 2, old31: 2, noEvidence: 1 });
   const gemini = mockGemini([ok()]);
   const { ctx, clock } = context(db, { gemini });
@@ -139,16 +137,16 @@ test("stages run in priority order: new sites, then changed sites, then re-grade
   assert.equal(r.status, "complete");
   const jobs = await jobsInOrder(db);
   // Content writes the weekly polls (one request: nothing was scheduled ahead).
-  assert.deepEqual(jobs, ["grade-new", "grade-new", "grade-new", "grade-changed", "grade-changed", "content", "regrade", "regrade"]);
-  // Graded on 3.5, the changed and 3.1 grades kept in history.
-  const graded = (await db.execute("SELECT url, json_extract(ai_rubric, '$.model') AS m FROM portfolios WHERE ai_rubric IS NOT NULL")).rows;
-  assert.ok(graded.every((g) => g.m === PRIMARY_MODEL));
-  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM rubric_history")).rows[0].n), 4);
+  assert.deepEqual(jobs, ["grade-new", "grade-new", "grade-new", "content"]);
+  // The new sites graded on 3.5; a site whose page changed and a 3.1 grade keep their grades (owner, 2026-11-21).
+  const modelOf = async (url) => (await db.execute({ sql: "SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios WHERE url = ?", args: [url] })).rows[0].m;
+  for (const url of made.fresh) assert.equal(await modelOf(url), PRIMARY_MODEL);
+  for (const url of made.old31) assert.equal(await modelOf(url), BACKUP_MODEL);
+  for (const url of made.changed) assert.equal(await modelOf(url), PRIMARY_MODEL);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM rubric_history")).rows[0].n), 0);
   // A row without page text and facts waits for the Actions evidence step.
   assert.equal((await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [made.noEvidence[0]] })).rows[0].ai_rubric, null);
-  // A changed site graded tonight is not "changed" any more.
-  const again = await planNight(ctx, { ...r.state, estimate: null });
-  assert.equal(again.estimate.perStage.grade_changed, 0);
+  assert.deepEqual(r.summary.stages.map((s) => s.key), ["grade_new", "compare", "content", "library", "experiment"]);
 
   const byKey = Object.fromEntries(r.summary.stages.map((s) => [s.key, s]));
   assert.equal(byKey.compare.label, "AI ranking comparisons");
@@ -159,10 +157,10 @@ test("stages run in priority order: new sites, then changed sites, then re-grade
   assert.match(r.markdown, /\| AI ranking comparisons \| 0 \|/);
   assert.match(r.markdown, /Human votes \(the face-off\) use no Gemini and are never scheduled/);
   // Estimate at the start and the actual at the end.
-  assert.equal(r.summary.estimate.requests, 8);
+  assert.equal(r.summary.estimate.requests, 4);
   assert.equal(r.summary.estimate.minutes, 1);
-  assert.equal(r.summary.actual.requests, 8);
-  assert.match(r.markdown, /Estimated: 8 request\(s\), about 1 min at 8\/min\. Actual: 8 request\(s\)/);
+  assert.equal(r.summary.actual.requests, 4);
+  assert.match(r.markdown, /Estimated: 4 request\(s\), about 1 min at 8\/min\. Actual: 4 request\(s\)/);
 });
 
 test("requests are paced evenly across batches", async () => {
@@ -178,20 +176,17 @@ test("caps: a stage stops at its request cap and the next one starts", async () 
   const { db } = await setup({ fresh: 5, old31: 2 });
   const { ctx, clock } = context(db, { gemini: mockGemini([ok()]), budget: { stages: { grade_new: { cap: 2 } } } });
   const r = await drive(ctx, clock);
-  assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "content", "regrade", "regrade"]);
+  assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "content"]);
   assert.match(r.summary.stages.find((s) => s.key === "grade_new").result, /cap reached \(2 requests today\)/);
 });
 
-test("re-grades are off by default until rubric v3: the night spends nothing on them", async () => {
-  assert.equal(DEFAULT_PLAN.stages.regrade.cap, 0);
-  assert.equal(budgetPlan(undefined).stages.regrade.cap, 0, "no GEMINI_BUDGET: re-grades stay off");
-  const { db } = await setup({ fresh: 2, old31: 2 });
-  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]), budget: { stages: { regrade: DEFAULT_PLAN.stages.regrade } } });
+test("a GEMINI_BUDGET that still turns on the removed re-grade stages changes nothing", async () => {
+  const { db } = await setup({ fresh: 2, changed: 2, old31: 2 });
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]), budget: { stages: { regrade: { cap: 300 }, grade_changed: { cap: 100 } } } });
   const r = await drive(ctx, clock);
+  assert.equal(r.status, "complete");
   assert.deepEqual(await jobsInOrder(db), ["grade-new", "grade-new", "content"]);
-  const regrade = r.summary.stages.find((s) => s.key === "regrade");
-  assert.equal(regrade.requests ?? 0, 0);
-  assert.equal(r.summary.estimate.perStage.regrade ?? 0, 0, "the estimate plans none");
+  assert.deepEqual(Object.keys(r.summary.estimate.perStage), ["grade_new", "compare", "content", "library", "experiment"], "the estimate plans no removed stage");
 });
 
 test("the reserve is never spent, and it grows with people's demand", async () => {
@@ -231,14 +226,19 @@ test("people preempt: a batch that sees people grading pauses, and resumes once 
 });
 
 test("each stage has a wall-clock cap, and everything stops 30 minutes before the quota resets", async () => {
-  const { db } = await setup({ fresh: 30, old31: 30 });
-  // 1 request a minute; new grades get 5 minutes; the run starts at 23:15 Pacific.
+  // 1 request a minute; the run starts at 23:15 Pacific.
   const start = Date.parse("2026-11-11T07:15:00Z");
-  const { ctx, clock } = context(db, { start, rpm: 1, gemini: mockGemini([ok()]), budget: { stages: { grade_new: { cap: 300, minutes: 5 } } } });
-  const r = await drive(ctx, clock);
-  const byKey = Object.fromEntries(r.summary.stages.map((s) => [s.key, s]));
+  // New grades get 5 minutes: the stage closes on its own time cap, and the run goes on.
+  const capped = await setup({ fresh: 30 });
+  const c = context(capped.db, { start, rpm: 1, gemini: mockGemini([ok()]), budget: { stages: { grade_new: { cap: 300, minutes: 5 } } } });
+  const first = await drive(c.ctx, c.clock);
+  const byKey = Object.fromEntries(first.summary.stages.map((s) => [s.key, s]));
   assert.match(byKey.grade_new.result, /time cap reached/);
   assert.ok(byKey.grade_new.requests <= 6);
+  // With its usual 60 minutes, the same work runs into the hard stop at 23:30.
+  const { db } = await setup({ fresh: 30 });
+  const { ctx, clock } = context(db, { start, rpm: 1, gemini: mockGemini([ok()]) });
+  const r = await drive(ctx, clock);
   assert.equal(r.status, "stopped");
   assert.match(r.summary.stopped, /hard stop 30 minutes before the quota resets \(23:30 Pacific\)/);
   const hardStop = Date.parse("2026-11-11T07:30:00Z");
@@ -282,15 +282,15 @@ test("a failed or stopped run never restarts itself the same night", async () =>
 });
 
 test("circuit breaker: 5 failures in a row stop that stage for the night; the next stage still runs", async () => {
-  const { db } = await setup({ fresh: 8, old31: 2 });
-  // New grades get malformed answers; re-grades get good ones.
+  const { db } = await setup({ fresh: 8 });
+  // New grades get malformed answers; the content stage after them gets a good one.
   const gemini = mockGemini((n) => (n < 5 ? ok({ nonsense: true }) : ok()));
   const { ctx, clock } = context(db, { gemini });
   const r = await drive(ctx, clock);
   const byKey = Object.fromEntries(r.summary.stages.map((s) => [s.key, s]));
   assert.match(byKey.grade_new.result, /circuit breaker: 5 failures in a row/);
   assert.equal(byKey.grade_new.failed, 5);
-  assert.equal(byKey.regrade.done, 2);
+  assert.equal(byKey.content.requests, 1);
   assert.equal(r.status, "complete");
 });
 
@@ -341,7 +341,7 @@ test("a spent daily quota is waiting for tomorrow, not a failure", async () => {
   assert.match(r.summary.stopped, /daily quota is spent; the rest waits for tomorrow/);
   assert.equal(gemini.calls.length, 2, "it stops at the first 429 for the day");
   assert.ok(gemini.calls.every((c) => c.url.includes(PRIMARY_MODEL)), "never 3.1");
-  assert.equal(r.summary.stages.find((s) => s.key === "regrade").result, "not reached");
+  assert.equal(r.summary.stages.find((s) => s.key === "content").result, "not reached");
 });
 
 test("a rejected key fails the run", async () => {
@@ -371,4 +371,110 @@ test("AI ranking comparisons (RANKING_V2 on): within the budget, stored once, th
   assert.ok(rows.every((x) => x.model === PRIMARY_MODEL && x.method === "one_on_one"));
   assert.ok(Number((await db.execute("SELECT COUNT(*) AS n FROM site_ratings")).rows[0].n) > 0, "boards rebuilt");
   assert.equal(r.summary.stages.find((s) => s.key === "compare").done, 3);
+});
+
+// A person's re-grade request (the owner's "Re-grade", lib/games/claims.mjs) asks for a new capture; the
+// night grades the site once from a capture made after the request, then closes the request.
+test("a re-grade request: graded once from a newer capture, first in the queue, then closed; an older capture waits", async () => {
+  const { db, made } = await setup({ fresh: 1, old31: 2 });
+  await db.batch(REGRADE_REQUEST_TABLES, "write");
+  const [asked, waiting] = made.old31; // captured 2026-11-02 and 2026-11-03
+  await db.execute({ sql: "INSERT INTO regrade_requests (url, requested_by, requested_at) VALUES (?, 'gh:1', '2026-10-15T00:00:00.000Z')", args: [asked] });
+  await db.execute({ sql: "INSERT INTO regrade_requests (url, requested_by, requested_at) VALUES (?, 'gh:2', '2026-11-05T00:00:00.000Z')", args: [waiting] });
+  const modelOf = async (url) => (await db.execute({ sql: "SELECT json_extract(ai_rubric, '$.model') AS m FROM portfolios WHERE url = ?", args: [url] })).rows[0].m;
+  const statusOf = async (url) => (await db.execute({ sql: "SELECT status, done_at FROM regrade_requests WHERE url = ?", args: [url] })).rows[0];
+
+  const first = context(db, { gemini: mockGemini([ok()]) });
+  const r = await drive(first.ctx, first.clock);
+  assert.equal(r.status, "complete");
+  const graded = (await db.execute("SELECT item FROM gemini_requests WHERE job = 'grade-new' ORDER BY id")).rows.map((x) => String(x.item));
+  assert.deepEqual(graded, [asked, made.fresh[0]], "the requested re-grade goes first, inside the grade_new cap");
+  assert.equal(await modelOf(asked), PRIMARY_MODEL, "graded again on 3.5");
+  const hist = (await db.execute("SELECT url, model FROM rubric_history")).rows.map((x) => [String(x.url), String(x.model)]);
+  assert.deepEqual(hist, [[asked, BACKUP_MODEL]], "the old grade is kept in rubric_history");
+  assert.equal(String((await statusOf(asked)).status), "done");
+  assert.ok((await statusOf(asked)).done_at);
+  // A request whose site has not been captured again since waits, its grade untouched.
+  assert.equal(await modelOf(waiting), BACKUP_MODEL);
+  assert.equal(String((await statusOf(waiting)).status), "pending");
+
+  // The next night grades nothing again.
+  const second = context(db, { start: T0 + 86400000, gemini: mockGemini([ok()]) });
+  await drive(second.ctx, second.clock);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'grade-new'")).rows[0].n), 2);
+  // Once the site is captured after its request, it is graded once too.
+  await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-06 00:00:00' WHERE url = ?", args: [waiting] });
+  const third = context(db, { start: T0 + 2 * 86400000, gemini: mockGemini([ok()]) });
+  await drive(third.ctx, third.clock);
+  assert.equal(await modelOf(waiting), PRIMARY_MODEL);
+  assert.equal(String((await statusOf(waiting)).status), "done");
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM gemini_requests WHERE job = 'grade-new'")).rows[0].n), 3);
+});
+
+test("a re-grade request whose new screenshot is gone keeps the grade and closes the request as failed", async () => {
+  const { db, made } = await setup({ old31: 1 });
+  await db.batch(REGRADE_REQUEST_TABLES, "write");
+  const [asked] = made.old31;
+  await db.execute({ sql: "INSERT INTO regrade_requests (url, requested_by, requested_at) VALUES (?, 'gh:1', '2026-10-15T00:00:00.000Z')", args: [asked] });
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]) });
+  ctx.image = async () => "missing";
+  await drive(ctx, clock);
+  const g = JSON.parse(String((await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [asked] })).rows[0].ai_rubric));
+  assert.equal(g.model, BACKUP_MODEL, "the grade stays");
+  assert.equal(String((await db.execute("SELECT status FROM regrade_requests")).rows[0].status), "failed");
+});
+
+test("parked items of removed stages are never reported, so they raise no 'parked' alert", async () => {
+  const { db } = await setup();
+  await ensureNightSchema(db);
+  for (const [job, item] of [["grade-new", "https://a.dev"], ["grade-changed", "https://b.dev"], ["regrade", "https://c.dev"]]) {
+    await db.execute({
+      sql: "INSERT INTO night_item_failures (job, item, nights, last_night, reason, parked_at) VALUES (?, ?, 3, '2026-11-10', 'bad answer', '2026-11-11T05:00:00.000Z')",
+      args: [job, item],
+    });
+  }
+  assert.deepEqual((await parkedItems(db)).map((p) => [p.job, p.item]), [["grade-new", "https://a.dev"]]);
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]) });
+  const r = await drive(ctx, clock);
+  assert.doesNotMatch(r.markdown, /b\.dev|c\.dev/);
+  assert.match(r.markdown, /grade-new: https:\/\/a\.dev/);
+});
+
+// A release deployed while a night is running: the Workflow resumes from its last step on the new code,
+// with a state written by the old seven-stage list.
+const closedStage = (key, job, result = "nothing waiting") => ({ key, job, label: key, requests: 0, ok: 0, failed: 0, skipped: 0, parked: [], result });
+const jobsLogged = async (db) => (await db.execute("SELECT job FROM gemini_requests ORDER BY id")).rows.map((r) => String(r.job));
+
+test("a run resumed on a new release with a removed stage open closes it as off and goes on with the stages that exist", async () => {
+  const { db } = await setup({ fresh: 2 });
+  const { ctx, clock } = context(db, { gemini: mockGemini([ok()]) });
+  let state = await planNight(ctx, await startNight(ctx));
+  // Old code had closed grade_new and opened grade_changed (old index 1).
+  const t = new Date(clock.t).toISOString();
+  state = {
+    ...state,
+    stages: [closedStage("grade_new", "grade-new", "done: nothing left")],
+    stageIndex: 1,
+    stage: { key: "grade_changed", job: "grade-changed", label: "Grade changed sites", night: state.night, startedAt: t, deadlineAt: new Date(clock.t + 30 * 60000).toISOString(), requests: 0, ok: 0, failed: 0, skipped: 0, consecutive: 0, parked: [], tried: [], result: null },
+  };
+  for (let n = 0; !state.done && n < 50; n++) state = (await runBatch(ctx, state)).state;
+  assert.ok(state.done);
+  assert.equal(state.status, "running", "not failed");
+  assert.deepEqual(state.stages.map((s) => s.key), ["grade_new", "grade_changed", "compare", "content", "library", "experiment"], "each remaining stage once, in order");
+  assert.match(state.stages[1].result, /off: this stage was removed by a release during the run/);
+  assert.deepEqual(await jobsLogged(db), ["content"], "grade_new is not opened again");
+});
+
+test("a run resumed with an index from the old stage list never opens the wrong stage", async () => {
+  const { db } = await setup({ fresh: 2 });
+  const { ctx } = context(db, { gemini: mockGemini([ok()]) });
+  let state = await planNight(ctx, await startNight(ctx));
+  // Old code closed grade_new, grade_changed and compare and was about to open content (old index 3);
+  // in the new list index 3 is the image library.
+  state = { ...state, stages: [closedStage("grade_new", "grade-new"), closedStage("grade_changed", "grade-changed"), closedStage("compare", "compare")], stageIndex: 3, stage: null };
+  for (let n = 0; !state.done && n < 50; n++) state = (await runBatch(ctx, state)).state;
+  assert.ok(state.done);
+  assert.deepEqual(state.stages.slice(3).map((s) => s.key), ["content", "library", "experiment"], "content runs, nothing is skipped or run twice");
+  assert.deepEqual(await jobsLogged(db), ["content"]);
+  assert.equal(nextStageIndex(state), -1);
 });

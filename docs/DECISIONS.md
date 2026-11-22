@@ -16,7 +16,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   `gemini-3.5-flash-lite` makes every grade and every AI vote.
   An overloaded, timed-out or unreachable 3.5 is retried on 3.5 after 10, 30 and 60 seconds; if it is still busy, or its daily quota or grading budget is used up, the item is left for the next run, with no fallback to 3.1.
   A run that stops this way says why in its job summary; it fails only when it did nothing for a reason other than a spent budget or quota.
-  `gemini-3.1-flash-lite` may only be used for explicitly labelled experiments (such as the 3.1-vs-3.5 comparison) and non-ranking analysis, and is never written into grades or ratings.
+  `gemini-3.1-flash-lite` may only be used for explicitly labelled experiments (the weekly 3.1-vs-3.5 comparison was one until it was removed on 2026-11-21) and non-ranking analysis, and is never written into grades or ratings.
   The fallback code from #54 stays behind `GEMINI_FALLBACK` (default `off`) for those experiments; the grading and vote workflows pin it to `off`.
   Why: one consistent judge for every grade and every comparison matters more than speed; the backlog can wait a few days for 3.5's budget.
 - **The key goes in the `x-goog-api-key` header, never in the URL** (agent, 2026-11-10). Status: built (#52).
@@ -34,7 +34,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **No catch-up mode; the backlog is graded on 3.5's daily budget** (owner, 2026-11-10). Status: built (#63); since #69 the budget is the end-of-day run's "Grade new sites" share.
   The repository variable `GEMINI_CATCHUP` is `"false"` and the code no longer reads it; ungraded sites are worked through over the coming days, within 3.5's grading budget.
   Why: catch-up mode wrote 3.1 grades, which the "3.5 only" decision rules out.
-- **Conditional re-grades of 3.1 grades on 3.5** (owner, 2026-11-10). Status: built (#54); the stop rule is planned.
+- **Conditional re-grades of 3.1 grades on 3.5** (owner, 2026-11-10). Status: superseded on 2026-11-21 (see "Graded once; five scheduled jobs removed" under Grading); was built (#54).
   Every existing 3.1 grade is queued for a 3.5 re-grade from spare 3.5 budget, and the old grade moves to `rubric_history`, so each re-grade is a free 3.1-vs-3.5 pair for the Sunday comparison report.
   No new 3.1 grades are made, so the queue only holds grades from before the "3.5 only" decision.
   The re-grades stop once that report shows no meaningful difference (for example, tiers differ on 10% of sites or fewer), and the quota goes back to ranking and content.
@@ -135,6 +135,7 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **One full re-grade on v2, when the owner turns it on** (owner, 2026-11-10). Status: built behind the `RUBRIC_REGRADE` variable, off.
   Why: about 2,000 grades (4 to 5 days of 3.5's grading budget) so every listed site is on the same rubric; it waits until the ungraded backlog is done.
   Superseded in part on 2026-11-16: no automatic re-grading (below).
+  Superseded in full on 2026-11-21: the re-grade queues and `RUBRIC_REGRADE` are removed (see "Graded once; five scheduled jobs removed").
 
 ### Is it a portfolio, asked once at the door (2026-11-16)
 
@@ -175,6 +176,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A rule's removal sets the site down, so no queue grades it again; only a manual grade could, and it would need the owner.
 - **Listed sites get the health check only; "is it a portfolio" is asked once, at the door** (owner, 2026-11-16: "Listed sites, health check only. Is it a portfolio is asked once, at the door, agreed." and "We're not doing automatic regrading on change."). Status: building.
   The "grade changed sites" and "re-grade" stages default to a cap of 0 in `DEFAULT_PLAN`, so lifting the `GEMINI_BUDGET` pause does not bring them back; their code stays, and change detection keeps running (it is free).
+  Superseded on 2026-11-21: the two stages and change detection are removed, not kept at cap 0 (see "Graded once; five scheduled jobs removed" below).
   A listed, graded site whose weekly signals collapse (1 or fewer) is not re-graded: a pending review row says so, and nothing is removed without Gemini's "no" at the door or the owner's decision.
   Once the owner has decided to keep the site (one definition everywhere: he rejected any proposal to remove it, in any group, or confirmed it is a portfolio himself, or the grade carries that decision), no new row is written for it unless the site is graded again after his decision (none is while re-grading is off).
 - **Bot-walled sites go to the owner** (owner, 2026-11-16: "Bot-walled sites can be sent to me for review."). Status: building.
@@ -192,6 +194,20 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **Accepted: Gemini over-awards top scores** (owner, 2026-11-16). Status: accepted, no change.
   Why: the owner accepts it for now rather than adding a second model or calibration.
 
+### Graded once; five scheduled jobs removed (2026-11-21 and 2026-11-22)
+
+- **A site is graded once and never re-graded automatically, and only one Gemini model is used** (owner, 2026-11-21). Status: building (#273).
+  Five scheduled jobs are removed: the nightly change detection ("Record page changes", which wrote `rating_resets`), the weekly comparison of two Gemini versions' grades (`grade-compare.yml`), the "grade changed sites" night stage, the "re-grades" night stage (with the fallback grader's re-grade queues), and the ELO-era AI votes that `judge-vote.yml` ran without `RANKING_V2`.
+  No table is dropped: `rating_resets` and `site_fingerprints` keep what they hold and are no longer written, and the resets already stored still count in the ranking recompute.
+  The hourly change fingerprints ("When checks re-run") are not part of this: the owner has not decided on them.
+  Why: a site is asked "is it a portfolio" once, at the door, and with one model there is nothing to compare.
+- **Confirmed, and discovery's AI screen goes too** (owner, 2026-11-22: "you can remove these" and "yeah we can remove the discover screen ask to gemini"). Status: building (#273).
+  The rule: never ask Gemini what code can answer, and never ask it about a site twice; discovery checks a site with code first, then hands it to grading.
+  Rows that waited for the screen stay as they are, inert ([DISCOVERY.md](DISCOVERY.md)).
+- **A person may still ask for a re-grade** (owner, 2026-11-22). Status: building (#273).
+  A listed site's verified owner's "Re-grade" asks for a new capture; the night's "grade new sites" stage grades the site once from a capture newer than the request, ahead of new sites and inside the same cap, keeps the old grade in `rubric_history` and closes the request, so it can be asked again later.
+  Nothing else re-grades a listed site.
+
 ## Ranking
 
 - **OpenSkill ratings, seeded from the grade** (owner asked the agent to pick, 2026-11-10). Status: planned.
@@ -207,6 +223,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   Why: close matches teach the most, the random one lets a much-improved site jump fast, and random order cancels the judge's first-position bias.
 - **Settled sites are compared less; a redesign resets certainty** (agent, 2026-11-10). Status: planned.
   When a site's page fingerprint changes it is re-captured and re-graded and its certainty resets.
+  Superseded on 2026-11-21: nothing records page changes or re-grades a site on its own any more; resets already stored still count (see "Graded once; five scheduled jobs removed" under Grading).
   Why: budget goes where the board is least sure, and real change is visible fast.
 - **Open method** (agent, 2026-11-10). Status: planned.
   A public method page and a downloadable comparison log (pair, model, prompt version, winner), so anyone can recompute the board.
@@ -241,12 +258,14 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   `compare.mjs` now exits 0 when 3.5's quota is spent, like `judge.mjs` since #63.
 - **Re-grades on request, with a cooldown** (owner, 2026-11-10). Status: the rule is building (#69, `regradeAllowed`); the request flow is building (#81, "Grade my portfolio" below).
   Once every 7 days, sooner when the page fingerprint changed after the last grade.
+  Still true on 2026-11-22: a person may ask for a re-grade (see "Graded once; five scheduled jobs removed" under Grading for how a listed site's owner's request is graded).
 - **People's requests wait for 3.5, never 3.1** (owner, 2026-11-10). Status: building (#69, `pipeline/people.mjs`); "grade my portfolio" uses it (#81).
   A busy 3.5 is retried as usual, then the request is queued and finished by an hourly cron when 3.5 is available, and the person is emailed when it is done.
 - **The ELO-era AI votes stop running on a schedule** (agent, 2026-11-10, following "comparisons when `RANKING_V2` is on"). Status: building (#69).
   `judge-vote.yml` is manual only; until `RANKING_V2` is on, no AI votes are added to the ELO board.
   Why: the owner's order runs AI comparisons in the background only as ranking v2; keeping the old 30 votes would need a second runner outside the budget.
   Owner: say if they should continue meanwhile.
+  Superseded on 2026-11-21: the owner removed them; the manual run of the old votes is gone too (see "Graded once; five scheduled jobs removed" under Grading).
 - **Owner alerts repeat until resolved** (owner, 2026-11-10). Status: building (#69); email off until a provider is chosen.
   Quota used up before the end-of-day run, a stage stopped by its circuit breaker, parked items, and traction past configurable levels ("PortfolioRank is doing well").
   One email per condition per day, every day, until it clears.
