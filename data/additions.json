@@ -288,5 +288,170 @@
     "name": "Siddharth",
     "url": "https://sudosidd.dev",
     "source": "review"
+  },
+  {
+    "name": "Irfan.Dev",
+    "url": "https://irfan-devs.vercel.app",
+    "tagline": "Frontend Developer",
+    "source": "left_community_list",
+    "left_on": "2026-07-06"
+  },
+  {
+    "name": "Cristian Cezar Moisés",
+    "url": "https://ccm.securityops.com.br",
+    "source": "left_community_list",
+    "left_on": "2026-08-02"
+  },
+  {
+    "name": "Anadi Sharma",
+    "url": "https://asharma.tech",
+    "tagline": "Software Engineer | Cse'25 Iit Jodhpur",
+    "source": "left_community_list",
+    "left_on": "2026-09-14"
+  },
+  {
+    "name": "Johnson Siziba",
+    "url": "https://www.johnsonsiziba.com",
+    "source": "left_community_list",
+    "left_on": "2026-09-14"
+  },
+  {
+    "name": "André Souza",
+    "url": "https://an3dree.dev",
+    "tagline": "Backend Developer",
+    "source": "left_community_list",
+    "left_on": "2026-10-12"
+  },
+  {
+    "name": "Greta Macri",
+    "url": "https://gretamacri.com",
+    "source": "left_community_list",
+    "left_on": "2026-10-12"
+  },
+  {
+    "name": "Sayan Adhikary",
+    "url": "https://www.sayanadhikary.me",
+    "tagline": "Full Stack Mern",
+    "source": "left_community_list",
+    "left_on": "2026-10-12"
+  },
+  {
+    "name": "Aditya Dutt Pandey",
+    "url": "https://www.adpandey.com",
+    "tagline": "Founder | Backend Engineer | System Architect",
+    "source": "left_community_list",
+    "left_on": "2026-10-19"
+  },
+  {
+    "name": "Sudev Thapa Magar",
+    "url": "https://www.sudevmagar.tech",
+    "source": "left_community_list",
+    "left_on": "2026-10-19"
+  },
+  {
+    "name": "Aathif Zahir",
+    "url": "https://az-dev.vercel.app",
+    "source": "left_community_list",
+    "left_on": "2026-10-24"
+  },
+  {
+    "name": "Anik Ahammed Khan",
+    "url": "https://anikahammedkhan.com",
+    "source": "left_community_list",
+    "left_on": "2026-10-25"
+  },
+  {
+    "name": "Capt Michael",
+    "url": "https://captmichael.dev",
+    "tagline": "Mern Full Stack Developer",
+    "source": "left_community_list",
+    "left_on": "2026-10-25"
+  },
+  {
+    "name": "Nsk Reddy",
+    "url": "https://nskr.dev",
+    "tagline": "Student | Freelancer | Aspiring Ai Engineer",
+    "source": "left_community_list",
+    "left_on": "2026-10-25"
+  },
+  {
+    "name": "Zheng Robert",
+    "url": "https://www.robert.hase-zheng.net",
+    "source": "left_community_list",
+    "left_on": "2026-10-25"
+  },
+  {
+    "name": "Emmanuel Alabi",
+    "url": "https://emjjkk.tech",
+    "tagline": "CS Student | Full Stack Web/App",
+    "source": "left_community_list",
+    "left_on": "2026-11-02"
+  },
+  {
+    "name": "Aprameya Kannan",
+    "url": "https://aprameyak.vercel.app",
+    "tagline": "Software Engineer",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Cole Emeruche",
+    "url": "https://coleruche.com",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Mihir Das",
+    "url": "https://getmihir.com",
+    "tagline": "Full Stack Web Developer | Reactjs | Typescript | Node Js | Ai Enthusiast",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Hanan Bhatti",
+    "url": "https://hanan-bhatti.site",
+    "tagline": "Full Stack Developer | Creator",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Sabbir Ahmed Shawon",
+    "url": "https://sabbirshawon.com",
+    "tagline": "Full Stack Software Developer",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Erick Namukolo",
+    "url": "https://www.ericknamukolo.com",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Nicolas Nguyen",
+    "url": "https://www.nic-nguyen.com",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Redoyanul Haque",
+    "url": "https://www.redoyanulhaque.me",
+    "tagline": "AI Engineer | Full Stack Developer | Python Programmer",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Yubraj Khatri",
+    "url": "https://www.yubrajkhatri.com.np",
+    "tagline": "Full Stack/Ai Developer",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
+  },
+  {
+    "name": "Zaid Rakhange",
+    "url": "https://zaid.impiclabs.com",
+    "tagline": "Gen AI Engineer | Founder @ImpicLabs",
+    "source": "left_community_list",
+    "left_on": "2026-11-16"
   }
 ]
