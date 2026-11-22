@@ -17,11 +17,10 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   capture.mjs (new + --refresh)  ──►  screenshots ──► Cloudflare R2   + diagnostics, page text, facts ──► Turso
   fullpage-backfill.mjs (capped)  ──►  tall images for older captures ──► R2 (+ portfolios.meta.fullPage)
-  evidence.mjs, detect-changes.mjs  ──►  old rows' text and facts, page changes (rating_resets)
+  evidence.mjs  ──►  old rows' text and facts, project link checks
         ▼   (all of the above: the free checks on Actions, started by Cloudflare at 20:30 Pacific)
-  end-of-day Workflow (Cloudflare)  ──►  new and changed sites graded (rubric v2) ──► Turso (portfolios.ai_rubric)
+  end-of-day Workflow (Cloudflare)  ──►  new sites graded once (rubric v2) ──► Turso (portfolios.ai_rubric)
                                     ──►  AI ranking comparisons (RANKING_V2) ──► Turso (comparisons, site_ratings)
-                                    ──►  re-grades, on what is left of the day's quota
         ▼
   Next.js app (Cloudflare Workers)  ──►  grid · /rank face-off · /top leaderboard · /p/[slug] · /removed
 
@@ -210,7 +209,7 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), checks the change fingerprint of a 168th of the list ("When checks re-run" above), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)), then starts the not-working re-check on GitHub Actions when a site is due ([worker/recheck-start.ts](worker/recheck-start.ts)) |
 | Every 5 minutes | Worker cron | The grader's tick ([worker/grader.ts](worker/grader.ts)): report emails, captures that didn't start, requests waiting for a later day, cleanup; nothing while `GRADER_ENABLED` is off |
 | 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
-| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due, fingerprint changes); every night also `health.yml` (not waited for) |
+| 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due); every night also `health.yml` (not waited for) |
 | Then until 23:30 | Workflow | The AI stages, in order, on what is left ([pipeline/night.mjs](pipeline/night.mjs)) |
 | 23:30 | Workflow | Hard stop, 30 minutes before the reset; the summary and owner alerts |
 | Then | Workflow | Roll-ups and retention of the log tables ([pipeline/retention.mjs](pipeline/retention.mjs)): `gemini_requests` older than 90 Pacific days becomes `gemini_daily`, `night_runs` older than 180 days and the free-text reason of comparisons older than 90 days go |
@@ -224,13 +223,13 @@ The Workflow instance is `night-<Pacific date>` and the night is claimed in the 
 | Order | Stage (job name in `gemini_requests`) | Works on | Cap a day | Time cap |
 | ---: | --- | --- | ---: | ---: |
 | 1 | Grade new sites (`grade-new`) | listed, captured, ungraded, with page text and facts; a site whose screenshot was missing comes back once it is captured again; every answer goes through the door (the owner review queue, above) | 300 | 60 min |
-| 2 | Grade changed sites (`grade-changed`) | graded before their page fingerprint changed (the free checks re-capture sites and record changes in `rating_resets`); off by default (cap 0, owner 2026-11-16: "We're not doing automatic regrading on change"), change detection still runs | 0 | 30 min |
-| 3 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
-| 4 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
-| 5 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
-| 6 | Re-grades (`regrade`) | 3.1 grades on 3.5, then (`RUBRIC_REGRADE`) older rubrics; off by default (cap 0: a site is graded once, at the door, owner 2026-11-16), turned on only with `GEMINI_BUDGET` `{"stages":{"regrade":{"cap":300}}}` ([docs/audits/gemini-prompting.md](docs/audits/gemini-prompting.md)) | 0 | 60 min |
-| 7 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
+| 2 | AI ranking comparisons (`compare`) | ranking v2 one-on-one and batched comparisons, then the boards are rebuilt; only when the Worker variable `RANKING_V2` is `"true"` | 200 | 45 min |
+| 3 | Content (`content`) | the weekly polls (below): at most one request a night and two a week; then, while `CONTENT_MODE` is not "off", the content engine (below): the week's pick on Sunday, one post on Monday and Wednesday nights | 100 | 30 min |
+| 4 | Image library (`library`) | no work in the night: the cap for the library's Gemini checks, which run once a day on the hourly cron, only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 3:15 pm Pacific in winter), using whatever the owner's Make now left of the 40 AI images a UTC day and stopping before 23:55 UTC; [docs/CONTENT-ENGINE.md](docs/CONTENT-ENGINE.md#the-image-library)) | 40 | 25 min |
+| 5 | Experiments (`experiment`) | none scheduled | 50 | 15 min |
 
+A site is graded once, when it is added, and never re-graded automatically (owner, 2026-11-16 and 2026-11-21): the "grade changed sites" and "re-grades" stages were removed on 2026-11-22.
+Their old requests keep their job names (`grade-changed`, `regrade`) in `gemini_requests`, and a `GEMINI_BUDGET` key for a stage that no longer exists is ignored.
 "AI ranking comparisons" are Gemini comparing sites.
 Human face-off votes use no Gemini and are never scheduled.
 Rows without page text and facts (captured before rubric v2) are measured by the free checks (`pipeline/evidence.mjs`, which needs a browser) and graded the same night.
@@ -639,19 +638,19 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | Workflow | Trigger | What it does | Secrets |
 |---|---|---|---|
 | **`ci.yml`** | PR → main | `tsc --noEmit` and the Worker build; gates what the next deploy ships | none |
-| **`sync-upstream.yml`** | the end-of-day Workflow at 20:30 Pacific; fallback schedule 06:00 UTC + manual | The free checks: rebuild `feed.json` from upstream's merged README, open the sync PR if it changed, capture new sites and re-capture the oldest (`--refresh`), measure page evidence, record page changes. No Gemini, except as the fallback: the manual `grade` input, or a scheduled run (Cloudflare didn't start it) grades within the accountant's shares | TURSO, R2, SHOTS_BASE_URL (GEMINI only for `grade`) |
+| **`sync-upstream.yml`** | the end-of-day Workflow at 20:30 Pacific; fallback schedule 06:00 UTC + manual | The free checks: rebuild `feed.json` from upstream's merged README, open the sync PR if it changed, capture new sites and re-capture the oldest (`--refresh`), measure page evidence and the link checks that are due. No Gemini, except as the fallback: the manual `grade` input, or a scheduled run (Cloudflare didn't start it) grades new sites within the accountant's share | TURSO, R2, SHOTS_BASE_URL (GEMINI only for `grade`) |
 | **`health.yml`** | the end-of-day Workflow every night; fallback schedule daily 12:00 UTC + manual | Roster sync, health check of every listed site (except those the hourly re-check owns), the weekly exclusions bot PR, purge of rows delisted 30+ days. No Gemini | TURSO, R2, SYNC_BOT |
 | **`recheck.yml`** | started by the Worker's hourly cron at :15 when a site is due; fallback schedule hourly at :40 (skips when Cloudflare started a run in the last hour) + manual | The not-working pool's re-checks that are due (`pipeline/recheck-run.mjs`); an hour with none due is one query and no install. No Gemini, no email | TURSO |
-| **`judge-vote.yml`** | manual only | Fallback: the ELO-era AI votes, or (repository variable `RANKING_V2`) the ranking v2 comparisons and recompute, within the accountant's share | TURSO, GEMINI, SHOTS_BASE_URL |
-| **`grade-compare.yml`** | Sundays 18:00 UTC + manual | 3.1-vs-3.5 grade comparison report from `rubric_history`. No Gemini | TURSO |
+| **`judge-vote.yml`** | manual only | Fallback: the ranking v2 comparisons and recompute, within the accountant's share, only when the repository variable `RANKING_V2` is `true` (it is not set, so a run does nothing) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
 | **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for every listed graded portfolio (whatever Gemini's letter; not "not a portfolio") without a fresh PSI result (never measured first, then oldest), up to 400 a day, by hitting the prod API | TURSO |
 | **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 
 The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check, whose fallback runs daily at 12:00 UTC, 7.5 hours after Cloudflare's start), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
 Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without claiming it and this fallback does the night's work.
-`judge-vote.yml` lost its schedule: AI comparisons run in the end-of-day run, and the ELO-era AI votes (30 a day into the shared ELO pool) no longer run on their own, since the owner's decision keeps background comparisons for `RANKING_V2`.
-`grade-compare`, `backup` and `prewarm` call no Gemini and nothing depends on their exact time, so they keep their GitHub schedules.
+`judge-vote.yml` lost its schedule on 2026-11-10: AI comparisons run in the end-of-day run.
+Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were removed on 2026-11-22 (owner, 2026-11-21).
+`backup` and `prewarm` call no Gemini and nothing depends on their exact time, so they keep their GitHub schedules.
 `sync-upstream` and `judge-vote` share the `gemini` concurrency group, so a manual fallback run and the nightly checks never overlap on the runner.
 
 ## Budget model
@@ -681,52 +680,45 @@ Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without clai
 
 - **Key:** sent in the `x-goog-api-key` header, never as `?key=` in the URL.
   Newer AI Studio keys ("AQ." style) are rejected in the URL, and a URL key leaks into logs.
-- **Models:** grades and AI votes come from `gemini-3.5-flash-lite` only, never from a lower model (owner's decision, 2026-11-10).
+- **Models:** grades and AI comparisons come from `gemini-3.5-flash-lite` only, never from a lower model (owner's decision, 2026-11-10).
   An overloaded (5xx), timed-out or unreachable 3.5 is retried, same model, after 10, 30 and 60 seconds (jittered); if the last retry still fails, that item is left for the next run and the run stops.
   A 429 for a spent per-day quota (`RESOURCE_EXHAUSTED` on a `PerDay` quota) stops the run; the rest waits for tomorrow's quota.
   Any other 429 (per-minute) means slow down: wait Google's `RetryInfo` delay (or 60 seconds) and retry 3.5, up to 5 times.
   Why a run stopped early goes to its job summary ("Stopped early: ..."), including that there was no fallback.
   A rejected key (401, 403, 400 `API_KEY_INVALID`) or a bad request fails the call.
-  `gemini-3.1-flash-lite` is only for explicitly labelled experiments (such as the 3.1-vs-3.5 comparison) and non-ranking analysis, never written into grades or ratings.
+  `gemini-3.1-flash-lite` is only for explicitly labelled experiments and non-ranking analysis, never written into grades or ratings.
 - **`GEMINI_FALLBACK`:** `off` by default; `on` brings back the per-call fallback to 3.1 from #54 (a call that still fails after its retries goes once to 3.1, and a spent 3.5 quota moves the run to 3.1).
   It exists for labelled experiments run by hand only: the run prints an "experiment mode" warning, and every answer keeps the model that gave it.
-  `sync-upstream.yml` and `judge-vote.yml` pin it to `"off"` in their env, so no repository variable can turn it on for production grades or votes.
-  `--model M` uses only `M`, with no fallback; for `pairwise`, any model other than 3.5 also needs `--allow-model`.
+  `sync-upstream.yml` pins it to `"off"` in its env, so no repository variable can turn it on for production grades.
+  `--model M` uses only `M`, with no fallback.
 - **Pacing:** one limiter per run spaces every request evenly, retries included: `--rpm`, else the `GEMINI_RPM` repository variable, else 8 per minute.
-  `sync-upstream` (grading) and `judge-vote` (voting) share the `gemini` concurrency group, so they never run at the same time.
+  `sync-upstream` (grading) and `judge-vote` (comparisons) share the `gemini` concurrency group, so they never run at the same time.
 - **Monitoring:** every Gemini HTTP request is a row in the `gemini_requests` table (time, job, run id, model, status, reason, latency, input, output and thinking tokens from `usageMetadata`, retry and fallback flags).
   Each run's job summary shows the requests per model, 5xx and 429 answers, retries, fallbacks, tokens and an estimated cost, plus the quota day's requests per model (midnight to midnight Pacific, when the free quota resets) against the daily free quota, with a warning from 80%.
-  Each row's `job` is the budget's job name (`grade-new`, `grade-changed`, `compare`, `regrade`, `people-grade`, ...; older rows say `rubric` and `pairwise`).
+  Each row's `job` is the budget's job name (`grade-new`, `compare`, `content`, `people-grade`, ...; older rows say `rubric` and `pairwise`, and the removed `grade-changed`, `regrade` and `discovery-screen`).
   The quotas default to 500 a day for 3.5 and 500 for 3.1 (the owner's numbers) and can be changed with the `GEMINI_DAILY_QUOTA` repository variable (JSON, `{"model": requests}`).
   Cost estimates use `GEMINI_PRICES` (JSON, `{"model": {"in": usd_per_1M, "out": usd_per_1M}}`), else Google's published paid rates on 2026-11-10 (3.5 Flash-Lite $0.30 in / $2.50 out, 3.1 Flash-Lite $0.25 / $1.50); thinking tokens are billed as output.
-- **Budget:** every grade, comparison and re-grade asks the budget accountant ([pipeline/budget.mjs](pipeline/budget.mjs), "End-of-day run" above); `GEMINI_GRADING_BUDGET` is gone.
-  `judge.mjs rubric` (the manual fallback) starts a grade only with room for its 4 possible requests in the "Grade new sites" share, then re-grades in the "Re-grades" share.
+- **Budget:** every grade and comparison asks the budget accountant ([pipeline/budget.mjs](pipeline/budget.mjs), "End-of-day run" above); `GEMINI_GRADING_BUDGET` is gone.
+  `judge.mjs rubric` (the manual fallback) starts a grade only with room for its 4 possible requests in the "Grade new sites" share.
   Sites past the budget are deferred to tomorrow, which is not a failure.
 - **No catch-up mode:** catch-up mode (grading on 3.1's budget once 3.5's was used) was removed on 2026-11-10; the code no longer reads `GEMINI_CATCHUP`, and the repository variable is `"false"`.
-- **Re-grade queue:** after new and ungraded sites, the rubric re-grades grades not made by 3.5 (oldest first) with whatever room 3.5's grading budget has left today; re-grades only ever run on 3.5.
-  Lowest priority after that: 3.5 grades from an older rubric version (`rubric_version` below `pipeline/rubric.mjs` `RUBRIC_VERSION`; grades from before v2 count as 1), oldest first, only when the repository variable `RUBRIC_REGRADE` is `true` (off until the owner turns it on; about 2,000 grades, 4 to 5 days of 3.5's grading budget).
-  Re-grading stops as soon as an answer comes from a model other than 3.5.
-  The old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten, so each re-grade is a free 3.1-vs-3.5 pair; `--force` keeps history the same way, and `--no-regrade` turns the queue off.
-  No new 3.1 grades are made, so the queue only shrinks: it holds the 3.1 grades written before 2026-11-10.
+- **Graded once:** a site is graded when it is added and never re-graded automatically (owner, 2026-11-16 and 2026-11-21); the re-grade queues for 3.1 grades and older rubric versions were removed on 2026-11-22, so the 3.1 grades written before 2026-11-10 stay as they are.
+  When a site is graded again (its one fresh grade after the owner's review, a manual tool, or `--force`), the old grade (model, tier, `is_portfolio`, scores, date) moves to `rubric_history` instead of being overwritten.
 - **Comparisons:** a spent 3.5 quota or budget in `compare.mjs` is deferred too: the run exits 0 and counts the rest as waiting (the same rule as `judge.mjs` since #63).
-- **Grade comparison:** `grade-compare.yml` (Sundays 18:00 UTC, database reads only) writes the number of 3.1-vs-3.5 pairs (same rubric version only), exact and within-one tier agreement, the mean absolute difference per axis and the `is_portfolio` disagreement rate to its run summary (`scripts/grade-compare.mjs`).
-- **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows (or pairs) were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
+- **Failing loudly:** `judge.mjs` exits 1 when the key is rejected, when there was work and nothing was judged, or when most rows were skipped because their screenshots were unavailable, so the "Notify on failure" step files an issue.
   Skipped rows are counted on their own, never as attempted.
   The counts (queued, judged, abstained, errors, skipped, deferred) go to the run's job summary.
   A spent 3.5 quota or grading budget is planned waiting, not a failure: the rest is counted as deferred and the run exits 0, even with nothing judged.
   A 3.5 that stays busy through its retries stops the run too; it exits 0 if it judged something, and 1 if it judged nothing.
-- **Which model judged:** each rubric stores the model that actually answered in `ai_rubric.model`, and each AI vote stores it in `votes.model`.
-- **One AI voter:** every vote the flash-lite chain casts uses one logical rater id, `ai:flash-lite`, whichever model answered.
-  `rater_id` is a voter's identity: the unique `(rater_id, pair_key)` index allows one vote per voter per matchup, and the judge skips pairs its rater id already voted on.
-  Per-model rater ids would let the backup vote a second time on a pair the primary already judged, giving the AI two votes on that matchup and skewing ELO toward the AI.
-  With one logical id, the database guarantees one AI vote per matchup, and the leaderboard (`ratings`, which never looks at `rater_id`) stays consistent.
-  The first pairwise run moves the earlier `ai:gemini-3.1-flash-lite` votes to `ai:flash-lite` with `model = 'gemini-3.1-flash-lite'`, so the new judge does not re-vote those pairs.
-  A model outside the chain (`--model M --allow-model`) is a different judge and votes as `ai:M`.
+- **Which model judged:** each rubric stores the model that actually answered in `ai_rubric.model`, and each comparison stores it in `comparisons.model`.
+- **The ELO-era AI votes** (`judge.mjs pairwise`) were removed on 2026-11-22 (owner, 2026-11-21).
+  The votes they cast stay in `votes` (rater `ai:flash-lite`, with `votes.model`), and ranking v2 imports them as `legacy-pairwise` comparisons.
 
 ## Ranking v2 (built, not switched on)
 
 The OpenSkill leaderboards (People, AI and Merged), the comparison log, the matchmaking and the stability analytics are described in [RANKING.md](RANKING.md).
-Their tables are additive (`comparisons`, `site_ratings`, `rank_history`, `site_fingerprints`, `rating_resets`, `ranking_runs`) and nothing on the site reads them yet.
+Their tables are additive (`comparisons`, `site_ratings`, `rank_history`, `site_fingerprints`, `rating_resets`, `ranking_runs`).
+Nothing writes `site_fingerprints` or `rating_resets` since change detection was removed on 2026-11-22; their rows stay, and the recompute still reads the stored resets.
 The daily comparison job (`pipeline/compare.mjs`) does nothing until the repository variable `RANKING_V2` is `true`.
 
 ## Required repo secrets
@@ -741,7 +733,7 @@ serve images.
 ## Local pipeline scripts
 
 - `pipeline/capture.mjs [--upload-only] [--only s] [--force]` - Playwright capture + R2 upload
-- `pipeline/judge.mjs rubric|pairwise [flags]` - Gemini grading / voting (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
+- `pipeline/judge.mjs rubric [flags]` - Gemini grading (`node --test tests/gemini-judge.test.mjs tests/judge-run.test.mjs tests/rubric.test.mjs` tests it offline with a mocked Gemini)
 - `npm run eval:rubric -- --sample 30 [--live]` - rubric v2 eval (offline token and cost estimate; `--live` grades the sample)
 - `npm run docs:rubric [-- --check]` - regenerate (or check) the rubric table in GRADING_CRITERIA.md from `pipeline/rubric.mjs`
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
@@ -756,7 +748,6 @@ serve images.
 - `node pipeline/fullpage-backfill.mjs [--limit N] [--minutes M] [--concurrency C] [--only s] [--dry-run]` - tall desktop and phone images with thumbnails (AVIF, `<shot_key>/<v>/`) for up to N listed sites captured before the capture made them; changes no grade, hero.jpg or capture date (the nightly free checks run it with a cap)
 - `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: changed or asked for, then 90 days old (finds redesigns)
 - `node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them; `--links N` also measures again up to N sites whose project link checks are due
-- `node scripts/detect-changes.mjs` - record page fingerprint changes (`rating_resets`)
 - `node scripts/simulate-ranking.mjs [--grades csv] [--votes-log log] [--out dir]` - offline evaluation of ranking v2
 - `scripts/backup-db.mjs` - DB → R2 snapshot · `scripts/restore-db.mjs` - snapshot → a new, empty database · `scripts/export-grades.mjs` - grades → CSV
 - `scripts/r2-check.mjs` - R2 connectivity · `scripts/r2-upload-one.mjs <key>` - single-site upload
