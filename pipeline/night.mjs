@@ -477,9 +477,10 @@ export async function planNight(ctx, state) {
     const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()) });
     await recordSites(ctx, s, "plan", [
       ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
+      ...sent.captureReview.map((url) => ({ url, entries: [["review", { url, why: "the capture was held back for the owner (a canvas-only page or an error status)" }]] })),
       ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
     ]);
-    if (sent.botWall.length || sent.collapsed.length) ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.collapsed.length} collapsed site(s) sent to the owner`);
+    if (sent.botWall.length || sent.captureReview.length || sent.collapsed.length) ctx.log(`Review queue: ${sent.botWall.length} bot-walled, ${sent.captureReview.length} held-capture and ${sent.collapsed.length} collapsed site(s) sent to the owner`);
   } catch (e) {
     ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);
   }
