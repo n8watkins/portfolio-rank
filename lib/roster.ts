@@ -65,12 +65,13 @@ export async function hiddenUrls(): Promise<Set<string>> {
 
 /**
  * Whether one site is hidden right now (the same rule as hiddenUrls), for
- * checks about a single site: a primary-key lookup, never cached, plus the
- * owners' marked rows (cached a minute per isolate, lib/ownership/same-site.mjs).
+ * checks about a single site (the print view, a speed check, a report by
+ * email; none of them a hot path): never cached, so a removal the hourly job
+ * applied in another isolate counts at once.
  */
 export async function isHidden(url: string): Promise<boolean> {
   await ensureSchema();
-  const [res, marks] = await Promise.all([db().execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND (${HIDDEN_WHERE})`, args: [url] }), ownerMarks(db())]);
+  const [res, marks] = await Promise.all([db().execute({ sql: `SELECT 1 FROM portfolios WHERE url = ? AND (${HIDDEN_WHERE})`, args: [url] }), ownerMarks(db(), { fresh: true })]);
   return res.rows.length > 0 || marks.isRemoved(url);
 }
 
