@@ -13,9 +13,11 @@
 //   retry_at      when capture may try a site again after a failed capture
 //                 (backoff), so one transient error never hides a site forever.
 //
-// When the list respells a site (pipeline/list-key.mjs: same key), the old row
-// is delisted and the new spelling gets a row of its own, as for any new site.
-// The old row holds the site's grade, votes and screenshots, so it is never
+// The feed build keeps a site's spelling when the list respells it in a way
+// that cannot name another site (pipeline/build-feed.mjs stickySpelling), so
+// most respellings never reach this sync. When another one does
+// (pipeline/list-key.mjs: same key), the old row is delisted and the new
+// spelling gets a row of its own, as for any new site. The old row holds the site's grade, votes and screenshots, so it is never
 // purged while its key is listed (a split site), and the sync counts split
 // sites in the job summary every night until they are merged.
 

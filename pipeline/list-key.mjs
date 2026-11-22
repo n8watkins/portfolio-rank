@@ -16,6 +16,50 @@ export function listKey(url) {
   }
 }
 
+// Query parameters that only say where a visitor came from, never which page
+// they get: utm_* and the click ids ad and mail platforms add.
+const TRACKING_PARAM = /^(utm_.+|fbclid|gclid|gbraid|wbraid|dclid|msclkid|yclid|twclid|igshid|mc_cid|mc_eid|_ga|_gl)$/i;
+
+/**
+ * The key of one spelling of an address, for the feed build's sticky
+ * spelling (pipeline/build-feed.mjs): two addresses with the same spelling
+ * key can only be one site. Stricter than listKey on purpose: listKey
+ * ignores the query and the fragment and the path's case, which can name two
+ * different portfolios (`/?user=a` and `/?user=b`, `#/alice` and `#/bob`).
+ * Only these may differ: the scheme, the host's case, a leading `www.`,
+ * trailing slashes on the path, the scheme's default port, tracking parameters
+ * (TRACKING_PARAM) added or removed, and an empty `?` or `#`. Everything else (path case, other query
+ * parameters and their order, the fragment, a port, credentials) must be
+ * exactly the same. Null for an address that is not http(s).
+ */
+export function spellingKey(url) {
+  let u;
+  try {
+    u = new URL(String(url).trim());
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  // URL drops a port that is its scheme's default.
+  const port = u.port ? `:${u.port}` : "";
+  const auth = u.username || u.password ? `${u.username}:${u.password}@` : "";
+  const query = u.search
+    .slice(1)
+    .split("&")
+    .filter((pair) => pair && !TRACKING_PARAM.test(decodeParamName(pair)))
+    .join("&");
+  return `${auth}${u.hostname.replace(/^www\./, "")}${port}${u.pathname.replace(/\/+$/, "")}${query ? `?${query}` : ""}${u.hash.length > 1 ? u.hash : ""}`;
+}
+
+function decodeParamName(pair) {
+  const name = pair.split("=")[0];
+  try {
+    return decodeURIComponent(name.replace(/\+/g, " "));
+  } catch {
+    return name;
+  }
+}
+
 /** Groups items by the key of their address: Map(key -> items, in order). */
 export function byListKey(items, urlOf = (x) => x) {
   const groups = new Map();
