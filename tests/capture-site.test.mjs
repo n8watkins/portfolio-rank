@@ -19,6 +19,8 @@ import { captureSite, keyOf } from "../pipeline/capture.mjs";
 import { BLOCKED_PREFIX, BOT_WALL } from "../pipeline/capture-blocked.mjs";
 import { dueForCapture, ensureRosterSchema } from "../pipeline/roster.mjs";
 import { ensureFreshnessSchema } from "../lib/freshness.mjs";
+import { ensureCaptureProblemSchema } from "../lib/capture-problems.mjs";
+import { FACTS_VERSION } from "../pipeline/facts.mjs";
 import { ensureGeminiLog } from "../pipeline/gemini-log.mjs";
 import { DEFAULT_PLAN } from "../pipeline/budget.mjs";
 import { PRIMARY_MODEL, BACKUP_MODEL } from "../pipeline/gemini.mjs";
@@ -47,6 +49,10 @@ const pages = {
   "/refresh": `<!doctype html><title>Home</title><body><p>Hello there, welcome to my new website, coming along soon</p></body>`,
   // A forced re-capture (not marked refresh) of a site with a good capture.
   "/forced": `<!doctype html><title>Home</title><body><p>Hello there, welcome to my new website, coming along soon</p></body>`,
+  // A refresh of a site that had a résumé link and a long text, now without either.
+  "/refresh-worse": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
+  // A refresh whose phone view (the browser's second visit) meets a bot check: see the server below.
+  "/phone-bot": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
 };
 // A bot check in place of the site, answered with 403 like Cloudflare's.
 const BOT = `<!doctype html><title>Just a moment...</title><body><h1>example.dev</h1><p>Verifying you are human. This may take a few seconds.</p>
@@ -63,8 +69,13 @@ const OLD = { shot_key: "oldkey00oldkey00", meta: JSON.stringify({ motion: false
 
 // Six captures side by side while other test files run: far more than the runner's per-test timeout.
 before(async () => {
+  const visits = {};
   server = http.createServer((req, res) => {
-    if (req.url === "/bot") return res.writeHead(403, { "content-type": "text/html" }).end(BOT);
+    if (req.url === "/bot" || req.url === "/refresh-bot") return res.writeHead(403, { "content-type": "text/html" }).end(BOT);
+    // The browser's page loads only (the plain pre-check sends no sec-fetch-dest): the second is the phone view.
+    if (req.url === "/phone-bot" && req.headers["sec-fetch-dest"] === "document" && (visits[req.url] = (visits[req.url] ?? 0) + 1) >= 2) {
+      return res.writeHead(403, { "content-type": "text/html" }).end(BOT);
+    }
     res.writeHead(pages[req.url] ? 200 : 404, { "content-type": "text/html" }).end(pages[req.url] ?? "not found");
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -74,18 +85,27 @@ before(async () => {
   await ensureRosterSchema(db);
   // A failed refresh records its backoff there (capture.mjs's main creates it the same way).
   await ensureFreshnessSchema(db);
-  // Two sites that already have a good capture.
-  for (const p of ["/refresh", "/forced"]) {
+  // What a re-capture made worse is recorded there (capture.mjs's main creates it the same way).
+  await ensureCaptureProblemSchema(db);
+  // Sites that already have a good capture.
+  for (const p of ["/refresh", "/forced", "/refresh-bot", "/phone-bot"]) {
     await db.execute({
       sql: "INSERT INTO portfolios (url, name, status, reason, shot_key, meta, page_text, facts, checked_at, captured_at) VALUES (?, 'Old Site', 'live', '', ?, ?, ?, '{}', ?, ?)",
       args: [url(p), OLD.shot_key, OLD.meta, OLD.page_text, OLD.captured_at, OLD.captured_at],
     });
   }
+  // One whose stored capture had a résumé link and a long text.
+  await db.execute({
+    sql: "INSERT INTO portfolios (url, name, status, reason, shot_key, meta, page_text, facts, checked_at, captured_at) VALUES (?, 'Old Site', 'live', '', ?, ?, ?, ?, ?, ?)",
+    args: [url("/refresh-worse"), OLD.shot_key, OLD.meta, "Jane Doe. ".repeat(300), JSON.stringify({ v: FACTS_VERSION, resume: true, github: false, contact: false }), OLD.captured_at, OLD.captured_at],
+  });
   browser = await chromium.launch();
   const run = async (p, opts = {}) => {
     results[p] = await captureSite(browser, { url: url(p), name: p === "/minimal" ? "Sam Lee" : "Jane Doe" }, { db, s3: null, root, ...opts });
   };
   await Promise.all([run("/picker"), run("/minimal"), run("/empty"), run("/bot"), run("/refresh", { refresh: true }), run("/forced")]);
+  // The refreshes for the review flag and the worse-capture record, after the first six (the machine is shared).
+  await Promise.all([run("/refresh-bot", { refresh: true }), run("/phone-bot", { refresh: true }), run("/refresh-worse", { refresh: true })]);
 }, { timeout: 600000 });
 
 after(async () => {
@@ -180,7 +200,7 @@ test("only the capture that shows the site reaches the grading queue", async () 
        pair_key TEXT, rater_type TEXT NOT NULL DEFAULT 'anon', rater_id TEXT NOT NULL,
        created_at TEXT NOT NULL DEFAULT (datetime('now')), delta INTEGER, starred INTEGER NOT NULL DEFAULT 0, model TEXT)`);
   // The two good old captures are graded already; only new captures wait.
-  await db.execute({ sql: "UPDATE portfolios SET ai_rubric = '{\"tier\":\"B\",\"is_portfolio\":true}' WHERE url IN (?, ?)", args: [url("/refresh"), url("/forced")] });
+  await db.execute({ sql: "UPDATE portfolios SET ai_rubric = '{\"tier\":\"B\",\"is_portfolio\":true}' WHERE url IN (?, ?, ?, ?, ?)", args: [url("/refresh"), url("/forced"), url("/refresh-bot"), url("/phone-bot"), url("/refresh-worse")] });
   const ctx = {
     db,
     plan: DEFAULT_PLAN,
@@ -196,4 +216,35 @@ test("only the capture that shows the site reaches the grading queue", async () 
   const live = (await db.execute("SELECT url FROM portfolios WHERE status = 'live' AND ai_rubric IS NULL AND facts IS NOT NULL")).rows.map((r) => String(r.url)).sort();
   assert.deepEqual(live, [url("/minimal"), url("/picker")].sort(), "the captures that show the site have their evidence");
   assert.equal(state.estimate.perStage.grade_new, live.length, "the blocked ones never wait for a grade");
+});
+
+test("a refresh that meets a bot check puts the site on the owner's review list and keeps its capture", async () => {
+  assert.match(results["/refresh-bot"], /a bot or security check stood in for the site\); the existing capture is kept$/);
+  const row = await rowOf("/refresh-bot");
+  assert.equal(Number(row.needs_review), 1);
+  assert.equal(row.status, "live");
+  assert.equal(row.shot_key, OLD.shot_key);
+  assert.equal(row.page_text, OLD.page_text);
+  const failure = (await db.execute({ sql: "SELECT reason FROM refresh_failures WHERE url = ?", args: [url("/refresh-bot")] })).rows[0];
+  assert.equal(failure.reason, `error: ${BLOCKED_PREFIX}${BOT_WALL}`);
+});
+
+test("a bot check only on the phone view of a refresh is a refresh failure with that reason, not a review", async () => {
+  assert.match(results["/phone-bot"], /\(phone view\)\); the existing capture is kept$/);
+  const row = await rowOf("/phone-bot");
+  assert.equal(Number(row.needs_review), 0);
+  assert.equal(row.shot_key, OLD.shot_key);
+  const failure = (await db.execute({ sql: "SELECT reason FROM refresh_failures WHERE url = ?", args: [url("/phone-bot")] })).rows[0];
+  assert.equal(failure.reason, `error: ${BLOCKED_PREFIX}${BOT_WALL} (phone view)`);
+});
+
+test("a refresh that loses the résumé link and most of the text is recorded as worse", async () => {
+  assert.match(results["/refresh-worse"], /^live/);
+  const rows = (await db.execute({ sql: "SELECT * FROM capture_changes WHERE url = ?", args: [url("/refresh-worse")] })).rows;
+  assert.equal(rows.length, 1);
+  assert.deepEqual(JSON.parse(String(rows[0].lost)), ["resume", "text"]);
+  assert.equal(Number(rows[0].measuring), 0);
+  assert.equal(Number(rows[0].old_chars), "Jane Doe. ".repeat(300).length);
+  assert.ok(Number(rows[0].new_chars) < 900);
+  assert.equal(rows[0].cleared_at, null);
 });
