@@ -6,7 +6,7 @@
 //
 // measureFacts is pure; checkLinks makes HTTP requests (HEAD, then GET when
 // HEAD is refused), capped in number and time, never to private addresses.
-import { RESUME_PATH, RESUME_WORDS, TAG_ATTRS, controlFacts, extractControls } from "./page-controls.mjs";
+import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
 
 // 2 (2026-11-21): resume, GitHub, contact, project links and in-page
@@ -25,8 +25,6 @@ export const FREE_HOSTS =
 const NOT_PROJECT =
   /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com)$/i;
 
-const GH_RESERVED =
-  /^(sponsors|topics|features|about|pricing|marketplace|orgs|organizations|settings|notifications|explore|login|join|new|search|apps|collections|readme|site|customer-stories|enterprise|team|security|contact|trending|events|github-copilot)$/i;
 
 // Known templates, by a marker they leave in the HTML. The value is the name
 // stored in facts.template.
@@ -63,37 +61,16 @@ const host = (u) => {
     return "";
   }
 };
-const decode = (s) =>
-  String(s ?? "")
-    .replace(/&amp;/gi, "&")
-    .replace(/&#x2F;/gi, "/")
-    .replace(/&#47;/g, "/")
-    .replace(/&quot;/gi, '"');
-
-// An <a> tag, its attributes read with quoted values whole: a Tailwind class
-// such as "[&>svg]:size-4" holds a ">" that would otherwise end the tag
-// before its href.
-const LINK = new RegExp(String.raw`<a\b(${TAG_ATTRS})>([\s\S]*?)<\/a>`, "gi");
-
-/** Every <a href> on the page, absolute, with its text. */
+/**
+ * Every <a href> on the page, absolute, with its text and aria-label. Read by
+ * the tag scanner (./page-controls.mjs scanPage), so a Tailwind class such as
+ * "[&>svg]:size-4" does not end the tag before its href, and a stray quote
+ * (href=/o'neil, title=5") is read as a browser reads it.
+ */
 export function extractLinks(html, baseUrl) {
-  const out = [];
-  for (const m of String(html ?? "").matchAll(LINK)) {
-    const href = m[1].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-    const raw = decode(href?.[1] ?? href?.[2] ?? href?.[3] ?? "").trim();
-    if (!raw) continue;
-    const text = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
-    const aria = m[1].match(/\baria-label\s*=\s*["']([^"']*)["']/i)?.[1] ?? "";
-    let abs;
-    try {
-      abs = new URL(raw, baseUrl).href;
-    } catch {
-      continue;
-    }
-    out.push({ raw, href: abs, text: `${text} ${aria}`.trim() });
-  }
-  return out;
+  return scanPage(html, baseUrl).links;
 }
+
 
 /** Is this a private, loopback or link-local address that must never be fetched? */
 export function isPrivateHost(hostname) {
@@ -119,26 +96,23 @@ export function footerYear(text, now = new Date()) {
 // The label of a nav control that scrolls to a section of the page.
 const NAV_SECTION = /^\s*(home|about(?: me)?|projects?|work|portfolio|skills|experience|contact(?: me)?|blog|services|education|testimonials)\s*$/;
 
-/** A GitHub profile or repository URL (not github.com's own pages). */
-export function isGithubProfile(href) {
-  try {
-    const u = new URL(href);
-    if (u.hostname.toLowerCase().replace(/^www\./, "") !== "github.com") return false;
-    const first = u.pathname.split("/").filter(Boolean)[0];
-    return Boolean(first) && !GH_RESERVED.test(first);
-  } catch {
-    return false;
-  }
-}
+export { isGithubProfile };
 
 /**
- * Every link on the page as extractLinks returns it, plus the URLs written
- * in non-link controls (a button's window.open('https://github.com/me/app'),
- * data-href), so a project opened from a button is a project link too.
+ * Every link on the page as extractLinks returns it, plus the URLs a
+ * non-link control navigates to from its onclick (a button's
+ * window.open('https://github.com/me/app') or location.href = '...'), so a
+ * project opened from a button is a project link too. URLs merely written in
+ * data- attributes (tracking, form endpoints) are not. `scan` is a scanPage
+ * result to reuse.
+ * @param {string} html
+ * @param {string} baseUrl
+ * @param {ReturnType<typeof scanPage> | null} [scan]
  */
-export function pageLinks(html, baseUrl) {
-  const fromControls = extractControls(html, baseUrl).flatMap((c) => c.urls.map((href) => ({ raw: href, href, text: c.label })));
-  return [...extractLinks(html, baseUrl), ...fromControls];
+export function pageLinks(html, baseUrl, scan = null) {
+  const page = scan ?? scanPage(html, baseUrl);
+  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label })));
+  return [...page.links, ...fromControls];
 }
 
 /**
@@ -179,9 +153,11 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
  * Facts from a page's HTML and visible text (pure). `motion` comes from the
  * capture's frame difference; `project_links` is filled by checkLinks.
  */
-export function measureFacts({ html = "", text = "", url, finalUrl, name = "", motion = null, source = "rendered", now = new Date() }) {
+export function measureFacts({ html = "", text = "", url, finalUrl, name = "", motion = null, source = "rendered", now = new Date(), scan = null }) {
   const base = finalUrl || url;
-  const links = extractLinks(html, base);
+  // One pass over the HTML (./page-controls.mjs); measurePage passes its own in.
+  const page = scan ?? scanPage(html, base);
+  const links = page.links;
   const self = host(base);
   const internal = new Set();
   const sections = new Set();
@@ -212,21 +188,30 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
     }
   }
   // Buttons and other non-link controls: a "View Resume" button, a GitHub icon button, a "Contact" button.
-  const controls = extractControls(html, base);
+  const controls = page.controls;
   const byControl = controlFacts(controls, isGithubProfile);
   resume ||= byControl.resume;
   github ||= byControl.github;
   contactLink ||= byControl.contact;
-  // A nav button that scrolls to a section ("Projects", "About") is an in-page section, as a "#projects" link is.
+  // A nav button that scrolls to a section ("Projects", "About") is an in-page
+  // section, as a "#projects" link is: not when it sits in a link (the link
+  // decides), and not twice when a "#about" link already names its section.
+  const sectionKey = (w) => w.toLowerCase().replace(/[^a-z]+/g, " ").trim().replace(/\s+me$/, "").replace(/s$/, "");
+  const hashKeys = new Set([...sections].map(sectionKey));
   for (const c of controls) {
+    if (c.inLink != null) continue;
     const word = c.text.toLowerCase().match(NAV_SECTION)?.[1];
-    if (word) sections.add(word.replace(/\s+me$/, ""));
+    if (!word) continue;
+    const key = sectionKey(word);
+    if (hashKeys.has(key)) continue;
+    hashKeys.add(key);
+    sections.add(`nav:${key}`);
   }
-  const signals = portfolioSignals(html, name);
+  const signals = portfolioSignals(html, name, page);
   const raw = String(html ?? "");
   const template = TEMPLATE_MARKERS.find(([re]) => re.test(raw))?.[1] ??
     (/brittany\s*chiang/i.test(raw) && !/brittany/i.test(name) ? "Brittany Chiang v4 clone" : null);
-  const generator = raw.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? "";
+  const generator = page.generator;
   const builder =
     BUILDERS.find(([re, label]) => re.test(raw) || generator.toLowerCase().includes(label.toLowerCase()))?.[1] ?? null;
   const words = String(text ?? "").split(/\s+/).filter(Boolean).length;
@@ -238,7 +223,7 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
     resume,
     github,
     contact: contactLink || /<form\b/i.test(raw),
-    footer_year: footerYear(text) ?? footerYear(raw.replace(/<[^>]+>/g, " ")),
+    footer_year: footerYear(text) ?? footerYear(stripTags(raw)),
     internal_pages: internal.size,
     sections: sections.size,
     template,
@@ -303,8 +288,9 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
 
 /** measureFacts plus the project-link check. */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
-  const facts = measureFacts(input);
-  const urls = projectLinkCandidates(pageLinks(input.html, facts.final_url), facts.final_url);
+  const scan = scanPage(input.html, input.finalUrl || input.url);
+  const facts = measureFacts({ ...input, scan });
+  const urls = projectLinkCandidates(pageLinks(input.html, facts.final_url, scan), facts.final_url);
   facts.project_links = await checkLinks(urls, { fetchImpl, userAgent, timeoutMs });
   return facts;
 }

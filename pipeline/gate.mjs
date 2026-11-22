@@ -1,6 +1,7 @@
 // The HTTP gate shared by pipeline/capture.mjs (before screenshots) and
 // pipeline/health.mjs (the weekly health check): is a site up, parked or for
 // sale? Tables ported from pipeline/check_parking_redirects.py.
+import { firstTitle, removeElements, stripTags } from "./page-controls.mjs";
 
 export const PARKING_DOMAINS = new Set([
   "sedoparking.com", "sedo.com", "bodis.com", "parkingcrew.net",
@@ -72,8 +73,7 @@ const findPhrase = (s) => {
 };
 
 /** The page's <title>, if any. */
-export const titleOf = (html) =>
-  (String(html ?? "").match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "").trim();
+export const titleOf = (html) => firstTitle(html).trim();
 
 /**
  * The parking phrase that marks this page as parked, or undefined. Pass the
@@ -120,11 +120,9 @@ export function readRenderedPage() {
 
 /** Visible text of an HTML document, roughly: tags, scripts and styles removed. */
 export function visibleText(html) {
-  return String(html ?? "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+  // Linear passes (./page-controls.mjs): the quick grade reads up to 1.5 MB
+  // from any address, and /<[^>]+>/g took 13 s on 500 KB of "a <b && c".
+  return stripTags(removeElements(removeElements(removeElements(html, "script"), "style"), "noscript"))
     .replace(/&[a-z#0-9]+;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
