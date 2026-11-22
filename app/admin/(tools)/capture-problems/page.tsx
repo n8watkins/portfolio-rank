@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { CaptureAgain } from "@/components/admin/CaptureAgain";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
@@ -62,14 +62,19 @@ function healthTag(h: string | null) {
   return { text: "Health: not checked", cls: tagWrap };
 }
 
-/** When it happened and when it is tried again, in the group's words. */
-function timing(r: Row) {
+/** When it happened and when it is tried again, in the group's words: phrases that each stay on one line. */
+function timing(r: Row): string[] {
   const at = day(r.at);
   const next = day(r.retryAt);
-  if (r.group === "A") return [at && `Failed ${at}`, r.attempts > 1 && `${r.attempts} times in a row`, next && `next try ${next}`].filter(Boolean).join(" · ");
-  if (r.group === "B") return [at && `Last tried ${at}`, r.attempts > 0 && `${r.attempts} ${r.attempts === 1 ? "try" : "tries"}`, next && `next try ${next}`].filter(Boolean).join(" · ");
-  if (r.group === "D") return at ? `Re-captured ${at}` : "";
-  return "";
+  const parts =
+    r.group === "A"
+      ? [at && `Failed ${at}`, (r.attempts ?? 0) > 1 && `${r.attempts} times in a row`, next && `next try ${next}`]
+      : r.group === "B"
+        ? [at && `Last tried ${at}`, (r.attempts ?? 0) > 0 && `${r.attempts} ${r.attempts === 1 ? "try" : "tries"}`, next && `next try ${next}`]
+        : r.group === "D"
+          ? [at && `Re-captured ${at}`]
+          : [];
+  return parts.filter((p): p is string => typeof p === "string" && p.length > 0);
 }
 
 function ProblemRow({ r, base }: { r: Row; base: string | null }) {
@@ -86,12 +91,18 @@ function ProblemRow({ r, base }: { r: Row; base: string | null }) {
         <div className="min-w-0">
           <ScreenshotFrame src={base ? frameOf(base, "hero.jpg") : null} alt={captured ? `${domain}, the stored capture from ${captured}` : `${domain}: no stored capture`} domain={domain} className="rounded-lg ring-1 ring-edge" />
           <p className="mt-1.5 text-xs text-mute" data-capture-date>
-            {captured ? `Capture ${captured}` : "No capture"}
+            {captured ? (
+              <>
+                Captured <span className="whitespace-nowrap">{captured}</span>
+              </>
+            ) : (
+              "No capture"
+            )}
           </p>
         </div>
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
-            <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1 font-bold break-all hover:text-accent">
+            <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center gap-1 font-bold [overflow-wrap:anywhere] hover:text-accent">
               {domain}
               <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
               <span className="sr-only">(opens the site)</span>
@@ -106,7 +117,16 @@ function ProblemRow({ r, base }: { r: Row; base: string | null }) {
               Kept off your review list: our own second visit may have tripped the site&rsquo;s protection.
             </p>
           )}
-          {when && <p className="mt-1 text-xs text-mute tabular-nums">{when}</p>}
+          {when.length > 0 && (
+            <p className="mt-1 text-xs text-mute tabular-nums" data-timing>
+              {when.map((w, i) => (
+                <span key={w}>
+                  {i > 0 && " · "}
+                  <span className="whitespace-nowrap">{w}</span>
+                </span>
+              ))}
+            </p>
+          )}
           <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="State">
             <li className={grade.cls} data-grade>
               {grade.text}
@@ -119,18 +139,18 @@ function ProblemRow({ r, base }: { r: Row; base: string | null }) {
             </li>
             {!r.listed && <li className={tagWrap}>Off the list</li>}
           </ul>
-        </div>
-      </div>
-      {(again || r.reviewId != null) && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-edge pt-3">
-          {again && <CaptureAgain url={r.url} domain={domain} />}
-          {r.reviewId != null && (
-            <Link href="/admin/review" className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline" data-open-review>
-              Open in Review
-            </Link>
+          {(again || r.reviewId != null) && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              {again && <CaptureAgain url={r.url} domain={domain} />}
+              {r.reviewId != null && (
+                <Link href="/admin/review" className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline" data-open-review>
+                  Open in Review
+                </Link>
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
     </li>
   );
 }
@@ -185,7 +205,8 @@ export default async function AdminCaptureProblemsPage() {
             )}
             {g === "D" && p.measuring.length > 0 && (
               <details className="group/m mt-4" data-measuring>
-                <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-mute hover:text-ink">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-semibold text-mute hover:text-ink [&::-webkit-details-marker]:hidden">
+                  <ChevronDown className="h-4 w-4 shrink-0 transition group-open/m:rotate-180" aria-hidden />
                   {n(p.measuring.length)} changed with new measuring code (not counted)
                 </summary>
                 <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">
