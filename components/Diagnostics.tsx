@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import type { Inspection } from "@/app/api/inspect/route";
 import type { PsiResult } from "@/app/api/psi/route";
 import type { CacheMeta } from "@/lib/cache";
-import { FRESHNESS_UI } from "@/lib/freshness-flag";
 import { useClientSession } from "@/lib/session-client";
 
 function domainOf(url: string): string {
@@ -33,50 +32,20 @@ function scoreColor(s: number | null | undefined) {
   return "text-red-400";
 }
 
-/** "Nov 3", with the year when it isn't this year's. */
-function shortDate(d: Date) {
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
-  });
-}
-
 /**
- * How fresh a result is (lib/freshness.mjs): "Measured Nov 11 · site
- * unchanged since" when a later check found the page the same, and
- * "Re-measuring, the site changed" while a due result runs again.
+ * When a result was measured (lib/freshness.mjs), and "updating in the
+ * background" while a due result runs again.
  */
 function MeasuredOn({ meta }: { meta: CacheMeta }) {
-  const { measuredAt, stale, staleReason, unchangedSince } = meta;
+  const { measuredAt, stale } = meta;
   if (!measuredAt) return null;
   const d = new Date(measuredAt);
   if (Number.isNaN(d.getTime())) return null;
-  // Until FRESHNESS_ENABLED (lib/freshness-flag.ts): the line as it was.
-  if (!FRESHNESS_UI) {
-    return (
-      <p className="mt-3 text-xs text-mute">
-        Measured on{" "}
-        <time dateTime={measuredAt}>{d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</time>
-        {stale ? " · updating in the background" : ""}
-      </p>
-    );
-  }
-  const when = <time dateTime={measuredAt}>{shortDate(d)}</time>;
-  if (stale) {
-    return (
-      <p className="mt-3 text-xs text-mute" role="status">
-        {staleReason === "changed" ? "Re-measuring, the site changed" : "Re-measuring"} · last measured {when}
-      </p>
-    );
-  }
-  const checked = unchangedSince ? new Date(unchangedSince) : null;
   return (
     <p className="mt-3 text-xs text-mute">
-      Measured {when}
-      {checked && !Number.isNaN(checked.getTime()) && (
-        <span title={`Checked again ${shortDate(checked)}: no changes`}> · site unchanged since</span>
-      )}
+      Measured on{" "}
+      <time dateTime={measuredAt}>{d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</time>
+      {stale ? " · updating in the background" : ""}
     </p>
   );
 }
@@ -95,40 +64,24 @@ const FAILED = { ok: false, error: "failed" } as const;
  * arrives, `initial` (what the server had cached, so the first paint already
  * has the right shape) or null, so switching URLs never shows the previous
  * site's result.
- * retry() asks again. With `pollStaleMs`, a result that is being measured
- * again (`stale`) is asked for again after that long, a few times, so the
- * new result replaces "Re-measuring" without a reload.
+ * retry() asks again.
  */
-const STALE_POLLS = 4;
-function useJson<T>(endpoint: string, { initial = null, pollStaleMs }: { initial?: T | null; pollStaleMs?: number } = {}): { data: T | null; retry: () => void } {
+function useJson<T>(endpoint: string, { initial = null }: { initial?: T | null } = {}): { data: T | null; retry: () => void } {
   const [attempt, setAttempt] = useState(0);
   const key = `${attempt}:${endpoint}`;
-  const [result, setResult] = useState<{ key: string; data: T; polls: number } | null>(null);
-  const [polls, setPolls] = useState(0);
+  const [result, setResult] = useState<{ key: string; data: T } | null>(null);
   useEffect(() => {
     let live = true;
     fetch(endpoint)
       .then((r) => r.json())
-      .then((d) => live && setResult({ key, data: d, polls }))
-      .catch(() => live && setResult({ key, data: FAILED as T, polls }));
+      .then((d) => live && setResult({ key, data: d }))
+      .catch(() => live && setResult({ key, data: FAILED as T }));
     return () => {
       live = false;
     };
-  }, [endpoint, key, polls]);
+  }, [endpoint, key]);
   const data = result?.key === key ? result.data : attempt === 0 ? initial : null;
-  const stale = Boolean((data as CacheMeta | null)?.stale);
-  useEffect(() => {
-    if (!pollStaleMs || !stale || polls >= STALE_POLLS) return;
-    const t = setTimeout(() => setPolls((p) => p + 1), pollStaleMs);
-    return () => clearTimeout(t);
-  }, [pollStaleMs, stale, polls, key]);
-  return {
-    data,
-    retry: () => {
-      setPolls(0);
-      setAttempt((a) => a + 1);
-    },
-  };
+  return { data, retry: () => setAttempt((a) => a + 1) };
 }
 
 export function useInspection(url: string, initial: Inspection | null = null) {
@@ -316,10 +269,8 @@ function ShareSkeleton() {
 
 /** Full panel for the detail page. Order: Lighthouse → Polish → Share card. */
 export function DetailDiagnostics({ url, initialInspection = null }: { url: string; initialInspection?: Inspection | null }) {
-  // With FRESHNESS_ENABLED, a result being measured again is asked for again:
-  // a PageSpeed run takes about 30 seconds, the polish check a few.
-  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { initial: initialInspection, pollStaleMs: FRESHNESS_UI ? 8_000 : undefined });
-  const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`, { pollStaleMs: FRESHNESS_UI ? 35_000 : undefined });
+  const { data: inspect, retry: retryInspect } = useJson<Inspection>(`/api/inspect?url=${encodeURIComponent(url)}`, { initial: initialInspection });
+  const { data: psi, retry: retryPsi } = useJson<PsiResult>(`/api/psi?url=${encodeURIComponent(url)}`);
   const psiFailure = psi && !psi.ok ? psiProblem(psi.error) : null;
 
   return (

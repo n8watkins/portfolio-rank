@@ -114,7 +114,7 @@ export async function ensureRosterSchema(db) {
 
 /**
  * SQL condition for rows the free background jobs may work on (captures and
- * their retries, the screenshot refresh, tall images, fingerprints,
+ * their retries, the screenshot refresh, tall images,
  * Lighthouse, link checks, PageSpeed prewarm, the door's review rows): the
  * rule main has always had (on the list, not taken off it: 'down'), less the
  * sites on the not-answering ladder while its marks hold

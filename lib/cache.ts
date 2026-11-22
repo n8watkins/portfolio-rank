@@ -3,7 +3,7 @@ import { runInBackground } from "./background";
 import { decide, type CheckKind } from "./freshness.mjs";
 
 /** Why a stored result is being measured again (lib/freshness.mjs decide). */
-export type StaleReason = "changed" | "forced" | "max_age" | "failed";
+export type StaleReason = "forced" | "max_age" | "failed";
 
 /** What every cached lookup returns on top of its own fields. */
 export type CacheMeta = {
@@ -11,10 +11,8 @@ export type CacheMeta = {
   measuredAt?: string;
   /** True when the result is due again and a refresh is under way. */
   stale?: boolean;
-  /** With `stale`, why: the site changed, the admin asked, or it is past its maximum age. */
+  /** With `stale`, why: the admin or the owner asked, it failed, or it is past its maximum age. */
   staleReason?: StaleReason;
-  /** When a later check found the site unchanged since this was measured (ISO 8601). */
-  unchangedSince?: string;
 };
 
 // Only one isolate refreshes a given key at a time: it takes a lease row in the
@@ -62,26 +60,26 @@ export type CacheOptions<T> = {
    */
   leaseOnMiss?: { busy: () => T };
   /**
-   * The site's change rule instead of a fixed TTL (lib/freshness.mjs): the
-   * result is reused while the page is unchanged, and due again when its
-   * fingerprint changed, the admin pressed "Re-measure", or it is older
-   * than the kind's maximum age; a failure keeps its short retry window.
+   * The site's check rule instead of a fixed TTL (lib/freshness.mjs): the
+   * result is due again when the admin pressed "Re-measure" or the owner
+   * asked (forced_at), or when it is older than the kind's maximum age; a
+   * failure keeps its short retry window.
    */
   freshness?: { kind: CheckKind; url: string };
 };
 
-type Entry<T> = { data: T; at: number; due: { run: boolean; reason: StaleReason | "missing" | null; unchangedSince: number | null } };
+type Entry<T> = { data: T; at: number; due: { run: boolean; reason: StaleReason | "missing" | null } };
 
 /**
  * The stored result for `k` and whether it is due again: by the site's
- * change rule when `freshness` is given (one query reads the result and the
- * site's fingerprint row together), else by age against `ttlOf`.
+ * check rule when `freshness` is given (one query reads the result and the
+ * site's site_freshness row together), else by age against `ttlOf`.
  */
 export async function readEntry<T>(k: string, ttlOf: (data: T) => number, isFailure: (data: T) => boolean, freshness?: { kind: CheckKind; url: string }): Promise<Entry<T> | null> {
   const row = freshness
     ? (
         await db().execute({
-          sql: `SELECT c.v, c.at, f.checked_at, f.changed_at, f.forced_at
+          sql: `SELECT c.v, c.at, f.forced_at
                 FROM (SELECT ? AS k, ? AS u) q
                 LEFT JOIN cache c ON c.k = q.k
                 LEFT JOIN site_freshness f ON f.url = q.u`,
@@ -97,7 +95,7 @@ export async function readEntry<T>(k: string, ttlOf: (data: T) => number, isFail
     return { data, at, due: due as Entry<T>["due"] };
   }
   const old = Date.now() - at >= ttlOf(data);
-  return { data, at, due: { run: old, reason: old ? (isFailure(data) ? "failed" : "max_age") : null, unchangedSince: null } };
+  return { data, at, due: { run: old, reason: old ? (isFailure(data) ? "failed" : "max_age") : null } };
 }
 
 /** The CacheMeta for a stored entry. */
@@ -106,8 +104,6 @@ export function metaOf<T>(entry: Entry<T>): CacheMeta {
   if (entry.due.run) {
     meta.stale = true;
     if (entry.due.reason && entry.due.reason !== "missing") meta.staleReason = entry.due.reason;
-  } else if (entry.due.unchangedSince != null) {
-    meta.unchangedSince = new Date(entry.due.unchangedSince).toISOString();
   }
   return meta;
 }
@@ -132,9 +128,8 @@ export async function peekCached<T extends object>(namespace: string, key: strin
  * Read-through cache in the `cache` table (`<namespace>:<key>` → JSON, `at` =
  * when it was measured).
  *
- * - Fresh hit: returned as is (with `unchangedSince` when a fingerprint check
- *   since found the site unchanged).
- * - Due hit (older than its TTL, or by the site's change rule with
+ * - Fresh hit: returned as is.
+ * - Due hit (older than its TTL, or by the site's check rule with
  *   `freshness`): returned at once with `stale: true` and `staleReason`, and
  *   a refresh runs in the background (Workers `ctx.waitUntil`), at most one
  *   per key across isolates. A failed refresh keeps the old good result and
