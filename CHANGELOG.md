@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 - 2026-11-22
+
+### Fixed
+
+- Resume, GitHub, contact and project checks now see buttons and pages that load late, so fewer sites are wrongly marked as missing them.
+- A site the community list respells keeps its grade, votes and rank.
+
 ## 0.6.0 - 2026-11-18
 
 ### New

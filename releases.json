@@ -4,6 +4,42 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.6.1",
+      "tag": "v0.6.1",
+      "date": "2026-11-22",
+      "time": "2026-11-22T17:41:35Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.6.1",
+      "previous": "v0.6.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "facts",
+          "text": "Resume, GitHub, contact and project checks now see buttons and pages that load late, so fewer sites are wrongly marked as missing them.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "4b0bf5437165619da6f23d564bf96048d2421a90",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/4b0bf5437165619da6f23d564bf96048d2421a90"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "list",
+          "text": "A site the community list respells keeps its grade, votes and rank.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "2d2aaf62dd1ed6a625fb163d0b0cec3ff56f69de",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/2d2aaf62dd1ed6a625fb163d0b0cec3ff56f69de"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.6.0",
       "tag": "v0.6.0",
       "date": "2026-11-18",
