@@ -375,6 +375,7 @@ Each one watches the jobs above.
 | `grade-compare.yml` (Weekly grade comparison) | Sunday 18:00 UTC; manual | compares old and new model grades, no Gemini | Running, Going |
 | `judge-vote.yml` (AI votes and comparisons, manual fallback) | manual only | the older AI votes, or the ranking v2 comparisons | Off, Going (the older votes) |
 | `regrade-not-portfolio.yml` (Re-check not-a-portfolio grades) | manual only | a one-off re-check tool | Off |
+| `remeasure-all.yml` (Re-capture and re-measure the whole list) | manual only | re-captures every listed site in parallel shards after the measuring code changed, no AI | Off |
 | `discover.yml` (Discover portfolios) | daily 22:00 UTC, gated; manual | finds new sites | Off |
 | `backup.yml` (Backup DB to R2) | daily 05:00 UTC; manual | database snapshot | Running |
 | `limits.yml` (Free limits snapshot) | daily 13:30 UTC; manual | free-limit numbers, backup freshness | Running |
