@@ -2,6 +2,7 @@
 
 How PortfolioRank stays current with **no manual work**. This is the source of
 truth for the data flow and the GitHub Actions.
+The short version, every job and the order they run in, is [docs/HOW-IT-RUNS.md](docs/HOW-IT-RUNS.md).
 
 ## Data flow
 
@@ -32,14 +33,21 @@ emmabostian/developer-portfolios (upstream, community-curated)
 
 `data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
 Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`, exactly the health check's `normKey`: the address lower-cased, host without www, path without the trailing slash; scheme, port, query and fragment ignored).
-`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address exactly as the list spells it.
+`generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address as the list spells it, except a site already on the feed that the list respelled (below).
 
 #### Respelled sites
 
 A site's address is its key everywhere in the database (grade, votes, ratings, screenshots, likes, lists, claims, review history).
-When the list respells a site, the old row is delisted and the new spelling gets a row of its own, captured and graded like a new site, so an upstream fix to a broken address takes effect at once.
-Nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N" (sites respelled more than once, and keys with two listed rows, separately).
-Merging them is a separate change.
+A site is graded once, so the feed build keeps a site's spelling when the list respells it (`pipeline/build-feed.mjs` `stickySpelling`, owner 2026-11-21).
+When an address on the list differs from one already on `feed.json` only in the scheme, the host's case, a leading `www.`, trailing slashes or tracking parameters (`utm_*`, `fbclid`, `gclid` and the like; `pipeline/list-key.mjs` `spellingKey`), the feed keeps its current spelling and takes only the entry's name and tagline.
+The database row, its grade, votes, screenshots, claims and profile address are untouched, and the roster sync delists and lists nothing.
+Every spelling on the list of that one site counts, however many the list has; the kept spelling must also have the same `listKey` as the list's, so exclusions and duplicates are unchanged.
+The build's log gives the count and the job summary ("Respellings on the community list") lists each kept spelling.
+Everything else is a new site, as before: a different path case, another query parameter or fragment (`/?user=a` and `/?user=b` can be two portfolios), an address that was not a web address (an upstream fix to a broken address takes effect at once), and a new domain.
+So is a spelling that matches two current addresses (a feed edited by hand); the summary lists these as unclear.
+The cost: a kept site keeps its old spelling, so if that spelling stops answering while the new one works (a dropped `www.` that no longer resolves), the health check sees it as not answering; an old spelling that redirects to the new one on the same domain passes, as it does today.
+When a site does split, nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N" (sites respelled more than once, and keys with two listed rows, separately).
+Merging the sites split before the sticky spelling is a separate change.
 
 | Source | Trust | Mechanism |
 |---|---|---|
@@ -100,6 +108,8 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Nobody is emailed about a site hidden or back: the owner sees counts in the job summaries and the list on `/admin/alerts`.
   When this shipped, nothing was adopted: a `suspect` row whose reason is not answering starts the ladder at its next failed nightly check, like any first failure (hidden the next day if it still fails); a `down` one stays down and, at its next failed nightly check, joins the ladder as not working since its first failure (it leaves the list on a failed check on or after day 90 from then).
 - **Portfolio-likeness** (`pipeline/signals.mjs`, part of the health check): from each loaded page's HTML (the rendered DOM for single-page apps) it records six yes/no signals in `portfolios.signals`: projects/work section, about, contact (mailto, form or social links), resume/CV, a GitHub profile link, and the person's name in the title or h1.
+  A page the health check loads in the browser (`pipeline/render.mjs`) is read once its text has rendered and held still for 2 seconds (`settleText`, 10 seconds at most): read a second after network idle, 13 of 70 sampled sites still showed almost no words and scored as near-empty pages.
+  Buttons and other non-link controls count with their text, aria-label, title and image alt ([pipeline/page-controls.mjs](pipeline/page-controls.mjs), one linear pass over the HTML): a button labelled "View Resume" or "Download CV" is a resume ("Resume slideshow" is not), a button that opens a github.com profile is a GitHub link (the word alone, as in "Sign in with GitHub", is not), and a "Works" or "My work" tab is a projects section (a bare "Work" tab is not).
   A page with at most one is flagged `needs_review`: never removed or hidden for it, listed in the run summary, and graded first by the rubric so Gemini's `is_portfolio` confirms or clears it.
   A listed site that is already graded is never graded again for it (owner, 2026-11-16: "Listed sites, health check only"); the night's free part turns the flag into a pending review row ("the site's portfolio signals collapsed") for the owner.
   The other way round, a grade that says `is_portfolio=false` for a page with at least 4 of the 6 signals is not acted on ([pipeline/portfolio-guard.mjs](pipeline/portfolio-guard.mjs), applied in `gradeRecord`): it is stored as a portfolio, so it stays listed and ranked, with the AI's answer in `ai_is_portfolio` and the reason in `review`, and the night writes a pending review row for the owner (the door, below).
@@ -660,6 +670,9 @@ Until the Worker has `GEMINI_API_KEY`, the Workflow skips the night without clai
 
 - **Rubric v2** (owner rule 2026-11-10: "code checks facts; Gemini judges quality"; criteria in GRADING_CRITERIA.md section 6, defined once in `pipeline/rubric.mjs`):
   `capture.mjs` stores each site's visible text (at most 4,000 characters, `portfolios.page_text`) and the facts code can check (`pipeline/facts.mjs`, `portfolios.facts`: resume, GitHub, contact, project links that load, own domain, footer year, pages and sections, template, motion, portfolio signals).
+  Resume, GitHub and contact come from links and from buttons, `role="button"` and `onclick` controls (a resume needs a resume-like label such as "View Resume", GitHub a github.com URL on the control, and only a short label is read for contact words), a URL a button navigates to from its onclick is a project link (not URLs in data- attributes), and links inside HTML comments do not count ([pipeline/page-controls.mjs](pipeline/page-controls.mjs); facts version 2, measured in the audit in [scripts/experiments/facts-audit/](scripts/experiments/facts-audit/)).
+  Stored facts carry their version (`v`, `FACTS_VERSION`); nothing re-measures a row for a new version: a row gets the new facts at its next capture, and a grade keeps the code checks it was made with.
+  A project shown in a projects section counts as a project link when its GitHub or demo URL is a link or is written in its button; a "Projects" button that only scrolls to that section is not a link itself, but it counts for the `projects` signal and as an in-page section.
   A grade sends one image (the settled top of the page, local capture or R2 `hero.jpg`), the facts and the page text in a `<site_data>` block the system instruction marks as untrusted, with thinking at `minimal` and a strict JSON schema.
   Rows captured before v2 get their text and facts measured when graded (plain HTTP, or a browser when the server sends under 200 characters; `--no-browser` turns that off) and stored.
   Every grade records `rubric_version`, the model, token usage (input, output, thinking), the facts, the code checks, `quality_score` and `checks_score`.

@@ -13,8 +13,9 @@ Build feed.json = (upstream README) - (our exclusions) + (our additions).
 This file only reads the README. Everything that decides whether two
 addresses are one site (duplicates, exclusions) is pipeline/build-feed.mjs,
 so the rule lives in one place (pipeline/list-key.mjs); this script runs it
-with Node and passes its exit code on. Addresses are written exactly as the
-list spells them.
+with Node and passes its exit code on. Addresses are written as the list
+spells them, except a site already on the feed that the list respelled: it
+keeps the feed's spelling (build-feed.mjs stickySpelling).
 
 Usage:
     python generate_feed.py [README.md] [feed.json]

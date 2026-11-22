@@ -1,0 +1,134 @@
+sites scored: 70 of 70 (skipped: none)
+         fact           before right/FN/FP    fixed code, same reading  after (new visit)     causes of the misses before
+facts    resume         60/10/0               69/1/0                    69/1/0 of 70          not a link (button or script): 9; wording the pattern misses: 1
+facts    github         67/2/1                68/2/0                    70/0/0 of 70          other: page HTML cut at 400,000 characters: 2; false positive: 1
+facts    contact        66/4/0                68/2/0                    69/1/0 of 70          other: page HTML cut at 400,000 characters: 1; other: read in the page: the footer shows an address written as 'name(a)domain', a link a script turns into a mailto on click (other: an obfuscated email): 1; not a link (button or script): 2
+facts    project_links  67/0/3                69/0/1                    69/0/1 of 70          false positive: 3
+facts    own_domain     70/0/0                70/0/0                    70/0/0 of 70          
+facts    sections       61/9/0                67/3/0                    67/3/0 of 70          not a link (button or script): 9
+signals  projects       69/1/0                70/0/0                    70/0/0 of 70          behind a click: 1
+signals  about          68/0/2                68/0/2                    68/0/2 of 70          false positive: 2
+signals  contact        69/1/0                69/1/0                    70/0/0 of 70          other: page HTML cut at 400,000 characters: 1
+signals  resume         70/0/0                70/0/0                    69/0/1 of 70          
+signals  github         67/2/1                67/2/1                    69/0/1 of 70          other: page HTML cut at 400,000 characters: 2; false positive: 1
+signals  name           69/1/0                69/1/0                    69/1/0 of 70          not a link (button or script): 1
+facts    footer_year    70 of 70 right; fixed code 70; after 70 of 70
+
+found by main's code and not by the current code, same reading: facts.project_links https://kunalpatil.me; facts.project_links https://suhailroushan.com; facts.github https://fourtonfish.com
+
+render.mjs (health check signals, evidence.mjs): old code at network idle + 1 s  ->  current code after settleText
+facts    resume         56/14/0               68/2/0 of 70
+facts    github         57/12/1               69/1/0 of 70
+facts    contact        55/15/0               68/2/0 of 70
+facts    project_links  58/9/3                68/1/1 of 70
+facts    own_domain     70/0/0                70/0/0 of 70
+facts    sections       55/15/0               67/3/0 of 70
+signals  projects       60/10/0               70/0/0 of 70
+signals  about          57/11/2               67/1/2 of 70
+signals  contact        58/12/0               69/1/0 of 70
+signals  resume         61/9/0                69/1/0 of 70
+signals  github         57/12/1               68/1/1 of 70
+signals  name           67/3/0                69/1/0 of 70
+signal score <= 1 (needs_review): 13 of 70 before, 3 of 70 after
+MISS facts.resume https://krishnananda.netlify.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: Resume 
+     div: Hi! I'am Krishnanand Developer I : SE Resume 
+MISS facts.resume https://kalpsenghani.com truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: Resume 
+     button: Download Resume 
+MISS facts.resume https://adityapillai.dev truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: View Resume | View Resume 
+MISS facts.resume https://dhirajbhawsar-portfolio.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: Download CV 
+MISS facts.resume https://adityathakur.me truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: RESUME 
+     button: VIEW RESUME ↓ 
+MISS facts.resume https://personal-portfolio-website-seven-teal.vercel.app truth=true before=false fixed=true after=true [wording the pattern misses] decided: read by eye: a 'Resume' button in the hero; its wrapping link is empty (href="")
+     a: Resume https://personal-portfolio-website-seven-teal.vercel.app/
+     button: Resume 
+MISS facts.resume https://sanjanavenkatesh.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: Resume 
+     button: Resume.pdf 
+MISS facts.resume https://ayushdas.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: Resume Resume 
+MISS facts.resume https://carlos-rojas-portfolio.vercel.app truth=true before=false fixed=false after=false [not a link (button or script)] decided: read by eye: the bench menu's 'Clipboard - Resume and contact' button (hero screenshot); the resume itself opens behind the click
+     button: Clipboard Resume and contact 
+MISS facts.resume https://whilmarbitoco.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: view cv 
+MISS facts.github https://yeabsiras-portfolio.vercel.app truth=true before=false fixed=false after=true [other: page HTML cut at 400,000 characters]
+     a: Github https://github.com/itsyaba
+MISS facts.github https://eduardconstantin.github.io truth=true before=false fixed=false after=true [other: page HTML cut at 400,000 characters]
+     a: Github https://github.com/eduardconstantin
+MISS facts.github https://fourtonfish.com truth=false before=true fixed=false after=false [false positive] decided: corrected in the second round: the footer 'GitHub' link is inside an HTML comment, and the only other one is a <link rel=me> in the head; a visitor sees no GitHub link (main's code read the commented-out link)
+     
+MISS facts.contact https://eduardconstantin.github.io truth=true before=false fixed=false after=true [other: page HTML cut at 400,000 characters]
+     a: Twitter https://twitter.com/_Eduard26
+     a: Mail mailto: <email>
+MISS facts.contact https://yevhenmakes.com truth=true before=false fixed=false after=false [other: read in the page: the footer shows an address written as 'name(a)domain', a link a script turns into a mailto on click (other: an obfuscated email)] decided: read in the page: the footer shows an address written as 'name(a)domain', a link a script turns into a mailto on click (other: an obfuscated email)
+     
+MISS facts.contact https://mariyajebastin.netlify.app truth=true before=false fixed=true after=true [not a link (button or script)] decided: read by eye: a 'Contact' menu item, an <a> without href driven by script
+     a: Contact 
+MISS facts.contact https://carlos-rojas-portfolio.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)] decided: read by eye: the same 'Resume and contact' button
+     button: Clipboard Resume and contact 
+MISS facts.project_links https://kunalpatil.me truth=false before=true fixed=false after=false [false positive]
+     
+MISS facts.project_links https://suhailroushan.com truth=false before=true fixed=false after=false [false positive]
+     
+MISS facts.project_links https://www.afaqrashid.com truth=false before=true fixed=true after=true [false positive] decided: read by eye: the only outbound link besides social profiles is the employer's site (AlimcoSoft), not a project
+     a: AlimcoSoft https://www.alimcosoft.com/
+     a: AlimcoSoft https://www.alimcosoft.com/
+MISS facts.sections https://dhirajbhawsar-portfolio.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     a: home 
+     a: about 
+     a: skills 
+MISS facts.sections https://hassan-ali-portfolio-nine.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: home 
+     button: experience 
+     button: projects 
+MISS facts.sections https://eduardconstantin.github.io truth=true before=false fixed=false after=false [not a link (button or script)]
+     li(hidden): about 
+     li(hidden): projects 
+     li(hidden): skills 
+MISS facts.sections https://blakekarbon.github.io truth=true before=false fixed=false after=false [not a link (button or script)]
+     div: about me 
+     div: projects 
+     div: experience 
+MISS facts.sections https://prakharpatel.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: about 
+     button: projects 
+     button: skills 
+MISS facts.sections https://personal-portfolio-website-seven-teal.vercel.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: home 
+     button: about 
+     button: projects 
+MISS facts.sections https://mariyajebastin.netlify.app truth=true before=false fixed=true after=true [not a link (button or script)]
+     a: home 
+     a: about me 
+     a: projects 
+MISS facts.sections https://toukoum.fr truth=true before=false fixed=true after=true [not a link (button or script)]
+     button: projects 
+     button: skills 
+     button: contact 
+MISS facts.sections https://rohitwork.vercel.app truth=true before=false fixed=false after=false [not a link (button or script)]
+     button: home 
+     button: projects 
+     button: experience 
+MISS signals.projects https://krishnananda.netlify.app truth=true before=false fixed=true after=true [behind a click] decided: behind a click: a 'Works' tab (role=tab) next to 'Profile' holds the projects (hero screenshot)
+     
+MISS signals.about https://chat-portfolio-dhanushnehru.netlify.app truth=false before=true fixed=true after=true [false positive] decided: read in the page: a chat window; 'about' appears only in the bot's sentence 'Send more to know more about me', no About section
+     
+MISS signals.about https://www.chicagoitsystems.com truth=false before=true fixed=true after=true [false positive] decided: read in the page: a company site; 'about' only in prose ('learn more about' a staff member)
+     
+MISS signals.contact https://eduardconstantin.github.io truth=true before=false fixed=false after=true [other: page HTML cut at 400,000 characters]
+     a: Twitter https://twitter.com/_Eduard26
+     a: Mail mailto: <email>
+MISS signals.resume https://zalt.me truth=false before=false fixed=false after=true [new miss after the fix]
+     
+MISS signals.github https://yeabsiras-portfolio.vercel.app truth=true before=false fixed=false after=true [other: page HTML cut at 400,000 characters]
+     a: Github https://github.com/itsyaba
+MISS signals.github https://eduardconstantin.github.io truth=true before=false fixed=false after=true [other: page HTML cut at 400,000 characters]
+     a: Github https://github.com/eduardconstantin
+MISS signals.github https://fourtonfish.com truth=false before=true fixed=true after=true [false positive] decided: corrected in the second round: the footer 'GitHub' link is inside an HTML comment, and the only other one is a <link rel=me> in the head; a visitor sees no GitHub link (main's code read the commented-out link)
+     
+MISS signals.name https://chat-portfolio-dhanushnehru.netlify.app truth=true before=false fixed=false after=false [not a link (button or script)] decided: read in the page: the chat introduces Dhanush Nehru by name; the name is not in the title or an h1
+     text: dhanush 
