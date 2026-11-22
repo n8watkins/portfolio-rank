@@ -1,0 +1,183 @@
+name: Re-capture and re-measure the whole list
+
+# Manual only. Re-captures every listed, live site and measures it again (the
+# screenshots, the page text and the facts of pipeline/facts.mjs), for the day
+# the measuring code changed and every stored measurement is from the old
+# version. No AI. The nightly run (sync-upstream.yml) re-captures only the sites
+# that are due, up to 150 a night; this one does the whole list in one go.
+#
+# The list is data/feed.json of the code being run, minus the sites that are not
+# live, captured and listed in the database (scripts/remeasure-shard.mjs). It is
+# split into `shards` parts by a hash of the address, one parallel job each; every
+# job runs `node pipeline/capture.mjs --recapture <its file>`: a refresh, so a
+# capture that fails (a bot wall, a down site, a timeout) keeps the site's
+# existing capture and never marks it failed.
+#
+# A re-run after a failure does only what is left: `skip_version` leaves out the
+# sites whose stored facts already carry that facts version (portfolios.facts.v).
+# To re-run one shard, give `only_shard`; the split is the same every time.
+#
+# Do not start it around the night's run (03:30 and 04:30 UTC, which is 20:30
+# Pacific): see the note at `concurrency` below.
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Code to run: empty for production's release, checkout for this branch, or one vX.Y.Z tag"
+        required: false
+      shards:
+        description: "How many parallel jobs to split the list into"
+        required: false
+        default: "4"
+      only_shard:
+        description: "Run only this shard (1 to shards), to re-run one that failed; empty = all"
+        required: false
+      limit:
+        description: "Most sites per shard, for a small trial run (e.g. 10); empty = no cap"
+        required: false
+      skip_version:
+        description: "Skip sites whose stored facts already carry this facts version or newer (0 = skip none)"
+        required: false
+        default: "2"
+
+# Its own group, deliberately not the nightly's `gemini` group. That group exists
+# so the jobs that call Gemini never split the shared per-minute pace and the
+# daily quota, and it also serializes the nightly's database writes. This run
+# calls no AI, and it takes hours: in the `gemini` group it would hold the 20:30
+# Pacific night (and Cloudflare's end-of-day Workflow, which waits for it) in a
+# queue for that long, and GitHub keeps only one waiting run per group, so a
+# queued night could be cancelled by a later one. So it is not serialized with the
+# night, and the shards of one run run in parallel with each other. What that
+# allows, and what it does not, is written in the pull request that added this
+# file: two captures of one site at once end with the row of whichever wrote last,
+# and in a rare case (one sees the page changed and replaces its images, the
+# other sees it unchanged) the row can name tall images the first capture then
+# deleted. Starting this away from the night's run, and not twice at once (this
+# group), keeps that to the few sites a night's due list and a shard reach in the
+# same minutes.
+concurrency:
+  group: remeasure-all
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The shard numbers to run, as a JSON list for the matrix.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - id: plan
+        env:
+          SHARDS: ${{ inputs.shards || '4' }}
+          ONLY_SHARD: ${{ inputs.only_shard }}
+        run: |
+          if ! [[ "$SHARDS" =~ ^[0-9]+$ ]] || [ "$SHARDS" -lt 1 ] || [ "$SHARDS" -gt 20 ]; then
+            echo "::error::shards must be a whole number from 1 to 20, got \"$SHARDS\"."
+            exit 1
+          fi
+          if [ -n "$ONLY_SHARD" ]; then
+            if ! [[ "$ONLY_SHARD" =~ ^[0-9]+$ ]] || [ "$ONLY_SHARD" -lt 1 ] || [ "$ONLY_SHARD" -gt "$SHARDS" ]; then
+              echo "::error::only_shard must be a whole number from 1 to $SHARDS, got \"$ONLY_SHARD\"."
+              exit 1
+            fi
+            list="[$ONLY_SHARD]"
+          else
+            list="[$(seq -s, 1 "$SHARDS")]"
+          fi
+          echo "shards=$list" >> "$GITHUB_OUTPUT"
+          echo "Shards to run: $list of $SHARDS" >> "$GITHUB_STEP_SUMMARY"
+
+  shard:
+    needs: plan
+    # Pinned like the nightly's job: Playwright can't install Chromium on ubuntu 26.04 yet.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    name: shard ${{ matrix.shard }}
+    env:
+      # Not ROSTER_SYNC_OWNER: the roster sync inside capture.mjs is the nightly's job; here it
+      # only repeats what the nightly already did, and a refusal would not stop this run.
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      # The public images bucket (pipeline/shot-store.mjs).
+      R2_IMAGES_BUCKET: ${{ secrets.R2_IMAGES_BUCKET }}
+      CAPTURE_LEGACY_FRAMES: ${{ vars.CAPTURE_LEGACY_FRAMES || 'true' }}
+      SHARD: ${{ matrix.shard }}
+      SHARDS: ${{ inputs.shards || '4' }}
+      LIMIT: ${{ inputs.limit }}
+      SKIP_VERSION: ${{ inputs.skip_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Production runs the last release's code (.github/actions/release-code),
+      # which removes every file the release does not have: the shard script is
+      # on main only until a release has it. So it is kept aside first and put back
+      # after (a no-op for code=checkout). It needs only pipeline/roster.mjs, which
+      # every release has.
+      - name: Keep the shard script
+        run: cp scripts/remeasure-shard.mjs "$RUNNER_TEMP/remeasure-shard.mjs"
+      - uses: ./.github/actions/release-code
+        with:
+          code: ${{ inputs.code }}
+      - name: Put the shard script back
+        run: |
+          mkdir -p scripts
+          cp "$RUNNER_TEMP/remeasure-shard.mjs" scripts/remeasure-shard.mjs
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: List this shard's sites
+        id: list
+        shell: bash
+        run: |
+          # An empty skip_version is the default, 2; 0 skips nothing.
+          node scripts/remeasure-shard.mjs --shard "$SHARD" --shards "$SHARDS" \
+            --skip-version "${SKIP_VERSION:-2}" --limit "${LIMIT:-0}" --out "$RUNNER_TEMP/shard.txt" | tee "$RUNNER_TEMP/list.log"
+          echo "count=$(wc -l < "$RUNNER_TEMP/shard.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Re-capture and re-measure
+        if: steps.list.outputs.count != '0'
+        # shell: bash adds pipefail, so a failing capture.mjs fails the step through the pipe to tee.
+        shell: bash
+        run: node pipeline/capture.mjs --concurrency 4 --recapture "$RUNNER_TEMP/shard.txt" 2>&1 | tee "$RUNNER_TEMP/capture.log"
+
+      - name: Job summary
+        if: always()
+        env:
+          CODE: ${{ inputs.code }}
+        run: |
+          {
+            echo "### Shard $SHARD of $SHARDS"
+            echo
+            echo "Code: ${CODE:-production release}. skip_version: ${SKIP_VERSION:-2}. limit: ${LIMIT:-none}."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/list.log" 2>/dev/null || echo "The list was not made."
+            if [ -f "$RUNNER_TEMP/capture.log" ]; then
+              grep -E '^(roster:|refresh:|capturing |done:)' "$RUNNER_TEMP/capture.log" || true
+              echo "stored a new capture: $(grep -cE '^\[[0-9]+/[0-9]+\] .* - live' "$RUNNER_TEMP/capture.log" || true)"
+              echo "existing capture kept (the refresh failed or the page was not the site): $(grep -c 'the existing capture is kept' "$RUNNER_TEMP/capture.log" || true)"
+              echo "put back in line after a browser crash: $(grep -c 'back in line' "$RUNNER_TEMP/capture.log" || true)"
+            else
+              echo "capture.mjs did not run."
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
