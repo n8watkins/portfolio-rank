@@ -29,7 +29,7 @@ const SIGNALS = ["projects", "about", "contact", "resume", "github", "name"];
 const readMaybe = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null);
 const fold = (s) => String(s ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
 const GH_RESERVED = /^(sponsors|topics|features|about|pricing|marketplace|orgs|settings|explore|login|join|new|search|apps|collections|site|enterprise|team|security|contact|trending|events)$/i;
-const SOCIAL = /(linkedin|twitter|x|instagram|facebook|youtube|tiktok|dribbble|behance|medium|dev|discord|t|wa|calendly|cal|google|w3|schema|vercel|netlify|leetcode|hackerrank|stackoverflow|codepen|kaggle|credly|fonts\.googleapis)\.(com|to|me|gg|org|io|app|net)$/i;
+const SOCIAL = /(^|\.)(linkedin|twitter|x|instagram|facebook|youtube|tiktok|threads|bsky|dribbble|behance|medium|dev|discord|t|wa|calendly|cal|google|w3|schema|vercel|netlify|leetcode|hackerrank|stackoverflow|codepen|kaggle|credly|fonts\.googleapis)\.(com|to|me|gg|org|io|app|net)$/i;
 
 function ghUser(u) {
   const m = String(u).match(/github\.com\/([A-Za-z0-9-]+)(\/[A-Za-z0-9._-]+)?/i);
@@ -41,7 +41,6 @@ const urlOf = (s) => String(s).replace(/^[\w-]+=/, "");
 /** The broad probe's answer per fact and signal, with the evidence behind each. */
 function broadTruth(probe, site, finalUrl) {
   const clicks = probe.clickables ?? [];
-  const textOf = (c) => `${c.label} ${c.urls.join(" ")}`;
   const ev = {};
   const pick = (k, list) => (ev[k] = list.slice(0, 6));
   const self = (() => {
@@ -100,15 +99,22 @@ function broadTruth(probe, site, finalUrl) {
   const nameIn = fold(`${probe.title} ${probe.headings.map((h) => h.text).join(" ")} ${String(probe.text ?? "").slice(0, 300)}`);
   ev.name = tokens.filter((t) => nameIn.includes(t)).map((t) => ({ tag: "text", label: t, urls: [], visible: true }));
   // Footer year: a year within 40 characters after the copyright mark.
-  const years = [...String(probe.text ?? "").matchAll(/(?:©|\(c\)|copyright)[^\n]{0,40}?((?:19|20)\d{2})(?!\d)/gi)].map((m) => Number(m[1])).filter((y) => y <= new Date().getUTCFullYear() + 1);
+  const years = [...String(probe.text ?? "").matchAll(/(?:©|\(c\)|copyright)([^\n]{0,40})/gi)]
+    .flatMap((m) => [...m[1].matchAll(/(?<!\d)((?:19|20)\d{2})(?!\d)/g)].map((y) => Number(y[1])))
+    .filter((y) => y <= new Date().getUTCFullYear() + 1);
   const footer = years.length ? Math.max(...years) : null;
-  // Section navigation: in-page links, or nav-word controls (scroll buttons count).
-  const NAV = /^(home|about( me)?|projects?|work|portfolio|skills|experience|contact( me)?|resume|cv|blog|services|education|testimonials)$/i;
-  const navs = new Set([
-    ...clicks.filter((c) => c.urls.some((u) => /#[\w-]+$/.test(urlOf(u)) && urlOf(u).includes(self))).map((c) => urlOf(c.urls[0]).split("#")[1].toLowerCase()),
-    ...clicks.filter((c) => NAV.test(c.label.split(" | ")[0])).map((c) => c.label.split(" | ")[0].toLowerCase()),
-  ]);
-  ev.sections = [...navs].map((n) => ({ tag: "nav", label: n, urls: [], visible: true }));
+  // In-page section navigation: links to "#section" on this page, or nav-word
+  // controls that are not links to another page (buttons that scroll).
+  const NAV = /^(home|about( me)?|projects?|work|portfolio|skills|experience|contact( me)?|blog|services|education|testimonials)$/i;
+  const navEv = new Map();
+  for (const c of clicks) {
+    const hash = c.urls.map(urlOf).find((u) => /#[\w-]+$/.test(u) && u.includes(self));
+    const word = c.label.split(" | ")[0];
+    if (hash) navEv.set(hash.split("#")[1].toLowerCase(), c);
+    else if (NAV.test(word) && (c.tag !== "a" || !c.urls.length)) navEv.set(word.toLowerCase(), c);
+  }
+  ev.sections = [...navEv.entries()].map(([n, c]) => ({ tag: c.tag, label: n, urls: c.urls, visible: c.visible }));
+  const navs = navEv;
   const truth = {
     resume: ev.resume.length > 0,
     github: ev.github.length > 0,
@@ -196,7 +202,7 @@ function cause(s, group, k) {
   if (pickOld("B")) return "only after scrolling";
   const e = s.ev[k] ?? [];
   if (s.meta.A.fullHtmlChars > 400000 && e.some((x) => x.tag === "a")) return "other: page HTML cut at 400,000 characters";
-  if (e.length && e.every((x) => x.tag !== "a")) return "not a link (button or script)";
+  if (e.length && e.every((x) => x.tag !== "a" || !x.urls.length)) return "not a link (button or script)";
   if (e.some((x) => x.tag === "a")) return "wording the pattern misses";
   if (e.length && e.every((x) => !x.visible)) return "behind a click";
   return `other${s.decided[k] ? `: ${s.decided[k]}` : ""}`;
@@ -229,6 +235,8 @@ for (const group of ["facts", "signals"]) {
         const c = t ? cause(s, group, k) : "false positive";
         row.causes[c] = (row.causes[c] ?? 0) + 1;
         misses.push({ group, fact: k, url: s.url, truth: t, before: b, fixedOnA: get(s.fixedOnA), after: s.after ? get(s.after) : null, cause: c, decided: s.decided[k] ?? null, ev: (s.ev[k] ?? []).slice(0, 3).map((e) => `${e.tag}${e.visible ? "" : "(hidden)"}: ${e.label.slice(0, 60)} ${e.urls.slice(0, 1).join(" ")}`) });
+      } else if (get(s.fixedOnA) !== t) {
+        misses.push({ group, fact: k, url: s.url, truth: t, before: b, fixedOnA: get(s.fixedOnA), after: s.after ? get(s.after) : null, cause: "new miss with the fixed code", decided: s.decided[k] ?? null, ev: (s.ev[k] ?? []).slice(0, 3).map((e) => `${e.tag}: ${e.label.slice(0, 60)}`) });
       } else if (s.after && get(s.after) !== t) {
         misses.push({ group, fact: k, url: s.url, truth: t, before: b, fixedOnA: get(s.fixedOnA), after: get(s.after), cause: "new miss after the fix", decided: s.decided[k] ?? null, ev: [] });
       }
@@ -241,7 +249,7 @@ const fy = { n: 0, before: 0, fixedOnA: 0, after: 0, afterN: 0, causes: {} };
 for (const s of scored) {
   fy.n++;
   if (s.old.A.facts.footer_year === s.truth.footer_year) fy.before++;
-  else misses.push({ group: "facts", fact: "footer_year", url: s.url, truth: s.truth.footer_year, before: s.old.A.facts.footer_year, cause: "different year", ev: [] });
+  else misses.push({ group: "facts", fact: "footer_year", url: s.url, truth: s.truth.footer_year, before: s.old.A.facts.footer_year, fixedOnA: s.fixedOnA.facts.footer_year, after: s.after?.facts.footer_year ?? null, cause: "different year", decided: s.decided.footer_year ?? null, ev: [] });
   if (s.fixedOnA.facts.footer_year === s.truth.footer_year) fy.fixedOnA++;
   if (s.after) {
     fy.afterN++;

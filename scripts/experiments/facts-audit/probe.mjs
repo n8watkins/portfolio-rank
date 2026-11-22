@@ -8,9 +8,10 @@
 // wait for content, the preloader polls, the motion frames, the dark-mode
 // shot, the scroll-through) and saves that reading (A). On the way it saves
 // the reading at the point pipeline/render.mjs reads (R: network idle, then
-// 1 s). With --pass after, the capture's settle step (pipeline/render.mjs
-// settleText) runs where capture.mjs now runs it, so A is the fixed
-// capture's reading.
+// 1 s). --pass after replays the same sequence with the current pipeline
+// code (gate.mjs readRenderedPage), so A is the fixed capture's reading.
+// --pass render loads each site once through pipeline/render.mjs
+// createRenderer, the renderer of the health check and evidence.mjs.
 //
 // With --pass before it then goes on for the ground truth: the visible
 // text's length is sampled every 500 ms until it holds for 8 s (20 s at
@@ -19,7 +20,7 @@
 // (dom-probe.mjs) runs, with a first-screen and a full-page screenshot and a
 // crop of each candidate resume, GitHub, contact and projects control.
 //
-//   node scripts/experiments/facts-audit/probe.mjs --pass before|after --out <dir> [--only substr] [--concurrency 6]
+//   node scripts/experiments/facts-audit/probe.mjs --pass before|after|render --out <dir> [--only substr] [--concurrency 6]
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -40,8 +41,7 @@ const concurrency = Math.min(6, Number(opt("--concurrency", 6)));
 if (!outDir) throw new Error("--out is required");
 const sample = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "sample.json"), "utf8")).filter((s) => s.url.includes(only));
 const keyOf = (url) => createHash("sha1").update(url).digest("hex").slice(0, 12);
-let settleText = null;
-if (pass === "after") ({ settleText } = await import("../../../pipeline/render.mjs"));
+const { createRenderer } = await import("../../../pipeline/render.mjs");
 
 const SITE_CAP_MS = 240000;
 const read = (page) => page.evaluate(readRenderedPage).catch(() => ({ text: "", media: false, html: "" }));
@@ -106,8 +106,6 @@ async function visit(browser, site) {
     await shot(page, { type: "png" });
     await page.emulateMedia({ colorScheme: "light" });
     mark("beforeScroll");
-    if (settleText) meta.settle = await settleText(page);
-    mark("settled");
     await captureViewAsSeen(page, "desktop");
     mark("scrolled");
     const A = await read(page);
@@ -190,17 +188,41 @@ async function visit(browser, site) {
   return meta;
 }
 
-const browser = await chromium.launch();
+/** --pass render: one load through pipeline/render.mjs as the health check and evidence.mjs run it. */
+async function visitRender(renderer, site) {
+  const dir = path.join(outDir, keyOf(site.url));
+  fs.mkdirSync(dir, { recursive: true });
+  const meta = { url: site.url, name: site.name, key: keyOf(site.url), pass };
+  const t0 = Date.now();
+  try {
+    const r = await renderer.render(site.url);
+    meta.ms = Date.now() - t0;
+    meta.status = r.status;
+    meta.finalUrl = r.finalUrl;
+    meta.words = words(r.text);
+    fs.writeFileSync(path.join(dir, "render.html"), r.html ?? "");
+    fs.writeFileSync(path.join(dir, "render.txt"), r.text ?? "");
+  } catch (e) {
+    meta.error = String(e?.message ?? e).split("\n")[0].slice(0, 200);
+  }
+  fs.writeFileSync(path.join(dir, `meta-${pass}.json`), JSON.stringify(meta, null, 1));
+  return { ...meta, A: { words: meta.words }, t: { A: meta.ms } };
+}
+
+const browser = pass === "render" ? null : await chromium.launch();
+const renderers = pass === "render" ? Array.from({ length: concurrency }, () => createRenderer()) : [];
 const queue = [...sample];
 let n = 0;
 await Promise.all(
-  Array.from({ length: concurrency }, async () => {
+  Array.from({ length: concurrency }, async (_, lane) => {
     while (queue.length) {
       const site = queue.shift();
-      const m = await Promise.race([visit(browser, site), new Promise((r) => setTimeout(() => r({ url: site.url, error: "site cap" }), SITE_CAP_MS))]);
+      const work = pass === "render" ? visitRender(renderers[lane], site) : visit(browser, site);
+      const m = await Promise.race([work, new Promise((r) => setTimeout(() => r({ url: site.url, error: "site cap" }), SITE_CAP_MS))]);
       n++;
       console.log(`[${n}/${sample.length}] ${site.url} ${m.error ? `ERROR ${m.error}` : `A=${m.A?.words}w at ${Math.round((m.t?.A ?? 0) / 1000)}s B=${m.B?.words ?? "-"}w`}`);
     }
   })
 );
-await browser.close();
+await browser?.close();
+for (const r of renderers) await r.close();

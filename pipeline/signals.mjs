@@ -36,11 +36,14 @@ const textOf = (html) =>
 export function portfolioSignals(html, name) {
   const raw = String(html ?? "").slice(0, 400000);
   const text = fold(textOf(raw));
-  // Link targets, ids and the labels of icon-only controls count too:
-  // "#projects", "/about", "resume.pdf", aria-label="View Resume".
-  const attrs = fold((raw.match(/\b(?:href|id|aria-label|title)\s*=\s*["'][^"']*["']/gi) ?? []).join(" "));
-  const controls = extractControls(raw);
+  // Link targets and ids count too: "#projects", "/about", "resume.pdf".
+  const attrs = fold((raw.match(/(?:href|id)\s*=\s*["'][^"']*["']/gi) ?? []).join(" "));
   const both = `${text} ${attrs}`;
+  // Controls (./page-controls.mjs): the labels of icon-only buttons
+  // (aria-label="View Resume") count for resume and contact, a "Works" tab
+  // for projects. Not for about: "Learn more about animation" is no About.
+  const controls = extractControls(raw);
+  const labels = fold(controls.map((c) => c.label).join(" | "));
   const head = fold(
     textOf(
       [...raw.matchAll(/<(title|h1)[^>]*>([\s\S]*?)<\/\1>/gi)].map((m) => m[2]).join(" ")
@@ -48,10 +51,12 @@ export function portfolioSignals(html, name) {
   );
   const tokens = fold(name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
   const s = {
-    projects: /\b(projects?|portfolio|my work|selected work|case stud(?:y|ies)|things i(?:'ve)? built)\b/.test(both),
+    projects:
+      /\b(projects?|portfolio|my work|selected work|case stud(?:y|ies)|things i(?:'ve)? built)\b/.test(both) ||
+      controls.some((c) => /^\s*(my )?works?\s*$/i.test(c.text)),
     about: /\babout(?:[ -]?me)?\b|\bwho i am\b/.test(both),
-    contact: /mailto:/i.test(raw) || /<form\b/i.test(raw) || SOCIAL.test(raw) || /\bcontact\b|\bget in touch\b|\bhire me\b/.test(both),
-    resume: /\b(resume|cv|curriculum vitae)\b/.test(both),
+    contact: /mailto:/i.test(raw) || /<form\b/i.test(raw) || SOCIAL.test(raw) || /\bcontact\b|\bget in touch\b|\bhire me\b/.test(`${both} ${labels}`),
+    resume: /\b(resume|cv|curriculum vitae)\b/.test(`${both} ${labels}`),
     // A GitHub link, or a control that opens GitHub from script or is labelled GitHub.
     github: GITHUB.test(raw) || controls.some((c) => GITHUB_WORD.test(c.label) || c.urls.some((u) => GITHUB_URL.test(u))),
     name: tokens.length > 0 && tokens.some((t) => head.includes(t)),

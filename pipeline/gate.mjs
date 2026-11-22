@@ -100,8 +100,18 @@ export function readRenderedPage() {
     return r.width >= 100 && r.height >= 100;
   };
   const media = [...document.querySelectorAll("canvas, img, svg, video, flt-glass-pane, flutter-view")].some(visible);
-  // The rendered DOM, for the portfolio-likeness signals of single-page apps.
-  const html = document.documentElement.outerHTML.slice(0, 400000);
+  // The rendered DOM, for the portfolio-likeness signals and facts of
+  // single-page apps, at most 400,000 characters. A page longer than that
+  // (inline scripts, styles and SVG path data in the head can fill it before
+  // the body starts) loses those first, so the cut takes its footer's
+  // GitHub and email links last (facts audit, 2026-11-21).
+  let html = document.documentElement.outerHTML;
+  if (html.length > 400000) {
+    html = html
+      .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3")
+      .replace(/\s(?:d|points)="[^"]{120,}"/g, "");
+  }
+  html = html.slice(0, 400000);
   return { text, media, html };
 }
 

@@ -66,6 +66,16 @@ test("GitHub and contact from buttons; a project opened from a button is a proje
   assert.equal(measureFacts({ html: `<button onclick="window.open('https://github.com/features')">Features</button>`, url }).github, false, "github.com's own pages are not a profile");
 });
 
+test("a Projects button that scrolls to the projects section is an in-page section; the repo links in that section are project links", () => {
+  const url = "https://ana.dev";
+  const html = `<nav><button>About</button><button>Projects</button><a href="#contact">Contact</a></nav>
+    <section id="projects"><h2>Projects</h2><div><h3>Weather</h3><a href="https://github.com/ana/weather">GitHub</a></div></section>`;
+  const f = measureFacts({ html, url, name: "Ana" });
+  assert.equal(f.sections, 3);
+  assert.equal(f.signals.projects, true);
+  assert.deepEqual(projectLinkCandidates(pageLinks(html, url), url), ["https://github.com/ana/weather"]);
+});
+
 test("controls: labels from text, aria-label, title and image alt; long text is not read for words", () => {
   const c = extractControls(`<button title="Download Resume"><img alt="file icon"></button><div role="tab">About</div><input type="submit" value="Send">`, "https://ana.dev/");
   assert.deepEqual(
@@ -111,6 +121,8 @@ test("settleText waits while the text grows, stops once it holds, and has a ceil
   const late = await run([0, 0, 400, 1800, 2900, 2900]);
   assert.equal(late.grew, 2900);
   assert.ok(late.ms >= 4000, `it waits until the text stops growing (${late.ms} ms)`);
+  const blank = await run([0]);
+  assert.ok(blank.ms >= 10000 && blank.ms <= 10500, `a page with no text yet is waited for up to the ceiling (${blank.ms} ms)`);
   const ticker = await run(Array.from({ length: 100 }, (_, n) => n));
   assert.ok(ticker.ms <= 10500, `a page that never stops changing gets the ceiling (${ticker.ms} ms)`);
 });

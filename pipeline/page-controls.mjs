@@ -1,6 +1,6 @@
 // The controls on a page a visitor clicks that are not plain links: buttons,
-// elements with role="button" (or link, menuitem, tab), elements with an
-// onclick attribute, and input buttons. A "View Resume" button that opens a
+// links without an href, elements with role="button" (or link, menuitem,
+// tab), elements with an onclick attribute, and input buttons. A "View Resume" button that opens a
 // PDF from script, a GitHub icon button, a "Contact" button that scrolls to
 // the form: a person counts them, so the facts (./facts.mjs) and the
 // portfolio signals (./signals.mjs) count them too (facts audit, 2026-11-21:
@@ -37,12 +37,20 @@ const plain = (inner) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// A tag's attributes, quoted values whole: class="[&>svg]:size-4" holds a ">".
+export const TAG_ATTRS = String.raw`(?:[^>"']|"[^"]*"|'[^']*')*`;
+const A = TAG_ATTRS;
+/** An attribute value, quoted or not, that starts with one of `words` ("button|tab"). */
+const valueOf = (words) => String.raw`(?:"(?:${words})\b[^"]*"|'(?:${words})\b[^']*'|(?:${words})\b)`;
 const PATTERNS = [
-  /<(button)\b([^>]*)>([\s\S]*?)<\/button>/gi,
-  /<([a-z][\w-]*)\b([^>]*\brole\s*=\s*["']?(?:button|link|menuitem|tab)\b[^>]*)>([\s\S]*?)<\/\1>/gi,
-  /<([a-z][\w-]*)\b([^>]*\bonclick\s*=[^>]*)>([\s\S]*?)<\/\1>/gi,
+  new RegExp(String.raw`<(button)\b(${A})>([\s\S]*?)<\/button>`, "gi"),
+  // Kept only without an href: a script-driven menu item (<a class="menu">Contact</a>).
+  new RegExp(String.raw`<(a)\b(${A})>([\s\S]*?)<\/a>`, "gi"),
+  new RegExp(String.raw`<([a-z][\w-]*)\b(${A}\brole\s*=\s*${valueOf("button|link|menuitem|tab")}${A})>([\s\S]*?)<\/\1>`, "gi"),
+  new RegExp(String.raw`<([a-z][\w-]*)\b(${A}\bonclick\s*=${A})>([\s\S]*?)<\/\1>`, "gi"),
 ];
-const INPUT = /<input\b([^>]*\btype\s*=\s*["']?(?:button|submit)\b[^>]*)>/gi;
+const INPUT = new RegExp(String.raw`<input\b(${A}\btype\s*=\s*${valueOf("button|submit")}${A})>`, "gi");
+const hasHref = (attrs) => /\bhref\s*=/i.test(String(attrs).replace(/"[^"]*"|'[^']*'/g, '""'));
 // URLs written in a control's attributes other than href: window.open('...'), data-href="...".
 const URL_IN_ATTR = /\b(?:onclick|data-[\w-]+|formaction)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
 const URL_TOKEN = /(?:https?:\/\/|mailto:|tel:)[^\s'"`<>)]+|[\w./~-]+\.pdf\b/gi;
@@ -75,7 +83,9 @@ export function extractControls(html, baseUrl) {
     }
     out.push({ tag: tag.toLowerCase(), label, text: text.slice(0, 200), urls });
   };
-  for (const re of PATTERNS) for (const m of raw.matchAll(re)) push(m[1], m[2], m[3]);
+  for (const re of PATTERNS) {
+    for (const m of raw.matchAll(re)) if (m[1].toLowerCase() !== "a" || !hasHref(m[2])) push(m[1], m[2], m[3]);
+  }
   for (const m of raw.matchAll(INPUT)) push("input", m[1], "");
   return out;
 }

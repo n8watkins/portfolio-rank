@@ -1,1 +1,44 @@
-{}
+{
+  "https://carlos-rojas-portfolio.vercel.app": {
+    "resume": { "truth": true, "why": "read by eye: the bench menu's 'Clipboard - Resume and contact' button (hero screenshot); the resume itself opens behind the click" },
+    "contact": { "truth": true, "why": "read by eye: the same 'Resume and contact' button" }
+  },
+  "https://krishnananda.netlify.app": {
+    "projects": { "truth": true, "why": "behind a click: a 'Works' tab (role=tab) next to 'Profile' holds the projects (hero screenshot)" }
+  },
+  "https://personal-portfolio-website-seven-teal.vercel.app": {
+    "resume": { "truth": true, "why": "read by eye: a 'Resume' button in the hero; its wrapping link is empty (href=\"\")" }
+  },
+  "https://fourtonfish.com": {
+    "github": { "truth": true, "why": "read in the capture's HTML: a footer link 'GitHub' to github.com/stefanbohacek (rel=me)" }
+  },
+  "https://mariyajebastin.netlify.app": {
+    "contact": { "truth": true, "why": "read by eye: a 'Contact' menu item, an <a> without href driven by script" }
+  },
+  "https://josephmansilla.github.io/portfolio/": {
+    "projects": { "truth": true, "why": "read in the page: a Spanish site with 'Proyectos' in the nav and the hero (projects.html)" },
+    "about": { "truth": true, "why": "read in the page: 'Sobre mi' (about.html) in the nav" }
+  },
+  "https://vip3r-portfolio.vercel.app": {
+    "projects": { "truth": true, "why": "read in the page: a French site with a 'Projets' section and nav item" }
+  },
+  "https://chat-portfolio-dhanushnehru.netlify.app": {
+    "about": { "truth": false, "why": "read in the page: a chat window; 'about' appears only in the bot's sentence 'Send more to know more about me', no About section" },
+    "name": { "truth": true, "why": "read in the page: the chat introduces Dhanush Nehru by name; the name is not in the title or an h1" }
+  },
+  "https://www.chicagoitsystems.com": {
+    "about": { "truth": false, "why": "read in the page: a company site; 'about' only in prose ('learn more about Mr. Stresen-Reuter')" }
+  },
+  "https://sanjanavenkatesh.vercel.app": {
+    "about": { "truth": true, "why": "read in the page: an 'about me :<' block introduces her ('Hi, I'm Sanjana...'), not a heading tag" }
+  },
+  "https://yevhenmakes.com": {
+    "contact": { "truth": true, "why": "read in the page: the footer shows 'what(a)yevhenmakes.com', a link a script turns into a mailto on click (other: an obfuscated email)" }
+  },
+  "https://rohitwork.vercel.app": {
+    "about": { "truth": false, "why": "read in the page: 'about' only in aria-labels 'Learn more about animation/tools' of two cards, no About section" }
+  },
+  "https://www.afaqrashid.com": {
+    "project_links": { "truth": false, "why": "read by eye: the only outbound link besides social profiles is the employer's site (AlimcoSoft), not a project" }
+  }
+}

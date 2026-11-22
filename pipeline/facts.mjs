@@ -6,13 +6,13 @@
 //
 // measureFacts is pure; checkLinks makes HTTP requests (HEAD, then GET when
 // HEAD is refused), capped in number and time, never to private addresses.
-import { RESUME_PATH, RESUME_WORDS, controlFacts, extractControls } from "./page-controls.mjs";
+import { RESUME_PATH, RESUME_WORDS, TAG_ATTRS, controlFacts, extractControls } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
 
-// 2: resume, GitHub, contact and project links also come from buttons and
-// other non-link controls (./page-controls.mjs), and the capture reads the
-// page once its text has stopped growing (./render.mjs settleText). Facts
-// stored with v 1 (or none) were measured from links only.
+// 2 (2026-11-21): resume, GitHub, contact, project links and in-page
+// sections also come from buttons and other non-link controls
+// (./page-controls.mjs). Facts stored with v 1 were measured from links
+// only; nothing re-measures them for the version (see AUTOMATION.md).
 export const FACTS_VERSION = 2;
 export const LINK_CHECK_MAX = 8;
 export const LINK_TIMEOUT_MS = 8000;
@@ -23,7 +23,7 @@ export const FREE_HOSTS =
 
 // Hosts that are profiles or services, not project demos.
 const NOT_PROJECT =
-  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com)$/i;
+  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com)$/i;
 
 const GH_RESERVED =
   /^(sponsors|topics|features|about|pricing|marketplace|orgs|organizations|settings|notifications|explore|login|join|new|search|apps|collections|readme|site|customer-stories|enterprise|team|security|contact|trending|events|github-copilot)$/i;
@@ -70,10 +70,15 @@ const decode = (s) =>
     .replace(/&#47;/g, "/")
     .replace(/&quot;/gi, '"');
 
+// An <a> tag, its attributes read with quoted values whole: a Tailwind class
+// such as "[&>svg]:size-4" holds a ">" that would otherwise end the tag
+// before its href.
+const LINK = new RegExp(String.raw`<a\b(${TAG_ATTRS})>([\s\S]*?)<\/a>`, "gi");
+
 /** Every <a href> on the page, absolute, with its text. */
 export function extractLinks(html, baseUrl) {
   const out = [];
-  for (const m of String(html ?? "").matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+  for (const m of String(html ?? "").matchAll(LINK)) {
     const href = m[1].match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
     const raw = decode(href?.[1] ?? href?.[2] ?? href?.[3] ?? "").trim();
     if (!raw) continue;
@@ -110,6 +115,9 @@ export function footerYear(text, now = new Date()) {
   }
   return best;
 }
+
+// The label of a nav control that scrolls to a section of the page.
+const NAV_SECTION = /^\s*(home|about(?: me)?|projects?|work|portfolio|skills|experience|contact(?: me)?|blog|services|education|testimonials)\s*$/;
 
 /** A GitHub profile or repository URL (not github.com's own pages). */
 export function isGithubProfile(href) {
@@ -204,10 +212,16 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
     }
   }
   // Buttons and other non-link controls: a "View Resume" button, a GitHub icon button, a "Contact" button.
-  const byControl = controlFacts(extractControls(html, base), isGithubProfile);
+  const controls = extractControls(html, base);
+  const byControl = controlFacts(controls, isGithubProfile);
   resume ||= byControl.resume;
   github ||= byControl.github;
   contactLink ||= byControl.contact;
+  // A nav button that scrolls to a section ("Projects", "About") is an in-page section, as a "#projects" link is.
+  for (const c of controls) {
+    const word = c.text.toLowerCase().match(NAV_SECTION)?.[1];
+    if (word) sections.add(word.replace(/\s+me$/, ""));
+  }
   const signals = portfolioSignals(html, name);
   const raw = String(html ?? "");
   const template = TEMPLATE_MARKERS.find(([re]) => re.test(raw))?.[1] ??

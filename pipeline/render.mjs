@@ -18,29 +18,42 @@ export function browserUserAgent(version) {
   return Number.isFinite(major) && major > 0 ? chromeUA(major) : chromeUA();
 }
 
-/** How often settleText samples the page's text, how long it must hold still, and the most it waits. */
+/**
+ * How often settleText samples the page's text, how long it must hold still,
+ * the most it waits, and how much text counts as "the page has rendered".
+ */
 export const SETTLE_POLL_MS = 500;
 export const SETTLE_QUIET_MS = 2000;
 export const SETTLE_MAX_MS = 10000;
+export const SETTLE_MIN_CHARS = 30;
 
 /**
- * Waits until the page's visible text stops growing: its length sampled
- * every `pollMs` holds for `quietMs`, at most `maxMs` in all. Pages that
- * render their text late (a client-rendered portfolio with 0 words at network
- * idle and 372 a few seconds later, facts audit 2026-11-21) are then read
- * whole; a page that is already still costs `quietMs`. Returns { ms, grew }:
- * the time spent and how many characters appeared meanwhile.
+ * Waits until the page's visible text has rendered and stopped growing: at
+ * least `minChars` characters, its length sampled every `pollMs` unchanged
+ * for `quietMs`, at most `maxMs` in all. In the facts audit (2026-11-21,
+ * scripts/experiments/facts-audit/) 13 of 70 listed sites had under half
+ * their words, most of them none, at network idle plus a second, the point
+ * this renderer used to read at; the list's capture reads much later and
+ * was not short. A page already rendered and still costs `quietMs`; a page
+ * that never shows text costs `maxMs`. Returns { ms, grew }: the time spent
+ * and how many characters appeared meanwhile.
  * @param {import("playwright").Page} page
  */
-export async function settleText(page, { pollMs = SETTLE_POLL_MS, quietMs = SETTLE_QUIET_MS, maxMs = SETTLE_MAX_MS } = {}) {
-  const len = () => page.evaluate(() => (document.body?.innerText ?? "").length).catch(() => -1);
+export async function settleText(page, { pollMs = SETTLE_POLL_MS, quietMs = SETTLE_QUIET_MS, maxMs = SETTLE_MAX_MS, minChars = SETTLE_MIN_CHARS } = {}) {
+  // -1 while the page cannot be read (navigating); null when it answers no number at all (nothing to wait for).
+  const len = async () => {
+    const n = await page.evaluate(() => (document.body?.innerText ?? "").trim().length).catch(() => -1);
+    return typeof n === "number" ? n : null;
+  };
   const t0 = Date.now();
   const first = await len();
+  if (first == null) return { ms: 0, grew: 0 };
   let last = first;
   let stillSince = t0;
-  while (Date.now() - t0 < maxMs && Date.now() - stillSince < quietMs) {
+  while (Date.now() - t0 < maxMs && (last < minChars || Date.now() - stillSince < quietMs)) {
     await page.waitForTimeout(pollMs);
     const n = await len();
+    if (n == null) break;
     if (n !== last) stillSince = Date.now();
     last = n;
   }
@@ -64,8 +77,9 @@ export class BrowserUnavailableError extends Error {
  * render tries to launch again.
  * The page counts as loaded once its HTML has arrived and parsed
  * (domcontentloaded); then it gets until `timeoutMs` for the load event and a
- * few seconds of network quiet, but a slow image or script never turns a
- * page that answered into an error.
+ * few seconds of network quiet, then until its text has rendered and holds
+ * still (settleText, 10 seconds at most), but a slow image or script never
+ * turns a page that answered into an error.
  */
 export function createRenderer({
   viewport = { width: 1280, height: 800 },
@@ -98,7 +112,8 @@ export function createRenderer({
         const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
         await page.waitForLoadState("load", { timeout: Math.max(1000, timeoutMs - (Date.now() - began)) }).catch(() => {});
         await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
-        await page.waitForTimeout(1000);
+        // Client-rendered pages often have no text yet at network idle: read once it has rendered and holds still.
+        await settleText(page);
         return {
           status: res?.status() ?? 0,
           finalUrl: page.url(),
