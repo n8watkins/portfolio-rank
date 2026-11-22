@@ -3,10 +3,11 @@
 // fetched once (plus its robots.txt, and the README of a GitHub repo), and
 // everything later steps need is kept from that one fetch: the html lang,
 // title, description, headings, about 1,200 characters of text and link
-// counts (the AI screen's evidence).
+// counts (the evidence kept with the row).
 //
 // checkPage answers { status: "dropped", reason, detail } or
-// { status: "screen", evidence }. Reasons are the seen-set's coarse codes
+// { status: "screen", evidence } (a pass: judgeRow in run.mjs settles it as
+// `pending`; the value's name is left from the removed AI screen). Reasons are the seen-set's coarse codes
 // (lib/discovery/sites.mjs): dead, blocked, parked and empty are looked at
 // again later; template, not_portfolio and duplicate are final. `detail`
 // (http_404, robots_disallow, ...) is for the run summary only.

@@ -14,9 +14,10 @@
 //     reason; dead, blocked, parked and empty keep the address and get a
 //     recheck date counted from the pilot; anything else keeps only the
 //     hash, the reason and the dates;
-//   - passed both (the 3,620 "kept"): `screen`, with the pilot's evidence
-//     (title, description, headings, 1,200 characters, link counts) as
-//     their working data, so the AI screen needs no new fetch;
+//   - passed both (the 3,620 "kept"): `pending`, waiting for the hand-off,
+//     with the pilot's evidence (title, description, headings, 1,200
+//     characters, link counts) as their working data (there is no AI screen
+//     since 2026-11-22);
 //   - the 1,690 GitHub rows that did not fit the pilot's cap: `found`, with
 //     their repo, so the next run checks them.
 // Watermarks: github:portfolio is set to the creation days the pilot read
@@ -100,7 +101,7 @@ export function pilotRows(dir) {
         linksGithub: Boolean(r.links_github),
         jsShell: (r.flags ?? []).includes("js_rendered"),
       };
-      add(c, { status: "screen", work: { evidence, priority: r.filter?.priority ?? "normal", from: "pilot" } });
+      add(c, { status: "pending", work: { evidence, priority: r.filter?.priority ?? "normal", from: "pilot" } });
     }
   }
   const checked = new Set(candidates.map((c) => c.url));

@@ -4,11 +4,12 @@ name: Discover portfolios
 # reads each source that is due from its watermark (GitHub topics and Hacker
 # News weekly, the "Share your personal site" threads monthly,
 # personalsit.es and uses.tech when they change), checks the new sites for
-# free, and, when switched on, screens them with Gemini 3.1 Flash-Lite and
-# hands the ones that pass to the grader's queue at a capped pace.
+# free with code, and, when switched on, hands the ones that pass to the
+# grader's queue at a capped pace. No AI screen: Gemini is asked about a site
+# once, when it is graded (owner, 2026-11-22).
 #
-# Daily, so the AI screen and the hand-off keep an even pace inside their
-# daily caps; each source is still read only when its interval is due.
+# Daily, so the hand-off keeps an even pace inside its daily cap; each source
+# is still read only when its interval is due.
 # 22:00 UTC is the Pacific afternoon, clear of the 20:30 to 21:15 Pacific
 # nightly window.
 #
@@ -17,10 +18,8 @@ name: Discover portfolios
 # at once, without a runner).
 #
 # Target: the staging database unless the repository variable
-# DISCOVERY_TARGET is "production". Switches (repository variables, all off
-# until the owner turns them on): DISCOVERY_SCREEN=on (the AI screen; owner
-# 2026-11-12: no Gemini spending until the prompt audits are done) and
-# DISCOVERY_HANDOFF=on (grading). DISCOVERY_CAPS (JSON) lowers or raises the
+# DISCOVERY_TARGET is "production". Switch (a repository variable, off until
+# the owner turns it on): DISCOVERY_HANDOFF=on (grading). DISCOVERY_CAPS (JSON) lowers or raises the
 # caps in pipeline/discovery/run.mjs.
 on:
   workflow_dispatch:
@@ -61,8 +60,6 @@ jobs:
       TURSO_AUTH_TOKEN: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_AUTH_TOKEN || secrets.STAGING_TURSO_AUTH_TOKEN }}
       # GitHub search (30 a minute) and the owners' profiles (GraphQL).
       GITHUB_TOKEN: ${{ github.token }}
-      GEMINI_API_KEY: ${{ vars.DISCOVERY_SCREEN == 'on' && secrets.GEMINI_API_KEY || '' }}
-      DISCOVERY_SCREEN: ${{ vars.DISCOVERY_SCREEN || 'off' }}
       DISCOVERY_HANDOFF: ${{ vars.DISCOVERY_HANDOFF || 'off' }}
       DISCOVERY_CAPS: ${{ inputs.caps || vars.DISCOVERY_CAPS }}
       GRADER_CAPS: ${{ vars.GRADER_CAPS }}
