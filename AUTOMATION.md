@@ -40,9 +40,10 @@ A site's address is its key everywhere in the database (grade, votes, ratings, s
 A site is graded once, so the feed build keeps a site's spelling when the list respells it (`pipeline/build-feed.mjs` `stickySpelling`, owner 2026-11-21).
 When an address on the list differs from one already on `feed.json` only in the scheme, the host's case, a leading `www.`, trailing slashes or tracking parameters (`utm_*`, `fbclid`, `gclid` and the like; `pipeline/list-key.mjs` `spellingKey`), the feed keeps its current spelling and takes only the entry's name and tagline.
 The database row, its grade, votes, screenshots, claims and profile address are untouched, and the roster sync delists and lists nothing.
-The build's log and the job summary ("Respellings on the community list") list each kept spelling.
+Every spelling on the list of that one site counts, however many the list has; the kept spelling must also have the same `listKey` as the list's, so exclusions and duplicates are unchanged.
+The build's log gives the count and the job summary ("Respellings on the community list") lists each kept spelling.
 Everything else is a new site, as before: a different path case, another query parameter or fragment (`/?user=a` and `/?user=b` can be two portfolios), an address that was not a web address (an upstream fix to a broken address takes effect at once), and a new domain.
-So is a match that is not one to one (two spellings on the list for one current address, or one for two); the summary lists these as unclear.
+So is a spelling that matches two current addresses (a feed edited by hand); the summary lists these as unclear.
 The cost: a kept site keeps its old spelling, so if that spelling stops answering while the new one works (a dropped `www.` that no longer resolves), the health check sees it as not answering; an old spelling that redirects to the new one on the same domain passes, as it does today.
 When a site does split, nothing is lost: the purge never deletes a delisted row whose key is listed, and every roster sync lists these in the job summary as "Split sites waiting for a merge: N" (sites respelled more than once, and keys with two listed rows, separately).
 Merging the sites split before the sticky spelling is a separate change.

@@ -72,7 +72,7 @@ test("every kind of respelling keeps the current spelling and the list's other f
   assert.deepEqual(await dueForCapture(db, r.feed, NOW), []);
 });
 
-test("an address that could be another site, or a match that is not one to one, is built exactly as before", () => {
+test("an address that could be another site, or one that matches two current addresses, is built exactly as before", () => {
   const cases = [
     // A different query or fragment: the list's spelling, as today.
     { current: ["https://host.dev/?user=a"], entries: ["https://host.dev/?user=b"] },
@@ -81,11 +81,9 @@ test("an address that could be another site, or a match that is not one to one, 
     { current: ["https://bob.github.io/portfolio"], entries: ["https://bob.github.io/Portfolio"] },
     // An address with no scheme fixed upstream (feed history: abass.wanecrea.com).
     { current: ["abass.wanecrea.com"], entries: ["https://abass.wanecrea.com"] },
-    // Two incoming spellings for one current address.
-    { current: ["https://two.dev/"], entries: ["https://two.dev", "https://www.two.dev"], unclear: 1 },
-    { current: ["https://two.dev/"], entries: ["https://two.dev", "https://two.dev/"], unclear: 1 },
     // One incoming address for two current spellings (a feed written by hand).
     { current: ["https://one.dev", "https://www.one.dev/"], entries: ["http://one.dev"], unclear: 1 },
+    { current: ["https://one.dev", "https://www.one.dev/"], entries: ["https://one.dev"], unclear: 1 },
   ];
   for (const c of cases) {
     const current = c.current.map((url) => ({ name: url, url }));
@@ -96,8 +94,34 @@ test("an address that could be another site, or a match that is not one to one, 
     assert.deepEqual(r.kept, [], JSON.stringify(c));
     assert.equal(r.unclear.length, c.unclear ?? 0, JSON.stringify(c));
   }
-  // The same spelling twice on the list is one spelling, so the current one is kept.
-  assert.deepEqual(stickySpelling([{ url: "https://x.dev/" }], ["https://x.dev", "https://x.dev"]).spell("https://x.dev"), "https://x.dev/");
+  // The unclear entry names the current addresses once, and a list spelling only when it is not one of them.
+  assert.deepEqual(stickySpelling([{ url: "https://one.dev" }, { url: "https://www.one.dev/" }], ["http://one.dev", "https://one.dev", "http://one.dev"]).unclear, [
+    { current: ["https://one.dev", "https://www.one.dev/"], listed: ["http://one.dev"] },
+  ]);
+});
+
+test("several spellings on the list of one current site all keep the current spelling, and nothing is delisted", async () => {
+  const current = [...fillers, { name: "Two", url: "https://two.dev/" }];
+  const entries = [...fillers, { name: "Two www", url: "https://www.two.dev" }, { name: "Two", url: "https://two.dev/" }];
+  const r = buildFeed({ entries, current });
+  assert.deepEqual(r.feed.slice(fillers.length), [{ name: "Two www", url: "https://two.dev/" }]);
+  assert.deepEqual([r.kept, r.unclear, r.dupes], [[{ from: "https://www.two.dev", to: "https://two.dev/" }], [], 1]);
+  const db = createClient({ url: `file:${path.join(tmp(), "db.sqlite")}` });
+  await ensureRosterSchema(db);
+  await db.batch(current.map((p) => ({ sql: "INSERT INTO portfolios (url, status) VALUES (?, 'live')", args: [p.url] })), "write");
+  assert.deepEqual(await syncRoster(db, r.feed, { now: NOW, owner: true }), { delisted: 0, relisted: 0, listed: current.length, split: 0, skipped: false });
+});
+
+test("a spelling whose list key differs from the current address's is never kept, so exclusions and duplicates hold", () => {
+  // The URL parser encodes é, so the spelling keys match; listKey lower-cases first, so the list keys do not.
+  assert.equal(spellingKey("https://x.dev/café"), spellingKey("https://x.dev/caf%C3%A9"));
+  assert.notEqual(listKey("https://x.dev/café"), listKey("https://x.dev/caf%C3%A9"));
+  const current = [{ name: "X", url: "https://x.dev/caf%C3%A9" }];
+  const entries = [{ name: "X", url: "https://x.dev/café" }];
+  assert.deepEqual(buildFeed({ entries, current }).feed, buildFeed({ entries }).feed);
+  // An exclusion of the list's spelling still keeps it out.
+  const excluded = [{ url: "https://x.dev/café", kind: "owner_request" }];
+  assert.deepEqual(buildFeed({ entries, current, excluded }).feed, []);
 });
 
 test("exclusions, duplicates and the guards see the kept spelling exactly as the list's", () => {
@@ -155,7 +179,10 @@ test("generate_feed.py, as the nightly sync runs it, keeps the feed's spelling o
     { name: "Haylee", url: "https://hellohaylee.com" },
     { name: "New", url: "https://new.dev/" },
   ]);
-  assert.match(out, /2 respelling\(s\) kept as listed/);
-  assert.match(out, /kept https:\/\/www\.stimmie\.dev \(the list now spells it https:\/\/stimmie\.dev\)/);
-  assert.match(fs.readFileSync(summary, "utf8"), /### Respellings on the community list: 2 kept, 0 unclear/);
+  // One count line in the log; the per-site list only in the job summary.
+  assert.match(out, /2 respelling\(s\) kept as the feed spells them/);
+  assert.doesNotMatch(out, /stimmie/);
+  const text = fs.readFileSync(summary, "utf8");
+  assert.match(text, /### Respellings on the community list: 2 kept, 0 unclear/);
+  assert.match(text, /- https:\/\/www\.stimmie\.dev \(the list spells it https:\/\/stimmie\.dev\)/);
 });

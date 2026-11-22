@@ -22,41 +22,45 @@ import { pathToFileURL } from "node:url";
 import { byListKey, listKey, spellingKey } from "./list-key.mjs";
 import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, excludedUrl, jobSummary, readList } from "./list-util.mjs";
 
+/** An entry's address, trimmed ("" when it has none). */
+const urlOf = (e) => String(e?.url ?? "").trim();
+
 /**
  * Sticky spelling: the address the feed writes for an entry. When the entry's
- * address has the spelling key (pipeline/list-key.mjs spellingKey) of exactly
- * one address on the current feed, and no other incoming entry has that key,
- * the current feed's spelling is kept, so a respelling upstream (a slash,
- * `www.`, the host's case, the scheme, tracking parameters) never reaches the
- * database as a new site. Returns { spell(url), unclear: [[urls]] }, where
- * unclear lists the keys left as upstream spells them because the match was
- * not one to one.
+ * address has the spelling key (pipeline/list-key.mjs spellingKey) and the
+ * list key of exactly one address on the current feed, the current feed's
+ * spelling is kept, so a respelling upstream (a slash, `www.`, the host's
+ * case, the scheme, tracking parameters) never reaches the database as a new
+ * site. Every incoming spelling of that key is that one site, however many
+ * the list has. Returns { spell(url), unclear: [{ current: [urls], listed:
+ * [urls] }] }, where unclear lists the keys with two or more current
+ * addresses, left as the list spells them.
  */
 export function stickySpelling(current, incomingUrls) {
   const now = new Map();
   for (const p of current) {
-    const url = String(p?.url ?? "").trim();
+    const url = urlOf(p);
     const key = url && spellingKey(url);
     if (!key) continue;
     if (!now.has(key)) now.set(key, new Set());
     now.get(key).add(url);
   }
-  const incoming = new Map();
+  const keep = new Map();
+  const unclear = new Map();
   for (const url of incomingUrls) {
     const key = spellingKey(url);
     if (!key || !now.has(key)) continue;
-    if (!incoming.has(key)) incoming.set(key, new Set());
-    incoming.get(key).add(url);
-  }
-  const keep = new Map();
-  const unclear = [];
-  for (const [key, spellings] of incoming) {
     const was = [...now.get(key)];
-    const urls = [...spellings];
-    if (was.length === 1 && urls.length === 1) keep.set(urls[0], was[0]);
-    else unclear.push([...was, ...urls]);
+    if (was.length === 1) {
+      // Same list key too, so exclusions and duplicates see exactly what they would have.
+      if (listKey(was[0]) === listKey(url)) keep.set(url, was[0]);
+      continue;
+    }
+    if (!unclear.has(key)) unclear.set(key, { current: was, listed: [] });
+    const u = unclear.get(key);
+    if (!was.includes(url) && !u.listed.includes(url)) u.listed.push(url);
   }
-  return { spell: (url) => keep.get(url) ?? url, unclear };
+  return { spell: (url) => keep.get(url) ?? url, unclear: [...unclear.values()] };
 }
 
 /**
@@ -68,7 +72,7 @@ export function stickySpelling(current, incomingUrls) {
  */
 export function buildFeed({ entries, excluded = [], additions = [], current = [] }) {
   const out = byListKey(excluded, (e) => excludedUrl(e) ?? "");
-  const all = [...entries, ...additions].map((e) => String(e?.url ?? "").trim()).filter(Boolean);
+  const all = [...entries, ...additions].map(urlOf).filter(Boolean);
   const { spell, unclear } = stickySpelling(current, all);
   const seen = new Set();
   const feed = [];
@@ -77,9 +81,9 @@ export function buildFeed({ entries, excluded = [], additions = [], current = []
   let excludedHits = 0;
   let added = 0;
   const take = (e, fromAdditions) => {
-    const given = String(e?.url ?? "").trim();
+    const given = urlOf(e);
     if (!given) return;
-    // Same list key as `given` (a stricter key matched), so exclusions and duplicates are unchanged.
+    // Same list key as `given` (stickySpelling checks it), so exclusions and duplicates are unchanged.
     const url = spell(given);
     const key = listKey(url);
     if (out.has(key)) {
@@ -145,21 +149,21 @@ async function main(argv) {
     r.dupes && `${r.dupes} dup(s)`,
     r.excludedHits && `${r.excludedHits} excluded`,
     r.added && `${r.added} added`,
-    r.kept.length && `${r.kept.length} respelling(s) kept as listed`,
+    r.kept.length && `${r.kept.length} respelling(s) kept as the feed spells them`,
     r.unclear.length && `${r.unclear.length} unclear respelling(s)`,
   ].filter(Boolean);
   console.log(`✓ Wrote ${output} with ${r.feed.length} entries.${extras.length ? `  (${extras.join(", ")})` : ""}`);
-  for (const k of r.kept) console.log(`  kept ${k.to} (the list now spells it ${k.from})`);
-  for (const u of r.unclear) console.log(`  unclear, left as the list spells it: ${u.join(", ")}`);
   if (r.kept.length || r.unclear.length) {
     jobSummary(
       [
         `### Respellings on the community list: ${r.kept.length} kept, ${r.unclear.length} unclear`,
         "",
-        "A kept site keeps its current address, so its row, grade, votes and screenshots stay as they are (AUTOMATION.md, \"Respelled sites\"). An unclear one is not one to one, so the list's spelling is used and the site may split.",
+        "A kept site keeps the feed's address, so its row, grade, votes and screenshots stay as they are (AUTOMATION.md, \"Respelled sites\"). An unclear one has two current addresses on the feed, so the list's spelling is used.",
         "",
-        ...r.kept.map((k) => `- kept ${k.to} (listed as ${k.from})`),
-        ...r.unclear.map((u) => `- unclear: ${u.join(", ")}`),
+        ...r.kept.map((k) => `- ${k.to} (the list spells it ${k.from})`),
+        ...r.unclear.map(
+          (u) => `- unclear: current ${u.current.join(", ")}; ${u.listed.length ? `the list spells it ${u.listed.join(", ")}` : "the list uses a current spelling"}`
+        ),
         "",
       ].join("\n")
     );
