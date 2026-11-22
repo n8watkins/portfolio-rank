@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // The facts audit's scoring: for every site of a probe run (probe.mjs), the
-// truth per fact and signal, the code's answer before (baseline/, a frozen
-// copy of pipeline/facts.mjs and signals.mjs from main) and after (the
-// pipeline's current code), and for every miss its cause.
+// truth per fact and signal, the code's answer before (pipeline/facts.mjs
+// and signals.mjs as they were on main at BASELINE_COMMIT, read from git into
+// a temporary folder) and after (the pipeline's current code), and for every
+// miss its cause. Emails in the printed evidence are replaced by <email>.
 //
 // The truth: the broad probe's answer (dom-probe.mjs, read after the page
 // stopped changing and a slow scroll), replaced by the answer decided by eye
@@ -12,9 +13,22 @@
 //
 //   node scripts/experiments/facts-audit/analyze.mjs <before-dir> [<after-dir>] [--render <render-dir>] [--list] [--json out.json]
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import * as v1 from "./baseline/facts-v1.mjs";
+import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import * as now from "../../../pipeline/facts.mjs";
+
+// main before this work (2026-11-21): the facts and signals code the audit measured as "before".
+const BASELINE_COMMIT = "5900b53df688073b717b5cfa792dc176f41db525";
+const baselineDir = fs.mkdtempSync(path.join(os.tmpdir(), "facts-audit-baseline-"));
+for (const f of ["facts.mjs", "signals.mjs"]) {
+  const src = execFileSync("git", ["show", `${BASELINE_COMMIT}:pipeline/${f}`], { cwd: import.meta.dirname, encoding: "utf8" });
+  fs.writeFileSync(path.join(baselineDir, f), src);
+}
+const v1 = await import(pathToFileURL(path.join(baselineDir, "facts.mjs")).href);
+fs.rmSync(baselineDir, { recursive: true, force: true });
+const redact = (s) => String(s).replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<email>");
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
@@ -265,6 +279,15 @@ for (const r of table) {
   console.log(`${pad(r.group, 9)}${pad(r.fact, 15)}${pad(f(r.before), 22)}${pad(f(r.fixedOnA), 26)}${pad(r.after.n ? `${f(r.after)} of ${r.after.n}` : "-", 22)}${Object.entries(r.causes).map(([c, n]) => `${c}: ${n}`).join("; ")}`);
 }
 console.log(`facts    footer_year    ${fy.before} of ${fy.n} right; fixed code ${fy.fixedOnA}; after ${fy.afterN ? `${fy.after} of ${fy.afterN}` : "-"}`);
+// Facts only gain: on the same reading, anything main's code found that the current code does not.
+const lost = [];
+for (const s of scored) {
+  for (const k of keysOf("facts")) if (s.old.A.facts[k] === true && s.fixedOnA.facts[k] !== true) lost.push(`facts.${k} ${s.url}`);
+  for (const k of SIGNALS) if (s.old.A.signals[k] === true && s.fixedOnA.signals[k] !== true) lost.push(`signals.${k} ${s.url}`);
+  if (s.fixedOnA.raw.sections < s.old.A.raw.sections) lost.push(`facts.sections count ${s.old.A.raw.sections} -> ${s.fixedOnA.raw.sections} ${s.url}`);
+}
+console.log(`\nfound by main's code and not by the current code, same reading: ${lost.length ? lost.join("; ") : "none"}`);
+
 // The browser second opinion (pipeline/render.mjs, used by the health check's
 // signals and by evidence.mjs): the old code at its old reading point (R) and
 // the current code on a load through the current renderer (--render <dir>).
@@ -304,6 +327,7 @@ if (renderDir) {
 }
 
 if (flags.has("--list")) {
-  for (const m of misses) console.log(`MISS ${m.group}.${m.fact} ${m.url} truth=${m.truth} before=${m.before} fixed=${m.fixedOnA} after=${m.after} [${m.cause}]${m.decided ? ` decided: ${m.decided}` : ""}\n     ${m.ev.join("\n     ")}`);
+  for (const m of misses) console.log(redact(`MISS ${m.group}.${m.fact} ${m.url} truth=${m.truth} before=${m.before} fixed=${m.fixedOnA} after=${m.after} [${m.cause}]${m.decided ? ` decided: ${m.decided}` : ""}\n     ${m.ev.join("\n     ")}`));
 }
-if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ table, footerYear: fy, misses, sites: sites.map((s) => (s.skipped ? s : { url: s.url, from: s.from, truth: s.truth, decided: s.decided, words: { R: s.meta.R?.words, A: s.meta.A?.words, A2: s.meta.A2?.words, B: s.meta.B?.words }, t: s.meta.t, before: { ...s.old.A.facts, ...Object.fromEntries(SIGNALS.map((k) => [`sig_${k}`, s.old.A.signals[k]])) }, fixedOnA: { ...s.fixedOnA.facts, ...Object.fromEntries(SIGNALS.map((k) => [`sig_${k}`, s.fixedOnA.signals[k]])) }, after: s.after ? { ...s.after.facts, ...Object.fromEntries(SIGNALS.map((k) => [`sig_${k}`, s.after.signals[k]])), settle: s.after.meta.settle, t: s.after.meta.t } : null })) }, null, 1));
+// The per-site JSON is for local digging only (it holds page evidence): keep it out of the repository.
+if (jsonOut) fs.writeFileSync(jsonOut, redact(JSON.stringify({ table, footerYear: fy, misses, sites: sites.map((s) => (s.skipped ? s : { url: s.url, from: s.from, truth: s.truth, decided: s.decided, words: { R: s.meta.R?.words, A: s.meta.A?.words, A2: s.meta.A2?.words, B: s.meta.B?.words }, t: s.meta.t, before: { ...s.old.A.facts, ...Object.fromEntries(SIGNALS.map((k) => [`sig_${k}`, s.old.A.signals[k]])) }, fixedOnA: { ...s.fixedOnA.facts, ...Object.fromEntries(SIGNALS.map((k) => [`sig_${k}`, s.fixedOnA.signals[k]])) }, after: s.after ? { ...s.after.facts, ...Object.fromEntries(SIGNALS.map((k) => [`sig_${k}`, s.after.signals[k]])), settle: s.after.meta.settle, t: s.after.meta.t } : null })) }, null, 1)));

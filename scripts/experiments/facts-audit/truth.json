@@ -10,7 +10,7 @@
     "resume": { "truth": true, "why": "read by eye: a 'Resume' button in the hero; its wrapping link is empty (href=\"\")" }
   },
   "https://fourtonfish.com": {
-    "github": { "truth": true, "why": "read in the capture's HTML: a footer link 'GitHub' to github.com/stefanbohacek (rel=me)" }
+    "github": { "truth": false, "why": "corrected in the second round: the footer 'GitHub' link is inside an HTML comment, and the only other one is a <link rel=me> in the head; a visitor sees no GitHub link (main's code read the commented-out link)" }
   },
   "https://mariyajebastin.netlify.app": {
     "contact": { "truth": true, "why": "read by eye: a 'Contact' menu item, an <a> without href driven by script" }
@@ -27,16 +27,19 @@
     "name": { "truth": true, "why": "read in the page: the chat introduces Dhanush Nehru by name; the name is not in the title or an h1" }
   },
   "https://www.chicagoitsystems.com": {
-    "about": { "truth": false, "why": "read in the page: a company site; 'about' only in prose ('learn more about Mr. Stresen-Reuter')" }
+    "about": { "truth": false, "why": "read in the page: a company site; 'about' only in prose ('learn more about' a staff member)" }
   },
   "https://sanjanavenkatesh.vercel.app": {
     "about": { "truth": true, "why": "read in the page: an 'about me :<' block introduces her ('Hi, I'm Sanjana...'), not a heading tag" }
   },
   "https://yevhenmakes.com": {
-    "contact": { "truth": true, "why": "read in the page: the footer shows 'what(a)yevhenmakes.com', a link a script turns into a mailto on click (other: an obfuscated email)" }
+    "contact": { "truth": true, "why": "read in the page: the footer shows an address written as 'name(a)domain', a link a script turns into a mailto on click (other: an obfuscated email)" }
   },
   "https://rohitwork.vercel.app": {
     "about": { "truth": false, "why": "read in the page: 'about' only in aria-labels 'Learn more about animation/tools' of two cards, no About section" }
+  },
+  "https://adityathakur.me": {
+    "sections": { "truth": false, "why": "second round: the only nav-word control outside a #hash link is a 'Contact' button inside a link to the /contact page, another page, not an in-page section" }
   },
   "https://www.afaqrashid.com": {
     "project_links": { "truth": false, "why": "read by eye: the only outbound link besides social profiles is the employer's site (AlimcoSoft), not a project" }
