@@ -59,7 +59,7 @@ export function createRequestLog({ db, job, runId = env().GITHUB_RUN_ID ?? null 
   const log = {
     rows,
     // The job new requests are logged under; a run that moves from one kind
-    // of work to another (new grades, then re-grades) changes it.
+    // of work to another changes it.
     job,
     // The site the next requests are for (its URL), or null; the night sets it per item.
     item: null,

@@ -1,6 +1,6 @@
-// Gemini monitoring (pipeline/gemini-log.mjs), grade history and the
-// re-grade queue (pipeline/rubric-history.mjs), and the 3.1-vs-3.5
-// grade pairs (pipeline/grade-pairs.mjs). Offline: Gemini is a
+// Gemini monitoring (pipeline/gemini-log.mjs), grade history
+// (pipeline/rubric-history.mjs), and the 3.1-vs-3.5 grade pairs
+// (pipeline/grade-pairs.mjs). Offline: Gemini is a
 // stand-in, the database a throwaway file.
 import { test } from "node:test";
 import assert from "node:assert/strict";

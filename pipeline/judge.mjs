@@ -199,10 +199,9 @@ async function gradeRow(row) {
   return { status: "ok", rubric, model, pageText, facts };
 }
 
-// Grading stays inside a daily budget per model (GEMINI_GRADING_BUDGET;
-// 3.5's leaves room in its 500 for the daily vote job). Every request counts,
-// retries included, plus what earlier runs spent today (gemini_requests).
-// Rows beyond the budget wait for tomorrow.
+// Grading stays inside the budget accountant's "Grade new sites" share
+// (pipeline/budget.mjs). Every request counts, retries included, plus what
+// earlier runs spent today (gemini_requests). Rows beyond it wait for tomorrow.
 
 async function runRubric() {
   await ensureRubricHistory(db);

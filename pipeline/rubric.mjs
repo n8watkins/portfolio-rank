@@ -11,8 +11,9 @@
 // measured facts as a few lines of context.
 //
 // Bump RUBRIC_VERSION whenever the criteria, the prompt or the schema change
-// in a way that makes grades incomparable. Grades from an older version go on
-// the lowest-priority re-grade queue (pipeline/rubric-history.mjs).
+// in a way that makes grades incomparable. Grades from an older version stay
+// as they are: a site is graded once and never re-graded automatically
+// (owner, 2026-11-21); every grade records its rubric_version.
 import { redactContacts } from "./redact.mjs";
 import { SITE_DATA_MARKER } from "./site-data.mjs";
 import { guardVerdict } from "./portfolio-guard.mjs";

@@ -21,8 +21,8 @@ Data source: `feed.json` from github.com/n8watkins/developer-portfolios (~1,700+
 | Behavior | Playwright (same run as screenshots) | free | all sites |
 | Originality | known-template fingerprints only (clustering not built) | free | all captured sites |
 | Facts for the rubric | capture script (`pipeline/facts.mjs`) | free | all captured sites |
-| Design & content | Gemini Flash-Lite (free-tier daily budget), quality only | free tier | rubric for new sites, pairwise ongoing |
-| Overall design rank | Human ELO votes + AI ELO votes | free | forever-refining |
+| Design & content | Gemini Flash-Lite (free-tier daily budget), quality only | free tier | rubric once per site, when it is added |
+| Overall design rank | Human ELO votes (the ELO-era AI votes were removed on 2026-11-22; their votes stay) | free | forever-refining |
 
 ## 1. Gates (pass/fail)
 
@@ -142,12 +142,12 @@ Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and a
 The free tier counts requests, not tokens, so a grade is still one request; the savings matter at paid rates and for per-minute token limits.
 `npm run eval:rubric -- --sample 30 --live` grades the sample with v2 and compares it with the stored grades (it uses up to 60 of the day's 3.5 requests).
 
-**Re-grades:** grades from an older rubric version are re-graded at the lowest priority, after new and ungraded sites and after the 3.1-to-3.5 re-grades, inside the daily grading budget, and only when the repository variable `RUBRIC_REGRADE` is `true` (off until the owner turns it on).
-The old grade moves to `rubric_history`; the weekly 3.1-vs-3.5 report only pairs grades from the same rubric version.
+**Graded once:** a site is graded when it is added and never re-graded automatically, so a grade from an older rubric version stays as it is (owner, 2026-11-21; [docs/DECISIONS.md](docs/DECISIONS.md)).
+A grade made again (a person's re-grade request, its one fresh grade after the owner's review, or a manual tool) moves the old grade to `rubric_history`.
 
-**Pairwise pass** (1 call = 2 sites): "which is better overall?" from the two hero screenshots plus cached Lighthouse and polish signals.
-The answer is a vote in the same ELO system as humans, tagged `rater_type='ai'`.
-The pool is graded S/A/B sites that are on the list, not confirmed down and not graded `is_portfolio=false`; pairs favor the least-voted sites with close ratings.
+**Pairwise pass:** removed on 2026-11-22.
+It was one call for two sites, "which is better overall?", cast as a vote in the same ELO system as humans (`rater_type='ai'`); the votes it cast stay.
+AI comparisons are now ranking v2's ([RANKING.md](RANKING.md)), off until `RANKING_V2` is on.
 
 ## 7. Human ELO (the master design ranking)
 
