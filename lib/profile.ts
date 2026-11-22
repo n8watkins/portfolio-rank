@@ -116,7 +116,8 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   await ensureSchema();
   const client = db();
   const listed = listedBy.get(url) ?? null;
-  const owner = await ownerState(client, url);
+  // Fresh, never the minute cache: this render is kept at the edge for a day.
+  const owner = await ownerState(client, url, { fresh: true });
   if (owner.removedAt) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
@@ -204,7 +205,7 @@ export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "
   const [row, inspect, owner] = await Promise.all([
     client.execute({ sql: `SELECT ai_rubric, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]),
     client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`inspect:${url}`] }).then((r) => r.rows[0]),
-    ownerState(client, url),
+    ownerState(client, url, { fresh: true }),
   ]);
   let inspected = null;
   try {

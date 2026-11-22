@@ -190,7 +190,8 @@ export default async function PortfolioPage({
   ).rows[0];
   // A verified owner may remove their portfolio or hide its grade
   // (lib/games/claims.mjs); a removed one is gone at once.
-  const owner = await ownerState(db(), url);
+  // Fresh, never the minute cache: this render is kept at the edge for a day.
+  const owner = await ownerState(db(), url, { fresh: true });
   if (owner.removedAt) notFound();
   const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
   // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise, and the page stays as it was.

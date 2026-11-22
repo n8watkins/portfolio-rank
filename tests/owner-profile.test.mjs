@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { register } from "node:module";
+import { createClient } from "@libsql/client";
 
 // Lets this file import lib/profile.ts the way Next does: "@/..." from the
 // repository root, extensionless TypeScript, and JSON as a default export.
@@ -98,4 +99,18 @@ test("a hidden grade under one spelling stays hidden on the profile under anothe
   await addPending(db(), { url: "https://graded-own.dev/", source: "tools" });
   await act("https://graded-own.dev/", "hide_grade");
   assert.equal((await loadProfile("https://graded-own.dev/#about"))?.hideGrade, true);
+});
+
+test("a removal applied by another isolate (the hourly job): the profile under another spelling answers removed at once, whatever this isolate cached", async () => {
+  const { markedOwnerRows } = await import("../lib/ownership/same-site.mjs");
+  await addPending(db(), { url: "https://other-isolate-own.dev/", source: "tools" });
+  const spelling = "https://www.other-isolate-own.dev/?x=1";
+  assert.ok(await loadProfile(spelling), "a profile before");
+  const cached = (await markedOwnerRows(db())).length;
+
+  // Another isolate's client writes the applied removal; this module's cache is not told.
+  const other = createClient({ url: `file:${process.env.LOCAL_DB_FILE}` });
+  await other.execute({ sql: "INSERT INTO portfolio_owner (url, removed_at, updated_at) VALUES (?, ?, ?)", args: ["https://other-isolate-own.dev", T0.toISOString(), T0.toISOString()] });
+  assert.equal((await markedOwnerRows(db())).length, cached, "this isolate's list-wide cache is still stale");
+  assert.equal(await loadProfile(spelling), null, "the profile reads fresh");
 });
