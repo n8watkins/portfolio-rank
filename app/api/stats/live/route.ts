@@ -11,7 +11,7 @@ import { testSeam } from "@/lib/grader/server";
 // GET /api/stats/live (GAMES_V2) -> the live numbers in one answer:
 //   portfolios, graded, gradedThisWeek, votesToday, votes, quizzesPlayed,
 //   ownDomainPct, resumePct, commonRole { key, label, pct }, averageTier
-//   { value, tier }, changedThisMonth, newest { url, name },
+//   { value, tier }, newest { url, name },
 //   contributors (the community list), stars (PortfolioRank's repository),
 //   at, measuredAt { site, github }
 // The same for everyone and cached at the edge for a minute. Behind it the

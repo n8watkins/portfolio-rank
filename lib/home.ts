@@ -206,7 +206,6 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
     site.averageTier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
     site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
-    site.changedThisMonth > 0 ? { key: "changed", label: "Sites changed this month", value: n(site.changedThisMonth), tone: 4 } : null,
     gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
   ];
   return out.filter((s): s is LiveStat => s !== null);

@@ -379,7 +379,7 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   A hidden grade is left out of the portfolio page, the print report (except for an owner with that proof) and the quiz pool.
   A re-grade is a row in `regrade_requests` for the grade service, which applies its own cooldown; one open request per site.
   Every claim step and action is written to `claim_log`, the audit log.
-- **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, sites changed this month from `rating_resets`, the newest entry) come from one pass over the listed portfolios, cached an hour.
+- **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, the newest entry) come from one pass over the listed portfolios, cached an hour.
   Stars and the community list's contributors come from the GitHub API, cached a day.
   Votes today (Pacific, through the `votes_created_idx` index), all votes and quizzes finished are read on each edge-cache miss.
 - **Report download** (`printView` and `renderReportHtml` in [lib/grader/report.mjs](lib/grader/report.mjs)): a print-optimised HTML page with a "Save as PDF" button, not a PDF made on the Worker (a Worker PDF library ships Latin-1 fonts only, or a megabyte-scale font).
