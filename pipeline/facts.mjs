@@ -6,9 +6,14 @@
 //
 // measureFacts is pure; checkLinks makes HTTP requests (HEAD, then GET when
 // HEAD is refused), capped in number and time, never to private addresses.
+import { RESUME_PATH, RESUME_WORDS, controlFacts, extractControls } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
 
-export const FACTS_VERSION = 1;
+// 2: resume, GitHub, contact and project links also come from buttons and
+// other non-link controls (./page-controls.mjs), and the capture reads the
+// page once its text has stopped growing (./render.mjs settleText). Facts
+// stored with v 1 (or none) were measured from links only.
+export const FACTS_VERSION = 2;
 export const LINK_CHECK_MAX = 8;
 export const LINK_TIMEOUT_MS = 8000;
 
@@ -106,6 +111,28 @@ export function footerYear(text, now = new Date()) {
   return best;
 }
 
+/** A GitHub profile or repository URL (not github.com's own pages). */
+export function isGithubProfile(href) {
+  try {
+    const u = new URL(href);
+    if (u.hostname.toLowerCase().replace(/^www\./, "") !== "github.com") return false;
+    const first = u.pathname.split("/").filter(Boolean)[0];
+    return Boolean(first) && !GH_RESERVED.test(first);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Every link on the page as extractLinks returns it, plus the URLs written
+ * in non-link controls (a button's window.open('https://github.com/me/app'),
+ * data-href), so a project opened from a button is a project link too.
+ */
+export function pageLinks(html, baseUrl) {
+  const fromControls = extractControls(html, baseUrl).flatMap((c) => c.urls.map((href) => ({ raw: href, href, text: c.label })));
+  return [...extractLinks(html, baseUrl), ...fromControls];
+}
+
 /**
  * Outbound links that look like projects or demos: other sites and GitHub
  * repositories, without social profiles, services and the site itself.
@@ -165,11 +192,8 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
     if (/^mailto:/i.test(l.raw)) contactLink = true;
     if (/linkedin\.com\/in\/|(^|\.)(twitter|x)\.com\/[A-Za-z0-9_]+/i.test(l.href)) contactLink = true;
     if (/\bcontact\b|get in touch|hire me|say hello/i.test(label)) contactLink = true;
-    if (/\b(resume|résumé|cv|curriculum vitae)\b/i.test(label) || /resume|\/cv\b|[-_]cv\.pdf/i.test(u.pathname)) resume = true;
-    if (h === "github.com") {
-      const first = u.pathname.split("/").filter(Boolean)[0];
-      if (first && !GH_RESERVED.test(first)) github = true;
-    }
+    if (RESUME_WORDS.test(label) || RESUME_PATH.test(u.pathname)) resume = true;
+    if (isGithubProfile(u.href)) github = true;
     if (h === self && (u.protocol === "http:" || u.protocol === "https:")) {
       if (l.raw.startsWith("#") && l.raw.length > 1) sections.add(l.raw.slice(1).toLowerCase());
       else if (u.hash && u.hash.length > 1 && (u.pathname === "/" || u.pathname === new URL(base).pathname)) sections.add(u.hash.slice(1).toLowerCase());
@@ -179,6 +203,11 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
       }
     }
   }
+  // Buttons and other non-link controls: a "View Resume" button, a GitHub icon button, a "Contact" button.
+  const byControl = controlFacts(extractControls(html, base), isGithubProfile);
+  resume ||= byControl.resume;
+  github ||= byControl.github;
+  contactLink ||= byControl.contact;
   const signals = portfolioSignals(html, name);
   const raw = String(html ?? "");
   const template = TEMPLATE_MARKERS.find(([re]) => re.test(raw))?.[1] ??
@@ -261,7 +290,7 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
 /** measureFacts plus the project-link check. */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
   const facts = measureFacts(input);
-  const urls = projectLinkCandidates(extractLinks(input.html, facts.final_url), facts.final_url);
+  const urls = projectLinkCandidates(pageLinks(input.html, facts.final_url), facts.final_url);
   facts.project_links = await checkLinks(urls, { fetchImpl, userAgent, timeoutMs });
   return facts;
 }

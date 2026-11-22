@@ -18,6 +18,35 @@ export function browserUserAgent(version) {
   return Number.isFinite(major) && major > 0 ? chromeUA(major) : chromeUA();
 }
 
+/** How often settleText samples the page's text, how long it must hold still, and the most it waits. */
+export const SETTLE_POLL_MS = 500;
+export const SETTLE_QUIET_MS = 2000;
+export const SETTLE_MAX_MS = 10000;
+
+/**
+ * Waits until the page's visible text stops growing: its length sampled
+ * every `pollMs` holds for `quietMs`, at most `maxMs` in all. Pages that
+ * render their text late (a client-rendered portfolio with 0 words at network
+ * idle and 372 a few seconds later, facts audit 2026-11-21) are then read
+ * whole; a page that is already still costs `quietMs`. Returns { ms, grew }:
+ * the time spent and how many characters appeared meanwhile.
+ * @param {import("playwright").Page} page
+ */
+export async function settleText(page, { pollMs = SETTLE_POLL_MS, quietMs = SETTLE_QUIET_MS, maxMs = SETTLE_MAX_MS } = {}) {
+  const len = () => page.evaluate(() => (document.body?.innerText ?? "").length).catch(() => -1);
+  const t0 = Date.now();
+  const first = await len();
+  let last = first;
+  let stillSince = t0;
+  while (Date.now() - t0 < maxMs && Date.now() - stillSince < quietMs) {
+    await page.waitForTimeout(pollMs);
+    const n = await len();
+    if (n !== last) stillSince = Date.now();
+    last = n;
+  }
+  return { ms: Date.now() - t0, grew: Math.max(0, last - first) };
+}
+
 /** The browser could not start (Playwright's Chromium missing or failing to launch): says nothing about a site. */
 export class BrowserUnavailableError extends Error {
   /** @param {unknown} cause */

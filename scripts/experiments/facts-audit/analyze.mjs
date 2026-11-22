@@ -127,7 +127,8 @@ function broadTruth(probe, site, finalUrl) {
 /** One version of the code on one saved reading: the facts and signals as booleans. */
 function codeAnswer(lib, html, text, site, finalUrl) {
   const f = lib.measureFacts({ html, text, url: site.url, finalUrl, name: site.name });
-  const cands = lib.projectLinkCandidates(lib.extractLinks(html, f.final_url), f.final_url);
+  // The links measurePage checks: pageLinks where the version has it (links plus control URLs), else the links.
+  const cands = lib.projectLinkCandidates((lib.pageLinks ?? lib.extractLinks)(html, f.final_url), f.final_url);
   return {
     facts: {
       resume: f.resume,

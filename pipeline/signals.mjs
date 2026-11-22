@@ -5,11 +5,14 @@
 // can confirm or clear it. The signals are stored per site
 // (portfolios.signals) for the transparent rubric later.
 
+import { GITHUB_WORD, extractControls } from "./page-controls.mjs";
+
 // At or below this many signals a page needs review.
 export const NEEDS_REVIEW_MAX = 1;
 
 const SOCIAL = /href\s*=\s*["']?https?:\/\/(?:www\.)?(?:linkedin\.com\/in|twitter\.com|x\.com|instagram\.com|dribbble\.com|behance\.net|mastodon\.[a-z]+|bsky\.app|threads\.net)\//i;
 const GITHUB = /href\s*=\s*["']?https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9-]+/i;
+const GITHUB_URL = /^https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9-]+/i;
 
 const fold = (s) =>
   String(s ?? "")
@@ -33,8 +36,10 @@ const textOf = (html) =>
 export function portfolioSignals(html, name) {
   const raw = String(html ?? "").slice(0, 400000);
   const text = fold(textOf(raw));
-  // Link targets and ids count too: "#projects", "/about", "resume.pdf".
-  const attrs = fold((raw.match(/(?:href|id)\s*=\s*["'][^"']*["']/gi) ?? []).join(" "));
+  // Link targets, ids and the labels of icon-only controls count too:
+  // "#projects", "/about", "resume.pdf", aria-label="View Resume".
+  const attrs = fold((raw.match(/\b(?:href|id|aria-label|title)\s*=\s*["'][^"']*["']/gi) ?? []).join(" "));
+  const controls = extractControls(raw);
   const both = `${text} ${attrs}`;
   const head = fold(
     textOf(
@@ -47,7 +52,8 @@ export function portfolioSignals(html, name) {
     about: /\babout(?:[ -]?me)?\b|\bwho i am\b/.test(both),
     contact: /mailto:/i.test(raw) || /<form\b/i.test(raw) || SOCIAL.test(raw) || /\bcontact\b|\bget in touch\b|\bhire me\b/.test(both),
     resume: /\b(resume|cv|curriculum vitae)\b/.test(both),
-    github: GITHUB.test(raw),
+    // A GitHub link, or a control that opens GitHub from script or is labelled GitHub.
+    github: GITHUB.test(raw) || controls.some((c) => GITHUB_WORD.test(c.label) || c.urls.some((u) => GITHUB_URL.test(u))),
     name: tokens.length > 0 && tokens.some((t) => head.includes(t)),
   };
   const score = Object.values(s).filter(Boolean).length;
