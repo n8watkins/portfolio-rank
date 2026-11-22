@@ -1,6 +1,7 @@
 import type { Client } from "@libsql/client";
 import { safeFetch, readCapped } from "@/lib/safefetch";
-import { checkLinks, extractLinks, measureFacts, projectLinkCandidates } from "@/pipeline/facts.mjs";
+import { checkLinks, measureFacts, pageLinks, projectLinkCandidates } from "@/pipeline/facts.mjs";
+import { scanPage } from "@/pipeline/page-controls.mjs";
 import { parkingPhrase, titleOf, visibleText } from "@/pipeline/gate.mjs";
 import { codeChecks } from "@/pipeline/rubric.mjs";
 import { CHECK_KINDS, pageFingerprint, recordCheck } from "@/lib/freshness.mjs";
@@ -92,7 +93,9 @@ export async function measureQuick(
     return { ok: false, error: "parked", finalUrl, httpStatus: res.status, title, message: "That domain looks parked or for sale.", measuredAt };
   }
   // measureFacts is plain JavaScript; its inferred parameter type is narrower than what it reads.
-  const facts = measureFacts({ html, text, url, finalUrl, source: "http", now } as never) as Record<string, unknown>;
+  // One linear pass over the HTML for the facts and the link candidates, as pipeline/facts.mjs measurePage does.
+  const scan = scanPage(html, finalUrl);
+  const facts = measureFacts({ html, text, url, finalUrl, source: "http", now, scan } as never) as Record<string, unknown>;
   const fp = pageFingerprint({ html, finalUrl, headers: res.headers, now: now.getTime() });
   // The link checks are the slow part: an unchanged page reuses them for 30 days.
   const linksAt = reuse?.linksCheckedAt ? Date.parse(reuse.linksCheckedAt) : NaN;
@@ -101,7 +104,7 @@ export async function measureQuick(
     facts.project_links = reuse.facts.project_links;
     linksCheckedAt = reuse.linksCheckedAt!;
   } else {
-    const urls = projectLinkCandidates(extractLinks(html, finalUrl), finalUrl);
+    const urls = projectLinkCandidates(pageLinks(html, finalUrl, scan), finalUrl);
     facts.project_links = await checkLinks(urls, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS });
   }
   // Client-rendered pages send little HTML: the capture measures them properly.
