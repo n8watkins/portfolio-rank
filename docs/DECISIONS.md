@@ -77,6 +77,12 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Every background job works only on sites on the current list; rows that leave the list are deleted after 30 days, with their votes kept.
   Our exclusions override the community list, and `/removed` shows what was removed and why.
   Why: 254 unlisted sites were still being graded and voted on, and we can't rely on the community list being right for our purposes.
+  Changed on 2026-11-22 (next entry): a site the community list drops no longer leaves our list, and only rows we removed are deleted.
+- **A community list removal changes nothing on our side** (owner, 2026-11-22: "a community list remove shouldnt change anything on our side"; earlier: "it could be the case that the removed sites are still portfolios ... we should be doing our checks on the sites they are removing as a failsafe. if people want to remove their portfolio from our site they have to go through our claim process."). Status: building (#274).
+  A site on our list that the community list drops stays on `data/feed.json`, recorded in `data/additions.json` (`source: "left_community_list"`, `left_on`, the day the nightly rebuild first saw it gone); the health check hides and shows it like any listed site, and only our exclusions (dead, down, duplicate, not a portfolio) and an owner's removal through the claim process take it off.
+  Respellings, excluded sites and README lines that were never web addresses are not carried; the purge deletes only rows we removed (in `data/excluded.json`, or an old spelling of a listed site); nothing is sent to the community list.
+  The 25 sites dropped before this rule, delisted on 2026-11-10 and 2026-11-16, were recorded by hand so the next sync lists them again.
+  Why: the community list removes lines through its automatic broken-link reports (paused hosting, a 404, an expired domain), which is not a judgement that a site is not a portfolio, and the first of those rows would have been deleted on about 2026-12-10.
 - **The capture gives a working site every chance before calling it failed** (agent, 2026-11-14). Status: building (this PR).
   A 401, 403, 429 or 503 or a TLS failure on the plain pre-check is left to the browser (often a bot filter, or a certificate the browser accepts); a page with no text yet gets up to 15 seconds to render before it counts as blank; a screenshot that times out or hits Chrome's "Unable to capture screenshot" is taken again through the DevTools protocol.
   Why: 30 sites the owner confirmed as portfolios on 14 November failed the nightly capture (13 on a 403 to the pre-check alone, 9 blank after 3 seconds, 6 on a screenshot error) while a browser loaded all of them.
@@ -109,7 +115,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: the owner wants a verdict to stand, not to be re-earned on every capture, while a dead site gets a way back.
 - **Feed shrink guard** (agent, 2026-11-10). Status: built (#53).
   The sync fails rather than write a list more than 5% smaller.
-  Why: a broken upstream file should never wipe the site.
+  Since 2026-11-22 it also fails when the community list drops more than 5% of our list in one night, since such sites now stay on the feed (agent).
+  Why: a broken upstream file should never wipe the site, or fill the record of sites the community list dropped.
 
 ## Grading
 

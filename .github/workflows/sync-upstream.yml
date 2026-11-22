@@ -17,8 +17,11 @@ name: Sync upstream + ingest
 # it, then grades new sites on Cloudflare the same night
 # (pipeline/night.mjs). capture.mjs reads feed.json, marks database rows that
 # left it as delisted (pipeline/roster.mjs), and captures new sites plus
-# failed captures whose retry date has come. The feed may shrink by at most
-# 5% per run (generate_feed.py --max-shrink).
+# failed captures whose retry date has come. A site upstream drops stays on
+# feed.json, recorded in data/additions.json (owner, 2026-11-22; AUTOMATION.md
+# "Community list removals"), so only our own exclusions and owner removals
+# take a site off. The feed may shrink by at most 5% per run, and upstream may
+# drop at most 5% of it per run (generate_feed.py --max-shrink).
 # Grading here is the fallback only: by hand (the "grade" input), or when the
 # GitHub schedule runs because Cloudflare did not start this workflow.
 on:
@@ -162,14 +165,17 @@ jobs:
       - name: Add owner-confirmed relists
         run: node pipeline/review-additions.mjs
 
-      # 1) Rebuild feed.json from upstream's merged (accepted) README.
+      # 1) Rebuild feed.json from upstream's merged (accepted) README. A site
+      #    already listed that upstream dropped stays, and the build records it
+      #    in data/additions.json (committed below with feed.json).
       - name: Rebuild feed.json from upstream
         run: |
           curl -fsSL \
             https://raw.githubusercontent.com/emmabostian/developer-portfolios/master/README.md \
             -o /tmp/upstream-README.md
           # --max-shrink: a truncated or broken upstream README fails the run
-          # here instead of dropping hundreds of sites from the list.
+          # here instead of dropping hundreds of sites from the list or
+          # recording them all as dropped by upstream.
           python3 pipeline/generate_feed.py /tmp/upstream-README.md data/feed.json \
             --exclude data/excluded.json --add data/additions.json --max-shrink 0.05
 
