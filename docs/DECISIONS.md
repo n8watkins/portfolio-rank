@@ -208,6 +208,23 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A listed site's verified owner's "Re-grade" asks for a new capture; the night's "grade new sites" stage grades the site once from a capture newer than the request, ahead of new sites and inside the same cap, keeps the old grade in `rubric_history` and closes the request, so it can be asked again later.
   Nothing else re-grades a listed site.
 
+### Capture problems the owner can see (2026-11-22)
+
+- **A Capture problems page in the admin, and one line in the nightly alert** (owner, 2026-11-22: yes to a "Capture problems" list). Status: building (#275).
+  Why: a whole-list re-capture that day left 100 sites on their old capture and 11 more got worse, and the owner could see none of it, because a failed re-capture of a site with a good capture was recorded only in `refresh_failures`.
+  `/admin/capture-problems` lists four groups, newest first (`lib/capture-problems.mjs` has each rule):
+  A, a re-capture failed and the old capture is kept (every `refresh_failures` row);
+  B, a listed site has no good capture (`status` error, dead or parked);
+  C, the stored capture is bad (its page text reads as a bot check by the capture's own `isBotWallPage`, or there is none, or under 200 characters);
+  D, a re-capture got worse (it lost a résumé, GitHub or contact link the old facts had, or kept under 30% of an old text over 500 characters).
+  D is recorded at capture time in `capture_changes`, and only facts of the same version (`facts.v`) are compared: a change that comes with new measuring code is listed apart as the code's, not counted.
+  A site the health check marks down or suspect is not a capture problem; its health state is a column.
+  The nightly owner alert gets one line with the count per group and the page's link, while a count is above zero or changed; never on staging.
+- **A blocked re-capture goes to the owner's review list, like a first capture** (owner's standing rule, "bot-walled sites go to owner review", applied to re-captures, 2026-11-22). Status: building (#275).
+  A re-capture that meets a bot or security check, a page of only a canvas, video or image, or a gate, loader, dialog or mode picker still covering the page sets `needs_review`, and the good stored capture stays as it was.
+  A bot check seen only on the phone-size visit, after the desktop view of the same capture showed the site, does not: it stays a refresh failure in group A with that reason.
+  Why: that day 28 of 33 bot checks were phone-view only, on sites whose stored capture is good, so they may be the site's protection answering our own second visit rather than a wall a visitor meets.
+
 ## Ranking
 
 - **OpenSkill ratings, seeded from the grade** (owner asked the agent to pick, 2026-11-10). Status: planned.
