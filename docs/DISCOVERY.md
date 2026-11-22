@@ -9,7 +9,8 @@ The design, the trial run and the open decisions are in [audits/discovery-pipeli
 `node pipeline/discovery/run.mjs` runs four stages.
 Each stage reads only its own queue in `discovery_sites`, so a run can stop anywhere and the next one carries on.
 There is no AI screen: the owner removed it on 2026-11-22, so Gemini is asked about a site once, when it is graded, and the code check and filter come first.
-Rows an earlier run left in the old `screen` queue are moved to `pending` at the start of every run (`movePastScreen`, a no-op once none are left).
+Rows an earlier run left in the old `screen` status stay there, inert: they were never screened, so they must not go ahead of sites people add, and nothing hands them off or writes that status again.
+To put them through this pipeline's code checks and filter by hand, set them back to `found` (`UPDATE discovery_sites SET status = 'found' WHERE status = 'screen'`, they still have their address); the next runs fetch each once, at `found` a run, and the ones that pass wait for the hand-off like any new site.
 
 1. **Sources.** Each source that is due reads from its watermark.
    Every address is normalized (`normalize.mjs`), checked against the list (`data/feed.json`, `additions.json`, `excluded.json`) and the seen-set (one primary-key read each), and new ones are written as `found`.
@@ -44,7 +45,7 @@ One row per normalized address, keyed by the first 64 bits of its SHA-256 (see `
 | Status | Means | Keeps the address |
 |---|---|---|
 | `found` | Collected, waiting for the fetch | Yes |
-| `screen` | No longer written: was waiting for the removed AI screen; each run moves any left to `pending` | Yes |
+| `screen` | Only in old rows: waited for the removed AI screen; inert, never handed off, never written again (see above) | Yes |
 | `pending` | Waiting to be graded (passed the free checks, or added by the free tools) | Yes |
 | `queued` | Handed to the grader | Yes |
 | `graded` | Graded | Yes |
@@ -79,9 +80,9 @@ A key that is not a cap (the removed `screenRequests`, for one) is ignored.
 
 ## The pilot
 
-`scripts/discovery-import.mjs <pilot folder>` imports the pilot of 2026-11-12 once: its 10,000 checked sites (dropped ones under the rules above, the 3,616 that passed as `pending` with their evidence; an import made before 2026-11-22 wrote them as `screen`) and the 1,685 GitHub rows that did not fit its cap as `found`.
+`scripts/discovery-import.mjs <pilot folder>` imports the pilot of 2026-11-12 once: its 10,000 checked sites (dropped ones under the rules above, and the 3,616 that passed as `found`, so this pipeline checks them once more; an import made before 2026-11-22 wrote those as `screen`, which stay inert) and the 1,685 GitHub rows that did not fit its cap as `found`.
 It sets `github:portfolio` and `hn:comments` to where the pilot stopped.
 
 ## Tests
 
-`tests/discovery.test.mjs`: normalize, the seen-check, settle and rechecks, the filter, the code checks, the sources' planning, the watermark, the move out of the old screen queue, the hand-off, the pilot import's mapping, and one whole run with stand-ins for every source and page.
+`tests/discovery.test.mjs`: normalize, the seen-check, settle and rechecks, the filter, the code checks, the sources' planning, the watermark, old screen rows staying inert, the hand-off, the pilot import's mapping, and one whole run with stand-ins for every source and page.

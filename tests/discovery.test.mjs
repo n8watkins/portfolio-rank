@@ -16,7 +16,7 @@ import { handoff, handoffRoom } from "../pipeline/discovery/handoff.mjs";
 import { plan } from "../pipeline/discovery/sources/github.mjs";
 import { postLinks } from "../pipeline/discovery/sources/hn.mjs";
 import { dataJsUrls, yamlUrl } from "../pipeline/discovery/sources/lists.mjs";
-import { discoveryCaps, markdownSummary, movePastScreen, newItems, runDiscovery } from "../pipeline/discovery/run.mjs";
+import { discoveryCaps, markdownSummary, newItems, runDiscovery } from "../pipeline/discovery/run.mjs";
 import { checkReason, filterReason, sourceOf } from "../scripts/discovery-import.mjs";
 
 const fresh = async () => {
@@ -89,7 +89,7 @@ test("settle: a permanent drop forgets the address, a rechecked one comes back l
   await settle(db, [
     { key: key("tmpl"), status: "dropped", reason: "template" },
     { key: key("dead"), status: "dropped", reason: "dead" },
-    { key: key("keep"), status: "screen", work: { evidence: { title: "Keep" } } },
+    { key: key("keep"), status: "pending", work: { evidence: { title: "Keep" } } },
   ], { now: NOW });
   const rows = async () => (await db.execute("SELECT CAST(id AS TEXT) AS k, status, reason, url, recheck_at, tries FROM discovery_sites")).rows;
   const row = async (s) => (await rows()).find((r) => r.k === key(s));
@@ -98,7 +98,7 @@ test("settle: a permanent drop forgets the address, a rechecked one comes back l
   // Working data goes with a drop, stays with a row still in the pipeline.
   const work = (await db.execute("SELECT COUNT(*) AS n FROM discovery_work")).rows[0].n;
   assert.equal(Number(work), 1);
-  assert.deepEqual((await queue(db, "screen", 5))[0].work, { evidence: { title: "Keep" } });
+  assert.deepEqual((await queue(db, "pending", 5))[0].work, { evidence: { title: "Keep" } });
   // Not due yet; then due: back to found. Each new failure waits longer, the third forgets it.
   assert.equal(await reopenDue(db, { now: NOW }), 0);
   const later = new Date("2027-02-12T00:00:00Z");
@@ -193,25 +193,29 @@ test("watermark: a source is due after its interval, and the cursor round-trips"
 
 // ---------------------------------------------------------------- the old screen queue
 
-test("old screen queue: rows left in `screen` move to `pending` once, with their evidence; a second move is a no-op", async () => {
+test("old screen rows stay inert: readable, never handed off, never written again", async () => {
   const db = await fresh();
-  for (const s of ["w1", "w2", "kept"]) await addFound(db, [{ url: `https://${s}.dev/`, source: "github" }], { now: NOW });
-  // Two rows the removed AI screen never got to, and one already waiting for the hand-off.
-  await settle(db, ["w1", "w2"].map((s) => ({ key: seenKey(`https://${s}.dev/`), status: "screen", work: { evidence: { title: s } } })), { now: NOW });
+  for (const s of ["old1", "old2", "kept"]) await addFound(db, [{ url: `https://${s}.dev/`, source: "github" }], { now: NOW });
+  // Two rows the removed AI screen never got to, as the old code left them, and one waiting for the hand-off.
+  for (const s of ["old1", "old2"]) {
+    const id = BigInt(seenKey(`https://${s}.dev/`));
+    await db.batch([
+      { sql: "UPDATE discovery_sites SET status = 'screen' WHERE id = ?", args: [id] },
+      { sql: "INSERT INTO discovery_work (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data", args: [id, JSON.stringify({ evidence: { title: s } })] },
+    ], "write");
+  }
   await settle(db, [{ key: seenKey("https://kept.dev/"), status: "pending", work: { evidence: { title: "kept" } } }], { now: NOW });
-  assert.equal(await movePastScreen(db, { now: NOW }), 2);
-  assert.equal(await movePastScreen(db, { now: NOW }), 0, "nothing left to move");
-  assert.equal((await queue(db, "screen", 10)).length, 0, "the screen status stays readable, and empty");
-  const pending = await queue(db, "pending", 10);
-  assert.deepEqual(pending.map((r) => r.work.evidence.title).sort(), ["kept", "w1", "w2"]);
-  // A whole run does the same move first, and says so in its summary.
-  await addFound(db, [{ url: "https://w3.dev/", source: "github" }], { now: NOW });
-  await settle(db, [{ key: seenKey("https://w3.dev/"), status: "screen", work: { evidence: { title: "w3" } } }], { now: NOW });
+  // A whole run leaves them where they are.
   const s = await runDiscovery({ db, io: { fetchPage: async () => new Response("", { status: 404 }) }, caps: discoveryCaps('{"found": 0}'), sources: [], now: NOW, log: () => {} });
-  assert.equal(s.movedPastScreen, 1);
-  assert.deepEqual(s.queues, { found: 0, pending: 4, queued: 0 });
-  const again = await runDiscovery({ db, io: { fetchPage: async () => new Response("", { status: 404 }) }, caps: discoveryCaps('{"found": 0}'), sources: [], now: NOW, log: () => {} });
-  assert.equal(again.movedPastScreen, 0);
+  assert.deepEqual(s.queues, { found: 0, pending: 1, queued: 0 });
+  // The hand-off takes only the pending row.
+  const out = await handoff(db, { perDay: 10, waiting: 10, reserve: 0, now: NOW });
+  assert.equal(out.handed, 1);
+  assert.deepEqual((await db.execute("SELECT url FROM grade_jobs")).rows.map((r) => r.url), ["https://kept.dev/"]);
+  // Still readable, with their evidence.
+  assert.deepEqual((await queue(db, "screen", 10)).map((r) => r.work.evidence.title).sort(), ["old1", "old2"]);
+  // Nothing can settle a row into `screen` again.
+  await assert.rejects(settle(db, [{ key: seenKey("https://kept.dev/"), status: "screen" }], { now: NOW }), /no longer written/);
 });
 
 // ---------------------------------------------------------------- hand-off
@@ -224,7 +228,7 @@ test("hand-off: capped per day, by the waiting line and by people's reserve; peo
 
   const db = await fresh();
   for (const [i, s] of ["p1", "p2", "p3"].entries()) await addFound(db, [{ url: `https://${s}.dev/`, source: "github" }], { now: new Date(NOW.getTime() - (3 - i) * 1000) });
-  await settle(db, ["p1", "p2", "p3"].map((s) => ({ key: seenKey(`https://${s}.dev/`), status: "pending", work: { screen: { effort: 4 } } })), { now: NOW });
+  await settle(db, ["p1", "p2", "p3"].map((s) => ({ key: seenKey(`https://${s}.dev/`), status: "pending", work: { evidence: { title: "p" } } })), { now: NOW });
   const first = await handoff(db, { perDay: 2, waiting: 10, reserve: 40, now: NOW });
   assert.equal(first.handed, 2);
   assert.equal((await handoff(db, { perDay: 2, waiting: 10, reserve: 40, now: NOW })).handed, 0);

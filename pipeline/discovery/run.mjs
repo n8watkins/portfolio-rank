@@ -18,8 +18,9 @@
 //
 // No AI screen: Gemini is asked about a site once, when it is graded (owner,
 // 2026-11-22: code filter first, then grading). Rows an earlier run left in
-// the old `screen` queue are moved to `pending` at the start of each run
-// (movePastScreen; a no-op once none are left). Nothing writes `screen` now.
+// the old `screen` status stay there, inert: they were never screened, and
+// they must not go ahead of sites people add (docs/DISCOVERY.md says how to
+// put them through the code checks again by hand). Nothing writes `screen`.
 //
 // Environment: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (or LOCAL_DB_FILE),
 // GITHUB_TOKEN (GitHub search and profiles), DISCOVERY_HANDOFF,
@@ -134,21 +135,10 @@ export async function judgeRow(row, io) {
   if (!row.url) return { key: row.key, status: "dropped", reason: "dead", detail: "no_address" };
   if (row.work?.sharedLink) return { key: row.key, status: "dropped", reason: "not_portfolio", detail: "shared_link_many_authors" };
   const c = await checkPage({ url: row.url, context: row.work }, io);
-  if (c.status === "dropped") return { key: row.key, status: "dropped", reason: c.reason, detail: c.detail };
+  if (c.status !== "passed") return { key: row.key, status: "dropped", reason: c.reason ?? "dead", detail: c.detail };
   const f = filterPage(c.evidence);
   if (!f.keep) return { key: row.key, status: "dropped", reason: f.reason, detail: f.detail };
   return { key: row.key, status: "pending", finalKey: c.finalKey, finalUrl: c.finalUrl, siteKey: siteKeyOf(row.url), work: { evidence: c.evidence, priority: f.priority } };
-}
-
-/**
- * Rows an earlier run left in the old AI screen's queue (`screen`) go on to
- * the hand-off's queue (`pending`): they passed the code check and filter,
- * which is all a site needs now. Idempotent: a no-op once none are left.
- * Returns how many moved.
- */
-export async function movePastScreen(db, { now = new Date() } = {}) {
-  const r = await db.execute({ sql: "UPDATE discovery_sites SET status = 'pending', checked_at = ? WHERE status = 'screen'", args: [now.toISOString()] });
-  return Number(r.rowsAffected ?? 0);
 }
 
 const bump = (o, k, n = 1) => (o[k] = (o[k] ?? 0) + n);
@@ -159,11 +149,7 @@ const bump = (o, k, n = 1) => (o[k] = (o[k] ?? 0) + n);
  */
 export async function runDiscovery({ db, io, caps, sources = SOURCES, now = new Date(), handoffOn = false, listed = new Set(), log = console.log }) {
   await db.batch(DISCOVERY_TABLES, "write");
-  const summary = { at: now.toISOString(), caps, sources: {}, recheck: 0, check: { rows: 0, outcomes: {}, details: {} }, movedPastScreen: 0, handoff: { ran: false } };
-
-  // 0. Rows the removed AI screen never got to go straight on to the hand-off.
-  summary.movedPastScreen = await movePastScreen(db, { now });
-  if (summary.movedPastScreen) log(`moved ${summary.movedPastScreen} row(s) from the old screen queue to pending`);
+  const summary = { at: now.toISOString(), caps, sources: {}, recheck: 0, check: { rows: 0, outcomes: {}, details: {} }, handoff: { ran: false } };
 
   // 1. Sources: rows first, then the watermark.
   const taken = new Set();
@@ -250,9 +236,7 @@ export function markdownSummary(s) {
   for (const [k, n] of Object.entries(s.check.outcomes)) lines.push(`| ${k} | ${n} |`);
   lines.push("", "| Check detail | Sites |", "|---|---:|");
   for (const [k, n] of Object.entries(s.check.details).sort((a, b) => b[1] - a[1])) lines.push(`| ${k} | ${n} |`);
-  lines.push("");
-  if (s.movedPastScreen) lines.push(`Moved from the old AI screen queue to the hand-off: ${s.movedPastScreen}.`);
-  lines.push(s.handoff.ran ? `Hand-off: ${s.handoff.handed} handed to the grader; ${s.handoff.graded} graded, ${s.handoff.notPortfolio} not a portfolio, ${s.handoff.failed} failed.` : "Hand-off: off.");
+  lines.push("", s.handoff.ran ? `Hand-off: ${s.handoff.handed} handed to the grader; ${s.handoff.graded} graded, ${s.handoff.notPortfolio} not a portfolio, ${s.handoff.failed} failed.` : "Hand-off: off.");
   lines.push("", `Queues after the run: ${Object.entries(s.queues).map(([k, n]) => `${k} ${n}`).join(", ")}.`);
   return lines.join("\n");
 }

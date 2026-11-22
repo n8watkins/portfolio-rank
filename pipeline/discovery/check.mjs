@@ -6,8 +6,8 @@
 // counts (the evidence kept with the row).
 //
 // checkPage answers { status: "dropped", reason, detail } or
-// { status: "screen", evidence } (a pass: judgeRow in run.mjs settles it as
-// `pending`; the value's name is left from the removed AI screen). Reasons are the seen-set's coarse codes
+// { status: "passed", evidence } (judgeRow in run.mjs settles a pass as
+// `pending`, the hand-off's queue). Reasons are the seen-set's coarse codes
 // (lib/discovery/sites.mjs): dead, blocked, parked and empty are looked at
 // again later; template, not_portfolio and duplicate are final. `detail`
 // (http_404, robots_disallow, ...) is for the run summary only.
@@ -260,7 +260,7 @@ export function judgePage({ status, type, html, url, finalUrl, context = null, r
   return { reason: null, page: p, jsShell };
 }
 
-/** The screen's evidence from a page that passed: small, and never more than the AI needs. */
+/** The evidence kept from a page that passed: small, and never more than grading needs. */
 export function evidenceOf(p, { url, finalUrl, context = null, jsShell = false }) {
   return {
     url,
@@ -317,5 +317,5 @@ export async function checkPage(row, { fetchPage, fetchText = async () => null }
   const readme = row.context?.repo ? await fetchText(`https://raw.githubusercontent.com/${row.context.repo}/HEAD/README.md`).catch(() => null) : null;
   const j = judgePage({ status: res.status, type: res.headers.get("content-type") ?? "", html, url: row.url, finalUrl, context: row.context, readme });
   if (j.reason) return { status: "dropped", reason: j.reason, detail: j.detail };
-  return { status: "screen", finalKey: siteKeyOf(finalUrl), finalUrl, evidence: evidenceOf(j.page, { url: row.url, finalUrl, context: row.context, jsShell: j.jsShell }) };
+  return { status: "passed", finalKey: siteKeyOf(finalUrl), finalUrl, evidence: evidenceOf(j.page, { url: row.url, finalUrl, context: row.context, jsShell: j.jsShell }) };
 }

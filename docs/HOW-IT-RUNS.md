@@ -337,7 +337,7 @@ Off, and the last step has never been connected to the list.
 3. **Free check and filter** (`pipeline/discovery/check.mjs`, `filter.mjs`): code drops known sites and obvious junk.
    A site that passes waits for the hand-off (`pending`).
    There is no AI screen: Gemini is asked about a site once, when it is graded.
-   Sites an earlier run left waiting for the removed screen move on to the hand-off at the start of each run.
+   Sites an earlier run left waiting for the removed screen stay where they are and are never handed off (`docs/DISCOVERY.md` says how to check them again by hand).
 4. **Hand-off to grading** (`handoff.mjs`).
    Runs only with `DISCOVERY_HANDOFF` on.
    Off.
