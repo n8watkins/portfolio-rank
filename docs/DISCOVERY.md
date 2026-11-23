@@ -75,7 +75,7 @@ A key that is not a cap (the removed `screenRequests`, for one) is ignored.
 ## Switches and target
 
 - `DISCOVERY_SCHEDULE`: `on` lets the daily schedule (22:00 UTC) run. Off until the owner turns it on: until then nothing runs unless someone starts the workflow by hand.
-- `DISCOVERY_TARGET`: `production` points the job at the production database; anything else (the default) at staging.
+- `DISCOVERY_TARGET`: `production` points the job at the production database; without it (the default) the job stops at its first step and writes nothing, since staging was removed on 2026-11-22.
 - `DISCOVERY_HANDOFF`: `on` hands sites to the grader. Off until the owner turns it on.
 
 ## The pilot

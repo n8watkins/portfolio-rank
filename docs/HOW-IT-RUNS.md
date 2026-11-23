@@ -26,7 +26,8 @@ Every job has one of four states.
   It may still run today, and the table says so.
 
 Where a state could not be confirmed from code, the page says "not confirmed".
-Production switches come from `wrangler.jsonc` (top-level `vars`, not the staging block).
+Production switches come from `wrangler.jsonc` (its `vars`).
+There is no staging site since 2026-11-22: changes are tried locally and in CI, then as small trials on production on the owner's word ([DEPLOY.md](../DEPLOY.md), "Trying a change").
 "Per `wrangler.jsonc`" means the value is read from that file.
 A Worker secret or a dashboard-only variable cannot be read from code.
 
@@ -75,9 +76,6 @@ Once a week:
 - **Monday 07:00 (15:00 UTC)**: the security scan of dependencies (`security.yml`).
   It also runs on any pull request that changes a lock file.
 - **Monday 08:00 (16:00 UTC; 09:00 in summer)**: model watch, then your goals email (`worker/model-watch.ts`, `worker/goals.ts`).
-- **Monday 10:00 (18:00 UTC)**: staging's data is replaced with production's newest backup (`staging-data.yml`).
-
-Staging only: staging's ratings are rebuilt every 6 hours (`staging-data.yml`), and staging has its own two Worker crons that run only the tasks marked "staging" in `worker/crons.ts`.
 
 Not on a clock: discovery has a daily schedule at 14:00 Pacific (22:00 UTC) that does nothing (`discover.yml`, see section 5).
 
@@ -113,9 +111,6 @@ Each task runs on its own, so one that fails is reported to Sentry and the rest 
 
 Nothing checks pages for changes.
 The hourly change fingerprints were removed on 2026-11-22, before they ever ran in production.
-
-Staging runs only some of these (`owner removals`, `removal alerts`, `edge purge`, `tiers`, `review auto-apply`, `people queue`, and `grader`).
-It does not start GitHub jobs, and its emails go only to its own test address.
 
 ## 4. The night's stages, in order
 
@@ -367,7 +362,7 @@ Off, and the last step has never been connected to the list.
 1. **The schedule never fires.**
    `discover.yml` has a daily schedule at 14:00 Pacific (22:00 UTC), but the job runs only when the repository variable `DISCOVERY_SCHEDULE` is `on`.
    That variable is not set, so every scheduled run is skipped.
-   A manual run works, and points at the staging database unless `DISCOVERY_TARGET` is `production`.
+   A manual run works only when the repository variable `DISCOVERY_TARGET` is `production`, and then writes to the production database; without it the run stops at its first step.
 2. **Read the sources** (`pipeline/discovery/sources`): GitHub topics, Hacker News and two directories.
 3. **Free check and filter** (`pipeline/discovery/check.mjs`, `filter.mjs`): code drops known sites and obvious junk.
    A site that passes waits for the hand-off (`pending`).
@@ -386,7 +381,7 @@ Each one watches the jobs above.
 | When | What | State |
 | --- | --- | --- |
 | a failed run | The jobs with their own failure notice file or update a GitHub issue: `sync-upstream.yml`, `health.yml`, `recheck.yml`, `backup.yml`, `limits.yml`, `prewarm.yml`, `judge-vote.yml`, `discover.yml`. | Running |
-| a failed run | The others file nothing: `grade.yml`, `security.yml`, `staging-data.yml`, `staging-capture.yml`, `regrade-not-portfolio.yml`. | Running |
+| a failed run | The others file nothing: `grade.yml`, `security.yml`, `regrade-not-portfolio.yml`. | Running |
 | hourly | Night watch: an alert when last night's run never started or died. | Running |
 | hourly | Email caps: an alert at 80% of a cap. | Running |
 | after each night | Owner alerts: quota used up, a stage stopped, parked items, traction, a missing or expiring dispatch token. | Running |
@@ -415,9 +410,6 @@ Each one watches the jobs above.
 | `limits.yml` (Free limits snapshot) | daily 13:30 UTC; manual | free-limit numbers, backup freshness | Running |
 | `prewarm.yml` (Prewarm metrics) | daily 09:00 UTC; manual | warms speed and polish scores | Running |
 | `security.yml` (Security scan) | Monday 15:00 UTC; lock-file pull requests; manual | scans dependencies | Running |
-| `staging-data.yml` (Staging data) | every 6 hours; Monday 18:00 UTC; manual | staging's data and ratings | Running (staging secrets not confirmed) |
-| `staging-capture.yml` (Staging capture) | manual only | captures a sample on staging | Off |
-| `staging.yml` (Staging) | push to main (not docs); labeled pull requests; manual | deploys staging | Running |
 | `deploy.yml` (Deploy) | release tag; a push to main under `data/`; manual | deploys production | Running |
 | `release.yml` (Release) | a `vX.Y.Z` tag; manual | publishes a release | Running |
 | `ci.yml` (CI) | pull requests to main; manual | typecheck, lint, tests, Worker build | Running |
