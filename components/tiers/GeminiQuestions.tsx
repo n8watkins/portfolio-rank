@@ -3,9 +3,8 @@ import { Bot } from "lucide-react";
 // What the AI model does, for both grading pages (app/grading/page.tsx with
 // RANKING_V2 off, components/tiers/EloGrading.tsx with it on), owner
 // 2026-11-23: rank and tier come from code measurements and votes; the model
-// is used for one decision only, whether a page is a portfolio at all. Its
-// other stored answers (the five-second test, roles) are not shown and set
-// nothing.
+// is used for one decision only, whether a page is a portfolio at all. The
+// roles it also names are not shown and set nothing.
 
 export function GeminiQuestions() {
   return (

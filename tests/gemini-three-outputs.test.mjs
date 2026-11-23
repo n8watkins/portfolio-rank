@@ -215,6 +215,17 @@ test("no Gemini score or note reaches a page: the leaderboard chips, home and th
   assert.ok(!/five_second|five-second/.test(read("components/admin/StatusReviewQueue.tsx")), "the review queue");
 });
 
+test("the five-second test is not asked (owner, 2026-11-23) and no reader of a stored one is left outside the named old-letter readers", () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+  assert.ok(!("five_second_test" in RESPONSE_SCHEMA.properties));
+  assert.ok(DROPPED_OUTPUTS.includes("five_second_test"), "kept in the database, left out for every reader");
+  for (const f of ["lib/home.ts", "lib/leaderboard.ts", "lib/profile.ts", "lib/profile-seo.ts", "lib/reviews/door.mjs", "pipeline/content/facts.mjs", "pipeline/judge.mjs", "scripts/export-grades.mjs"]) {
+    assert.ok(!/five_second_test|fiveSecondOf|five_second\b/.test(read(f)), f);
+  }
+  // The eval keeps v1's frozen prompt text (to size it) but compares no five-second score.
+  assert.ok(!/fiveSecondOf|\.five_second_test/.test(read("scripts/eval-rubric.mjs")), "eval-rubric");
+});
+
 test("the Removal rule's reason is Gemini's own reason only, never a score or note; the rule itself is unchanged", () => {
   assert.equal(geminiReason(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })), "Sells coaching sessions.");
   assert.match(geminiReason(v2({ is_portfolio: false })), /no reason/);

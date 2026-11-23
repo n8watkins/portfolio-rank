@@ -124,10 +124,11 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Anything a script can check (resume link, GitHub link, contact path, project links that load, own domain, footer year, template, pages, motion) is measured by our code; Gemini judges only design, clarity, project presentation, writing and memorability, with the facts as context.
   Why: facts from code are free and give the same answer every time; AI is for judgment a script can't make.
   Since 2026-11-23 Gemini is asked only three things (rubric v3, below).
-- **Gemini is asked three things: is it a portfolio, the five-second test, roles** (owner, 2026-11-22). Status: building (rubric v3, `grade-v3`).
+- **Gemini is asked two things: is it a portfolio (with a reason), and the roles** (owner, 2026-11-22 and 2026-11-23). Status: building (rubric v3, `grade-v3`).
   "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
   A site's rank and tier come only from code measurements and votes.
   Then (owner, 2026-11-23): no Gemini report card at all, on profiles or the printable report; the model is used for one decision, whether a page is a portfolio, and its other answers are stored, not shown ("the five second test should just be actually a code which is deterministic"; that code measure is a later change).
+  Then (owner, 2026-11-23): the model is not asked the five-second test at all; old stored five-second scores stay in the database, unread and unshown.
   The portfolio rule carries his definition: "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
   With his rulings: a personal page whose main purpose is selling coaching is not a portfolio, even a developer's; hosted profiles are not portfolio pages: a GitHub or other code-host profile, a Substack, a Medium page, a Linktree or other link-in-bio page; a digital resume may stay listed; certificates are not projects.
   The prompt keeps the rest narrow: a portfolio that also offers freelance work or says hire me is still a portfolio, and so is a solo developer or designer under a studio name who shows projects they built; a company or agency site presenting a team's services is not.

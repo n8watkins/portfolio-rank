@@ -216,9 +216,10 @@ Each chain is a list of steps in the order they happen.
    The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
 9. **Grade** (night stage 1, `grade_new`).
    One Gemini request with the screenshot, the page text and the facts (rubric v3, prompt `grade-v3`, `pipeline/rubric.mjs`).
-   It is asked three things and nothing else: whether it is a portfolio (with a short reason), the five-second test (1 to 5 with a note) and the roles the page names.
+   It is asked two things and nothing else: whether it is a portfolio (with a short reason, written first) and the roles the page names.
    Your decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
-   It never sets or moves the Starting rank or the Tier, and none of its answers is shown (your decision, 2026-11-23: no Gemini report card); "is it a portfolio" feeds the removal rule below, the roles name the profile for search engines, and the five-second test is stored only.
+   It never sets or moves the Starting rank or the Tier, and none of its answers is shown (your decision, 2026-11-23: no Gemini report card); "is it a portfolio" feeds the removal rule below and the roles name the profile for search engines.
+   Your decision (2026-11-23): the five-second test will be measured by code, so the model is not asked it; older grades' five-second scores stay in the database, unread and unshown.
    Grades made before v3 keep their old fields in the database, and no site is graded again because of v3.
    No profile, list, stat, rank or tier reads those fields.
    Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).

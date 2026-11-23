@@ -22,7 +22,7 @@
 import { AI_WORK, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
-import { AI_CRITERIA, GEMINI_ANSWERED_SQL, geminiAnswered, keptOutputs } from "../rubric.mjs";
+import { GEMINI_ANSWERED_SQL, geminiAnswered, keptOutputs } from "../rubric.mjs";
 
 // The production address (lib/site.ts PRODUCTION_SITE_URL; tests/site-url.test.mjs keeps them equal).
 export const SITE_URL = "https://portfoliorank.dev";
@@ -30,16 +30,6 @@ export const SITE_URL = "https://portfoliorank.dev";
 export const MIN_GROUP = 20;
 /** Places a site must climb to be named as a climber. */
 export const MIN_CLIMB = 3;
-
-/**
- * The Gemini scores a sheet may compare: only the kept ones (rubric v3, owner
- * 2026-11-22), for older grades too. Gemini's letter and its dropped scores
- * (pipeline/rubric.mjs DROPPED_OUTPUTS) are never read.
- */
-const AXES = AI_CRITERIA.map((c) => c.id);
-export const AXIS_LABELS = {
-  five_second_test: "the five-second test",
-};
 
 const nf = new Intl.NumberFormat("en-US");
 export const fmt = {
@@ -140,8 +130,8 @@ const VISIBLE = `p.status = 'live' AND ${AI_WORK("p")} AND NOT (${HIDDEN_WHERE})
  * The graded, visible portfolios, each with its Tier (`rank`: the tier store's
  * letter, tier_ratings.tier as the daily run wrote it, or null outside the
  * library). Which portfolios are "top" comes from the Tier, never from
- * Gemini's letter (owner, 2026-11-22); Gemini's kept score (the five-second
- * test) is what the sheets compare. `rubric` holds the kept outputs only.
+ * Gemini's letter (owner, 2026-11-22). No Gemini score is compared (owner,
+ * 2026-11-23: the model is no longer asked the five-second test). `rubric` holds the kept outputs only.
  */
 async function gradedRows(db) {
   const removed = await removedUrls(db);
@@ -171,7 +161,6 @@ async function gradedRows(db) {
 const top = (r) => r.rank != null && (r.rank[0] === "S" || r.rank[0] === "A");
 /** In the S family of the Tier: earned with face-off wins in the top 1%. */
 const topTier = (r) => r.rank != null && r.rank[0] === "S";
-const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const median = (xs) => {
   if (!xs.length) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -186,110 +175,21 @@ export function extremes(items, key, dir = "max", d = 1) {
   return items.filter((x) => r(x) === best);
 }
 const joinWords = (xs) => (xs.length <= 2 ? xs.join(" and ") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
-const axisScore = (r, k) => {
-  const v = r.rubric?.[k];
-  const s = typeof v === "number" ? v : v?.score;
-  return typeof s === "number" ? s : null;
-};
-const axisSum = (r) => AXES.reduce((a, k) => a + (axisScore(r, k) ?? 0), 0);
-
 // ---------------------------------------------------------------------------
-// "What the best-graded portfolios share" (grades: ready now)
+// "What the best-graded portfolios share" (retired with rubric v3)
 // ---------------------------------------------------------------------------
-export async function topGrades(db, { now }) {
-  const kind = "top-grades";
-  const rows = await gradedRows(db);
-  const best = rows.filter(top);
-  const rest = rows.filter((r) => !top(r));
-  if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} S/A and ${rest.length} other grades; ${MIN_GROUP} of each needed`);
-  const b = sheet(kind, {
-    now,
-    headline: "What the top portfolios get right in the first five seconds",
-    angle: "Compare the AI judge's five-second test (can a visitor tell who the person is and what they do) for the top-graded portfolios with the rest: how much the first screen matters, and the one change a reader can copy.",
-    dataLink: `${SITE_URL}/top`,
-    query: "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
-  });
-  b.fact("Portfolios graded by the AI judge", rows.length, fmt.int(rows.length));
-  b.fact("Share of all graded portfolios that are top-graded", best.length / rows.length, fmt.pct(best.length / rows.length), {
-    scope: { need: "graded|all portfolios|every portfolio|everyone", avoid: "of (?:the )?(?:top|best|leading) (?:portfolios|sites)" },
-  });
-  const sCount = rows.filter(topTier).length;
-  b.fact("Portfolios in the highest tier, a small part of the top-graded group", sCount, fmt.int(sCount));
-  const per = [];
-  const bestIds = [];
-  const restIds = [];
-  for (const k of AXES) {
-    const mb = mean(best.map((r) => axisScore(r, k)).filter((x) => x != null));
-    const mr = mean(rest.map((r) => axisScore(r, k)).filter((x) => x != null));
-    if (mb == null || mr == null) continue;
-    const ib = b.fact(`Average ${AXIS_LABELS[k]} score (1 to 5) of the top-graded portfolios`, mb, fmt.dec(mb));
-    const ir = b.fact(`Average ${AXIS_LABELS[k]} score (1 to 5) of all other graded portfolios`, mr, fmt.dec(mr));
-    bestIds.push([AXIS_LABELS[k], ib]);
-    restIds.push([AXIS_LABELS[k], ir]);
-    per.push({ k, label: AXIS_LABELS[k], mb, mr, gap: mb - mr, ib, ir });
-  }
-  if (per.length === 1) {
-    // One kept score (rubric v3): its gap, and no comparison across axes.
-    const [x] = per;
-    const gapId = b.fact(`How far the top-graded portfolios lead the rest on ${x.label}, in points on a 1 to 5 scale`, x.gap, `${fmt.dec(x.gap)} points`);
-    b.notable([x.ib, x.ir], `On ${x.label}, the top-graded portfolios average {{${x.ib}}} against {{${x.ir}}} for the rest`);
-    b.notable([gapId], `a lead of {{${gapId}}} for the top-graded portfolios on ${x.label}`);
-  } else if (per.length) {
-    const lead = extremes(per, (x) => x.gap, "max");
-    const small = extremes(per, (x) => x.gap, "min");
-    const leadId = b.fact(lead.length > 1 ? "The axes where the top-graded portfolios lead the rest by the most (tied)" : "The axis where the top-graded portfolios lead the rest by the most", lead.map((x) => x.label).join(" and "), joinWords(lead.map((x) => x.label)));
-    const gapId = b.fact("The biggest lead, in points on a 1 to 5 scale", lead[0].gap, `${fmt.dec(lead[0].gap)} points`);
-    const nLead = b.fact("Number of axes sharing the biggest lead", lead.length, fmt.int(lead.length));
-    b.superlative("biggest lead", [leadId, gapId], lead.length > 1, nLead);
-    const smallId = b.fact(small.length > 1 ? "The axes where the gap between the top-graded portfolios and the rest is smallest (tied)" : "The axis where the gap is smallest", small.map((x) => x.label).join(" and "), joinWords(small.map((x) => x.label)));
-    b.superlative("smallest gap", [smallId], small.length > 1, nLead);
-    // Notable: an axis that is lowest for both groups (a weak spot everywhere), else the smallest gap; then the biggest lead.
-    const lowBest = extremes(per, (x) => x.mb, "min");
-    const lowRest = extremes(per, (x) => x.mr, "min");
-    const lowAll = lowBest.filter((x) => lowRest.includes(x));
-    if (lowAll.length === 1) {
-      const x = lowAll[0];
-      b.superlative("lowest score", [x.ib, x.ir], false, null);
-      b.notable([x.ib, x.ir], `${x.label} is the lowest-scoring axis for every group: {{${x.ib}}} on average for the top-graded portfolios against {{${x.ir}}} for the rest`);
-    } else {
-      b.notable([smallId], `The top-graded portfolios lead the rest by the least on ${small.map((x) => x.label).join(" and ")}`);
-    }
-    b.notable([leadId, gapId], lead.length > 1 ? `{{${leadId}}} tie for the biggest lead of the top-graded portfolios, {{${gapId}}} each` : `the biggest lead of the top-graded portfolios is {{${gapId}}} on {{${leadId}}}`);
-  }
-  b.chart({
-    title: "Average five-second test score: the top-graded portfolios against the rest",
-    unit: "",
-    max: 5,
-    categories: bestIds.map(([l]) => l),
-    series: [
-      { name: `Top-graded (top ${fmt.pct(best.length / rows.length)})`, facts: bestIds.map(([, id]) => id) },
-      { name: "Everyone else", facts: restIds.map(([, id]) => id) },
-    ],
-    alt: "Bar chart of the average AI five-second test score, the top-graded portfolios next to all others.",
-  });
-  // Up to 5 tier S sites with a name, highest total first: named only for being in tier S.
-  const named = rows
-    .filter((r) => topTier(r) && r.name)
-    .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
-    .slice(0, 5);
-  for (const r of named) {
-    b.name(r, "is in the highest tier");
-    b.fact(`${r.name} (${domainOf(r.url)}) is in the highest tier`, "S", "the highest tier", { tone: "positive", about: r.url });
-    // What it does well, for the post to say when it links the site: its full-mark axes.
-    const strong = per.filter((p) => axisScore(r, p.k) === 5).map((p) => p.label);
-    if (strong.length) b.fact(`${r.name} (${domainOf(r.url)}) scores 5 out of 5 on ${joinWords(strong)}`, strong.length, joinWords(strong), { tone: "positive", about: r.url });
-  }
-  // For each axis, the named S site that scores highest on it: a positive example a "Try this" step can link.
-  for (const p of per) {
-    const strong = named.filter((r) => axisScore(r, p.k) != null).sort((x, y) => axisScore(y, p.k) - axisScore(x, p.k) || x.url.localeCompare(y.url))[0];
-    if (strong) b.example(p.label, b.fact(`${strong.name} (${domainOf(strong.url)}) scores ${axisScore(strong, p.k)} out of 5 on ${p.label}`, axisScore(strong, p.k), String(axisScore(strong, p.k)), { tone: "positive", about: strong.url }), strong);
-  }
-  return b.done();
+/**
+ * This sheet compared the AI judge's scores between the top-graded portfolios
+ * and the rest. Since rubric v3 the model gives no score (owner, 2026-11-22:
+ * the letter and four axes dropped; 2026-11-23: the five-second test is to be
+ * measured by code and is not asked), so there is nothing left to compare and
+ * the sheet is never written; older grades' stored scores are not read. The
+ * kind stays so posts made from it keep their label.
+ */
+export async function topGrades() {
+  return notReady("top-grades", "the AI judge no longer gives scores to compare (rubric v3)");
 }
 
-// ---------------------------------------------------------------------------
-// "Dark mode, motion and page weight" (measured by the capture: ready now)
-// ---------------------------------------------------------------------------
 export async function pageCraft(db, { now }) {
   const kind = "page-craft";
   const rows = (await gradedRows(db)).filter((r) => r.meta && typeof r.meta === "object");
@@ -347,7 +247,8 @@ export async function pageCraft(db, { now }) {
   // with what it does well. Named only for those reasons.
   const examples = best
     .filter((r) => topTier(r) && r.name && r.meta.overflow390 === false && r.meta.consoleErrors === 0 && typeof r.meta.bytes === "number" && r.meta.bytes > 0 && (wr == null || r.meta.bytes <= wr))
-    .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
+    // Lightest page first, by the capture's measure (never a Gemini score).
+    .sort((x, y) => x.meta.bytes - y.meta.bytes || x.url.localeCompare(y.url))
     .slice(0, 5);
   for (const r of examples) {
     b.name(r, "is in the highest tier, fits a phone screen and loads light with no console errors");
@@ -398,21 +299,12 @@ export async function votePatterns(db, { now }) {
   const b = sheet(kind, {
     now,
     headline: "What people vote for when two portfolios go head to head",
-    angle: "In people's head-to-head votes, how often the portfolio with the better five-second test wins, and which things the winner has more often (dark mode, motion, a phone-friendly layout, no errors). A reader learns what real visitors reward.",
+    angle: "In people's head-to-head votes, which things the winner has more often (dark mode, motion, a phone-friendly layout, no errors). A reader learns what real visitors reward.",
     dataLink: `${SITE_URL}/top`,
-    query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI's five-second test and capture measurements of both",
+    query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the capture measurements of both",
   });
   b.fact("People's votes between two graded portfolios", votes.length, fmt.int(votes.length));
-  // Gemini's kept score only (its letter is no longer asked for or read, owner 2026-11-22).
-  const five = (r) => axisScore(r, "five_second_test");
-  const decided = votes.filter((v) => five(v.w) != null && five(v.l) != null && five(v.w) !== five(v.l));
-  if (decided.length >= MIN_GROUP) {
-    const agree = decided.filter((v) => five(v.w) > five(v.l)).length;
-    const id = b.fact("Share of votes, between portfolios with different five-second test scores, won by the higher-scoring one", agree / decided.length, fmt.pct(agree / decided.length), {
-      scope: { need: "different (?:five-second )?(?:test )?scores?|higher-scoring|five-second", avoid: "of all votes" },
-    });
-    b.notable([id], `People pick the portfolio with the better five-second test in {{${id}}} of votes where the scores differ.`);
-  }
+  // No Gemini score is compared (owner, 2026-11-23): the traits below are measured by the capture.
   const cats = [];
   const ids = [];
   for (const [label, f] of TRAITS) {

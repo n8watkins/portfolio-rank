@@ -1,0 +1,293 @@
+{
+  "kind": "top-grades",
+  "ready": true,
+  "headline": "What the top portfolios get right in the first five seconds",
+  "angle": "Compare the AI judge's five-second test (can a visitor tell who the person is and what they do) for the top-graded portfolios with the rest: how much the first screen matters, and the one change a reader can copy.",
+  "dataAsOf": "2026-11-17T04:30:00.000Z",
+  "dataLink": "https://portfoliorank.dev/top",
+  "facts": [
+    {
+      "id": "f1",
+      "label": "Portfolios graded by the AI judge",
+      "value": 60,
+      "display": "60",
+      "tone": "neutral",
+      "about": null,
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f2",
+      "label": "Share of all graded portfolios that are top-graded",
+      "value": 0.5,
+      "display": "50%",
+      "tone": "neutral",
+      "about": null,
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z",
+      "scope": {
+        "need": "graded|all portfolios|every portfolio|everyone",
+        "avoid": "of (?:the )?(?:top|best|leading) (?:portfolios|sites)"
+      }
+    },
+    {
+      "id": "f3",
+      "label": "Portfolios in the highest tier, a small part of the top-graded group",
+      "value": 8,
+      "display": "8",
+      "tone": "neutral",
+      "about": null,
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f4",
+      "label": "Average the five-second test score (1 to 5) of the top-graded portfolios",
+      "value": 4.266666666666667,
+      "display": "4.3",
+      "tone": "neutral",
+      "about": null,
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f5",
+      "label": "Average the five-second test score (1 to 5) of all other graded portfolios",
+      "value": 2,
+      "display": "2.0",
+      "tone": "neutral",
+      "about": null,
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f6",
+      "label": "How far the top-graded portfolios lead the rest on the five-second test, in points on a 1 to 5 scale",
+      "value": 2.2666666666666666,
+      "display": "2.3 points",
+      "tone": "neutral",
+      "about": null,
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f7",
+      "label": "Top Person 1 (top-1.dev) is in the highest tier",
+      "value": "S",
+      "display": "the highest tier",
+      "tone": "positive",
+      "about": "https://top-1.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f8",
+      "label": "Top Person 1 (top-1.dev) scores 5 out of 5 on the five-second test",
+      "value": 1,
+      "display": "the five-second test",
+      "tone": "positive",
+      "about": "https://top-1.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f9",
+      "label": "Top Person 2 (top-2.dev) is in the highest tier",
+      "value": "S",
+      "display": "the highest tier",
+      "tone": "positive",
+      "about": "https://top-2.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f10",
+      "label": "Top Person 2 (top-2.dev) scores 5 out of 5 on the five-second test",
+      "value": 1,
+      "display": "the five-second test",
+      "tone": "positive",
+      "about": "https://top-2.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f11",
+      "label": "Top Person 3 (top-3.dev) is in the highest tier",
+      "value": "S",
+      "display": "the highest tier",
+      "tone": "positive",
+      "about": "https://top-3.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f12",
+      "label": "Top Person 3 (top-3.dev) scores 5 out of 5 on the five-second test",
+      "value": 1,
+      "display": "the five-second test",
+      "tone": "positive",
+      "about": "https://top-3.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f13",
+      "label": "Top Person 4 (top-4.dev) is in the highest tier",
+      "value": "S",
+      "display": "the highest tier",
+      "tone": "positive",
+      "about": "https://top-4.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f14",
+      "label": "Top Person 4 (top-4.dev) scores 5 out of 5 on the five-second test",
+      "value": 1,
+      "display": "the five-second test",
+      "tone": "positive",
+      "about": "https://top-4.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f15",
+      "label": "Top Person 5 (top-5.dev) is in the highest tier",
+      "value": "S",
+      "display": "the highest tier",
+      "tone": "positive",
+      "about": "https://top-5.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f16",
+      "label": "Top Person 5 (top-5.dev) scores 5 out of 5 on the five-second test",
+      "value": 1,
+      "display": "the five-second test",
+      "tone": "positive",
+      "about": "https://top-5.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    },
+    {
+      "id": "f17",
+      "label": "Top Person 1 (top-1.dev) scores 5 out of 5 on the five-second test",
+      "value": 5,
+      "display": "5",
+      "tone": "positive",
+      "about": "https://top-1.dev",
+      "query": "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
+      "at": "2026-11-17T04:30:00.000Z"
+    }
+  ],
+  "charts": [
+    {
+      "id": "c1",
+      "title": "Average five-second test score: the top-graded portfolios against the rest",
+      "unit": "",
+      "max": 5,
+      "categories": [
+        "the five-second test"
+      ],
+      "series": [
+        {
+          "name": "Top-graded (top 50%)",
+          "facts": [
+            "f4"
+          ]
+        },
+        {
+          "name": "Everyone else",
+          "facts": [
+            "f5"
+          ]
+        }
+      ],
+      "alt": "Bar chart of the average AI five-second test score, the top-graded portfolios next to all others."
+    }
+  ],
+  "names": [
+    {
+      "name": "Top Person 1",
+      "url": "https://top-1.dev",
+      "domain": "top-1.dev",
+      "reason": "is in the highest tier"
+    },
+    {
+      "name": "Top Person 2",
+      "url": "https://top-2.dev",
+      "domain": "top-2.dev",
+      "reason": "is in the highest tier"
+    },
+    {
+      "name": "Top Person 3",
+      "url": "https://top-3.dev",
+      "domain": "top-3.dev",
+      "reason": "is in the highest tier"
+    },
+    {
+      "name": "Top Person 4",
+      "url": "https://top-4.dev",
+      "domain": "top-4.dev",
+      "reason": "is in the highest tier"
+    },
+    {
+      "name": "Top Person 5",
+      "url": "https://top-5.dev",
+      "domain": "top-5.dev",
+      "reason": "is in the highest tier"
+    }
+  ],
+  "screenshots": [
+    {
+      "url": "https://top-1.dev",
+      "name": "Top Person 1",
+      "shotKey": "0000000000020deb"
+    },
+    {
+      "url": "https://top-2.dev",
+      "name": "Top Person 2",
+      "shotKey": "0000000000020deb"
+    },
+    {
+      "url": "https://top-3.dev",
+      "name": "Top Person 3",
+      "shotKey": "0000000000020deb"
+    },
+    {
+      "url": "https://top-4.dev",
+      "name": "Top Person 4",
+      "shotKey": "0000000000020deb"
+    },
+    {
+      "url": "https://top-5.dev",
+      "name": "Top Person 5",
+      "shotKey": "0000000000020deb"
+    }
+  ],
+  "notable": [
+    {
+      "factIds": [
+        "f4",
+        "f5"
+      ],
+      "why": "On the five-second test, the top-graded portfolios average {{f4}} against {{f5}} for the rest"
+    },
+    {
+      "factIds": [
+        "f6"
+      ],
+      "why": "a lead of {{f6}} for the top-graded portfolios on the five-second test"
+    }
+  ],
+  "superlatives": [],
+  "examples": [
+    {
+      "axis": "the five-second test",
+      "factId": "f17",
+      "name": "Top Person 1",
+      "url": "https://top-1.dev"
+    }
+  ]
+}

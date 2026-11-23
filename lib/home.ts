@@ -110,7 +110,7 @@ export type ShowItem = {
   href: string;
 };
 
-/** The hero's card deck: the best-ranked portfolios whose screenshots are strong. */
+/** The hero's card deck: the best-ranked portfolios that have a stored screenshot, in /top's order. */
 async function showcase(pool: PoolSite[], count = 6): Promise<ShowItem[]> {
   // The best of the order with a stored screenshot (no Gemini score picks them, owner 2026-11-23).
   const strong = pool.slice(0, count * 4);

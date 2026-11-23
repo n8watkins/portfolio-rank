@@ -18,7 +18,7 @@ import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { pollsContent } from "../pipeline/polls.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
-import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, topGrades, votePatterns } from "../pipeline/content/facts.mjs";
+import { BUILDERS, KIND_LABELS, NamingRuleError, assertNamingRule, leaderboardMovement, pageCraft, topGrades as liveTopGrades, votePatterns } from "../pipeline/content/facts.mjs";
 import { renderChart } from "../pipeline/content/charts.mjs";
 import { CTA, LENGTHS, assembleBody, fill, normalizeDraft, sheetForWriter } from "../pipeline/content/writer.mjs";
 import { WRITE_SYSTEM, assemble, buildWriteRequests, parseBlocks, reflow, cutBadSentences } from "../pipeline/content/compose.mjs";
@@ -46,7 +46,7 @@ import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
 import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
-import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, enableAutomation, fixture, hex, sheetAndRoster } from "./helpers/content-fixture.mjs";
+import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, enableAutomation, fixture, hex, sheetAndRoster, topGrades } from "./helpers/content-fixture.mjs";
 import { MANUAL_REQUESTS, runManualJob } from "../pipeline/content/manual.mjs";
 import { review } from "../lib/content/blog.mjs";
 
@@ -69,22 +69,20 @@ function assertNoBadNames(sheet) {
 // ---------------------------------------------------------------------------
 // Fact builders
 // ---------------------------------------------------------------------------
-test("fact builders: top grades and page craft are ready, name only positive, visible sites, and keep negatives aggregate", async () => {
+test("fact builders: top grades is never written (no AI score left to compare); page craft is ready, names only positive, visible sites, and keeps negatives aggregate", async () => {
   const db = await fixture();
-  const tg = await topGrades(db, { now: MONDAY });
-  assert.equal(tg.ready, true);
-  assertNoBadNames(tg);
-  assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "is in the highest tier" && n.url.startsWith("https://top-")));
-  assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
-  assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
-  assert.equal(tg.charts.length, 1);
+  // Every stored grade here holds a five-second score and four dropped axes: none is read (owner, 2026-11-23).
+  const tg = await liveTopGrades(db, { now: MONDAY });
+  assert.equal(tg.ready, false);
+  assert.match(tg.reason, /no longer gives scores to compare/);
   const pc = await pageCraft(db, { now: MONDAY });
   assert.equal(pc.ready, true);
   assertNoBadNames(pc);
   // Named only as positive examples: in the highest tier (the Tier, never Gemini's letter), fits a phone, no console errors, light.
   assert.ok(pc.names.every((n) => /highest tier, fits a phone screen/.test(n.reason)));
   assert.equal(pc.facts.find((f) => f.label === "Median page weight of other portfolios, first load").display, "4.0 MB");
+  // The named sites are ordered by the capture's page weight, lightest first, then address (no Gemini score).
+  assert.deepEqual(pc.names.map((n) => n.url), ["https://top-1.dev", "https://top-2.dev", "https://top-3.dev", "https://top-4.dev", "https://top-5.dev"]);
 });
 
 test("fact builders: not ready without enough data, and say why", async () => {
@@ -92,7 +90,7 @@ test("fact builders: not ready without enough data, and say why", async () => {
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
   await migrate(db);
   await ensureRosterSchema(db);
-  for (const [kind, build] of Object.entries(BUILDERS)) {
+  for (const [kind, build] of Object.entries({ ...BUILDERS, "top-grades": liveTopGrades })) {
     const s = await build(db, { now: MONDAY });
     assert.equal(s.ready, false, kind);
     assert.ok(s.reason, kind);
@@ -130,8 +128,9 @@ test("fact builders: people's votes, who wins when grades differ and which trait
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.equal(s.facts.find((f) => f.label === "People's votes between two graded portfolios").display, "41", "votes with a removed site are not counted");
-  // Gemini's letter is never read (rubric v3): the higher five-second test score wins 35 of 41 here.
-  assert.equal(s.facts.find((f) => /won by the higher-scoring one/.test(f.label)).display, "85%", "35 of 41");
+  // No Gemini answer is compared: not its letter, not the five-second test the fixture's grades still hold.
+  assert.ok(!s.facts.some((f) => /higher-scoring|five-second/.test(f.label)));
+  assert.doesNotMatch(`${s.headline} ${s.angle}`, /five-second/);
   assert.ok(!s.facts.some((f) => /better-graded/.test(f.label)));
   assert.ok(s.facts.some((f) => /with dark mode by default, when only one/.test(f.label)));
   assert.deepEqual(s.names.map((n) => n.url), ["https://top-1.dev"]);

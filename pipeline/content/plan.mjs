@@ -97,7 +97,7 @@ export function planPost(sheet) {
   // TL;DR: the hook, then the next two strongest points (a comparison, then
   // an example or a count), each a clause the body also carries.
   const hook = clauses.find(isHook) ?? body[0] ?? counts[0] ?? examples[0];
-  // One count before the named sites, so a sheet with few comparisons (top-grades under rubric v3 has one) never
+  // One count before the named sites, so a sheet with few comparisons never
   // gives two TL;DR bullets in a row that open with a site's name.
   const pool = [...body, ...counts.slice(0, 1), ...examples, ...counts.slice(1)].filter((c) => c !== hook);
   const tldr = [hook, ...pool.filter((c) => c.kind !== hook?.kind).slice(0, 1), ...pool].filter(Boolean).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3);

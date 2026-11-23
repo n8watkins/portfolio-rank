@@ -211,7 +211,7 @@ test("b: after Undo the site shows no grade, is not graded on the old capture, a
   const g = await grade(db, url);
   assert.equal(g.rubric_version, RUBRIC_VERSION, "a real grade (rubric v3 has no letter)");
   assert.equal(g.is_portfolio, true);
-  assert.equal(g.five_second_test.score, 3);
+  assert.ok(g.portfolio_reason, "with the model's reason");
   assert.deepEqual((await reviewsOf(db, url)).map((r) => String(r.status)), ["closed"], "the undone row is settled by the grade");
 
   // Exactly one: the next night grades nothing.
@@ -234,7 +234,7 @@ test("b: after Reject the site is kept with no scores shown, and its one fresh g
   assert.equal(kept.review.kind, "owner_kept");
   assert.equal(kept.is_portfolio, true);
   assert.equal(kept.tier, undefined, "no tier until the fresh grade");
-  assert.equal(kept.five_second_test, undefined, "no scores until the fresh grade");
+  assert.equal(kept.portfolio_reason, undefined, "no answer until the fresh grade");
 
   await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-20 12:00:00' WHERE url = ?", args: [url] });
   const c2 = context(db, { gemini: { [url]: answer(false) }, start: T0 + 5 * DAY });
@@ -245,7 +245,7 @@ test("b: after Reject the site is kept with no scores shown, and its one fresh g
   assert.equal(g.review.kind, "owner_kept", "Gemini still says no: the owner's keep holds");
   assert.equal(g.is_portfolio, true);
   assert.equal(g.ai_is_portfolio, false);
-  assert.equal(g.five_second_test.score, 1, "now with the fresh grade's own scores");
+  assert.ok(g.portfolio_reason, "now with the fresh grade's own answer");
   assert.equal(g.fresh_grade, undefined, "the fresh grade is done");
   assert.equal((await listReviews(db)).pending.length, 0, "nothing new asked of the owner");
   assert.equal(await hidden(db, url), false);

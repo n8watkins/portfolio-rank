@@ -1,10 +1,10 @@
 // One-off: export Gemini ai_rubric grades from Turso to local CSV + markdown.
-// Only the outputs Gemini is still asked for (rubric v3, owner 2026-11-22):
-// is it a portfolio (and why), the five-second test and the roles. An older
-// grade's letter and dropped scores stay in the database and are not exported.
+// Only the outputs Gemini is still asked for (rubric v3, owner 2026-11-22 and
+// 2026-11-23): is it a portfolio (and why) and the roles. An older grade's
+// letter and dropped scores stay in the database and are not exported.
 import { createClient } from "@libsql/client";
 import { readFileSync, writeFileSync } from "fs";
-import { fiveSecondOf, geminiAnswered, portfolioReason, versionOf } from "../pipeline/rubric.mjs";
+import { geminiAnswered, portfolioReason, versionOf } from "../pipeline/rubric.mjs";
 
 const env = Object.fromEntries(
   readFileSync(".env.local", "utf8")
@@ -36,14 +36,13 @@ const recs = rows
     url: r.url,
     is_portfolio: j.is_portfolio !== false,
     reason: portfolioReason(j),
-    five_second: fiveSecondOf(j)?.score ?? null,
     roles: Array.isArray(j.roles) ? j.roles.join("; ") : "",
     rubric_version: versionOf(j),
     model: j.model,
   }))
-  .sort((a, b) => (b.five_second ?? 0) - (a.five_second ?? 0) || String(a.url).localeCompare(String(b.url)));
+  .sort((a, b) => String(a.url).localeCompare(String(b.url)));
 
-const cols = ["is_portfolio", "reason", "five_second", "roles", "rubric_version", "name", "url", "model"];
+const cols = ["is_portfolio", "reason", "roles", "rubric_version", "name", "url", "model"];
 const esc = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
 const csv = [cols.join(",")]
   .concat(recs.map((r) => cols.map((c) => esc(r[c])).join(",")))
@@ -53,10 +52,10 @@ writeFileSync("ai-grades.csv", csv);
 const no = recs.filter((r) => !r.is_portfolio);
 const md = [
   `# Gemini answers: "not a portfolio" (${no.length} of ${recs.length} graded)\n`,
-  "| Reason | 5s | Roles | Rubric | Name | URL |",
-  "|---|---|---|---|---|---|",
+  "| Reason | Roles | Rubric | Name | URL |",
+  "|---|---|---|---|---|",
 ]
-  .concat(no.map((r) => `| ${r.reason || "-"} | ${r.five_second ?? "-"} | ${r.roles || "-"} | v${r.rubric_version} | ${r.name} | ${r.url} |`))
+  .concat(no.map((r) => `| ${r.reason || "-"} | ${r.roles || "-"} | v${r.rubric_version} | ${r.name} | ${r.url} |`))
   .join("\n");
 writeFileSync("ai-grades-not-portfolio.md", md);
 

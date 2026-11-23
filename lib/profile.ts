@@ -31,9 +31,9 @@ export const profilePath = (url: string) => `/p/${encodeURIComponent(url)}`;
  * What a profile reads from Gemini's stored answer (owner, 2026-11-23: no
  * Gemini report card is shown): whether it is a portfolio, which decides
  * whether search engines may index the page, and the roles, which name the
- * page for search (lib/profile-seo.ts). The five-second test, the reason and
- * an older grade's letter and dropped scores stay in the database and are
- * never read here.
+ * page for search (lib/profile-seo.ts). The reason, and an older grade's
+ * letter and dropped scores (the five-second test among them), stay in the
+ * database and are never read here.
  */
 export type ReportCard = {
   model?: string;

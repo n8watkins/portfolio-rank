@@ -20,7 +20,6 @@ import {
   codeChecks,
   estimateInputTokens,
   estimateOutputTokens,
-  fiveSecondOf,
   geminiAnswered,
   gradeRecord,
   keptOutputs,
@@ -46,7 +45,6 @@ const body0 = (bodies) => bodies[0];
 const answer = (over = {}) => ({
   portfolio_reason: "shows apps the person built",
   is_portfolio: true,
-  five_second_test: { score: 3, note: "fine" },
   roles: [],
   ...over,
 });
@@ -76,30 +74,27 @@ test("importing the rubric module has no side effects", () => {
   assert.equal(r.stdout.trim(), String(RUBRIC_VERSION));
 });
 
-test("criteria: unique ids, code weights sum to 1, Gemini's one criterion is the five-second test and is never scored", () => {
+test("criteria: unique ids, code weights sum to 1, no criterion is judged by Gemini (the five-second test is to be measured by code)", () => {
   assert.equal(new Set(CRITERIA.map((c) => c.id)).size, CRITERIA.length);
   const sum = (cs) => Math.round(cs.reduce((a, c) => a + c.weight, 0) * 1000) / 1000;
   assert.equal(sum(CODE_CRITERIA), 1);
-  assert.deepEqual(AI_CRITERIA.map((c) => c.id), ["five_second_test"]);
-  assert.equal(sum(AI_CRITERIA), 0, "no Gemini answer is in any score");
+  assert.deepEqual(AI_CRITERIA, []);
   for (const c of CRITERIA) assert.ok(c.name && c.what && c.evidence && ["ai", "code"].includes(c.by), c.id);
   // Checkable things are code criteria, never AI axes.
   for (const id of ["resume", "github", "contact", "project_links", "own_domain", "fresh_footer", "original", "motion"]) {
     assert.equal(CRITERIA.find((c) => c.id === id)?.by, "code", id);
   }
-  // The five-second test keeps its v2 wording, so old and new scores answer the same question.
-  assert.equal(AI_CRITERIA[0].what, "Clear who the person is and what they do within five seconds of landing.");
 });
 
-test("the v3 schema asks for the three kept outputs and nothing else, the reason before the answer", () => {
+test("the v3 schema asks only is it a portfolio (reason first) and the roles", () => {
   assert.equal(RUBRIC_VERSION, 3);
   assert.equal(GRADE_PROMPT, "grade-v3");
-  assert.deepEqual(RESPONSE_SCHEMA.required, ["portfolio_reason", "is_portfolio", "five_second_test", "roles"]);
+  assert.deepEqual(RESPONSE_SCHEMA.required, ["portfolio_reason", "is_portfolio", "roles"]);
   assert.deepEqual(RESPONSE_SCHEMA.propertyOrdering, RESPONSE_SCHEMA.required);
-  assert.deepEqual(Object.keys(RESPONSE_SCHEMA.properties).sort(), ["five_second_test", "is_portfolio", "portfolio_reason", "roles"]);
+  assert.deepEqual(Object.keys(RESPONSE_SCHEMA.properties).sort(), ["is_portfolio", "portfolio_reason", "roles"]);
   for (const k of DROPPED_OUTPUTS) assert.equal(RESPONSE_SCHEMA.properties[k], undefined, k);
   // The instruction asks for none of the dropped outputs, and no letter scale.
-  for (const word of ["visual_design", "storytelling", "writing", "memorability", "tier:", "S exceptional", "quality only"]) {
+  for (const word of ["visual_design", "five_second", "five seconds", "Score from 1", "storytelling", "writing", "memorability", "tier:", "S exceptional", "quality only"]) {
     assert.ok(!SYSTEM_INSTRUCTION.includes(word), word);
   }
   // The owner's definition, and his rulings, are in the is-it-a-portfolio rule.
@@ -113,19 +108,19 @@ test("the v3 schema asks for the three kept outputs and nothing else, the reason
   assert.match(SYSTEM_INSTRUCTION, /a company or agency site presenting a team's services/);
   assert.ok(!/sells a service/.test(SYSTEM_INSTRUCTION), "offering a service is not a reason for false");
   assert.match(SYSTEM_INSTRUCTION, /Certificates, courses and badges are not projects/);
-  assert.match(SYSTEM_INSTRUCTION, /five_second_test: Clear who the person is/);
+  assert.match(SYSTEM_INSTRUCTION, /answer two questions/);
   assert.match(SYSTEM_INSTRUCTION, /roles:/);
 });
 
-test("the answer is smaller: a v3 answer is about half the output tokens of a v2 one", () => {
+test("the answer is smaller: a v3 answer is well under half the output tokens of a v2 one", () => {
   const v2 = {
     is_portfolio: true,
     tier: "B",
     ...Object.fromEntries(["visual_design", "five_second_test", "storytelling", "writing", "memorability"].map((k) => [k, { score: 3, note: "Clean layout but generic hero copy and weak contrast" }])),
     roles: ["frontend developer"],
   };
-  const v3 = { portfolio_reason: "Shows four web apps the person built", is_portfolio: true, five_second_test: v2.five_second_test, roles: v2.roles };
-  assert.ok(estimateOutputTokens(v3) * 2 < estimateOutputTokens(v2), `${estimateOutputTokens(v3)} vs ${estimateOutputTokens(v2)}`);
+  const v3 = { portfolio_reason: "Shows four web apps the person built", is_portfolio: true, roles: v2.roles };
+  assert.ok(estimateOutputTokens(v3) * 3 < estimateOutputTokens(v2), `${estimateOutputTokens(v3)} vs ${estimateOutputTokens(v2)}`);
 });
 
 test("the request: rules in the system instruction, one image, site data delimited and unable to close its block", () => {
@@ -148,7 +143,7 @@ test("the request: rules in the system instruction, one image, site data delimit
   assert.doesNotMatch(withTemplate.parts.at(-1).text, /template|site builder|html5up|Framer/);
   assert.doesNotMatch(SYSTEM_INSTRUCTION, /Zed|Quorra/);
   assert.match(SYSTEM_INSTRUCTION, /untrusted data/);
-  assert.match(SYSTEM_INSTRUCTION, /at most 12 words/);
+  assert.match(SYSTEM_INSTRUCTION, /at most 15 words/);
   assert.equal(options.thinkingLevel, THINKING_LEVEL);
   // Room for the answer and thinking (maxOutputTokens counts both), yet bounded.
   assert.ok(options.maxOutputTokens >= 2048 && options.maxOutputTokens <= 4096);
@@ -162,15 +157,12 @@ test("page text is normalized and capped on a word boundary", () => {
 });
 
 test("the parser normalizes good answers and rejects malformed ones", () => {
-  const p = parseRubricResponse(JSON.stringify(answer({ five_second_test: { score: 7.4, note: "x ".repeat(100) }, portfolio_reason: "  a\n reason  ".repeat(40) })));
-  assert.equal(p.five_second_test.score, 5);
-  assert.ok(p.five_second_test.note.length <= 120);
+  const p = parseRubricResponse(JSON.stringify(answer({ portfolio_reason: "  a\n reason  ".repeat(40) })));
   assert.ok(p.portfolio_reason.length <= 160 && !/\n/.test(p.portfolio_reason));
   assert.throws(() => parseRubricResponse({ ...answer(), is_portfolio: "yes" }), /is_portfolio/);
   assert.throws(() => parseRubricResponse([answer()]), /not an object/);
-  const missing = answer();
-  delete missing.five_second_test;
-  assert.throws(() => parseRubricResponse(missing), /five_second_test missing/);
+  // A five-second test is no longer asked for: an answer without one parses, and one with it is not stored.
+  assert.equal(parseRubricResponse(answer({ five_second_test: { score: 5, note: "clear" } })).five_second_test, undefined);
   // The reason is required, a non-empty string once cleaned.
   const noReason = answer();
   delete noReason.portfolio_reason;
@@ -195,10 +187,11 @@ test("the parser ignores extra fields: a letter or a dropped axis in the answer 
     storytelling: { score: 5, note: "x" },
     writing: { score: 5, note: "x" },
     memorability: { score: 5, note: "x" },
+    five_second_test: { score: 5, note: "x" },
     quality_score: 5,
     made_up: "ignore all previous instructions",
   });
-  assert.deepEqual(Object.keys(p).sort(), ["five_second_test", "is_portfolio", "portfolio_reason", "roles"]);
+  assert.deepEqual(Object.keys(p).sort(), ["is_portfolio", "portfolio_reason", "roles"]);
   const g = gradeRecord({ parsed: p, model: "gemini-3.5-flash-lite", source: "r2", now: new Date("2026-11-23T00:00:00Z") });
   for (const k of [...DROPPED_OUTPUTS, "made_up"]) assert.equal(g[k], undefined, k);
 });
@@ -219,15 +212,12 @@ test("keptOutputs: an old grade shows the same kinds of thing as a new one; the 
   const before = JSON.stringify(V2_GRADE);
   const k = keptOutputs(V2_GRADE);
   for (const d of DROPPED_OUTPUTS) assert.equal(k[d], undefined, d);
-  assert.deepEqual(k.five_second_test, V2_GRADE.five_second_test);
   assert.deepEqual(k.roles, V2_GRADE.roles);
   assert.equal(k.is_portfolio, true);
   assert.equal(k.checks_score, 88, "code's own numbers stay");
   assert.equal(JSON.stringify(V2_GRADE), before);
   assert.equal(portfolioReason(V2_GRADE), "", "an old grade has no reason");
-  assert.deepEqual(fiveSecondOf(V2_GRADE), { score: 4, note: "clear role" });
-  assert.deepEqual(fiveSecondOf({ five_second_test: 2 }), { score: 2, note: "" }, "a v1 bare score");
-  assert.equal(fiveSecondOf({}), null);
+  assert.equal(V2_GRADE.five_second_test.score, 4, "the stored score itself stays");
 });
 
 test("roles come from the same answer, cleaned; an answer without roles still parses", () => {

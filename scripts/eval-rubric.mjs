@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Offline eval of the current rubric (pipeline/rubric.mjs, v3: is it a
-// portfolio, the five-second test, roles) against the grades already stored.
+// portfolio with a reason, and roles) against the grades already stored.
 // Read-only: it never writes a grade. In the code, "v2" names the current
 // rubric's columns (the eval was written for v2); the output says v3.
 //
@@ -15,8 +15,8 @@
 // only (no fallback), records every request in gemini_requests (job
 // "eval-rubric", so the nightly budget sees them), refuses to start when
 // today's quota left is smaller than the sample, and compares the answers
-// with the stored grades (is_portfolio agreement and the five-second test's
-// difference; Gemini's letter and the dropped axes are never compared)
+// with the stored grades (is_portfolio agreement; Gemini's letter and the
+// dropped scores are never compared)
 // using real token usage.
 //
 // Sites come from the database (Turso with TURSO_*, else the local file); a
@@ -40,7 +40,6 @@ import {
   buildRubricRequest,
   estimateInputTokens,
   estimateOutputTokens,
-  fiveSecondOf,
   normalizePageText,
   parseRubricResponse,
   versionOf,
@@ -96,11 +95,10 @@ function v1PromptText(name, url, images) {
 // The audit's measured v1 answer size (a stored grade's dropped fields are never read to size it).
 const V1_OUTPUT_FALLBACK = 400;
 // A typical v3 answer for the offline output estimate: a reason, the answer,
-// the five-second test with a ten-word clause, and two roles.
+// and two roles.
 const V2_TYPICAL_ANSWER = {
   portfolio_reason: "Shows four web apps the person built with links",
   is_portfolio: true,
-  five_second_test: { score: 3, note: "Clean layout but generic hero copy and weak contrast overall" },
   roles: ["frontend developer", "designer"],
 };
 
@@ -288,7 +286,7 @@ async function main() {
     console.log(
       `[${i + 1}/${picked.length}] ${url} - text ${r.textChars} chars (${r.from}), est. in v1 ${r.v1In} / v${RUBRIC_VERSION} ${r.v2In}` +
         (r.v2
-          ? `, portfolio ${old?.is_portfolio ?? "-"} -> ${r.v2.is_portfolio}, five-second ${fiveSecondOf(old)?.score ?? "-"} -> ${r.v2.five_second_test.score}, used in ${r.usage?.inputTokens} out ${r.usage?.outputTokens} thinking ${r.usage?.thoughtsTokens ?? 0}`
+          ? `, portfolio ${old?.is_portfolio ?? "-"} -> ${r.v2.is_portfolio}, used in ${r.usage?.inputTokens} out ${r.usage?.outputTokens} thinking ${r.usage?.thoughtsTokens ?? 0}`
           : "") +
         (r.error ? ` - ERROR ${r.error}` : "")
     );
@@ -334,21 +332,20 @@ async function main() {
   ].filter((l) => l !== null);
 
   if (live.length) {
-    // Only the kept outputs are compared (rubric v3): is_portfolio and the five-second test. Never the letter or a dropped axis.
+    // Only is_portfolio is compared (rubric v3). Never the letter or a dropped score.
     const pairs = live.filter((r) => r.old);
     const disagree = pairs.filter((r) => Boolean(r.old.is_portfolio !== false) !== r.v2.is_portfolio).length;
-    const five = pairs.filter((r) => fiveSecondOf(r.old)).map((r) => Math.abs(fiveSecondOf(r.old).score - r.v2.five_second_test.score));
     const share = (n) => (pairs.length ? `${((100 * n) / pairs.length).toFixed(0)}%` : "-");
     md.push(
       `### v${RUBRIC_VERSION} against the stored grades`,
       "",
-      `${pairs.length} pair(s): is_portfolio disagrees ${share(disagree)}; five-second test mean absolute difference ${five.length ? avg(five).toFixed(2) : "-"} over ${five.length}.`,
+      `${pairs.length} pair(s): is_portfolio disagrees ${share(disagree)}.`,
       "",
-      `| Site | Stored portfolio | v${RUBRIC_VERSION} portfolio | v${RUBRIC_VERSION} reason | Stored five-second | v${RUBRIC_VERSION} five-second | Stored rubric |`,
-      "| --- | --- | --- | --- | ---: | ---: | --- |",
+      `| Site | Stored portfolio | v${RUBRIC_VERSION} portfolio | v${RUBRIC_VERSION} reason | Stored rubric |`,
+      "| --- | --- | --- | --- | --- |",
       ...live.map(
         (r) =>
-          `| ${r.url} | ${r.old ? r.old.is_portfolio !== false : "-"} | ${r.v2.is_portfolio} | ${r.v2.portfolio_reason.replace(/\|/g, "/")} | ${fiveSecondOf(r.old)?.score ?? "-"} | ${r.v2.five_second_test.score} | v${r.old ? versionOf(r.old) : "-"} ${r.old?.model ?? ""} |`
+          `| ${r.url} | ${r.old ? r.old.is_portfolio !== false : "-"} | ${r.v2.is_portfolio} | ${r.v2.portfolio_reason.replace(/\|/g, "/")} | v${r.old ? versionOf(r.old) : "-"} ${r.old?.model ?? ""} |`
       ),
       ""
     );
