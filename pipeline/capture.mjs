@@ -22,8 +22,8 @@
 //
 // --refresh N also re-captures up to N listed sites whose screenshots are due
 // by the check rule (lib/freshness.mjs, AUTOMATION.md "When checks re-run"):
-// the weekly change fingerprint found the page changed, the admin pressed
-// "Re-measure" or the owner asked for a re-grade, or the capture is 90 days
+// the admin pressed "Re-measure" or the owner asked for a new capture
+// (site_freshness.forced_at), or the capture is 90 days
 // old (the nightly checks, sync-upstream.yml). Their screenshots, text,
 // facts and page fingerprint are renewed; the grade stays (a site is graded
 // once, owner 2026-11-21). A refresh that
@@ -905,7 +905,7 @@ async function main() {
   }
   queue = queue.slice(0, LIMIT);
   // The nightly refresh: listed, healthy sites whose screenshots are due
-  // (changed or asked for first, then captures past 90 days).
+  // (asked for first, then captures past 90 days).
   if (REFRESH > 0 && !ONLY && !RECAPTURE) {
     const queued = new Set(queue.map((p) => p.url));
     const listed = new Map(feed.map((p) => [p.url, p]));
@@ -913,7 +913,7 @@ async function main() {
       .filter((u) => !queued.has(u) && listed.has(u))
       .slice(0, REFRESH);
     for (const u of due) queue.push({ ...listed.get(u), refresh: true });
-    console.log(`refresh: re-capturing ${due.length} site(s) that changed, were asked for, or are 90 days old`);
+    console.log(`refresh: re-capturing ${due.length} site(s) that were asked for or are 90 days old`);
   }
   console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
 

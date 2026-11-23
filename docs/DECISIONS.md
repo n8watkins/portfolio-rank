@@ -199,7 +199,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **A site is graded once and never re-graded automatically, and only one Gemini model is used** (owner, 2026-11-21). Status: building (#273).
   Five scheduled jobs are removed: the nightly change detection ("Record page changes", which wrote `rating_resets`), the weekly comparison of two Gemini versions' grades (`grade-compare.yml`), the "grade changed sites" night stage, the "re-grades" night stage (with the fallback grader's re-grade queues), and the ELO-era AI votes that `judge-vote.yml` ran without `RANKING_V2`.
   No table is dropped: `rating_resets` and `site_fingerprints` keep what they hold and are no longer written, and the resets already stored still count in the ranking recompute.
-  The hourly change fingerprints ("When checks re-run") are not part of this: the owner has not decided on them.
+  The hourly change fingerprints ("When checks re-run") were not part of this; the owner removed them on 2026-11-22 (see "A check is due by age or by request" under Infrastructure).
   Why: a site is asked "is it a portfolio" once, at the door, and with one model there is nothing to compare.
 - **Confirmed, and discovery's AI screen goes too** (owner, 2026-11-22: "you can remove these" and "yeah we can remove the discover screen ask to gemini"). Status: building (#273).
   The rule: never ask Gemini what code can answer, and never ask it about a site twice; discovery checks a site with code first, then hands it to grading.
@@ -636,6 +636,14 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Every listed site is checked once a week on the hourly cron, never twice in a day.
   Measured on 2026-11-11 by fetching 400 listed sites twice: before the noise rules 9% looked changed between two fetches seconds apart, after them about 1.5%, all of them pages that really differ per request (a live clock, a random quote, a "now playing" track); those get re-measured weekly.
   Why: the old fixed timers re-ran Lighthouse every 30 days, re-captured 150 sites a night whether or not they changed and re-ran the polish check weekly, so unchanged sites waited on slow re-runs, and a changed site could show stale results for weeks.
+  Superseded on 2026-11-22 by "A check is due by age or by request": the fingerprints never ran in production (`FRESHNESS_ENABLED` stayed `"false"`) and were removed; the maximum ages and failure windows above still hold.
+- **A check is due by age or by request; the hourly page fingerprints are removed** (owner, 2026-11-22: "the hourly page fingerprints should be removed."). Status: building (`chore/remove-page-fingerprints`).
+  A check or capture is due again only when it is missing, when it is past its maximum age (the numbers above), when the admin's "Re-measure" or a verified owner's request came after it was measured (`site_freshness.forced_at`), or when it failed and its retry window passed.
+  A failed nightly re-capture keeps its growing backoff (`refresh_failures`), which a later request skips.
+  The hourly task (`worker/freshness.ts`), the `FRESHNESS_ENABLED` switch and the profile's "site unchanged since" lines are gone.
+  No table or column is dropped: `site_freshness` keeps `forced_at` in use, its fingerprint columns are no longer written or read, and an old row's `changed_at` makes nothing due.
+  The grader's own page fingerprint ("Grade my portfolio"'s re-grade cooldown and link-check reuse) stays.
+  Why: a site is graded once (2026-11-21), so a page change no longer leads to a new grade, and a fetch of every listed site each week bought nothing a 90-day refresh and a person's request do not already cover.
 - **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
   Why: what merges is what the next deploy ships.
 - **Email sign-in beside GitHub; email accounts' votes count fully** (owner, 2026-11-12). Status: building (branch `feat/email-signin`).
