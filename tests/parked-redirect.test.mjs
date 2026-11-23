@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { clientRedirect, httpGate, parkedPage } from "../pipeline/gate.mjs";
+import { clientRedirect, httpGate, parkedPage, parkingPhrase } from "../pipeline/gate.mjs";
 import { checkSite } from "../pipeline/health.mjs";
 import { plainReason } from "../lib/capture-problems.mjs";
 
@@ -64,13 +64,31 @@ test("the nic-nguyen home page (a script to /lander, GoDaddy's lander) is parked
   assert.deepEqual(seen, ["https://www.parked-person.example/", "https://www.parked-person.example/lander"], "one hop, on the same host");
 });
 
-test("a script redirect to a parking path whose page cannot be read is parked by the path", async () => {
-  const { fetchImpl } = fakeFetch({
-    "https://a.example/": { body: ROOT },
-    "https://a.example/lander": { throws: Object.assign(new Error("timeout"), { name: "TimeoutError" }) },
-  });
-  const g = await httpGate("https://a.example/", { fetchImpl });
-  assert.deepEqual([g.status, g.reason], ["parked", "parking page: redirects to /lander"]);
+test("only positive evidence says parked: a page there that cannot be read, answers an error, or is merely short leaves it to the browser", async () => {
+  const reset = Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });
+  const timeout = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+  const short = `<html><head><title>Jane Doe</title></head><body><h1>Jane Doe</h1><p>${"Product designer in Lisbon. ".repeat(40)}</p></body></html>`;
+  const shellNoscript = APP_SHELL.replace("</body>", "<noscript>You need to enable JavaScript to run this app.</noscript></body>");
+  const cases = [
+    ["/lander drops the connection", "/lander", { throws: reset }],
+    ["/lander times out", "/lander", { throws: timeout }],
+    ["/parking answers 403 (a bot wall)", "/parking", { status: 403, body: "Forbidden" }],
+    ["/parking answers 404 (a single-page app route)", "/parking", { status: 404, body: "Not found" }],
+    ["/parking answers 503", "/parking", { status: 503, body: "busy" }],
+    ["/lander is an app shell", "/lander", { body: shellNoscript }],
+    ["/lander is a short real page", "/lander", { body: short }],
+  ];
+  for (const [label, at, answer] of cases) {
+    const { fetchImpl, seen } = fakeFetch({ "https://jane.dev/": { body: `<script>location.href="${at}"</script>` }, [`https://jane.dev${at}`]: answer });
+    const g = await httpGate("https://jane.dev/", { fetchImpl });
+    assert.equal(g.status, "live", `${label}: ${g.reason}`);
+    assert.equal(seen.length, 2, `${label}: followed once`);
+  }
+  // An HTTP redirect to /lander or /for-sale that serves an app shell: the browser decides, as before.
+  for (const landed of ["https://jane.dev/lander", "https://jane.dev/for-sale"]) {
+    const { fetchImpl } = fakeFetch({ "https://jane.dev/": { body: shellNoscript, url: landed } });
+    assert.equal((await httpGate("https://jane.dev/", { fetchImpl })).status, "live", landed);
+  }
 });
 
 test("a redirect in the page to a parking host is parked without asking that host", async () => {
@@ -127,13 +145,28 @@ test("clientRedirect reads only small pages with no text of their own", () => {
   assert.equal(clientRedirect(`<script>${"/* bundle */ ".repeat(1000)}location.href="/lander"</script>`, "https://x.example/"), null, "a big inline bundle");
   assert.equal(clientRedirect('<script src="/x.js">location.href="/lander"</script>', "https://x.example/"), null, "a script loaded from a file");
   assert.equal(clientRedirect('<script>location.href="javascript:void(0)"</script>', "https://x.example/"), null);
+  // Only a redirect that always runs on load.
+  assert.equal(clientRedirect('<script>document.addEventListener("DOMContentLoaded", () => { location.replace("/lander"); });</script>', "https://x.example/"), "https://x.example/lander");
+  assert.equal(clientRedirect('<div id=a></div><script>document.getElementById("a").onclick=()=>{location.href="/parking"}</script>', "https://x.example/"), null, "a click handler");
+  assert.equal(clientRedirect('<script>if(!localStorage.t)location.href="/login"</script>', "https://x.example/"), null, "a condition");
+  assert.equal(clientRedirect('<script>if(location.pathname==="/")location.href="/lander"</script>', "https://x.example/"), null, "a condition on the path");
+  assert.equal(clientRedirect('<script>const location = "/parking";</script>', "https://x.example/"), null, "a variable named location");
+  assert.equal(clientRedirect('<script>data.location = "/parking"</script>', "https://x.example/"), null, "a property named location");
+  assert.equal(clientRedirect('<meta http-equiv="refresh" content="600;url=/parked"><div id=root></div>', "https://x.example/"), null, "a session timeout");
+  assert.equal(clientRedirect('<div id=root></div><noscript>You need to enable JavaScript to run this app.</noscript><script>location.href="/lander"</script>', "https://x.example/"), null, "<noscript> text is text");
 });
 
 test("parkedPage judges where the browser ended: the rendered lander is parked, a real page there is not", () => {
   assert.equal(parkedPage({ finalUrl: "https://www.parked-person.example/lander", text: LANDER_TEXT, title: "" }), 'parking phrase: "has expired and is parked"');
   assert.equal(parkedPage({ finalUrl: "https://www.parked-person.example/lander", html: LANDER }), "parking page: GoDaddy parking lander");
-  assert.equal(parkedPage({ finalUrl: "https://x.example/lander", from: "https://x.example", html: "<div id=root></div>", text: "" }), "parking page: nothing at /lander");
-  assert.equal(parkedPage({ finalUrl: "https://x.example/lander", from: "https://x.example/lander", html: "<div id=root></div>", text: "" }), null, "a listed address's own path is never the redirect");
+  assert.equal(parkedPage({ finalUrl: "https://x.example/lander", html: "<div id=root></div>", text: "" }), null, "a path and an empty page are no evidence");
+  // Markers: a script loaded from a parking host, never a data-src or a lookalike host or GoDaddy's other tags.
+  const marker = (html) => parkedPage({ finalUrl: "https://jane.dev/", html, text: "Jane Doe portfolio" });
+  assert.equal(marker('<script src="//www.dan.com/widget.js"></script>'), "parking page: a script from a parking service");
+  assert.equal(marker('<img data-src="//cdn.bodis.com/x"><script data-src="//cdn.bodis.com/x.js"></script>'), null);
+  assert.equal(marker('<script src="https://jordan.com/x.js"></script>'), null);
+  assert.equal(marker('<script src="https://img1.wsimg.com/signals/js/clients/scc-c2/scc-c2.min.js"></script>'), null);
+  assert.equal(marker('<script>window._trfd.push({"tccl.baseHost":"secureserver.net"},{"ap":"cpsh-oh"})</script>'), null);
   assert.equal(parkedPage({ finalUrl: "https://bodis.com/x" }), "redirects to bodis.com");
   assert.equal(parkedPage({ finalUrl: "https://jane.dev/en/", html: PORTFOLIO() }), null);
   assert.equal(parkedPage({ finalUrl: "https://jane.dev/", html: APP_SHELL, text: "" }), null, "an empty app shell is not parked");
@@ -174,17 +207,13 @@ test("checkSite: the parked redirect fails as 'answers with the wrong thing'; re
   assert.deepEqual([moved.ok, moved.moved, moved.hijack], [true, true, false]);
 });
 
-test("the Capture problems page says the new reasons in plain words", () => {
-  assert.deepEqual(
-    [
-      plainReason("parked: parking page: GoDaddy parking lander"),
-      plainReason("parking page: redirects to /lander"),
-      plainReason("parking page: nothing at /parking"),
-    ].map((p) => [p.kind, p.text]),
-    [
-      ["noanswer", "The page is a parked domain (GoDaddy parking lander)."],
-      ["noanswer", "It sends visitors to /lander, a parking page."],
-      ["noanswer", "It sends visitors to /parking, an empty parking page."],
-    ]
-  );
+test("the Capture problems page says the new reason in plain words", () => {
+  const p = plainReason("parked: parking page: GoDaddy parking lander");
+  assert.deepEqual([p.kind, p.text], ["noanswer", "The page is a parked domain (GoDaddy parking lander)."]);
+});
+
+test("phrases: the GoDaddy lander's words count, a car 'parked free of charge' does not; phrases read across line breaks", () => {
+  assert.equal(parkingPhrase({ text: LANDER_TEXT, title: "" }), "has expired and is parked");
+  assert.equal(parkingPhrase({ text: "ParkSpot - find out if your car is parked free of charge in your city. Jane Doe, mobile developer.", title: "Jane" }), undefined);
+  assert.equal(parkingPhrase({ text: "jane.dev\nis for sale.\nDomain\nfor sale", title: "" }), "domain for sale");
 });

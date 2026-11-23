@@ -184,7 +184,8 @@ Each chain is a list of steps in the order they happen.
 6. **Capture checks** (same step, code only).
    A capture that does not show the site is never stored or graded:
    1. An error, a parked page or a blank page is retried on later nights, after 1, 2, 4, 8 and 16 days, then every 30 days.
-      A parked page is judged where the visit ends, after the page's own redirects: a parking service's address, a parking phrase, a parking service's lander, or an empty page at a parking path such as `/lander` (the same rule as the health check's).
+      A parked page is judged where the visit ends, after the page's own redirects: a parking service's address, a parking phrase on a short page, or a parking service's own lander code (the same rule as the health check's).
+      Only that kind of positive evidence counts: an address such as `/lander`, a short or empty page, or a page that could not be read never makes a site parked.
    2. A bot wall is never graded.
       A site that was never captured gets a row on your review page at the night's plan step.
    3. A page with only a canvas or video is held back and marked for review, but no review row is written for it yet.
@@ -264,8 +265,9 @@ Each chain is a list of steps in the order they happen.
 No one is emailed at any step.
 A site the check could not tell about for 28 days gives you an alert on the alerts page.
 A different path exists for a site that answers with the wrong thing (parked, blank, a duplicate): 3 failed checks, a week apart, spanning at least 13 days.
-A parked domain counts as the wrong thing also when its home page is only a redirect made in the page (a script or a meta refresh) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
-The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`); a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
+A parked domain counts as the wrong thing also when its home page is only a redirect made on load (a script or a meta refresh of a few seconds) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
+The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
+A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
 
 ### The community list drops a site
 

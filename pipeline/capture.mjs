@@ -404,20 +404,19 @@ export async function captureViewAsSeen(page, name) {
  * (./capture-blocked.mjs readBlockedInputs), `verdict` null or { status,
  * reason, needsReview }. In order: the main
  * document's HTTP status (httpVerdict), a parking page where the browser
- * ended up (./gate.mjs parkedPage on the page's address against the listed
- * one `listedUrl`, its rendered HTML `seenHtml`, text and title, as the plain
- * pre-check reads the served one), then
+ * ended up (./gate.mjs parkedPage on the page's address, its rendered HTML
+ * `seenHtml`, text and title, as the plain pre-check reads the served one), then
  * capturedBlocked. A page with no words, or only a canvas, video or image
  * (MEDIA_ONLY), is never stored as live: a flat frame is blocked as blank,
  * anything else goes to the owner's review (MEDIA_REVIEW_REASON).
  * @param {import("playwright").Page} page
  */
-async function judgeDesktop(page, doc, passes, seenText, { seenHtml = "", listedUrl = "" } = {}) {
+async function judgeDesktop(page, doc, passes, seenText, seenHtml = "") {
   const shown = await readBlockedInputs(page, seenText, seenText);
   const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: shown.text, title: shown.title, shown: { ...shown, ...passes } });
   if (verdict) return { verdict, shown };
   // A parking page where the browser ended up, after the page's own redirects (./gate.mjs parkedPage).
-  const parked = parkedPage({ finalUrl: page.url(), from: listedUrl, html: seenHtml, text: shown.text, title: shown.title });
+  const parked = parkedPage({ finalUrl: page.url(), html: seenHtml, text: shown.text, title: shown.title });
   if (parked) return { verdict: { status: "parked", reason: parked, needsReview: false }, shown };
   const blocked = capturedBlocked({ ...shown, ...passes });
   if (blocked === MEDIA_ONLY || (blocked === null && wordCount(shown.text) === 0)) {
@@ -710,7 +709,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // still blocked (./capture-blocked.mjs). Nothing of it is stored,
     // uploaded or graded (reject). A bot wall is not called broken: it is
     // marked for the owner's review.
-    const desktop = await judgeDesktop(page, doc, { splash, modal, mode }, seen.text, { seenHtml: seen.html, listedUrl: url });
+    const desktop = await judgeDesktop(page, doc, { splash, modal, mode }, seen.text, seen.html);
     if (desktop.verdict) return reject(desktop.verdict);
     const pageText = normalizePageText(seen.text);
     // Facts from the same reading (single-page apps included), plus a capped

@@ -21,26 +21,21 @@ export const PARKING_PHRASES = [
   "this domain expired", "renew this domain", "domain registration expired",
   // GoDaddy's parking lander (nic-nguyen.com, 2026-11-23): "<domain> has
   // expired and is parked free, courtesy of GoDaddy.com."
-  "has expired and is parked", "is parked free", "parked free, courtesy of",
+  "has expired and is parked", "parked free, courtesy of",
 ];
 
 // What a parking service's own lander carries in its HTML, whatever its text:
 // the script that draws GoDaddy's lander (img1.wsimg.com/parking-lander,
 // window.LANDER_SYSTEM, its traffic tag "ap: parking"; nic-nguyen.com/lander,
-// 2026-11-23) and scripts loaded from the parking hosts themselves. Like the
-// phrases, a marker counts only on a page with little visible text.
+// 2026-11-23) and scripts loaded (a `src`, never a `data-src`) from the
+// parking hosts themselves. Like the phrases, a marker counts only on a page
+// with little visible text.
 const PARKING_MARKERS = [
   [/\bwindow\.LANDER_SYSTEM\s*=/, "GoDaddy parking lander"],
   [/\/\/img\d*\.wsimg\.com\/parking-lander\//i, "GoDaddy parking lander"],
-  [/_trfd\.push\(\s*\{\s*ap\s*:\s*["']parking["']/, "GoDaddy parking lander"],
-  [/<script\b[^>]*\bsrc=["']?(?:https?:)?\/\/(?:[\w-]+\.)*(sedoparking\.com|parkingcrew\.net|bodis\.com|parklogic\.com|above\.com|dan\.com|afternic\.com|hugedomains\.com)\//i, "a script from a parking service"],
+  [/_trfd\.push\([^)]*?["']?\bap["']?\s*:\s*["']parking["']/, "GoDaddy parking lander"],
+  [/<script\b[^>]*?\ssrc\s*=\s*["']?(?:https?:)?\/\/(?:[\w-]+\.)*(sedoparking\.com|parkingcrew\.net|bodis\.com|parklogic\.com|above\.com|dan\.com|afternic\.com|hugedomains\.com)\//i, "a script from a parking service"],
 ];
-
-// Paths that parking services send a domain's home page to (GoDaddy's
-// "/lander", others' "/parking", "/park.html", "/for-sale"). A path alone
-// never decides: the page there must also read as a parking page, or show
-// nothing of its own (./gate.mjs parkedPage).
-export const PARKING_PATH = /^\/(?:lander|parking|parked|park(?:ing)?\.html?|for-?sale|domain-?for-?sale|buy-?domain)\/?(?:index\.html?)?$/i;
 // The User-Agent of the plain requests (and of the capture's browser, which
 // imports UA). It names a current Chrome, worked out from the date, so it
 // never goes stale: a pinned "Chrome/124" was 2.5 years old by 2026-11, and
@@ -122,82 +117,92 @@ export function parkingMarker(html, text) {
   return PARKING_MARKERS.find(([re]) => re.test(h))?.[1];
 }
 
-const pathOf = (url) => {
-  try {
-    return new URL(url).pathname;
-  } catch {
-    return "";
-  }
-};
-
-/** Fewer visible characters than this is a page that shows nothing of its own (pipeline/health.mjs BLANK_TEXT). */
-const SHELL_TEXT = 30;
-
 /**
  * Whether the page where a visit ended (a plain request's answer, or the
  * browser's rendered page) is a parking page, and why: the failure reason,
  * or null. The one judgement of the health check (pipeline/health.mjs
  * checkSite, on the browser's page) and the capture (pipeline/capture.mjs
- * judgeDesktop), as httpGate makes it on the served page. In order:
+ * judgeDesktop), as httpGate makes it on the served page. Only positive
+ * evidence counts, in order:
  *   - it ended on a parking host (isParkingDomain): "redirects to <host>";
  *   - a parking phrase in the title, or on a short page: "parking phrase: ...";
- *   - a parking service's lander (parkingMarker): "parking page: <service>";
- *   - a parking path (PARKING_PATH, GoDaddy's /lander) the visit was sent
- *     to from the listed address `from` (another path), that shows nothing
- *     of its own: "parking page: nothing at <path>".
- * A page that only shows little is never parked for that alone: a single-page
- * app's first HTML is nearly empty too.
+ *   - a parking service's lander (parkingMarker): "parking page: <service>".
+ * A path, a short or empty page, or a page that could not be read is never
+ * evidence: a single-page app's first HTML is nearly empty too.
  */
-export function parkedPage({ finalUrl = "", from = "", html = "", text, title } = {}) {
+export function parkedPage({ finalUrl = "", html = "", text, title } = {}) {
   if (isParkingDomain(finalUrl)) return `redirects to ${netloc(finalUrl)}`;
   const visible = String(text ?? visibleText(html)).trim();
   const phrase = parkingPhrase({ html, text: visible, title });
   if (phrase) return `parking phrase: "${phrase}"`;
   const marker = parkingMarker(html, visible);
   if (marker) return `parking page: ${marker}`;
-  const at = pathOf(finalUrl);
-  if (PARKING_PATH.test(at) && at !== pathOf(from) && visible.length < SHELL_TEXT) return `parking page: nothing at ${at}`;
   return null;
 }
 
-// A home page that is nothing but a redirect made in the page (a script
-// setting location, or a meta refresh), as parking services serve one
-// (nic-nguyen.com, 2026-11-23: 114 bytes, `window.location.href="/lander"`).
-// Only small pages with no text of their own are read for one: a single-page
-// app's shell is small too, but its redirect is followed and judged like any
-// other (parkedAfterClientRedirect), never called parked for being small.
+// A home page that is nothing but a redirect made on load (a script setting
+// location, or a meta refresh of a few seconds), as parking services serve
+// one (nic-nguyen.com, 2026-11-23: 114 bytes,
+// `window.onload=function(){window.location.href="/lander"}`). Only small
+// pages with no text of their own (<noscript> text counts as text) are read
+// for one, and only a redirect that always runs on load: a script whose whole
+// body is the assignment, or a window.onload / load / DOMContentLoaded handler
+// whose whole body is. Never one inside a click handler or a condition, a
+// variable or property that happens to be named location, or a long meta
+// refresh (a session timeout). The redirect is followed and judged
+// (parkedAfterClientRedirect), never called parked for being small.
 export const CLIENT_REDIRECT_MAX_HTML = 8192;
-const REDIRECT_SCRIPT = [
-  /\b(?:(?:window|document|self|top)\.)?location(?:\.href)?\s*=\s*(["'`])([^"'`\s]+)\1/,
-  /\b(?:(?:window|document|self|top)\.)?location\.(?:replace|assign)\(\s*(["'`])([^"'`\s]+)\1\s*\)/,
+/** A meta refresh waiting longer than this many seconds is not a redirect of the home page. */
+export const META_REFRESH_MAX_S = 5;
+/** Fewer characters of its own than this, and a page is only a redirect. */
+const SHELL_TEXT = 30;
+const ASSIGN = /^(?:(?:window|document|self|top)\.)?location(?:\.href)?\s*=\s*(["'`])([^"'`\s]+)\1$/;
+const CALL = /^(?:(?:window|document|self|top)\.)?location\.(?:replace|assign)\(\s*(["'`])([^"'`\s]+)\1\s*\)$/;
+const FN = String.raw`(?:function\s*\w*\s*\(\s*\)|\(\s*\)\s*=>)\s*\{([\s\S]*)\}`;
+const ON_LOAD = [
+  new RegExp(String.raw`^(?:window\.)?onload\s*=\s*${FN}$`),
+  new RegExp(String.raw`^(?:window|document)\.addEventListener\(\s*["'](?:load|DOMContentLoaded)["']\s*,\s*${FN}\s*(?:,\s*\w+\s*)?\)$`),
 ];
 
+/** A statement's text without the semicolons and space around it. */
+const statement = (s) => String(s).trim().replace(/;+\s*$/, "").trim();
+
+/** The fixed address a script whose whole body is a redirect on load sends the browser to, or null. */
+function scriptTarget(body) {
+  let s = statement(body);
+  const wrapped = ON_LOAD.map((re) => s.match(re)).find(Boolean);
+  if (wrapped) s = statement(wrapped[1]);
+  const m = s.match(ASSIGN) ?? s.match(CALL);
+  return m ? m[2] : null;
+}
+
 /**
- * Where a page that is only a client-side redirect sends the browser, as an
- * absolute http(s) URL, or null: a meta refresh with a URL, or an inline
- * script that sets the location to a fixed address. Only for a page of at
- * most CLIENT_REDIRECT_MAX_HTML characters with no visible text of its own.
+ * Where a page that is only a client-side redirect on load sends the browser,
+ * as an absolute http(s) URL, or null: a meta refresh with a URL after at most
+ * META_REFRESH_MAX_S seconds, or an inline script that only sets the location
+ * to a fixed address (scriptTarget). Only for a page of at most
+ * CLIENT_REDIRECT_MAX_HTML characters with no text of its own.
  */
 export function clientRedirect(html, baseUrl) {
   const h = String(html ?? "");
-  if (!h || h.length > CLIENT_REDIRECT_MAX_HTML || visibleText(h).length >= SHELL_TEXT) return null;
+  if (!h || h.length > CLIENT_REDIRECT_MAX_HTML) return null;
+  // Its own text, <noscript> included (a single-page app's "You need to enable JavaScript").
+  const own = stripTags(removeElements(removeElements(h, "script"), "style")).replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+  if (own.length >= SHELL_TEXT) return null;
   let target = null;
   for (const tag of h.match(/<meta\b[^>]*>/gi) ?? []) {
     if (!/http-equiv\s*=\s*["']?refresh\b/i.test(tag)) continue;
     const content = tag.match(/\bcontent\s*=\s*(["'])([\s\S]*?)\1/i)?.[2] ?? tag.match(/\bcontent\s*=\s*([^\s>]+)/i)?.[1] ?? "";
-    const m = content.match(/\burl\s*=\s*['"]?([^'"\s]+)/i);
-    if (m) {
-      target = m[1];
+    const m = content.match(/^\s*(\d+(?:\.\d+)?)?\s*[;,]?\s*url\s*=\s*['"]?([^'"\s]+)/i);
+    if (m && Number(m[1] ?? 0) <= META_REFRESH_MAX_S) {
+      target = m[2];
       break;
     }
   }
   if (!target) {
-    for (const [, body] of h.matchAll(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)) {
-      const m = REDIRECT_SCRIPT.map((re) => body.match(re)).find(Boolean);
-      if (m) {
-        target = m[2];
-        break;
-      }
+    for (const [, body] of h.matchAll(/<script\b(?![^>]*\ssrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+      target = scriptTarget(body);
+      if (target) break;
     }
   }
   if (!target) return null;
@@ -219,29 +224,24 @@ const withoutHash = (url) => String(url).replace(/#.*$/, "");
  * other site is a move, judged by the health check's redirectVerdict on the
  * browser's page). On the same host: one plain GET with the gate's headers,
  * fetch and timeout (HTTP redirects followed as in httpGate, no further
- * client redirect), then parkedPage on what it answered. A parking path whose
- * page could not be read, or shows no more than a parking page does
- * (PARKED_MAX_TEXT), is parked: the home page was nothing but a redirect there.
+ * client redirect), then parkedPage on what it answered. A page there that
+ * could not be read (a dropped connection, a timeout, an error status) or that
+ * shows no positive evidence is no verdict: null, and the browser decides, as
+ * for timeouts and bot walls everywhere else.
  */
 async function parkedAfterClientRedirect(from, to, { fetchImpl, timeoutMs, userAgent }) {
   if (isParkingDomain(to)) return { reason: `redirects to ${netloc(to)}`, finalUrl: to };
   if (netloc(to) !== netloc(from) || withoutHash(to) === withoutHash(from)) return null;
-  let landed = to;
-  let html = null;
   try {
     const res = await fetchImpl(to, { redirect: "follow", headers: navigationHeaders(userAgent), signal: AbortSignal.timeout(timeoutMs) });
-    landed = res.url || to;
-    if (res.ok && !isParkingDomain(landed)) html = await readBody(res, 262144);
+    const landed = res.url || to;
+    if (isParkingDomain(landed)) return { reason: `redirects to ${netloc(landed)}`, finalUrl: landed };
+    if (!res.ok) return null;
+    const reason = parkedPage({ finalUrl: landed, html: await readBody(res, 262144) });
+    return reason ? { reason, finalUrl: landed } : null;
   } catch {
-    html = null;
+    return null;
   }
-  if (isParkingDomain(landed)) return { reason: `redirects to ${netloc(landed)}`, finalUrl: landed };
-  const at = pathOf(landed);
-  if (html == null) return PARKING_PATH.test(at) ? { reason: `parking page: redirects to ${at}`, finalUrl: landed } : null;
-  const reason = parkedPage({ finalUrl: landed, from, html });
-  if (reason) return { reason, finalUrl: landed };
-  if (PARKING_PATH.test(at) && visibleText(html).length <= PARKED_MAX_TEXT) return { reason: `parking page: redirects to ${at}`, finalUrl: landed };
-  return null;
 }
 
 /**
@@ -381,7 +381,7 @@ export async function httpGate(url, { fetchImpl = globalThis.fetch, timeoutMs = 
   } catch (e) {
     return { ...requestFailed(e), finalUrl, httpStatus: res.status };
   }
-  const parked = parkedPage({ finalUrl, from: url, html });
+  const parked = parkedPage({ finalUrl, html });
   if (parked) return { status: "parked", reason: parked, finalUrl, httpStatus: res.status };
   // A home page that is only a redirect made in the page: where it sends the browser decides (one hop).
   const to = clientRedirect(html, finalUrl);

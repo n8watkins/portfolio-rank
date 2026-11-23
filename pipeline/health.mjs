@@ -309,7 +309,7 @@ export async function checkSite(
     text = String(page.text ?? "").trim();
     if (page.html) html = page.html;
     // Where the browser ended up, after the page's own redirects (./gate.mjs parkedPage, as the capture judges it).
-    const parked = parkedPage({ finalUrl, from: url, html: String(page.html ?? ""), text, title: String(page.title ?? "") });
+    const parked = parkedPage({ finalUrl, html: String(page.html ?? ""), text, title: String(page.title ?? "") });
     if (parked) return { ok: false, reason: parked, finalUrl };
     if (text.length < BLANK_TEXT && !page.media) return { ok: false, reason: "renders blank", finalUrl };
   }
