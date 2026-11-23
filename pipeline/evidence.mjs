@@ -73,7 +73,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
       : [];
     const at = new Date().toISOString();
     // No list (none should lack one): the check is still recorded, so the due list moves on.
-    const facts = chosen.length || stored.project_candidates ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA }), measured_at: at } : stored;
+    const facts = chosen.length || stored.project_candidates ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? "") }), measured_at: at } : stored;
     try {
       await db.execute({ sql: "UPDATE portfolios SET facts = ?, facts_at = ? WHERE url = ?", args: [JSON.stringify(facts), at, url] });
     } catch {

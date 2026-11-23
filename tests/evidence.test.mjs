@@ -55,7 +55,7 @@ async function withSite(fn) {
 const fetchFor = (pageUrl) => async (input, init) => {
   const u = String(input);
   if (u === pageUrl) return fetch(u, init);
-  return new Response("", { status: u.includes("gone") ? 404 : 200 });
+  return new Response("", { status: u.includes("gone") || u.includes("no-such-page") ? 404 : 200 });
 };
 
 // The links the capture chose, from its desktop and phone views and the projects page (facts version 3).
@@ -79,8 +79,11 @@ test("a link re-check tests again the links the capture chose, and keeps the ren
       },
     });
     assert.equal(out.measured, true);
-    // Only the chosen links, never the page itself: its plain-HTTP links (github.com/ada/engine) are not picked.
-    assert.deepEqual([...new Set(asked)].sort(), CHOSEN.map((c) => c.url).sort());
+    // Only the chosen links (and one address that cannot exist, which tells whether the host answers every address),
+    // never the page itself: its plain-HTTP links (github.com/ada/engine) are not picked.
+    const nonsense = asked.filter((u) => u.includes("/projects/no-such-page-"));
+    assert.equal(nonsense.length, 1);
+    assert.deepEqual([...new Set(asked.filter((u) => !nonsense.includes(u)))].sort(), CHOSEN.map((c) => c.url).sort());
     const after = (await db.execute({ sql: "SELECT page_text, facts, facts_at FROM portfolios WHERE url = ?", args: [url] })).rows[0];
     const facts = JSON.parse(String(after.facts));
     assert.equal(after.page_text, RENDERED_TEXT);
@@ -89,8 +92,8 @@ test("a link re-check tests again the links the capture chose, and keeps the ren
     assert.equal(facts.words, 14);
     assert.equal(facts.v, 3, "the stored version stays");
     assert.deepEqual(facts.project_candidates, CHOSEN, "the capture's list is kept");
-    // The own page loads and is counted as one (own_ok), so the version 3 rule can cap it.
-    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1 });
+    // The host answers 404 for an address that cannot exist, so the own page counts by its status.
+    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status" });
     assert.notEqual(facts.measured_at, RENDERED_FACTS.measured_at);
     assert.equal(after.facts_at, facts.measured_at, "the link check due date moves on");
   });

@@ -244,7 +244,7 @@ test("a row captured before v2 gets its page text and facts measured at grade ti
   assert.equal(facts.source, "http");
   assert.equal(facts.github, true);
   assert.equal(facts.footer_year, 2026);
-  assert.deepEqual(facts.project_links, { checked: 1, ok: 1, broken: 0, blocked: 0, own_ok: 0 });
+  assert.deepEqual(facts.project_links, { checked: 1, ok: 1, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null });
   assert.ok(row.facts_at);
 });
 

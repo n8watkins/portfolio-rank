@@ -8,7 +8,7 @@
 // HEAD is refused), capped in number and time, never to private addresses.
 import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
-import { parkingPhrase } from "./gate.mjs";
+import { parkingPhrase, visibleText } from "./gate.mjs";
 
 // 2 (2026-11-21): resume, GitHub, contact, project links and in-page
 // sections also come from buttons and other non-link controls
@@ -26,8 +26,15 @@ export const LINK_TIMEOUT_MS = 8000;
 /** The fewest project links that load for "project links load" to pass (and for full project points, lib/check-points.mjs). */
 export const MIN_PROJECT_LINKS = 3;
 
-/** The most of the MIN_PROJECT_LINKS a site's own pages may supply: one link elsewhere that loads is always needed. */
-export const OWN_PAGES_MAX = 2;
+/** How many of the site's own project pages go ahead of its other outbound links in the list of 8 (projectCandidates). */
+export const OWN_PAGES_AHEAD = 2;
+/**
+ * Own project pages on a host that answers 200 for an address that cannot exist (a catch-all host, an app
+ * shell) are verified by their text instead of their status (checkProjectLinks): at least this many words of
+ * their own, and no more than this share of their words shared with the nonsense page or the home page.
+ */
+export const OWN_PAGE_MIN_WORDS = 50;
+export const OWN_PAGE_MAX_OVERLAP = 0.8;
 /** The facts version whose project-link rule is the one below; older facts keep the rule they were measured under. */
 export const PROJECT_RULE_VERSION = 3;
 const isLinks = (l) => Boolean(l && typeof l === "object" && typeof l.checked === "number");
@@ -41,8 +48,9 @@ export const newProjectRule = (version) => n(version) >= PROJECT_RULE_VERSION;
  * changes for a site until it is measured again:
  *
  *   version 3 and newer: a third for each project link that loads, full at
- *   MIN_PROJECT_LINKS; a site's own pages count for at most OWN_PAGES_MAX of
- *   them, so a host that answers every address cannot pass on its own pages.
+ *   MIN_PROJECT_LINKS. The site's own pages count fully, because they load
+ *   only when they are real pages (checkProjectLinks: on a host that answers
+ *   every address, by their own text).
  *   A link behind a bot check is neither loading nor broken: it is left out,
  *   and when the ones behind a bot check could have made the difference
  *   (2 load and 1 is behind one) the result is unknown, not a fail. None
@@ -60,8 +68,7 @@ export function projectLinksShare(links, version) {
   if (!newProjectRule(version)) return links.checked > 0 ? (n(links.ok) / links.checked) * Math.min(1, links.checked / MIN_PROJECT_LINKS) : 0;
   const blocked = n(links.blocked);
   if (links.checked > 0 && blocked >= links.checked) return null;
-  const own = Math.min(n(links.own_ok), n(links.ok));
-  const counted = n(links.ok) - own + Math.min(own, OWN_PAGES_MAX);
+  const counted = n(links.ok);
   if (counted >= MIN_PROJECT_LINKS) return 1;
   if (counted + blocked >= MIN_PROJECT_LINKS) return null;
   return counted / MIN_PROJECT_LINKS;
@@ -95,7 +102,9 @@ export function projectLinksText(links, version) {
   const tested = links.checked - blocked;
   const wall = blocked ? `${blocked} behind a bot check` : "";
   if (tested <= 0) return `Project links: ${wall}`;
-  return `${n(links.ok)} of ${tested} project links load${wall ? `; ${wall}` : ""}`;
+  // Own pages that answered but could not be told from a page that does not exist (a catch-all host) do not load.
+  const shell = n(links.own_unverified) ? `${n(links.own_unverified)} of the site's own pages look like any other address on it` : "";
+  return `${n(links.ok)} of ${tested} project links load${[wall, shell].filter(Boolean).map((s) => `; ${s}`).join("")}`;
 }
 
 // Free hosting subdomains: a site served from one is not on its own domain.
@@ -322,8 +331,8 @@ function isOwnProjectPath(path, base = "") {
  *      on the site's projects page (`from: "projects_page"`);
  *   2. the site's own pages for single projects (isOwnProjectPath): in a home
  *      page projects section, or on the projects page outside its nav,
- *      header and footer; at most OWN_PAGES_MAX here (as many as the pass
- *      counts), any more only after kind 3;
+ *      header and footer; at most OWN_PAGES_AHEAD here, any more only after
+ *      kind 3;
  *   3. every other outbound link of the home page, in page order. The
  *      projects page adds no links of this kind: a client list or a press
  *      page called "Work" does not make its links projects.
@@ -373,10 +382,10 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     seen.add(own.key);
     tiers[1].push({ url: own.key, from, kind: "own page" });
   }
-  // Own pages can make at most OWN_PAGES_MAX of the pass, so only that many go ahead of the other outbound links;
-  // the rest only fill slots left over (stimmie.dev: 7 own pages had pushed out its project sites).
+  // Only OWN_PAGES_AHEAD own pages go ahead of the other outbound links; the rest fill the slots left over, so
+  // a site's own pages never push its outbound project sites out of the 8 (stimmie.dev: 7 own pages had).
   const own = tiers[1].map((c) => ({ ...c, tier: 2 }));
-  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own.slice(0, OWN_PAGES_MAX), ...tiers[2].map((c) => ({ ...c, tier: 3 })), ...own.slice(OWN_PAGES_MAX)].slice(0, max);
+  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own.slice(0, OWN_PAGES_AHEAD), ...tiers[2].map((c) => ({ ...c, tier: 3 })), ...own.slice(OWN_PAGES_AHEAD)].slice(0, max);
 }
 
 /** A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies". Not "How I work". */
@@ -392,12 +401,10 @@ const pathOfUrl = (u) => {
 
 /**
  * The projects a home page shows itself, as the pass counts them: its
- * outbound demo and repository links, and its own project pages up to
- * OWN_PAGES_MAX.
+ * outbound demo and repository links and its own project pages.
  */
 function shownProjects(links, homeUrl) {
-  const c = projectCandidates(links, homeUrl, Infinity);
-  return c.filter((x) => x.tier === 1).length + Math.min(OWN_PAGES_MAX, c.filter((x) => x.tier === 2).length);
+  return projectCandidates(links, homeUrl, Infinity).filter((x) => x.tier <= 2).length;
 }
 
 /**
@@ -522,13 +529,37 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
  * Check links: HEAD, then GET when HEAD is refused. A link "loads" on 2xx/3xx;
  * 401/403/429/999 is a bot wall (blocked, not broken); 404, 410, 5xx, DNS
  * failures and timeouts are broken. `urls` are addresses or candidates
- * ({ url, kind }, projectCandidates). Returns { checked, ok, broken, blocked,
- * own_ok }: `own_ok` how many of the loading ones are the site's own pages
- * (kind "own page"), which count for at most OWN_PAGES_MAX of the pass.
+ * ({ url, kind }, projectCandidates).
+ *
+ * The site's own project pages (kind "own page") must be real pages. When
+ * there are any, one address on the same host that cannot exist (a random
+ * segment under the first own page's parent path) is asked for once, with a
+ * plain GET: when it answers 404 or another error, own pages count by their
+ * status like any link; when it answers 2xx (a host or an app shell that
+ * answers every address), each own page is fetched (GET, its body capped at
+ * OWN_PAGE_MAX_BYTES) and loads only when its visible text has at least
+ * OWN_PAGE_MIN_WORDS distinct words, and at most OWN_PAGE_MAX_OVERLAP of them
+ * are also on the nonsense page and on the home page (`homeText`); two own
+ * pages with the same text count once. An own page that answered but failed
+ * that is counted as checked, not loading, in `own_unverified`.
+ *
+ * Returns { checked, ok, broken, blocked, own_ok, own_unverified, own_check }:
+ * `own_ok` how many of the loading ones are own pages, `own_check` "status",
+ * "text" or null (no own pages).
  */
-export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent } = {}) {
-  const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0 };
+export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "" } = {}) {
+  const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
   const headers = { Accept: "text/html,*/*;q=0.8", ...(userAgent ? { "User-Agent": userAgent } : {}) };
+  /** A plain GET with its visible text (the body capped), or null when it failed. */
+  async function getPage(url) {
+    try {
+      const r = await fetchImpl(url, { method: "GET", redirect: "follow", headers, signal: AbortSignal.timeout(timeoutMs) });
+      const html = await readCapped(r, OWN_PAGE_MAX_BYTES);
+      return { status: r.status, words: wordSet(visibleText(html)) };
+    } catch {
+      return null;
+    }
+  }
   async function one(url) {
     let h;
     try {
@@ -558,11 +589,36 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     return "broken";
   }
   const queue = urls.map((u) => (typeof u === "string" ? { url: u, kind: "outbound" } : u));
+  // Once per check: does the host answer an address that cannot exist?
+  const firstOwn = queue.find((c) => c.kind === "own page");
+  let byText = null;
+  if (firstOwn) {
+    const probe = await getPage(nonsenseUrl(firstOwn.url));
+    byText = probe && probe.status >= 200 && probe.status < 300 ? { probe: probe.words, home: wordSet(homeText) } : null;
+    res.own_check = byText ? "text" : "status";
+  }
+  const seenTexts = new Set();
+  /** An own page on a host that answers every address: loads only with text of its own. */
+  async function ownByText(url) {
+    const got = await getPage(url);
+    if (!got) return "broken";
+    if (got.status >= 400) return [401, 403, 429, 999].includes(got.status) ? "blocked" : "broken";
+    const key = [...got.words].sort().join(" ");
+    const real = got.words.size >= OWN_PAGE_MIN_WORDS && overlap(got.words, byText.probe) <= OWN_PAGE_MAX_OVERLAP && overlap(got.words, byText.home) <= OWN_PAGE_MAX_OVERLAP && !seenTexts.has(key);
+    seenTexts.add(key);
+    return real ? "ok" : "own_unverified";
+  }
   await Promise.all(
     Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
       while (queue.length) {
         const c = queue.shift();
-        const verdict = await one(c.url);
+        let verdict;
+        try {
+          if (c.kind === "own page" && byText && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByText(c.url);
+          else verdict = await one(c.url);
+        } catch {
+          verdict = null;
+        }
         if (!verdict) continue;
         res.checked++;
         res[verdict]++;
@@ -571,6 +627,58 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     })
   );
   return res;
+}
+
+/** The most of an own page's body read to verify it by its text. */
+export const OWN_PAGE_MAX_BYTES = 300_000;
+
+/** An address on the same host as `url` that cannot exist: a random segment under the same parent path. */
+export function nonsenseUrl(url) {
+  const u = new URL(url);
+  const parent = u.pathname.replace(/\/+$/, "").replace(/\/[^/]*$/, "");
+  const rand = globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2).padEnd(24, "x");
+  u.pathname = `${parent}/no-such-page-${rand}`;
+  u.search = "";
+  u.hash = "";
+  return u.href;
+}
+
+/** The distinct words (3 letters or more, lower case) of a text. */
+function wordSet(text) {
+  return new Set(String(text ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+}
+/** The share of `a`'s words that are also in `b` (0 when `a` is empty). */
+function overlap(a, b) {
+  if (!a.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / a.size;
+}
+/** The body of a response as text, at most `max` bytes. */
+async function readCapped(r, max) {
+  if (!r.body?.getReader) return String((await r.text?.()) ?? "").slice(0, max);
+  const reader = r.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (size < max) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      size += value.length;
+    }
+  } finally {
+    await reader.cancel?.().catch(() => {});
+  }
+  const all = new Uint8Array(Math.min(size, max));
+  let at = 0;
+  for (const c of chunks) {
+    const part = c.subarray(0, all.length - at);
+    all.set(part, at);
+    at += part.length;
+    if (at >= all.length) break;
+  }
+  return new TextDecoder().decode(all);
 }
 
 const SIGNAL_KEYS = ["projects", "about", "contact", "resume", "github", "name"];
@@ -675,8 +783,9 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
     views.push("projects page");
   }
   const candidates = projectCandidates(links, facts.final_url);
-  // With their kind: the site's own pages count for at most OWN_PAGES_MAX of the pass (projectLinksShare).
-  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs });
+  // With their kind, and the home page's text: the site's own pages must be real pages (checkLinks).
+  const homeText = desktopInput.text || visibleText(desktopInput.html);
+  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText });
   // The links checked, with where each came from: the nightly re-check (pipeline/evidence.mjs) tests these again.
   facts.project_candidates = candidates.map(({ url, from, kind }) => ({ url, from, kind }));
   facts.project_links_from = sourcesOf(candidates, projectsPageUrl);

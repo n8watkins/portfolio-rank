@@ -53,11 +53,11 @@ test("www.adhamdannaway.com: its case studies are its own pages under /portfolio
   assert.equal(got.length, 8);
   assert.ok(got.every((c) => c.kind === "own page" && /^https:\/\/www\.adhamdannaway\.com\/portfolio\/[a-z0-9-]+$/.test(c.url)), JSON.stringify(got));
   assert.ok(!got.some((c) => /\/portfolio$/.test(c.url)), "never the projects page itself");
-  // Its own pages supply at most 2 of the 3: with no project link elsewhere it is two thirds, a fail.
-  const links = { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 8 };
+  // Real case-study pages on a host that answers 404 for nonsense: they count fully, a pass on its own pages alone.
+  const links = { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 8, own_unverified: 0, own_check: "status" };
   assert.equal(projectLinksText(links, 3), "8 of 8 project links load");
-  assert.equal(projectLinksShare(links, 3), 2 / 3);
-  assert.equal(codeChecks({ v: 3, project_links: links }).project_links, false);
+  assert.equal(projectLinksShare(links, 3), 1);
+  assert.equal(codeChecks({ v: 3, project_links: links }).project_links, true);
 });
 
 test("eduardconstantin.github.io: the projects its app shows after PROJECTS is pressed", () => {
@@ -68,15 +68,15 @@ test("eduardconstantin.github.io: the projects its app shows after PROJECTS is p
   assert.ok(got.some((c) => c.url === "https://github.com/eduardconstantin/react-motion-components"));
 });
 
-test("www.rapidtech1898.com: its own solution pages count, at most 2 of them, so its Solutions page is read too", () => {
+test("www.rapidtech1898.com: its own solution pages in the home page's portfolio menu count, so no other page is read", () => {
   const url = "https://www.rapidtech1898.com/";
   const home = homeOf("www.rapidtech1898.com", url);
   const got = projectCandidates(home, url);
   const own = got.filter((c) => c.kind === "own page");
   assert.ok(own.length >= 3, JSON.stringify(got));
   assert.ok(own.every((c) => /\/solutions\/portfolio-[a-z-]+\/$/.test(c.url)));
-  // Its own pages show 2 of the 3 the pass counts, so the listing page is read for more.
-  assert.equal(projectsPageFor(home, url), "https://rapidtech1898.com/topic/solutions/");
+  // Its own pages show 3 projects, as many as the pass needs, so the listing page is not read.
+  assert.equal(projectsPageFor(home, url), null);
 });
 
 test("nitishkr.fun: its project buttons carry no URL in the page, and nothing is pressed to find one", () => {

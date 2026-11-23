@@ -17,7 +17,7 @@
 import { redactContacts } from "./redact.mjs";
 import { SITE_DATA_MARKER } from "./site-data.mjs";
 import { guardVerdict } from "./portfolio-guard.mjs";
-import { MIN_PROJECT_LINKS, OWN_PAGES_MAX, projectLinksPass } from "./facts.mjs";
+import { MIN_PROJECT_LINKS, projectLinksPass } from "./facts.mjs";
 
 export const RUBRIC_VERSION = 2;
 /**
@@ -127,7 +127,7 @@ export const CRITERIA = [
     name: "Project links load",
     by: "code",
     weight: 5 / 17,
-    what: `Project and demo links answer (up to 8 checked, links in the projects and GitHub repositories first, then the site's own project pages, HEAD then GET, 8 s timeout); passes when at least ${MIN_PROJECT_LINKS} load, the site's own pages counting for at most ${OWN_PAGES_MAX}, and fails when fewer load or none were found; a link behind a bot check is left out. Facts measured before version 3 keep their rule: passes when at least one was checked and none is broken.`,
+    what: `Project and demo links answer (up to 8 checked, links in the projects and GitHub repositories first, then the site's own project pages, HEAD then GET, 8 s timeout); passes when at least ${MIN_PROJECT_LINKS} load (the site's own pages count only as real pages: on a host that answers an address that cannot exist, by their own text), and fails when fewer load or none were found; a link behind a bot check is left out. Facts measured before version 3 keep their rule: passes when at least one was checked and none is broken.`,
     evidence: "HTTP checks of the project links on the desktop and phone views and the site's own projects page",
   },
   {

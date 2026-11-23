@@ -227,7 +227,7 @@ test("link checks: HEAD then GET, bot walls are blocked, not broken", async () =
   };
   const urls = ["ok", "no-head", "gone", "wall", "down", "dns"].map((p) => `https://site.test/${p}`);
   const r = await checkLinks([...urls, "http://127.0.0.1/x"], { fetchImpl, concurrency: 2 });
-  assert.deepEqual(r, { checked: 6, ok: 2, broken: 3, blocked: 1, own_ok: 0 });
+  assert.deepEqual(r, { checked: 6, ok: 2, broken: 3, blocked: 1, own_ok: 0, own_unverified: 0, own_check: null });
   assert.ok(seen.includes("GET https://site.test/no-head"));
   assert.ok(!seen.some((s) => s.includes("127.0.0.1")), "private addresses are never fetched");
 });

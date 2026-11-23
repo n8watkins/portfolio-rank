@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { FACTS_VERSION, MIN_PROJECT_LINKS, footerYear, isErrorPage, measureFacts, measurePage, mergeViews, pageLinks, projectLinkCandidates, projectLinksPass, projectLinksShare, projectLinksText } from "../pipeline/facts.mjs";
+import { FACTS_VERSION, MIN_PROJECT_LINKS, checkLinks, footerYear, isErrorPage, measureFacts, measurePage, mergeViews, pageLinks, projectLinkCandidates, projectLinksPass, projectLinksShare, projectLinksText } from "../pipeline/facts.mjs";
 import { scanPage } from "../pipeline/page-controls.mjs";
 import { codeChecks } from "../pipeline/rubric.mjs";
 import { checkPoints, checkShares, libraryMedians } from "../lib/check-points.mjs";
@@ -106,13 +106,59 @@ test("facts of version 1 and 2 keep the old rule and the old words everywhere, s
   assert.equal(strengthsAndFixes({ checks: { project_links: false }, facts: v3 }).fixes.find((f) => f.criterion === "project_links").title, "Link at least 3 projects that load");
 });
 
-test("a site's own pages supply at most 2 of the 3: a host that answers every address cannot pass on them alone", () => {
-  // Three own pages that load, nothing elsewhere: two thirds, a fail.
-  assert.equal(projectLinksShare({ checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 3 }, 3), 2 / 3);
-  assert.equal(projectLinksPass({ checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 8 }, 3), false);
-  // Two own pages and one outbound link that loads: a pass.
-  assert.equal(projectLinksPass({ checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 2 }, 3), true);
-  assert.equal(projectLinksPass({ checked: 4, ok: 3, broken: 1, blocked: 0, own_ok: 3 }, 3), false);
+/** A fake host: `pages` maps a path to [status, html]; anything else answers `other` ([status, html]). Counts requests. */
+const host = (pages, other) => {
+  const asked = [];
+  const f = async (url, init) => {
+    asked.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
+    const [status, html] = pages[new URL(url).pathname] ?? other;
+    return new Response(init?.method === "HEAD" ? null : html, { status, headers: { "content-type": "text/html" } });
+  };
+  f.asked = asked;
+  return f;
+};
+const own = (paths) => paths.map((p) => ({ url: `https://ana.dev${p}`, kind: "own page" }));
+const caseStudy = (name) =>
+  `<main><h1>${name}</h1><p>${Array.from({ length: 70 }, (_, i) => `${name.toLowerCase()}word${i}`).join(" ")} research interviews prototypes outcome</p></main>`;
+const SHELL = `<div id="root"><nav>Ana Ruiz Home Work About Contact</nav><p>Loading the app, please wait</p></div>`;
+const HOME = "Ana Ruiz product designer in Madrid. Selected work, about me and contact.";
+
+test("own project pages count fully, but only as real pages: a catch-all host's empty identical pages fail", async () => {
+  // Every address answers 200 with the same app shell: the three own pages cannot be told from a page that does not exist.
+  const shell = host({}, [200, SHELL]);
+  const r = await checkLinks(own(["/work/a", "/work/b", "/work/c"]), { fetchImpl: shell, homeText: HOME });
+  assert.deepEqual(r, { checked: 3, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 3, own_check: "text" });
+  assert.equal(projectLinksPass(r, 3), false);
+  assert.equal(projectLinksText(r, 3), "0 of 3 project links load; 3 of the site's own pages look like any other address on it");
+});
+
+test("a host with real case-study pages and a 404 for nonsense passes on its own pages alone", async () => {
+  const real = host({ "/work/a": [200, caseStudy("Alpha")], "/work/b": [200, caseStudy("Beta")], "/work/c": [200, caseStudy("Gamma")] }, [404, "<h1>Not found</h1>"]);
+  const r = await checkLinks(own(["/work/a", "/work/b", "/work/c"]), { fetchImpl: real, homeText: HOME });
+  assert.deepEqual(r, { checked: 3, ok: 3, broken: 0, blocked: 0, own_ok: 3, own_unverified: 0, own_check: "status" });
+  assert.equal(projectLinksPass(r, 3), true, "own pages count fully");
+  // The address that cannot exist is asked for once per check, not once per link.
+  assert.equal(real.asked.filter((a) => a.includes("/work/no-such-page-")).length, 1);
+  assert.ok(real.asked.every((a) => a.startsWith("GET /work/no-such-page-") || a.startsWith("HEAD ")), JSON.stringify(real.asked));
+});
+
+test("a catch-all host whose pages do differ passes; two own pages with the same text count once", async () => {
+  const pages = { "/work/a": [200, caseStudy("Alpha")], "/work/b": [200, caseStudy("Beta")], "/work/c": [200, caseStudy("Gamma")], "/work/d": [200, caseStudy("Gamma")] };
+  const differ = host(pages, [200, SHELL]);
+  const r = await checkLinks(own(["/work/a", "/work/b", "/work/c", "/work/d"]), { fetchImpl: differ, homeText: HOME });
+  assert.equal(r.own_check, "text");
+  assert.equal(r.own_ok, 3);
+  assert.equal(r.own_unverified, 1, "the copy of Gamma counts once");
+  assert.equal(projectLinksPass(r, 3), true);
+  assert.equal(differ.asked.filter((a) => a.includes("no-such-page-")).length, 1);
+  // A page with too little text of its own, or one that is the home page again, does not load.
+  const thin = host({ "/work/a": [200, "<p>Alpha</p>"], "/work/b": [200, `<p>${HOME}</p>`] }, [200, SHELL]);
+  const t = await checkLinks(own(["/work/a", "/work/b"]), { fetchImpl: thin, homeText: HOME });
+  assert.deepEqual([t.ok, t.own_unverified], [0, 2]);
+  // No own pages: no extra request at all.
+  const none = host({}, [200, "<p>ok</p>"]);
+  await checkLinks([{ url: "https://demo.example/", kind: "outbound" }], { fetchImpl: none });
+  assert.ok(!none.asked.some((a) => a.includes("no-such-page-")));
 });
 
 test("a link behind a bot check is neither loading nor broken: left out of the count, unknown when it could decide", () => {
@@ -254,7 +300,7 @@ test("krishnananda.netlify.app: the projects in the desktop's inactive tab are f
   assert.deepEqual(desktopOnly.views, ["desktop"]);
   const both = await measurePage({ html: desktop, text: "", url, finalUrl: `${url}/`, phone: { html: phone, text: "", finalUrl: `${url}/` } }, { fetchImpl });
   assert.deepEqual(both.views, ["desktop", "phone"]);
-  assert.deepEqual(both.project_links, { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 0 });
+  assert.deepEqual(both.project_links, { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null });
   assert.equal(codeChecks(both).project_links, true);
   assert.equal(both.v, FACTS_VERSION);
 });
