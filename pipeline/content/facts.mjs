@@ -232,8 +232,8 @@ export async function topGrades(db, { now }) {
     // One kept score (rubric v3): its gap, and no comparison across axes.
     const [x] = per;
     const gapId = b.fact(`How far the top-graded portfolios lead the rest on ${x.label}, in points on a 1 to 5 scale`, x.gap, `${fmt.dec(x.gap)} points`);
-    b.notable([x.ib, x.ir], `The top-graded portfolios average {{${x.ib}}} on ${x.label}, against {{${x.ir}}} for the rest`);
-    b.notable([gapId], `the top-graded portfolios lead the rest by {{${gapId}}} on ${x.label}`);
+    b.notable([x.ib, x.ir], `On ${x.label}, the top-graded portfolios average {{${x.ib}}} against {{${x.ir}}} for the rest`);
+    b.notable([gapId], `a lead of {{${gapId}}} for the top-graded portfolios on ${x.label}`);
   } else if (per.length) {
     const lead = extremes(per, (x) => x.gap, "max");
     const small = extremes(per, (x) => x.gap, "min");

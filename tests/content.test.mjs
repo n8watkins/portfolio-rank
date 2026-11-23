@@ -202,7 +202,7 @@ function goodDraft(sheet, over = {}) {
       `The five-second test is where the top portfolios pull ahead of every other group we graded.`,
       `The top-graded portfolios average ${lowTop} on it, against ${lowRest} for the rest.`,
       `We graded ${total} portfolios with the same rubric, and only ${share} of them are top-graded.`,
-      "If you change one thing on your portfolio this week, say who you are and what you do on the first screen.",
+      "If you change one thing on your portfolio this week, state who you are and what you do on the first screen.",
       "",
       "### Top portfolios lead on the first screen",
       para(3),
@@ -354,7 +354,7 @@ test("writer: blocks that fail a check get one targeted fix call; still failing,
   const g = fakeGemini({ write: (n, parts) => (n === 1 ? short(n, parts) : mockAnswer({ parts })), review: REVIEW_OK });
   const { ctx } = contentCtx(db);
   const r = await runDraft(ctx, g, { kind: "top-grades", night: "2026-11-16", budget: 20 });
-  assert.equal(r.status, "ok");
+  assert.equal(r.status, "ok", JSON.stringify(r.failures));
   const fix = g.calls.filter((c) => c.kind === "write")[1].parts[0].text;
   assert.match(fix, /Rewrite only the blocks listed below/);
   assert.match(fix, /=== SECTION \d+ ===/);
@@ -977,7 +977,7 @@ test("quality: a standard post is LENGTHS.standard words, with the soft gate bel
   assert.equal(checkOf(goodDraft(sheet), sheet, roster, "template").ok, true);
   const tooShort = checkOf(goodDraft(sheet, { body: body.split("\n").slice(0, 24).join("\n") }), sheet, roster, "template");
   assert.ok(tooShort.problems.some((p) => new RegExp(`words; ${S.min} to ${S.max} wanted: add`).test(p)), tooShort.problems.join("; "));
-  const tooLong = checkOf(goodDraft(sheet, { body: body.replace("### Try this", `${LONG(30)}\n\n### Try this`) }), sheet, roster, "template");
+  const tooLong = checkOf(goodDraft(sheet, { body: body.replace("### Try this", `${LONG(45)}\n\n### Try this`) }), sheet, roster, "template");
   assert.ok(tooLong.problems.some((p) => new RegExp(`words; ${S.min} to ${S.max} wanted: cut`).test(p)), tooLong.problems.join("; "));
 });
 
@@ -1073,7 +1073,7 @@ test("quality: a superlative a tie contradicts is rejected", async () => {
 test("quality: a notable fact is flagged and the draft must lead with it", async () => {
   const { sheet, roster } = await sheetAndRoster();
   assert.ok(sheet.notable.length >= 1 && sheet.notable.length <= 2);
-  assert.match(sheet.notable[0].why, /average \{\{f\d+\}\} on the five-second test, against \{\{f\d+\}\} for the rest/);
+  assert.match(sheet.notable[0].why, /On the five-second test, the top-graded portfolios average \{\{f\d+\}\} against \{\{f\d+\}\} for the rest/);
   const d = goodDraft(sheet);
   assert.equal(checkOf(d, sheet, roster, "hook").ok, true);
   const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^The five-second test is[^\n]*\nThe top-graded[^\n]*\n/, "") });
@@ -1102,12 +1102,11 @@ test("quality: Try this points to a named positive example with a link", async (
 test("quality: the callout restates exactly one numeric fact with its full scope", async () => {
   const { sheet, roster } = await sheetAndRoster();
   const share = ph(sheet, "Share of all graded portfolios that are top-graded");
-  const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
+  const gap = ph(sheet, "How far the top-graded portfolios lead the rest on the five-second test, in points on a 1 to 5 scale");
   const body = goodDraft(sheet).body;
   const withCallout = (l1, l2) => body.replace(/^> \*\*.*\n> .*$/m, `> **${l1}**\n> ${l2}`);
   const run = (l1, l2) => checkOf(goodDraft(sheet, { body: withCallout(l1, l2) }), sheet, roster, "callout");
-  assert.equal(run(`${gap} ahead on ${lead}`, "Several axes tie for that lead.").ok, true, "one number and a label fact");
+  assert.equal(run(`${gap} ahead on the five-second test`, "That is the whole gap.").ok, true, "one number");
   assert.equal(run(`${share} of all graded portfolios`, "That is who reaches the top two tiers.").ok, true);
   // The earlier draft's mistake: a share of all graded portfolios called a share of top portfolios.
   const wrongScope = run(`${share} of top portfolios`, "They reach S or A.");
@@ -1146,8 +1145,8 @@ test("clauses and plan: pairs worded together, a tie never one winner, one sente
     assert.ok(c.facts.every((f) => c.text.includes(`{{${f}}}`)), c.text);
     assert.ok(!/\(1 to 5\) of|S and A/.test(c.text), c.text);
   }
-  // The fixture's lead is tied across five axes: worded as a tie.
-  assert.ok(clauses.some((c) => c.kind === "tie" && /tie for the biggest lead/.test(c.text)));
+  // Rubric v3 leaves one AI score, so the sheet has no tie to word.
+  assert.ok(!clauses.some((c) => c.kind === "tie"));
   // One clause per named site, its link once.
   for (const c of clauses.filter((x) => x.kind === "example")) assert.equal((c.text.match(/\]\(/g) ?? []).length, 1, c.text);
   for (const length of ["short", "standard", "medium", "long"]) {

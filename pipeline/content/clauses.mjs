@@ -103,6 +103,8 @@ export function clausesOf(sheet) {
     else if (/^Portfolios on the board this week$/i.test(f.label)) text = `${ph(f.id)} portfolios are on the board this week.`;
     else if (/^Portfolios that moved up$/i.test(f.label)) text = `${ph(f.id)} portfolios moved up this week.`;
     else if (/^New entries in the top 10$/i.test(f.label)) text = `The top ten has ${ph(f.id)} new entries this week.`;
+    // The one kept AI score's gap (rubric v3, ./facts.mjs topGrades).
+    else if (/^How far the top-graded portfolios lead the rest on (.+), in points/i.test(f.label)) text = `On ${f.label.match(/lead the rest on (.+), in points/i)[1]}, that is a lead of ${ph(f.id)} for the top-graded portfolios.`;
     else text = `${f.label}: ${ph(f.id)}.`;
     add({ text, facts: [f.id], kind: "count" });
   }
