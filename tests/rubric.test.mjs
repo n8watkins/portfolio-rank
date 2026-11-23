@@ -104,10 +104,15 @@ test("the v3 schema asks only is it a portfolio (reason first) and the roles", (
   // The owner's host rulings, named.
   for (const host of ["GitHub or other code-host profile", "Substack", "Medium page", "Linktree or other link-in-bio page"]) assert.ok(SYSTEM_INSTRUCTION.includes(host), host);
   // No "no" for freelancers or a solo studio; an agency presenting a team is.
-  assert.match(SYSTEM_INSTRUCTION, /Say true for: a portfolio that also offers freelance work or says hire me; a solo developer or designer working under a studio name who shows projects they built; a digital resume/);
+  assert.match(SYSTEM_INSTRUCTION, /a portfolio that also offers freelance work or says hire me; a solo developer or designer working under a studio name who shows projects they built; a digital resume/);
   assert.match(SYSTEM_INSTRUCTION, /a company or agency site presenting a team's services/);
   assert.ok(!/sells a service/.test(SYSTEM_INSTRUCTION), "offering a service is not a reason for false");
   assert.match(SYSTEM_INSTRUCTION, /Certificates, courses and badges are not projects/);
+  // His blog rulings ("having a blog shouldn't be a negative. It just can't just be a blog page") and a redirect to a code host.
+  assert.match(SYSTEM_INSTRUCTION, /Say true for: a portfolio that also has a blog/);
+  assert.match(SYSTEM_INSTRUCTION, /a blog with no projects, even a technical one/);
+  assert.match(SYSTEM_INSTRUCTION, /a site that redirects to or ends on a GitHub or other code-host profile/);
+  assert.ok(!/plain blog/.test(SYSTEM_INSTRUCTION));
   assert.match(SYSTEM_INSTRUCTION, /answer two questions/);
   assert.match(SYSTEM_INSTRUCTION, /roles:/);
 });
@@ -177,6 +182,10 @@ test("the reason is cleaned: control characters and web addresses removed, one l
   assert.equal(p.portfolio_reason, "Shows apps at and see now");
   assert.ok(!/https?:|www\.|\.dev|[\u0000-\u001f]/.test(p.portfolio_reason) && !p.portfolio_reason.includes(String.fromCharCode(0x202e)));
   assert.ok(parseRubricResponse(answer({ portfolio_reason: "word ".repeat(100) })).portfolio_reason.length <= 160);
+  // Technology names that look like an address stay; a bare address with a path goes.
+  assert.equal(parseRubricResponse(answer({ portfolio_reason: "Shows ASP.NET and Socket.io apps" })).portfolio_reason, "Shows ASP.NET and Socket.io apps");
+  assert.equal(parseRubricResponse(answer({ portfolio_reason: "Node.js, Vue.js and Next.js projects with Node.js/Express" })).portfolio_reason, "Node.js, Vue.js and Next.js projects with Node.js/Express");
+  assert.equal(parseRubricResponse(answer({ portfolio_reason: "Projects listed at ana.dev/work and here" })).portfolio_reason, "Projects listed at and here");
 });
 
 test("the parser ignores extra fields: a letter or a dropped axis in the answer is never stored", () => {

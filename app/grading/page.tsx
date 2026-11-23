@@ -14,8 +14,8 @@ import { BASE_ELO } from "@/lib/elo";
 // How grading works while RANKING_V2 is off, kept short and true for what a
 // visitor sees with the switch off: the Code checks score (lib/check-points.mjs)
 // each profile shows, what "top X%" means (the leaderboard: people's votes),
-// what is checked and the one decision an AI model makes (whether a page is a
-// portfolio, components/tiers/GeminiQuestions.tsx), and the leaderboard of face-off
+// what is checked (the AI check is switched off,
+// components/tiers/GeminiQuestions.tsx), and the leaderboard of face-off
 // votes (lib/leaderboard.ts loadElo: everyone starts at BASE_ELO). The
 // Starting rank from the code checks and the tiers are explained on the
 // RANKING_V2 page (components/tiers/EloGrading.tsx), where they are shown.
@@ -59,7 +59,7 @@ export default function GradingPage() {
             How grading works
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Code measures each site for its Code checks score. People&apos;s votes decide the leaderboard. An AI model only decides whether a page is a portfolio at all.
+            Code measures each site for its Code checks score. People&apos;s votes decide the leaderboard, and the owner reviews what is listed. No AI model decides anything.
           </p>
         </div>
       </section>
@@ -105,7 +105,7 @@ export default function GradingPage() {
 
         {/* What's checked */}
         <section aria-labelledby="checked" className="mt-14">
-          <SectionHeader id="checked" eyebrow="What's checked" title="Measured by code, and the one AI decision" className="mb-5" />
+          <SectionHeader id="checked" eyebrow="What's checked" title="Measured by code, no AI" className="mb-5" />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">

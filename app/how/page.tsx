@@ -71,11 +71,10 @@ export default function HowPage() {
               rank comes from those measurements, and votes move it from there.
             </p>
             <p>
-              An AI model is used for{" "}
-              <strong className="text-ink">one decision only: whether a page is a portfolio at all</strong>,
-              one that shows projects the person built. It never sets a rank or a tier.
-              A &ldquo;not a portfolio&rdquo; answer can take a site off the list, with a
-              record the owner can undo.
+              <strong className="text-ink">No AI model decides anything</strong>: rank, tier and
+              listing come from code measurements, people&apos;s votes and the owner&apos;s own
+              review. An AI check that asks whether a page is a portfolio at all exists, but it
+              is switched off; even when on, it never sets a rank or a tier.
             </p>
             <p>
               What each grade means and what goes into it:{" "}

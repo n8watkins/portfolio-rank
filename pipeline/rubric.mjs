@@ -207,8 +207,8 @@ const CLOSE = "</site_data>";
  */
 export const PORTFOLIO_RULE = [
   "is_portfolio: a portfolio is a person's own site that showcases technical projects they made: software, apps, websites, tools, games, data or machine learning work, and design work such as UI or product design.",
-  "Say false for: a parked, for-sale, blank, broken or hijacked domain; a starter template still showing its placeholder content; a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built; a company or agency site presenting a team's services; a GitHub or other code-host profile, a Substack, a Medium page, or a Linktree or other link-in-bio page; a plain blog that shows no work.",
-  "Say true for: a portfolio that also offers freelance work or says hire me; a solo developer or designer working under a studio name who shows projects they built; a digital resume (experience and skills, no projects). Certificates, courses and badges are not projects. A weak portfolio is still a portfolio: say true.",
+  "Say false for: a parked, for-sale, blank, broken or hijacked domain; a starter template still showing its placeholder content; a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built; a company or agency site presenting a team's services; a GitHub or other code-host profile, a Substack, a Medium page, or a Linktree or other link-in-bio page; a site that redirects to or ends on a GitHub or other code-host profile; a blog with no projects, even a technical one.",
+  "Say true for: a portfolio that also has a blog (a blog is fine; it just cannot be the whole site); a portfolio that also offers freelance work or says hire me; a solo developer or designer working under a studio name who shows projects they built; a digital resume (experience and skills, no projects). Certificates, courses and badges are not projects. A weak portfolio is still a portfolio: say true.",
   "portfolio_reason: first, the main reason for your answer, one short clause of at most 15 words.",
 ];
 
@@ -400,12 +400,14 @@ const INVISIBLE = new RegExp(`[${[span(0x00, 0x1f), span(0x7f, 0x9f), span(0x200
  * The "is it a portfolio" reason as stored and shown: control characters and
  * web addresses removed (page text is untrusted, and a link has no place in
  * a reason), one line, at most REASON_MAX characters. "" when nothing is left.
+ * A bare address goes only with a path ("ana.dev/work"), so technology names
+ * that look like one (ASP.NET, Socket.io, Node.js) stay.
  */
 export function cleanReason(s) {
   const t = String(s ?? "")
     .replace(INVISIBLE, " ")
     .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
-    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app|me|co|ai|xyz|site|page|tech|design)(?:\/\S*)?\b/gi, " ");
+    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app|me|co|ai|xyz|site|page|tech|design)\/\S*/gi, " ");
   return oneLine(t, REASON_MAX).replace(/^[\s,;:.-]+|[\s,;:-]+$/g, "");
 }
 

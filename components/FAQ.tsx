@@ -18,7 +18,7 @@ const ITEMS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "What does the AI do?",
-    a: `Code measures the facts that rank a site (links, domain, speed, a fresh footer and the like), and people's votes move it. An AI model is used for one decision only: whether a page is a portfolio at all. It never changes the rank.`,
+    a: `Code measures the facts that rank a site (links, domain, speed, a fresh footer and the like), and people's votes move it. The owner reviews what is listed. No AI model decides anything: an AI check that asks whether a page is a portfolio exists, but it is switched off, and it never changes the rank.`,
   },
   {
     q: "Why do I have to sign in to vote?",

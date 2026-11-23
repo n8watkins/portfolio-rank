@@ -99,14 +99,14 @@ Then (owner, 2026-11-23): the five-second test will be measured by code, so the 
 The rubric lives in one pure module, `pipeline/rubric.mjs` (version, criteria, prompt, response schema, parser), used by the nightly grader, the eval and the docs.
 
 **Is it a portfolio** (the owner's definition, 2026-11-22): "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
-The prompt says no for a parked, blank or hijacked domain, an unedited template, a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built (even a developer's), a company or agency site presenting a team's services, a GitHub or other code-host profile, a Substack, a Medium page, a Linktree or other link-in-bio page, and a plain blog with no work.
-It says yes for a portfolio that also offers freelance work or says hire me, and for a solo developer or designer under a studio name who shows projects they built.
+The prompt says no for a parked, blank or hijacked domain, an unedited template, a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built (even a developer's), a company or agency site presenting a team's services, a GitHub or other code-host profile, a Substack, a Medium page, a Linktree or other link-in-bio page, a site that redirects to or ends on a GitHub or other code-host profile, and a blog with no projects, even a technical one.
+It says yes for a portfolio that also has a blog ("having a blog shouldn't be a negative. It just can't just be a blog page"), a portfolio that also offers freelance work or says hire me, and for a solo developer or designer under a studio name who shows projects they built.
 A digital resume counts as a portfolio (it earns nothing for projects; that is the Code checks score's business), certificates are not projects, and a weak portfolio is still a portfolio.
 Gemini writes a short `portfolio_reason` before its answer.
 What a "no" does is unchanged: the Removal rule (`lib/reviews/door.mjs`) removes the site with a record and Undo when a junk rule fires or the code finds fewer than 4 of 6 portfolio signals, and holds it for the owner otherwise.
 
 **Older grades:** grades made before v3 keep everything they stored (the letter, the four dropped scores and `quality_score`) in `portfolios.ai_rubric` and `rubric_history`; nothing is deleted.
-No profile, list, stat, rank or tier reads those fields any more (`pipeline/rubric.mjs` `keptOutputs`); an old grade shows the same three things a new one does, without the reason it never had.
+No profile, list, stat, rank or tier reads those fields any more (`pipeline/rubric.mjs` `keptOutputs`), and no Gemini answer is shown for an old grade or a new one.
 Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
 A site is never re-graded because of v3: old rows wait for their next grade like any other (graded once, below).
 A person's own "Grade my portfolio" request still uses the frozen v2 prompt (`pipeline/rubric-v2.mjs`) until the owner decides what that report shows.
