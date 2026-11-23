@@ -3,6 +3,7 @@ import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 import { isPublicTier, tierOf } from "@/lib/tiers.mjs";
 import { pointFixes, unpackCheck } from "@/lib/check-points.mjs";
+import { checkSources, pointsOf } from "@/lib/tiers-store.mjs";
 
 // What a page shows of tiers by ELO (lib/tiers.mjs), and only while
 // RANKING_V2 is on: with it off every page renders exactly as before, with
@@ -33,7 +34,9 @@ export type ProfileTier = {
 
 /**
  * A profile's tier by ELO, derived on read from its rating row and the daily
- * cutoffs (two reads by key), with the points breakdown stored with its grade.
+ * cutoffs (two reads by key), with its points breakdown made on read from its
+ * saved check data (two more reads by key), so the breakdown, the fixes and
+ * the report card always read the same facts.
  * Null while RANKING_V2 is off.
  */
 export async function loadProfileTier(url: string, rawRubric: unknown, hideGrade: boolean): Promise<ProfileTier | null> {
@@ -45,10 +48,18 @@ export async function loadProfileTier(url: string, rawRubric: unknown, hideGrade
     grade = null;
   }
   const graded = Boolean(tierOf(grade) || (grade && typeof grade.tier === "string" && grade.is_portfolio !== false && !("error" in grade)));
-  const [row, meta] = await Promise.all([readSiteRow(db(), url), readTierMeta(db())]);
+  const stored = hideGrade ? null : unpackCheck((grade?.rank as { check?: unknown } | undefined)?.check);
+  const [row, meta, sources] = await Promise.all([
+    readSiteRow(db(), url),
+    readTierMeta(db()),
+    // Only for a grade with a breakdown: its points as they are now, never a breakdown it never had.
+    stored ? checkSources(db(), { only: url }).then((m) => m.get(url) ?? {}).catch(() => null) : null,
+  ]);
   const s = standingOf(row, meta);
   const hasTier = graded && !hideGrade && s.tier != null;
-  const check = hideGrade ? null : unpackCheck((grade?.rank as { check?: unknown } | undefined)?.check);
+  // The breakdown and the fixes from the saved checks and the newest measured facts (lib/fresh-facts.mjs), as the
+  // report card reads them; the one stored with the rank at the last rebuild when they can't be read.
+  const check = stored && sources ? pointsOf(grade, sources, meta?.medians ?? null) : stored;
   return {
     shown: hasTier && isPublicTier(s.tier) ? s.tier : null,
     hasTier,
