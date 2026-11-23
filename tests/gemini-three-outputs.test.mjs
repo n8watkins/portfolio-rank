@@ -270,3 +270,18 @@ test("a person's own grade (people queue, own key) still asks the frozen v2 prom
   assert.match(fs.readFileSync(new URL("../pipeline/people.mjs", import.meta.url), "utf8"), /rubric: RUBRIC_V2/);
   assert.match(fs.readFileSync(new URL("../lib/grader/own-key.mjs", import.meta.url), "utf8"), /from "\.\.\/\.\.\/pipeline\/rubric-v2\.mjs"/);
 });
+
+test("SQL over ai_rubric never throws on text that is not JSON: prewarm, fresh grade due, owner keeps", async () => {
+  const { prewarmQueue } = await import("../scripts/lib/prewarm.mjs");
+  const { FRESH_GRADE_DUE_SQL, OWNER_KEEPS_SQL, ensureReviewSchema } = await import("../lib/reviews/store.mjs");
+  const db = await freshDb();
+  await ensureReviewSchema(db);
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES (?, 'live', 'k', ?)", args: ["https://broken.dev", "{not json"] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES (?, 'live', 'k', ?)", args: ["https://due.dev", JSON.stringify({ is_portfolio: true, fresh_grade: "due" })] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric) VALUES (?, 'live', 'k', ?)", args: ["https://kept.dev", JSON.stringify({ is_portfolio: true, review: { kind: "owner_kept" } })] });
+  await prewarmQueue(db, { active: () => "1", now: NOW });
+  const due = (await db.execute(`SELECT url FROM portfolios p WHERE ${FRESH_GRADE_DUE_SQL("p")}`)).rows.map((r) => r.url);
+  assert.deepEqual(due, ["https://due.dev"]);
+  const keeps = (await db.execute(`SELECT url FROM portfolios p WHERE ${OWNER_KEEPS_SQL("p")}`)).rows.map((r) => r.url);
+  assert.deepEqual(keeps, ["https://kept.dev"]);
+});
