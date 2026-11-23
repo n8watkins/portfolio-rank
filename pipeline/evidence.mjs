@@ -19,7 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { measurePage } from "./facts.mjs";
+import { checkLinks, measurePage } from "./facts.mjs";
 import { httpGate, UA, visibleText } from "./gate.mjs";
 import { normalizePageText } from "./rubric.mjs";
 import { ACTIVE, AI_WORK } from "./roster.mjs";
@@ -46,9 +46,13 @@ const parseJson = (v) => {
  * HTTP, or in a browser (`renderer`, pipeline/render.mjs) when the server
  * sends little text. Motion always comes from the capture (meta.motion).
  * `force` is the link re-check: when evidence is stored it renews only the
- * project link results (facts.project_links and the time of the check),
+ * project link results (facts.project_links and the time of the check), by
+ * checking again the links the capture chose (facts.project_candidates), and
  * never the settled, browser-rendered page text or the signals measured from
- * it; a site with no page text or facts is measured in full as usual.
+ * it. Stored facts from before the capture kept its list (facts version 2 and
+ * older) are left as they are until the next capture: a plain fetch is a
+ * weaker reading and never picks the links. A site with no page text or facts,
+ * or facts without a link check, is measured as usual.
  * `fetchImpl` is for tests (the page fetch and the link checks).
  */
 export async function pageEvidence(db, row, { renderer = null, force = false, fetchImpl = globalThis.fetch } = {}) {
@@ -60,6 +64,21 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
     return { pageText: String(row.page_text), facts: stored.motion == null && motion != null ? { ...stored, motion } : stored, measured: false };
   }
   const relinkOnly = force && row.page_text != null && Boolean(stored);
+  if (relinkOnly && stored.project_links) {
+    // The link re-check tests again the links the capture chose (facts.project_candidates: from
+    // the desktop and phone views, project buttons and the projects page), and only renews which
+    // of them load. A plain fetch is a weaker reading than the capture, so it never picks the links.
+    const chosen = Array.isArray(stored.project_candidates) ? stored.project_candidates.map((c) => (typeof c === "string" ? c : c?.url)).filter((u) => typeof u === "string") : null;
+    if (!chosen) return { pageText: String(row.page_text), facts: stored, measured: false };
+    const at = new Date().toISOString();
+    const facts = { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA }), measured_at: at };
+    try {
+      await db.execute({ sql: "UPDATE portfolios SET facts = ?, facts_at = ? WHERE url = ?", args: [JSON.stringify(facts), at, url] });
+    } catch {
+      /* the checks come due again tomorrow */
+    }
+    return { pageText: String(row.page_text), facts, measured: true };
+  }
   const gate = await httpGate(url, { fetchImpl }).catch(() => null);
   if (gate?.status !== "live") {
     if (relinkOnly) return { pageText: String(row.page_text), facts: stored, measured: false };

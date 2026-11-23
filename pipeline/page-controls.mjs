@@ -34,8 +34,8 @@ const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
 // An element whose id, class or aria-label says it holds projects ("projects", "project-card", "portfolio",
 // "works", "case-study", "showcase"), and a heading that names them ("Projects", "Selected work", "Things I've
 // built"). Not work experience: "work-experience", "Where I've worked" and a bare "Work" heading are timelines.
-const PROJECT_ATTR = /\b(?:projects?|portfolio|works?(?!\s*(?:experience|history|place|timeline))|case\s*stud(?:y|ies)|showcase)\b/i;
-const PROJECT_HEADING = /\b(?:projects?|portfolio|works|my work|selected work|featured work|recent work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
+export const PROJECT_ATTR = /\b(?:projects?|portfolio|works?(?!\s*(?:experience|history|place|timeline))|case\s*stud(?:y|ies)|showcase)\b/i;
+export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selected|featured|recent|latest) work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
 // An element or a section that lists where else to find the person ("~ find me ~", "Let's connect",
 // "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
 const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;

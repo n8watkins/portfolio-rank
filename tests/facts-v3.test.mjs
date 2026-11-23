@@ -51,10 +51,10 @@ test("yashitanamdeo.github.io: the projects are checked, not the school and empl
     "https://covid19-tracker-84ef4.web.app/",
     "https://github.com/yashitanamdeo/Covid19-tracker",
   ]);
-  // The about section's university, club and the experience section's employers (main checked these first) come
-  // only after every project link: here the university takes the last free slot.
-  assert.deepEqual(got.slice(7), ["https://www.svvv.edu.in/"]);
-  for (const notProject of ["https://www.internationalmun.org/", "https://internship.suvenconsultants.com/", "https://www.theforage.com/"]) {
+  // Then the site's own page for a project (its face-landmark demo on the same GitHub Pages host). The about
+  // section's university, club and the experience section's employers (main checked these first) come only after.
+  assert.deepEqual(got.slice(7), ["https://yashitanamdeo.github.io/face-landmark-detection/"]);
+  for (const notProject of ["https://www.svvv.edu.in/", "https://www.internationalmun.org/", "https://internship.suvenconsultants.com/", "https://www.theforage.com/"]) {
     assert.ok(!got.includes(notProject), notProject);
   }
 });

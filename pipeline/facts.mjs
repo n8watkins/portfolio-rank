@@ -209,18 +209,131 @@ function projectUrl(l, self) {
  * Social profiles, services and the site itself are never candidates.
  */
 export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
+  return projectCandidates(links, siteUrl, max).map((c) => c.url);
+}
+
+// A same-site page that lists the projects ("/projects", "Work", "Portfolio", "Case studies", "/solutions/"),
+// read from a link's words or its path. Not work experience or a work history.
+const PROJECTS_PAGE = /\b(?:projects?|works?(?!\s*(?:experience|history|place|timeline))|my work|portfolios?|case\s*stud(?:y|ies)|solutions?|showcase)\b/i;
+/** "/case-studies/my_app" as words, so PROJECTS_PAGE can read a path. */
+const pathWords = (p) => decodeURIComponent(String(p ?? "")).replace(/[-_/.]+/g, " ");
+const sameHost = (a, b) => a.replace(/^www\./, "") === b.replace(/^www\./, "");
+
+/**
+ * A link to a page of the site itself, as the URL that is checked: http(s),
+ * not the home page, not a file, without its fragment. Null otherwise.
+ */
+function ownPageUrl(l, self) {
+  let u;
+  try {
+    u = new URL(l.href);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:" || !sameHost(u.hostname.toLowerCase(), self)) return null;
+  const p = u.pathname.replace(/\/+$/, "");
+  if (!p || /\.(pdf|png|jpe?g|gif|svg|webp|zip|xml|txt|ico|css|js)$/i.test(p)) return null;
+  u.hash = "";
+  return { key: u.href, path: p.toLowerCase() };
+}
+
+/**
+ * The project-link candidates with where each came from, at most `max`, in
+ * this order:
+ *   1. outbound demo and repository links in the projects: links inside a
+ *      projects element or section (`inProjects`), GitHub repositories outside
+ *      the nav, header and footer, the destinations a project button opens
+ *      (`from: "button"`), and every outbound link in the main content of the
+ *      site's projects page (`from: "projects_page"`);
+ *   2. the site's own pages for single projects: a same-site link in a home
+ *      page projects section, or on the projects page a same-site link outside
+ *      its nav, header and footer whose path says project, work, portfolio,
+ *      case study or solution, or sits under the projects page's own path
+ *      ("/projects/foo" from "/projects");
+ *   3. every other outbound link, in page order.
+ * A profile, a link in a "find me" list, the site's home page and the
+ * projects page itself are never candidates. `links` carry `from` ("home",
+ * "phone", "projects_page" or "button"; "home" when missing) and, for the
+ * projects page, its address in `page`. Returns [{ url, from, kind }], kind
+ * "outbound" or "own page".
+ */
+export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   const self = host(siteUrl);
   const seen = new Set();
-  const first = [];
-  const rest = [];
+  const tiers = [[], [], []];
   for (const l of links) {
+    const from = l.from ?? "home";
+    const onProjectsPage = from === "projects_page";
     const p = projectUrl(l, self);
-    // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
-    if (!p || seen.has(p.key) || (l.inSocial && !p.repo)) continue;
-    seen.add(p.key);
-    (l.inProjects || (p.repo && !l.inChrome) ? first : rest).push(p.key);
+    if (p) {
+      // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
+      if (seen.has(p.key) || (l.inSocial && !p.repo)) continue;
+      seen.add(p.key);
+      const inProjects = l.inProjects || from === "button" || (p.repo && !l.inChrome) || (onProjectsPage && !l.inChrome);
+      tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
+      continue;
+    }
+    const own = ownPageUrl(l, self);
+    if (!own || seen.has(own.key) || l.inChrome || l.inSocial) continue;
+    let ok = false;
+    if (onProjectsPage) {
+      const base = (() => {
+        try {
+          return new URL(l.page).pathname.replace(/\/+$/, "").toLowerCase();
+        } catch {
+          return "";
+        }
+      })();
+      ok = own.path !== base && (PROJECTS_PAGE.test(pathWords(own.path)) || (base !== "" && own.path.startsWith(`${base}/`)));
+    } else {
+      // In a home page projects section; not its "All projects" link to the listing page itself.
+      ok = Boolean(l.inProjects) && !LISTING_PATH.test(own.path);
+    }
+    if (!ok) continue;
+    seen.add(own.key);
+    tiers[1].push({ url: own.key, from, kind: "own page" });
   }
-  return [...first, ...rest].slice(0, max);
+  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...tiers[1].map((c) => ({ ...c, tier: 2 })), ...tiers[2].map((c) => ({ ...c, tier: 3 }))].slice(0, max);
+}
+
+/** A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies". Not "How I work". */
+const PROJECTS_LINK_TEXT = /^\s*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view)\s+)?(?:projects?|works?|portfolio|case stud(?:y|ies)|solutions|showcase)\s*[→›»↗]?\s*$/i;
+
+/** A page that lists projects rather than shows one: "/projects", "/work", "/portfolio", "/case-studies". */
+const LISTING_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:projects?|works?|my-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase)$/i;
+
+/**
+ * The site's own projects page to read when the home page shows fewer than
+ * MIN_PROJECT_LINKS projects (pure): the first same-site link, nav links
+ * included, whose path or text says projects, work, portfolio, case studies,
+ * solutions or showcase, on the same host, not the home page and not a link
+ * to a section of the page itself. `links` are the home page's (desktop and
+ * phone, `from` set); `homeUrl` the page's final address. Returns the address
+ * or null.
+ */
+export function projectsPageFor(links, homeUrl) {
+  const self = host(homeUrl);
+  const home = (() => {
+    try {
+      return new URL(homeUrl).pathname.replace(/\/+$/, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+  // The projects the home page shows itself: its candidates of the first two kinds.
+  const shown = projectCandidates(links, homeUrl, Infinity).filter((c) => c.tier <= 2).length;
+  if (shown >= MIN_PROJECT_LINKS) return null;
+  // A listing path ("/projects") first, then any path that says projects ("/topic/portfolios/"), then a link's words.
+  let byPath = null;
+  let byText = null;
+  for (const l of links) {
+    const own = ownPageUrl(l, self);
+    if (!own || own.path === home) continue;
+    if (LISTING_PATH.test(own.path)) return own.key;
+    if (!byPath && PROJECTS_PAGE.test(pathWords(own.path))) byPath = own.key;
+    if (!byText && PROJECTS_LINK_TEXT.test(String(l.text ?? ""))) byText = own.key;
+  }
+  return byPath ?? byText;
 }
 
 /**
@@ -389,29 +502,70 @@ export function mergeViews(desktop, phone) {
   };
 }
 
+const readable = (v) => Boolean(v && typeof v.html === "string" && v.html.trim());
+
+/**
+ * The home page's links as the project-link candidates read them (pure): the
+ * desktop reading's, the phone reading's (`input.phone`) and the destinations
+ * the page's project buttons open (`input.buttonUrls`, read by the capture),
+ * each with `from`. For projectsPageFor and measurePage.
+ */
+export function homeProjectLinks(input) {
+  const base = input.finalUrl || input.url;
+  const links = pageLinks(input.html, base).map((l) => ({ ...l, from: "home" }));
+  if (readable(input.phone)) links.push(...pageLinks(input.phone.html, input.phone.finalUrl || base).map((l) => ({ ...l, from: "phone" })));
+  for (const href of input.buttonUrls ?? []) links.push({ raw: href, href, text: "", inProjects: true, from: "button" });
+  return links;
+}
+
+/** How many of the candidates checked came from each place, and the projects page read, if any. */
+function sourcesOf(candidates, projectsPage) {
+  const count = (from) => candidates.filter((c) => c.from === from).length;
+  return {
+    home: count("home"),
+    phone: count("phone"),
+    buttons: count("button"),
+    projects_page: projectsPage ? { url: projectsPage, count: count("projects_page") } : null,
+    own_pages: candidates.filter((c) => c.kind === "own page").length,
+  };
+}
+
 /**
  * measureFacts plus the project-link check. `input.phone` ({ html, text,
  * finalUrl }), when given, is the same page read at 390 wide: it is measured
- * too and merged in (mergeViews), and its link candidates join the desktop's
- * (the desktop's first within each kind, ./projectLinkCandidates), so one
- * check covers both. `views` records what was read.
+ * too and merged in (mergeViews). The candidates (projectCandidates) come from
+ * both views, the destinations of the page's project buttons
+ * (`input.buttonUrls`) and, when the capture read it, the site's own projects
+ * page (`input.projectsPage`: { html, finalUrl }), so one check covers them
+ * all. `views` records what was read, `project_links_from` where the
+ * candidates checked came from.
  */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
-  const { phone = null, ...desktopInput } = input;
+  const { phone = null, projectsPage = null, buttonUrls = [], ...desktopInput } = input;
   const scan = scanPage(desktopInput.html, desktopInput.finalUrl || desktopInput.url);
   let facts = measureFacts({ ...desktopInput, scan });
-  const links = pageLinks(desktopInput.html, facts.final_url, scan);
   const views = ["desktop"];
-  if (phone && typeof phone.html === "string" && phone.html.trim()) {
+  if (readable(phone)) {
     const phoneBase = phone.finalUrl || facts.final_url;
-    const phoneScan = scanPage(phone.html, phoneBase);
-    const phoneFacts = measureFacts({ ...desktopInput, html: phone.html, text: phone.text ?? "", finalUrl: phoneBase, scan: phoneScan });
+    const phoneFacts = measureFacts({ ...desktopInput, html: phone.html, text: phone.text ?? "", finalUrl: phoneBase });
     facts = mergeViews(facts, phoneFacts);
-    links.push(...pageLinks(phone.html, phoneBase, phoneScan));
     views.push("phone");
   }
-  const urls = projectLinkCandidates(links, facts.final_url);
-  facts.project_links = await checkLinks(urls, { fetchImpl, userAgent, timeoutMs });
+  const links = homeProjectLinks({ ...desktopInput, finalUrl: facts.final_url, phone, buttonUrls });
+  let projectsPageUrl = null;
+  if (readable(projectsPage) && projectsPage.finalUrl) {
+    projectsPageUrl = projectsPage.finalUrl;
+    links.push(...pageLinks(projectsPage.html, projectsPageUrl).map((l) => ({ ...l, from: "projects_page", page: projectsPageUrl })));
+    views.push("projects page");
+  }
+  const candidates = projectCandidates(links, facts.final_url);
+  facts.project_links = await checkLinks(
+    candidates.map((c) => c.url),
+    { fetchImpl, userAgent, timeoutMs }
+  );
+  // The links checked, with where each came from: the nightly re-check (pipeline/evidence.mjs) tests these again.
+  facts.project_candidates = candidates.map(({ url, from, kind }) => ({ url, from, kind }));
+  facts.project_links_from = sourcesOf(candidates, projectsPageUrl);
   facts.views = views;
   return facts;
 }

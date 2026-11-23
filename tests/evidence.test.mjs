@@ -57,26 +57,60 @@ const fetchFor = (pageUrl) => async (input, init) => {
   return new Response("", { status: u.includes("gone") ? 404 : 200 });
 };
 
-test("a link re-check keeps the rendered page text and signals byte for byte and renews the link results", async () => {
+// The links the capture chose, from its desktop and phone views and the projects page (facts version 3).
+const CHOSEN = [
+  { url: "https://ada.example/engine", from: "home", kind: "outbound" },
+  { url: "https://ada.example/gone", from: "phone", kind: "outbound" },
+  { url: "https://ada.dev/projects/notes", from: "projects_page", kind: "own page" },
+];
+
+test("a link re-check tests again the links the capture chose, and keeps the rendered text and signals byte for byte", async () => {
+  const db = await setup();
+  await withSite(async (url) => {
+    await insert(db, { url, pageText: RENDERED_TEXT, facts: { ...RENDERED_FACTS, v: 3, project_candidates: CHOSEN } });
+    const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    const asked = [];
+    const out = await pageEvidence(db, row, {
+      force: true,
+      fetchImpl: async (input, init) => {
+        asked.push(String(input));
+        return fetchFor(url)(input, init);
+      },
+    });
+    assert.equal(out.measured, true);
+    // Only the chosen links, never the page itself: its plain-HTTP links (github.com/ada/engine) are not picked.
+    assert.deepEqual([...new Set(asked)].sort(), CHOSEN.map((c) => c.url).sort());
+    const after = (await db.execute({ sql: "SELECT page_text, facts, facts_at FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    const facts = JSON.parse(String(after.facts));
+    assert.equal(after.page_text, RENDERED_TEXT);
+    assert.equal(JSON.stringify(facts.signals), JSON.stringify(RENDERED_FACTS.signals));
+    assert.equal(facts.source, "rendered");
+    assert.equal(facts.words, 14);
+    assert.equal(facts.v, 3, "the stored version stays");
+    assert.deepEqual(facts.project_candidates, CHOSEN, "the capture's list is kept");
+    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0 });
+    assert.notEqual(facts.measured_at, RENDERED_FACTS.measured_at);
+    assert.equal(after.facts_at, facts.measured_at, "the link check due date moves on");
+  });
+});
+
+test("a link re-check never replaces a capture's links with a plain fetch's: facts without the chosen list stay as they are", async () => {
   const db = await setup();
   await withSite(async (url) => {
     await insert(db, { url, pageText: RENDERED_TEXT, facts: RENDERED_FACTS });
     const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-    const out = await pageEvidence(db, row, { force: true, fetchImpl: fetchFor(url) });
-    assert.equal(out.measured, true);
-    const after = (await db.execute({ sql: "SELECT page_text, facts, facts_at FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-    const facts = JSON.parse(String(after.facts));
-    assert.equal(after.page_text, RENDERED_TEXT);
-    assert.deepEqual(facts.signals, RENDERED_FACTS.signals);
-    assert.equal(JSON.stringify(facts.signals), JSON.stringify(RENDERED_FACTS.signals));
-    assert.equal(facts.source, "rendered");
-    assert.equal(facts.words, 14);
-    assert.equal(facts.final_url, RENDERED_FACTS.final_url);
-    assert.notDeepEqual(facts.project_links, RENDERED_FACTS.project_links, "the link results are new");
-    assert.equal(facts.project_links.checked, 2);
-    assert.equal(facts.project_links.broken, 1);
-    assert.notEqual(facts.measured_at, RENDERED_FACTS.measured_at);
-    assert.equal(after.facts_at, facts.measured_at, "the link check due date moves on");
+    let asked = 0;
+    const out = await pageEvidence(db, row, {
+      force: true,
+      fetchImpl: async (...a) => {
+        asked++;
+        return fetchFor(url)(...a);
+      },
+    });
+    assert.equal(out.measured, false);
+    assert.equal(asked, 0, "nothing fetched");
+    const after = (await db.execute({ sql: "SELECT facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    assert.deepEqual(JSON.parse(String(after.facts)), RENDERED_FACTS);
   });
 });
 
