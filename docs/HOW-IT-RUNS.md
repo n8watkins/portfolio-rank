@@ -221,6 +221,9 @@ Each chain is a list of steps in the order they happen.
 11. **Starting rank** (`lib/tiers-store.mjs` `rankForWrite`, as the grade is written).
     The site's starting place in the tiers comes from the code checks, not from Gemini's letter.
     Votes move it from there.
+    The code checks (resume, GitHub, contact, own domain, project links, footer year) are read from the newest measured facts (`portfolios.facts`), not from the copy frozen into the grade, whenever those are at least the grade's measuring version (`lib/fresh-facts.mjs`).
+    So a re-capture, or the whole-list re-measure (`remeasure-all.yml`), changes the points, the fix list and the report card's checks without a new grade.
+    The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
     Tier letters are hidden from visitors while `RANKING_V2` is false, so the leaderboard visitors see today is the older votes board.
 12. **After that** the site takes part in votes and gets the nightly health check.
     It is not graded again, except for one fresh grade after you undo or reject a removal, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.

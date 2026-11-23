@@ -9,6 +9,7 @@ import { percentilesOf } from "@/lib/games/pool.mjs";
 import { gamesEnabled, getPool, portfolioName, sign, unsign } from "@/lib/games/server";
 import { openOneTimeLink } from "@/lib/grader/links.mjs";
 import { printView, renderReportHtml } from "@/lib/grader/report.mjs";
+import { freshGrade } from "@/lib/fresh-facts.mjs";
 import { authSecret } from "@/lib/grader/server";
 import feed from "@/data/feed.json";
 
@@ -83,8 +84,9 @@ export async function GET(req: Request) {
     }
     if (proof !== "control") return page(403, "Grade hidden", "The owner of this portfolio chose to hide its grade.");
   }
-  const row = (await db().execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-  const view = printView(row?.ai_rubric == null ? null : String(row.ai_rubric));
+  const row = (await db().execute({ sql: "SELECT ai_rubric, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+  // The code checks from the newest measured facts (lib/fresh-facts.mjs).
+  const view = printView(row?.ai_rubric == null ? null : freshGrade(String(row.ai_rubric), row.facts));
   if (!view) return page(404, "No report yet", "This portfolio hasn't been graded yet.");
   const shot = (await shotBases([url])).get(url);
   const tagline = (feed as { url: string; tagline?: string }[]).find((p) => p.url === url)?.tagline ?? null;
