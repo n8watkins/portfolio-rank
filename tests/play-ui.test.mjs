@@ -95,7 +95,8 @@ test("face-off: pick with a key, the crowd's lean is announced, Undo takes it ba
   assert.equal(await page.getByText("of people would pick this").count(), 2);
   await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Next pair");
   assert.match(await page.getByText(/^\d+ \/ 10$/).textContent(), /^1 \/ 10$/);
-  await page.getByRole("button", { name: "Undo" }).click();
+  // Exact: a name in the pair can contain "undo" (Facundo), and a role name matches substrings otherwise.
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await page.getByText("Undid your last vote. Here's a fresh pair.").first().waitFor();
   await picks.first().waitFor();
   assert.match(await page.getByText(/^\d+ \/ 10$/).textContent(), /^0 \/ 10$/);
