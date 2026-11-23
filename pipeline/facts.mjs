@@ -322,7 +322,8 @@ function isOwnProjectPath(path, base = "") {
  *      on the site's projects page (`from: "projects_page"`);
  *   2. the site's own pages for single projects (isOwnProjectPath): in a home
  *      page projects section, or on the projects page outside its nav,
- *      header and footer;
+ *      header and footer; at most OWN_PAGES_MAX here (as many as the pass
+ *      counts), any more only after kind 3;
  *   3. every other outbound link of the home page, in page order. The
  *      projects page adds no links of this kind: a client list or a press
  *      page called "Work" does not make its links projects.
@@ -372,7 +373,10 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     seen.add(own.key);
     tiers[1].push({ url: own.key, from, kind: "own page" });
   }
-  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...tiers[1].map((c) => ({ ...c, tier: 2 })), ...tiers[2].map((c) => ({ ...c, tier: 3 }))].slice(0, max);
+  // Own pages can make at most OWN_PAGES_MAX of the pass, so only that many go ahead of the other outbound links;
+  // the rest only fill slots left over (stimmie.dev: 7 own pages had pushed out its project sites).
+  const own = tiers[1].map((c) => ({ ...c, tier: 2 }));
+  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own.slice(0, OWN_PAGES_MAX), ...tiers[2].map((c) => ({ ...c, tier: 3 })), ...own.slice(OWN_PAGES_MAX)].slice(0, max);
 }
 
 /** A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies". Not "How I work". */

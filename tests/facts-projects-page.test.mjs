@@ -123,6 +123,17 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   );
 });
 
+test("only as many own pages as the pass counts go ahead of other outbound links (stimmie.dev's case)", () => {
+  const url = "https://ana.dev/";
+  const html = `<section id="projects">${[1, 2, 3, 4, 5, 6, 7].map((i) => `<a href="/projects/p${i}">p${i}</a>`).join("")}</section>
+    <section><h2>~ ana-verse ~</h2><a href="https://app.ana.example/">App</a><a href="https://tool.ana.example/">Tool</a></section>`;
+  const got = projectCandidates(homeProjectLinks({ html, url, finalUrl: url }), url);
+  assert.deepEqual(
+    got.map((c) => c.url.replace("https://ana.dev", "")),
+    ["/projects/p1", "/projects/p2", "https://app.ana.example/", "https://tool.ana.example/", "/projects/p3", "/projects/p4", "/projects/p5", "/projects/p6"]
+  );
+});
+
 test("a 'Portfolio' title heading opens no projects section, and a projects heading's section ends at the next heading", () => {
   const url = "https://ana.dev/";
   // The reviewer's case: a person's name heading with "Portfolio", then about, blog and contact pages.
