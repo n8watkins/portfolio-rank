@@ -25,6 +25,7 @@ const axis = (score) => ({ score, note: "x" });
 const grade = (model, tier, scores = 3, over = {}) => ({
   model,
   tier,
+  portfolio_reason: "Shows projects the person built",
   is_portfolio: true,
   judged_at: "2026-10-01T00:00:00Z",
   visual_design: axis(scores),

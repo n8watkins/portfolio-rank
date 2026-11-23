@@ -18,7 +18,7 @@ import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
-const answer = { is_portfolio: true, tier: "B", ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: 3, note: "fine" }])) };
+const answer = { portfolio_reason: "Shows projects the person built", is_portfolio: true, tier: "B", ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: 3, note: "fine" }])) };
 const facts = JSON.stringify({ source: "http", measured_at: "2026-11-01T00:00:00Z", github: true });
 const T0 = Date.parse("2026-11-11T04:30:00Z"); // 20:30 Pacific on 2026-11-10
 

@@ -414,6 +414,23 @@ const oneLine = (s, max) => {
   return t.length > max ? `${t.slice(0, max - 3).trimEnd()}...` : t;
 };
 
+// Control characters, zero-width and direction marks: built from code points so the source stays ASCII.
+const span = (a, b) => `${String.fromCharCode(a)}-${String.fromCharCode(b)}`;
+const INVISIBLE = new RegExp(`[${[span(0x00, 0x1f), span(0x7f, 0x9f), span(0x200b, 0x200f), span(0x2028, 0x202e), span(0x2060, 0x206f), span(0xfeff, 0xfeff)].join("")}]`, "g");
+
+/**
+ * The "is it a portfolio" reason as stored and shown: control characters and
+ * web addresses removed (page text is untrusted, and a link has no place in
+ * a reason), one line, at most REASON_MAX characters. "" when nothing is left.
+ */
+export function cleanReason(s) {
+  const t = String(s ?? "")
+    .replace(INVISIBLE, " ")
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, " ")
+    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app|me|co|ai|xyz|site|page|tech|design)(?:\/\S*)?\b/gi, " ");
+  return oneLine(t, REASON_MAX).replace(/^[\s,;:.-]+|[\s,;:-]+$/g, "");
+}
+
 /**
  * Validate and normalize Gemini's answer. Throws when a required field is
  * missing or of the wrong type, so a malformed answer is an error, never a
@@ -425,7 +442,10 @@ export function parseRubricResponse(raw) {
   if (typeof r === "string") r = JSON.parse(r);
   if (!r || typeof r !== "object" || Array.isArray(r)) throw new Error("rubric answer is not an object");
   if (typeof r.is_portfolio !== "boolean") throw new Error("rubric answer: is_portfolio missing");
-  const out = { is_portfolio: r.is_portfolio, portfolio_reason: oneLine(r.portfolio_reason, REASON_MAX), roles: normalizeRoles(r.roles) };
+  if (typeof r.portfolio_reason !== "string") throw new Error("rubric answer: portfolio_reason missing");
+  const reason = cleanReason(r.portfolio_reason);
+  if (!reason) throw new Error("rubric answer: portfolio_reason empty");
+  const out = { is_portfolio: r.is_portfolio, portfolio_reason: reason, roles: normalizeRoles(r.roles) };
   for (const c of AI_CRITERIA) {
     const a = r[c.id];
     const score = Number(a?.score);

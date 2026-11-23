@@ -171,10 +171,20 @@ test("the parser normalizes good answers and rejects malformed ones", () => {
   const missing = answer();
   delete missing.five_second_test;
   assert.throws(() => parseRubricResponse(missing), /five_second_test missing/);
-  // A missing reason is not an error: the answer itself is what counts.
+  // The reason is required, a non-empty string once cleaned.
   const noReason = answer();
   delete noReason.portfolio_reason;
-  assert.equal(parseRubricResponse(noReason).portfolio_reason, "");
+  assert.throws(() => parseRubricResponse(noReason), /portfolio_reason missing/);
+  assert.throws(() => parseRubricResponse(answer({ portfolio_reason: 42 })), /portfolio_reason missing/);
+  assert.throws(() => parseRubricResponse(answer({ portfolio_reason: "   " })), /portfolio_reason empty/);
+  assert.throws(() => parseRubricResponse(answer({ portfolio_reason: "https://evil.example/x" })), /portfolio_reason empty/, "only a link is no reason");
+});
+
+test("the reason is cleaned: control characters and web addresses removed, one line, at most 160 characters", () => {
+  const p = parseRubricResponse(answer({ portfolio_reason: "Shows apps\u0000 at https://evil.example/x and www.spam.io," + String.fromCharCode(0x202e) + " see ana.dev/work\nnow" }));
+  assert.equal(p.portfolio_reason, "Shows apps at and see now");
+  assert.ok(!/https?:|www\.|\.dev|[\u0000-\u001f]/.test(p.portfolio_reason) && !p.portfolio_reason.includes(String.fromCharCode(0x202e)));
+  assert.ok(parseRubricResponse(answer({ portfolio_reason: "word ".repeat(100) })).portfolio_reason.length <= 160);
 });
 
 test("the parser ignores extra fields: a letter or a dropped axis in the answer is never stored", () => {

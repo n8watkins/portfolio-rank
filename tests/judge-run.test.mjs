@@ -251,7 +251,7 @@ test("a malformed answer is an error, never a stored grade", async () => {
   const { dir, dbFile, db } = await setup([{ url: a.url, page_text: "hello", facts: FACTS }]);
   const r = await runJudge(dir, dbFile, ["rubric"], { MOCK_GEMINI: JSON.stringify([{ json: { is_portfolio: true, tier: "B" } }]) });
   assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /five_second_test missing/);
+  assert.match(r.out, /portfolio_reason missing/);
   const row = (await db.execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [a.url] })).rows[0];
   assert.equal(row.ai_rubric, null);
 });
