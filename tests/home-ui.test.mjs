@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
 import { createClient } from "@libsql/client";
-import { AI_CRITERIA } from "../pipeline/rubric.mjs";
+// A person's own grade still runs on the frozen v2 prompt (pipeline/rubric-v2.mjs) until the owner decides.
+import { V2_AI_CRITERIA as AI_CRITERIA } from "../pipeline/rubric-v2.mjs";
 import { buildReport } from "../lib/grader/report.mjs";
 import { listen } from "./helpers/listen.mjs";
 

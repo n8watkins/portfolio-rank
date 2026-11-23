@@ -40,6 +40,7 @@ const rubric = JSON.stringify({
   is_portfolio: true,
   roles: ["frontend developer"],
   visual_design: { score: 5, note: "Clean." },
+  five_second_test: { score: 5, note: "Clear." },
   writing: { score: 3, note: "Fine." },
 });
 async function seedGrade(url, status = "live") {
@@ -82,7 +83,9 @@ test("a graded profile: a ProfilePage about the person with their socials, a bre
   assert.equal(crumbs.itemListElement[2].item, profile.url);
   const description = unescape(html.match(/<meta name="description" content="([^"]+)"/)?.[1] ?? "");
   assert.ok(description.startsWith(`${graded.name}'s frontend developer portfolio at `), description);
-  assert.ok(description.includes("visual design (5/5)"), description);
+  // Only the kept score is named (rubric v3); an old grade's dropped scores never are.
+  assert.ok(description.includes("five-second test (5/5)"), description);
+  assert.ok(!description.includes("visual design"), description);
   assert.equal(profile.description, description);
 });
 
