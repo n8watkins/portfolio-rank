@@ -29,8 +29,8 @@ const fakeFetch = (status = 200) => {
   return f;
 };
 
-test("the measuring version is 3, and the whole-list re-measure skips by it", () => {
-  assert.equal(FACTS_VERSION, 3);
+test("the measuring version is 4, and the whole-list re-measure skips by it", () => {
+  assert.equal(FACTS_VERSION, 4);
   assert.equal(MIN_PROJECT_LINKS, 3);
   const wf = fs.readFileSync(path.join(import.meta.dirname, "..", ".github", "workflows", "remeasure-all.yml"), "utf8");
   assert.match(wf, new RegExp(`skip_version:[\\s\\S]*?default: "${FACTS_VERSION}"`));

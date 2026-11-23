@@ -6,7 +6,7 @@
 //
 // measureFacts is pure; checkLinks makes HTTP requests (HEAD, then GET when
 // HEAD is refused), capped in number and time, never to private addresses.
-import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, scanPage, stripTags } from "./page-controls.mjs";
+import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, removeElements, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
 import { parkingPhrase, visibleText } from "./gate.mjs";
 
@@ -20,7 +20,14 @@ import { parkingPhrase, visibleText } from "./gate.mjs";
 // after the year ("2026 ©"); the capture measures the phone view too and
 // merges it in (mergeViews). A row gets the new version at its next capture,
 // or from the whole-list re-measure (remeasure-all.yml, see AUTOMATION.md).
-export const FACTS_VERSION = 3;
+// 4 (2026-11-23): the misses of the production trial of version 3 on 25 sites. An own page on a host that
+// answers every address is judged by its text of its own (OWN_PAGE_MIN_WORDS); on the projects page a link to
+// the site's own page counts at any path that is not a section of the site (isProjectsPageLink); one outside
+// host takes at most PER_HOST_MAX of the places before the others; a hash route ("#/projects") can be the
+// projects page; the capture waits for the projects page's content to settle (./capture-projects.mjs). The
+// project-link rule, its words and its points are version 3's (PROJECT_RULE_VERSION): version 3 and 4 facts are
+// read alike, and the re-measure of the whole list measures the version 3 rows again.
+export const FACTS_VERSION = 4;
 export const LINK_CHECK_MAX = 8;
 export const LINK_TIMEOUT_MS = 8000;
 /** The fewest project links that load for "project links load" to pass (and for full project points, lib/check-points.mjs). */
@@ -42,11 +49,14 @@ export const LOW_TIER = 3;
 export const LOW_LINKS = "never";
 /**
  * Own project pages on a host that answers 200 for an address that cannot exist (a catch-all host, an app
- * shell) are verified by their text instead of their status (checkProjectLinks): at least this many words of
- * their own, and no more than this share of their words shared with the nonsense page or the home page.
+ * shell) are verified by their text instead of their status (checkLinks): the lines of text a page does not
+ * share with the nonsense page or the home page (its menu, header, footer and sidebar are on those too) must
+ * hold at least this many distinct words. Judged by the text of its own, not by a share of the whole page, so
+ * a short write-up under a menu of several hundred words counts (bhavaniravi.com's project pages: 30 to 49 of
+ * their own), while a catch-all host's identical pages (none of their own) and a thin page (a title, a line)
+ * do not.
  */
-export const OWN_PAGE_MIN_WORDS = 50;
-export const OWN_PAGE_MAX_OVERLAP = 0.8;
+export const OWN_PAGE_MIN_WORDS = 20;
 /** The facts version whose project-link rule is the one below; older facts keep the rule they were measured under. */
 export const PROJECT_RULE_VERSION = 3;
 const isLinks = (l) => Boolean(l && typeof l === "object" && typeof l.checked === "number");
@@ -423,6 +433,27 @@ function isOwnProjectPath(path, base = "") {
   return !(nameUnderListing ? parents : segs).some((s) => SECTION_SEGMENT.test(s));
 }
 
+// Pages of a personal site that are not one project, beside SECTION_SEGMENT's: what the person uses, is doing now,
+// writes, says and reads, and the like. Only for links on the projects page that are not under a listing
+// (isProjectsPageLink): "/uses", "/now", "/talks", "/til".
+const SITE_SECTION_SEGMENT =
+  /^(?:uses|now|writing|writings|essays|notes|til|snippets|thoughts|journal|talks|speaking|podcasts?|videos|newsletters?|links|bookmarks|books|reading|library|photos|photography|gallery|archives?|sitemap|changelog|colophon|guestbook|experience|education|skills|testimonials|recommendations|hire(?:-me)?|work-with-me|sponsors?|donate|support|home|index)$/i;
+// A language or a year as a whole segment: "/en", "/pt-br" (a language switch), "/2024" (a dated archive of posts).
+const LOCALE_OR_YEAR = /^(?:[a-z]{2}(?:[-_][a-z]{2,4})?|(?:19|20)\d{2})$/i;
+
+/**
+ * Whether a same-site link on the site's own projects page, in its main content, is a page for one project
+ * whatever its path ("/rht", "/apps/lasttimei"): it is not another listing ("/work"), and no segment is a section
+ * of the site (about, contact, blog, resume, tags, NOT_PROJECT_SEGMENT, SITE_SECTION_SEGMENT), an action, a
+ * language or a year. The home page and the projects page itself are left out by the caller. On the projects page
+ * only: on the home page a same-site link is a section of the site far more often than a project.
+ */
+function isProjectsPageLink(path) {
+  const segs = segmentsOf(path).map(pageName);
+  if (!segs.length || LISTING_SEGMENT.test(segs.at(-1)) || MAKER_PAGE.test(segs.at(-1))) return false;
+  return !segs.some((s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s) || LOCALE_OR_YEAR.test(s));
+}
+
 /**
  * A page whose own name says it is one project: "project-sync.html", "/project_solar", "/work-dashboard",
  * "/case-study-x": "project", "work" or "case study", then "-" or "_" and a name. Not "/works-cited" (a
@@ -500,7 +531,10 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     let ok = false;
     if (onProjectsPage) {
       const base = pathOfUrl(l.page);
-      ok = own.path !== base && isOwnProjectPath(rel, homePath && base.startsWith(homePath) ? base.slice(homePath.length) : base);
+      const relBase = homePath && base.startsWith(homePath) ? base.slice(homePath.length) : base;
+      // Under a listing or the projects page's own path; or, in its main content (not an aside), a page of the site
+      // at any path that is not one of its section pages (amanhimself.dev's apps at "/rht", "/lasttimei").
+      ok = own.path !== base && (isOwnProjectPath(rel, relBase) || (!l.inAside && isProjectsPageLink(rel)));
     } else {
       // In a home page projects section, with a project page's path, or a page of its own whose name says
       // project ("project-sync.html", sebascherny.github.io's case studies at the site's root).
@@ -513,8 +547,58 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   // Every own project page goes ahead of the lowest tier, which only fills the slots left over (sujanbhatta.tech:
   // 6 case studies, then partner logos). stimmie.dev's own apps on its subdomains are in the first tier now, so
   // its own pages no longer push them out.
-  const own = tiers[1].map((c) => ({ ...c, tier: 2 }));
-  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own, ...tiers[2].map((c) => ({ ...c, tier: LOW_TIER }))].slice(0, max);
+  // At most PER_HOST_MAX links of one outside host first, so one site does not take every place (bekahhw.com's
+  // "My Work" page: 8 articles on one shut-down company site before its live projects); the places left are filled
+  // in order. The higher tiers are picked first, so a link outside the projects never takes a project's place.
+  const high = [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...tiers[1].map((c) => ({ ...c, tier: 2 }))];
+  const picked = spreadByHost(high, max);
+  return [...picked, ...spreadByHost(tiers[2].map((c) => ({ ...c, tier: LOW_TIER })), max - picked.length)];
+}
+
+/** The most links of one outside host (a code host: of one repository) taken before other hosts get a place. */
+export const PER_HOST_MAX = 3;
+const CODE_HOST = /^(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)$/i;
+/**
+ * What PER_HOST_MAX counts per: the host without "www.", or on a code host the repository's owner and name
+ * ("github.com/ana/app"), since each repository is a project of its own.
+ */
+export function hostKey(url) {
+  try {
+    const u = new URL(url);
+    const h = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (!CODE_HOST.test(h)) return h;
+    const [owner = "", repo = ""] = u.pathname.split("/").filter(Boolean);
+    return `${h}/${owner.toLowerCase()}/${repo.toLowerCase().replace(/\.git$/, "")}`;
+  } catch {
+    return "";
+  }
+}
+/**
+ * At most `max` of `list`, in its order: first every candidate whose outside host (hostKey) has had fewer than
+ * PER_HOST_MAX places (the site's own pages are not counted per host), then the ones skipped, in order, for the
+ * places left.
+ */
+function spreadByHost(list, max) {
+  if (!(max > 0)) return [];
+  const perHost = new Map();
+  const take = new Set();
+  for (const c of list) {
+    if (take.size >= max) break;
+    if (c.kind === "own page") {
+      take.add(c);
+      continue;
+    }
+    const k = hostKey(c.url);
+    const had = perHost.get(k) ?? 0;
+    if (had >= PER_HOST_MAX) continue;
+    perHost.set(k, had + 1);
+    take.add(c);
+  }
+  for (const c of list) {
+    if (take.size >= max) break;
+    take.add(c);
+  }
+  return list.filter((c) => take.has(c));
 }
 
 /**
@@ -533,6 +617,31 @@ const pathOfUrl = (u) => {
     return "";
   }
 };
+
+/**
+ * A same-site link whose address is the home page's but for a hash route ("#/projects", "#!/work/"), as
+ * { key: the address with its route, segs: the route's segments }, or null. An in-page anchor ("#projects") is not
+ * a route, nor is a route with a query ("#/projects?tab=x"). Loading it is a plain GET of the home page itself (the
+ * part after "#" is never sent); the app's own router then shows the route.
+ */
+export function hashRoute(l, homeUrl) {
+  let u;
+  let h;
+  try {
+    u = new URL(l.href);
+    h = new URL(homeUrl);
+  } catch {
+    return null;
+  }
+  if ((u.protocol !== "http:" && u.protocol !== "https:") || !sameHost(u.hostname.toLowerCase(), h.hostname.toLowerCase())) return null;
+  const strip = (p) => p.replace(/\/index\.html?$/i, "").replace(/\/+$/, "").toLowerCase();
+  if (strip(u.pathname) !== strip(h.pathname) || u.search) return null;
+  const m = /^#!?\/([^?]*)$/.exec(u.hash);
+  if (!m) return null;
+  const segs = segmentsOf(m[1]).map(pageName);
+  if (!segs.length || segs.some((s) => ACTION_SEGMENT.test(s))) return null;
+  return { key: u.href, segs };
+}
 
 /**
  * The projects a home page shows itself, as the pass counts them: its
@@ -559,6 +668,14 @@ export function projectsPageFor(links, homeUrl) {
   if (shownProjects(links, homeUrl) >= MIN_PROJECT_LINKS) return null;
   let byText = null;
   for (const l of links) {
+    // A route of an app on the home page's own address: "#/projects", "#!/work" (chiragsamal.github.io).
+    const route = hashRoute(l, homeUrl);
+    if (route) {
+      if (route.segs.some((s) => NOT_PROJECT_SEGMENT.test(s))) continue;
+      if (LISTING_SEGMENT.test(route.segs.at(-1)) || makerPage(route.segs, l.text)) return route.key;
+      if (!byText && PROJECTS_LINK_TEXT.test(String(l.text ?? ""))) byText = route.key;
+      continue;
+    }
     const own = ownPageUrl(l, self);
     if (!own) continue;
     // Read below the home page's own path, so a site served under /my-portfolio/ is not its own projects page.
@@ -672,10 +789,10 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
  * plain GET: when it answers 404 or another error, own pages count by their
  * status like any link; when it answers 2xx (a host or an app shell that
  * answers every address), each own page is fetched (GET, its body capped at
- * OWN_PAGE_MAX_BYTES) and loads only when its visible text has at least
- * OWN_PAGE_MIN_WORDS distinct words, and at most OWN_PAGE_MAX_OVERLAP of them
- * are also on the nonsense page and on the home page (`homeText`); two own
- * pages with the same text count once. An own page that answered but failed
+ * OWN_PAGE_MAX_BYTES) and loads only when the lines of its visible text that
+ * are on neither the nonsense page nor the home page (`homeText`) hold at
+ * least OWN_PAGE_MIN_WORDS distinct words (ownText); two own pages with the
+ * same text of their own count once. An own page that answered but failed
  * that is counted as checked, not loading, in `own_unverified`.
  *
  * Returns { checked, ok, broken, blocked, own_ok, own_unverified, own_check }:
@@ -685,12 +802,12 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
 export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "", lowLinks = LOW_LINKS } = {}) {
   const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
   const headers = { Accept: "text/html,*/*;q=0.8", ...(userAgent ? { "User-Agent": userAgent } : {}) };
-  /** A plain GET with its visible text (the body capped), or null when it failed. */
+  /** A plain GET with the lines of its visible text (the body capped), or null when it failed. */
   async function getPage(url) {
     try {
       const r = await fetchImpl(url, { method: "GET", redirect: "follow", headers, signal: AbortSignal.timeout(timeoutMs) });
       const html = await readCapped(r, OWN_PAGE_MAX_BYTES);
-      return { status: r.status, words: wordSet(visibleText(html)) };
+      return { status: r.status, lines: textLines(html) };
     } catch {
       return null;
     }
@@ -733,7 +850,8 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   let byText = null;
   if (firstOwn) {
     const probe = await getPage(nonsenseUrl(firstOwn.url));
-    byText = probe && probe.status >= 200 && probe.status < 300 ? { probe: probe.words, home: wordSet(homeText) } : null;
+    // The lines every page of the site shares (its menu, header, footer): the nonsense page's and the home page's.
+    byText = probe && probe.status >= 200 && probe.status < 300 ? { frame: new Set([...probe.lines, ...textLines(homeText, { html: false })]) } : null;
     res.own_check = byText ? "text" : "status";
   }
   const seenTexts = new Set();
@@ -742,9 +860,9 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     const got = await getPage(url);
     if (!got) return "broken";
     if (got.status >= 400) return [401, 403, 429, 999].includes(got.status) ? "blocked" : "broken";
-    const key = [...got.words].sort().join(" ");
-    const real = got.words.size >= OWN_PAGE_MIN_WORDS && overlap(got.words, byText.probe) <= OWN_PAGE_MAX_OVERLAP && overlap(got.words, byText.home) <= OWN_PAGE_MAX_OVERLAP && !seenTexts.has(key);
-    seenTexts.add(key);
+    const mine = ownText(got.lines, byText.frame);
+    const real = mine.words >= OWN_PAGE_MIN_WORDS && !seenTexts.has(mine.key);
+    seenTexts.add(mine.key);
     return real ? "ok" : "own_unverified";
   }
   const done = [];
@@ -796,16 +914,28 @@ export function nonsenseUrl(url) {
   return u.href;
 }
 
-/** The distinct words (3 letters or more, lower case) of a text. */
-function wordSet(text) {
-  return new Set(String(text ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+/**
+ * The lines of a page's visible text, lower case, spaces collapsed, empty ones left out: of its HTML (block
+ * elements and <br> end a line; scripts, styles and noscript removed), or with `html: false` of a text that
+ * already has its lines (the stored page text).
+ */
+export function textLines(src, { html = true } = {}) {
+  const text = html ? stripTags(removeElements(removeElements(removeElements(src, "script"), "style"), "noscript"), { lines: true }) : String(src ?? "");
+  return text
+    .replace(/&[a-z#0-9]+;/gi, " ")
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter(Boolean);
 }
-/** The share of `a`'s words that are also in `b` (0 when `a` is empty). */
-function overlap(a, b) {
-  if (!a.size) return 0;
-  let shared = 0;
-  for (const w of a) if (b.has(w)) shared++;
-  return shared / a.size;
+/**
+ * An own page's text of its own: its lines that are not in `frame` (the lines of the nonsense page and the
+ * home page), as `words` (how many distinct words of 3 letters or more they hold) and `key` (the same text
+ * for two pages that are copies of each other).
+ */
+export function ownText(lines, frame) {
+  const mine = [...new Set(lines.filter((l) => !frame.has(l)))];
+  const words = new Set(mine.join(" ").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+  return { words: words.size, key: [...mine].sort().join("\n") };
 }
 /** The body of a response as text, at most `max` bytes. */
 async function readCapped(r, max) {
