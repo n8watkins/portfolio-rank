@@ -217,7 +217,7 @@ test("a v2 grade sends one image plus the facts and page text as delimited data,
   assert.equal(g.tier, "A");
   assert.deepEqual(g.usage, { input_tokens: 2100, output_tokens: 120, thoughts_tokens: 30 });
   assert.equal(g.facts.motion, true);
-  assert.equal(g.checks.project_links, false);
+  assert.equal(g.checks.project_links, true, "3 of 4 load: at least 3 is a pass (facts version 3)");
   assert.equal(g.checks.fresh_footer, false);
   assert.equal(typeof g.checks_score, "number");
   assert.equal(g.quality_score, 3.3);

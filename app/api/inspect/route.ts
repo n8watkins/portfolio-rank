@@ -4,6 +4,8 @@ import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
 import { db } from "@/lib/db";
 import { CHECK_KINDS, FINGERPRINT_MAX_BYTES, pageFingerprint, recordCheck } from "@/lib/freshness.mjs";
+import { footerYear } from "@/pipeline/facts.mjs";
+import { stripTags } from "@/pipeline/page-controls.mjs";
 
 const FREE_HOSTS =
   /\.(vercel\.app|netlify\.app|github\.io|framer\.website|framer\.app|pages\.dev|web\.app|surge\.sh|onrender\.com|herokuapp\.com)$/i;
@@ -109,7 +111,8 @@ async function inspect(target: string): Promise<Inspection> {
     favicon = Boolean(ico?.res.ok);
   }
 
-  const yearMatch = html.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(20\d{2})/i);
+  // The same reading as the stored facts (pipeline/facts.mjs footerYear): the mark before or after the year.
+  const copyrightYear = footerYear(stripTags(html));
   let githubUrl = scrapeGithub(html);
   let linkedinUrl = scrapeLinkedin(html);
   let xUrl = scrapeX(html);
@@ -151,7 +154,7 @@ async function inspect(target: string): Promise<Inspection> {
     hasContact:
       /mailto:|href=["'][^"']*contact|<form/i.test(html) ||
       /linkedin\.com\/in\//i.test(html),
-    copyrightYear: yearMatch ? Number(yearMatch[1]) : null,
+    copyrightYear,
   };
 }
 

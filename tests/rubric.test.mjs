@@ -129,7 +129,8 @@ test("code checks: pass, fail or unknown; unknown is left out of checks_score", 
   const c = codeChecks(facts, now);
   assert.deepEqual(c, { resume: true, github: false, contact: true, project_links: true, own_domain: true, fresh_footer: true, original: true });
   assert.equal(checksScore(c), Math.round((100 * 15) / 17), "GitHub missing: 2 of 17");
-  const unknown = codeChecks({ ...facts, footer_year: null, project_links: { checked: 0, ok: 0, broken: 0, blocked: 2 } }, now);
+  // Every link found was behind a bot check (checkLinks counts those as checked): it could not be told.
+  const unknown = codeChecks({ ...facts, footer_year: null, project_links: { checked: 2, ok: 0, broken: 0, blocked: 2 } }, now);
   assert.equal(unknown.fresh_footer, null);
   assert.equal(unknown.project_links, null);
   assert.equal(checksScore(unknown), Math.round((100 * 8) / 10), "known: resume 2, GitHub 2 (missing), contact 4, domain 2 seventeenths; the template counts for nothing");

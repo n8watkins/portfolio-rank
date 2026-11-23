@@ -17,6 +17,7 @@
 import { redactContacts } from "./redact.mjs";
 import { SITE_DATA_MARKER } from "./site-data.mjs";
 import { guardVerdict } from "./portfolio-guard.mjs";
+import { MIN_PROJECT_LINKS, projectLinksShare } from "./facts.mjs";
 
 export const RUBRIC_VERSION = 2;
 /**
@@ -126,8 +127,8 @@ export const CRITERIA = [
     name: "Project links load",
     by: "code",
     weight: 5 / 17,
-    what: "Project and demo links answer (up to 8 checked, HEAD then GET, 8 s timeout); passes when at least one was checked and none is broken.",
-    evidence: "HTTP checks of the page's outbound project links",
+    what: `Project and demo links answer (up to 8 checked, links in the projects and GitHub repositories first, HEAD then GET, 8 s timeout); passes when at least ${MIN_PROJECT_LINKS} load, and fails when fewer load or none were found.`,
+    evidence: "HTTP checks of the page's outbound project links, on the desktop and phone views",
   },
   {
     id: "own_domain",
@@ -297,7 +298,8 @@ export function codeChecks(facts, now = new Date()) {
     resume: typeof facts.resume === "boolean" ? facts.resume : null,
     github: typeof facts.github === "boolean" ? facts.github : null,
     contact: typeof facts.contact === "boolean" ? facts.contact : null,
-    project_links: links && links.checked > 0 ? links.broken === 0 : null,
+    // At least MIN_PROJECT_LINKS load, as the points count them (lib/check-points.mjs); none found is a fail.
+    project_links: projectLinksShare(links) == null ? null : projectLinksShare(links) >= 1,
     own_domain: typeof facts.own_domain === "boolean" ? facts.own_domain : null,
     fresh_footer: typeof facts.footer_year === "number" ? year - facts.footer_year <= STALE_FOOTER_YEARS : null,
     original: facts.template === undefined ? null : !facts.template,

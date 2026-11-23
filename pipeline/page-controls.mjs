@@ -31,6 +31,16 @@ const RAW = { script: /<\/script/gi, style: /<\/style/gi };
 const CONTROL_ROLES = new Set(["button", "link", "menuitem", "tab"]);
 // Attributes whose value is a URL a control may open: for the GitHub fact only.
 const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
+// An element whose id, class or aria-label says it holds projects ("projects", "project-card", "portfolio",
+// "works", "case-study", "showcase"), and a heading that names them ("Projects", "Selected work", "Things I've
+// built"). Not work experience: "work-experience", "Where I've worked" and a bare "Work" heading are timelines.
+const PROJECT_ATTR = /\b(?:projects?|portfolio|works?(?!\s*(?:experience|history|place|timeline))|case\s*stud(?:y|ies)|showcase)\b/i;
+const PROJECT_HEADING = /\b(?:projects?|portfolio|works|my work|selected work|featured work|recent work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
+// The page's frame: links here are navigation, credits and profiles, never the projects.
+const CHROME = new Set(["nav", "header", "footer"]);
+const HEADINGS = new Set(["h1", "h2", "h3", "h4"]);
+/** "project-card", "projectsGrid", "my_work" as words, so the patterns above can read them. */
+const attrWords = (v) => String(v ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ");
 const isSpace = (c) => c === " " || c === "\n" || c === "\t" || c === "\r" || c === "\f";
 const isLetter = (c) => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
 
@@ -56,11 +66,14 @@ function resolve(u, baseUrl) {
 
 /**
  * Reads `html` once. Returns { links, controls, text, head, attrValues, generator }:
- *   links      every <a> with a non-empty href, in page order: { raw, href, text } as extractLinks gave them
- *   controls   { tag, label, parts, text, navUrls, attrUrls, inLink }: `parts` the label's pieces (text when
- *              at most LABEL_MAX characters, aria-label, title, image alt, an input's value), `navUrls` URLs
- *              it opens from onclick, `attrUrls` URLs in data-href and the like, `inLink` the href of the
- *              link around it, if any
+ *   links      every <a> with a non-empty href, in page order: { raw, href, text, inProjects, inChrome }:
+ *              `inProjects` it sits in an element whose id, class or aria-label says projects, or in the
+ *              section after a "Projects" heading, and not in the nav, header or footer; `inChrome` it
+ *              sits in the nav, header or footer
+ *   controls   { tag, label, parts, text, navUrls, attrUrls, inLink, inProjects, inChrome }: `parts` the
+ *              label's pieces (text when at most LABEL_MAX characters, aria-label, title, image alt, an
+ *              input's value), `navUrls` URLs it opens from onclick, `attrUrls` URLs in data-href and the
+ *              like, `inLink` the href of the link around it, if any; the last two as for links
  *   text       the visible text (no script or style), tags as spaces
  *   head       the text of the title and h1 elements
  *   attrValues values of attributes whose name ends in "href" or "id"
@@ -79,13 +92,22 @@ export function scanPage(html, baseUrl) {
   const stack = [];
   const openLinks = [];
   const openControls = [];
+  const openHeadings = [];
   let headOpen = 0;
+  // How many open elements hold projects, and how many are the page's frame (nav, header, footer).
+  let projectOpen = 0;
+  let chromeOpen = 0;
   const noQuote = { '"': false, "'": false };
 
   const addText = (t) => {
     if (!t || !/\S/.test(t)) return;
     text.push(t);
     if (headOpen) head.push(t);
+    const h = openHeadings.at(-1);
+    if (h && h.len < TEXT_CAP) {
+      h.parts.push(t);
+      h.len += t.length;
+    }
     const l = openLinks.at(-1);
     if (l && l.len < TEXT_CAP) {
       l.parts.push(t);
@@ -101,6 +123,17 @@ export function scanPage(html, baseUrl) {
     if (rec.link) openLinks.splice(openLinks.lastIndexOf(rec.link), 1);
     if (rec.control) openControls.splice(openControls.lastIndexOf(rec.control), 1);
     if (rec.head) headOpen--;
+    if (rec.project) projectOpen--;
+    if (rec.chrome) chromeOpen--;
+    if (rec.heading) {
+      openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
+      // A "Projects" heading: what follows it in its section holds the projects.
+      const parent = stack.at(-1);
+      if (parent && !parent.project && PROJECT_HEADING.test(decodeEntities(rec.heading.parts.join(" ")))) {
+        parent.project = true;
+        projectOpen++;
+      }
+    }
   };
 
   /**
@@ -222,10 +255,15 @@ export function scanPage(html, baseUrl) {
       if (c && attrs.get("alt")) c.alts.push(attrs.get("alt"));
     }
     const rec = { name };
+    if (CHROME.has(name) || /^(?:navigation|banner|contentinfo)$/i.test(String(attrs.get("role") ?? "").trim())) rec.chrome = true;
+    else if (name !== "html" && name !== "body" && name !== "main" && PROJECT_ATTR.test(attrWords(`${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`))) rec.project = true;
+    if (HEADINGS.has(name)) rec.heading = { parts: [], len: 0 };
+    // Where it sits: inside an element that holds projects (itself included), and not in the page's frame.
+    const where = () => ({ inProjects: projectOpen + (rec.project ? 1 : 0) > 0 && chromeOpen + (rec.chrome ? 1 : 0) === 0, inChrome: chromeOpen + (rec.chrome ? 1 : 0) > 0 });
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();
     if (name === "a" && raw) {
-      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0 };
+      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0, ...where() };
       links.push(rec.link);
     }
     const role = String(attrs.get("role") ?? "").trim().toLowerCase().split(/\s+/)[0];
@@ -259,6 +297,7 @@ export function scanPage(html, baseUrl) {
         navUrls,
         attrUrls,
         inLink: openLinks.at(-1)?.raw ?? null,
+        ...where(),
       };
       controls.push(rec.control);
     }
@@ -268,6 +307,9 @@ export function scanPage(html, baseUrl) {
     if (rec.link) openLinks.push(rec.link);
     if (rec.control) openControls.push(rec.control);
     if (rec.head) headOpen++;
+    if (rec.heading) openHeadings.push(rec.heading);
+    if (rec.project) projectOpen++;
+    if (rec.chrome) chromeOpen++;
   }
   addText(s.slice(t0, n));
 
@@ -277,13 +319,13 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim() };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome };
       })
       .filter(Boolean),
     controls: controls.map((c) => {
       const own = decodeEntities(c.textParts.join(" ")).replace(/\s+/g, " ").trim();
       const parts = [own.length <= LABEL_MAX ? own : "", c.aria, c.title, ...c.alts, c.value].map((x) => decodeEntities(x).replace(/\s+/g, " ").trim()).filter(Boolean);
-      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink };
+      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome };
     }),
     text: text.join(" "),
     head: head.join(" "),

@@ -12,10 +12,45 @@ import { portfolioSignals } from "./signals.mjs";
 // 2 (2026-11-21): resume, GitHub, contact, project links and in-page
 // sections also come from buttons and other non-link controls
 // (./page-controls.mjs). Facts stored with v 1 were measured from links
-// only; nothing re-measures them for the version (see AUTOMATION.md).
-export const FACTS_VERSION = 2;
+// only.
+// 3 (2026-11-22): project links are picked from the projects first (links in
+// an element or section that says projects, and GitHub repositories), and
+// pass when at least MIN_PROJECT_LINKS load; the footer year is also read
+// after the year ("2026 ©"); the capture measures the phone view too and
+// merges it in (mergeViews). A row gets the new version at its next capture,
+// or from the whole-list re-measure (remeasure-all.yml, see AUTOMATION.md).
+export const FACTS_VERSION = 3;
 export const LINK_CHECK_MAX = 8;
 export const LINK_TIMEOUT_MS = 8000;
+/** The fewest project links that load for "project links load" to pass (and for full project points, lib/check-points.mjs). */
+export const MIN_PROJECT_LINKS = 3;
+
+/**
+ * How much of "project links load" a check earns, 0 to 1: a third for each
+ * link that loads, full at MIN_PROJECT_LINKS (a dead link among them costs
+ * nothing once three load); 0 when none were found. Null when it was never
+ * checked, or when every link found was behind a bot check (it could not be
+ * told). The rubric's pass (pipeline/rubric.mjs codeChecks) is a share of 1,
+ * and the automated checks score (lib/check-points.mjs) is this share of its
+ * points, so the two always agree.
+ */
+export function projectLinksShare(links) {
+  if (!links || typeof links !== "object" || typeof links.checked !== "number") return null;
+  const ok = Number(links.ok) || 0;
+  if (links.checked > 0 && ok === 0 && (Number(links.blocked) || 0) >= links.checked) return null;
+  return Math.min(1, ok / MIN_PROJECT_LINKS);
+}
+
+/**
+ * The project-link check in words, wherever it is shown: "5 of 8 project
+ * links load", "Project links: none found" when there were none to check, or
+ * null when they were never checked.
+ */
+export function projectLinksText(links) {
+  if (!links || typeof links !== "object" || typeof links.checked !== "number") return null;
+  if (links.checked <= 0) return "Project links: none found";
+  return `${Number(links.ok) || 0} of ${links.checked} project links load`;
+}
 
 // Free hosting subdomains: a site served from one is not on its own domain.
 export const FREE_HOSTS =
@@ -82,14 +117,25 @@ export function isPrivateHost(hostname) {
   return false;
 }
 
+// A copyright year next to its mark, either way round: "© 2026", "Copyright 2024-2026", "2026 © Name",
+// "2020 - 2026 ©". The second year of a range counts. A bare year without a mark never does.
+const COPYRIGHT_MARK = String.raw`(?:©|&copy;|&#169;|\(c\)|copyright)`;
+const YEAR = String.raw`((?:19|20)\d{2})`;
+// A hyphen, an en dash or an em dash between the two years of a range (U+2013, U+2014).
+const RANGE_DASH = `\\s*[-${String.fromCharCode(0x2013, 0x2014)}]\\s*`;
+const MARK_THEN_YEAR = new RegExp(String.raw`${COPYRIGHT_MARK}\s*(?:\d{4}${RANGE_DASH})?${YEAR}(?!\d)`, "gi");
+const YEAR_THEN_MARK = new RegExp(String.raw`(?<!\d)${YEAR}(?:${RANGE_DASH}${YEAR})?\s*${COPYRIGHT_MARK}`, "gi");
+
 /** The highest plausible copyright year on the page, or null. */
 export function footerYear(text, now = new Date()) {
   const max = now.getUTCFullYear() + 1;
+  const s = String(text ?? "");
   let best = null;
-  for (const m of String(text ?? "").matchAll(/(?:©|&copy;|\(c\)|copyright)\s*(?:\d{4}\s*[-\u2013\u2014]\s*)?((?:19|20)\d{2})/gi)) {
-    const y = Number(m[1]);
+  const take = (y) => {
     if (y <= max && (best == null || y > best)) best = y;
-  }
+  };
+  for (const m of s.matchAll(MARK_THEN_YEAR)) take(Number(m[1]));
+  for (const m of s.matchAll(YEAR_THEN_MARK)) take(Number(m[2] ?? m[1]));
   return best;
 }
 
@@ -111,42 +157,60 @@ export { isGithubProfile };
  */
 export function pageLinks(html, baseUrl, scan = null) {
   const page = scan ?? scanPage(html, baseUrl);
-  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label })));
+  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome })));
   return [...page.links, ...fromControls];
 }
 
 /**
- * Outbound links that look like projects or demos: other sites and GitHub
- * repositories, without social profiles, services and the site itself.
+ * An outbound link that may be a project or a demo, as the URL that is
+ * checked: another site or a GitHub repository, not a social profile, a
+ * service, a file or the site itself. Null otherwise. `repo` says it is a
+ * GitHub repository.
+ */
+function projectUrl(l, self) {
+  let u;
+  try {
+    u = new URL(l.href);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  const h = u.hostname.toLowerCase().replace(/^www\./, "");
+  if (!h || h === self || isPrivateHost(h)) return null;
+  let repo = false;
+  if (h === "github.com") {
+    const segs = u.pathname.split("/").filter(Boolean);
+    if (segs.length < 2 || GH_RESERVED.test(segs[0])) return null; // a profile, not a repository
+    repo = true;
+  } else if (NOT_PROJECT.test(h) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
+    return null;
+  }
+  u.hash = "";
+  return { key: u.href, repo };
+}
+
+/**
+ * The links checked for "project links load", at most `max`: first the
+ * outbound links inside the projects (an element whose id, class,
+ * aria-label or heading says projects, work, portfolio, case study: a link
+ * `inProjects`, ./page-controls.mjs) and links to GitHub repositories outside
+ * the page's nav, header and footer, in page order; only then every other
+ * outbound link, in page order. So a school, an employer or a client named in
+ * the about or experience sections never takes the place of a project.
+ * Social profiles, services and the site itself are never candidates.
  */
 export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   const self = host(siteUrl);
   const seen = new Set();
-  const out = [];
+  const first = [];
+  const rest = [];
   for (const l of links) {
-    let u;
-    try {
-      u = new URL(l.href);
-    } catch {
-      continue;
-    }
-    if (u.protocol !== "http:" && u.protocol !== "https:") continue;
-    const h = u.hostname.toLowerCase().replace(/^www\./, "");
-    if (!h || h === self || isPrivateHost(h)) continue;
-    if (h === "github.com") {
-      const segs = u.pathname.split("/").filter(Boolean);
-      if (segs.length < 2 || GH_RESERVED.test(segs[0])) continue; // a profile, not a repository
-    } else if (NOT_PROJECT.test(h) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
-      continue;
-    }
-    u.hash = "";
-    const key = u.href;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(key);
-    if (out.length >= max) break;
+    const p = projectUrl(l, self);
+    if (!p || seen.has(p.key)) continue;
+    seen.add(p.key);
+    (l.inProjects || (p.repo && !l.inChrome) ? first : rest).push(p.key);
   }
-  return out;
+  return [...first, ...rest].slice(0, max);
 }
 
 /**
@@ -286,11 +350,58 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   return res;
 }
 
-/** measureFacts plus the project-link check. */
+const SIGNAL_KEYS = ["projects", "about", "contact", "resume", "github", "name"];
+const higher = (a, b) => (typeof a === "number" && typeof b === "number" ? Math.max(a, b) : typeof a === "number" ? a : typeof b === "number" ? b : (a ?? b ?? null));
+
+/**
+ * The desktop view's facts with the phone view's merged in (pure): a yes/no
+ * fact is yes when either view has it (a resume button shown only in the
+ * phone menu, projects shown inline at 390 wide but in an inactive tab on
+ * desktop), the footer year is the higher, the page and section counts the
+ * higher, and the portfolio signals are each yes when either view has them.
+ * Everything else (the address, own domain, the words, motion, the template)
+ * is the desktop view's. No phone facts: the desktop facts as they are.
+ */
+export function mergeViews(desktop, phone) {
+  if (!phone) return desktop;
+  const signals = Object.fromEntries(SIGNAL_KEYS.map((k) => [k, Boolean(desktop.signals?.[k] || phone.signals?.[k])]));
+  return {
+    ...desktop,
+    resume: desktop.resume === true || phone.resume === true,
+    github: desktop.github === true || phone.github === true,
+    contact: desktop.contact === true || phone.contact === true,
+    footer_year: higher(desktop.footer_year, phone.footer_year),
+    internal_pages: higher(desktop.internal_pages, phone.internal_pages),
+    sections: higher(desktop.sections, phone.sections),
+    template: desktop.template ?? phone.template ?? null,
+    builder: desktop.builder ?? phone.builder ?? null,
+    signals: { score: Object.values(signals).filter(Boolean).length, ...signals },
+  };
+}
+
+/**
+ * measureFacts plus the project-link check. `input.phone` ({ html, text,
+ * finalUrl }), when given, is the same page read at 390 wide: it is measured
+ * too and merged in (mergeViews), and its link candidates join the desktop's
+ * (the desktop's first within each kind, ./projectLinkCandidates), so one
+ * check covers both. `views` records what was read.
+ */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
-  const scan = scanPage(input.html, input.finalUrl || input.url);
-  const facts = measureFacts({ ...input, scan });
-  const urls = projectLinkCandidates(pageLinks(input.html, facts.final_url, scan), facts.final_url);
+  const { phone = null, ...desktopInput } = input;
+  const scan = scanPage(desktopInput.html, desktopInput.finalUrl || desktopInput.url);
+  let facts = measureFacts({ ...desktopInput, scan });
+  const links = pageLinks(desktopInput.html, facts.final_url, scan);
+  const views = ["desktop"];
+  if (phone && typeof phone.html === "string" && phone.html.trim()) {
+    const phoneBase = phone.finalUrl || facts.final_url;
+    const phoneScan = scanPage(phone.html, phoneBase);
+    const phoneFacts = measureFacts({ ...desktopInput, html: phone.html, text: phone.text ?? "", finalUrl: phoneBase, scan: phoneScan });
+    facts = mergeViews(facts, phoneFacts);
+    links.push(...pageLinks(phone.html, phoneBase, phoneScan));
+    views.push("phone");
+  }
+  const urls = projectLinkCandidates(links, facts.final_url);
   facts.project_links = await checkLinks(urls, { fetchImpl, userAgent, timeoutMs });
+  facts.views = views;
   return facts;
 }

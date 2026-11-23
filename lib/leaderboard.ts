@@ -109,9 +109,10 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
       continue;
     }
     if (!g || typeof g !== "object") continue;
-    const facts = (factLines(g) as { id: string; pass: boolean | null }[])
+    // Project links say how many load ("5 of 8 project links load"), never a bare yes or no.
+    const facts = (factLines(g) as { id: string; pass: boolean | null; detail: string }[])
       .filter((f) => CHIP[f.id] && typeof f.pass === "boolean")
-      .map((f) => ({ label: CHIP[f.id], pass: f.pass as boolean }));
+      .map((f) => ({ label: f.id === "project_links" && f.detail ? f.detail : CHIP[f.id], pass: f.pass as boolean }));
     const top = (strengthsAndFixes(g).strengths as { title: string; why: string; by: string }[]).find((s) => s.by === "ai");
     out.set(url, { facts, best: top ? { label: top.title, note: top.why } : null });
   }

@@ -246,11 +246,10 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
     const judgments = (judgmentLines(grade) as { label: string; score: number | null; note: string }[])
       .filter((j) => typeof j.score === "number" && j.note)
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-    const facts = (factLines(grade) as { id: string; label: string; pass: boolean | null }[]).filter((f) => f.pass !== null) as {
-      id: string;
-      label: string;
-      pass: boolean;
-    }[];
+    // Project links say how many load ("5 of 8 project links load"), never a bare yes or no.
+    const facts = (factLines(grade) as { id: string; label: string; pass: boolean | null; detail: string }[])
+      .filter((f) => f.pass !== null)
+      .map((f) => ({ id: f.id, label: f.id === "project_links" && f.detail ? f.detail : f.label, pass: f.pass as boolean }));
     return {
       url: p.url,
       name: p.name,

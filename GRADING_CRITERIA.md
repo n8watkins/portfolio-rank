@@ -118,7 +118,7 @@ Rubric version 2 (`pipeline/rubric.mjs`).
 | `resume` | Resume link | code | 12% | A link to a resume or CV. | links on the page |
 | `github` | GitHub link | code | 12% | A link to a GitHub profile. | links on the page |
 | `contact` | Contact path | code | 24% | A mailto link, a contact form, a contact page or a LinkedIn/social profile. | links and forms on the page |
-| `project_links` | Project links load | code | 29% | Project and demo links answer (up to 8 checked, HEAD then GET, 8 s timeout); passes when at least one was checked and none is broken. | HTTP checks of the page's outbound project links |
+| `project_links` | Project links load | code | 29% | Project and demo links answer (up to 8 checked, links in the projects and GitHub repositories first, HEAD then GET, 8 s timeout); passes when at least 3 load, and fails when fewer load or none were found. | HTTP checks of the page's outbound project links, on the desktop and phone views |
 | `own_domain` | Own domain | code | 12% | Served from the person's own domain, not a free hosting subdomain (vercel.app, github.io, netlify.app and similar). | final URL after redirects |
 | `fresh_footer` | Fresh footer year | code | 12% | The footer copyright year is at most 2 years old; unknown when the page shows no year. | page text |
 | `original` | Not a known template | code | context | No fingerprint of a known template (HTML5 UP, Start Bootstrap, BootstrapMade, Colorlib, a Brittany Chiang clone and others). | page HTML |

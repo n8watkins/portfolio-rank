@@ -657,9 +657,6 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     const desktop = await judgeDesktop(page, doc, { splash, modal, mode }, seen.text);
     if (desktop.verdict) return reject(desktop.verdict);
     const pageText = normalizePageText(seen.text);
-    // Facts from the same reading (single-page apps included), plus a capped
-    // check of its project and demo links.
-    const facts = await measurePage({ html: seen.html, text: seen.text, url, finalUrl: page.url(), name, motion, source: "rendered" }, { userAgent: UA }).catch(() => null);
     const heroJpg = desktopView.ok ? desktopView.files.crop : await shot(page, { type: "jpeg", quality: 75 });
 
     // Phone: the same page at 390 wide, horizontal-overflow check, then the
@@ -691,6 +688,15 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // else blocked on it is kept as a note in the meta (phoneBlocked).
     const phone = await judgePhone(mpage, mdoc, { splash: mobileSplash, modal: mobileModal, mode: mobileMode });
     if (phone.verdict) return reject(phone.verdict);
+    // Facts from the desktop reading (single-page apps included), merged with
+    // the phone view's own reading (projects some sites show only at 390 wide),
+    // plus a capped check of their project and demo links. A phone view that
+    // is blocked (phone.note) or cannot be read adds nothing: the desktop facts stand.
+    const phoneSeen = phone.note ? null : await mpage.evaluate(readRenderedPage).catch(() => null);
+    const facts = await measurePage(
+      { html: seen.html, text: seen.text, url, finalUrl: page.url(), name, motion, source: "rendered", phone: phoneSeen ? { html: phoneSeen.html, text: phoneSeen.text, finalUrl: mpage.url() } : null },
+      { userAgent: UA }
+    ).catch(() => null);
     const mobileJpg = phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 });
 
     // A browser that died while the views were taken leaves them half made (their own errors are caught): not stored.

@@ -180,7 +180,8 @@ Each chain is a list of steps in the order they happen.
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, with a 15% safety limit.
-   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure.
+   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
+   When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`).
 6. **Capture checks** (same step, code only).
    A capture that does not show the site is never stored or graded:
