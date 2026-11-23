@@ -63,18 +63,18 @@ function Board({ rows, scoreLabel, elo = false }: { rows: BoardItem[]; scoreLabe
   );
 }
 
-/** Top 10: the ranked order (code checks, then votes), with the Tier while tiers are shown. */
+/** Top 10: the first 10 rows /top shows: people's ELO board with tiers off, the ranked board (Tier and ELO) with them on. */
 export function TopTen({ top, className = "" }: { top: TopTenData; className?: string }) {
-  const empty = top.kind === "code" && top.rows.length === 0;
+  const empty = top.kind === "elo" && top.rows.length === 0;
   return (
     <section aria-labelledby="top10" className={`card flex flex-col p-4 sm:p-6 ${className}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 id="top10" className={sectionTitle}>
           Top 10
         </h3>
-        {top.kind === "code" && (
+        {top.kind === "elo" && (
           <p className="flex items-center gap-1.5 text-xs text-mute">
-            <Code className="h-3.5 w-3.5" aria-hidden /> By code checks and votes
+            <Users className="h-3.5 w-3.5" aria-hidden /> By people&apos;s votes
           </p>
         )}
         {top.kind === "ranked" && <p className="text-xs text-mute">By tier and ELO</p>}
@@ -86,8 +86,8 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           <span className="icon-tile h-11 w-11">
             <Swords className="h-5 w-5" aria-hidden />
           </span>
-          <p className="font-semibold">The board fills as portfolios are measured</p>
-          <p className="max-w-sm text-sm text-mute">Each portfolio gets its starting rank from the checks our code measures. Every face-off vote moves two of them.</p>
+          <p className="font-semibold">The board fills as people vote</p>
+          <p className="max-w-sm text-sm text-mute">Every face-off vote moves two portfolios.</p>
           {ROUTES.faceoff && (
             <a href={ROUTES.faceoff} className="group mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent">
               Vote in a face-off <ArrowRight className="nudge h-4 w-4" aria-hidden />
@@ -95,8 +95,8 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           )}
         </div>
       ) : (
-        // The ranked order with no letter: Tiers are hidden while RANKING_V2 is off, and Gemini gives no letter.
-        <Board rows={top.rows} scoreLabel="" />
+        // The people's ELO board, as /top shows it while RANKING_V2 is off: no letter.
+        <Board rows={top.rows} scoreLabel="ELO" />
       )}
     </section>
   );
@@ -270,7 +270,7 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
           {p.tier && <EloTierBadge tier={p.tier} size="lg" />}
           <p className="text-sm">
             <span className="block font-semibold">
-              Top {topPct(p.rank, p.total)}% · #{p.rank} by code checks and votes
+              Top {topPct(p.rank, p.total)}% · #{p.rank} by {p.order}
             </span>
             <span className="block text-mute">of {p.total.toLocaleString("en-US")} ranked portfolios</span>
           </p>

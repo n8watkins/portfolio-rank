@@ -255,20 +255,26 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
 // the AI seed standing in until enough people have voted.
 const MIN_VOTES = 1;
 
-async function loadElo(limit: number): Promise<Leaderboard> {
+/**
+ * The ELO board's order (RANKING_V2 off): listed, shown sites with at least
+ * MIN_VOTES people's votes, best ELO first, as /top shows them; place i + 1.
+ * The home page reads the same order (lib/home.ts), so the two never disagree.
+ */
+export async function eloOrder(limit: number): Promise<{ url: string; elo: number; votes: number }[]> {
   const hidden = await hiddenUrls();
-  const [res, votes] = await db().batch(
-    [
-      { sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT ?", args: [MIN_VOTES, limit + 50] },
-      // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
-      "SELECT n FROM vote_totals WHERE k = 'all'",
-    ],
-    "read"
-  );
-  const ranked = res.rows
+  const res = await db().execute({ sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT ?", args: [MIN_VOTES, limit + 50] });
+  return res.rows
     .map((r) => ({ url: String(r.url), elo: Number(r.elo), votes: Number(r.votes) }))
     .filter((r) => byUrl.has(r.url) && !hidden.has(r.url))
     .slice(0, limit);
+}
+
+async function loadElo(limit: number): Promise<Leaderboard> {
+  const [ranked, votes] = await Promise.all([
+    eloOrder(limit),
+    // Kept by triggers on votes (lib/schema.mjs COUNTERS): one row, not a count of the vote log.
+    db().execute("SELECT n FROM vote_totals WHERE k = 'all'"),
+  ]);
   const urls = ranked.map((r) => r.url);
   const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);
   const rows: Entry[] = ranked.map((r, i) => {

@@ -10,6 +10,7 @@ import { GEMINI_SAYS_PORTFOLIO_SQL, fiveSecondOf, geminiAnswered } from "@/pipel
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
+import { eloOrder } from "@/lib/leaderboard";
 import { familyOf, isPublicTier, tierLabel } from "@/lib/tiers.mjs";
 import { peekTierMeta } from "@/lib/tiers-db.mjs";
 import { publicLetters, siteTiers } from "@/lib/tiers-letters.mjs";
@@ -47,24 +48,54 @@ const POOL_SIZE = 300;
 type PoolSite = {
   url: string;
   name: string;
-  /** Its place in the ranked order (code checks, then votes; lib/tiers-board.ts rankedSites). */
+  /** Its place in the order /top shows (boardOrder). */
   rank: number;
-  /** Its Tier from that order (every letter): shown only while tiers are shown and only when public. Never Gemini's letter. */
-  tier: string;
+  /** Its Tier (every letter) while tiers are shown, else null: shown only when public. Never Gemini's letter. */
+  tier: string | null;
   /** Gemini's five-second test score (1-5), any rubric version, or null: the one kept score that reads the screenshot. */
   fiveSecond: number | null;
 };
 
+type OrderSite = { url: string; name: string; rank: number; tier: string | null };
+
+/** True while tiers by ELO are on (RANKING_V2), as /top reads it (lib/leaderboard.ts rankingViewsEnabled). */
+const rankingV2 = () => /^true$/i.test(String(process.env.RANKING_V2 ?? ""));
+
 /**
- * The listed portfolios best first in the ranked order (owner, 2026-11-22: a
- * site's place comes only from code measurements, then votes), with the
- * library size. Gemini's dropped outputs (its letter and the four dropped
- * scores, pipeline/rubric.mjs DROPPED_OUTPUTS) are never read; its
- * five-second test is, for the showcase only.
+ * The order /top shows, so the home page's Top 10 and its "#N" places come
+ * from the same order in each flag state: with RANKING_V2 on, the ranked
+ * board (code checks, then votes; lib/tiers-board.ts rankedSites); with it
+ * off, the people's ELO board (sites with at least one person's vote, best
+ * ELO first; lib/leaderboard.ts eloOrder). Never Gemini's order or letter.
+ * A database error is thrown to the page's error path, never shown as an
+ * empty board.
+ */
+async function boardOrder(limit: number): Promise<{ sites: OrderSite[]; total: number }> {
+  if (rankingV2()) {
+    const { sites, total } = await rankedSites(limit);
+    return { sites: sites.map((s) => ({ url: s.url, name: s.name, rank: s.rank, tier: s.tier })), total };
+  }
+  // The whole ELO board (people's votes only, so a few hundred rows), so `total` is its size.
+  const all = await eloOrder(100_000);
+  return { sites: all.slice(0, limit).map((r, i) => ({ url: r.url, name: byUrl.get(r.url)?.name ?? domainOf(r.url), rank: i + 1, tier: null })), total: all.length };
+}
+
+/**
+ * The best of /top's order with each one's five-second test, for the
+ * showcase and the portfolio of the day. Cached an hour, as the AI-grade
+ * pool it replaced was (it reads up to POOL_SIZE grades), so their "#N" can
+ * lag /top by up to an hour; the Top 10 reads the order fresh (topTen).
+ * Gemini's dropped outputs (pipeline/rubric.mjs DROPPED_OUTPUTS) are never
+ * read.
  */
 async function rankedPool(): Promise<{ pool: PoolSite[]; total: number }> {
   await ensureSchema();
-  const { sites, total } = await rankedSites(POOL_SIZE).catch(() => ({ sites: [] as Awaited<ReturnType<typeof rankedSites>>["sites"], total: 0 }));
+  const { pool, total } = await cached<{ pool: PoolSite[]; total: number }>("home", `pool:${rankingV2() ? "tiers" : "elo"}`, { ttlMs: HOUR }, readPool);
+  return { pool, total };
+}
+
+async function readPool(): Promise<{ pool: PoolSite[]; total: number }> {
+  const { sites, total } = await boardOrder(POOL_SIZE);
   const urls = sites.map((s) => s.url);
   const five = new Map<string, number | null>();
   if (urls.length) {
@@ -82,7 +113,7 @@ async function rankedPool(): Promise<{ pool: PoolSite[]; total: number }> {
       five.set(String(r.url), geminiAnswered(g) ? (fiveSecondOf(g)?.score ?? null) : null);
     }
   }
-  return { pool: sites.map((s) => ({ url: s.url, name: s.name, rank: s.rank, tier: s.tier, fiveSecond: five.get(s.url) ?? null })), total };
+  return { pool: sites.map((s) => ({ ...s, fiveSecond: five.get(s.url) ?? null })), total };
 }
 
 /**
@@ -144,26 +175,29 @@ export type BoardItem = {
 };
 
 export type TopTen =
-  /** Tiers hidden (RANKING_V2 off): the ranked order with no letter. */
-  | { kind: "code"; rows: BoardItem[] }
+  /** RANKING_V2 off: the first 10 of the people's ELO board /top shows (lib/leaderboard.ts eloOrder), the score its ELO. */
+  | { kind: "elo"; rows: BoardItem[] }
   /** Tiers by ELO (RANKING_V2): the ranked board's first 10 (lib/tiers-board.ts), the score a tier by ELO. */
   | { kind: "ranked"; rows: BoardItem[] };
 
 /**
- * The top 10: the ranked board's first 10 (lib/tiers-board.ts, code checks
- * then votes), the same rows /top shows first with tiers on. With RANKING_V2
- * on each shows its public Tier; until then no letter. Never Gemini's order
- * or letter (owner, 2026-11-22: they are no longer asked for or used).
+ * The top 10: the same first 10 rows /top shows, read fresh, in each flag
+ * state. With RANKING_V2 on, the ranked board (code checks, then votes) with
+ * each public Tier; with it off, the people's ELO board with each ELO. Never
+ * Gemini's order or letter (owner, 2026-11-22).
  */
-async function topTen(pool: PoolSite[]): Promise<TopTen> {
-  const shown = /^true$/i.test(String(process.env.RANKING_V2 ?? ""));
-  const rows: BoardItem[] = pool.slice(0, 10).map((s) => {
-    const p = byUrl.get(s.url);
-    return { url: s.url, name: p?.name ?? domainOf(s.url), line: p?.tagline || domainOf(s.url), rank: s.rank, tied: false, hero: null, score: shown && isPublicTier(s.tier) ? s.tier : "", href: reportPath(s.url) };
-  });
+async function topTen(): Promise<TopTen> {
+  const item = (url: string, rank: number, score: string): BoardItem => {
+    const p = byUrl.get(url);
+    return { url, name: p?.name ?? domainOf(url), line: p?.tagline || domainOf(url), rank, tied: false, hero: null, score, href: reportPath(url) };
+  };
+  const shown = rankingV2();
+  const rows: BoardItem[] = shown
+    ? (await rankedSites(10)).sites.map((s) => item(s.url, s.rank, isPublicTier(s.tier) ? s.tier : ""))
+    : (await eloOrder(10)).map((r, i) => item(r.url, i + 1, String(Math.round(r.elo))));
   const shots = await shotBases(rows.map((r) => r.url));
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
-  return { kind: shown ? "ranked" : "code", rows };
+  return { kind: shown ? "ranked" : "elo", rows };
 }
 
 /** `tier`: the site's public Tier while tiers are shown, else null; never Gemini's letter. */
@@ -252,6 +286,8 @@ export type PortfolioOfTheDay = {
   tier: string | null;
   rank: number;
   total: number;
+  /** What `rank` is a place in: /top's order in this flag state. */
+  order: "code checks and votes" | "people's votes";
   best: { label: string; note: string }[];
   facts: { id: string; label: string; pass: boolean }[];
   href: string;
@@ -294,6 +330,7 @@ async function portfolioOfTheDay(pool: PoolSite[], total: number, skip: Set<stri
       tier: (await lettersFor([p.url])).get(p.url) ?? null,
       rank: p.rank,
       total,
+      order: rankingV2() ? "code checks and votes" : "people's votes",
       best: five?.note ? [{ label: "Five-second test", note: five.note }] : [],
       facts: facts.slice(0, 6),
       href: reportPath(p.url),
@@ -317,7 +354,7 @@ export async function homeData() {
   const { pool, total: ranked } = await rankedPool();
   const hidden = await hiddenUrls();
   const total = FEED.filter((p) => !hidden.has(p.url)).length;
-  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(pool), recentlyGraded(), liveStats(total), polls()]);
+  const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(), recentlyGraded(), liveStats(total), polls()]);
   const potd = await portfolioOfTheDay(pool, ranked, new Set(show.map((s) => s.url)));
   return {
     /** Listed portfolios anyone can see (the browse grid's count). */
