@@ -174,48 +174,32 @@ The community list mostly drops lines through its own automatic "Broken Links" r
 
 ## When checks re-run
 
-Owner decision of 2026-11-11 ([docs/DECISIONS.md](docs/DECISIONS.md#infrastructure)): if a site hasn't changed, don't measure it again; if it has, measure it again.
-It isn't about saving free API requests: re-runs take time, and a changed site should not show old results.
-It has a launch switch, `FRESHNESS_ENABLED` ([lib/freshness-flag.ts](lib/freshness-flag.ts)): `"false"` in production and `"true"` on staging.
-While it is off, the hourly cron makes no fingerprint fetches and profiles say "Measured on <date>" as before, without "site unchanged since" or "re-measuring"; the reuse rules below apply either way.
+Owner decision of 2026-11-22 ([docs/DECISIONS.md](docs/DECISIONS.md#infrastructure)): a check is due by age or by a person's request, never because the page changed.
+Nothing watches pages for changes: the hourly page fingerprints (decided 2026-11-11, never switched on in production) were removed once a site came to be graded once (2026-11-21).
 The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mjs).
 
-**The rule, for every check on a portfolio:** reuse the stored result while the site is unchanged.
-Run it again when:
+**The rule, for every check on a portfolio:** reuse the stored result until one of these holds:
 
-- the site's change fingerprint changed after the result was measured;
-- the admin pressed "Re-measure" on the portfolio's page, or its verified owner asked for a re-grade;
-- the result is older than its maximum age (below), because some things break without the page changing;
+- the admin pressed "Re-measure" on the portfolio's page, or its verified owner asked for a new capture, after the result was measured (`site_freshness.forced_at`);
+- the result is older than its maximum age (below);
 - the result is a failure and its short retry window has passed.
 
 | Check | Where it is stored | Maximum age | A failure is retried after | When a due result runs again |
 | --- | --- | --- | --- | --- |
-| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` for S, A and B sites |
+| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` |
 | Polish checklist and share card | `cache` `inspect:<url>` | 30 days (the share image and favicon can break on their own) | 1 hour | On the next view, and `prewarm.yml` |
 | Project link checks | `portfolios.facts` (`facts_at`) | 30 days (links rot without the page changing) | the next night | Tonight's free checks (`evidence.mjs --links`, up to 120 a night) |
-| Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | the next night | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, changed and asked-for sites first) |
-| "Grade my portfolio" free checks | `cache` `grader:quick:<site>` | links 30 days | 10 minutes (the visitor may have just fixed the site) | A request is a grade: the page is always fetched again, and only its link checks are reused while the page is unchanged |
+| Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | a growing backoff (`refresh_failures`) | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, asked-for sites first) |
+| "Grade my portfolio" free checks | `cache` `grader:quick:<site>` | links 30 days | 10 minutes (the visitor may have just fixed the site) | A request is a grade: the page is always fetched again, and only its link checks are reused while the grader's page fingerprint is unchanged |
 
-**The change fingerprint** ([lib/freshness.mjs](lib/freshness.mjs) `pageFingerprint`), from one ordinary page fetch, the same one the polish check and the grader's free checks make (`safeFetch`, the body capped at 800 KB):
+A nightly re-capture that fails keeps the good stored capture and waits out a growing backoff (`refresh_failures`) before it is tried again, unless the admin or the owner asks again after that failure.
 
-- a hash of the HTML with per-request noise removed: inline scripts, comments, CSP nonces, CSRF and trace tokens (and Sentry's trace tags), timestamps and epoch numbers, UUIDs and long hex or base64 ids, numbers in counter ids (`bits-5`, React's ids), Cloudflare's per-response links and email obfuscation, `@font-face` rules (font CDNs reorder their subsets), whitespace between tags, and the order of the `<head>` (streaming renderers emit it in a different order);
-- plus the sorted script and stylesheet URLs (without per-request query parameters such as `?t=<epoch>`), whose build hashes change on every deploy;
-- ETag and Last-Modified count only when the body is byte-for-byte the same as last time (a redeploy of identical HTML); a Last-Modified equal to the response's own time is a dynamic page and never counts.
+The state is `site_freshness`: per address `forced_at`.
+Its other columns (`hash`, `checked_at`, `attempted_at`, `changed_at` and the rest) held the removed fingerprints: nothing writes or reads them any more, and their rows stay.
+An old row's `changed_at` never makes anything due.
 
-The first fingerprint of a site is its baseline, never a change.
-About 1.5% of sites really differ on every request (a live clock, a random quote, a "now playing" track): they look changed at each weekly check and get re-measured weekly.
-A client-rendered page whose HTML shell and asset names stay the same across deploys looks unchanged; the maximum ages catch it.
-
-**The weekly check** ([worker/freshness.ts](worker/freshness.ts)): the hourly Cron Trigger (`15 * * * *`) fingerprints the listed, live sites attempted longest ago, about a 168th of the list each hour (14 of 2,106), so each site is checked once a week, and a site attempted in the last day is never fetched again.
-The polish check and the grader's free checks record the fingerprint of the page they already fetched, so a change found there counts at once.
-A fetch that fails keeps the stored fingerprint and only notes the attempt.
-The state is `site_freshness`: per address the fingerprint, `checked_at`, `attempted_at`, `changed_at` (and why), and `forced_at`.
-
-**What it costs** (2,106 listed sites, measured on 400 of them): about 300 page fetches a day, about 400 subrequests with redirects plus 3 Turso requests a tick (about 17 to 20 subrequests per hourly run, far under a run's limit); the fingerprint takes about 1 ms of CPU at the median and 8 ms at the 90th percentile, so with the fetch's own work about 1.5 to 3 seconds of Workers CPU a day, roughly 0.1 to 0.3 million ms a month of the 30 million included.
-Turso: the due query reads about 4,200 rows a tick (about 3 million a month of 500 million) and writes about 300 rows a day.
-
-**What people see:** under Lighthouse and the polish checklist, "Measured Nov 11 · site unchanged since" when a later check found the page the same, or "Re-measuring, the site changed · last measured Nov 3" while a due result runs again (the page asks again until the new result is in).
-**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`), and the counts in `GET /api/admin/quota` `freshness` and on `/admin/usage`: sites unchanged, changed this week, never checked, checked today, and re-measured today (Lighthouse, polish, captures, link checks).
+**What people see:** under Lighthouse and the polish checklist, "Measured on <date>", with "updating in the background" while a due result runs again.
+**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`).
 
 ## End-of-day run
 
@@ -226,7 +210,7 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | When (Pacific) | Where | What |
 | --- | --- | --- |
 | All day, as they arrive | Worker and `grade.yml` | People's grade requests ("Grade my portfolio" below, [pipeline/people.mjs](pipeline/people.mjs)): the whole day's quota minus the evening reserve, 3.5 only; a request 3.5 can't answer waits in a queue |
-| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), checks the change fingerprint of a 168th of the list ("When checks re-run" above), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)), then starts the not-working re-check on GitHub Actions when a site is due ([worker/recheck-start.ts](worker/recheck-start.ts)) |
+| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)), then starts the not-working re-check on GitHub Actions when a site is due ([worker/recheck-start.ts](worker/recheck-start.ts)) |
 | Every 5 minutes | Worker cron | The grader's tick ([worker/grader.ts](worker/grader.ts)): report emails, captures that didn't start, requests waiting for a later day, cleanup; nothing while `GRADER_ENABLED` is off |
 | 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
 | 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due); every night also `health.yml` (not waited for) |
@@ -769,7 +753,7 @@ serve images.
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
 - `node scripts/model-watch.mjs [--dry-run]` - the weekly model watch by hand (needs `GEMINI_API_KEY` for the model list; no generate calls)
 - `node pipeline/fullpage-backfill.mjs [--limit N] [--minutes M] [--concurrency C] [--only s] [--dry-run]` - tall desktop and phone images with thumbnails (AVIF, `<shot_key>/<v>/`) for up to N listed sites captured before the capture made them; changes no grade, hero.jpg or capture date (the nightly free checks run it with a cap)
-- `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: changed or asked for, then 90 days old (finds redesigns)
+- `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: asked for, then 90 days old (finds redesigns)
 - `node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them; `--links N` also measures again up to N sites whose project link checks are due
 - `node scripts/simulate-ranking.mjs [--grades csv] [--votes-log log] [--out dir]` - offline evaluation of ranking v2
 - `scripts/backup-db.mjs` - DB → R2 snapshot · `scripts/restore-db.mjs` - snapshot → a new, empty database · `scripts/export-grades.mjs` - grades → CSV
