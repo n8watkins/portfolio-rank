@@ -32,10 +32,106 @@ const CONTROL_ROLES = new Set(["button", "link", "menuitem", "tab"]);
 // Attributes whose value is a URL a control may open: for the GitHub fact only.
 const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
 // An element whose id, class or aria-label says it holds projects ("projects", "project-card", "portfolio",
-// "works", "case-study", "showcase"), and a heading that names them ("Projects", "Selected work", "Things I've
-// built"). Not work experience: "work-experience", "Where I've worked" and a bare "Work" heading are timelines.
-export const PROJECT_ATTR = /\b(?:projects?|portfolio|works?(?!\s*(?:experience|history|place|timeline))|case\s*stud(?:y|ies)|showcase)\b/i;
-export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selected|featured|recent|latest) work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
+// "my-work", "selected-work", "work-samples", "case-study", "showcase"), and a heading that names them
+// ("Projects", "Selected work", "Things I've built"). A bare singular "work" in a class or id is not one:
+// "work-section" (Work Experiences, nuwanjaliyagoda.com), "work-connections" (partners, sujanbhatta.tech) and
+// "work-item" (employers, reaganhsu.com) are timelines and logo walls. The plural "works" is: "ul.works" is
+// kentom.co.ke's list of its products.
+//
+// Words are matched whole with Unicode letter boundaries ("\b" does not work around "проекты" or "项目").
+// Strong words name projects outright and win over a not-projects word ("Projects & experience"); weak words
+// ("Featured", "Apps", "Lab", "Open source") count only when no not-projects word is there ("Featured clients",
+// "Featured in", "Open source contributions" are not projects).
+// Chinese, Japanese and Korean words are written without spaces ("我的项目"), so they match anywhere.
+const whole = (alternatives, anywhere = "") =>
+  new RegExp(String.raw`(?<!\p{L})(?:${alternatives})(?!\p{L})${anywhere ? `|${anywhere}` : ""}`, "iu");
+// The "projects" family: the word itself in each language. Only these make an h1 a section's title (close()).
+const PROJECTS_FAMILY = String.raw`projects?|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти`;
+// A heading that says the person built, made, created, shipped or founded things, or worked on them (madeIt):
+// "Things I built", "What have I built?", "What I've been building", "Things I've worked on", "Stuff I've made",
+// "Companies I founded", "Products and platforms I built". The verb needs a made-things word for its object
+// (MADE_THINGS) and none of MADE_NOT ("What I've worked on at Google", "Teams we built", "I'm working on my
+// master's degree", "We are building the future of fintech", "Places I've made coffee"). A present tense
+// ("building", "working on") is a weak word unless the heading asks "What I'm building". Not "I worked at".
+const MADE_PAST = new RegExp(
+  String.raw`(?<!\p{L})(?:(?:i|we)(?:\s*(?:'|’)\s*ve|\s+have)?(?:\s+been)?\s+(?:built|made|created|shipped|founded|launched|worked on)|(?:have|did)\s+(?:i|we)\s+(?:built|build|made|make|created|create|shipped|ship))(?!\p{L})`,
+  "iu"
+);
+const MADE_NOW = new RegExp(String.raw`(?<!\p{L})(?:i|we)(?:\s*(?:'|’)\s*(?:ve|m|re)|\s+have|\s+am|\s+are)?(?:\s+been)?\s+(?:building|making|creating|shipping|working on)(?!\p{L})`, "iu");
+const MADE_THINGS = new RegExp(
+  String.raw`(?<!\p{L})(?:things|stuff|what|projects?|apps?|products?|tools?|sites?|websites?|companies|startups?|platforms?|integrations?|work|games?|librar(?:y|ies)|plugins?|extensions?|systems?|models?|agents?|bots?|solutions?|services?)(?!\p{L})`,
+  "iu"
+);
+const MADE_NOT = /\bat\s+\p{Lu}|\b(?:this|my) (?:site|website|portfolio|blog)\b|\bmy (?:degree|master|masters|master's|thesis|phd|bachelor)|\bthe future\b|\bteams?\b|\bcoffee\b|\bcareer\b/iu;
+/** "strong", "weak" or null: what a heading that says the person made things is worth (see MADE_PAST). */
+function madeIt(words) {
+  if (!MADE_THINGS.test(words) || MADE_NOT.test(words)) return null;
+  if (MADE_PAST.test(words)) return "strong";
+  if (MADE_NOW.test(words)) return /^\W*what\b/i.test(words) ? "strong" : "weak";
+  return null;
+}
+const STRONG_ATTR_WORDS = String.raw`${PROJECTS_FAMILY}|portfolio|portafolio|portf[oó]lio|case\s*stud(?:y|ies)|showcase|my creations|client work|freelance (?:work|projects)|trabajos|travaux`;
+const CJK_WORDS = "项目|專案|作品|プロジェクト|프로젝트";
+// Chinese, Japanese and Korean words that say a heading is about something else: experience, management, a blog,
+// articles ("项目管理经验" is project management experience). They win over a Chinese "projects" word.
+const CJK_NOT = /经验|经历|博客|文章|管理|复盘|总结|笔记|ブログ|経験|블로그|경력/u;
+// "What I build" is mubaidr.js.org's (the label scan).
+const WEAK_WORDS = String.raw`works|(?:my|our|selected|featured|recent|latest|past|personal|side|some of my) ?work|works? ?samples?|featured|open ?source|apps|products|experiments|lab|playground|builds|creations|what i build|things i build`;
+const STRONG = whole(STRONG_ATTR_WORDS, CJK_WORDS);
+const WEAK = whole(WEAK_WORDS);
+const STRONG_ATTR = whole(STRONG_ATTR_WORDS, CJK_WORDS);
+// A heading that says its section is not projects, whatever the classes around it: work experience, education,
+// certificates, awards, testimonials, clients, a network ("Network & recognition."), what was written or said
+// about the person, and other people's code ("Contributions", "Repos I like"). Its links are lowered.
+const NOT_PROJECT_HEADING = whole(
+  String.raw`experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition|featured in|as seen in|press|articles?|posts?|blog|talks?|publications?|contributions?|repos i like|starred|favou?rite repos|platforms|partners|integrations|sponsors|brands|companies|trusted by|worked with`
+);
+// A number and a unit, or a few of them: a stat, not a section's title ("3 apps / 8 months", "20+ builds").
+const STAT = /^[\s\d.,+%x×]*\d[\d.,+%x×]*\s*\p{L}+(?:\s*[/|·,-]\s*[\d.,+%x×]*\d[\d.,+%x×]*\s*\p{L}+)*\s*$/u;
+/**
+ * Whether a heading opens a projects section. A strong word (projects in any language, portfolio, case studies,
+ * "I built", "client work") in a heading of up to 14 words; a weak word (featured, apps, lab, open source) in one
+ * of up to 7, with no not-projects word. A longer one is an article's or a card's title ("Exploring Framer Motion:
+ * Adding Smooth Animations to React Apps"); a stat opens nothing; Chinese, Japanese or Korean words for
+ * experience, management or a blog win over a projects word there.
+ */
+const projectHeading = (words) => {
+  // "How I built my homelab" is an article's title.
+  if (STAT.test(words) || /^\W*how\b/i.test(words)) return false;
+  const latin = words.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length;
+  const cjk = (words.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu) ?? []).length;
+  if (cjk && CJK_NOT.test(words)) return false;
+  const made = madeIt(words);
+  if (latin <= 14 && cjk <= 12 && (STRONG.test(words) || made === "strong")) return true;
+  return latin <= 7 && cjk <= 8 && (WEAK.test(words) || made === "weak") && !NOT_PROJECT_HEADING.test(words);
+};
+/** A heading that names projects (projectHeading: strong words win, weak ones yield to not-projects words). */
+export const PROJECT_HEADING = { test: (words) => projectHeading(String(words)) };
+/** An h1 that may title a projects section on a page of many h1s: the "projects" family only, not "My Portfolio". */
+const H1_PROJECTS = whole(PROJECTS_FAMILY, CJK_WORDS);
+// In an id or a class: strong words anywhere ("project-card", "mis-proyectos"). A weak word only as a whole name:
+// in an id or aria-label any of them ("apps", "open-source", "featured-apps", "selected-work"); in a class only the
+// "work" phrases ("works", "my-work", "selected-work", "work-samples"), never the single generic words ("apps" or
+// "products" on a shop's grid, "lab"). Never with a not-projects word ("featured-posts", "featured-in",
+// "as-seen-in"); bare "featured" never ("featured-image", "card featured").
+const ATTR_WEAK_NAME = /^(?:(?:featured|my|selected|recent|side|personal|all)\s+)*(?:works|apps|products|experiments|lab|playground|builds|creations|open\s?source|work\s?samples?|(?:my|selected|recent|featured|side|personal)\s+work)$/i;
+const CLASS_WEAK_NAME = /^(?:(?:featured|my|selected|recent|side|personal|all)\s+)*(?:works|work\s?samples?|(?:my|selected|recent|featured|side|personal)\s+work)(?:\s+(?:list|grid|section|wrapper|container|items?))?$/i;
+const nameWords = (v) => attrWords(v).toLowerCase().replace(/\s+/g, " ").trim();
+/** Whether an element's id, classes or aria-label say it holds projects. */
+function projectAttr(id, cls, aria) {
+  const all = attrWords(`${id} ${cls} ${aria}`);
+  if (STRONG_ATTR.test(all)) return true;
+  if (NOT_PROJECT_HEADING.test(all)) return false;
+  if (ATTR_WEAK_NAME.test(nameWords(id)) || ATTR_WEAK_NAME.test(nameWords(aria))) return true;
+  return String(cls).split(/\s+/).some((c) => CLASS_WEAK_NAME.test(nameWords(c)));
+}
+/** The id, class and aria-label test, for callers that have the three at hand. */
+export const PROJECT_ATTR = { test: (id, cls = "", aria = "") => projectAttr(id, cls, aria) };
+// The words right before a link that make it a credit, not a project: "Powered by Hugo & Narrow", "Theme by
+// ...", "Designed by ...", "Built with Astro", "Made with care by". Only the text since the last block boundary
+// counts.
+const CREDIT_BEFORE =
+  /\b(?:(?:built|made|crafted|created|coded|developed|designed|design|powered|hosted|deployed|theme(?:d)?|template|inspired|icons?|fonts?|photos?|illustrations?)\s+(?:with|by|on|using|from)(?:(?:\s+\S{1,12}){1,3}\s+(?:by|in))?|theme|template|credits?)\s*:?\s*(?:[^\n]{0,40}?\s(?:&|and|,|\+|\/)\s*)?$/i;
 // An element or a section that lists where else to find the person ("~ find me ~", "Let's connect",
 // "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
 const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
@@ -61,6 +157,10 @@ const headingCore = (words) => words.replace(/^[^a-z]+|[^a-z]+$/gi, "").replace(
 const TITLE_LIKE = new RegExp(String.raw`\s[-|${String.fromCharCode(0x2013, 0x2014)}:·]\s|['’]s\s+portfolio\b|\bportfolio\s+(?:of|by|website|site)\b`, "i");
 // The page's frame: links here are navigation, credits and profiles, never the projects.
 const CHROME = new Set(["nav", "header", "footer"]);
+// A header or footer inside an article, section or aside is that card's, not the page's frame (HTML: it is a
+// banner or contentinfo only outside sectioning content). A common template puts each project's links in its
+// card's <header> (hellosagar.vercel.app's "Other Noteworthy Projects").
+const SECTIONING = new Set(["article", "section", "aside"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4"]);
 /** "project-card", "projectsGrid", "my_work" as words, so the patterns above can read them. */
 const attrWords = (v) => String(v ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ");
@@ -105,6 +205,9 @@ function resolve(u, baseUrl) {
 export function scanPage(html, baseUrl) {
   const s = String(html ?? "");
   const n = s.length;
+  // Three or more h1s: the page titles its sections with them (see close()).
+  const h1Sections = (s.match(/<h1[\s>]/gi) ?? []).length >= 3;
+  let h1Seen = 0;
   const links = [];
   const controls = [];
   const text = [];
@@ -122,11 +225,17 @@ export function scanPage(html, baseUrl) {
   let chromeOpen = 0;
   let socialOpen = 0;
   let asideOpen = 0;
+  // Open sections whose heading says they are not projects (NOT_PROJECT_HEADING).
+  let otherOpen = 0;
+  // The page text since the last block boundary, for the words right before a link (CREDIT_BEFORE).
+  let recent = "";
   const noQuote = { '"': false, "'": false };
 
   const addText = (t) => {
     if (!t || !/\S/.test(t)) return;
     text.push(t);
+    // Line breaks in the text are spaces here: only an element boundary ("\n" below) starts a new run.
+    recent = `${recent} ${decodeEntities(t).replace(/\s+/g, " ")}`.slice(-200);
     if (headOpen) head.push(t);
     const h = openHeadings.at(-1);
     if (h && h.len < TEXT_CAP) {
@@ -145,6 +254,7 @@ export function scanPage(html, baseUrl) {
     }
   };
   const close = (rec) => {
+    if (BLOCK_NAMES.test(rec.name)) recent += "\n";
     if (rec.link) openLinks.splice(openLinks.lastIndexOf(rec.link), 1);
     if (rec.control) openControls.splice(openControls.lastIndexOf(rec.control), 1);
     if (rec.head) headOpen--;
@@ -152,8 +262,17 @@ export function scanPage(html, baseUrl) {
     if (rec.chrome) chromeOpen--;
     if (rec.social) socialOpen--;
     if (rec.aside) asideOpen--;
-    // The element a heading's section belongs to closed: its section ends with it.
-    if (scope && scope.parent === rec) endScope();
+    // The element a heading's section belongs to closed: its section ends with it. Unless that element only
+    // wrapped the heading (no link since it): "<div><div>Projects</div><h2>Check out my latest work</h2></div>"
+    // then the cards (sahilbajajportfolio.vercel.app); the section then is the one element that comes next
+    // (the cards' container), and ends with it. Anything after that, an about line, a "Clients" block, is not in it.
+    if (scope && scope.parent === rec) {
+      if (links.length === scope.linksAt && stack.length && !scope.handedOn) {
+        scope.parent = stack.at(-1);
+        scope.awaitSibling = true;
+        scope.handedOn = true;
+      } else endScope();
+    }
     if (rec.heading) {
       openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
       // A "Projects" heading opens a projects section, a "Find me" heading a list of profiles: what follows
@@ -162,21 +281,37 @@ export function scanPage(html, baseUrl) {
       // only h2 to h4 open a section; a page whose projects sit under an h1 alone is read by its projects
       // elements (id, class, aria-label) and its repository links. A title-like h2 to h4 opens nothing either.
       // A projects heading at any level from h2 to h4 ends an open aside ("Skills" h2, then "Projects" h3).
+      // A page with several h1s may use them as section titles ("about", "skills", "projects", "contact" on
+      // beatrizneaime.com): there an h1 that names projects opens a projects section like an h2. Only the word
+      // "projects" in some language, never the page's first h1 (its title, "My Portfolio"); big titles split into
+      // h1s ("TURNING", "IDEAS", "Crafting Digital Experiences" on nitishkr.fun) open nothing.
       const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
-      const titled = rec.heading.level >= 2 && !TITLE_LIKE.test(words);
-      if (titled && scope?.kind === "aside" && PROJECT_HEADING.test(words)) endScope();
+      const firstH1 = rec.heading.level === 1 && h1Seen++ === 0;
+      const h1Section = h1Sections && !firstH1 && H1_PROJECTS.test(words) && PROJECT_HEADING.test(words);
+      const titled = (rec.heading.level >= 2 || h1Section) && !TITLE_LIKE.test(words);
+      // A projects heading ends an open tool list; an experience or blog section ends only at a heading with the
+      // word "projects" in some language (or at an h2, by level): "<h2>Work Experience</h2><h3>What I've worked
+      // on</h3>" and "<h2>Latest posts</h2><h3>How I built my homelab</h3>" stay what they are.
+      const endsOther = scope?.kind === "other" && H1_PROJECTS.test(words) && PROJECT_HEADING.test(words);
+      if (titled && ((scope?.kind === "aside" && PROJECT_HEADING.test(words)) || endsOther)) endScope();
       if (!scope && titled) {
+        // "Work Experiences", "Education", "Network & recognition." are never projects, whatever their classes. Inside
+        // a projects element only an h2 says so ("section.projects > h2 Clients"): an h3 or h4 there is a card's
+        // title ("Dashboard for Companies' Data Analysis", "E-Commerce Platforms").
         const kind = PROJECT_HEADING.test(words)
           ? "project"
           : SOCIAL_HEADING.test(words)
             ? "social"
-            : !projectOpen && ASIDE_HEADING.test(headingCore(words))
-              ? "aside"
-              : null;
+            : NOT_PROJECT_HEADING.test(words) && (!projectOpen || rec.heading.level <= 2)
+              ? "other"
+              : !projectOpen && ASIDE_HEADING.test(headingCore(words))
+                ? "aside"
+                : null;
         if (kind) {
-          scope = { kind, level: rec.heading.level, parent: stack.at(-1) ?? null };
+          scope = { kind, level: rec.heading.level, parent: stack.at(-1) ?? null, linksAt: links.length };
           if (kind === "project") projectOpen++;
           else if (kind === "social") socialOpen++;
+          else if (kind === "other") otherOpen++;
           else asideOpen++;
         }
       }
@@ -188,6 +323,7 @@ export function scanPage(html, baseUrl) {
     if (scope?.kind === "project") projectOpen--;
     else if (scope?.kind === "social") socialOpen--;
     else if (scope?.kind === "aside") asideOpen--;
+    else if (scope?.kind === "other") otherOpen--;
     scope = null;
   };
 
@@ -310,11 +446,13 @@ export function scanPage(html, baseUrl) {
       if (c && attrs.get("alt")) c.alts.push(attrs.get("alt"));
     }
     const rec = { name };
-    if (CHROME.has(name) || /^(?:navigation|banner|contentinfo)$/i.test(String(attrs.get("role") ?? "").trim())) rec.chrome = true;
+    if (BLOCK_NAMES.test(name)) recent += "\n";
+    const cardFrame = (name === "header" || name === "footer") && stack.some((r) => SECTIONING.has(r.name));
+    if ((CHROME.has(name) && !cardFrame) || /^(?:navigation|banner|contentinfo)$/i.test(String(attrs.get("role") ?? "").trim())) rec.chrome = true;
     else if (name !== "html" && name !== "body" && name !== "main") {
       const own = `${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`;
       const words = attrWords(own);
-      if (PROJECT_ATTR.test(words)) rec.project = true;
+      if (projectAttr(attrs.get("id") ?? "", attrs.get("class") ?? "", attrs.get("aria-label") ?? "")) rec.project = true;
       else if (SOCIAL_ATTR.test(words)) rec.social = true;
       // Only while no projects element or section is open: a "card-tech" footer in a project card is the card's.
       else if (!projectOpen && ASIDE_ATTR.test(words)) rec.aside = true;
@@ -328,15 +466,19 @@ export function scanPage(html, baseUrl) {
     const where = () => {
       const chrome = chromeOpen + (rec.chrome ? 1 : 0) > 0;
       const social = socialOpen + (rec.social ? 1 : 0) > 0;
-      // A projects element opened inside an aside (a "tech-theme" page wrapper) wins over it.
-      const projects = projectOpen + (rec.project ? 1 : 0) > 0;
-      const aside = asideOpen + (rec.aside ? 1 : 0) > 0 && !projects;
-      return { inProjects: projects && !chrome && !social, inChrome: chrome, inSocial: social, inAside: aside };
+      // A projects element opened inside an aside (a "tech-theme" page wrapper) wins over it; a section whose
+      // heading says it is not projects ("Work Experiences") is not, whatever its classes, and is lowered.
+      const projects = projectOpen + (rec.project ? 1 : 0) > 0 && !otherOpen;
+      const aside = (asideOpen + (rec.aside ? 1 : 0) > 0 || otherOpen > 0) && !projects;
+      // inOther: in a section whose heading says it is not projects; even a repository there is lowered.
+      return { inProjects: projects && !chrome && !social, inChrome: chrome, inSocial: social, inAside: aside, ...(otherOpen > 0 ? { inOther: true } : {}) };
     };
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();
     if (name === "a" && raw) {
-      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0, ...where() };
+      // A credit ("Powered by Hugo & <a>Narrow</a>"): the words since the last block boundary end in a credit phrase.
+      const credit = CREDIT_BEFORE.test(recent.slice(recent.lastIndexOf("\n") + 1).replace(/\s+/g, " ").trim());
+      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0, ...where(), ...(credit ? { credit: true } : {}) };
       links.push(rec.link);
     }
     const role = String(attrs.get("role") ?? "").trim().toLowerCase().split(/\s+/)[0];
@@ -376,6 +518,11 @@ export function scanPage(html, baseUrl) {
     }
     if (name === "title" || name === "h1") rec.head = true;
     if (VOID.has(name) || tag.selfClosing) continue;
+    // The element right after a heading's link-less wrapper takes the section (see close()).
+    if (scope?.awaitSibling && stack.at(-1) === scope.parent) {
+      scope.parent = rec;
+      scope.awaitSibling = false;
+    }
     stack.push(rec);
     if (rec.link) openLinks.push(rec.link);
     if (rec.control) openControls.push(rec.control);
@@ -394,13 +541,13 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside, ...(l.inOther ? { inOther: true } : {}), ...(l.credit ? { credit: true } : {}) };
       })
       .filter(Boolean),
     controls: controls.map((c) => {
       const own = decodeEntities(c.textParts.join(" ")).replace(/\s+/g, " ").trim();
       const parts = [own.length <= LABEL_MAX ? own : "", c.aria, c.title, ...c.alts, c.value].map((x) => decodeEntities(x).replace(/\s+/g, " ").trim()).filter(Boolean);
-      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside };
+      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside, ...(c.inOther ? { inOther: true } : {}) };
     }),
     text: text.join(" "),
     head: head.join(" "),
@@ -434,6 +581,8 @@ export function stripTags(html, { lines = false } = {}) {
   return out + s.slice(i);
 }
 const BLOCK_TAG = /^\/?(?:br|p|div|li|ul|ol|h[1-6]|footer|header|section|article|main|nav|tr|td|table|address|blockquote|pre|hr)(?![a-z0-9])/i;
+/** The same block elements by name: a boundary for the words right before a link (CREDIT_BEFORE). */
+const BLOCK_NAMES = /^(?:br|p|div|li|ul|ol|h[1-6]|footer|header|section|article|main|nav|tr|td|table|address|blockquote|pre|hr)$/i;
 
 /**
  * The HTML without its <name>...</name> elements (a space in their place), as

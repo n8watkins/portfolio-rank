@@ -52,9 +52,10 @@ test("yashitanamdeo.github.io: the projects are checked, not the school and empl
     "https://github.com/yashitanamdeo/Covid19-tracker",
   ]);
   // The about section's university, club and the experience section's employers (main checked these first) come
-  // only after every project link: here the university takes the last free slot. Its face-landmark demo page on
-  // the same host is not under a listing path ("/projects/..."), so it is not counted as one of its own project pages.
-  assert.deepEqual(got.slice(7), ["https://www.svvv.edu.in/"]);
+  // only after every project link: the last slot is another project's repository, from "Other Noteworthy
+  // Projects", whose heading sits in a wrapper that holds no link. Its face-landmark demo page on the same host
+  // is not under a listing path ("/projects/..."), so it is not counted as one of its own project pages.
+  assert.deepEqual(got.slice(7), ["https://github.com/yashitanamdeo/Voter-Registration-WebApp"]);
   for (const notProject of ["https://www.internationalmun.org/", "https://internship.suvenconsultants.com/", "https://www.theforage.com/"]) {
     assert.ok(!got.includes(notProject), notProject);
   }
