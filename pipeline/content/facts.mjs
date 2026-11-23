@@ -22,7 +22,8 @@
 import { AI_WORK, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
-import { GEMINI_ANSWERED_SQL, geminiAnswered, keptOutputs } from "../rubric.mjs";
+import { keptOutputs } from "../rubric.mjs";
+import { IN_LIBRARY_SQL } from "../../lib/tiers-store.mjs";
 
 // The production address (lib/site.ts PRODUCTION_SITE_URL; tests/site-url.test.mjs keeps them equal).
 export const SITE_URL = "https://portfoliorank.dev";
@@ -127,7 +128,9 @@ async function removedUrls(db) {
 const VISIBLE = `p.status = 'live' AND ${AI_WORK("p")} AND NOT (${HIDDEN_WHERE}) AND NOT ${NOT_PORTFOLIO("p")}`;
 
 /**
- * The graded, visible portfolios, each with its Tier (`rank`: the tier store's
+ * The visible portfolios that are real profiles by code (lib/tiers-store.mjs
+ * IN_LIBRARY_SQL: a ranked library member, or a Gemini "yes"; no model has to
+ * have looked), each with its Tier (`rank`: the tier store's
  * letter, tier_ratings.tier as the daily run wrote it, or null outside the
  * library). Which portfolios are "top" comes from the Tier, never from
  * Gemini's letter (owner, 2026-11-22). No Gemini score is compared (owner,
@@ -140,7 +143,7 @@ async function gradedRows(db) {
     await db.execute(
       `SELECT p.url, p.name, p.shot_key, p.ai_rubric, p.meta, ${hasTiers ? "t.tier" : "NULL"} AS rank_tier FROM portfolios p
        ${hasTiers ? "LEFT JOIN tier_ratings t ON t.url = p.url AND t.member = 1" : ""}
-       WHERE ${VISIBLE} AND ${GEMINI_ANSWERED_SQL("p.ai_rubric")} ORDER BY p.url`
+       WHERE ${VISIBLE} AND ${IN_LIBRARY_SQL("p", { tiers: hasTiers })} ORDER BY p.url`
     )
   ).rows;
   return rows
@@ -153,7 +156,6 @@ async function gradedRows(db) {
       meta: parse(r.meta),
       rank: r.rank_tier == null ? null : String(r.rank_tier),
     }))
-    .filter((r) => geminiAnswered(r.raw) && r.raw.is_portfolio !== false)
     .map(({ raw, ...r }) => ({ ...r, rubric: keptOutputs(raw) }));
 }
 
@@ -431,10 +433,10 @@ export const KIND_LABELS = {
 };
 
 /** Story ideas from the data (stage 1, Find): every builder that is ready. */
-export async function findIdeas(db, { now, rankingV2 = false }) {
+export async function findIdeas(db, { now, rankingV2 = false, builders = BUILDERS }) {
   const ideas = [];
   const waiting = [];
-  for (const [kind, build] of Object.entries(BUILDERS)) {
+  for (const [kind, build] of Object.entries(builders ?? BUILDERS)) {
     const s = await build(db, { now, rankingV2 });
     if (s.ready) ideas.push({ kind, headline: s.headline, angle: s.angle, facts: s.facts.length });
     else waiting.push({ kind, reason: s.reason });

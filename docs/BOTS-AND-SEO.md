@@ -242,6 +242,8 @@ This is the change that removes the cost line.
 
 - A profile with no grade and no tagline today renders a name, a domain and a screenshot: thin, near-duplicate content across hundreds of pages.
   Make it `noindex, follow` until it has a grade, and leave it out of the sitemap.
+  Since 2026-11-23 "a grade" is a code test, as no model runs in normal running: a listed site that is not down, with a good capture (live, with a screenshot), that the daily run made a ranked library member (`lib/tiers-store.mjs` `IN_LIBRARY_SQL`), or a stored Gemini "yes"; a Gemini "not a portfolio" on record still keeps it out.
+  The same test decides the profile's index tag (`lib/profile-seo.ts` `indexable`), the sitemap (`lib/sitemap-profiles.mjs`), the printable report (`app/report/print`) and the blog's fact sheets.
 - A site the health check hides (down, dead, parked) still answers 200 and is indexable: make it `noindex` while hidden (it is already out of the sitemap).
 - A removed profile is a 404 today; a 410 tells crawlers faster that it is gone for good.
 - Public lists (`/list/<slug>`) are user-made: `noindex` until a list has, say, 5 portfolios and a title.

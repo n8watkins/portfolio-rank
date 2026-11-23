@@ -22,11 +22,20 @@ export type SeoFacts = {
   report: Pick<ReportCard, "roles" | "isPortfolio"> | null;
   /** The health check hides the site (down, dead, parked; lib/hidden.mjs). */
   hidden: boolean;
+  /**
+   * A real profile by code (lib/tiers-store.mjs IN_LIBRARY_SQL): a ranked library member with a good
+   * capture, or a Gemini "yes"; false for a Gemini "not a portfolio" on record.
+   */
+  inLibrary: boolean;
   socials: Socials;
 };
 
-/** Graded, a real portfolio and not hidden: the only profiles search engines are asked to index. */
-export const indexable = (f: Pick<SeoFacts, "report" | "hidden">) => Boolean(f.report?.isPortfolio) && !f.hidden;
+/**
+ * A real profile by code and not hidden: the only profiles search engines are asked to index. No model
+ * has to have looked (owner, 2026-11-23: no model decides in normal running), so a site added now is
+ * indexed once the daily run ranks it; the same test as the sitemap (lib/sitemap-profiles.mjs).
+ */
+export const indexable = (f: Pick<SeoFacts, "inLibrary" | "hidden">) => f.inLibrary && !f.hidden;
 
 /** Cut at a word boundary with an ellipsis. */
 function clip(s: string, max: number): string {

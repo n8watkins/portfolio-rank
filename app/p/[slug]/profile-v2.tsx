@@ -40,8 +40,8 @@ function seoTitle(p: Profile) {
 
 /** What search engines read about this profile: its own grade (an added site's too), plus the health check and social links. */
 async function seoFactsOf(p: Profile): Promise<SeoFacts> {
-  const { hidden, socials } = await loadSeoExtras(p.url);
-  return { name: p.name, url: p.url, domain: p.domain, tagline: p.tagline, report: p.report, hidden, socials };
+  const { hidden, inLibrary, socials } = await loadSeoExtras(p.url);
+  return { name: p.name, url: p.url, domain: p.domain, tagline: p.tagline, report: p.report, hidden, inLibrary, socials };
 }
 
 export async function profileMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -50,7 +50,7 @@ export async function profileMetadata({ params }: { params: Promise<{ slug: stri
   if (!p || p.gone) return {};
   const canonical = `${SITE_URL}${p.path}`;
   const facts = await seoFactsOf(p);
-  // Graded, a real portfolio and not hidden by the health check: the only profiles search engines are asked to index.
+  // A real profile by code and not hidden by the health check: the only profiles search engines are asked to index.
   if (!indexable(facts)) {
     return { title: `${p.name} - PortfolioRank`, robots: { index: false, follow: true }, alternates: { canonical } };
   }

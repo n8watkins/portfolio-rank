@@ -44,22 +44,23 @@ export const newJobId = () => crypto.randomBytes(8).toString("hex");
  * else the ready kind with the oldest latest post (so drafts spread over the
  * kinds). Returns { kind, sheet } or { error } when no kind is ready.
  */
-export async function chooseKind(db, { kind = null, now, rankingV2 = false }) {
-  if (kind && BUILDERS[kind]) {
-    const sheet = await BUILDERS[kind](db, { now, rankingV2 });
+export async function chooseKind(db, { kind = null, now, rankingV2 = false, builders = BUILDERS }) {
+  builders ??= BUILDERS;
+  if (kind && builders[kind]) {
+    const sheet = await builders[kind](db, { now, rankingV2 });
     if (sheet.ready) return { kind, sheet };
     return { error: `"${KIND_LABELS[kind] ?? kind}" has no data yet: ${sheet.reason}` };
   }
   const last = new Map((await db.execute("SELECT kind, MAX(created_at) AS at FROM posts GROUP BY kind")).rows.map((r) => [String(r.kind), String(r.at)]));
   const ready = [];
   const waiting = [];
-  for (const [k, build] of Object.entries(BUILDERS)) {
+  for (const [k, build] of Object.entries(builders)) {
     const sheet = await build(db, { now, rankingV2 });
     if (sheet.ready) ready.push({ kind: k, sheet, at: last.get(k) ?? "" });
     else waiting.push(`${KIND_LABELS[k] ?? k}: ${sheet.reason}`);
   }
   if (!ready.length) return { error: `no story has enough data yet (${waiting.join("; ")})` };
-  ready.sort((a, b) => a.at.localeCompare(b.at) || Object.keys(BUILDERS).indexOf(a.kind) - Object.keys(BUILDERS).indexOf(b.kind));
+  ready.sort((a, b) => a.at.localeCompare(b.at) || Object.keys(builders).indexOf(a.kind) - Object.keys(builders).indexOf(b.kind));
   return { kind: ready[0].kind, sheet: ready[0].sheet };
 }
 
@@ -108,7 +109,7 @@ export async function runManualJob(ctx, jobId, { attempt = 1, tries = DRAFT_TRIE
       source = r.rows[0] ?? null;
       if (!source) return done("failed", "The draft to rewrite no longer exists.");
     }
-    const picked = await chooseKind(db, { kind: source ? String(source.kind) : job.kind, now: now(), rankingV2: Boolean(ctx.flags?.rankingV2) });
+    const picked = await chooseKind(db, { kind: source ? String(source.kind) : job.kind, now: now(), rankingV2: Boolean(ctx.flags?.rankingV2), builders: ctx.builders });
     if (picked.error) return done("skipped", picked.error);
     const budget = await manualBudget(db, { env: ctx.env ?? {}, now: new Date(now()) });
     // A later try (after Google was busy) gets only what the earlier tries left of the draft's MANUAL_REQUESTS.

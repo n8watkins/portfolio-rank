@@ -46,7 +46,7 @@ import { BUSY_WAIT_MINUTES } from "../pipeline/content/busy.mjs";
 import { linkPortfoliosToPages } from "../lib/content/portfolio-links.mjs";
 import { GUIDELINES_MAX, editGuidelines, listGuidelines, noteSuggestions, writerGuidelines } from "../lib/content/guidelines.mjs";
 import { contentCosts } from "../lib/content/costs.mjs";
-import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, enableAutomation, fixture, hex, sheetAndRoster, topGrades } from "./helpers/content-fixture.mjs";
+import { MONDAY, REVIEW_OK, SUNDAY, TUESDAY, contentCtx, fakeGemini, enableAutomation, fixture, hex, sheetAndRoster, topGrades, BUILDERS_FOR_TESTS } from "./helpers/content-fixture.mjs";
 import { MANUAL_REQUESTS, runManualJob } from "../pipeline/content/manual.mjs";
 import { review } from "../lib/content/blog.mjs";
 
@@ -73,6 +73,7 @@ test("fact builders: top grades is never written (no AI score left to compare); 
   const db = await fixture();
   // Every stored grade here holds a five-second score and four dropped axes: none is read (owner, 2026-11-23).
   const tg = await liveTopGrades(db, { now: MONDAY });
+  assert.equal(BUILDERS["top-grades"], liveTopGrades, "the shared map is the real one: tests hand their own builders in");
   assert.equal(tg.ready, false);
   assert.match(tg.reason, /no longer gives scores to compare/);
   const pc = await pageCraft(db, { now: MONDAY });
@@ -85,12 +86,23 @@ test("fact builders: top grades is never written (no AI score left to compare); 
   assert.deepEqual(pc.names.map((n) => n.url), ["https://top-1.dev", "https://top-2.dev", "https://top-3.dev", "https://top-4.dev", "https://top-5.dev"]);
 });
 
+test("fact builders read the library by code: with no Gemini answer stored, page craft counts the same members; a Gemini 'no' still keeps a site out", async () => {
+  const db = await fixture();
+  const before = await pageCraft(db, { now: MONDAY });
+  await db.execute("UPDATE portfolios SET ai_rubric = NULL WHERE url != 'https://not-a-portfolio.dev'");
+  const after = await pageCraft(db, { now: MONDAY });
+  assert.equal(after.ready, true, after.reason);
+  const n = (s) => s.facts.find((f) => f.label === "Portfolios measured and graded").display;
+  assert.equal(n(after), n(before), "every member counted without a model");
+  assertNoBadNames(after);
+});
+
 test("fact builders: not ready without enough data, and say why", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "content-empty-"));
   const db = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
   await migrate(db);
   await ensureRosterSchema(db);
-  for (const [kind, build] of Object.entries({ ...BUILDERS, "top-grades": liveTopGrades })) {
+  for (const [kind, build] of Object.entries(BUILDERS)) {
     const s = await build(db, { now: MONDAY });
     assert.equal(s.ready, false, kind);
     assert.ok(s.reason, kind);
@@ -881,6 +893,7 @@ async function nightRun(db, { mode, now, fetchImpl }) {
     flags: { contentMode: mode, rankingV2: false,pollGeneration: "true", ranking: rankingConfig({}) },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     runId: "test",
+    builders: BUILDERS_FOR_TESTS,
   };
   // Scheduled drafts need the owner's saved Automation settings (no saved row means off).
   if (mode !== "off") await enableAutomation(db, { mode: mode === "publish" ? "publish" : "review" });
@@ -1236,6 +1249,7 @@ function manualCtx(db, { answers, prompts, mode = "publish", apiKey = "k", quota
     flags: { contentMode: mode },
     content: { env: "test", keys: {}, ai: null, store: async (k) => k },
     env: { GEMINI_DAILY_QUOTA: JSON.stringify(quota) },
+    builders: BUILDERS_FOR_TESTS,
   };
 }
 

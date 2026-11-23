@@ -20,14 +20,15 @@ const base = {
     ],
   },
   hidden: false,
+  inLibrary: true,
   socials: { github: null, linkedin: null, x: null },
 };
 const opts = { canonical: "https://portfoliorank.dev/p/x", title: "Jane Doe - PortfolioRank", siteUrl: "https://portfoliorank.dev", siteName: "PortfolioRank" };
 
-test("only a graded real portfolio the health check shows is indexed", () => {
+test("only a real profile by code (in the library) that the health check shows is indexed; no model has to have looked", () => {
   assert.equal(indexable(base), true);
-  assert.equal(indexable({ ...base, report: null }), false, "ungraded, or the owner hid the grade");
-  assert.equal(indexable({ ...base, report: { ...base.report, isPortfolio: false } }), false, "not a portfolio");
+  assert.equal(indexable({ ...base, report: null }), true, "no Gemini answer: indexed on the code test alone");
+  assert.equal(indexable({ ...base, inLibrary: false }), false, "not in the library, or a Gemini 'not a portfolio' on record");
   assert.equal(indexable({ ...base, hidden: true }), false, "hidden by the health check");
 });
 

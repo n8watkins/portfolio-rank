@@ -15,6 +15,7 @@ import type { PsiResult } from "@/lib/tools/psi";
 import type { ShareResult } from "@/lib/tools/share";
 import { psiKey, quickKey, shareKey } from "@/lib/tools/keys";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { inLibrary } from "@/lib/tiers-store.mjs";
 
 // Everything a portfolio's profile (/p/<address>) shows, for a listed
 // portfolio or one added through "Add your portfolio" (the discovery
@@ -203,13 +204,14 @@ export function profileJsonLd(f: SeoFacts, { canonical, title }: { canonical: st
  * check found. One batch of reads, once per request (the page and its
  * metadata share it).
  */
-export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "report" | "hidden" | "socials">> => {
+export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "report" | "hidden" | "inLibrary" | "socials">> => {
   await ensureSchema();
   const client = db();
-  const [row, inspect, owner] = await Promise.all([
+  const [row, inspect, owner, listed] = await Promise.all([
     client.execute({ sql: `SELECT ai_rubric, facts, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]),
     client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`inspect:${url}`] }).then((r) => r.rows[0]),
     ownerState(client, url, { fresh: true }),
+    inLibrary(client, url),
   ]);
   let inspected = null;
   try {
@@ -218,6 +220,7 @@ export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "
   return {
     report: owner.hideGrade || row?.ai_rubric == null ? null : reportCard(freshGrade(row.ai_rubric, row.facts)),
     hidden: Number(row?.hidden ?? 0) === 1,
+    inLibrary: listed,
     socials: socialsFrom(inspected),
   };
 });

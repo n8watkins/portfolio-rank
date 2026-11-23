@@ -67,8 +67,8 @@ export async function generateMetadata({
   if (!p) return {};
   const [img, facts] = await Promise.all([shotFor(url), seoFacts(p)]);
   const title = `${p.name} - PortfolioRank`;
-  // Indexed: a description from the grade (lib/profile-seo.ts). Ungraded,
-  // "not a portfolio", a hidden grade or a site the health check hides: noindex.
+  // Indexed: a real profile by code (lib/profile-seo.ts indexable). Not in
+  // the library, a Gemini "not a portfolio" or a site the health check hides: noindex.
   const index = indexable(facts);
   const description = index
     ? profileDescription(facts)

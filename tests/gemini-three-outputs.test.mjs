@@ -87,6 +87,32 @@ const facts = (n) => {
   return { v: 2, resume: true, github: true, contact: true, own_domain: true, footer_year: 2026, project_links: { checked: 3, ok: 3, broken: 0, blocked: 0 }, signals: { ...signals, score: n }, measured_at: "2026-11-21T10:00:00Z" };
 };
 
+test("with no model running, a ranked member by code is indexable, in the sitemap and has a printable report; a Gemini 'no' on record still excludes", async () => {
+  const { seedNewcomers, inLibrary } = await import("../lib/tiers-store.mjs");
+  const { checksReading } = await import("../lib/fresh-facts.mjs");
+  const db = await freshDb();
+  await refreshTiers(db, { now: NOW });
+  const add = (url, n, rubric = null) =>
+    db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', ?, ?, '2026-11-20 00:00:00')", args: [url, rubric, JSON.stringify(facts(n))] });
+  await add("https://code.dev", 6);
+  await add("https://weak.dev", 2);
+  await add("https://said-no.dev", 6, JSON.stringify(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })));
+  await add("https://down.dev", 6);
+  await seedNewcomers(db, { now: NOW });
+  // Even a member row for the "no" (an old one) does not let it in.
+  await db.execute("UPDATE tier_ratings SET member = 1 WHERE url = 'https://said-no.dev'");
+  await db.execute("UPDATE portfolios SET health = 'down' WHERE url = 'https://down.dev'");
+  assert.deepEqual([...(await gradedUrls(db))].sort(), ["https://code.dev"], "the sitemap's profiles");
+  assert.equal(await inLibrary(db, "https://code.dev"), true, "indexable (lib/profile-seo.ts reads this)");
+  for (const url of ["https://weak.dev", "https://said-no.dev", "https://down.dev"]) assert.equal(await inLibrary(db, url), false, url);
+  // The printable report: the code checks from the site's own facts, no grade needed.
+  const reading = checksReading(null, JSON.stringify(facts(6)));
+  const view = printView(reading, { inLibrary: true });
+  assert.ok(view && view.facts.length > 0 && typeof view.checksScore === "number");
+  assert.equal(printView(reading, { inLibrary: false }), null, "not in the library: no report");
+  assert.equal(printView(null, { inLibrary: true }), null, "nothing measured: no report");
+});
+
 test("a v3 grade (no letter) is Gemini's yes for membership; the owner's keep and an error are not", () => {
   const g = v3();
   assert.equal(g.tier, undefined);
