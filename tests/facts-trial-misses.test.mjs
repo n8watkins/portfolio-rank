@@ -486,6 +486,11 @@ test("'Réalisations' and the other common words for projects and work open a pr
     const html = `<section><h2>${heading}</h2><div><a href="https://demo.example/">Demo</a></div></section>`;
     assert.deepEqual(projectCandidates(homeProjectLinks({ html, url: home, finalUrl: home }), home).map((c) => c.tier), [1], heading);
   }
+  // www.aalexis.fr's "Réalisations à la une" opens a projects section now (its "Tout voir" link is in it). Its cards
+  // sit in the next element after the heading's wrapper, which holds that link, so they are still outside it: a known
+  // limit, listed in the pull request.
+  const aalexis = pageLinks(fixture("www.aalexis.fr.home.html"), "https://www.aalexis.fr/");
+  assert.equal(aalexis.find((l) => l.text === "Tout voir")?.inProjects, true);
   // Not a heading about work experience or "how we work".
   for (const heading of ["Expériences", "Wie wir arbeiten", "Werkervaring", "Deneyim"]) {
     const html = `<section><h2>${heading}</h2><div><a href="https://acme.example/">Acme</a></div></section>`;
