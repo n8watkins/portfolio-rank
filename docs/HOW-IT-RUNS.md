@@ -253,6 +253,14 @@ Each chain is a list of steps in the order they happen.
 
 1. **Nightly health check** (`health.yml`, `pipeline/health-check.mjs`, started by the night).
    Every listed site is loaded.
+   A plain request comes first, and its whole page is read up to 2,000,000 characters (`pipeline/gate.mjs` `httpGate`).
+   When that page is nearly empty, failed or shows too few portfolio signals, a real browser reads the site too (`pipeline/render.mjs`).
+   It reads once the page's text has held still for 2 seconds, scrolling one screen at a time while it waits so sections that load on scroll appear, for at most 10 seconds.
+   A page with under 400 characters of text (an intro screen or a loader) is not taken as finished: it is watched for up to 15 seconds.
+   The browser only scrolls: it never clicks, presses or submits anything, so a site whose intro waits for a press reads as its intro.
+   Of the rendered page at most 400,000 characters are kept, after script and style bodies, image data and empty decorative elements are dropped, so the menu and text survive.
+   The six portfolio signals and the role the page's title or description states (`pipeline/signals.mjs` `statedRole`, stored with the signals, not shown anywhere yet) are read from that page.
+   Low signals never hide or remove a site.
    On a first failed check the site is `suspect`: it leaves all AI work at once, but stays visible.
 2. **Re-check after 1 hour** (`recheck.yml`, `pipeline/recheck-run.mjs`, started by the hourly task).
    Up to 120 due sites a run, with a 20 minute limit.
@@ -279,6 +287,7 @@ A site the check could not tell about for 28 days gives you an alert on the aler
 A different path exists for a site that answers with the wrong thing (parked, blank, a duplicate): 3 failed checks, a week apart, spanning at least 13 days.
 A parked domain counts as the wrong thing also when its home page is only a redirect made on load (a script or a meta refresh of a few seconds) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
 The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
+A short page that loads Sedo's lander images, or whose whole title is Sedo's ("abdulmomin.dev - abdulmomin Resources and Information." on its own domain), is parked the same way.
 A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
 
 ### The community list drops a site
