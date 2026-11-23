@@ -43,6 +43,7 @@ import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 import { isNewsletterAlert } from "../lib/newsletter/alerts.mjs";
 import { ALERT_KEY as CAPTURE_PROBLEMS_ALERT, captureProblemConditionsOrLog } from "../lib/capture-problems.mjs";
 import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
+import { isProblemReportAlert } from "../lib/problem-reports/store.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
 export type NightEnv = CloudflareEnv & {
@@ -267,12 +268,13 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         ...(await addressBrakeConditions(ctx.db)),
       ];
       // The weekly model watch, the hourly removals, the hourly email caps
-      // and the hourly dead-man check and the newsletter tick own their alerts
-      // (./model-watch.ts, ./owner-removals.ts, ./email-alerts.ts,
-      // ./night-watch.ts, ./newsletter.ts); the night never clears them.
+      // and the hourly dead-man check, the newsletter tick and visitor reports
+      // own their alerts (./model-watch.ts, ./owner-removals.ts,
+      // ./email-alerts.ts, ./night-watch.ts, ./newsletter.ts,
+      // lib/problem-reports); the night never clears them.
       const r = await reconcileAlerts(ctx.db, {
         conditions,
-        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key) && !(captureProblems.failed && key === CAPTURE_PROBLEMS_ALERT),
+        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key) && !isProblemReportAlert(key) && !(captureProblems.failed && key === CAPTURE_PROBLEMS_ALERT),
         email: ctx.email,
         to: this.env.OWNER_EMAIL ?? null,
         log: ctx.log,

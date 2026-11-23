@@ -176,7 +176,7 @@ test("the night's alert reconcile leaves the newsletter's stopped-issue alerts t
   assert.equal(isNewsletterAlert("newsletter-stopped:12"), true);
   const scope = read("worker/night.ts").split("\n").find((l) => l.includes("scope: (key: string)"));
   assert.ok(scope, "the scope expression is there");
-  for (const owner of ["isModelWatchAlert", "isRemovalAlert", "isEmailCapAlert", "isNightWatchAlert", "isNewsletterAlert"]) {
+  for (const owner of ["isModelWatchAlert", "isRemovalAlert", "isEmailCapAlert", "isNightWatchAlert", "isNewsletterAlert", "isProblemReportAlert"]) {
     assert.ok(scope.includes(`!${owner}(key)`), `${owner} is excluded from the night's scope`);
   }
 });

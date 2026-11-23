@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { listReviews } from "@/lib/reviews/store.mjs";
 import { reviewAutoApplyEnabled } from "@/lib/reviews/flag";
+import { ProblemReports, type ReportedSite } from "@/components/admin/ProblemReports";
+import { listReports } from "@/lib/problem-reports/store.mjs";
 
 // /admin/review: status changes a re-check proposes (lib/reviews/store.mjs),
 // one row per site whose listed or ranked state would change, with its fresh
@@ -15,7 +17,9 @@ import { reviewAutoApplyEnabled } from "@/lib/reviews/flag";
 // and records who and when; Reject records the decision only. With
 // REVIEW_AUTO_APPLY (lib/reviews/flag.ts), rows that pass the owner's rule
 // are applied by the hourly cron and listed under "Applied automatically",
-// each with Undo. Only the admin sees it; anyone else gets a 404.
+// each with Undo. Above the queue, visitors' "Report a problem" notes,
+// grouped by site (components/admin/ProblemReports.tsx). Only the admin sees
+// it; anyone else gets a 404.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Review - PortfolioRank admin", robots: { index: false, follow: false } };
 
@@ -24,6 +28,8 @@ export default async function AdminReviewPage() {
   if ("error" in who) notFound();
   await ensureSchema();
   const { pending, autoApplied, decided } = (await listReviews(db())) as { pending: Review[]; autoApplied: Review[]; decided: Review[] };
+  // Visitors' "Report a problem" notes, grouped by site (lib/problem-reports/store.mjs).
+  const reports = (await listReports(db())) as { open: ReportedSite[]; handled: ReportedSite[] };
   const auto = reviewAutoApplyEnabled(process.env);
   const agreed = pending.filter((r) => r.agreed).length;
   return (
@@ -40,6 +46,7 @@ export default async function AdminReviewPage() {
           </span>
         )}
       </AdminHeader>
+      <ProblemReports open={reports.open} handled={reports.handled} />
       <StatusReviewQueue pending={pending} autoApplied={autoApplied} decided={decided} shotsBase={process.env.SHOTS_BASE_URL ?? null} />
     </>
   );
