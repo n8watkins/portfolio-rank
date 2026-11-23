@@ -8,7 +8,9 @@ Build feed.json = (upstream README) - (our exclusions) + (our additions).
   want back even if upstream still lists them). JSON array of URL strings or
   of {url, reason, kind, removed, ...} objects (pipeline/exclusions.mjs).
 - Additions (--add): OUR OWN entries (e.g. direct submissions) not in upstream.
-  JSON array of {name, url, tagline?}.
+  JSON array of {name, url, tagline?}. It also records the sites already on the
+  feed that upstream dropped: they stay (owner, 2026-11-22), and the build
+  rewrites this file with them ({..., source: "left_community_list", left_on}).
 
 This file only reads the README. Everything that decides whether two
 addresses are one site (duplicates, exclusions) is pipeline/build-feed.mjs,
@@ -23,10 +25,11 @@ Usage:
         [--max-shrink 0.05]
 
 The build refuses to write (exit 2) when the new feed has more than
---max-shrink fewer entries, or when more than 15% of the current entries'
+--max-shrink fewer entries, when upstream dropped more than --max-shrink of
+the current entries at once, or when more than 15% of the current entries'
 addresses are gone from it: a broken, truncated or rewritten upstream README
-must never reach the list. LIST_CLEANUP_SHARE (a share, e.g. 0.3) raises both
-for one run, for a real upstream cleanup.
+must never reach the list. LIST_CLEANUP_SHARE (a share, e.g. 0.3) raises all
+three for one run, for a real upstream cleanup.
 """
 
 import re

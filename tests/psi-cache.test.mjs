@@ -195,39 +195,33 @@ test("a site the health check found dead is never sent to PageSpeed", async () =
   await db.execute({ sql: "DELETE FROM portfolios WHERE url = ?", args: [url] });
 });
 
-test("an unchanged site reuses a 40-day-old result and says it is unchanged since", async () => {
+test("a 40-day-old result is reused as is", async () => {
   const url = feed[107].url;
   await clean(url);
   const at = Date.now() - 40 * DAY;
   await seedPsi(url, at, 0.6);
-  await page(url, { checked: Date.now() - DAY });
   calls = 0;
   const h = await get("psi", url);
   assert.equal(h.body.stale, undefined);
   assert.equal(h.body.scores.performance, 60);
   assert.equal(h.body.measuredAt, new Date(at).toISOString());
-  assert.ok(Date.parse(h.body.unchangedSince) > at, "a check after the measurement found no change");
+  assert.equal(h.body.unchangedSince, undefined);
   await sleep(300);
   assert.equal(calls, 0, "nothing re-ran");
 });
 
-test("a changed site is re-measured: the old result at once, with the reason, and one refresh", async () => {
+test("an old row's recorded page change never re-measures (the hourly fingerprints are gone)", async () => {
   const url = feed[108].url;
   await clean(url);
   await seedPsi(url, Date.now() - 5 * DAY, 0.5);
   await page(url, { checked: Date.now() - DAY, changed: Date.now() - DAY });
   calls = 0;
-  perf = 0.8;
   const h = await get("psi", url);
-  assert.equal(h.body.stale, true);
-  assert.equal(h.body.staleReason, "changed");
+  assert.equal(h.body.stale, undefined);
+  assert.equal(h.body.staleReason, undefined);
   assert.equal(h.body.scores.performance, 50);
-  await sleep(SLOW_MS + 1500);
-  assert.equal(calls, 1);
-  const fresh = await get("psi", url);
-  assert.equal(fresh.body.stale, undefined);
-  assert.equal(fresh.body.scores.performance, 80);
-  perf = 0.5;
+  await sleep(300);
+  assert.equal(calls, 0, "nothing re-ran");
 });
 
 test("the admin's Re-measure makes Lighthouse run again; nobody else may ask", async () => {

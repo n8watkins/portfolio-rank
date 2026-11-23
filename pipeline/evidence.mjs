@@ -11,8 +11,7 @@
 // grade and have none, at most --limit of them (a site is graded once and
 // never re-graded automatically, owner 2026-11-21); then, with --links N,
 // measures again up to N rows whose project link checks are due by the
-// check rule (lib/freshness.mjs: the page changed, the admin or the owner
-// asked, or the checks are 30 days old, since links rot without the page
+// check rule (lib/freshness.mjs: the admin or the owner asked, or the checks are 30 days old, since links rot without the page
 // changing), without a new capture.
 //
 //   node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]

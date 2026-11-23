@@ -18,7 +18,7 @@ import { BOT_WALL_REASON } from "../pipeline/capture-blocked.mjs";
 import { rowsNeedingEvidence } from "../pipeline/evidence.mjs";
 import { heroCandidates } from "../pipeline/polls.mjs";
 import { GRADER_POOL_KEY, gradedPool } from "../lib/grader/report.mjs";
-import { dueForFingerprint, ensureFreshnessSchema, lighthouseDue, linksDue, screenshotsDue } from "../lib/freshness.mjs";
+import { ensureFreshnessSchema, lighthouseDue, linksDue, screenshotsDue } from "../lib/freshness.mjs";
 import { fullPageDue } from "../pipeline/fullpage.mjs";
 import { prewarmQueue } from "../scripts/lib/prewarm.mjs";
 import { PORTFOLIO_HTML, T0, answer, col, context, drive, freshDb, site } from "./helpers/door-night.mjs";
@@ -572,7 +572,6 @@ test("per consumer: the AI's queues take only healthy sites; the free jobs (capt
   // ACTIVE: the free jobs.
   free("screenshot refresh (lib/freshness.mjs screenshotsDue, via pipeline/capture.mjs)", await screenshotsDue(db, { limit: 10, active: ACTIVE, now: T0 + 400 * 86400000 }));
   free("link checks (linksDue, via pipeline/evidence.mjs)", await linksDue(db, { limit: 10, active: ACTIVE, now: T0 + 400 * 86400000 }));
-  free("change fingerprints (dueForFingerprint, via worker/freshness.ts)", await dueForFingerprint(db, { limit: 10, active: ACTIVE, now: T0 }));
   free("Lighthouse (lighthouseDue)", await lighthouseDue(db, { limit: 10, active: ACTIVE, now: T0 }));
   free("tall images (pipeline/fullpage.mjs fullPageDue)", await fullPageDue(db, { limit: 10, active: ACTIVE, now: T0 }));
   free("PageSpeed prewarm (scripts/lib/prewarm.mjs prewarmQueue)", await prewarmQueue(db, { active: ACTIVE, now: T0 }));
@@ -650,7 +649,7 @@ test("one shared definition: no background job writes its own health condition",
   // Evidence: the page text for a grade is AI work, its link checks are not.
   assert.match(fs.readFileSync("pipeline/evidence.mjs", "utf8"), /\$\{AI_WORK\(\)\}[\s\S]*active: ACTIVE/);
   // Every free job (captures, refresh, measurements, the door's review rows) uses ACTIVE, or is handed it.
-  for (const f of ["pipeline/roster.mjs", "pipeline/capture.mjs", "pipeline/fullpage-backfill.mjs", "worker/freshness.ts", "scripts/prewarm-metrics.mjs", "lib/reviews/door.mjs"]) {
+  for (const f of ["pipeline/roster.mjs", "pipeline/capture.mjs", "pipeline/fullpage-backfill.mjs","scripts/prewarm-metrics.mjs", "lib/reviews/door.mjs"]) {
     assert.match(fs.readFileSync(f, "utf8"), /\bACTIVE\b/, f);
   }
   // The library and its tiers count a failing site (still shown) and drop a not-working one, as the trigger does.

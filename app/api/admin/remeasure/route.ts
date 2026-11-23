@@ -8,7 +8,7 @@ import { markForced, readFreshness } from "@/lib/freshness.mjs";
 // check of the site is due again at once. Lighthouse and the polish check
 // run on the next view (the portfolio page asks again right away), the
 // screenshots and link checks in tonight's free checks.
-//   GET  /api/admin/remeasure?url=<listed portfolio>   { forcedAt, checkedAt, changedAt }
+//   GET  /api/admin/remeasure?url=<listed portfolio>   { forcedAt }
 //   POST /api/admin/remeasure { url }                  { forcedAt }
 // Admin only (ADMIN_GITHUB_ID); anyone else gets 401 or 403.
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   if (!url || !isKnownPortfolio(url)) return NextResponse.json({ error: "unknown_url" }, { status: 404, headers: PRIVATE });
   await ensureSchema();
   const row = await readFreshness(db(), url);
-  return NextResponse.json({ forcedAt: iso(row?.forced_at), checkedAt: iso(row?.checked_at), changedAt: iso(row?.changed_at) }, { headers: PRIVATE });
+  return NextResponse.json({ forcedAt: iso(row?.forced_at) }, { headers: PRIVATE });
 }
 
 export async function POST(req: Request) {
