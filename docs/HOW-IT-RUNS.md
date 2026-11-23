@@ -175,8 +175,9 @@ Each chain is a list of steps in the order they happen.
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
-   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
-   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link (`pipeline/capture-projects.mjs`).
+   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 4).
+   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link or of the home page's own address for a hash route ("/#/projects"), and reads it once its list has stopped changing, within the step's 25 seconds (`pipeline/capture-projects.mjs`).
+   Up to 8 project links are checked, at most 3 of one outside site (or one repository) before the others; the site's own project pages count only as real pages, on a host that answers every address by the text they do not share with a page that cannot exist (AUTOMATION.md, Rubric v2).
    When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`), `lib/freshness.mjs` `screenshotsDue`.
    A capture is due again for one of two reasons only: it is 90 days old, or a person asked for a new one (your "Re-measure", or a re-grade an owner asked for).

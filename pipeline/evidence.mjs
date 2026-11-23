@@ -47,9 +47,12 @@ const parseJson = (v) => {
  * `force` is the link re-check: when evidence is stored it renews only the
  * project link results (facts.project_links and the time of the check), by
  * never the settled, browser-rendered page text or the signals measured from
- * it. Facts of version 3 have the capture's own list (facts.project_candidates,
- * from the desktop and phone views and the projects page): those links are
- * checked again, and a plain fetch, a weaker reading, never picks new ones.
+ * it. Facts of version 3 and up have the capture's own list
+ * (facts.project_candidates, from the desktop and phone views and the projects
+ * page, at most 3 of one outside host first): those links are checked again,
+ * by today's rule for own pages, and a plain fetch, a weaker reading, never
+ * picks new ones. A version 3 row keeps its list as the capture chose it
+ * until it is captured again (version 4 changed how the list is chosen).
  * Facts of version 1 and 2 keep their re-check as it was: the links are found
  * on a plain fetch of the page and checked, and the stored version stays (so
  * they keep their own rule). Either way the check is recorded (facts_at), so
@@ -67,7 +70,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
   }
   const relinkOnly = force && row.page_text != null && Boolean(stored);
   if (relinkOnly && newProjectRule(stored.v)) {
-    // Version 3: the links the capture chose, checked again; only which of them load is renewed.
+    // Version 3 and up: the links the capture chose, checked again; only which of them load is renewed.
     const chosen = Array.isArray(stored.project_candidates)
       ? stored.project_candidates.map((c) => (typeof c === "string" ? { url: c, kind: "outbound" } : c)).filter((c) => typeof c?.url === "string")
       : [];
