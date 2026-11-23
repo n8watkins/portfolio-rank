@@ -120,7 +120,7 @@ test("profiles and certificates are never project links; the same sites' project
 test("a credit is never a project, its repository included; a repository in the projects stays", () => {
   // sanajitjana.github.io: "Powered by Hugo & Narrow" in a <p> of the page's bottom block (not a <footer>).
   const credit = `<section id="projects"><a href="https://github.com/sanajitjana/Food-Order-App">Food Order App</a></section>
-    <div><p>© 2026 Sanajit Jana. All rights reserved.</p><p><span>Powered by</span> <a href="https://gohugo.io/">Hugo</a><span>&amp;</span> <a href="https://github.com/tom2almighty/hugo-narrow">Narrow</a></p></div>`;
+    <div><p>© 2026 Sanajit Jana. All rights reserved.</p><p><span>Powered by</span>\n<a href="https://gohugo.io/">Hugo\n</a><span>&amp;</span>\n<a href="https://github.com/tom2almighty/hugo-narrow">Narrow</a></p></div>`;
   assert.deepEqual(show(credit), [[1, "https://github.com/sanajitjana/Food-Order-App"]]);
   for (const phrase of ["Theme by", "Designed by", "Built with", "Template:", "Made with ❤ by"]) {
     assert.deepEqual(show(`<footer><p>${phrase} <a href="https://github.com/someone/theme">x</a></p></footer><div><p>${phrase} <a href="https://credit.example/">y</a></p></div>`), [], phrase);

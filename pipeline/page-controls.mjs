@@ -146,7 +146,8 @@ export function scanPage(html, baseUrl) {
   const addText = (t) => {
     if (!t || !/\S/.test(t)) return;
     text.push(t);
-    recent = `${recent} ${decodeEntities(t)}`.slice(-200);
+    // Line breaks in the text are spaces here: only an element boundary ("\n" below) starts a new run.
+    recent = `${recent} ${decodeEntities(t).replace(/\s+/g, " ")}`.slice(-200);
     if (headOpen) head.push(t);
     const h = openHeadings.at(-1);
     if (h && h.len < TEXT_CAP) {
