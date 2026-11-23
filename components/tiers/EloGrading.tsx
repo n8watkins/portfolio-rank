@@ -78,7 +78,7 @@ export async function EloGrading() {
           <SectionHeader id="tiers" eyebrow="Your tier" title="Your tier is your place by ELO" className="mb-3" />
           <ol className="grid max-w-2xl list-decimal gap-1.5 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
             <li>
-              Every graded portfolio gets a starting rank from automated checks: up to 100 points for speed, accessibility, a share card,
+              Every portfolio gets a starting rank from automated checks as soon as its page is measured, before any AI looks at it: up to 100 points for speed, accessibility, a share card,
               working project links and the basics a hiring manager looks for (below). No votes are made up: it is only where the ELO starts.
             </li>
             <li>
@@ -86,14 +86,14 @@ export async function EloGrading() {
               comparison counts {share(AI_VOTE_WEIGHT)} as much. The starting rank is held loosely, so votes move it fast.
             </li>
             <li>
-              Your place by ELO among all graded portfolios sets your tier from day one: A is the top 30%, B the next 40%, C the rest.
+              Your place by ELO among all ranked portfolios sets your tier from day one: A is the top 30%, B the next 40%, C the rest.
             </li>
             <li>
               S is earned: {S_MIN_WINS} face-off wins while in the top 1%. Drop out of the top 1% and it goes back to your place&apos;s
               letter.
             </li>
           </ol>
-          {live && <p className="mt-3 text-sm text-mute">Ranked against {live.total.toLocaleString("en-US")} graded portfolios today.</p>}
+          {live && <p className="mt-3 text-sm text-mute">Ranked against {live.total.toLocaleString("en-US")} portfolios today.</p>}
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[30rem] text-sm">
               <thead>
@@ -149,7 +149,7 @@ export async function EloGrading() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-mute">Equal points are split by the AI grade, then by who was graded first.</p>
+          <p className="mt-3 text-sm text-mute">Equal points are split by who was measured first, never by the AI grade.</p>
         </section>
 
         {/* Caution, updates, grade and tier */}

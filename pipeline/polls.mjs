@@ -261,12 +261,20 @@ async function codePoll(ctx, { known, week, now }) {
 // The Gemini part: candidates from the data
 // ---------------------------------------------------------------------------
 
-/** Aggregate facts about the graded list, as percentages. Never a name or a site. */
+/**
+ * Aggregate facts about the graded list, as percentages. Never a name or a
+ * site. The top tiers are the Tier's S and A families (the tier store, never
+ * Gemini's letter, owner 2026-11-22); 0 before the tier tables exist.
+ */
 export async function dataDigest(db) {
+  const tiers = (await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tier_ratings'")).rows.length > 0;
+  const top = tiers
+    ? `SUM(EXISTS (SELECT 1 FROM tier_ratings t WHERE t.url = p.url AND t.member = 1 AND substr(t.tier, 1, 1) IN ('S', 'A')))`
+    : "0";
   const r = (
     await db.execute(
       `SELECT COUNT(*) AS graded,
-              SUM(json_extract(ai_rubric, '$.tier') IN ('S', 'A')) AS top,
+              ${top} AS top,
               SUM(COALESCE(json_extract(facts, '$.signals.resume'), 0) = 1) AS resume,
               SUM(COALESCE(json_extract(facts, '$.signals.github'), 0) = 1) AS github,
               SUM(COALESCE(json_extract(facts, '$.signals.about'), 0) = 1) AS about,

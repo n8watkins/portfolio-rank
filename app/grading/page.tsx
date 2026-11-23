@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowRight, Bot, ChevronRight, CircleCheck, Code2, Swords, Trophy } from "lucide-react";
-import { TierBadge } from "@/components/ui/badges";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { CHECK_ITEMS, CHECK_POINTS } from "@/lib/check-points.mjs";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
 import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
@@ -9,24 +9,19 @@ import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { EloGrading } from "@/components/tiers/EloGrading";
 
-// How grading works, kept short: the tiers, what "top X%" means, what is
-// checked and how votes combine. The criteria come from the rubric
-// (pipeline/rubric.mjs), so this page follows it when it changes.
+// How grading works, kept short: the Code checks score that sets where a
+// portfolio starts (owner, 2026-11-22: never the AI), what "top X%" means,
+// what is checked and how votes combine. The points come from
+// lib/check-points.mjs and the criteria from the rubric (pipeline/rubric.mjs),
+// so this page follows them when they change. Tier letters stay on the
+// RANKING_V2 page (components/tiers/EloGrading.tsx).
 
 export const metadata: Metadata = {
   title: "How grading works - PortfolioRank",
-  description: "What S, A, B, C and D mean, what a top 10% place says, what is checked and how people's votes move the ranking.",
+  description: "What code measures for the Code checks score, what a top 10% place says, what Gemini's report card is and how people's votes move the ranking.",
 };
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
-
-const TIERS = [
-  { tier: "S", name: "Exceptional", note: "About 1 in 20." },
-  { tier: "A", name: "Strong", note: "Stands out." },
-  { tier: "B", name: "Solid", note: "The most common grade." },
-  { tier: "C", name: "Weak", note: "Works, says little." },
-  { tier: "D", name: "Needs work", note: "Hard to tell who you are." },
-];
 
 /** The bands a report names, best first: `of` is the band's share in twentieths, drawn as a little bar. */
 const BANDS = [
@@ -62,34 +57,34 @@ export default function GradingPage() {
             How grading works
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Code checks the facts. AI judges the look and the words. People&apos;s votes decide the leaderboard.
+            Code measures the site and sets where it starts. Gemini writes a report card on the side. People&apos;s votes decide the leaderboard.
           </p>
         </div>
       </section>
 
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        {/* The tiers */}
-        <section aria-labelledby="tiers" className="mt-12">
-          <SectionHeader id="tiers" eyebrow="The grade" title="Five tiers, S to D" className="mb-5" />
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-5 sm:gap-3">
-            {TIERS.map(({ tier, name, note }) => (
-              <li key={tier} className="card flex items-center gap-3 px-4 py-3 sm:flex-col sm:items-start sm:p-4">
-                <TierBadge tier={tier} />
-                <span className="min-w-0">
-                  <span className="block font-semibold">{name}</span>
-                  <span className="block text-sm text-mute">{note}</span>
-                </span>
+        {/* The Code checks score */}
+        <section aria-labelledby="score" className="mt-12">
+          <SectionHeader id="score" eyebrow="The score" title="The Code checks score, out of 100" className="mb-5" />
+          <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+            {CHECK_ITEMS.map((i) => (
+              <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-2 text-sm">
+                <span>{i.name}</span>
+                <span className="shrink-0 tabular-nums text-mute">{CHECK_POINTS[i.id as keyof typeof CHECK_POINTS]} pts</span>
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-sm text-mute">The AI makes the call, with the facts in front of it. No S+: S is the top.</p>
+          <p className="mt-3 text-sm text-mute">
+            Code measures each one from the page, Lighthouse and the share card, with no AI. Something not measured yet counts the library&apos;s
+            median, never zero. Where a portfolio starts in the ranking comes from this score, not from the AI.
+          </p>
         </section>
 
         {/* Top X% */}
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
           <p className="text-[15px] text-mute">
-            Only 1 in 10 graded portfolios placed higher. Tier first, then the AI&apos;s scores break ties.
+            Only 1 in 10 portfolios placed higher. The Code checks score sets the start; equal scores go by who was measured first.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {BANDS.map((b) => (
@@ -108,7 +103,7 @@ export default function GradingPage() {
 
         {/* What's checked */}
         <section aria-labelledby="checked" className="mt-14">
-          <SectionHeader id="checked" eyebrow="What's checked" title="Facts by code, quality by AI" className="mb-5" />
+          <SectionHeader id="checked" eyebrow="What's checked" title="Facts by code, a report card by AI" className="mb-5" />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">
@@ -125,8 +120,9 @@ export default function GradingPage() {
             </div>
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">
-                <Bot className="h-4 w-4 text-mute" aria-hidden /> AI: 1 to 5, from a screenshot and the text
+                <Bot className="h-4 w-4 text-mute" aria-hidden /> Gemini report card: 1 to 5, from a screenshot and the text
               </h3>
+              <p className="mt-1 text-sm text-mute">An opinion from one look. It never sets the rank; it can only flag a site that is not a portfolio.</p>
               <ul className="mt-4 grid gap-2.5 text-sm">
                 {AI_CRITERIA.map((c) => (
                   <li key={c.id} className="flex items-center gap-3">
@@ -148,7 +144,7 @@ export default function GradingPage() {
           <SectionHeader id="votes" eyebrow="The ranking" title="How people's votes combine" className="mb-5" />
           <ol className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
             {[
-              { Icon: Bot, title: "Grade", body: "Sets the start" },
+              { Icon: Code2, title: "Code checks", body: "Set the start" },
               { Icon: Swords, title: "Face-offs", body: "Move it up or down" },
               { Icon: Trophy, title: "Leaderboard", body: "Settles with more votes" },
             ].map(({ Icon, title, body }, i) => (
