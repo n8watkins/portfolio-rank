@@ -215,15 +215,17 @@ Each chain is a list of steps in the order they happen.
    Lighthouse for every member comes from the nightly prewarm (`scripts/lib/prewarm.mjs`), graded or not; until it has run, those items count the library median.
    The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
 9. **Grade** (night stage 1, `grade_new`).
-   One Gemini request with the screenshot, the page text and the facts.
-   It answers whether it is a portfolio and writes the Gemini report card (scores and notes).
-   It never sets or moves the Starting rank or the Tier, and its own letter is never shown on a listed site's pages.
+   One Gemini request with the screenshot, the page text and the facts (rubric v3, prompt `grade-v3`, `pipeline/rubric.mjs`).
+   It is asked three things and nothing else: whether it is a portfolio (with a short reason), the five-second test (1 to 5 with a note) and the roles the page names.
+   Your decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
+   It never sets or moves the Starting rank or the Tier; the profile shows its three answers as the Gemini report card, under "What we asked the model".
+   Grades made before v3 keep their old fields in the database, but nothing shows or uses them, and no site is graded again because of v3.
    A stored screenshot that does not show the site is checked first and set aside.
    Paused.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
-   2. Gemini says portfolio: it is listed with its report card.
+   2. Gemini says portfolio: it is listed, with Gemini's three answers on its profile.
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
@@ -314,8 +316,8 @@ Known gaps, with fixes open as pull requests: a removal covers one exact spellin
 
 ### Ranking
 
-The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
-The rank starts from the Code checks score and moves with face-off votes.
+Gemini's three answers (is it a portfolio, the five-second test, roles) are an opinion from one look, kept apart from the ranking.
+The rank starts from the Code checks score and moves with face-off votes; no Gemini output is in it.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).
    Two sites are shown and one is picked.
@@ -343,6 +345,8 @@ The routes answer 404 and the five-minute tick returns at once.
    The same browser capture, behind a filtering proxy.
 3. **Grade** (`pipeline/people.mjs`).
    One Gemini request from the day's quota, or the visitor's own key.
+   It still uses the frozen v2 prompt (`pipeline/rubric-v2.mjs`: Gemini's letter and five scores), because the visitor's report is built on them; listed sites use v3.
+   What that report shows under v3 waits for your decision.
    A request that cannot be answered waits, and the hourly task 7 finishes it.
 4. **Report and email** (the five-minute tick, `worker/grader.ts`).
    The visitor gets a report page and, if they asked, a one-time link by email.

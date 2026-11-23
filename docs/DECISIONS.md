@@ -123,6 +123,15 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
 - **Code checks facts; Gemini judges quality** (owner, 2026-11-10). Status: built (#57).
   Anything a script can check (resume link, GitHub link, contact path, project links that load, own domain, footer year, template, pages, motion) is measured by our code; Gemini judges only design, clarity, project presentation, writing and memorability, with the facts as context.
   Why: facts from code are free and give the same answer every time; AI is for judgment a script can't make.
+  Since 2026-11-23 Gemini is asked only three things (rubric v3, below).
+- **Gemini is asked three things: is it a portfolio, the five-second test, roles** (owner, 2026-11-22). Status: building (rubric v3, `grade-v3`).
+  "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
+  A site's rank and tier come only from code measurements and votes; Gemini's answer is a separate, optional opinion, and the profile says plainly what code measured and what the model was asked.
+  The portfolio rule carries his definition: "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
+  With his rulings: a personal page selling coaching is not a portfolio, even a developer's; a GitHub profile is not one; a digital resume may stay listed; certificates are not projects.
+  Older grades keep the dropped fields in the database; nothing shows or uses them (one rule for old and new grades), nothing is deleted, and no site is re-graded because of v3.
+  A person's own "Grade my portfolio" stays on the frozen v2 prompt (`pipeline/rubric-v2.mjs`) until the owner decides what its report shows.
+  Why: the rank must rest on clear, verifiable measurements; the dropped outputs were taste from one screenshot (Gemini over-awards top scores, 2026-11-16, and matched an expert least on judgment calls, PR #206), and fewer outputs make a smaller, cheaper answer.
 - **Rubric v2** (owner rule, agent design, 2026-11-10). Status: built (#57).
   One screenshot, the facts and up to 4,000 characters of page text in one request, thinking at `minimal`, a strict JSON schema, short notes, and a `rubric_version` on every grade.
   The rubric is defined once in `pipeline/rubric.mjs` and the table in GRADING_CRITERIA.md is generated from it.

@@ -524,7 +524,7 @@ export function criteriaMarkdown() {
     `Gemini is asked three things and nothing else: \`is_portfolio\` with a short \`portfolio_reason\`, the ${AI_CRITERIA.map((c) => c.name.toLowerCase()).join(", ")} (1 to 5 with a note), and up to ${ROLES_MAX} \`roles\`.`,
     "None of them is scored or used in a rank or tier; \"not a portfolio\" goes to the Removal rule.",
     "Code criteria pass or fail and make up `checks_score` (weighted share passed, 0-100); unknown checks are left out of the share.",
-    "Criteria with weight \"context\" are measured, stored and shown to Gemini, but not scored.",
+    "Criteria with weight \"context\" are measured and stored but not scored; all but the template are shown to Gemini as facts.",
     `Each grade sends ${IMAGE_TOKENS.toLocaleString("en-US")} image tokens (one screenshot), the rules, the facts and at most ${PAGE_TEXT_MAX.toLocaleString("en-US")} characters of page text, with thinking at "${THINKING_LEVEL}".`,
     `Grades from rubric 1 and 2 also stored ${DROPPED_OUTPUTS.map((k) => `\`${k}\``).join(", ")}; those stay in the database and are no longer shown or used.`,
   ].join("\n");
