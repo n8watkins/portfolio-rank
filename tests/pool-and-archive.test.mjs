@@ -157,6 +157,49 @@ test("a duplicate stays a duplicate on the hourly re-check, though its original 
 });
 
 // ---------------------------------------------------------------------------
+// The listed address fails, the site answers at its own www or https address (http://gianlucafiore.it)
+
+test("a listed address that fails while the site answers at its own https and www address is not a failure; another domain or a dead final address is", async () => {
+  const listed = "http://rescue.example";
+  const final = "https://www.rescue.example/";
+  const bothDead = "http://both-dead.example";
+  const moved = "http://moved-away.example";
+  const { db, w, nightly } = await setup([listed, bothDead, moved]);
+  await nightly(T0);
+  // Earlier good reads ended at these addresses.
+  await db.execute({ sql: "UPDATE portfolios SET final_url = ? WHERE url = ?", args: [final, listed] });
+  await db.execute({ sql: "UPDATE portfolios SET final_url = 'https://www.both-dead.example/' WHERE url = ?", args: [bothDead] });
+  await db.execute({ sql: "UPDATE portfolios SET final_url = 'https://another-domain.example/' WHERE url = ?", args: [moved] });
+  // The listed addresses now answer from a dead server; the final addresses of the first site work.
+  w.mode.set(listed, "paused");
+  w.mode.set(bothDead, "paused");
+  w.mode.set("https://www.both-dead.example", "paused");
+  w.mode.set(moved, "paused");
+  const s = await nightly(T0 + D);
+  assert.equal(await col(db, listed, "health"), "live", "the site answers at its own address: passes");
+  assert.deepEqual(s.answersElsewhere.map((a) => [a.url, a.at]), [[listed, final]]);
+  assert.equal((await db.execute({ sql: "SELECT answers_at FROM health_marks WHERE url = ?", args: [listed] })).rows[0].answers_at, final);
+  assert.equal(await col(db, bothDead, "health"), "suspect", "its final address is dead too: a failure as before");
+  assert.equal(await col(db, moved, "health"), "suspect", "another domain is never tried");
+  assert.match(health.healthSummary(s), /Listed address unreliable/);
+  // The admin page says so.
+  const page = await healthPool(db, { excluded: [], now: at(T0 + D + H) });
+  assert.deepEqual(page.elsewhere.map((e) => [e.url, e.at]), [[listed, final]]);
+  // The failed reads never wrote a final address.
+  assert.equal(await col(db, bothDead, "final_url"), "https://www.both-dead.example/");
+  // The listed address works again on its own: the note clears.
+  w.mode.set(listed, "ok");
+  await nightly(T0 + 2 * D);
+  assert.equal((await db.execute({ sql: "SELECT answers_at FROM health_marks WHERE url = ?", args: [listed] })).rows[0].answers_at, null);
+  // The rule itself.
+  assert.equal(health.sameSiteAddress("http://gianlucafiore.it", { final_url: "https://www.gianlucafiore.it/" }), "https://www.gianlucafiore.it/");
+  assert.equal(health.sameSiteAddress("http://gianlucafiore.it", { final_url: "http://gianlucafiore.it/" }), null, "the same address");
+  assert.equal(health.sameSiteAddress("http://gianlucafiore.it", { final_url: "https://blog.gianlucafiore.it/" }), null, "another host");
+  assert.equal(health.sameSiteAddress("http://gianlucafiore.it", { final_url: "https://github.com/x" }), null);
+  assert.equal(health.sameSiteAddress("http://gianlucafiore.it", { final_url: "http://gianlucafiore.it/", facts_final_url: "https://www.gianlucafiore.it/" }), "https://www.gianlucafiore.it/");
+});
+
+// ---------------------------------------------------------------------------
 // The archive
 
 test("90 days in the pool: archived; the archive check brings a working site back and never a not-a-portfolio removal", async () => {

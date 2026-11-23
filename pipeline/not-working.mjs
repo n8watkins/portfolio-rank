@@ -336,6 +336,14 @@ export const dueCutoff = (now = new Date()) => iso(now.getTime() + DUE_SLACK_MS)
 export const RETURNS_SQL = `SELECT url, at, from_where, reason, since, hidden FROM health_returns WHERE at >= ? ORDER BY at DESC, id DESC`;
 
 /**
+ * SQL: listed sites whose listed address failed while the site answered at its
+ * own www or https address (pipeline/health.mjs sameSiteAddress), for the
+ * owner's Health pool page: "listed address is unreliable".
+ */
+export const ANSWERS_ELSEWHERE_SQL = `SELECT p.url, p.name, m.answers_at, p.health_checked_at FROM health_marks m JOIN portfolios p ON p.url = m.url
+  WHERE m.answers_at IS NOT NULL AND p.delisted_at IS NULL ORDER BY p.url`;
+
+/**
  * SQL: the pool as the owner's admin pages show it: listed sites failing (not
  * hidden yet) or in the temporary pool (hidden), with their ladder.
  */

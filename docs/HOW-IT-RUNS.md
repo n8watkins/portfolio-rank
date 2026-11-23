@@ -254,6 +254,7 @@ Each chain is a list of steps in the order they happen.
 Your rule (2026-11-23): "if something is failing a health check, it doesn't go to review by me, it gets checked, it gets put in a pool ... And after 90 days, it gets put into the archived section."
 Every kind of failed check takes these same steps: the site does not answer (paused hosting, a dead domain, an HTTP error), it is parked or for sale, it is blank, it redirects to a social profile, its capture was never anything but blocked, or it duplicates another entry.
 Never a failed check: a bot wall, a check that could not tell (a timeout, a dropped connection, a browser that did not start), a "not a portfolio" grade, and low portfolio signals (the code could not read the site; it stays listed).
+Nor a listed address that fails while the site answers at its own address with www or https, where it ended on an earlier good read (http://gianlucafiore.it has a stale server among its addresses; https://www.gianlucafiore.it serves the site): the site passes, and `/admin/health-pool` lists it as "listed address unreliable". Another domain is never tried this way.
 Nothing at any step writes a row to your review page.
 
 1. **Nightly health check** (`health.yml`, `pipeline/health-check.mjs`, started by the night).
@@ -277,7 +278,9 @@ Nothing at any step writes a row to your review page.
    The site is added to `data/excluded.json` (kind `down`, or `duplicate` for a duplicate) and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
 7. **The archive check** (the same weekly export, `pipeline/not-working.mjs` `archiveCheckDue`): every `down` and `dead` entry is checked again on days 7, 14 and 21 after it was archived, then every 30 days; plain health checks only, no Gemini, at most 40 a run.
    One that passes leaves the archive and is recorded in `data/additions.json`, so the next sync lists it again even when the community list dropped it.
-   It is then captured and measured again by code and ranked from code like a new site; within 30 days of archiving it still has its row and grade, and later it keeps only its votes and ratings.
+   It comes back as a new site, whenever that is, because we cannot know it is the same site (your rule, 2026-11-23: "It can't keep its own votes."): captured, measured and ranked from code like a site listed for the first time, with none of the old site's votes, rating, tier, grade, face-offs, likes, claim or review decisions.
+   The old site's rows are kept as history under a closed-off key, `archived:<day>:<address>`, which nothing lists (`pipeline/archive-return.mjs`); no other site's rating moves for it.
+   A site back from the temporary pool (step 4) is different: the same site after a bad spell, back exactly as it was.
    Not-a-portfolio removals, owner requests and duplicates are never checked this way.
 8. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
    Any other delisted row is kept and counted in the run summary.

@@ -798,7 +798,7 @@ test("review 5: marks a foreign writer leaves behind never steer the site (the r
   assert.equal((await dueForRecheck(db, at(T0 + 400 * D))).length, 0);
 });
 
-test("review 5: a removed site that passes its monthly re-check is due at once when the list takes it back", async () => {
+test("review 5 (owner, 2026-11-23): an archived site that passes its check comes back as a new site, its old row moved out of its way", async () => {
   const url = "https://back-after-90.example";
   const { db, feed, w, nightly, hourly } = await setup([url]);
   await failingSince(nightly, w, [url], T0);
@@ -820,12 +820,14 @@ test("review 5: a removed site that passes its monthly re-check is due at once w
   const excluded = [{ ...entry, removed: at(S + 90 * D).toISOString().slice(0, 10) }];
   ex = await weeklyExport({ db, excluded, feed: landedFiles.feed, now: at(later), answers: async (u) => u === url });
   assert.deepEqual(ex.plan.back, [url]);
-  assert.equal((await marks(db, url)).pool_next_at, at(later).toISOString());
-  // The daily sync lists it again: the next hour's re-check brings it back.
-  await db.execute({ sql: "UPDATE portfolios SET delisted_at = NULL WHERE url = ?", args: [url] });
-  const s = await hourly(later + H);
-  assert.deepEqual(s.returned.map((r) => r.url), [url]);
-  assert.deepEqual(await standing(db, url), LIVE);
+  // The old site is not this one any more: no row, no marks under its address; nothing for the hourly re-check.
+  assert.equal(await col(db, url, "ai_rubric"), undefined);
+  assert.equal(await marks(db, url), undefined);
+  assert.equal((await hourly(later + H)).due, 0);
+  // Its old row is kept as history under the closed key, off the list.
+  const old = (await db.execute({ sql: "SELECT url, delisted_at FROM portfolios WHERE url LIKE 'archived:%'" })).rows;
+  assert.deepEqual(old.map((r) => String(r.url)), [`archived:${at(later).toISOString().slice(0, 10)}:${url}`]);
+  assert.ok(old[0].delisted_at);
 });
 
 test("review 6: a profile the check takes away is marked for the edge purge when written, whatever the hour, and stays marked until a purge works", async () => {

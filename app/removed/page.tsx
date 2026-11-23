@@ -54,8 +54,9 @@ export default function RemovedPage() {
             </p>
             <p>
               A site taken off because it was down or gone is checked again a week,
-              two weeks and three weeks later, then every month, and comes back when
-              it works.
+              two weeks and three weeks later, then every month. When it works again
+              it comes back as a new site and starts fresh: its old votes, rank and
+              grade do not come with it.
             </p>
             <p>
               Is your site back up, or was it removed by mistake?{" "}

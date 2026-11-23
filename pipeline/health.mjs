@@ -322,6 +322,35 @@ export async function checkSite(
   return { ok: true, reason: "", finalUrl, signals };
 }
 
+/**
+ * The address a site ended at on an earlier read (row.final_url, else the
+ * capture's facts.final_url), when it is the same site as the listed address
+ * written another way: the same host but for a leading www, and a different
+ * address (the scheme, the www or the path). null otherwise, and always for
+ * another host (a move, never followed here).
+ */
+export function sameSiteAddress(url, row) {
+  const host = (u) => u.hostname.toLowerCase().replace(/^www\./, "");
+  const plain = (u) => `${u.protocol}//${u.hostname.toLowerCase()}${u.port ? `:${u.port}` : ""}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  let a;
+  try {
+    a = new URL(String(url));
+  } catch {
+    return null;
+  }
+  for (const stored of [row?.final_url, row?.facts_final_url]) {
+    if (!stored) continue;
+    let b;
+    try {
+      b = new URL(String(stored));
+    } catch {
+      continue;
+    }
+    if (/^https?:$/.test(b.protocol) && host(a) === host(b) && plain(a) !== plain(b)) return b.href;
+  }
+  return null;
+}
+
 /** Normalized URL for duplicate detection: the list's one key (pipeline/list-key.mjs, same rule as generate_feed.py norm_key). */
 export const normKey = listKey;
 
@@ -540,11 +569,12 @@ export async function runHealthCheck({
   const mark = (c) => (marksCols.has(c) ? `m.${c}` : "NULL");
   const rowSql = (where) =>
     `SELECT p.url, p.status, p.reason, p.health, p.health_reason, p.health_fails, p.health_first_fail_at, p.health_checked_at,
+            p.final_url, CASE WHEN json_valid(p.facts) THEN json_extract(p.facts, '$.final_url') END AS facts_final_url,
             ${RUBRIC_TOKEN("p")} AS rubric_token,
             CASE WHEN ${NOT_PORTFOLIO("p")} THEN 1 ELSE 0 END AS not_portfolio,
             CASE WHEN ${OPEN_CASE_SQL("p")} THEN 1 ELSE 0 END AS open_case,
             CASE WHEN ${REMOVAL_ON_RECORD_SQL("p")} THEN 1 ELSE 0 END AS decided_removal,
-            ${["last_fail_at", "unknown_weeks", "unknown_last_at", "unknown_since", "pool_stage", "pool_started_at", "pool_next_at", "pool_since", "pool_unclear"].map((c) => `${mark(c)} AS ${c}`).join(", ")},
+            ${["last_fail_at", "unknown_weeks", "unknown_last_at", "unknown_since", "pool_stage", "pool_started_at", "pool_next_at", "pool_since", "pool_unclear", "answers_at"].map((c) => `${mark(c)} AS ${c}`).join(", ")},
             ${hasPool ? `CASE WHEN ${VALID_MARKS()} THEN 1 ELSE 0 END` : "0"} AS pool_valid,
             ${marksCols.size ? "CASE WHEN m.url IS NULL THEN 0 ELSE 1 END" : "0"} AS has_marks
      FROM portfolios p ${marksCols.size ? "LEFT JOIN health_marks m ON m.url = p.url" : ""} WHERE p.delisted_at IS NULL ${where}`;
@@ -559,6 +589,25 @@ export async function runHealthCheck({
     readRows.push(...(await db.execute(rowSql(""))).rows);
   }
   const rows = new Map(readRows.map((r) => [String(r.url), r]));
+
+  // The listed address failed, but the site answers at the address it ended at on an earlier read, on the
+  // same host (the scheme or www: http://gianlucafiore.it has a stale server among its DNS answers, while
+  // https://www.gianlucafiore.it serves the site). That address passing means the site works: the failure
+  // is not counted, and health_marks.answers_at records where it answers for the owner's Health pool page.
+  // Never another host: that is a move (redirectVerdict).
+  const rescueOf = (r) => (r.ok === false ? sameSiteAddress(r.url, rows.get(r.url)) : null);
+  const rescues = results.filter((r) => rescueOf(r));
+  if (rescues.length) {
+    await mapPool(rescues, concurrency, async (r) => {
+      const at = rescueOf(r);
+      const again = await checkSite({ url: at, name: r.name }, { fetchImpl, render: counted }).catch(() => null);
+      if (again?.ok !== true) return;
+      log(`${r.url} - failed (${r.reason}), but the site answers at ${at}: not counted`);
+      Object.assign(r, { ok: true, reason: "", finalUrl: again.finalUrl ?? at, signals: again.signals, answersAt: at, listedFailed: r.reason });
+      delete r.moved;
+      delete r.hijack;
+    });
+  }
 
   // Duplicates are failures too, only after loading. A "not a portfolio" grade never is.
   const dupes = findDuplicates(results.filter((r) => r.ok));
@@ -664,6 +713,8 @@ export async function runHealthCheck({
     returned: [],
     leavingList: [],
     leftToRecheck,
+    // The listed address failed but the site answered at its own www or https address: not counted.
+    answersElsewhere: [],
   };
   const plans = [];
   const str = (v) => (v == null ? null : String(v));
@@ -734,7 +785,8 @@ export async function runHealthCheck({
         next.fails,
         next.firstFailAt,
         stamp,
-        r.finalUrl ?? null,
+        // Only a read that passed says where the site ends (a failed one may end at a stale server's page).
+        r.ok === true ? r.finalUrl ?? null : null,
         signals,
         // The signals' verdict, but a bot-walled capture's mark for the owner's review is never cleared here.
         r.signals?.needsReview || botWalled.has(r.url) ? 1 : 0,
@@ -745,8 +797,8 @@ export async function runHealthCheck({
     const mark = {
       sql: `INSERT INTO health_marks (url, last_fail_at, unknown_weeks, unknown_last_at, unknown_since,
                                       pool_stage, pool_started_at, pool_next_at, pool_since, pool_unclear,
-                                      pool_health, pool_checked_at, purge_pending)
-            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() > 0
+                                      pool_health, pool_checked_at, purge_pending${marksCols.has("answers_at") ? ", answers_at" : ""})
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${marksCols.has("answers_at") ? ", ?" : ""} WHERE changes() > 0
             ON CONFLICT(url) DO UPDATE SET last_fail_at = excluded.last_fail_at, unknown_weeks = excluded.unknown_weeks,
               unknown_last_at = excluded.unknown_last_at, unknown_since = excluded.unknown_since,
               pool_stage = excluded.pool_stage, pool_started_at = excluded.pool_started_at,
@@ -754,7 +806,8 @@ export async function runHealthCheck({
               pool_health = excluded.pool_health, pool_checked_at = excluded.pool_checked_at,
               -- Set when this write takes the profile away (1) or brings it back (2); cleared by the hourly purge
               -- once the cached copies agree (./not-working.mjs purgeGoneProfiles).
-              purge_pending = CASE WHEN excluded.purge_pending > 0 THEN excluded.purge_pending ELSE health_marks.purge_pending END`,
+              purge_pending = CASE WHEN excluded.purge_pending > 0 THEN excluded.purge_pending ELSE health_marks.purge_pending END
+              ${marksCols.has("answers_at") ? ", answers_at = excluded.answers_at" : ""}`,
       args: [
         r.url,
         next.lastFailAt,
@@ -770,11 +823,14 @@ export async function runHealthCheck({
         pool ? next.health : null,
         pool ? stamp : null,
         purgeState,
+        // Where the site answers when its listed address does not (the rescue above): set by a pass through it,
+        // cleared by a pass of the listed address itself, kept as it was by a failure or a check that could not tell.
+        ...(marksCols.has("answers_at") ? [r.ok === true ? r.answersAt ?? null : row?.answers_at == null ? null : String(row.answers_at)] : []),
       ],
     };
     // A marks row only when there is something to keep or to clear: a ladder, a counted failure, a streak
     // of could-not-tell, a profile to purge, or a row already there. A healthy site without one gets none.
-    const needMark = Number(row?.has_marks ?? 0) === 1 || Boolean(pool) || Boolean(next.lastFailAt) || Boolean(marks.unknownSince) || purgeState > 0;
+    const needMark = Number(row?.has_marks ?? 0) === 1 || Boolean(pool) || Boolean(next.lastFailAt) || Boolean(marks.unknownSince) || purgeState > 0 || Boolean(r.answersAt);
     // Back from the ladder (failing, or hidden in the temporary pool): recorded for the owner's Health pool
     // page, written only when the row above was (changes() is that statement's count), before the marks.
     const back = r.ok === true && (Boolean(prev?.pool) || prev?.health === "suspect" || prev?.health === "down");
@@ -821,6 +877,7 @@ export async function runHealthCheck({
     else summary.unchecked++;
     if (r.ok === null) summary.inconclusive.push({ url: r.url, reason: r.reason });
     if (r.moved) summary.moved.push({ url: r.url, to: r.finalUrl, hijack: r.hijack });
+    if (r.answersAt) summary.answersElsewhere.push({ url: r.url, at: r.answersAt, listedFailed: r.listedFailed });
     if (r.signals?.needsReview) summary.needsReview.push({ url: r.url, score: r.signals.score });
     if (next.health === "down" && prev?.health !== "down") summary.newlyDown.push({ url: r.url, reason: next.reason });
     if (next.health === "live" && (prev?.health === "suspect" || prev?.health === "down")) summary.recovered++;
@@ -1056,6 +1113,18 @@ export function healthSummary(s) {
       "| --- | ---: |"
     );
     for (const n of s.needsReview) lines.push(`| ${cell(n.url)} | ${n.score} |`);
+    lines.push("");
+  }
+  if (s.answersElsewhere?.length) {
+    lines.push(
+      "### Listed address unreliable (not counted)",
+      "",
+      "The listed address failed, but the site answered at its own address with www or https, where it ended on an earlier read. Not a failure; shown on /admin/health-pool.",
+      "",
+      "| Listed URL | Answers at | The listed address said |",
+      "| --- | --- | --- |"
+    );
+    for (const a of s.answersElsewhere) lines.push(`| ${cell(a.url)} | ${cell(a.at)} | ${cell(a.listedFailed)} |`);
     lines.push("");
   }
   if (s.moved.length) {

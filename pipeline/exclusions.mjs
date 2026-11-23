@@ -13,7 +13,8 @@
 // parked, blank, a social redirect, a blocked capture) and "dead" (the name no
 // longer resolves, or a 404 or broken deploy): the archive, checked again on
 // days 7, 14 and 21 after archiving and then monthly (./not-working.mjs
-// archiveCheckDue, planDeadRecheck); "duplicate" (duplicate_of: the address
+// archiveCheckDue, planDeadRecheck); one that passes comes back as a new site,
+// its old rows moved out of its way (./archive-return.mjs); "duplicate" (duplicate_of: the address
 // kept), "not_portfolio" (graded so by the AI, settled by a code rule, or
 // decided by the owner) or "owner_request" (a takedown): never checked again.
 // decided_by says who
@@ -29,6 +30,7 @@ import { excludedUrl, readJson } from "./list-util.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { notPortfolioReason } from "./portfolio-guard.mjs";
 import { LEFT_LIST } from "./build-feed.mjs";
+import { retireArchivedSite } from "./archive-return.mjs";
 import {
   ARCHIVE_EVERY_DAYS,
   ARCHIVE_FIRST_DAYS,
@@ -265,9 +267,9 @@ export function exportLanded({ excluded }, plan) {
  * only which sites it chose, and the entries are today's planExclusions, so a
  * site that recovered, or whose removal was undone, after the plan was made
  * drops out of it, and no site is ever exported that today's state would not
- * plan. A removed site that passes its re-check gets its not-working marks due
- * now, so once the daily sync lists it again the hourly re-check brings it
- * back at once instead of at its old monthly date.
+ * plan. An archived site that passes its check starts fresh: its old rows
+ * move to a closed-off key (./archive-return.mjs retireArchivedSite), and once
+ * the daily sync lists it again it is captured and ranked like a new site.
  * `dryRun` plans and returns the same and writes nothing.
  * Returns { files, plan: { added: [urls], back, still } | null, planned, landed, held }.
  */
@@ -316,11 +318,14 @@ export async function weeklyExport({ db, excluded, feed, additions, render, answ
     const empty = !pending.added.length && !pending.back.length && !pending.still.length;
     if (!dryRun) {
       if (dead.back.length) {
-        await db.execute({
-          sql: `UPDATE health_marks SET pool_next_at = ? WHERE url IN (${dead.back.map(() => "?").join(",")})
-                  AND EXISTS (SELECT 1 FROM portfolios p WHERE p.url = health_marks.url AND ${VALID_MARKS("health_marks", "p")})`,
-          args: [now.toISOString(), ...dead.back],
-        });
+        // A site back from the archive starts completely fresh (owner, 2026-11-23): the old site's rows move
+        // to a closed-off key, so the returning site inherits no votes, rating, grade, claim or decision
+        // (./archive-return.mjs). It is captured, measured and ranked from code like a new site.
+        for (const url of dead.back) {
+          const r = await retireArchivedSite(db, url, { now });
+          const n = Object.values(r.moved).reduce((a, b) => a + b, 0);
+          if (n) log(`export: ${url} is back from the archive and starts fresh; ${n} old row(s) moved to ${r.key}`);
+        }
         // The owner's Health pool page lists what came back from the archive (./not-working.mjs health_returns).
         await db.batch(
           returnStatements(

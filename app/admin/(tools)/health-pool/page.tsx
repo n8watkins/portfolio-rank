@@ -22,7 +22,8 @@ export const metadata = { title: "Health pool - PortfolioRank admin", robots: { 
 type PoolSite = { url: string; name: string; reason: string; started: string | null; since: string | null; next: string | null; hidden: boolean; archiveOn: string | null };
 type ArchiveSite = { url: string; name: string; kind: string; reason: string; archived: string | null; lastChecked: string | null; next: string };
 type Returned = { url: string; at: string; from: "pool" | "archive"; reason: string; since: string | null; hidden: boolean };
-type Pool = { failing: PoolSite[]; pool: PoolSite[]; archive: ArchiveSite[]; returned: Returned[] };
+type Elsewhere = { url: string; name: string; at: string; checked: string | null };
+type Pool = { failing: PoolSite[]; pool: PoolSite[]; archive: ArchiveSite[]; returned: Returned[]; elsewhere: Elsewhere[] };
 
 const n = (v: number) => v.toLocaleString("en-US");
 const TZ = "America/Los_Angeles";
@@ -115,7 +116,7 @@ export default async function AdminHealthPoolPage() {
     <>
       <AdminHeader title="Health pool">
         Sites failing their health checks never come to your review list. A site that fails a check leaves the AI&rsquo;s work; when it still fails the next day it is hidden here, in the temporary pool, with its rank, votes, grade and
-        captures kept. One passing check brings it back as it was. After {LEAVE_AFTER_DAYS} days it goes to the archive, which is checked again on days {ARCHIVE_FIRST_DAYS.join(", ")} and then every {ARCHIVE_EVERY_DAYS} days. Read only.
+        captures kept. One passing check brings it back as it was. After {LEAVE_AFTER_DAYS} days it goes to the archive, which is checked again on days {ARCHIVE_FIRST_DAYS.join(", ")} and then every {ARCHIVE_EVERY_DAYS} days; one that passes comes back as a new site, starting fresh. Read only.
       </AdminHeader>
 
       <nav aria-label="Sections" className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-health-counts>
@@ -169,7 +170,7 @@ export default async function AdminHealthPoolPage() {
         id="returned"
         title={`Back in the last ${RETURNS_SHOWN_DAYS} days`}
         count={p.returned.length}
-        about="Sites that passed a check while failing, in the pool, or in the archive, and came back."
+        about="Sites that passed a check while failing or in the pool, back as they were; and sites back from the archive, which start fresh as new sites."
         empty="None."
       >
         {p.returned.map((s) => (
@@ -185,6 +186,27 @@ export default async function AdminHealthPoolPage() {
         ))}
       </Section>
 
+      {p.elsewhere.length > 0 && (
+        <Section
+          id="elsewhere"
+          title="Listed address unreliable"
+          count={p.elsewhere.length}
+          about="The listed address failed its check, but the site answered at its own address with www or https, where it ended on an earlier read, so nothing was counted. The listed address may point at an old server."
+          empty="None."
+        >
+          {p.elsewhere.map((s) => (
+            <Site
+              key={s.url}
+              url={s.url}
+              name={s.name}
+              reason={`The site answers at ${s.at}`}
+              data={{ "data-elsewhere-site": s.url }}
+              facts={[day(s.checked) && `last checked ${day(s.checked)}`]}
+            />
+          ))}
+        </Section>
+      )}
+
       {/* Last: the longest list. */}
       <Section
         id="archive"
@@ -192,8 +214,8 @@ export default async function AdminHealthPoolPage() {
         count={p.archive.length}
         about={
           <>
-            Off the list after {LEAVE_AFTER_DAYS} days in the pool, or gone before the pool existed. One that passes its archive check comes back: captured and measured again by code and ranked from code like a new site, with its votes. Its row,
-            grade and captures are kept for 30 days after it is archived. Removals as not a portfolio or by your decision are not here and never come back this way.
+            Off the list after {LEAVE_AFTER_DAYS} days in the pool, or gone before the pool existed. One that passes its archive check comes back as a new site: captured, measured and ranked from code, with none of the old site&rsquo;s votes,
+            rating, grade, face-offs, likes, claim or review decisions (we cannot know it is the same site). Removals as not a portfolio or by your decision are not here and never come back this way.
           </>
         }
         empty="None."
