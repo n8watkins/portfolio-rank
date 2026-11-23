@@ -20,6 +20,7 @@ import {
   captureProblemConditions,
   captureProblemConditionsOrLog,
   alertBaseline,
+  gapPassed,
   captureProblems,
   countsOfTitle,
   plainReason,
@@ -347,7 +348,7 @@ test("a weekly health check after a blocked refresh leaves the site on the revie
   }
 });
 
-test("the alert condition: counts per group and the link while any is open, quiet unless a count rose since the last email", () => {
+test("the alert condition: the weekly summary with each group's count, its change and the link; quiet unless a count rose and the week is over", () => {
   const zero = { A: 0, B: 0, C: 0, D: 0 };
   assert.deepEqual(captureProblemCondition(zero, null), []);
   assert.deepEqual(captureProblemCondition(zero, { A: 5, B: 0, C: 0, D: 0 }), [], "all zero: nothing holds, the alert clears");
@@ -356,20 +357,33 @@ test("the alert condition: counts per group and the link while any is open, quie
   assert.equal(c.kind, "problem");
   assert.equal(c.quiet, false, "never emailed before: it goes out");
   assert.equal(c.repeats, false);
-  assert.equal(c.title, "Capture problems: A 70 · B 10 · C 9 · D 11");
-  assert.match(c.detail, /^A\. Refresh failed, old capture kept: 70; B\. First capture failed: 10; C\. Stored capture is bad: 9; D\. Got worse on a re-capture: 11\.\nhttps:\/\/portfoliorank\.dev\/admin\/capture-problems$/);
+  assert.equal(c.title, "Capture problems: A 70 · B 10 · C 9 · D 11 (weekly summary)");
+  assert.equal(
+    c.detail,
+    "The weekly summary of capture problems.\nA. Refresh failed, old capture kept: 70.\nB. First capture failed: 10.\nC. Stored capture is bad: 9.\nD. Got worse on a re-capture: 11.\nhttps://portfoliorank.dev/admin/capture-problems"
+  );
   assert.deepEqual(countsOfTitle(c.title), { A: 70, B: 10, C: 9, D: 11 });
   const told = { A: 70, B: 10, C: 9, D: 11 };
   assert.equal(captureProblemCondition(told, told)[0].quiet, true, "the same counts: quiet");
   assert.equal(captureProblemCondition({ A: 40, B: 10, C: 9, D: 11 }, told)[0].quiet, true, "a fall: quiet");
-  const [up] = captureProblemCondition({ A: 60, B: 10, C: 9, D: 12 }, told);
+  const [up] = captureProblemCondition({ A: 60, B: 10, C: 9, D: 12 }, told, "", { sent: told });
   assert.equal(up.quiet, false, "D rose, even though A fell");
-  assert.match(up.detail, /New since the last email: D up from 11 to 12\./);
+  assert.match(up.detail, /^The weekly summary of capture problems, with the change since the last email\.\n/);
+  assert.match(up.detail, /\nA\. Refresh failed, old capture kept: 60, 10 fewer than in the last email \(70\)\.\n/);
+  assert.match(up.detail, /\nB\. First capture failed: 10, the same as in the last email\.\n/);
+  assert.match(up.detail, /\nD\. Got worse on a re-capture: 12, 1 more than in the last email \(11\)\.\n/);
+  assert.equal(captureProblemCondition({ A: 60, B: 10, C: 9, D: 12 }, told, "", { sent: told, gapOver: false })[0].quiet, true, "inside the week: held");
+});
+
+test("gapPassed: seven days from the last email sent, by quota day", () => {
+  assert.equal(gapPassed(null, "2026-11-23"), true);
+  assert.equal(gapPassed("2026-11-23", "2026-11-29"), false);
+  assert.equal(gapPassed("2026-11-23", "2026-11-30"), true);
 });
 
 test("alertBaseline: zero before any email and after a clear, the last email's counts after a send, else the lowest since", () => {
   const zero = { A: 0, B: 0, C: 0, D: 0 };
-  const title = "Capture problems: A 100 · B 0 · C 0 · D 5";
+  const title = "Capture problems: A 100 · B 0 · C 0 · D 5 (weekly summary)";
   assert.deepEqual(alertBaseline(null, null), zero);
   assert.deepEqual(alertBaseline({ sent_title: null, sends: 0, cleared_at: null }, null), zero, "never emailed");
   assert.deepEqual(alertBaseline({ sent_title: title, sends: 1, cleared_at: "2026-11-24T05:00:00Z" }, { low: JSON.stringify({ A: 100, B: 0, C: 0, D: 5 }), sends: 1 }), zero, "cleared since");
@@ -377,125 +391,131 @@ test("alertBaseline: zero before any email and after a clear, the last email's c
   assert.deepEqual(alertBaseline({ sent_title: title, sends: 2, cleared_at: null }, { low: JSON.stringify({ A: 20, B: 0, C: 0, D: 1 }), sends: 2 }), { A: 20, B: 0, C: 0, D: 1 }, "the lowest since");
 });
 
-test("the alert end to end: one email for 100 open problems, none the next nights, one when a count rises", async () => {
-  const adir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-alert-"));
-  const adb = createClient({ url: `file:${path.join(adir, "db.sqlite")}` });
-  try {
-    await migrate(adb);
-    for (let i = 0; i < 100; i++) {
-      const url = `https://a${i}.dev`;
-      await adb.execute({ sql: "INSERT INTO portfolios (url, name, status, reason, shot_key, page_text) VALUES (?, 'x', 'live', '', 'k', ?)", args: [url, SITE_TEXT] });
-      await recordRefreshFailure(adb, url, "error: HTTP 503", new Date("2026-11-22T04:00:00Z"));
-    }
-    const sent = [];
-    const email = { send: async (m) => void sent.push(m) };
-    const night = async (day) => {
-      const { conditions } = await captureProblemConditionsOrLog(adb, { siteUrl: "https://portfoliorank.dev" });
-      return reconcileAlerts(adb, { conditions, now: new Date(`${day}T05:00:00Z`), email, to: "owner@example.com" });
-    };
-    let r = await night("2026-11-23");
-    assert.deepEqual(r.sent, [ALERT_KEY]);
-    assert.match(sent[0].subject, /Capture problems: A 100 · B 0 · C 0 · D 0/);
-    assert.match(sent[0].text, /This email comes again only when it gets worse\./);
-    for (const day of ["2026-11-24", "2026-11-25"]) {
-      r = await night(day);
-      assert.deepEqual(r.sent, [], `no email on ${day}`);
-      assert.deepEqual(r.quiet, [ALERT_KEY]);
-      assert.deepEqual(r.cleared, [], "still open for the admin");
-    }
-    assert.equal(sent.length, 1);
-    // A new problem in group B: one email the next night.
-    await adb.execute({ sql: "INSERT INTO portfolios (url, name, status, reason) VALUES ('https://b-new.dev', 'x', 'error', 'HTTP 500')" });
-    r = await night("2026-11-26");
-    assert.deepEqual(r.sent, [ALERT_KEY]);
-    assert.match(sent[1].text, /New since the last email: B up from 0 to 1\./);
-    r = await night("2026-11-27");
-    assert.deepEqual(r.sent, []);
-
-    // Fall then rise: A 100 falls to 20 (quiet), then 40 new failures make 60: emailed.
-    const failing = async (n) => {
-      await adb.execute("DELETE FROM refresh_failures");
-      for (let i = 0; i < n; i++) await recordRefreshFailure(adb, `https://a${i}.dev`, "error: HTTP 503", new Date("2026-11-22T04:00:00Z"));
-    };
-    await failing(20);
-    r = await night("2026-11-28");
-    assert.deepEqual(r.sent, [], "a fall is quiet");
-    await failing(60);
-    r = await night("2026-11-29");
-    assert.deepEqual(r.sent, [ALERT_KEY], "a rise from the lowest since the last email");
-    assert.match(sent[2].text, /New since the last email: A up from 20 to 60\./);
-    assert.equal(sent.length, 3);
-  } finally {
+/**
+ * A database of its own and a run of nights, one a day from night 1 (2026-11-23): `night(n)` runs the
+ * night's alert step for night n, `set(group, count)` sets a group's open problems to `count`.
+ */
+async function alertWorld(t, { failFirst = 0 } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-week-"));
+  const adb = createClient({ url: `file:${path.join(dir, "db.sqlite")}` });
+  t.after(() => {
     adb.close();
-    fs.rmSync(adir, { recursive: true, force: true });
-  }
-});
-
-test("the alert end to end: a problem that comes back after the alert cleared is emailed again", async () => {
-  const adir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-alert2-"));
-  const adb = createClient({ url: `file:${path.join(adir, "db.sqlite")}` });
-  try {
-    await migrate(adb);
-    const sent = [];
-    const email = { send: async (m) => void sent.push(m) };
-    const night = async (day) => {
-      const { conditions } = await captureProblemConditionsOrLog(adb, { siteUrl: "https://portfoliorank.dev" });
-      return reconcileAlerts(adb, { conditions, now: new Date(`${day}T05:00:00Z`), email, to: "owner@example.com" });
-    };
-    // D 5: emailed.
-    const worse = async (n) => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  await migrate(adb);
+  const sent = [];
+  let failures = failFirst;
+  const email = { send: async (m) => (failures-- > 0 ? Promise.reject(new Error("gate refused")) : void sent.push(m)) };
+  const set = async (g, n) => {
+    if (g === "A") {
+      await adb.execute("DELETE FROM refresh_failures");
+      for (let i = 0; i < n; i++) {
+        const url = `https://a${i}.dev`;
+        await adb.execute({ sql: "INSERT OR IGNORE INTO portfolios (url, name, status, reason, shot_key, page_text) VALUES (?, 'x', 'live', '', 'k', ?)", args: [url, SITE_TEXT] });
+        await recordRefreshFailure(adb, url, "error: HTTP 503", new Date("2026-11-22T04:00:00Z"));
+      }
+    } else if (g === "B") {
+      await adb.execute("DELETE FROM portfolios WHERE url LIKE 'https://b%'");
+      for (let i = 0; i < n; i++) await adb.execute({ sql: "INSERT INTO portfolios (url, name, status, reason) VALUES (?, 'x', 'error', 'HTTP 500')", args: [`https://b${i}.dev`] });
+    } else {
       await adb.execute("DELETE FROM capture_changes");
       for (let i = 0; i < n; i++) {
         const url = `https://d${i}.dev`;
         await adb.execute({ sql: "INSERT OR IGNORE INTO portfolios (url, name, status, reason, shot_key, page_text) VALUES (?, 'x', 'live', '', 'k', ?)", args: [url, SITE_TEXT] });
         await recordCaptureChange(adb, { url, prev: { facts: facts(2, { github: true }), chars: 3000 }, next: { facts: facts(2, {}), chars: 3000 } });
       }
-    };
-    await worse(5);
-    let r = await night("2026-11-23");
-    assert.deepEqual(r.sent, [ALERT_KEY]);
-    // Everything fixed: the alert clears.
-    await worse(0);
-    r = await night("2026-11-24");
-    assert.deepEqual(r.cleared, [ALERT_KEY]);
-    // D comes back at 3, under the 5 the last email said: emailed, since the alert had cleared.
-    await worse(3);
-    r = await night("2026-11-25");
-    assert.deepEqual(r.sent, [ALERT_KEY]);
-    assert.match(sent[1].subject, /D 3/);
-    // And quiet the night after.
-    r = await night("2026-11-26");
-    assert.deepEqual(r.sent, []);
-    assert.equal(sent.length, 2);
-  } finally {
-    adb.close();
-    fs.rmSync(adir, { recursive: true, force: true });
+    }
+  };
+  // Noon UTC is the same quota day (Pacific) as its date.
+  const night = async (n) => {
+    const now = Date.parse("2026-11-23T12:00:00Z") + (n - 1) * 86400000;
+    const { conditions } = await captureProblemConditionsOrLog(adb, { siteUrl: "https://portfoliorank.dev", now });
+    return reconcileAlerts(adb, { conditions, now: new Date(now), email, to: "owner@example.com" });
+  };
+  return { set, night, sent };
+}
+
+test("weekly: 100 old problems are emailed once, then nothing while nothing rises", async (t) => {
+  const w = await alertWorld(t);
+  await w.set("A", 100);
+  assert.deepEqual((await w.night(1)).sent, [ALERT_KEY]);
+  assert.match(w.sent[0].subject, /^\[PortfolioRank\] Capture problems: A 100 · B 0 · C 0 · D 0 \(weekly summary\)$/);
+  assert.match(w.sent[0].text, /This email comes at most once a week, and only when a count has gone up\./);
+  for (let n = 2; n <= 15; n++) {
+    const r = await w.night(n);
+    assert.deepEqual(r.sent, [], `night ${n}`);
+    assert.deepEqual(r.quiet, [ALERT_KEY], "shown to the admin as quiet");
+    assert.deepEqual(r.cleared, []);
   }
+  assert.equal(w.sent.length, 1);
 });
 
-test("the alert end to end: an email that failed is tried again the next night", async () => {
-  const adir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-alert3-"));
-  const adb = createClient({ url: `file:${path.join(adir, "db.sqlite")}` });
-  try {
-    await migrate(adb);
-    await adb.execute("INSERT INTO portfolios (url, name, status, reason) VALUES ('https://b1.dev', 'x', 'error', 'HTTP 500')");
-    let fail = true;
-    const sent = [];
-    const email = { send: async (m) => (fail ? Promise.reject(new Error("gate refused")) : void sent.push(m)) };
-    const night = async (day) => {
-      const { conditions } = await captureProblemConditionsOrLog(adb);
-      return reconcileAlerts(adb, { conditions, now: new Date(`${day}T05:00:00Z`), email, to: "owner@example.com" });
-    };
-    let r = await night("2026-11-23");
-    assert.deepEqual(r.unsent, [ALERT_KEY]);
-    fail = false;
-    r = await night("2026-11-24");
-    assert.deepEqual(r.sent, [ALERT_KEY]);
-    assert.equal(sent.length, 1);
-  } finally {
-    adb.close();
-    fs.rmSync(adir, { recursive: true, force: true });
+test("weekly: rises on nights 1, 2 and 3 give one email", async (t) => {
+  const w = await alertWorld(t);
+  for (const n of [1, 2, 3]) {
+    await w.set("B", n);
+    await w.night(n);
   }
+  assert.equal(w.sent.length, 1);
+  assert.match(w.sent[0].subject, /B 1 /);
+});
+
+test("weekly: a rise on night 2 that persists is emailed on night 8, with its change", async (t) => {
+  const w = await alertWorld(t);
+  await w.set("B", 1);
+  await w.night(1);
+  await w.set("B", 2);
+  for (let n = 2; n <= 7; n++) assert.deepEqual((await w.night(n)).sent, [], `held on night ${n}`);
+  assert.deepEqual((await w.night(8)).sent, [ALERT_KEY]);
+  assert.equal(w.sent.length, 2);
+  assert.match(w.sent[1].text, /B\. First capture failed: 2, 1 more than in the last email \(1\)\./);
+});
+
+test("weekly: a rise that is gone by night 8 sends nothing", async (t) => {
+  const w = await alertWorld(t);
+  await w.set("B", 2);
+  await w.night(1);
+  await w.set("B", 3);
+  await w.night(2);
+  await w.set("B", 2);
+  for (let n = 3; n <= 10; n++) assert.deepEqual((await w.night(n)).sent, [], `night ${n}`);
+  assert.equal(w.sent.length, 1);
+});
+
+test("weekly: a fall then a rise inside the week is emailed when the week is over", async (t) => {
+  const w = await alertWorld(t);
+  await w.set("A", 100);
+  await w.night(1);
+  await w.set("A", 20);
+  await w.night(2);
+  await w.set("A", 60);
+  for (let n = 3; n <= 7; n++) assert.deepEqual((await w.night(n)).sent, [], `held on night ${n}`);
+  assert.deepEqual((await w.night(8)).sent, [ALERT_KEY]);
+  assert.match(w.sent[1].text, /A\. Refresh failed, old capture kept: 60, 40 fewer than in the last email \(100\)\./);
+});
+
+test("weekly: clear then reappear inside the week waits for the week", async (t) => {
+  const w = await alertWorld(t);
+  await w.set("D", 5);
+  await w.night(1);
+  await w.set("D", 0);
+  assert.deepEqual((await w.night(2)).cleared, [ALERT_KEY], "it clears at zero");
+  await w.set("D", 3);
+  for (let n = 3; n <= 7; n++) assert.deepEqual((await w.night(n)).sent, [], `held on night ${n}`);
+  assert.deepEqual((await w.night(8)).sent, [ALERT_KEY]);
+  assert.match(w.sent[1].subject, /D 3 /);
+  assert.deepEqual((await w.night(9)).sent, []);
+});
+
+test("weekly: a failed email is tried the next night and does not start the week", async (t) => {
+  const w = await alertWorld(t, { failFirst: 1 });
+  await w.set("B", 1);
+  assert.deepEqual((await w.night(1)).unsent, [ALERT_KEY]);
+  assert.deepEqual((await w.night(2)).sent, [ALERT_KEY], "tried again the next night");
+  await w.set("B", 2);
+  for (let n = 3; n <= 8; n++) assert.deepEqual((await w.night(n)).sent, [], `held on night ${n}: the week runs from night 2`);
+  assert.deepEqual((await w.night(9)).sent, [ALERT_KEY]);
+  assert.equal(w.sent.length, 2);
 });
 
 test("the alert: a failed read gives no conditions and says so, for the night to leave the alert as it was", async () => {

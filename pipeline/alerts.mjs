@@ -19,9 +19,10 @@
 //                            (dispatchTokenConditions)
 //   capture-problems         open capture problems per group, with the admin
 //                            page's link (lib/capture-problems.mjs): open
-//                            while a count is above zero, emailed only on a
-//                            night a count rose since the last email sent
-//                            (a quiet condition the other nights, below)
+//                            while a count is above zero; a weekly summary,
+//                            emailed at most once in 7 days and only when a
+//                            count rose since the last email (a quiet
+//                            condition the other nights, below)
 // Levels: ALERT_TRACTION (JSON, {"peopleGrades": 50, "humanVotes": 300}).
 //
 // Email: one interface, { send({ to, subject, text }) }, which throws when
@@ -223,7 +224,7 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
       await email.send({
         to,
         subject: `${c.kind === "good" ? "" : "[PortfolioRank] "}${c.title}`,
-        text: `${c.detail ?? ""}\n\nOngoing since ${since}. ${c.repeats === false ? "This email comes again only when it gets worse." : "This email repeats once a day until it clears."}`,
+        text: `${c.detail ?? ""}\n\nOngoing since ${since}. ${c.repeats === false ? "This email comes at most once a week, and only when a count has gone up." : "This email repeats once a day until it clears."}`,
       });
     } catch (e) {
       // Refused by the email gate's caps or failed at the provider: tried again on the next run.

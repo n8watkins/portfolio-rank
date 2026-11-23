@@ -221,9 +221,14 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   D is recorded at capture time in `capture_changes`, and only facts of the same version (`facts.v`) are compared: a change that comes with new measuring code is listed apart as the code's, not counted.
   A site the health check marks down or suspect is not a capture problem; its health state is a column.
   "On your review list" means the site has an open row on `/admin/review`, never the `needs_review` flag alone, which the weekly health check rewrites.
-  The nightly owner alert holds one line with the count per group and the page's link while any count is above zero, and is emailed only on a night a group's count rose above its lowest since the last such email (`capture_problem_alert`, starting from the email's counts in `owner_alerts.sent_title`); never on staging.
-  Why: about 100 old re-capture failures in group A would otherwise send the same email every night.
-  So a count that falls and then rises again is emailed, and once every count reaches zero the alert clears and a problem that comes back is emailed as new.
+- **The capture-problems alert is a weekly summary** (owner, 2026-11-22: "lets just do a weekly capture alert"). Status: building (#275).
+  The night's owner alert holds it while any count is above zero, with each group's count, its change since the last email in plain words, and the page's link; never on staging.
+  An email goes out on a night when both hold: a group's count is above its lowest since the last email (zero after the alert cleared, which it does when every count reaches zero), and at least 7 days have passed since the last email that was actually sent (`owner_alerts.last_sent_day`).
+  A rise inside those 7 days is held: if the count is still above that lowest point on the first night after the gap, that night's email reports it; if it has gone, nothing is sent.
+  A failed email does not start the 7 days and is tried again the next night.
+  Every other night the alert is recorded quiet: the admin sees it, no email goes out.
+  The lowest counts are kept in `capture_problem_alert`, starting from the last email's counts (`owner_alerts.sent_title`).
+  Why: about 100 old re-capture failures in group A would otherwise send the same email every night, and a daily email for small changes is more than the owner wants.
 - **A re-capture that hits a bot check or a covering dialog goes to the owner's review list** (owner, 2026-11-22, with the Capture problems list; his standing rule "bot-walled sites go to owner review", applied to re-captures). Status: building (#275).
   A re-capture that meets a bot or security check, or a dialog still on top after the capture tried to close it, writes a pending row in its own group, `recapture_blocked` ("Re-capture blocked"), on `/admin/review` (`lib/reviews/door.mjs` `blockedRefreshReview`, the same "Mark checked" decision as a first capture's bot wall), and the good stored capture and grade stay as they are.
   One row per episode: none while the site has another open case, none again after he decided one since the stored capture was made, and the row closes by itself once a later re-capture gets through.
