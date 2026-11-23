@@ -41,7 +41,7 @@ export function ProfileTier({ t }: { t: Data }) {
               <p className="text-sm text-mute">
                 {t.seeded
                   ? t.startingPoints != null
-                    ? `Starting rank set from automated checks when they scored ${t.startingPoints} of 100 · ${votes}. Votes move it from here.`
+                    ? `Starting rank set from automated checks when they scored ${Math.round(t.startingPoints)} of 100 · ${votes}. Votes move it from here.`
                     : `Starting rank from automated checks · ${votes}. Votes move it from here.`
                   : `ELO from ${votes}. It moves as people vote.`}
                 <span className="block text-xs">{settling}</span>
@@ -61,7 +61,7 @@ export function ProfileTier({ t }: { t: Data }) {
         <div className="mt-4 grid grid-cols-1 gap-4 border-t border-edge pt-4 md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
           <div>
             <h3 className="text-sm font-semibold">
-              {t.checkIsCurrent ? "Automated checks now" : "Automated checks"}: <span className="tabular-nums">{t.check.total}</span> of 100
+              {t.checkIsCurrent ? "Automated checks now" : "Automated checks"}: <span className="tabular-nums">{Math.round(t.check.total)}</span> of 100
             </h3>
             <CheckItems check={t.check} />
           </div>

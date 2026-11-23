@@ -14,7 +14,8 @@ export function CheckItems({ check }: { check: CodeChecks["check"] }) {
             {i.name}
             {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
           </span>
-          <span className={`shrink-0 tabular-nums ${i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>{`${i.points}/${i.max}`}</span>
+          {/* Whole points for people; the order keeps the exact value (lib/check-points.mjs). */}
+          <span className={`shrink-0 tabular-nums ${i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>{`${Math.round(i.points)}/${i.max}`}</span>
         </li>
       ))}
     </ul>

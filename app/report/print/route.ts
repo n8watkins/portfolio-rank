@@ -91,7 +91,7 @@ export async function GET(req: Request) {
   if (!graded) return page(404, "No report yet", "This portfolio hasn't been graded yet.");
   // Never Gemini's letter (the "AI" mark instead), and the one Code checks score the profile shows (lib/tiers-view.ts).
   const code = await loadCodeChecks(url, row?.ai_rubric ?? null, false);
-  const view = { ...graded, showTier: false, checksScore: code ? code.check.total : null };
+  const view = { ...graded, showTier: false, checksScore: code ? Math.round(code.check.total) : null };
   const shot = (await shotBases([url])).get(url);
   const tagline = (feed as { url: string; tagline?: string }[]).find((p) => p.url === url)?.tagline ?? null;
   const html = renderReportHtml({

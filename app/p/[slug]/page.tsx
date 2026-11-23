@@ -138,7 +138,7 @@ function CodeChecksCard({ code }: { code: CodeChecks }) {
   return (
     <section aria-labelledby="code-checks" className="mb-4 rounded-xl border border-edge bg-card p-5">
       <h2 id="code-checks" className="font-semibold">
-        Code checks score: <span className="tabular-nums">{code.check.total}</span> of 100
+        Code checks score: <span className="tabular-nums">{Math.round(code.check.total)}</span> of 100
       </h2>
       <p className="mt-0.5 text-xs text-mute">Measured by code from the page, its speed and its share card. No AI is involved.</p>
       <CheckItems check={code.check} />
@@ -316,19 +316,10 @@ export default async function PortfolioPage({
                   by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
                   a verdict
                 </p>
-                {(grade.quality !== undefined || code) && (
+                {/* Gemini's own numbers only: the Code checks score is code's and sits in its own card above. */}
+                {grade.quality !== undefined && (
                   <p className="mt-0.5 text-xs text-mute">
-                    {grade.quality !== undefined && (
-                      <>
-                        Quality <span className="font-semibold tabular-nums text-ink">{grade.quality.toFixed(1)}/5</span>
-                      </>
-                    )}
-                    {grade.quality !== undefined && code && " · "}
-                    {code && (
-                      <>
-                        Code checks score <span className="font-semibold tabular-nums text-ink">{code.check.total}/100</span>
-                      </>
-                    )}
+                    Quality <span className="font-semibold tabular-nums text-ink">{grade.quality.toFixed(1)}/5</span>
                   </p>
                 )}
               </div>

@@ -8,13 +8,15 @@ import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { EloGrading } from "@/components/tiers/EloGrading";
+import { BASE_ELO } from "@/lib/elo";
 
-// How grading works, kept short: the Code checks score that sets where a
-// portfolio starts (owner, 2026-11-22: never the AI), what "top X%" means,
-// what is checked and how votes combine. The points come from
-// lib/check-points.mjs and the criteria from the rubric (pipeline/rubric.mjs),
-// so this page follows them when they change. Tier letters stay on the
-// RANKING_V2 page (components/tiers/EloGrading.tsx).
+// How grading works while RANKING_V2 is off, kept short and true for what a
+// visitor sees with the switch off: the Code checks score (lib/check-points.mjs)
+// each profile shows, what "top X%" means (the AI grade's order, on the home
+// page and grade reports), what is checked, and the leaderboard of face-off
+// votes (lib/leaderboard.ts loadElo: everyone starts at BASE_ELO). The
+// Starting rank from the code checks and the tiers are explained on the
+// RANKING_V2 page (components/tiers/EloGrading.tsx), where they are shown.
 
 export const metadata: Metadata = {
   title: "How grading works - PortfolioRank",
@@ -57,7 +59,7 @@ export default function GradingPage() {
             How grading works
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Code measures the site and sets where it starts. Gemini writes a report card on the side. People&apos;s votes decide the leaderboard.
+            Code measures each site for its Code checks score. Gemini writes a report card on the side. People&apos;s votes decide the leaderboard.
           </p>
         </div>
       </section>
@@ -76,7 +78,7 @@ export default function GradingPage() {
           </ul>
           <p className="mt-3 text-sm text-mute">
             Code measures each one from the page, Lighthouse and the share card, with no AI. Something not measured yet counts the library&apos;s
-            median, never zero. Where a portfolio starts in the ranking comes from this score, not from the AI.
+            median, never zero. Your portfolio&apos;s page shows its own score, item by item.
           </p>
         </section>
 
@@ -84,7 +86,7 @@ export default function GradingPage() {
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
           <p className="text-[15px] text-mute">
-            Only 1 in 10 portfolios placed higher. The Code checks score sets the start; equal scores go by who was measured first.
+            Only 1 in 10 graded portfolios placed higher by the AI grade.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {BANDS.map((b) => (
@@ -122,7 +124,7 @@ export default function GradingPage() {
               <h3 className="flex items-center gap-2 font-bold">
                 <Bot className="h-4 w-4 text-mute" aria-hidden /> Gemini report card: 1 to 5, from a screenshot and the text
               </h3>
-              <p className="mt-1 text-sm text-mute">An opinion from one look. It never sets the rank; it can only flag a site that is not a portfolio.</p>
+              <p className="mt-1 text-sm text-mute">An opinion from one look, kept apart from the Code checks score.</p>
               <ul className="mt-4 grid gap-2.5 text-sm">
                 {AI_CRITERIA.map((c) => (
                   <li key={c.id} className="flex items-center gap-3">
@@ -144,7 +146,7 @@ export default function GradingPage() {
           <SectionHeader id="votes" eyebrow="The ranking" title="How people's votes combine" className="mb-5" />
           <ol className="grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
             {[
-              { Icon: Code2, title: "Code checks", body: "Set the start" },
+              { Icon: CircleCheck, title: "Start", body: `Everyone at ${BASE_ELO} ELO` },
               { Icon: Swords, title: "Face-offs", body: "Move it up or down" },
               { Icon: Trophy, title: "Leaderboard", body: "Settles with more votes" },
             ].map(({ Icon, title, body }, i) => (

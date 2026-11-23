@@ -15,8 +15,8 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { ensureRosterSchema, ACTIVE } from "../pipeline/roster.mjs";
 import { STRONG_SIGNALS } from "../pipeline/portfolio-guard.mjs";
-import { checkSources, dailyRun, geminiYes, libraryMember, pointsOf, rankForWrite, rankFromCode, refreshTiers, seedNewcomers } from "../lib/tiers-store.mjs";
-import { readSiteRow, readTierMeta, standingOf, topRows } from "../lib/tiers-db.mjs";
+import { NEWCOMERS_PER_RUN, checkSources, dailyRun, geminiYes, libraryMember, pointsOf, rankForWrite, rankFromCode, refreshTiers, seedNewcomers } from "../lib/tiers-store.mjs";
+import { ensureTierSchema, readSiteRow, readTierMeta, standingOf, topRows } from "../lib/tiers-db.mjs";
 import { compareSeed, isTier } from "../lib/tiers.mjs";
 import { checksReading } from "../lib/fresh-facts.mjs";
 import { prewarmQueue } from "../scripts/lib/prewarm.mjs";
@@ -202,32 +202,141 @@ test("Gemini's later grade never moves a code-ranked site; its later 'no' takes 
   assert.equal((await readSiteRow(client, "https://later-no.example/")).member, 0);
   assert.equal((await readSiteRow(client, "https://later-yes.example/")).member, 1);
 
-  // An error answer changes nothing in the order.
+  // An error answer takes it out, as any answer that is not a "yes" did before; the daily run puts it back as it
+  // was, since the code checks alone make it a member.
   await addMeasured(client, "https://error.example/", 5);
   await rankFromCode(client, "https://error.example/", { now: NOW });
-  await rankForWrite(client, { error: "no_usable_captures" }, { url: "https://error.example/", now: NOW });
-  assert.equal((await readSiteRow(client, "https://error.example/")).member, 1);
+  const was = await readSiteRow(client, "https://error.example/");
+  const err = await rankForWrite(client, { error: "no_usable_captures" }, { url: "https://error.example/", now: NOW });
+  await client.execute({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?", args: [JSON.stringify(err), "https://error.example/"] });
+  assert.equal((await readSiteRow(client, "https://error.example/")).member, 0);
+  await dailyRun(client, { now: NOW + 86_400_000 });
+  const back = await readSiteRow(client, "https://error.example/");
+  assert.equal(back.member, 1);
+  assert.equal(back.mu, was.mu);
+  assert.equal(back.points, was.points);
 });
 
-test("the membership trigger keeps a code-ranked site in the library through health changes, and out while delisted or down", async () => {
+/** A health check's write, as pipeline/health.mjs makes for every listed site every night. */
+const healthWrite = (client, url, health = "live") =>
+  client.execute({ sql: "UPDATE portfolios SET health = ?, health_checked_at = datetime('now') WHERE url = ?", args: [health, url] });
+
+test("the membership trigger only takes sites out; the daily run brings back, by the membership rule, with the rating kept", async () => {
   const client = await db();
   await library(client);
-  await addMeasured(client, "https://trig.example/", 5);
-  await rankFromCode(client, "https://trig.example/", { now: NOW });
-  const member = async () => (await readSiteRow(client, "https://trig.example/")).member;
-  await client.execute("UPDATE portfolios SET health = 'suspect' WHERE url = 'https://trig.example/'");
+  const u = "https://trig.example/";
+  await addMeasured(client, u, 5);
+  await rankFromCode(client, u, { now: NOW });
+  // Votes on it, so a return can be seen to keep them.
+  await client.execute({ sql: "UPDATE tier_ratings SET votes = 4, faceoffs = 4, mu = mu + 1.5 WHERE url = ?", args: [u] });
+  const start = await readSiteRow(client, u);
+  const member = async () => (await readSiteRow(client, u)).member;
+  await healthWrite(client, u, "suspect");
   assert.equal(await member(), 1, "a failing (suspect) site stays, as graded ones do");
-  await client.execute("UPDATE portfolios SET health = 'down' WHERE url = 'https://trig.example/'");
-  assert.equal(await member(), 0, "hidden: out");
-  await client.execute("UPDATE portfolios SET health = 'live' WHERE url = 'https://trig.example/'");
-  assert.equal(await member(), 1, "back");
-  await client.execute("UPDATE portfolios SET delisted_at = '2026-11-22' WHERE url = 'https://trig.example/'");
+  await healthWrite(client, u, "down");
+  assert.equal(await member(), 0, "hidden: out at once");
+  await healthWrite(client, u, "live");
+  assert.equal(await member(), 0, "working again: the trigger never puts it back by itself");
+  assert.equal((await dailyRun(client, { now: NOW + 86_400_000 })).joined, 1);
+  const back = await readSiteRow(client, u);
+  assert.equal(back.member, 1, "the next daily run puts it back");
+  for (const k of ["mu", "sigma", "votes", "faceoffs", "points", "first"]) assert.equal(back[k], start[k], k);
+  await client.execute({ sql: "UPDATE portfolios SET delisted_at = '2026-11-22' WHERE url = ?", args: [u] });
   assert.equal(await member(), 0, "off the list: out");
-  await client.execute("UPDATE portfolios SET delisted_at = NULL WHERE url = 'https://trig.example/'");
+  await client.execute({ sql: "UPDATE portfolios SET delisted_at = NULL WHERE url = ?", args: [u] });
+  assert.equal(await member(), 0);
+  await dailyRun(client, { now: NOW + 2 * 86_400_000 });
   assert.equal(await member(), 1);
-  // The old trigger (it needed a Gemini letter) is gone.
-  const triggers = (await client.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'tier_member_sync%'")).rows.map((r) => String(r.name));
-  assert.deepEqual(triggers, ["tier_member_sync2"]);
+  const triggers = (await client.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'tier_member%' ORDER BY name")).rows.map((r) => String(r.name));
+  assert.deepEqual(triggers, ["tier_member_gone", "tier_member_out"]);
+});
+
+test("an owner's Undo that waits for a fresh grade keeps the site out through the nightly health writes and daily runs", async () => {
+  const client = await db();
+  await library(client);
+  const u = "https://undo.example/";
+  await addMeasured(client, u, 6);
+  await rankFromCode(client, u, { now: NOW });
+  // lib/reviews/store.mjs undoReviews: the grade becomes the fresh-grade marker, and the site leaves the tiers.
+  const marker = await rankForWrite(client, { error: "fresh_grade_due", judged_at: "2026-11-23T00:00:00Z", reason: "undo" }, { url: u, now: NOW });
+  await client.execute({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?", args: [JSON.stringify(marker), u] });
+  assert.equal((await readSiteRow(client, u)).member, 0);
+  for (let day = 1; day <= 2; day++) {
+    await healthWrite(client, u);
+    await dailyRun(client, { now: NOW + day * 86_400_000 });
+    assert.equal((await readSiteRow(client, u)).member, 0, `still out on day ${day}`);
+  }
+  await refreshTiers(client, { now: NOW + 3 * 86_400_000 });
+  assert.equal((await readSiteRow(client, u)).member, 0, "a full rebuild agrees");
+  // Its fresh grade says "a portfolio": back, with the rating it had.
+  const before = await readSiteRow(client, u);
+  await rankForWrite(client, grade(4), { url: u, now: NOW + 4 * 86_400_000 });
+  const after = await readSiteRow(client, u);
+  assert.equal(after.member, 1);
+  assert.equal(after.mu, before.mu);
+});
+
+test("a ranked site whose grade is cleared stays out through a health write when the code checks do not make it a member", async () => {
+  const client = await db();
+  await library(client);
+  // A Gemini member with 3 signals: out when its grade is cleared (lib/reviews/store.mjs putGrade, clearGradeStatements).
+  const u = "https://cleared.example/";
+  await addMeasured(client, u, 3, { rubric: grade(3) });
+  await rankFromCode(client, u, { now: NOW });
+  assert.equal((await readSiteRow(client, u)).member, 1);
+  await client.execute({ sql: "UPDATE portfolios SET ai_rubric = NULL WHERE url = ?", args: [u] });
+  await client.execute({ sql: "UPDATE tier_ratings SET member = 0, dirty = 1 WHERE url = ?", args: [u] });
+  await healthWrite(client, u);
+  assert.equal((await readSiteRow(client, u)).member, 0, "the health check's write never puts it back");
+  await dailyRun(client, { now: NOW + 86_400_000 });
+  assert.equal((await readSiteRow(client, u)).member, 0, "3 signals and no grade: not a member");
+  await refreshTiers(client, { now: NOW + 2 * 86_400_000 });
+  assert.equal((await readSiteRow(client, u)).member, 0, "a full rebuild agrees");
+});
+
+test("on a database that has the old membership triggers, the schema step replaces them with the one that only takes out", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rank-from-code-old-"));
+  const file = `file:${path.join(dir, "db.sqlite")}`;
+  const first = createClient({ url: file });
+  await migrate(first);
+  await ensureRosterSchema(first);
+  await ensureTierSchema(first);
+  // The two earlier triggers, as they were created on main and on the first version of this change.
+  await first.execute("DROP TRIGGER IF EXISTS tier_member_out");
+  await first.execute(`CREATE TRIGGER tier_member_sync AFTER UPDATE OF delisted_at, health, ai_rubric ON portfolios BEGIN
+    UPDATE tier_ratings SET member = (CASE WHEN NEW.delisted_at IS NULL AND COALESCE(NEW.health, '') != 'down' AND json_valid(NEW.ai_rubric)
+      AND json_extract(NEW.ai_rubric, '$.tier') IS NOT NULL THEN 1 ELSE 0 END), dirty = 1 WHERE url = NEW.url AND seeded = 1; END`);
+  await first.execute(`CREATE TRIGGER tier_member_sync2 AFTER UPDATE OF health ON portfolios BEGIN
+    UPDATE tier_ratings SET member = 1 WHERE url = NEW.url AND seeded = 1; END`);
+  first.close();
+  // A new client (a new Worker isolate or job) runs the schema step once.
+  const client = createClient({ url: file });
+  await ensureTierSchema(client);
+  const names = (await client.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'tier_member%' ORDER BY name")).rows.map((r) => String(r.name));
+  assert.deepEqual(names, ["tier_member_gone", "tier_member_out"]);
+  // A code-ranked site keeps its place through a health write.
+  await client.execute("INSERT INTO portfolios (url, status, facts) VALUES ('https://x.example/', 'live', '{}')");
+  await client.execute("INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded) VALUES ('https://x.example/', 25, 8, 9, 36, 1, 1)");
+  await healthWrite(client, "https://x.example/");
+  assert.equal((await readSiteRow(client, "https://x.example/")).member, 1);
+});
+
+test("the daily run takes at most NEWCOMERS_PER_RUN, the rest the next day; an owner's removal is never ranked", async () => {
+  assert.equal(NEWCOMERS_PER_RUN, 300);
+  const client = await db();
+  await library(client);
+  for (let i = 0; i < 5; i++) await addMeasured(client, `https://cap${i}.example/`, 5);
+  assert.equal((await seedNewcomers(client, { now: NOW, limit: 2 })).length, 2);
+  assert.equal((await seedNewcomers(client, { now: NOW, limit: 2 })).length, 2);
+  assert.equal((await seedNewcomers(client, { now: NOW, limit: 2 })).length, 1);
+  assert.equal((await seedNewcomers(client, { now: NOW, limit: 2 })).length, 0);
+  // Removed by its verified owner, still on the list until the nightly export: not ranked, at capture or daily.
+  await addMeasured(client, "https://removed.example/", 6);
+  await client.execute("INSERT INTO portfolio_owner (url, removed_at, updated_at) VALUES ('https://removed.example/', '2026-11-22T00:00:00Z', '2026-11-22T00:00:00Z')");
+  assert.equal(await rankFromCode(client, "https://removed.example/", { now: NOW }), false);
+  assert.equal((await seedNewcomers(client, { now: NOW })).length, 0);
+  await refreshTiers(client, { now: NOW });
+  assert.equal((await readSiteRow(client, "https://removed.example/")).member, 0);
 });
 
 test("the daily run ranks every measured newcomer among the others without moving anyone's rating or votes, and writes its Tier", async () => {

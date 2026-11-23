@@ -203,6 +203,7 @@ Each chain is a list of steps in the order they happen.
    All of these are listed on the Capture problems page (see "Keeping watch").
 7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), and project link checks that are due (up to 120).
 8. **Starting rank and Tier** (the capture itself, `lib/tiers-store.mjs` `rankFromCode`, right after a capture is stored; the daily tiers task catches any it missed).
+   This step starts with the release after 2026-11-22; until then a site gets its starting rank only with its Gemini grade.
    Your rule (2026-11-22): "the starting rank you get is based off of clear verifiable code measurements", and "a site should have a tier" from its first measure.
    A listed site joins the tiers when it has a good capture, measured facts and at least 4 of the 6 portfolio signals (name, projects, about, contact, resume, GitHub), with no Gemini grade needed.
    A site with fewer signals waits until Gemini says it is a portfolio or you keep it on your review page.
@@ -216,7 +217,7 @@ Each chain is a list of steps in the order they happen.
 9. **Grade** (night stage 1, `grade_new`).
    One Gemini request with the screenshot, the page text and the facts.
    It answers whether it is a portfolio and writes the Gemini report card (scores and notes).
-   It never sets or moves the rank, and its own letter is never shown.
+   It never sets or moves the Starting rank or the Tier, and its own letter is never shown on a listed site's pages.
    A stored screenshot that does not show the site is checked first and set aside.
    Paused.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
@@ -228,12 +229,14 @@ Each chain is a list of steps in the order they happen.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
    5. You undid an earlier removal, a rule once listed the site, an earlier grade said portfolio, or another case is waiting: the site stays listed and waits for you.
 
-   Whatever the outcome, the grade is written with `lib/tiers-store.mjs` `rankForWrite`: a site that already has its Starting rank keeps it exactly, a site without one (it had too few signals) gets it now from its Code checks score, and "not a portfolio" takes the site out of the tiers at once.
+   Whatever the outcome, the grade is written with `lib/tiers-store.mjs` `rankForWrite`: a site that already has its Starting rank keeps it exactly, a site without one (it had too few signals) gets it now from its Code checks score, and any answer that is not a "yes" takes the site out of the tiers at once.
+   A site out of the tiers comes back only through the membership rule, at the next daily tiers task, with the rating and votes it had (`seedNewcomers`).
 11. **Apply the removal.**
     With `REVIEW_AUTO_APPLY` true (per `wrangler.jsonc`), the night applies a recorded removal at once.
     The hourly task (hourly task 9) applies any that were left waiting, and also confirms waiting relist rows when both graders say portfolio.
     Every automatic decision shows on your review page with Undo.
-    A removed site leaves the order; an undone removal brings it back with its rank.
+    A removed site leaves the order.
+    An undone removal brings it back with its rank: at once when the grade it had comes back, or, when that grade is set aside for one fresh grade, once the fresh grade says it is a portfolio.
 12. **After that** the site takes part in votes and gets the nightly health check.
     It is not graded again, except for one fresh grade after you undo or reject a removal, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.
 
