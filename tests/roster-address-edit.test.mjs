@@ -140,17 +140,17 @@ test("a respelled site's old row is never purged, and every sync counts the spli
   assert.match(summary, /Respelled more than once \(1\):\n- https:\/\/two\.dev, https:\/\/www\.two\.dev -> http:\/\/two\.dev\//);
   for (const days of [31, 400]) {
     const logs = [];
-    await purgeDelisted(db, { now: new Date(NOW.getTime() + days * DAY), deleteShots: async () => {}, log: (m) => logs.push(m) });
+    await purgeDelisted(db, { now: new Date(NOW.getTime() + days * DAY), excluded: [], deleteShots: async () => {}, log: (m) => logs.push(m) });
     assert.match(logs.join("\n"), /kept https:\/\/ann\.dev\/: its site is listed under another address/);
   }
   for (const u of ["https://ann.dev/", "https://bob.github.io/portfolio", "http://cat.dev", "https://dan.dev/?game", "https://two.dev", "https://www.two.dev"]) {
     const row = (await db.execute({ sql: "SELECT ai_rubric, delisted_at FROM portfolios WHERE url = ?", args: [u] })).rows[0];
     assert.ok(row && row.delisted_at, `${u}: kept, delisted`);
   }
-  // A site that really left the list is still purged.
+  // A site we took off the list (data/excluded.json) is still purged.
   await db.execute({ sql: "INSERT INTO portfolios (url, shot_key, delisted_at) VALUES ('https://gone.dev', 'kg', ?)", args: [NOW.toISOString()] });
   const deleted = [];
-  await purgeDelisted(db, { now: new Date(NOW.getTime() + 31 * DAY), deleteShots: async (k) => deleted.push(k), log: () => {} });
+  await purgeDelisted(db, { now: new Date(NOW.getTime() + 31 * DAY), excluded: [{ url: "https://gone.dev", kind: "dead" }], deleteShots: async (k) => deleted.push(k), log: () => {} });
   assert.deepEqual(deleted, ["kg"]);
   // Two listed rows for one key are reported as unclear.
   assert.deepEqual(splitSites([{ url: "https://e.dev", delistedAt: null }, { url: "https://e.dev/", delistedAt: null }, { url: "http://e.dev", delistedAt: "x" }]).unclear.length, 1);

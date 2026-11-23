@@ -47,7 +47,6 @@ export const SCHEDULED_TASKS: Readonly<Record<string, readonly string[]>> = {
     "night watch",
     "people queue",
     "tiers",
-    "freshness",
     "review auto-apply",
     "image library",
   ],

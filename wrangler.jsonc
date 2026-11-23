@@ -95,10 +95,6 @@
     // Email sign-in (a one-time link beside GitHub, lib/signin): the option in
     // the sign-in dialog and its routes are off until this is "true" (decision D3).
     "EMAIL_SIGNIN_ENABLED": "false",
-    // "When checks re-run" (lib/freshness-flag.ts, AUTOMATION.md): the hourly
-    // change fingerprints and the profile's "site unchanged since" lines are
-    // off until this is "true".
-    "FRESHNESS_ENABLED": "false",
     // The report card's "see the whole page" preview (lib/fullpage-flag.ts):
     // the capture makes the tall page images either way (stored once the
     // images bucket exists), but no page links to them until this is "true".
@@ -270,7 +266,6 @@
         "GRADER_ENABLED": "true",
         "TOOLS_ENABLED": "true",
         "EMAIL_SIGNIN_ENABLED": "true",
-        "FRESHNESS_ENABLED": "true",
         // Off on staging too until the report card's preview UI ships.
         "FULLPAGE_PREVIEW_ENABLED": "false",
         "IMAGES_BASE_URL": "",
@@ -322,7 +317,7 @@
       // it needs: the allowlist STAGING_TASKS in worker/crons.ts (owner
       // removals, edge purge, tiers, review auto-apply, the people queue and
       // the grader's tick). The end-of-day run, the weekly model watch and
-      // goals, freshness, the image library, night watch, email caps, the start
+      // goals, the image library, night watch, email caps, the start
       // of the hourly re-check and the newsletter are off here. So only two triggers remain: the hourly group
       // every six hours and the grader's tick every 30 minutes (worker/crons.ts
       // maps them to production's crons to keep its CPU time low).

@@ -77,6 +77,12 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Every background job works only on sites on the current list; rows that leave the list are deleted after 30 days, with their votes kept.
   Our exclusions override the community list, and `/removed` shows what was removed and why.
   Why: 254 unlisted sites were still being graded and voted on, and we can't rely on the community list being right for our purposes.
+  Changed on 2026-11-22 (next entry): a site the community list drops no longer leaves our list, and only rows we removed are deleted.
+- **A community list removal changes nothing on our side** (owner, 2026-11-22: "a community list remove shouldnt change anything on our side"; earlier: "it could be the case that the removed sites are still portfolios ... we should be doing our checks on the sites they are removing as a failsafe. if people want to remove their portfolio from our site they have to go through our claim process."). Status: building (#274).
+  A site on our list that the community list drops stays on `data/feed.json`, recorded in `data/additions.json` (`source: "left_community_list"`, `left_on`, the day the nightly rebuild first saw it gone); the health check hides and shows it like any listed site, and only our exclusions (dead, down, duplicate, not a portfolio) and an owner's removal through the claim process take it off.
+  Respellings, excluded sites and README lines that were never web addresses are not carried; the purge deletes only rows we removed (in `data/excluded.json`, or an old spelling of a listed site); nothing is sent to the community list.
+  The 25 sites dropped before this rule, delisted on 2026-11-10 and 2026-11-16, were recorded by hand so the next sync lists them again.
+  Why: the community list removes lines through its automatic broken-link reports (paused hosting, a 404, an expired domain), which is not a judgement that a site is not a portfolio, and the first of those rows would have been deleted on about 2026-12-10.
 - **The capture gives a working site every chance before calling it failed** (agent, 2026-11-14). Status: building (this PR).
   A 401, 403, 429 or 503 or a TLS failure on the plain pre-check is left to the browser (often a bot filter, or a certificate the browser accepts); a page with no text yet gets up to 15 seconds to render before it counts as blank; a screenshot that times out or hits Chrome's "Unable to capture screenshot" is taken again through the DevTools protocol.
   Why: 30 sites the owner confirmed as portfolios on 14 November failed the nightly capture (13 on a 403 to the pre-check alone, 9 blank after 3 seconds, 6 on a screenshot error) while a browser loaded all of them.
@@ -109,7 +115,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: the owner wants a verdict to stand, not to be re-earned on every capture, while a dead site gets a way back.
 - **Feed shrink guard** (agent, 2026-11-10). Status: built (#53).
   The sync fails rather than write a list more than 5% smaller.
-  Why: a broken upstream file should never wipe the site.
+  Since 2026-11-22 it also fails when the community list drops more than 5% of our list in one night, since such sites now stay on the feed (agent).
+  Why: a broken upstream file should never wipe the site, or fill the record of sites the community list dropped.
 
 ## Grading
 
@@ -199,7 +206,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **A site is graded once and never re-graded automatically, and only one Gemini model is used** (owner, 2026-11-21). Status: building (#273).
   Five scheduled jobs are removed: the nightly change detection ("Record page changes", which wrote `rating_resets`), the weekly comparison of two Gemini versions' grades (`grade-compare.yml`), the "grade changed sites" night stage, the "re-grades" night stage (with the fallback grader's re-grade queues), and the ELO-era AI votes that `judge-vote.yml` ran without `RANKING_V2`.
   No table is dropped: `rating_resets` and `site_fingerprints` keep what they hold and are no longer written, and the resets already stored still count in the ranking recompute.
-  The hourly change fingerprints ("When checks re-run") are not part of this: the owner has not decided on them.
+  The hourly change fingerprints ("When checks re-run") were not part of this; the owner removed them on 2026-11-22 (see "A check is due by age or by request" under Infrastructure).
   Why: a site is asked "is it a portfolio" once, at the door, and with one model there is nothing to compare.
 - **Confirmed, and discovery's AI screen goes too** (owner, 2026-11-22: "you can remove these" and "yeah we can remove the discover screen ask to gemini"). Status: building (#273).
   The rule: never ask Gemini what code can answer, and never ask it about a site twice; discovery checks a site with code first, then hands it to grading.
@@ -664,6 +671,14 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Every listed site is checked once a week on the hourly cron, never twice in a day.
   Measured on 2026-11-11 by fetching 400 listed sites twice: before the noise rules 9% looked changed between two fetches seconds apart, after them about 1.5%, all of them pages that really differ per request (a live clock, a random quote, a "now playing" track); those get re-measured weekly.
   Why: the old fixed timers re-ran Lighthouse every 30 days, re-captured 150 sites a night whether or not they changed and re-ran the polish check weekly, so unchanged sites waited on slow re-runs, and a changed site could show stale results for weeks.
+  Superseded on 2026-11-22 by "A check is due by age or by request": the fingerprints never ran in production (`FRESHNESS_ENABLED` stayed `"false"`) and were removed; the maximum ages and failure windows above still hold.
+- **A check is due by age or by request; the hourly page fingerprints are removed** (owner, 2026-11-22: "the hourly page fingerprints should be removed."). Status: building (`chore/remove-page-fingerprints`).
+  A check or capture is due again only when it is missing, when it is past its maximum age (the numbers above), when the admin's "Re-measure" or a verified owner's request came after it was measured (`site_freshness.forced_at`), or when it failed and its retry window passed.
+  A failed nightly re-capture keeps its growing backoff (`refresh_failures`), which a later request skips.
+  The hourly task (`worker/freshness.ts`), the `FRESHNESS_ENABLED` switch and the profile's "site unchanged since" lines are gone.
+  No table or column is dropped: `site_freshness` keeps `forced_at` in use, its fingerprint columns are no longer written or read, and an old row's `changed_at` makes nothing due.
+  The grader's own page fingerprint ("Grade my portfolio"'s re-grade cooldown and link-check reuse) stays.
+  Why: a site is graded once (2026-11-21), so a page change no longer leads to a new grade, and a fetch of every listed site each week bought nothing a 90-day refresh and a person's request do not already cover.
 - **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
   Why: what merges is what the next deploy ships.
 - **Email sign-in beside GitHub; email accounts' votes count fully** (owner, 2026-11-12). Status: building (branch `feat/email-signin`).

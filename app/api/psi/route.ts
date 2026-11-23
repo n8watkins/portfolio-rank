@@ -22,9 +22,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "site_down" } satisfies PsiResult);
   }
   // When Lighthouse runs again (lib/freshness.mjs, AUTOMATION.md "When checks
-  // re-run"): a result is reused while the site is unchanged, and measured
-  // again when its change fingerprint moved, the admin pressed "Re-measure",
-  // or it is 90 days old. A failure (quota, timeout, a site that won't load)
+  // re-run"): a result is reused until the admin pressed "Re-measure" or it
+  // is 90 days old. A failure (quota, timeout, a site that won't load)
   // is retried after an hour, so a broken site can't burn the quota by being
   // asked again and again, and a good result is never replaced by a failure.
   // A miss takes the lease first: one PageSpeed run per site at a time, the
