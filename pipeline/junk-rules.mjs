@@ -1,5 +1,5 @@
 // The narrow code rules for "not a portfolio" that need no AI (from the
-// junk-detection experiment, PR #212, experiments/junk-detection: rules.mjs
+// junk-detection experiment, PR #212, docs/experiments/junk-detection: rules.mjs
 // recommend(), results.md). Only exact strings that never hit a real site in
 // the whole-database audit; no word-count rule and no facts.template, which
 // both caught real, sparse or gated portfolios.
