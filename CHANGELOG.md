@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 - 2026-11-22
+
+### Fixed
+
+- A portfolio the community list drops now stays on PortfolioRank, and 25 sites dropped earlier are back; only our own checks and an owner's removal take a site off.
+- A portfolio's automated check points, fix list and report card now reflect its latest re-measure instead of the facts from the day it was graded.
+
+### Safer
+
+- When an owner removes their site or hides its grade, that now covers every spelling of the address, and a removed site can't be added again.
+
 ## 0.6.1 - 2026-11-22
 
 ### Fixed
