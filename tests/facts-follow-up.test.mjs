@@ -287,7 +287,12 @@ test("an 'I built' heading needs made things for its object, never ends an exper
   for (const h of ["What I've worked on at Google", "Teams we built", "How I built this site", "I'm working on my master's degree", "We are building the future of fintech", "Places I've made coffee", "Where I've worked", "Who I've worked for", "Companies I've worked with", "How I built a CRM in a weekend"]) {
     assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${others}</section></main>`), [3, 3], h);
   }
-  for (const h of ["Things I built", "What have I built?", "What I've been building", "What I'm working on", "Things I've worked on", "Stuff I've made", "Companies I founded", "Products and platforms I built", "Apps &amp; integrations I built"]) {
+  // From the scan of 150 sites: "Where I've shipped." (employers) and "How it works" open nothing; "SYSTEMS I'VE
+  // BUILT" (faizimam.in) is projects.
+  for (const h of ["Where I've shipped.", "Where I've shipped reliability", "How it works"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${others}</section></main>`), [3, 3], h);
+  }
+  for (const h of ["SYSTEMS I'VE BUILT", "Things I built", "What have I built?", "What I've been building", "What I'm working on", "Things I've worked on", "Stuff I've made", "Companies I founded", "Products and platforms I built", "Apps &amp; integrations I built"]) {
     assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${others}</section></main>`), [1, 1], h);
   }
   // Inside a section that is not projects, such a heading opens nothing and ends nothing.

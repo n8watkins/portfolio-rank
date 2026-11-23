@@ -59,7 +59,7 @@ const MADE_PAST = new RegExp(
 );
 const MADE_NOW = new RegExp(String.raw`(?<!\p{L})(?:i|we)(?:\s*(?:'|’)\s*(?:ve|m|re)|\s+have|\s+am|\s+are)?(?:\s+been)?\s+(?:building|making|creating|shipping|working on)(?!\p{L})`, "iu");
 const MADE_THINGS = new RegExp(
-  String.raw`(?<!\p{L})(?:things|stuff|what|projects?|apps?|products?|tools?|sites?|websites?|companies|startups?|platforms?|integrations?|work|games?|librar(?:y|ies)|plugins?|extensions?)(?!\p{L})`,
+  String.raw`(?<!\p{L})(?:things|stuff|what|projects?|apps?|products?|tools?|sites?|websites?|companies|startups?|platforms?|integrations?|work|games?|librar(?:y|ies)|plugins?|extensions?|systems?|models?|agents?|bots?|solutions?|services?)(?!\p{L})`,
   "iu"
 );
 const MADE_NOT = /\bat\s+\p{Lu}|\b(?:this|my) (?:site|website|portfolio|blog)\b|\bmy (?:degree|master|masters|master's|thesis|phd|bachelor)|\bthe future\b|\bteams?\b|\bcoffee\b|\bcareer\b/iu;
