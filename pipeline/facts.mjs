@@ -312,15 +312,22 @@ function ownPageUrl(l, self) {
 /**
  * Whether a same-site path is a page for one project: it sits under a
  * listing ("/projects/foo", "/portfolio/bar", "/solutions/x"), or under
- * `base` (the projects page's own path), and no segment is an about,
- * contact, blog, resume, tag or category page. The listing itself is not one.
+ * `base` (the projects page's own path), and no segment above the project's
+ * name is an about, contact, blog, tag, category or action page
+ * ("/projects/tag/react", "/blog/projects/x"). The name right under the
+ * listing is the project's own and may be any word: "/projects/dashboard",
+ * "/projects/api", "/case-studies/checkout", "/work/store" are projects. The
+ * listing itself is not one.
  */
 function isOwnProjectPath(path, base = "") {
   const segs = segmentsOf(path);
-  if (!segs.length || segs.some((s) => NOT_PROJECT_SEGMENT.test(s))) return false;
-  const underListing = segs.slice(0, -1).some((s) => LISTING_SEGMENT.test(s));
+  if (!segs.length) return false;
+  const parents = segs.slice(0, -1);
+  const underListing = parents.some((s) => LISTING_SEGMENT.test(s));
   const underBase = base !== "" && path.startsWith(`${base}/`);
-  return underListing || underBase;
+  if (!underListing && !underBase) return false;
+  const nameUnderListing = (parents.length > 0 && LISTING_SEGMENT.test(parents.at(-1))) || (base !== "" && `/${parents.join("/")}`.toLowerCase() === base);
+  return !(nameUnderListing ? parents : segs).some((s) => NOT_PROJECT_SEGMENT.test(s));
 }
 
 /**
@@ -361,7 +368,11 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
       if (seen.has(p.key) || (l.inSocial && !p.repo)) continue;
-      const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome);
+      // On the site's own projects page (a listing page by its path or label, projectsPageFor) the whole
+      // main content is the projects, whatever its headings and classes: its title is almost always an h1
+      // "Projects", which opens no section, and utility-class cards say nothing. Nav, header, footer and
+      // social lists stay out. On the home page only a projects element or section, or a repository, counts.
+      const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome) || (onProjectsPage && !l.inChrome);
       if (onProjectsPage && !inProjects) continue;
       seen.add(p.key);
       tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });

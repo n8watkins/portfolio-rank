@@ -31,8 +31,10 @@ test("shreyanshportfolio.in: a home page with no projects leads to its /projects
   const got = projectCandidates(withProjectsPage("shreyanshportfolio.in", url), url);
   assert.equal(got.length, 8);
   assert.ok(got.every((c) => c.from === "projects_page" && c.kind === "outbound"));
-  // Its repositories and notebooks; an outbound link on that page outside a projects element or heading is not taken.
-  assert.ok(got.every((c) => c.url.startsWith("https://github.com/")), JSON.stringify(got));
+  // The whole main content of the projects page is its projects: the featured card's live site (no projects
+  // class, under the page's h1), then its repositories and notebooks.
+  assert.equal(got[0].url, "https://mj-silver.vercel.app/");
+  assert.ok(got.slice(1).every((c) => c.url.startsWith("https://github.com/")), JSON.stringify(got));
 });
 
 test("www.masirjafri.in: one project on the home page, the rest from its Projects page", () => {
@@ -111,18 +113,48 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   assert.equal(projectsPageFor(subLinks, sub), null);
   // A link's words count when the path does not say it ("/stuff" labelled "Explore Work →").
   assert.equal(projectsPageFor(links(`<a href="/stuff">Explore Work →</a>`), url), "https://ana.dev/stuff");
-  // A projects page's own links: its single-project pages and the outbound links in its projects count; its menu,
-  // the listing itself, its paging and tag pages, and outbound links outside the projects (clients, press) do not.
+  // A projects page's own links: its single-project pages and every outbound link in its main content count (the
+  // page is a listing by its path or label, so its content is the projects: a client named there is work shown);
+  // its menu, the listing itself, its paging and tag pages, and its social list do not.
   const page = "https://ana.dev/work";
-  const pageHtml = `<header><a href="/work/menu-item">menu</a></header><main><h1>Work</h1><p>Clients: <a href="https://bigcorp.example/">BigCorp</a></p>
+  const pageHtml = `<header><a href="/work/menu-item">menu</a><a href="https://press.example/">Press</a></header><main><h1>Work</h1><p>Clients: <a href="https://bigcorp.example/">BigCorp</a></p>
     <section class="projects"><a href="https://demo.example/">Demo</a><a href="/work/alpha">Alpha</a><a href="/case-studies/beta">Beta</a></section>
-    <a href="/work">All</a><a href="/work?page=2">Next</a><a href="/work/tag/react">React</a><a href="/blog/post">Post</a></main>`;
+    <a href="/work">All</a><a href="/work?page=2">Next</a><a href="/work/tag/react">React</a><a href="/blog/post">Post</a>
+    <section><h2>Find me</h2><a href="https://social.example/ana">Ana</a></section></main><footer><a href="https://host.example/">Hosted by</a></footer>`;
   const all = [...links(nav), ...pageLinks(pageHtml, page).map((l) => ({ ...l, from: "projects_page", page }))];
   assert.deepEqual(
     projectCandidates(all, url).map((c) => [c.kind, c.url]),
     // The home page's nav link to another site is an outbound link of neither kind: last.
-    [["outbound", "https://demo.example/"], ["own page", "https://ana.dev/work/alpha"], ["own page", "https://ana.dev/case-studies/beta"], ["outbound", "https://other.example/projects"]]
+    [["outbound", "https://bigcorp.example/"], ["outbound", "https://demo.example/"], ["own page", "https://ana.dev/work/alpha"], ["own page", "https://ana.dev/case-studies/beta"], ["outbound", "https://other.example/projects"]]
   );
+  // The reviewer's case: the projects page titled with an h1, plain cards with no projects class.
+  const pp = "https://ana.dev/projects";
+  const ppHtml = `<main><h1>Projects</h1><div><h3>Alpha</h3><a href="https://alpha.example/">Live</a></div><div><h3>Beta</h3><a href="https://beta.example/">Live</a></div><div><h3>Gamma</h3><a href="https://gamma.example/">Live</a><a href="/projects/gamma">Read</a></div></main>`;
+  assert.deepEqual(
+    projectCandidates(pageLinks(ppHtml, pp).map((l) => ({ ...l, from: "projects_page", page: pp })), url).map((c) => [c.tier, c.url]),
+    [[1, "https://alpha.example/"], [1, "https://beta.example/"], [1, "https://gamma.example/"], [2, "https://ana.dev/projects/gamma"]]
+  );
+  // The home page keeps "an h1 opens nothing": the same plain cards there are other outbound links, tier 3.
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: ppHtml, url, finalUrl: url }), url).map((c) => c.tier), [3, 3, 3]);
+});
+
+test("a project's own name may be any word; the path above it must not be a blog, tag or action page", () => {
+  const url = "https://ana.dev/";
+  const counted = (p) => projectCandidates(homeProjectLinks({ html: `<section id="projects"><a href="${p}">x</a></section>`, url, finalUrl: url }), url).length === 1;
+  for (const p of ["/projects/api-gateway", "/work/dashboard-redesign", "/portfolio/admin-panel", "/projects/dashboard", "/projects/admin", "/projects/api", "/work/store", "/projects/auth",
+    "/projects/profile", "/projects/export", "/portfolio/settings", "/case-studies/checkout", "/projects/news", "/projects/download"]) {
+    assert.ok(counted(p), p);
+  }
+  for (const p of ["/projects/tag/react", "/projects/category/web", "/blog/projects/x", "/account/projects/x", "/projects/download/file", "/admin/work/x", "/projects/page/2"]) {
+    assert.ok(!counted(p), p);
+  }
+  // On the projects page, the name right under that page's path is the project's too ("/builds/checkout" under "/builds").
+  const page = "https://ana.dev/builds";
+  const own = (p) => projectCandidates(pageLinks(`<main><a href="${p}">x</a></main>`, page).map((l) => ({ ...l, from: "projects_page", page })), url).length === 1;
+  assert.ok(own("/builds/checkout"));
+  assert.ok(!own("/builds/tag/react"));
+  // The page that is loaded in a browser is never an action, at any depth (projectsPageFor, tested above).
+  assert.equal(projectsPageFor(homeProjectLinks({ html: `<nav><a href="/projects/unsubscribe">Projects</a></nav>`, url, finalUrl: url }), url), null);
 });
 
 test("only as many own pages as the pass counts go ahead of other outbound links (stimmie.dev's case)", () => {
