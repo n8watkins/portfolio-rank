@@ -1,11 +1,14 @@
 import type { CodeChecks } from "@/lib/tiers-view";
+import { shownPoints } from "@/lib/check-points.mjs";
 
 // The Code checks score item by item (lib/check-points.mjs): each item's
-// points out of its maximum, "not measured yet" where the library median
-// stands in. Shared by the tier card (RANKING_V2) and the profile's code
-// checks card, so both show the same list.
+// points out of its maximum, in whole points that add up to the total shown,
+// "not measured yet" where the library median stands in. Shared by the tier
+// card (RANKING_V2) and the profile's code checks card, so both show the same list.
 
 export function CheckItems({ check }: { check: CodeChecks["check"] }) {
+  // Whole points that add up to the total shown (shownPoints); the order of sites keeps the exact values.
+  const shown = shownPoints(check).items;
   return (
     <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
       {check.items.map((i) => (
@@ -14,8 +17,7 @@ export function CheckItems({ check }: { check: CodeChecks["check"] }) {
             {i.name}
             {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
           </span>
-          {/* Whole points for people; the order keeps the exact value (lib/check-points.mjs). */}
-          <span className={`shrink-0 tabular-nums ${i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>{`${Math.round(i.points)}/${i.max}`}</span>
+          <span className={`shrink-0 tabular-nums ${i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>{`${shown[i.id]}/${i.max}`}</span>
         </li>
       ))}
     </ul>

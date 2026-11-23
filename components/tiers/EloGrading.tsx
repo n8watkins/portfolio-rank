@@ -78,7 +78,8 @@ export async function EloGrading() {
           <SectionHeader id="tiers" eyebrow="Your tier" title="Your tier is your place by ELO" className="mb-3" />
           <ol className="grid max-w-2xl list-decimal gap-1.5 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
             <li>
-              Every portfolio gets a starting rank from automated checks as soon as its page is measured, before any AI looks at it: up to 100 points for speed, accessibility, a share card,
+              A portfolio gets a starting rank from automated checks once its page is measured and shows at least 4 of 6 signs of a portfolio (your
+              name, projects, an about section, contact, a resume, GitHub), or once the AI confirms it is a portfolio: up to 100 points for speed, accessibility, a share card,
               working project links and the basics a hiring manager looks for (below). No votes are made up: it is only where the ELO starts.
             </li>
             <li>
@@ -197,7 +198,7 @@ export async function EloGrading() {
         <section aria-labelledby="place" className="mt-14">
           <SectionHeader id="place" eyebrow="Your place" title="What “Top 10%” means" className="mb-5" />
           <p className="text-[15px] text-mute">
-            On the leaderboard, only 1 in 10 graded portfolios rank higher. On a grade report, it is where the
+            On the leaderboard, only 1 in 10 ranked portfolios rank higher. On a grade report, it is where the
             grade itself stands among graded portfolios.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">

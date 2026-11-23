@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Tiers by ELO (lib/tiers.mjs), by hand and at deploy. No AI request.
+// Tiers by ELO (lib/tiers.mjs), by hand. No AI request.
 //
 //   node scripts/refresh-tiers.mjs              the full rebuild (lib/tiers-store.mjs refreshTiers): points from
 //                                               automated checks, starting ranks, every face-off replayed, the cutoffs,
-//                                               every grade's rank where it changed. The deploy workflow runs it for staging.
+//                                               every grade's rank where it changed. The owner runs it by hand.
 //   node scripts/refresh-tiers.mjs --daily      the daily run (lib/tiers-store.mjs dailyRun): a Starting rank for
 //                                               members measured since, the cutoffs, and only the letters that
 //                                               changed. The Worker does this once a day.

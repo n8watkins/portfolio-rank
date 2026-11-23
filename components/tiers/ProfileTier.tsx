@@ -3,6 +3,7 @@ import { ROUTES } from "@/lib/nav";
 import { BELOW_TOP_TIERS, SETTLED_FACEOFFS, familyOf, tierLabel } from "@/lib/tiers.mjs";
 import type { ProfileTier as Data } from "@/lib/tiers-view";
 import { CheckItems } from "./CheckItems";
+import { shownPoints } from "@/lib/check-points.mjs";
 
 // A profile's tier by ELO (RANKING_V2 only, lib/tiers-view.ts): the letter,
 // its place, "Starting rank from automated checks" and the real votes, how
@@ -61,7 +62,7 @@ export function ProfileTier({ t }: { t: Data }) {
         <div className="mt-4 grid grid-cols-1 gap-4 border-t border-edge pt-4 md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
           <div>
             <h3 className="text-sm font-semibold">
-              {t.checkIsCurrent ? "Automated checks now" : "Automated checks"}: <span className="tabular-nums">{Math.round(t.check.total)}</span> of 100
+              {t.checkIsCurrent ? "Automated checks now" : "Automated checks"}: <span className="tabular-nums">{shownPoints(t.check).total}</span> of 100
             </h3>
             <CheckItems check={t.check} />
           </div>

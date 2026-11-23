@@ -87,7 +87,7 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
             <Swords className="h-5 w-5" aria-hidden />
           </span>
           <p className="font-semibold">The board fills as portfolios are graded</p>
-          <p className="max-w-sm text-sm text-mute">Gemini grades new portfolios every night. Meanwhile, every face-off vote moves two of them.</p>
+          <p className="max-w-sm text-sm text-mute">New portfolios are graded when the AI has room in its daily budget. Meanwhile, every face-off vote moves two of them.</p>
           {ROUTES.faceoff && (
             <a href={ROUTES.faceoff} className="group mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent">
               Vote in a face-off <ArrowRight className="nudge h-4 w-4" aria-hidden />

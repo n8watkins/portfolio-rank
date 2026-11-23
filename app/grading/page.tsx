@@ -165,7 +165,7 @@ export default function GradingPage() {
             ))}
           </ol>
           <ul className="mt-4 grid gap-1.5 text-sm text-mute">
-            <li>A person&apos;s vote counts twice an AI vote.</li>
+            <li>Only signed-in people&apos;s votes count; a practice vote moves nothing.</li>
             <li>Beating a higher-ranked portfolio moves you more.</li>
             <li>Your report&apos;s Top X% uses grades only. Re-grade after {REGRADE_COOLDOWN_DAYS} days.</li>
           </ul>

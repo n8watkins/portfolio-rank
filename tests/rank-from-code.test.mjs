@@ -15,7 +15,8 @@ import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { ensureRosterSchema, ACTIVE } from "../pipeline/roster.mjs";
 import { STRONG_SIGNALS } from "../pipeline/portfolio-guard.mjs";
-import { NEWCOMERS_PER_RUN, checkSources, dailyRun, geminiYes, libraryMember, pointsOf, rankForWrite, rankFromCode, refreshTiers, seedNewcomers } from "../lib/tiers-store.mjs";
+import { NEWCOMERS_PER_RUN, checkSources, dailyRun, geminiYes, goodCapture, libraryMember, pointsOf, rankForWrite, rankFromCode, refreshTiers, seedNewcomers } from "../lib/tiers-store.mjs";
+import { shownPoints } from "../lib/check-points.mjs";
 import { ensureTierSchema, readSiteRow, readTierMeta, standingOf, topRows } from "../lib/tiers-db.mjs";
 import { compareSeed, isTier } from "../lib/tiers.mjs";
 import { checksReading } from "../lib/fresh-facts.mjs";
@@ -202,19 +203,96 @@ test("Gemini's later grade never moves a code-ranked site; its later 'no' takes 
   assert.equal((await readSiteRow(client, "https://later-no.example/")).member, 0);
   assert.equal((await readSiteRow(client, "https://later-yes.example/")).member, 1);
 
-  // An error answer takes it out, as any answer that is not a "yes" did before; the daily run puts it back as it
-  // was, since the code checks alone make it a member.
+  // An error answer changes nothing for a site the code checks alone make a member: not out for a day.
   await addMeasured(client, "https://error.example/", 5);
   await rankFromCode(client, "https://error.example/", { now: NOW });
   const was = await readSiteRow(client, "https://error.example/");
   const err = await rankForWrite(client, { error: "no_usable_captures" }, { url: "https://error.example/", now: NOW });
+  assert.equal(err.rank, undefined);
   await client.execute({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = ?", args: [JSON.stringify(err), "https://error.example/"] });
-  assert.equal((await readSiteRow(client, "https://error.example/")).member, 0);
-  await dailyRun(client, { now: NOW + 86_400_000 });
-  const back = await readSiteRow(client, "https://error.example/");
-  assert.equal(back.member, 1);
-  assert.equal(back.mu, was.mu);
-  assert.equal(back.points, was.points);
+  const still = await readSiteRow(client, "https://error.example/");
+  assert.equal(still.member, 1);
+  assert.equal(still.mu, was.mu);
+  // A Gemini member with 3 signals: an error answer takes it out (the code checks alone do not make it one).
+  await addMeasured(client, "https://error3.example/", 3, { rubric: grade(3) });
+  await rankFromCode(client, "https://error3.example/", { now: NOW });
+  assert.equal((await readSiteRow(client, "https://error3.example/")).member, 1);
+  await rankForWrite(client, { error: "no_usable_captures" }, { url: "https://error3.example/", now: NOW });
+  assert.equal((await readSiteRow(client, "https://error3.example/")).member, 0);
+});
+
+test("an owner's removal under another spelling of the address keeps the site out, at capture, daily, in the rebuild and on a Gemini yes", async () => {
+  const client = await db();
+  await library(client);
+  const u = "https://www.spelled.example/";
+  await addMeasured(client, u, 6);
+  // The owner removed "spelled.example" (no scheme, no www): the same site (lib/ownership/same-site.mjs ownerSiteKey).
+  await client.execute("INSERT INTO portfolio_owner (url, removed_at, updated_at) VALUES ('spelled.example', '2026-11-22T00:00:00Z', '2026-11-22T00:00:00Z')");
+  assert.equal(await rankFromCode(client, u, { now: NOW }), false);
+  assert.equal((await seedNewcomers(client, { now: NOW })).length, 0);
+  await refreshTiers(client, { now: NOW });
+  assert.equal((await readSiteRow(client, u)).member, 0);
+  // Gemini says "a portfolio": its row is kept for the day it is accepted, but it is not a member.
+  const yes = await rankForWrite(client, grade(4), { url: u, now: NOW });
+  assert.equal((await readSiteRow(client, u)).member, 0);
+  assert.equal(yes.rank.tier, null, "no Tier while removed");
+  // A delisted site: the same.
+  await addMeasured(client, "https://gone.example/", 6, { delisted: "2026-11-20" });
+  await rankForWrite(client, grade(4), { url: "https://gone.example/", now: NOW });
+  assert.equal((await readSiteRow(client, "https://gone.example/")).member, 0);
+});
+
+test("rows the membership rule turns down never take the newcomers' places in the daily limit", async () => {
+  const client = await db();
+  await library(client);
+  // Three stored captures from before the capture checked its screen, of a bot check: they pass the query (5 signals,
+  // live) but not the rule (no good capture), and sort before the real newcomer.
+  const wall = "Just a moment... Verifying you are human. This may take a few seconds.";
+  for (let i = 0; i < 3; i++) {
+    await client.execute({
+      sql: "INSERT INTO portfolios (url, status, shot_key, captured_at, facts, page_text) VALUES (?, 'live', 'k', '2026-11-01 00:00:00', ?, ?)",
+      args: [`https://aaa-wall${i}.example/`, JSON.stringify(facts(5, { resume: false, github: false, contact: false, internal_pages: 0, project_links: { checked: 0, ok: 0, broken: 0, blocked: 0 } })), wall],
+    });
+  }
+  const walls = (await client.execute("SELECT url, status, shot_key, captured_at, facts, page_text, meta AS gate_meta FROM portfolios WHERE url LIKE 'https://aaa-wall%'")).rows;
+  for (const r of walls) assert.equal(goodCapture(r), false, "the setup is a blocked capture");
+  await addMeasured(client, "https://zzz-real.example/", 5);
+  const ranked = await seedNewcomers(client, { now: NOW, limit: 2 });
+  assert.deepEqual(ranked, ["https://zzz-real.example/"]);
+});
+
+test("the Code checks score shows in whole points that add up to the total shown", () => {
+  const check = {
+    total: 61.6,
+    items: [
+      { id: "a", points: 9 },
+      { id: "b", points: 5 },
+      { id: "c", points: 8.2 },
+      { id: "d", points: 9.4 },
+      { id: "e", points: 5 },
+      { id: "f", points: 10 },
+      { id: "g", points: 5 },
+      { id: "h", points: 5 },
+      { id: "i", points: 5 },
+    ],
+  };
+  const shown = shownPoints(check);
+  assert.equal(shown.total, 62);
+  assert.equal(Object.values(shown.items).reduce((a, b) => a + b, 0), 62);
+  // The missing point goes to the largest remainder (9.4 -> 10), the other stays down (8.2 -> 8).
+  assert.equal(shown.items.d, 10);
+  assert.equal(shown.items.c, 8);
+  // Many breakdowns: the items always add up to the rounded total, and no item moves by a whole point or more.
+  for (let seed = 1; seed <= 200; seed++) {
+    let x = seed;
+    const rnd = () => (x = (x * 16807) % 2147483647) / 2147483647;
+    const items = Array.from({ length: 13 }, (_, k) => ({ id: `i${k}`, points: Math.round(rnd() * 150) / 10 }));
+    const total = Math.round(items.reduce((a, i) => a + i.points, 0) * 10) / 10;
+    const s = shownPoints({ total, items });
+    assert.equal(s.total, Math.round(total));
+    assert.equal(Object.values(s.items).reduce((a, b) => a + b, 0), s.total);
+    for (const i of items) assert.ok(Math.abs(s.items[i.id] - i.points) < 1, `${i.points} -> ${s.items[i.id]}`);
+  }
 });
 
 /** A health check's write, as pipeline/health.mjs makes for every listed site every night. */

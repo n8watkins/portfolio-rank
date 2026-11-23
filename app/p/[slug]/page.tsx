@@ -12,6 +12,7 @@ import { BASE_ELO } from "@/lib/elo";
 import { type CodeChecks, loadCodeChecks, loadProfileTier } from "@/lib/tiers-view";
 import { ProfileTier } from "@/components/tiers/ProfileTier";
 import { CheckItems } from "@/components/tiers/CheckItems";
+import { shownPoints } from "@/lib/check-points.mjs";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { isGone } from "@/lib/roster";
@@ -138,7 +139,7 @@ function CodeChecksCard({ code }: { code: CodeChecks }) {
   return (
     <section aria-labelledby="code-checks" className="mb-4 rounded-xl border border-edge bg-card p-5">
       <h2 id="code-checks" className="font-semibold">
-        Code checks score: <span className="tabular-nums">{Math.round(code.check.total)}</span> of 100
+        Code checks score: <span className="tabular-nums">{shownPoints(code.check).total}</span> of 100
       </h2>
       <p className="mt-0.5 text-xs text-mute">Measured by code from the page, its speed and its share card. No AI is involved.</p>
       <CheckItems check={code.check} />
