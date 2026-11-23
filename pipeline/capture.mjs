@@ -45,8 +45,9 @@
 // capture only with an error status or a bot wall of its own. A site with
 // no good capture records it as a failed capture and is retried (a bot wall
 // also sets needs_review for the owner); a site that has one keeps it, and a
-// refresh that met a bot wall or a page still covered by a gate, loader,
-// dialog or picker also sets needs_review, unless only the phone view saw it
+// refresh that met a bot wall or a page still covered by a dialog also goes
+// to the owner's review list (a pending bot_wall row: lib/reviews/door.mjs
+// blockedRefreshReview), unless only the phone view saw it
 // (refreshNeedsReview). A new capture that lost a portfolio sign or most of
 // the text of the one it replaced is recorded (lib/capture-problems.mjs);
 // the admin's Capture problems page lists all of these.
@@ -70,6 +71,7 @@ import {
   BLOCKED_PREFIX,
   BOT_WALL,
   BOT_WALL_REASON,
+  isBotWallReason,
   MEDIA_ONLY,
   MEDIA_REVIEW_REASON,
   capturedBlocked,
@@ -90,12 +92,13 @@ import {
 } from "./roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
 import { ensureCaptureProblemSchema, recordCaptureChange } from "../lib/capture-problems.mjs";
-
-/** Now as SQLite's datetime('now') writes it ("YYYY-MM-DD HH:MM:SS", UTC), like portfolios.captured_at. */
-const sqliteNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
+import { blockedRefreshReview, closeBlockedRefreshReviews } from "../lib/reviews/door.mjs";
 import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
 import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
+
+/** Now as SQLite's datetime('now') writes it ("YYYY-MM-DD HH:MM:SS", UTC), like portfolios.captured_at. */
+const sqliteNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -168,8 +171,10 @@ export async function recordCaptureFailure(db, url, name, status, reason, { need
 // site only waits out the same growing backoff a failed capture gets
 // (roster.captureRetryAt) in lib/freshness.mjs's refresh_failures, which
 // screenshotsDue reads. The table exists once ensureFreshnessSchema ran (main
-// runs it first). `needsReview` also sets portfolios.needs_review = 1, the
-// owner's review list (refreshNeedsReview decides), and nothing else.
+// runs it first). `needsReview` (refreshNeedsReview decides) also puts the
+// site on the owner's review list: a pending bot_wall row
+// (lib/reviews/door.mjs blockedRefreshReview, the durable record) and
+// portfolios.needs_review = 1; the stored capture and grade stay as they are.
 export async function recordRefreshFailure(db, url, reason, now = new Date(), { needsReview = false } = {}) {
   const prev = (await db.execute({ sql: "SELECT attempts FROM refresh_failures WHERE url = ?", args: [url] })).rows[0];
   const attempts = Number(prev?.attempts ?? 0) + 1;
@@ -181,28 +186,33 @@ export async function recordRefreshFailure(db, url, reason, now = new Date(), { 
   };
   if (!needsReview) return void (await db.execute(backoff));
   await db.batch([backoff, { sql: "UPDATE portfolios SET needs_review = 1 WHERE url = ? AND COALESCE(needs_review, 0) != 1", args: [url] }], "write");
+  // The review row; the backoff above is written either way, so a failure here is only logged.
+  const why = String(reason ?? "").replace(/^(error|dead|parked|pending): /, "");
+  await blockedRefreshReview(db, { url, reason: why, now }).catch((e) => console.warn(`  ${url}: review row not written (${String(e?.message ?? e).slice(0, 80)})`));
 }
 
-/** The blocked kinds besides the bot wall that send a failed refresh to the owner: something still covers the page. */
-const COVERED = /^still a (gate or loader|dialog on top|mode picker)\b/;
+/** The one covered page besides the bot wall that sends a failed refresh to the owner: a dialog still on top. */
+const COVERED = /^still a dialog on top\b/;
 
 /**
  * Whether a failed refresh goes to the owner's review list (owner,
- * 2026-11-22: "bot-walled sites go to owner review"; the capture problems
- * list): the verdicts a first capture sends there (a bot or security check,
- * a page of only a canvas, video or image, an error status on a page that
- * shows a site: `needsReview`), and a gate, loader, dialog or mode picker
- * still covering the page. Never a verdict of the phone view alone (`phone`):
- * the phone view is a second visit of the same capture, after the desktop
- * view showed the site, so a bot check there may be the site's protection
- * answering our own second visit; it stays a refresh failure (the capture
- * problems page lists it with that reason).
- * @param {{ reason?: string, needsReview?: boolean, phone?: boolean }} verdict
+ * 2026-11-22: a re-capture that hits a bot check or a covering dialog goes
+ * there): a bot or security check (BOT_WALL_REASON, from the screen or the
+ * error status), or a dialog still covering the page after the capture tried
+ * to close it. Not the other verdicts a first capture sends to review (a page
+ * of only a canvas, video or image, an error status on a page that shows a
+ * site), and not a gate, loader or mode picker still in the way: those stay
+ * refresh failures, listed on the Capture problems page (group A) with their
+ * reason. Never a verdict of the phone view alone (`phone`): the phone view
+ * is a second visit of the same capture, after the desktop view showed the
+ * site, so a bot check there may be the site's protection answering our own
+ * second visit.
+ * @param {{ reason?: string, phone?: boolean }} verdict
  */
-export function refreshNeedsReview({ reason = "", needsReview = false, phone = false } = {}) {
+export function refreshNeedsReview({ reason = "", phone = false } = {}) {
   if (phone) return false;
-  if (needsReview) return true;
   const r = String(reason);
+  if (isBotWallReason(r)) return true;
   return r.startsWith(BLOCKED_PREFIX) && COVERED.test(r.slice(BLOCKED_PREFIX.length));
 }
 
@@ -445,8 +455,8 @@ async function judgePhone(page, doc, passes) {
 export async function captureSite(browser, entry, { refresh = false, db, s3 = null, root = ROOT, limitMs = SITE_LIMIT_MS, stepLimitMs = STEP_LIMIT_MS } = {}) {
   const { url, name } = entry;
   // A refresh never marks a site failed (see the header): it only waits out a
-  // backoff, and what a first capture sends to the owner's review goes there
-  // too, unless only the phone view saw it (refreshNeedsReview).
+  // backoff, and a bot check or a covering dialog also goes to the owner's
+  // review list, unless only the phone view saw it (refreshNeedsReview).
   const record = refresh
     ? (status, reason, opts = {}) => recordRefreshFailure(db, url, `${status}: ${reason}`, new Date(), { needsReview: refreshNeedsReview({ reason, ...opts }) })
     : (status, reason, opts = {}) => recordCaptureFailure(db, url, name, status, reason, { needsReview: Boolean(opts.needsReview) });
@@ -832,6 +842,10 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // Neither can undo the capture, and each is bounded: a failure here is only logged.
     const warn = (what) => (e) => console.warn(`  ${url}: ${what} (${String(e?.message ?? e).slice(0, 80)})`);
     await within(db.execute({ sql: "DELETE FROM refresh_failures WHERE url = ?", args: [url] }), stepLimitMs, "clearing the refresh backoff").catch(warn("refresh backoff not cleared"));
+    // A blocked re-capture's row on the owner's review list closes: this one got through (lib/reviews/door.mjs).
+    if (stored.good) {
+      await within(closeBlockedRefreshReviews(db, url), stepLimitMs, "closing the blocked re-capture's review row").catch(warn("blocked re-capture's review row not closed"));
+    }
     // A capture that replaced a good one: whether it lost a portfolio sign or most of the text
     // (lib/capture-problems.mjs, the admin's Capture problems page). Facts the capture could not
     // measure keep the old ones (the write's COALESCE), so they are compared as kept.

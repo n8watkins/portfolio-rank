@@ -168,8 +168,10 @@ test("a new site whose capture is blocked is a failed capture with a retry, and 
   // The bot wall is marked for the owner's review; the empty page is not (it ends as broken).
   assert.equal(Number((await rowOf("/bot")).needs_review), 1);
   assert.equal(Number((await rowOf("/empty")).needs_review), 0);
-  const queue = await db.execute("SELECT name FROM sqlite_master WHERE name = 'status_reviews'");
-  assert.equal(queue.rows.length, 0, "nothing is sent to the review queue");
+  // The capture writes no review row for a new site (the night's syncReviewRows does); the table
+  // exists only because a blocked refresh below wrote one (lib/reviews/door.mjs blockedRefreshReview).
+  const queue = await db.execute({ sql: "SELECT COUNT(*) AS n FROM status_reviews WHERE url IN (?, ?)", args: [url("/empty"), url("/bot")] }).catch(() => ({ rows: [{ n: 0 }] }));
+  assert.equal(Number(queue.rows[0].n), 0, "nothing is sent to the review queue");
   // Retried on a later night: not due tonight, due once the backoff runs out.
   const entries = [{ url: url("/empty") }, { url: url("/bot") }];
   assert.deepEqual(await dueForCapture(db, entries), []);
@@ -227,6 +229,13 @@ test("a refresh that meets a bot check puts the site on the owner's review list 
   assert.equal(row.page_text, OLD.page_text);
   const failure = (await db.execute({ sql: "SELECT reason FROM refresh_failures WHERE url = ?", args: [url("/refresh-bot")] })).rows[0];
   assert.equal(failure.reason, `error: ${BLOCKED_PREFIX}${BOT_WALL}`);
+  // The review list is the pending row (lib/reviews/door.mjs blockedRefreshReview), with the stored capture's screenshots.
+  const reviews = (await db.execute({ sql: "SELECT grp, proposed, shot_key, reason FROM status_reviews WHERE url = ? AND status = 'pending'", args: [url("/refresh-bot")] })).rows;
+  assert.equal(reviews.length, 1);
+  assert.equal(reviews[0].grp, "bot_wall");
+  assert.equal(reviews[0].proposed, "review");
+  assert.equal(reviews[0].shot_key, OLD.shot_key);
+  assert.match(String(reviews[0].reason), /^A nightly re-capture of this listed site met a bot or security check/);
 });
 
 test("a bot check only on the phone view of a refresh is a refresh failure with that reason, not a review", async () => {
@@ -236,6 +245,8 @@ test("a bot check only on the phone view of a refresh is a refresh failure with 
   assert.equal(row.shot_key, OLD.shot_key);
   const failure = (await db.execute({ sql: "SELECT reason FROM refresh_failures WHERE url = ?", args: [url("/phone-bot")] })).rows[0];
   assert.equal(failure.reason, `error: ${BLOCKED_PREFIX}${BOT_WALL} (phone view)`);
+  const reviews = await db.execute({ sql: "SELECT COUNT(*) AS n FROM status_reviews WHERE url = ?", args: [url("/phone-bot")] }).catch(() => ({ rows: [{ n: 0 }] }));
+  assert.equal(Number(reviews.rows[0].n), 0);
 });
 
 test("a refresh that loses the résumé link and most of the text is recorded as worse", async () => {
