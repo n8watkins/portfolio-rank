@@ -11,7 +11,7 @@ import { frameOf } from "@/lib/shot-url";
 import { RULE_NAMES, ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
-import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } from "@/components/admin/review-labels";
+import { UNDO_QUESTION, bulkWords, decidedLabel, declineOf, declinedEffect, hintOf, outcomeOf } from "@/components/admin/review-labels";
 
 // The owner's review queue (app/admin/(tools)/review/page.tsx): one card per
 // proposed status change, with a tick box. Rows where the graders agree come
@@ -252,6 +252,7 @@ function Row({
   const action = r.signals?.capture?.action ?? null;
   const blocked = r.signals?.capture?.blocked ?? null;
   const outcome = outcomeOf(r);
+  const decline = declineOf(r);
   return (
     <li className={`card p-4 sm:p-5 ${r.agreed ? "" : "ring-1 ring-inset ring-down/35"}`} data-review-row={r.id} data-agreed={r.agreed ? "true" : "false"}>
       <div className="flex items-start gap-3">
@@ -354,13 +355,13 @@ function Row({
               className={btnGhost}
               disabled={busy}
               icon={<X className="h-4 w-4" aria-hidden />}
-              label="Reject"
-              question={REJECT_QUESTION}
+              label={decline.label}
+              question={decline.question}
               onConfirm={() => onDecide("reject")}
               data-review-reject
             />
             <p className="text-xs text-mute text-pretty" data-review-when>
-              {ifConfirmed(outcome.when)}
+              {hintOf(r)}
             </p>
             {r.applied?.error && !error && <p className="text-sm text-down">The last try failed: {r.applied.error}</p>}
             {error && (
@@ -505,7 +506,7 @@ function decider(by: string | null) {
 /** What a decision did, in one sentence. */
 function effect(r: Review) {
   if (r.status === "closed") return `Closed without acting: ${r.applied?.closed ?? "a newer decision made it stale"}.`;
-  if (r.status === "rejected") return r.applied?.grade === "settled" ? "Kept listed; the grade records your decision." : "Nothing changed.";
+  if (r.status === "rejected") return declinedEffect(r, r.applied?.grade === "settled");
   if (r.applied && "action" in r.applied) return "Marked checked; nothing to apply.";
   if (r.applied?.visibility?.length) return sentence(r.applied.visibility);
   return "Recorded; the grade already matched.";
@@ -559,7 +560,7 @@ function Decided({
                   {recent.has(r.id) && <span className="ml-2 align-[1px] text-xs font-semibold text-accent">just now</span>}
                 </p>
                 <p className="text-xs text-mute">
-                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "closed" ? "Closed" : r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
+                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{decidedLabel(r)}</span>
                   {" · "}
                   {PROPOSED[r.proposed]}
                   {r.decidedBy && ` · by ${decider(r.decidedBy)}`}
@@ -627,8 +628,8 @@ export function StatusReviewQueue({
   const [notice, setNotice] = useState<{ text: string; failures: string[]; toDecided: boolean } | null>(null);
   const [progress, setProgress] = useState<{ action: string; done: number; total: number } | null>(null);
   const running = progress !== null;
-  const all = useMemo(() => new Map([...pending, ...autoApplied, ...decided].map((r) => [r.id, r.url])), [pending, autoApplied, decided]);
-  const urlOf = (id: number) => all.get(id) ?? "";
+  const all = useMemo(() => new Map([...pending, ...autoApplied, ...decided].map((r) => [r.id, r])), [pending, autoApplied, decided]);
+  const urlOf = (id: number) => all.get(id)?.url ?? "";
   const [done, setDone] = useState<Record<number, "confirm" | "reject" | "undo">>({});
   // Rows confirmed or rejected on this page since it loaded, marked "just now" under Decided.
   const recentIds = useMemo(() => new Set(Object.entries(done).filter(([, a]) => a !== "undo").map(([id]) => Number(id))), [done]);
@@ -678,7 +679,9 @@ export function StatusReviewQueue({
     setAsking(false);
     setProgress(null);
     // Where the rows went, and what failed, by name.
-    const verb = action === "confirm" ? "Confirmed" : action === "undo" ? "Undone" : "Rejected";
+    // The other button's own words for one row ("Kept on the list"); "Decided" for several.
+    const one = ids.length === 1 ? all.get(ids[0]) : undefined;
+    const verb = action === "confirm" ? "Confirmed" : action === "undo" ? "Undone" : one ? declineOf(one).done : "Decided";
     const fails = Object.entries(failed);
     const where = action === "undo" ? "They wait for you again above." : "They are under Decided below, each with Undo.";
     setNotice({
@@ -711,6 +714,8 @@ export function StatusReviewQueue({
       onClose={() => setViewing(null)}
       returnFocus={viewing.from}
       outcome={outcomeOf(viewing.review)}
+      decline={declineOf(viewing.review)}
+      hint={hintOf(viewing.review)}
       prompt={viewing.review.verdicts.prompt ?? null}
     />
   );
@@ -764,7 +769,7 @@ export function StatusReviewQueue({
           // Many rows take a while: how far it is, and every decision button waits.
           <div className="basis-full rounded-xl bg-raised p-3" data-review-progress>
             <p className="text-sm font-semibold" aria-live="polite">
-              {progress.action === "confirm" ? "Confirming" : progress.action === "undo" ? "Undoing" : "Rejecting"} {progress.done.toLocaleString("en-US")} of {progress.total.toLocaleString("en-US")}...
+              {progress.action === "confirm" ? "Confirming" : progress.action === "undo" ? "Undoing" : "Deciding"} {progress.done.toLocaleString("en-US")} of {progress.total.toLocaleString("en-US")}...
             </p>
             <div
               role="progressbar"

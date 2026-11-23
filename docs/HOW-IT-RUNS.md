@@ -238,7 +238,7 @@ Each chain is a list of steps in the order they happen.
     A removed site leaves the order.
     An undone removal brings it back with its rank: at once when the grade it had comes back, or, when that grade is set aside for one fresh grade, once the fresh grade says it is a portfolio.
 12. **After that** the site takes part in votes and gets the nightly health check.
-    It is not graded again, except for one fresh grade after you undo or reject a removal, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.
+    It is not graded again, except for one fresh grade after you undo a removal or choose "Keep on the list" on one, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.
 
 ### A site stops working
 
