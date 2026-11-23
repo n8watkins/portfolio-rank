@@ -27,6 +27,7 @@ import { clausesOf } from "../pipeline/content/clauses.mjs";
 import { mockAnswer } from "../pipeline/content/mock-writer.mjs";
 import { devMetaHits, editorialChecks, findPayoff, readingGrade, repeatedPhrases, scorecard, syllables } from "../pipeline/content/scorecard.mjs";
 import { renderPreview } from "../pipeline/content/preview.mjs";
+import { checkSuperlatives } from "../pipeline/content/quality.mjs";
 import { checkLinksLoad, checkNames, checkNumbers, codeChecks, wordCount } from "../pipeline/content/checks.mjs";
 import { checkClaims, TAVILY_PER_WEEK } from "../pipeline/content/claims.mjs";
 import { KIND_TOPIC, TOPICS, choosePicks, denied } from "../pipeline/content/topic.mjs";
@@ -1068,6 +1069,22 @@ test("quality: a superlative a tie contradicts is rejected", async () => {
   assert.equal(checkOf(goodDraft(sheet, { subtitle: `Top portfolios have their largest lead, ${leadPh}, tied.` }), sheet, roster, "superlatives").ok, true);
   assert.equal(checkOf(goodDraft(sheet, { subtitle: `The largest lead is ${leadPh}, shared by {{${nTie.id}}} items.` }), sheet, roster, "superlatives").ok, true);
   assert.equal(checkOf(goodDraft(base), base, roster, "superlatives").ok, true);
+});
+
+test("ties on a real recorded sheet: the writer view lists them, the clauses word them as ties, a superlative that ignores one fails", async () => {
+  // A sheet the builder made on production data before rubric v3 (tests/fixtures/content-replay), where five axes tied for the lead.
+  const real = JSON.parse(fs.readFileSync(new URL("./fixtures/content-replay/top-grades-5bcb50a626f8ebde.json", import.meta.url), "utf8"));
+  const tie = real.superlatives.find((x) => x.tied);
+  assert.ok(tie, "the recorded sheet has a tie");
+  const view = sheetForWriter(real);
+  assert.ok(view.ties.length >= 1);
+  assert.deepEqual(view.ties[0], { claim: tie.term, facts: tie.factIds.map((i) => `{{${i}}}`), tie_placeholder: `{{${tie.tieFactId}}}` });
+  assert.ok(clausesOf(real).some((c) => c.kind === "tie" && /tie for the biggest lead/.test(c.text)), "the tie is worded as a tie");
+  const lead = `{{${tie.factIds[0]}}}`;
+  const bad = checkSuperlatives({ title: "t", subtitle: `Top portfolios have their largest lead on ${lead}.`, tldr: [], body: "" }, real);
+  assert.equal(bad.ok, false);
+  assert.match(bad.problems[0], /sheet shows a tie/);
+  assert.equal(checkSuperlatives({ title: "t", subtitle: `Top portfolios have their largest lead on ${lead}, tied.`, tldr: [], body: "" }, real).ok, true);
 });
 
 test("quality: a notable fact is flagged and the draft must lead with it", async () => {
