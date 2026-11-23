@@ -990,11 +990,6 @@
     "tagline": "Software developer"
   },
   {
-    "name": "Amit Kumar Raj",
-    "url": "https://amitkumarraj.vercel.app",
-    "tagline": "Full Stack Developer | MERN"
-  },
-  {
     "name": "Amit Sah",
     "url": "https://amit-sah.com.np",
     "tagline": "Ios Developer | Backend Engineer (Node.Js, Llms) | Cloud Computing"
@@ -2947,6 +2942,11 @@
     "url": "https://eduardconstantin.github.io"
   },
   {
+    "name": "Efuwape Ayomide Oreoluwa",
+    "url": "https://eaoreoluwa.netlify.app",
+    "tagline": "Full Stack Developer | Software Engineer"
+  },
+  {
     "name": "Ekaterine Mitagvaria",
     "url": "https://ekaterine-mitagvaria.vercel.app"
   },
@@ -3141,7 +3141,7 @@
   {
     "name": "Falak Gala",
     "url": "https://falakgala.dev",
-    "tagline": "AI Engineer | Full-Stack & Next.js Developer"
+    "tagline": "AI Engineer | Full Stack & Next.js Developer"
   },
   {
     "name": "Farhan Segujja",
@@ -4934,11 +4934,6 @@
   {
     "name": "Long Do",
     "url": "https://longpdo.github.io"
-  },
-  {
-    "name": "Loren Kamau",
-    "url": "https://lorenkamau.com",
-    "tagline": "Founder of Aptifolio"
   },
   {
     "name": "Loránd Kiss",
@@ -8472,11 +8467,6 @@
   {
     "name": "Sumonta Saha Mridul",
     "url": "https://sumonta056.github.io"
-  },
-  {
-    "name": "Sunil Band",
-    "url": "https://www.sunilband.com",
-    "tagline": "Frontend Engineer"
   },
   {
     "name": "Sunil Mahato",
