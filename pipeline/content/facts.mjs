@@ -23,7 +23,7 @@ import { AI_WORK, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
 import { keptOutputs } from "../rubric.mjs";
-import { IN_LIBRARY_SQL } from "../../lib/tiers-store.mjs";
+import { IN_LIBRARY_SQL, addressNotPortfolio } from "../../lib/tiers-store.mjs";
 
 // The production address (lib/site.ts PRODUCTION_SITE_URL; tests/site-url.test.mjs keeps them equal).
 export const SITE_URL = "https://portfoliorank.dev";
@@ -141,13 +141,13 @@ async function gradedRows(db) {
   const hasTiers = (await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tier_ratings'")).rows.length > 0;
   const rows = (
     await db.execute(
-      `SELECT p.url, p.name, p.shot_key, p.ai_rubric, p.meta, ${hasTiers ? "t.tier" : "NULL"} AS rank_tier FROM portfolios p
+      `SELECT p.url, p.final_url, p.name, p.shot_key, p.ai_rubric, p.meta, ${hasTiers ? "t.tier" : "NULL"} AS rank_tier FROM portfolios p
        ${hasTiers ? "LEFT JOIN tier_ratings t ON t.url = p.url AND t.member = 1" : ""}
        WHERE ${VISIBLE} AND ${IN_LIBRARY_SQL("p", { tiers: hasTiers })} ORDER BY p.url`
     )
   ).rows;
   return rows
-    .filter((r) => !removed.has(String(r.url)))
+    .filter((r) => !removed.has(String(r.url)) && !addressNotPortfolio(r))
     .map((r) => ({
       url: String(r.url),
       name: r.name == null ? null : String(r.name),

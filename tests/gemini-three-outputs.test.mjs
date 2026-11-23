@@ -113,6 +113,33 @@ test("with no model running, a ranked member by code is indexable, in the sitema
   assert.equal(printView(null, { inLibrary: true }), null, "nothing measured: no report");
 });
 
+test("the code test follows what PortfolioRank shows: a rate-limited recapture keeps a shown member indexed; a hidden one, a down one and a code-host address never are", async () => {
+  const { seedNewcomers, inLibrary } = await import("../lib/tiers-store.mjs");
+  const db = await freshDb();
+  await refreshTiers(db, { now: NOW });
+  const add = (url) =>
+    db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, facts, captured_at) VALUES (?, 'live', 'k', ?, '2026-11-20 00:00:00')", args: [url, JSON.stringify(facts(6))] });
+  const sites = ["https://rate-limited.dev", "https://failed-unchecked.dev", "https://down.dev", "https://github.com/ana", "https://ana.github.io", "https://redirects.dev", "https://ana.substack.com", "https://medium.com/@ana", "https://linktr.ee/ana"];
+  for (const u of sites) await add(u);
+  await seedNewcomers(db, { now: NOW });
+  // Every one of them is a member by code; the address rule's cases may be held for the owner.
+  for (const u of sites) await db.execute({ sql: "INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded) VALUES (?, 25, 8, 9, 36, 1, 1) ON CONFLICT(url) DO UPDATE SET member = 1", args: [u] });
+  // A recapture answered HTTP 429 (pipeline/capture-blocked.mjs): status error, the health check still live: shown.
+  await db.execute("UPDATE portfolios SET status = 'error', health = 'live' WHERE url = 'https://rate-limited.dev'");
+  // A failed capture the health check has not cleared: hidden (lib/hidden.mjs).
+  await db.execute("UPDATE portfolios SET status = 'error', health = NULL WHERE url = 'https://failed-unchecked.dev'");
+  await db.execute("UPDATE portfolios SET health = 'down' WHERE url = 'https://down.dev'");
+  await db.execute("UPDATE portfolios SET final_url = 'https://github.com/ana' WHERE url = 'https://redirects.dev'");
+  assert.deepEqual([...(await gradedUrls(db))].sort(), ["https://ana.github.io", "https://rate-limited.dev"], "the sitemap's profiles");
+  assert.equal(await inLibrary(db, "https://rate-limited.dev"), true, "shown, so indexable");
+  assert.equal(await inLibrary(db, "https://ana.github.io"), true, "a real portfolio on GitHub Pages stays in");
+  for (const u of sites.filter((x) => !["https://rate-limited.dev", "https://ana.github.io"].includes(x))) assert.equal(await inLibrary(db, u), false, u);
+  // A Gemini "yes" does not lift the address rule either.
+  await db.execute({ sql: "UPDATE portfolios SET ai_rubric = ? WHERE url = 'https://github.com/ana'", args: [JSON.stringify(v3())] });
+  assert.equal(await inLibrary(db, "https://github.com/ana"), false);
+  assert.ok(!(await gradedUrls(db)).has("https://github.com/ana"));
+});
+
 test("a v3 grade (no letter) is Gemini's yes for membership; the owner's keep and an error are not", () => {
   const g = v3();
   assert.equal(g.tier, undefined);
