@@ -57,6 +57,9 @@ PARKING_PHRASES = [
     "this domain expired",
     "renew this domain",
     "domain registration expired",
+    "has expired and is parked",
+    "is parked free",
+    "parked free, courtesy of",
 ]
 
 _USER_AGENT = (

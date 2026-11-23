@@ -50,7 +50,7 @@
 // Down sites are added to data/excluded.json (pipeline/exclusions.mjs), so the
 // list drops them; until then the site and the background jobs skip them.
 
-import { httpGate, isParkingDomain, netloc, parkingPhrase, titleOf, visibleText } from "./gate.mjs";
+import { httpGate, parkedPage, titleOf, visibleText } from "./gate.mjs";
 import { BOT_WALL, capturedBlocked, isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
@@ -308,9 +308,9 @@ export async function checkSite(
     if (page.status >= 400) return { ok: false, reason: page.status === gate.httpStatus && gate.reason ? gate.reason : `HTTP ${page.status}`, finalUrl };
     text = String(page.text ?? "").trim();
     if (page.html) html = page.html;
-    if (isParkingDomain(finalUrl)) return { ok: false, reason: `redirects to ${netloc(finalUrl)}`, finalUrl };
-    const phrase = parkingPhrase({ text, title: String(page.title ?? "") });
-    if (phrase) return { ok: false, reason: `parking phrase: "${phrase}"`, finalUrl };
+    // Where the browser ended up, after the page's own redirects (./gate.mjs parkedPage, as the capture judges it).
+    const parked = parkedPage({ finalUrl, from: url, html: String(page.html ?? ""), text, title: String(page.title ?? "") });
+    if (parked) return { ok: false, reason: parked, finalUrl };
     if (text.length < BLANK_TEXT && !page.media) return { ok: false, reason: "renders blank", finalUrl };
   }
   const redirect = redirectVerdict(url, finalUrl, name, text);

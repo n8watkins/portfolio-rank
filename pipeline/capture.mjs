@@ -62,7 +62,7 @@ import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { httpGate, isParkingDomain, netloc, parkingPhrase, readRenderedPage, UA } from "./gate.mjs";
+import { httpGate, parkedPage, readRenderedPage, UA } from "./gate.mjs";
 import { measurePage } from "./facts.mjs";
 import { pngDiff } from "./png-diff.mjs";
 import { actionNote, passModal, passModePicker, passSplashGate } from "./splash.mjs";
@@ -402,21 +402,22 @@ export async function captureViewAsSeen(page, name) {
  * judged. Returns { verdict, shown }: `shown` is what was judged
  * (./capture-blocked.mjs readBlockedInputs), `verdict` null or { status,
  * reason, needsReview }. In order: the main
- * document's HTTP status (httpVerdict), a parked domain on the rendered page
- * (./gate.mjs, as the plain pre-check reads the served one), then
+ * document's HTTP status (httpVerdict), a parking page where the browser
+ * ended up (./gate.mjs parkedPage on the page's address against the listed
+ * one `listedUrl`, its rendered HTML `seenHtml`, text and title, as the plain
+ * pre-check reads the served one), then
  * capturedBlocked. A page with no words, or only a canvas, video or image
  * (MEDIA_ONLY), is never stored as live: a flat frame is blocked as blank,
  * anything else goes to the owner's review (MEDIA_REVIEW_REASON).
  * @param {import("playwright").Page} page
  */
-async function judgeDesktop(page, doc, passes, seenText) {
+async function judgeDesktop(page, doc, passes, seenText, { seenHtml = "", listedUrl = "" } = {}) {
   const shown = await readBlockedInputs(page, seenText, seenText);
   const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: shown.text, title: shown.title, shown: { ...shown, ...passes } });
   if (verdict) return { verdict, shown };
-  const finalUrl = page.url();
-  if (isParkingDomain(finalUrl)) return { verdict: { status: "parked", reason: `redirects to ${netloc(finalUrl)}`, needsReview: false }, shown };
-  const phrase = parkingPhrase({ text: shown.text, title: shown.title });
-  if (phrase) return { verdict: { status: "parked", reason: `parking phrase: "${phrase}"`, needsReview: false }, shown };
+  // A parking page where the browser ended up, after the page's own redirects (./gate.mjs parkedPage).
+  const parked = parkedPage({ finalUrl: page.url(), from: listedUrl, html: seenHtml, text: shown.text, title: shown.title });
+  if (parked) return { verdict: { status: "parked", reason: parked, needsReview: false }, shown };
   const blocked = capturedBlocked({ ...shown, ...passes });
   if (blocked === MEDIA_ONLY || (blocked === null && wordCount(shown.text) === 0)) {
     const frame = await shot(page, { type: "png" }).catch(() => null);
@@ -708,7 +709,7 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // still blocked (./capture-blocked.mjs). Nothing of it is stored,
     // uploaded or graded (reject). A bot wall is not called broken: it is
     // marked for the owner's review.
-    const desktop = await judgeDesktop(page, doc, { splash, modal, mode }, seen.text);
+    const desktop = await judgeDesktop(page, doc, { splash, modal, mode }, seen.text, { seenHtml: seen.html, listedUrl: url });
     if (desktop.verdict) return reject(desktop.verdict);
     const pageText = normalizePageText(seen.text);
     // Facts from the same reading (single-page apps included), plus a capped
