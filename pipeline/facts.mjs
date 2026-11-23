@@ -520,7 +520,9 @@ function menuLinks(links, homeUrl, pageUrl) {
   const self = host(homeUrl);
   const targets = new Set([strip(pathOfUrl(homeUrl)), strip(pathOfUrl(pageUrl))]);
   const isFrameTarget = (l) => {
-    if (String(l.raw ?? "").startsWith("#")) return false;
+    // Not an in-page anchor, nor a project card's link to the site itself labelled with its address
+    // ("younes-megaache.com" as one card among the projects on younes-megaache.com/projects).
+    if (String(l.raw ?? "").startsWith("#") || isAddressLabel(l)) return false;
     try {
       const u = new URL(l.href);
       return sameHost(u.hostname.toLowerCase(), self) && targets.has(strip(u.pathname));
@@ -548,13 +550,17 @@ function menuLinks(links, homeUrl, pageUrl) {
     });
     // A menu's labels are a word or three ("Home", "Achievements", "Get in touch"); a breadcrumb's "Home" beside
     // project cards whose links hold a title and a description (bhavaniravi.com's) makes no menu of the cards.
-    const short = group.filter((l) => labelOf(l).split(" ").filter(Boolean).length <= MENU_LABEL_WORDS).length;
+    // A label that is an address ("github.com", "nan-mo-hoam.com") is a project card's, never a menu's.
+    const short = group.filter((l) => !isAddressLabel(l) && labelOf(l).split(" ").filter(Boolean).length <= MENU_LABEL_WORDS).length;
     if (short >= group.length * 0.7) for (const l of group) out.add(l);
   }
   return out;
 }
 /** The most words in a menu link's label (menuLinks). */
 const MENU_LABEL_WORDS = 3;
+/** A label that is a web address: "github.com", "younes-megaache.com", "app.example.dev/demo". */
+const ADDRESS_LABEL = /^(?:https?:\/\/)?(?:www\.)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?$/iu;
+const isAddressLabel = (l) => ADDRESS_LABEL.test(String(l.text ?? "").replace(/\s+/g, " ").trim());
 
 /**
  * A page whose own name says it is one project: "project-sync.html", "/project_solar", "/work-dashboard",

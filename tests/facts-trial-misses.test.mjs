@@ -169,6 +169,17 @@ test("a menu is told from a project grid: a breadcrumb or a back link beside the
   assert.deepEqual(ownOf(`<main>${list}</main>`), []);
 });
 
+test("younes-megaache.com: a project card that links the site itself, labelled with its address, makes no menu of the cards", () => {
+  // As the page writes its cards (cut from younes-megaache.com/projects): each links its project by its address.
+  const card = (name, href, label) => `<li><div><div><img alt="${name}"><div><h1>${name}</h1></div><a href="${href}" target="_blank"><span>${label}</span></a></div><p>${name}, a project of mine.</p></div></li>`;
+  const html = `<main><div>${card("Tawasal watch app", "https://appgallery.huawei.com/app/C105867571", "appgallery.huawei.com")}
+    ${card("Bananalyzer", "https://github.com/megaacheyounes/Bananalyzer", "github.com")}
+    ${card("Personal website", "https://younes-megaache.com", "younes-megaache.com")}
+    ${card("Nan Mo Hoam's website", "https://nan-mo-hoam.com", "nan-mo-hoam.com")}</div></main>`;
+  const got = fromPages({ home: "https://younes-megaache.com/", page: "https://younes-megaache.com/projects", pageHtml: html }).map((c) => c.url);
+  assert.deepEqual(got, ["https://appgallery.huawei.com/app/C105867571", "https://github.com/megaacheyounes/Bananalyzer", "https://nan-mo-hoam.com/"]);
+});
+
 test("a language is only an ISO 639-1 code at the start of the path; 'ai-chat', 'go-cli', 'ml-lab' and 'ui-kit' are projects", () => {
   const paths = ["/ai-chat", "/my-app", "/js-quiz", "/ui-kit", "/ml-lab", "/go-cli", "/ar-demo", "/en", "/pt-br", "/zh-hant", "/de/impressum", "/en/foo"];
   const html = `<main><div class="grid">${paths.map((p) => `<div class="card"><a href="${p}"><h3>Project ${p}</h3></a><p>One of my projects, with a line about it.</p></div>`).join("")}</div></main>`;
