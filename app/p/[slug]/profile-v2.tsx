@@ -5,6 +5,7 @@ import { Socials } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
+import { ReportProblem } from "@/components/profile/ReportProblem";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { SITE_URL } from "@/lib/site";
 import { ROUTES } from "@/lib/nav";
@@ -148,6 +149,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={shot} alt={`Screenshot of ${p.domain}`} fetchPriority="high" className="h-56 w-full border-t border-edge bg-raised object-cover object-top sm:h-80" />
+        <ReportProblem url={p.url} domain={p.domain} className="border-t border-edge px-5 sm:px-6" />
       </header>
 
       {!p.listed && (

@@ -1,0 +1,450 @@
+{
+ "created_at": "2026-11-13T18:25:47.556Z",
+ "seed": 20261113,
+ "sets": {
+  "A": [
+   {
+    "id": "A01",
+    "url": "https://vineetcodes.vercel.app",
+    "name": "Vineet Machchal",
+    "points": 75.9,
+    "stratum": 12,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:15:32.613Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A02",
+    "url": "https://www.mariokandut.com",
+    "name": "Mario Kandut",
+    "points": 82.6,
+    "stratum": 9,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:14:39.048Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A03",
+    "url": "https://portfolio-kappa-mauve-pfdsqi3ae7.vercel.app",
+    "name": "Hussam Barqawi",
+    "points": 55.2,
+    "stratum": 19,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:17:47.682Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A04",
+    "url": "https://www.pavangupta.in",
+    "name": "Pavan Gupta",
+    "points": 84,
+    "stratum": 8,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:14:12.707Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A05",
+    "url": "https://ashleighsimonelli.co.uk",
+    "name": "Aaryanna Simonelli",
+    "points": 64.7,
+    "stratum": 18,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:17:21.002Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A06",
+    "url": "https://custard.top/en",
+    "name": "Custard",
+    "points": 92.3,
+    "stratum": 2,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:11:58.331Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A07",
+    "url": "https://sambhusbabu.com",
+    "name": "Sambhu Babu",
+    "points": 72.1,
+    "stratum": 15,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:16:22.364Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A08",
+    "url": "https://maveeshah.github.io/projects.html",
+    "name": "Ameer Muavia Shah",
+    "points": 86,
+    "stratum": 6,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:13:31.229Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A09",
+    "url": "https://jos.gg",
+    "name": "Barnav Mitra Jos",
+    "points": 89.2,
+    "stratum": 4,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:12:42.622Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A10",
+    "url": "https://abdulrehmanwaseem.me",
+    "name": "Abdul Rehman Waseem",
+    "points": 87.8,
+    "stratum": 5,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:13:13.481Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A11",
+    "url": "https://abhishek-kumar-t.vercel.app",
+    "name": "Abhishek Kumar T",
+    "points": 92.1,
+    "stratum": 3,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:12:22.094Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A12",
+    "url": "https://dhruvjs.com",
+    "name": "Dhruv Parmar",
+    "points": 78.4,
+    "stratum": 11,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:15:07.426Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A13",
+    "url": "https://batrasamarth.com",
+    "name": "Samarth Batra",
+    "points": 74.3,
+    "stratum": 13,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:15:51.891Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A14",
+    "url": "https://lorenkamau.com",
+    "name": "Loren Kamau",
+    "points": 84.1,
+    "stratum": 7,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:13:47.614Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A15",
+    "url": "https://sameer27.netlify.app",
+    "name": "Sameer",
+    "points": 67.8,
+    "stratum": 16,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:16:36.728Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A16",
+    "url": "https://toukoum.fr",
+    "name": "Raphaël Giraud",
+    "points": 66.1,
+    "stratum": "junk",
+    "junk": true,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:18:20.948Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A17",
+    "url": "https://andresilva.tech",
+    "name": "Andre Nunes Da Silva",
+    "points": 67.3,
+    "stratum": 17,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:17:00.856Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A18",
+    "url": "https://portfolio-six-livid-ti0bj1fdj4.vercel.app/projects",
+    "name": "Rajwardhan Patil",
+    "points": 72.1,
+    "stratum": 14,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:16:05.925Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A19",
+    "url": "https://deveshchandan.me",
+    "name": "Devesh Chandan",
+    "points": 98.6,
+    "stratum": 1,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:11:33.870Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   },
+   {
+    "id": "A20",
+    "url": "https://alilinares.com",
+    "name": "Ali Linares",
+    "points": 78.8,
+    "stratum": 10,
+    "junk": false,
+    "images_from": "2026-11-13 capture of exp/grading-v3",
+    "facts_measured_at": "2026-11-13T18:14:52.550Z",
+    "text_from": "2026-11-13 capture of exp/grading-v3"
+   }
+  ],
+  "B": [
+   {
+    "id": "B01",
+    "url": "https://divij.tech",
+    "name": "Divij Shrivastava",
+    "points": 79.6,
+    "stratum": 10,
+    "junk": false,
+    "images_from": "2026-11-13T18:21:57.493Z",
+    "facts_measured_at": "2026-11-13T18:21:57.493Z",
+    "text_from": "2026-11-13T18:21:57.493Z"
+   },
+   {
+    "id": "B02",
+    "url": "https://swagata.tech",
+    "name": "Swagata Ganguly",
+    "points": 90.7,
+    "stratum": 2,
+    "junk": false,
+    "images_from": "2026-11-13T18:18:58.563Z",
+    "facts_measured_at": "2026-11-13T18:18:58.563Z",
+    "text_from": "2026-11-13T18:18:58.563Z"
+   },
+   {
+    "id": "B03",
+    "url": "https://premkrrajbhar.github.io/prem_kumar_rajbhar/",
+    "name": "Prem Kumar Rajbhar",
+    "points": 88.8,
+    "stratum": 4,
+    "junk": false,
+    "images_from": "2026-11-13T18:19:46.205Z",
+    "facts_measured_at": "2026-11-13T18:19:46.205Z",
+    "text_from": "2026-11-13T18:19:46.205Z"
+   },
+   {
+    "id": "B04",
+    "url": "https://walter-veriza.vercel.app",
+    "name": "Walter Veriza",
+    "points": 86.7,
+    "stratum": 5,
+    "junk": false,
+    "images_from": "2026-11-13T18:20:07.247Z",
+    "facts_measured_at": "2026-11-13T18:20:07.247Z",
+    "text_from": "2026-11-13T18:20:07.247Z"
+   },
+   {
+    "id": "B05",
+    "url": "https://transitivebullsh.it",
+    "name": "Travis Fischer",
+    "points": 78.2,
+    "stratum": 11,
+    "junk": false,
+    "images_from": "2026-11-13T18:22:21.375Z",
+    "facts_measured_at": "2026-11-13T18:22:21.375Z",
+    "text_from": "2026-11-13T18:22:21.375Z"
+   },
+   {
+    "id": "B06",
+    "url": "https://aaabadcode.com",
+    "name": "Aaabad Touk",
+    "points": 68.9,
+    "stratum": "junk",
+    "junk": true,
+    "images_from": "2026-11-13T18:25:28.363Z",
+    "facts_measured_at": "2026-11-13T18:25:28.363Z",
+    "text_from": "2026-11-13T18:25:28.363Z"
+   },
+   {
+    "id": "B07",
+    "url": "https://borove4ik.vercel.app",
+    "name": "Denis Borovets",
+    "points": 82.8,
+    "stratum": 8,
+    "junk": false,
+    "images_from": "2026-11-13T18:21:10.819Z",
+    "facts_measured_at": "2026-11-13T18:21:10.819Z",
+    "text_from": "2026-11-13T18:21:10.819Z"
+   },
+   {
+    "id": "B08",
+    "url": "https://www.maximehaegeman.com",
+    "name": "Maxime Haegeman",
+    "points": 89.1,
+    "stratum": 3,
+    "junk": false,
+    "images_from": "2026-11-13T18:19:20.440Z",
+    "facts_measured_at": "2026-11-13T18:19:20.440Z",
+    "text_from": "2026-11-13T18:19:20.440Z"
+   },
+   {
+    "id": "B09",
+    "url": "https://princeb.dev",
+    "name": "Prince Bhayani",
+    "points": 83.4,
+    "stratum": 7,
+    "junk": false,
+    "images_from": "2026-11-13T18:20:47.927Z",
+    "facts_measured_at": "2026-11-13T18:20:47.927Z",
+    "text_from": "2026-11-13T18:20:47.927Z"
+   },
+   {
+    "id": "B10",
+    "url": "https://asterjuneli.com",
+    "name": "Aster Li",
+    "points": 62.9,
+    "stratum": 18,
+    "junk": false,
+    "images_from": "2026-11-13T18:24:39.862Z",
+    "facts_measured_at": "2026-11-13T18:24:39.862Z",
+    "text_from": "2026-11-13T18:24:39.862Z"
+   },
+   {
+    "id": "B11",
+    "url": "https://www.aleksandarpajic.co",
+    "name": "Aleksandar Pajić",
+    "points": 68.4,
+    "stratum": 17,
+    "junk": false,
+    "images_from": "2026-11-13T18:24:25.523Z",
+    "facts_measured_at": "2026-11-13T18:24:25.523Z",
+    "text_from": "2026-11-13T18:24:25.523Z"
+   },
+   {
+    "id": "B12",
+    "url": "https://alisaleem252.com",
+    "name": "Ali Saleem",
+    "points": 38.1,
+    "stratum": 19,
+    "junk": false,
+    "images_from": "2026-11-13T18:24:54.414Z",
+    "facts_measured_at": "2026-11-13T18:24:54.414Z",
+    "text_from": "2026-11-13T18:24:54.414Z"
+   },
+   {
+    "id": "B13",
+    "url": "https://adjwilli.github.io",
+    "name": "Adam Williams",
+    "points": 80.8,
+    "stratum": 9,
+    "junk": false,
+    "images_from": "2026-11-13T18:21:26.733Z",
+    "facts_measured_at": "2026-11-13T18:21:26.733Z",
+    "text_from": "2026-11-13T18:21:26.733Z"
+   },
+   {
+    "id": "B14",
+    "url": "https://dhyeybhandari.vercel.app",
+    "name": "Dhyey Bhandari",
+    "points": 74.7,
+    "stratum": 14,
+    "junk": false,
+    "images_from": "2026-11-13T18:23:31.837Z",
+    "facts_measured_at": "2026-11-13T18:23:31.837Z",
+    "text_from": "2026-11-13T18:23:31.837Z"
+   },
+   {
+    "id": "B15",
+    "url": "https://www.michaellalavedra.com",
+    "name": "Michaell Alavedra",
+    "points": 69.4,
+    "stratum": 16,
+    "junk": false,
+    "images_from": "2026-11-13T18:24:13.210Z",
+    "facts_measured_at": "2026-11-13T18:24:13.210Z",
+    "text_from": "2026-11-13T18:24:13.210Z"
+   },
+   {
+    "id": "B16",
+    "url": "https://hangga.web.id",
+    "name": "Hangga Aji Sayekti",
+    "points": 71.9,
+    "stratum": 15,
+    "junk": false,
+    "images_from": "2026-11-13T18:23:54.319Z",
+    "facts_measured_at": "2026-11-13T18:23:54.319Z",
+    "text_from": "2026-11-13T18:23:54.319Z"
+   },
+   {
+    "id": "B17",
+    "url": "https://pawelszostak.vercel.app",
+    "name": "Aaweł Szostak",
+    "points": 77,
+    "stratum": 12,
+    "junk": false,
+    "images_from": "2026-11-13T18:22:39.584Z",
+    "facts_measured_at": "2026-11-13T18:22:39.584Z",
+    "text_from": "2026-11-13T18:22:39.584Z"
+   },
+   {
+    "id": "B18",
+    "url": "https://heyshaun.fr",
+    "name": "Shaun Fischmann",
+    "points": 93.2,
+    "stratum": 1,
+    "junk": false,
+    "images_from": "2026-11-13T18:18:35.657Z",
+    "facts_measured_at": "2026-11-13T18:18:35.657Z",
+    "text_from": "2026-11-13T18:18:35.657Z"
+   },
+   {
+    "id": "B19",
+    "url": "https://pujasridhar.github.io",
+    "name": "Puja Sridhar",
+    "points": 76.3,
+    "stratum": 13,
+    "junk": false,
+    "images_from": "2026-11-13T18:23:07.146Z",
+    "facts_measured_at": "2026-11-13T18:23:07.146Z",
+    "text_from": "2026-11-13T18:23:07.146Z"
+   },
+   {
+    "id": "B20",
+    "url": "https://bhaveshgudlani.me",
+    "name": "Bhavesh Gudlani",
+    "points": 84.4,
+    "stratum": 6,
+    "junk": false,
+    "images_from": "2026-11-13T18:20:24.788Z",
+    "facts_measured_at": "2026-11-13T18:20:24.788Z",
+    "text_from": "2026-11-13T18:20:24.788Z"
+   }
+  ]
+ }
+}

@@ -20,6 +20,9 @@
 //                    one-sentence explanation, which no recompute reads) is
 //                    cleared after COMPARISON_REASON_DAYS (90) days.
 //   owner_alerts     cleared alerts are deleted after 180 days.
+//   problem_reports  visitors' "Report a problem" notes are deleted 180
+//                    days after the owner marks them handled (open ones
+//                    stay; the visitor's hash is cleared on handling).
 //   grade_links      one-time links (lib/grader/links.mjs) are deleted once
 //                    they expire, whichever feature is on (the grader's
 //                    tick does the same hourly while it runs).
@@ -45,6 +48,7 @@ export const NIGHT_RUN_DAYS = 180;
 export const NIGHT_SITES_DAYS = 90;
 export const COMPARISON_REASON_DAYS = 90;
 export const CLEARED_ALERT_DAYS = 180;
+export const HANDLED_REPORT_DAYS = 180;
 export const EMAIL_SENDS_DAYS = 35;
 
 const DAY_MS = 86400000;
@@ -164,6 +168,10 @@ export async function pruneLogs(db, { now = new Date() } = {}) {
   if (await tableExists(db, "tavily_searches")) {
     // The weekly Tavily counter only reads the last 7 days (lib/content/tavily-credits.mjs).
     out.tavilySearches = (await db.execute({ sql: "DELETE FROM tavily_searches WHERE at < ?", args: [new Date(now.getTime() - WEEK_ROW_KEEP_MS).toISOString()] })).rowsAffected;
+  }
+  if (await tableExists(db, "problem_reports")) {
+    // Visitors' reports (lib/problem-reports/store.mjs): open ones stay until the owner handles them.
+    out.problemReports = (await db.execute({ sql: "DELETE FROM problem_reports WHERE status = 'handled' AND handled_at < ?", args: [before(HANDLED_REPORT_DAYS)] })).rowsAffected;
   }
   if (await tableExists(db, "badge_checks")) {
     out.badgeChecks = (await db.execute({ sql: "DELETE FROM badge_checks WHERE at < ?", args: [now.getTime() - DAY_MS] })).rowsAffected;

@@ -196,6 +196,17 @@ export default function PrivacyPage() {
         />
       </LegalSection>
 
+      <LegalSection id="problem-reports" title="If you report a problem with a profile">
+        <Bullets
+          items={[
+            "I store the site, the reason you picked, your note if you wrote one, and when.",
+            "So one person keeps one open report per site and can't flood the list, I store with the report a hash, keyed with a secret only the server holds, of your browser id, or of your account when you're signed in. That hash is cleared once I've handled the report.",
+            "To stop abuse, I also count reports per person (the same keyed hash) and per network (a hash of your network address, keyed the same way). Those counters are kept at most a day.",
+            "Only I see reports. A handled report is deleted 180 days later.",
+          ]}
+        />
+      </LegalSection>
+
       <LegalSection id="games" title="If you play the games">
         <Bullets
           items={[
@@ -267,6 +278,7 @@ export default function PrivacyPage() {
             ["Claims and the claims audit log", "As long as the site runs; deleting your account removes your name from it"],
             ["Listed site data", "While listed, then deleted 30 days after it leaves the list"],
             ["Hashed network counters (rate limits)", "At most a day"],
+            ["Problem reports about a profile", "Until handled, then 180 days"],
             ["Grade requests, reports and their screenshots", "180 days after the request"],
             ["An email address for a report", "Until the email is sent, or 30 days if it never is"],
             ["Gemini request log (which job asked, when, tokens used; no visitor data)", "90 days, then only daily totals"],

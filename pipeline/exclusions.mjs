@@ -24,7 +24,7 @@
 import { APPLIED_REMOVAL_WHERE, checkSite, mapPool, normKey } from "./health.mjs";
 import { excludedUrl, readJson } from "./list-util.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
-import { AI_SAYS_NOT_PORTFOLIO } from "./portfolio-guard.mjs";
+import { notPortfolioReason } from "./portfolio-guard.mjs";
 import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesOnFreshFailure, notAnswering } from "./not-working.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
@@ -33,7 +33,7 @@ export const MAX_EXCLUDE_SHARE = 0.1;
 export function kindOf(reason) {
   const r = String(reason ?? "");
   if (r.startsWith("duplicate of")) return "duplicate";
-  if (r.startsWith(AI_SAYS_NOT_PORTFOLIO)) return "not_portfolio";
+  if (notPortfolioReason(r)) return "not_portfolio";
   return "down";
 }
 
