@@ -116,6 +116,8 @@ One workflow deploys: **Production** (`.github/workflows/deploy.yml`; a release 
 
 The smoke check is read-only (GET requests and the start of a GitHub sign-in).
 It checks that the home page renders the ranking, `/top` reads the database, a screenshot comes from R2, `/api/polls` answers JSON, robots.txt is open and nothing says noindex, sign-in redirects to GitHub with a client id and the site's own callback URL, and the old address answers a 301 to the same path.
+What a visitor cannot see is checked in the unit tests instead, on every pull request and release (`tests/production-config.test.mjs`): the Worker's job crons are production's triggers, `SITE_ENV` is `production`, and production runs on the default email caps.
+Those three ran only inside the staging tests until #282.
 CI runs on every pull request into main before it can merge, sized to the change (`.github/workflows/ci.yml`, `scripts/ci-lanes.mjs`).
 It follows the site's code to sort the changed files: docs that no code reads run nothing; code the site cannot reach (a script, the nightly capture, a workflow file, a unit test) runs typecheck, lint and the unit tests; anything the site reaches, `data/`, and anything unknown runs everything, with the Worker build and the browser tests (E2E).
 It errs towards everything: a file is the site's when the site or a site test imports it, names its path in a string, or builds a path into its folder.
