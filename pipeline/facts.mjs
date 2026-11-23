@@ -166,7 +166,11 @@ const CERTIFICATE_PATH = {
   "learn.microsoft.com": /\/(?:api\/)?credentials\b|\/users\/[^/]+\/(?:credentials|transcript|achievements)\b/i,
   "datacamp.com": /^\/(?:completed\/)?statement-of-accomplishment\//i,
 };
-const isCertificate = (h, path) => CERTIFICATE_HOSTS.test(h) || Boolean(CERTIFICATE_PATH[h]?.test(path));
+// A certificate's verification or badge page on any host, by its path: Oracle's
+// catalog-education.oracle.com/ords/certview/sharebadge (houssambouzid.dev's certificates, in a panel the
+// projects heading runs into), "/verify-certificate", "/certificate-verification".
+const CERTIFICATE_ANY_PATH = /(?:^|\/)(?:certview|sharebadge|verify-?certificates?|certificates?-verification)(?:\/|$)/i;
+const isCertificate = (h, path) => CERTIFICATE_HOSTS.test(h) || Boolean(CERTIFICATE_PATH[h]?.test(path)) || CERTIFICATE_ANY_PATH.test(path);
 /** A CodePen profile (codepen.io/name), not one of its pens (codepen.io/name/pen/id). */
 const isCodepenProfile = (u) => /(^|\.)codepen\.io$/i.test(u.hostname) && u.pathname.split("/").filter(Boolean).length <= 1;
 

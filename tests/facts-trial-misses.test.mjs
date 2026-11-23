@@ -207,6 +207,18 @@ test("a hash route's page: its outbound project links count as the projects page
   assert.deepEqual(got.map((c) => [c.url, c.from, c.tier]), [["https://github.com/chiragsamal/zomato", "projects_page", 1]]);
 });
 
+// Found in the sample of 40 sites after the fixes (houssambouzid.dev).
+test("a certificate's verification or badge page is never a project, on any host; an app named for certificates is", () => {
+  const home = "https://ana.dev/";
+  const html = `<section id="projects"><h2>Projects</h2>
+    <a href="https://catalog-education.oracle.com/ords/certview/sharebadge?id=AA14">OCI badge</a>
+    <a href="https://academy.example/verify-certificate/123">Verify</a>
+    <a href="https://certs.example/certificate-verification/9">Verify</a>
+    <a href="https://certificate-maker.vercel.app/">Certificate maker</a>
+    <a href="https://github.com/ana/certificate-generator">Generator</a></section>`;
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html, url: home, finalUrl: home }), home).map((c) => c.url), ["https://certificate-maker.vercel.app/", "https://github.com/ana/certificate-generator"]);
+});
+
 test("alestor123.is-a.dev: its projects page read once the list has arrived gives its repositories", () => {
   const got = fromPages({ home: "https://alestor123.is-a.dev/", page: "https://alestor123.is-a.dev/projects/", pageHtml: fixture("alestor123.is-a.dev.projects.html") });
   assert.equal(got.length, 8);
