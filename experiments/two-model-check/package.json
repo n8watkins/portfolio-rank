@@ -1,0 +1,9 @@
+{
+  "name": "two-model-check-experiment",
+  "private": true,
+  "type": "module",
+  "description": "Experiment only: does a two-model portfolio check with code facts and page text beat code alone? Not used by the product.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0"
+  }
+}
