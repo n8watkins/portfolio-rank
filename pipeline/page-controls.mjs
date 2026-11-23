@@ -86,6 +86,14 @@ const STRONG_ATTR = whole(STRONG_ATTR_WORDS, CJK_WORDS);
 const NOT_PROJECT_HEADING = whole(
   String.raw`experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition|featured in|as seen in|press|articles?|posts?|blog|talks?|publications?|contributions?|repos i like|starred|favou?rite repos|platforms|partners|integrations|sponsors|brands|companies|trusted by|worked with`
 );
+// The short title of a column or card inside a projects section, written as plain text rather than a heading
+// ("<p>Company Experiences</p>" over two employers' logos inside krupal-portfolio.vercel.app's "Works"), that says
+// the column is work experience: its column is not projects (close()). The whole title must be this, so "Client
+// work", "Selected clients", "Companies I founded" or a project named "Career Compass" are left alone.
+const COLUMN_OTHER_TITLE =
+  /^(?:(?:my|work|company|professional|job|industry|corporate)\s+)?(?:experiences?|employment|employers?|career|work history|internships?|positions?|jobs)$|^companies(?:\s+i(?:'ve|’ve| have)?\s+worked\s+(?:at|for|with))?$|^where\s+i(?:'ve|’ve| have)?\s+worked$/i;
+/** Elements whose own text may be such a title. */
+const TITLE_TAGS = new Set(["p", "div", "span", "strong", "b", "small", "h5", "h6", "dt", "label"]);
 // A number and a unit, or a few of them: a stat, not a section's title ("3 apps / 8 months", "20+ builds").
 const STAT = /^[\s\d.,+%x×]*\d[\d.,+%x×]*\s*\p{L}+(?:\s*[/|·,-]\s*[\d.,+%x×]*\d[\d.,+%x×]*\s*\p{L}+)*\s*$/u;
 /**
@@ -231,9 +239,20 @@ export function scanPage(html, baseUrl) {
   let recent = "";
   const noQuote = { '"': false, "'": false };
 
+  // Every open element gets a number, and every link the numbers of the elements around it (`anc`), so the
+  // facts can tell which links share a container (a menu built from divs, ./facts.mjs menuLinks).
+  let elementId = 0;
+  // Open elements whose own text may be a column's title (COLUMN_OTHER_TITLE), innermost last.
+  const openTitles = [];
   const addText = (t) => {
     if (!t || !/\S/.test(t)) return;
     text.push(t);
+    // The innermost few ("<p><strong>Company</strong> Experiences</p>": both words are the p's title).
+    for (const title of openTitles.slice(-3)) {
+      if (title.len >= 80) continue;
+      title.parts.push(t);
+      title.len += t.length;
+    }
     // Line breaks in the text are spaces here: only an element boundary ("\n" below) starts a new run.
     recent = `${recent} ${decodeEntities(t).replace(/\s+/g, " ")}`.slice(-200);
     if (headOpen) head.push(t);
@@ -262,6 +281,18 @@ export function scanPage(html, baseUrl) {
     if (rec.chrome) chromeOpen--;
     if (rec.social) socialOpen--;
     if (rec.aside) asideOpen--;
+    if (rec.otherColumn) otherOpen--;
+    if (rec.title) {
+      openTitles.splice(openTitles.lastIndexOf(rec.title), 1);
+      // A column's plain-text title that says work experience, first in its column and holding no link, inside a
+      // projects section: the rest of the column is not projects ("Company Experiences" above employers' logos).
+      const words = decodeEntities(rec.title.parts.join(" ")).replace(/\s+/g, " ").trim();
+      const parent = stack.at(-1);
+      if (projectOpen && parent && !parent.otherColumn && links.length === rec.title.linksAt && parent.linksAt === rec.title.linksAt && words.split(" ").length <= 5 && COLUMN_OTHER_TITLE.test(words)) {
+        parent.otherColumn = true;
+        otherOpen++;
+      }
+    }
     // The element a heading's section belongs to closed: its section ends with it. Unless that element only
     // wrapped the heading (no link since it): "<div><div>Projects</div><h2>Check out my latest work</h2></div>"
     // then the cards (sahilbajajportfolio.vercel.app); the section then is the one element that comes next
@@ -478,7 +509,7 @@ export function scanPage(html, baseUrl) {
     if (name === "a" && raw) {
       // A credit ("Powered by Hugo & <a>Narrow</a>"): the words since the last block boundary end in a credit phrase.
       const credit = CREDIT_BEFORE.test(recent.slice(recent.lastIndexOf("\n") + 1).replace(/\s+/g, " ").trim());
-      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0, ...where(), ...(credit ? { credit: true } : {}) };
+      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0, anc: stack.map((r) => r.id), ...where(), ...(credit ? { credit: true } : {}) };
       links.push(rec.link);
     }
     const role = String(attrs.get("role") ?? "").trim().toLowerCase().split(/\s+/)[0];
@@ -523,6 +554,12 @@ export function scanPage(html, baseUrl) {
       scope.parent = rec;
       scope.awaitSibling = false;
     }
+    rec.id = ++elementId;
+    rec.linksAt = links.length - (rec.link ? 1 : 0);
+    if (TITLE_TAGS.has(name)) {
+      rec.title = { parts: [], len: 0, linksAt: rec.linksAt };
+      openTitles.push(rec.title);
+    }
     stack.push(rec);
     if (rec.link) openLinks.push(rec.link);
     if (rec.control) openControls.push(rec.control);
@@ -541,7 +578,7 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside, ...(l.inOther ? { inOther: true } : {}), ...(l.credit ? { credit: true } : {}) };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside, ...(l.inOther ? { inOther: true } : {}), ...(l.credit ? { credit: true } : {}), anc: l.anc };
       })
       .filter(Boolean),
     controls: controls.map((c) => {

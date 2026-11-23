@@ -118,16 +118,61 @@ test("amanhimself.dev: the apps its projects page links at the top of the site a
   assert.ok(!got.some((c) => c.url.includes("/slash")));
 });
 
-test("on the projects page, a same-site link to a section of the site, a language, a year or another listing is not a project", () => {
-  const page = "https://ana.dev/projects";
-  const html = `<nav><a href="/menu-app">Menu</a></nav><main><h1>Projects</h1>
-    <a href="/tracker">Tracker</a> <a href="/apps/budget">Budget</a> <a href="/notes-app.html">Notes app</a>
-    <a href="/about">About</a> <a href="/blog/how-i-built-it">Post</a> <a href="/tags/react">React</a> <a href="/uses">Uses</a>
-    <a href="/now">Now</a> <a href="/en">English</a> <a href="/2024/05/launch">Launch post</a> <a href="/work">Work</a> <a href="/resume">Resume</a>
-    <a href="/contact">Contact</a> <a href="/projects">All</a> <a href="/">Home</a> <a href="/logout">Sign out</a> <a href="/search?q=x">Search</a>
-    <aside class="tools"><a href="/stack-tool">Tool</a></aside></main>`;
-  const got = fromPages({ home: "https://ana.dev/", page, pageHtml: html }).map((c) => c.url);
-  assert.deepEqual(got, ["https://ana.dev/tracker", "https://ana.dev/apps/budget", "https://ana.dev/notes-app.html"]);
+/** A projects page: its cards (each a title link and a line), then `rest` in the same main content. */
+const cardsPage = (rest = "") => `<nav><a href="/menu-app">Menu</a></nav><main><h1>Projects</h1>
+  <div class="grid">
+    <div class="card"><a href="/tracker"><h3>Tracker</h3></a><p>Habits, streaks and reminders.</p></div>
+    <div class="card"><a href="/apps/budget"><h3>Budget</h3></a><p>A budget for two.</p></div>
+    <div class="card"><a href="/notes-app.html"><h3>Notes app</h3></a><p>Notes that sync.</p></div>
+    <div class="card"><a href="/ai-chat"><h3>AI chat</h3></a><p>Chat with your files.</p></div>
+    <div class="card"><a href="/go-cli"><h3>go-cli</h3></a><p>A CLI in Go.</p></div>
+  </div>${rest}</main>`;
+const PROJECTS_ONLY = ["https://ana.dev/tracker", "https://ana.dev/apps/budget", "https://ana.dev/notes-app.html", "https://ana.dev/ai-chat", "https://ana.dev/go-cli"];
+const ownOf = (html) => fromPages({ home: "https://ana.dev/", page: "https://ana.dev/projects", pageHtml: html }).map((c) => c.url);
+
+test("on the projects page, a same-site link to a section of the site, a language, a year or a page number is not a project", () => {
+  // Each in the main content, written as real pages write them.
+  const sections = [
+    `<p>Read more <a href="/about">about me</a> or the <a href="/blog/how-i-built-it">story of the tracker</a>.</p>`,
+    `<div class="tags"><a href="/tags/react">#react</a> <a href="/topics/react">React</a> <a href="/series/rust">Rust series</a> <a href="/categories/web">Web</a></div>`,
+    `<p><a href="/uses">What I use</a> · <a href="/now">What I'm doing now</a> · <a href="/en">EN</a> <a href="/pt-br">PT</a> <a href="/zh-hans/projects">中文</a></p>`,
+    `<p>Posted in <a href="/2024/05/launch">May 2024</a>. Also: <a href="/resume">my resume</a>, <a href="/work">all work</a>.</p>`,
+    `<div class="pagination"><a href="/projects/page/2">2</a> <a href="/projects/2">3</a> <a href="/projects?page=4">4</a> <a href="/archive/older">Older posts →</a></div>`,
+    `<p><a href="/privacy-policy">Privacy</a> <a href="/impressum">Impressum</a> <a href="/datenschutz">Datenschutz</a> <a href="/logout">Sign out</a> <a href="/search?q=x">Search</a></p>`,
+    `<p>Also see <a href="/achievements">what I achieved</a>, <a href="/certifications">my certificates</a>, <a href="/awards">awards</a>, <a href="/publications">papers</a>, <a href="/research">research</a>, <a href="/stack">my stack</a>, <a href="/tools">tools</a>, <a href="/resources">resources</a>, <a href="/journey">my journey</a>, <a href="/timeline">timeline</a>, <a href="/authors/ana">Ana</a>.</p>`,
+    `<p><a href="/contacto">Escríbeme</a> <a href="/sobre-mi">Quién soy</a> <a href="/kontakt">Schreib mir</a> <a href="/a-propos">Qui suis-je</a> <a href="/ueber-mich">Wer ich bin</a></p>`,
+    `<aside class="tools"><a href="/stack-tool">Tool</a></aside>`,
+  ].join("\n");
+  assert.deepEqual(ownOf(cardsPage(sections)), PROJECTS_ONLY);
+});
+
+test("on the projects page, a menu built from divs, a call-to-action band and a 'next project' link are not projects", () => {
+  // A navbar of divs, not a <nav>: it links the home page and the projects page itself, so it is a menu.
+  const divMenu = `<div class="navbar"><div class="nav-item"><a href="/">Home</a></div><div class="nav-item"><a href="/projects">Projects</a></div>
+    <div class="nav-item"><a href="/achievements">Achievements</a></div><div class="nav-item"><a href="/certs">Certifications</a></div><div class="nav-item"><a href="/pubs">Publications</a></div></div>`;
+  assert.deepEqual(ownOf(`<div id="app">${divMenu}${cardsPage()}</div>`), PROJECTS_ONLY);
+  // A site with no project is not passed through its menu, even on a host that answers 404 for made-up addresses.
+  assert.deepEqual(ownOf(`<div id="app">${divMenu}<main><h1>Projects</h1><p>Coming soon.</p></main></div>`), []);
+  // A call-to-action band and a next/previous pair, under addresses that are on no list.
+  const cta = `<section class="cta"><h2>Have an idea?</h2><a class="btn" href="/get-in-touch">Get in touch</a> <a class="btn" href="/lets-talk">Let's talk →</a> <a href="/start">Home</a></section>
+    <div class="pager"><a href="/p/older-one">← Previous project</a> <a href="/p/newer-one">Next project →</a> <a href="/everything">View all</a></div>`;
+  assert.deepEqual(ownOf(cardsPage(cta)), PROJECTS_ONLY);
+});
+
+test("a menu is told from a project grid: a breadcrumb or a back link beside the cards does not make the cards a menu", () => {
+  const crumb = `<div class="crumbs"><a href="/">Home</a> / <a href="/projects">Projects</a> / <span>All</span></div>`;
+  // The breadcrumb sits in the same main content as the cards, as on bhavaniravi.com.
+  assert.deepEqual(ownOf(cardsPage().replace("<h1>Projects</h1>", `${crumb}<h1>Projects</h1>`)), PROJECTS_ONLY);
+  assert.deepEqual(ownOf(cardsPage().replace("<h1>Projects</h1>", `<a href="/">← Back home</a><h1>Projects</h1>`)), PROJECTS_ONLY);
+  // A list whose items are short links and one of them the home page is a menu, whatever stands beside the links.
+  const list = `<ul class="links"><li><a href="/">Home</a></li><li><a href="/rht">Reading</a> <span>what I read</span></li><li><a href="/skillsbar">Skills</a> <span>what I know</span></li></ul>`;
+  assert.deepEqual(ownOf(`<main>${list}</main>`), []);
+});
+
+test("a language is only an ISO 639-1 code at the start of the path; 'ai-chat', 'go-cli', 'ml-lab' and 'ui-kit' are projects", () => {
+  const paths = ["/ai-chat", "/my-app", "/js-quiz", "/ui-kit", "/ml-lab", "/go-cli", "/ar-demo", "/en", "/pt-br", "/zh-hant", "/de/impressum", "/en/foo"];
+  const html = `<main><div class="grid">${paths.map((p) => `<div class="card"><a href="${p}"><h3>Project ${p}</h3></a><p>One of my projects, with a line about it.</p></div>`).join("")}</div></main>`;
+  assert.deepEqual(ownOf(html), ["/ai-chat", "/my-app", "/js-quiz", "/ui-kit", "/ml-lab", "/go-cli", "/ar-demo"].map((p) => `https://ana.dev${p}`));
 });
 
 test("not on the home page: a same-site link at the top of the site stays a section of the site there", () => {
@@ -156,10 +201,13 @@ test("the spread rule: 3 per outside host first, then the places left in order; 
   const repos = Array.from({ length: 9 }, (_, i) => `https://github.com/ana/app${i}`);
   assert.deepEqual(pick(repos), repos.slice(0, 8));
   assert.equal(hostKey("https://github.com/Ana/App/tree/main"), hostKey("https://github.com/ana/app"));
-  const oneRepo = [...["", "/tree/main", "/releases", "/wiki", "/issues/1", "/actions", "/blob/main/a.md", "/blob/main/b.md", "/blob/main/c.md", "/pulse"].map((p) => `https://github.com/ana/app${p}`), "https://demo.example/"];
-  const spread = pick(oneRepo);
-  assert.ok(spread.includes("https://demo.example/"), "the demo after ten links into one repository still gets a place");
-  assert.equal(spread.length, 8);
+  // Version 4 review: one repository is one link, wherever into it the links go (garebear99.github.io linked three
+  // releases of one plugin); the same outside page twice, with another fragment, is one link too.
+  const oneRepo = [...["", "/tree/main", "/releases/tag/v2.3.1", "/releases/tag/v2.3.0", "/wiki", "/blob/main/a.md"].map((p) => `https://github.com/ana/app${p}`), "https://github.com/ana/other", "https://demo.example/#top", "https://demo.example/#features"];
+  assert.deepEqual(pick(oneRepo), ["https://github.com/ana/app", "https://github.com/ana/other", "https://demo.example/"]);
+  // The link kept is the one in the projects, even when a link into the same repository comes first outside them.
+  const kept = projectCandidates(homeProjectLinks({ html: `<p>Credits: <a href="https://github.com/ana/app/wiki">wiki</a></p>${section(["https://github.com/ana/app/releases/tag/v1"])}`, url: home, finalUrl: home }), home);
+  assert.deepEqual(kept.map((c) => [c.url, c.tier]), [["https://github.com/ana/app/releases/tag/v1", 1]]);
   // A link outside the projects never takes the place of a project link, however many share a host.
   const many = Array.from({ length: 6 }, (_, i) => `https://one.example/q${i}`);
   const got = projectCandidates(homeProjectLinks({ html: `${section(many)}<p>${["https://x.example/", "https://y.example/", "https://z.example/"].map((h) => `<a href="${h}">x</a>`).join(" ")}</p>`, url: home, finalUrl: home }), home);
@@ -212,7 +260,8 @@ test("a hash route's page: its outbound project links count as the projects page
 // a plain fetch of one is the same shell as a made-up address, but the made-up one says "Project Not Found".
 test("nevo.is-a.dev: a host whose made-up address answers 200 but says not found tells its own pages apart", async () => {
   const SC = fixture("nevo.is-a.dev.smart-care.html");
-  const nf = fakeHost({ "/projects/smart-care": [200, SC], "/projects/drawly": [200, SC.replace(/Smart Care/g, "Drawly")], "/projects/gone": [200, fixture("nevo.is-a.dev.nonsense.html")] }, [200, fixture("nevo.is-a.dev.nonsense.html")]);
+  const HOME = SC.replace(/NEVO \| Smart Care/g, "NEVO | Frontend Developer");
+  const nf = fakeHost({ "/": [200, HOME], "/projects/smart-care": [200, SC], "/projects/drawly": [200, SC.replace(/Smart Care/g, "Drawly")], "/projects/gone": [200, fixture("nevo.is-a.dev.nonsense.html")] }, [200, fixture("nevo.is-a.dev.nonsense.html")]);
   const r = await checkLinks(["/projects/smart-care", "/projects/drawly", "/projects/gone"].map((p) => ({ url: `https://nevo.is-a.dev${p}`, kind: "own page", tier: 2 })), { fetchImpl: nf, homeText: "NEVO" });
   assert.deepEqual([r.own_check, r.ok, r.own_ok, r.broken, r.own_unverified], ["not_found_page", 2, 2, 1, 0], "a page that says not found is broken");
   // The same shell pages on a host whose made-up address does not say so: they still cannot be told apart.
@@ -224,6 +273,13 @@ test("nevo.is-a.dev: a host whose made-up address answers 200 but says not found
   assert.equal(saysNotFound("<title>Ana</title><h1>404</h1>"), true);
   assert.equal(saysNotFound("<title>Ana</title><h1>Ana Ruiz</h1><h2>Fixing 404 errors in Next.js</h2><p>Not found</p>"), false);
   assert.equal(saysNotFound(BH_NONSENSE), false, "bhavaniravi.com's made-up address is its home page, not a not-found page");
+  // A site whose name has "404" in it says so on every page, the home page included: that is no not-found page.
+  const studio = (t) => `<title>404 Studio - ${t}</title><body><nav>404 Studio</nav><main><h1>404 Studio</h1><div id="root"></div></main></body>`;
+  const named = fakeHost({ "/": [200, studio("Ana Ruiz")], "/work/a": [200, studio("Alpha")] }, [200, studio("Ana Ruiz")]);
+  const s = await checkLinks([{ url: "https://404studio.dev/work/a", kind: "own page", tier: 2 }], { fetchImpl: named, homeText: "404 Studio" });
+  assert.notEqual(s.own_check, "not_found_page");
+  assert.equal(s.broken, 0, "its own page is not marked broken for its name");
+  assert.ok(named.asked.includes("GET /"), "the home page was asked once, to tell");
 });
 
 // Found in the sample of 40 sites after the fixes (expensive.toys).
@@ -237,6 +293,47 @@ test("expensive.toys: a first-level '/toys' page labelled 'Toys' is the projects
   // Not under another label, and not below the first segment.
   assert.equal(projectsPageFor(homeProjectLinks({ html: `<a href="/toys">Shop</a>`, url: home, finalUrl: home }), home), null);
   assert.equal(projectsPageFor(homeProjectLinks({ html: `<a href="/shop/toys">Toys</a>`, url: home, finalUrl: home }), home), null);
+});
+
+// The independent review of #287 (krupal-portfolio.vercel.app in the sample of 40).
+test("krupal-portfolio.vercel.app: a 'Company Experiences' column title inside 'Works' lowers its employers; client work still counts", () => {
+  const home = "https://krupal-portfolio.vercel.app/";
+  const cands = (html) => projectCandidates(homeProjectLinks({ html, url: home, finalUrl: home }), home).map((c) => [c.url, c.tier]);
+  // As the site writes it (cut from its page): the column titles are <p>, not headings.
+  const works = (title) => `<section id="works"><h2>Works</h2><div><div><div><p>${title}</p><div>
+    <a target="_blank" href="https://virtuoustechlogic.com/"><img alt="Virtuous Techlogic"><div><p>Virtuous Techlogic</p><div><p>Junior Flutter Developer</p></div></div><div><p>2023 - 2024</p></div></a>
+    <a target="_blank" href="https://hencesoft.com/"><img alt="HENCE SOFT"><div><p>HENCE SOFT</p><div><p>Frontend Developer</p></div></div><div><p>2021 - 2023</p></div></a>
+    </div></div></div><div><div><p>Learning Projects</p><div>
+    <a target="_blank" href="https://github.com/Krupal19/Expense-Tracker"><div>Expence Tracker</div><p>A simple Flutter app to track expenses.</p></a>
+    <a target="_blank" href="https://krupal19.github.io/TodoListApp-JavaScript/"><div>TodoList App - Javascript</div><p>A JavaScript app for managing tasks.</p></a>
+    </div></div></div></div></section>`;
+  for (const title of ["Company Experiences", "Work experience", "<strong>Where I've</strong> worked", "Employment"]) {
+    assert.deepEqual(cands(works(title)), [
+      ["https://github.com/Krupal19/Expense-Tracker", 1],
+      ["https://krupal19.github.io/TodoListApp-JavaScript/", 1],
+      ["https://virtuoustechlogic.com/", 3],
+      ["https://hencesoft.com/", 3],
+    ], title);
+  }
+  // Client work is work the person shows: those columns still count.
+  for (const title of ["Client work", "Selected clients", "Companies I founded", "Career Compass"]) {
+    assert.deepEqual(cands(works(title)).map(([, t]) => t), [1, 1, 1, 1], title);
+  }
+  // Only as the column's first text, holding no link: a project card that mentions experience is a project.
+  const card = `<section id="projects"><h2>Projects</h2><div><a href="https://exp.example/">Exp</a><p>Experiences</p><a href="https://two.example/">Two</a></div></section>`;
+  assert.deepEqual(cands(card).map(([, t]) => t), [1, 1]);
+});
+
+test("a project page written in Chinese, Japanese or Thai counts by its letters; a thin one still does not", async () => {
+  const frame = `<header><a href="/">Ana</a> <a href="/projects">Projects</a></header>`;
+  const page = (body) => `<html><head><title>Ana</title></head><body>${frame}<main>${body}</main></body></html>`;
+  const zh = page(`<h1>智能客服系统</h1><p>这是一个为电商平台开发的智能客服系统，支持多轮对话、订单查询和售后处理。系统使用大语言模型理解用户问题，并结合知识库给出准确回答，上线后人工客服工作量下降了一半。</p>`);
+  const ja = page(`<h1>家計簿アプリ</h1><p>毎月の支出を写真から自動で記録できる家計簿アプリです。レシートを撮影すると品目と金額を読み取り、カテゴリごとに集計してグラフで表示します。家族で共有することもできます。</p>`);
+  const th = page(`<h1>ระบบจองคิวร้านอาหาร</h1><p>ระบบจองคิวออนไลน์สำหรับร้านอาหาร ลูกค้าสามารถจองโต๊ะล่วงหน้า ดูเวลารอ และรับการแจ้งเตือนเมื่อถึงคิว ร้านค้าจัดการคิวทั้งหมดได้จากหน้าจอเดียว</p>`);
+  const thin = page(`<h1>智能客服系统</h1><p>即将推出。</p>`);
+  const f = fakeHost({ "/projects/zh": [200, zh], "/projects/ja": [200, ja], "/projects/th": [200, th], "/projects/thin": [200, thin] }, [200, page("")]);
+  const r = await checkLinks(["zh", "ja", "th", "thin"].map((p) => ({ url: `https://ana.dev/projects/${p}`, kind: "own page", tier: 2 })), { fetchImpl: f, homeText: "Ana\nProjects" });
+  assert.deepEqual([r.own_check, r.ok, r.own_unverified], ["text", 3, 1]);
 });
 
 // Found in the sample of 40 sites after the fixes (houssambouzid.dev).

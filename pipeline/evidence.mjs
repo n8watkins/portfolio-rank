@@ -82,7 +82,7 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
     const facts = untiered
       ? { ...stored, project_links: null, project_links_note: "measured before tiers: needs a new capture", measured_at: at }
       : chosen.length || stored.project_candidates
-        ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? "") }), measured_at: at }
+        ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? ""), homeUrl: stored.final_url ?? url }), measured_at: at }
         : stored;
     try {
       await db.execute({ sql: "UPDATE portfolios SET facts = ?, facts_at = ? WHERE url = ?", args: [JSON.stringify(facts), at, url] });
