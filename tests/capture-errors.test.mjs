@@ -5,7 +5,8 @@
 //     httpVerdict): a firewall's 403 is a bot wall for the owner's review, a
 //     503 is a failed capture with a retry decided before the waits and the
 //     scroll-through, and a 429 on a refresh keeps the good capture;
-//   - a parked page drawn by script is parked, not live;
+//   - a parked page drawn by script is parked, not live, also when the home
+//     page only sends the browser to it; a language redirect is the site;
 //   - the desktop view decides: a gate only phones see is a note in the
 //     meta, while an error status on the phone's own navigation is a retry;
 //   - a forced re-capture whose pre-check fails keeps a captured site live;
@@ -53,6 +54,14 @@ const pages = {
   // A preloader line until the page is scrolled; the scroll-through shows the site.
   "/scrollreveal": `<!doctype html><title>Jane Doe</title><body style="font:18px system-ui;margin:0"><p>Loading the portfolio of Jane Doe, please wait while it gets ready: 87%</p><div style="height:3000px"></div>
     <script>addEventListener("scroll",()=>{if(!window.done){window.done=1;document.body.innerHTML=${JSON.stringify(SITE)}+'<div style="height:2000px"></div>'}})</script></body>`,
+  // A home page that only sends the browser on, by an address built at run time (the plain pre-check
+  // cannot read it), to a parking lander drawn by script (GoDaddy's, as nic-nguyen.com showed on 2026-11-23).
+  "/built-redirect": `<!doctype html><html><head><script>window.onload=function(){window.location.href="/"+"lander"}</script></head></html>`,
+  "/lander": `<!doctype html><html><head><title></title></head><body><div id=root></div><script>
+    setTimeout(()=>{document.getElementById("root").innerHTML='<h1>janedoe.dev</h1><p>has expired and is parked free, courtesy of GoDaddy.com.</p><p><a href="https://registrar.invalid/buy">Get This Domain</a></p><p>Related Search Topics</p><ul><li>Real Estate</li><li>Cheap Airfare</li></ul>'},300)</script></body></html>`,
+  // A real site behind a language redirect made by script: captured as the site.
+  "/to-en": `<!doctype html><html><head><script>location.replace("/en/")</script></head><body></body></html>`,
+  "/en/": SITE,
 };
 
 let flakyDown = true;
@@ -75,7 +84,7 @@ async function seedGood(p, meta = { motion: false, fullPage: { v: "oldv" } }) {
   });
 }
 
-// Nine captures side by side on a machine that runs other test files too: the
+// Eleven captures side by side on a machine that runs other test files too: the
 // hook gets far more than the runner's default per-test timeout.
 before(async () => {
   server = http.createServer((req, res) => {
@@ -116,6 +125,8 @@ before(async () => {
     run("/flaky", { refresh: true }),
     // A forced re-capture (not a refresh) of a captured site whose plain fetch now answers 502.
     run("/e502"),
+    run("/built-redirect"),
+    run("/to-en"),
   ]);
 }, { timeout: 600000 });
 
@@ -170,6 +181,15 @@ test("the page text stored is the text judged after the scroll-through, never th
   const text = String((await rowOf("/scrollreveal")).page_text);
   assert.match(text, /Backend engineer/);
   assert.doesNotMatch(text, /Loading the portfolio|87%/);
+});
+
+test("a home page that sends the browser to a parking lander is parked by the capture's own judgement; a language redirect is the site", async () => {
+  assert.equal(results["/built-redirect"], 'parked (parking phrase: "has expired and is parked")');
+  const row = await rowOf("/built-redirect");
+  assert.deepEqual([row.status, row.page_text, row.shot_key], ["parked", null, null]);
+  assert.equal(captured("/built-redirect"), false);
+  assert.match(results["/to-en"], /^live/, results["/to-en"]);
+  assert.match(String((await rowOf("/to-en")).page_text), /Backend engineer/);
 });
 
 test("a parked page drawn by script is parked, not live", async () => {
