@@ -219,7 +219,10 @@ Each chain is a list of steps in the order they happen.
    It is asked three things and nothing else: whether it is a portfolio (with a short reason), the five-second test (1 to 5 with a note) and the roles the page names.
    Your decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
    It never sets or moves the Starting rank or the Tier; the profile shows its three answers as the Gemini report card, under "What we asked the model".
-   Grades made before v3 keep their old fields in the database, but nothing shows or uses them, and no site is graded again because of v3.
+   Grades made before v3 keep their old fields in the database, and no site is graded again because of v3.
+   No profile, list, stat, rank or tier reads those fields.
+   Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
+   Before `RANKING_V2` is turned on, those views must be reseeded from the code checks or retired if any page shows them.
    A stored screenshot that does not show the site is checked first and set aside.
    Paused.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).

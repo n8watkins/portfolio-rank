@@ -1,7 +1,7 @@
-// Gemini monitoring (pipeline/gemini-log.mjs), grade history
-// (pipeline/rubric-history.mjs), and the 3.1-vs-3.5 grade pairs
-// (pipeline/grade-pairs.mjs). Offline: Gemini is a
-// stand-in, the database a throwaway file.
+// Gemini monitoring (pipeline/gemini-log.mjs) and grade history
+// (pipeline/rubric-history.mjs). Offline: Gemini is a stand-in, the
+// database a throwaway file. (The 3.1-vs-3.5 grade pairs compared Gemini's
+// letter and dropped axes; they were removed with rubric v3.)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -13,7 +13,6 @@ import { createRequestLog, dailyTotals, ensureGeminiLog, runSummary } from "../p
 import { ensureRubricHistory, replaceGradeStatements } from "../pipeline/rubric-history.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import { BACKUP_MODEL, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
-import { buildPairs, compareGrades } from "../pipeline/grade-pairs.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
 function tempDb() {
@@ -89,28 +88,6 @@ test("replacing a grade keeps the old one in rubric_history", async () => {
   // An error sentinel is not a grade: nothing goes to history.
   const stmts = replaceGradeStatements("https://b.dev", JSON.stringify({ error: "no_usable_captures" }), grade(PRIMARY_MODEL, "C"));
   assert.equal(stmts.length, 1);
-});
-
-test("grade pairs: tier agreement, per-axis difference, is_portfolio disagreement", () => {
-  const history = [
-    { url: "a", model: BACKUP_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(BACKUP_MODEL, "A", 4)) },
-    { url: "b", model: BACKUP_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(BACKUP_MODEL, "S", 5)) },
-    { url: "c", model: BACKUP_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(BACKUP_MODEL, "B", 3, { is_portfolio: false })) },
-    // A --force re-grade of a 3.5 grade is not a 3.1-vs-3.5 pair.
-    { url: "d", model: PRIMARY_MODEL, replaced_by_model: PRIMARY_MODEL, rubric: JSON.stringify(grade(PRIMARY_MODEL, "B")) },
-  ];
-  const current = new Map([
-    ["a", JSON.stringify(grade(PRIMARY_MODEL, "A", 4))],
-    ["b", JSON.stringify(grade(PRIMARY_MODEL, "B", 3))],
-    ["c", JSON.stringify(grade(PRIMARY_MODEL, "C", 2))],
-    ["d", JSON.stringify(grade(PRIMARY_MODEL, "B"))],
-  ]);
-  const r = compareGrades(buildPairs(history, current));
-  assert.equal(r.pairs, 3);
-  assert.equal(r.exact, 1); // A=A
-  assert.equal(r.withinOne, 2); // A=A, B~C
-  assert.equal(r.portfolioDisagree, 1);
-  assert.equal(r.mae.visual_design, (0 + 2 + 1) / 3);
 });
 
 async function judgeRun({ newSites = 1, oldGrades = 0, quota, budget, env = {} }) {

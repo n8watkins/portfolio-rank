@@ -14,8 +14,14 @@
 // five-second test, roles. Dropped: the letter, project presentation, visual
 // design, writing, memorability." A site's rank and tier come only from code
 // measurements; Gemini's answer is a separate, optional opinion. Older grades
-// keep the dropped outputs in the database, but nothing shows or uses them
-// (DROPPED_OUTPUTS, keptOutputs).
+// keep the dropped outputs in the database; no profile, list, stat, rank or
+// tier reads them (DROPPED_OUTPUTS, keptOutputs). Three readers still use an
+// older grade's letter, none shown while GAMES_V2, GRADER_ENABLED and
+// RANKING_V2 are off: lib/ranking/engine.mjs seedFromGrade (the openskill
+// views' seed), lib/games/pool.mjs (percentiles from those views) and
+// lib/grader/report.mjs gradedPool (a person's report's comparisons). The
+// pull request that turns RANKING_V2 on must reseed or retire those views if
+// any page shows them.
 //
 // Bump RUBRIC_VERSION whenever the criteria, the prompt or the schema change
 // in a way that makes grades incomparable. Grades from an older version stay
@@ -197,17 +203,21 @@ const CLOSE = "</site_data>";
  * What a portfolio is, for is_portfolio (owner, 2026-11-22 and 2026-11-23):
  * "a portfolio page is fundamentally defined by showcasing technical projects
  * you've created. And some of the technical products could be
- * design-oriented." A personal page selling coaching is not one, even a
- * developer's; a GitHub profile is not one; a digital resume may stay listed
- * (it earns nothing for projects, which is the code score's business);
- * certificates are not projects. "A weak portfolio is still a portfolio" and
- * "the reason first" come from the tested wordings of the 2026-11-13 grading
- * test (PR #206).
+ * design-oriented." A personal page whose main purpose is selling coaching is
+ * not one, even a developer's; hosted profiles are not portfolio pages (his
+ * rulings: a GitHub or other code-host profile, a Substack, a Medium page, a
+ * Linktree or other link-in-bio page); a digital resume may stay listed (it
+ * earns nothing for projects, which is the code score's business);
+ * certificates are not projects. A portfolio that also offers freelance work,
+ * or a solo developer under a studio name, is still a portfolio; an agency
+ * presenting a team's services is not. "A weak portfolio is still a
+ * portfolio" and "the reason first" come from the tested wordings of the
+ * 2026-11-13 grading test (PR #206).
  */
 export const PORTFOLIO_RULE = [
   "is_portfolio: a portfolio is a person's own site that showcases technical projects they made: software, apps, websites, tools, games, data or machine learning work, and design work such as UI or product design.",
-  "Say false for: a parked, for-sale, blank, broken or hijacked domain; a starter template still showing its placeholder content; a page that sells a service, coaching, courses or a product, even when the person is a developer; a company, agency or studio site; a GitHub or other code-hosting profile; a link-in-bio page or a plain blog that shows no work.",
-  "A digital resume (experience and skills, no projects) is a portfolio: say true. Certificates, courses and badges are not projects. A weak portfolio is still a portfolio: say true.",
+  "Say false for: a parked, for-sale, blank, broken or hijacked domain; a starter template still showing its placeholder content; a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built; a company or agency site presenting a team's services; a GitHub or other code-host profile, a Substack, a Medium page, or a Linktree or other link-in-bio page; a plain blog that shows no work.",
+  "Say true for: a portfolio that also offers freelance work or says hire me; a solo developer or designer working under a studio name who shows projects they built; a digital resume (experience and skills, no projects). Certificates, courses and badges are not projects. A weak portfolio is still a portfolio: say true.",
   "portfolio_reason: first, the main reason for your answer, one short clause of at most 15 words.",
 ];
 
@@ -533,7 +543,7 @@ export function criteriaMarkdown() {
     "Code criteria pass or fail and make up `checks_score` (weighted share passed, 0-100); unknown checks are left out of the share.",
     "Criteria with weight \"context\" are measured and stored but not scored; all but the template are shown to Gemini as facts.",
     `Each grade sends ${IMAGE_TOKENS.toLocaleString("en-US")} image tokens (one screenshot), the rules, the facts and at most ${PAGE_TEXT_MAX.toLocaleString("en-US")} characters of page text, with thinking at "${THINKING_LEVEL}".`,
-    `Grades from rubric 1 and 2 also stored ${DROPPED_OUTPUTS.map((k) => `\`${k}\``).join(", ")}; those stay in the database and are no longer shown or used.`,
+    `Grades from rubric 1 and 2 also stored ${DROPPED_OUTPUTS.map((k) => `\`${k}\``).join(", ")}; those stay in the database, no profile, list, stat, rank or tier reads them, and the readers that still use an old letter are named in section 6.`,
   ].join("\n");
 }
 

@@ -105,9 +105,13 @@ test("the v3 schema asks for the three kept outputs and nothing else, the reason
   // The owner's definition, and his rulings, are in the is-it-a-portfolio rule.
   assert.match(SYSTEM_INSTRUCTION, /showcases technical projects they made/);
   assert.match(SYSTEM_INSTRUCTION, /design work/);
-  assert.match(SYSTEM_INSTRUCTION, /coaching/);
-  assert.match(SYSTEM_INSTRUCTION, /GitHub or other code-hosting profile/);
-  assert.match(SYSTEM_INSTRUCTION, /digital resume .* is a portfolio: say true/);
+  assert.match(SYSTEM_INSTRUCTION, /main purpose is selling coaching, courses or a product rather than showing projects the person built/);
+  // The owner's host rulings, named.
+  for (const host of ["GitHub or other code-host profile", "Substack", "Medium page", "Linktree or other link-in-bio page"]) assert.ok(SYSTEM_INSTRUCTION.includes(host), host);
+  // No "no" for freelancers or a solo studio; an agency presenting a team is.
+  assert.match(SYSTEM_INSTRUCTION, /Say true for: a portfolio that also offers freelance work or says hire me; a solo developer or designer working under a studio name who shows projects they built; a digital resume/);
+  assert.match(SYSTEM_INSTRUCTION, /a company or agency site presenting a team's services/);
+  assert.ok(!/sells a service/.test(SYSTEM_INSTRUCTION), "offering a service is not a reason for false");
   assert.match(SYSTEM_INSTRUCTION, /Certificates, courses and badges are not projects/);
   assert.match(SYSTEM_INSTRUCTION, /five_second_test: Clear who the person is/);
   assert.match(SYSTEM_INSTRUCTION, /roles:/);

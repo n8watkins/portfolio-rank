@@ -97,13 +97,15 @@ A site's rank and tier come only from code measurements and votes; Gemini's answ
 The rubric lives in one pure module, `pipeline/rubric.mjs` (version, criteria, prompt, response schema, parser), used by the nightly grader, the eval and the docs.
 
 **Is it a portfolio** (the owner's definition, 2026-11-22): "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
-The prompt says no for a parked, blank or hijacked domain, an unedited template, a page selling a service or coaching (even a developer's), a company site, a GitHub or other code-hosting profile, and a link hub or blog with no work.
+The prompt says no for a parked, blank or hijacked domain, an unedited template, a page whose main purpose is selling coaching, courses or a product rather than showing projects the person built (even a developer's), a company or agency site presenting a team's services, a GitHub or other code-host profile, a Substack, a Medium page, a Linktree or other link-in-bio page, and a plain blog with no work.
+It says yes for a portfolio that also offers freelance work or says hire me, and for a solo developer or designer under a studio name who shows projects they built.
 A digital resume counts as a portfolio (it earns nothing for projects; that is the Code checks score's business), certificates are not projects, and a weak portfolio is still a portfolio.
 Gemini writes a short `portfolio_reason` before its answer.
 What a "no" does is unchanged: the Removal rule (`lib/reviews/door.mjs`) removes the site with a record and Undo when a junk rule fires or the code finds fewer than 4 of 6 portfolio signals, and holds it for the owner otherwise.
 
 **Older grades:** grades made before v3 keep everything they stored (the letter, the four dropped scores and `quality_score`) in `portfolios.ai_rubric` and `rubric_history`; nothing is deleted.
-No page, rank, tier, list, stat or script reads those fields any more (`pipeline/rubric.mjs` `keptOutputs`); an old grade shows the same three things a new one does, without the reason it never had.
+No profile, list, stat, rank or tier reads those fields any more (`pipeline/rubric.mjs` `keptOutputs`); an old grade shows the same three things a new one does, without the reason it never had.
+Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
 A site is never re-graded because of v3: old rows wait for their next grade like any other (graded once, below).
 A person's own "Grade my portfolio" request still uses the frozen v2 prompt (`pipeline/rubric-v2.mjs`) until the owner decides what that report shows.
 
@@ -142,7 +144,7 @@ None of them is scored or used in a rank or tier; "not a portfolio" goes to the 
 Code criteria pass or fail and make up `checks_score` (weighted share passed, 0-100); unknown checks are left out of the share.
 Criteria with weight "context" are measured and stored but not scored; all but the template are shown to Gemini as facts.
 Each grade sends 1,120 image tokens (one screenshot), the rules, the facts and at most 4,000 characters of page text, with thinking at "minimal".
-Grades from rubric 1 and 2 also stored `tier`, `visual_design`, `storytelling`, `writing`, `memorability`, `quality_score`; those stay in the database and are no longer shown or used.
+Grades from rubric 1 and 2 also stored `tier`, `visual_design`, `storytelling`, `writing`, `memorability`, `quality_score`; those stay in the database, no profile, list, stat, rank or tier reads them, and the readers that still use an old letter are named in section 6.
 <!-- rubric:end -->
 
 **Cost per grade** (offline estimate on 30 sampled sites, `npm run eval:rubric -- --sample 30`, at 3.5 Flash-Lite's paid rates of $0.30 in and $2.50 out per 1M tokens):
