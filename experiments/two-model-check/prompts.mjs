@@ -61,12 +61,23 @@ function newSystem(v, { text, facts }) {
     "- a freelancer's portfolio that also says hire me or offers services;",
     "- a solo developer or designer working under a studio name who shows projects they built;",
     "- a digital resume (experience and skills, no projects).",
+    ...(v === "v1" ? [] : ["A personal site with a resume link, a work history or an experience section counts as a digital resume, even when it also has a blog."]),
     "Answer \"not a portfolio\", with its kind, for:",
     "- a page whose main purpose is selling coaching, courses or a product, even a developer's (kind: selling coaching, courses or a product);",
     "- a company or agency site presenting a team's services (company or agency);",
-    "- a GitHub or other code-host profile or repository page (code-host profile);",
-    "- a Substack, a Medium page, a Linktree or another link page (blog platform or link page);",
+    v === "v1"
+      ? "- a GitHub or other code-host profile or repository page (code-host profile);"
+      : "- a GitHub or other code-host profile or repository page, even one whose README lists the person's projects (code-host profile);",
+    v === "v1"
+      ? "- a Substack, a Medium page, a Linktree or another link page (blog platform or link page);"
+      : "- a Substack, a Medium page, a Linktree, or any page that is only an avatar or handle and a list of social or contact links, on the person's own domain too (blog platform or link page);",
     "- a plain blog that shows no projects (plain blog);",
+    ...(v === "v1"
+      ? []
+      : [
+          "- a personal page about hobbies or life that shows no technical work at all (other);",
+          "- a page that only says the site has moved elsewhere and shows no work itself (other);",
+        ]),
     "- a starter template still showing its placeholder content: demo names such as John Doe, lorem ipsum, a theme's sample projects (template or placeholder);",
     "- a domain that is parked, for sale, or now shows unrelated content such as a shop, a casino or someone else's business (parked or unrelated content);",
     "- anything else that is clearly not a person showing their own work (other).",
@@ -135,6 +146,12 @@ export const PROMPTS = {
     arms: {
       old: { system: OLD_SYSTEM, image: true, text: false, facts: false, schemaKind: "old" },
       ...newArms("v1"),
+    },
+  },
+  v2: {
+    arms: {
+      old: { system: OLD_SYSTEM, image: true, text: false, facts: false, schemaKind: "old" },
+      ...newArms("v2"),
     },
   },
 };
