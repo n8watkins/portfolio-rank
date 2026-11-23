@@ -12,6 +12,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   sync-upstream Action  ──rebuild──►  data/feed.json
         │                               = upstream − excluded.json + additions.json
+        │                                 + sites upstream dropped (they stay; recorded in additions.json)
         ▼
   roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
         ▼
@@ -30,7 +31,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
 
 ## The list (two intake doors + a takedown)
 
-`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
+`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site, where `additions.json` also records the sites the community list dropped while they were on our list: they stay (see Community list removals).
 Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`, exactly the health check's `normKey`: the address lower-cased, host without www, path without the trailing slash; scheme, port, query and fragment ignored).
 `generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address as the list spells it, except a site already on the feed that the list respelled (below).
 
@@ -60,9 +61,11 @@ Merging the sites split before the sticky spelling is a separate change.
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
+  Since 2026-11-22 a site the community list drops stays in `feed.json` (see Community list removals), so a row is delisted only by our own removals (`data/excluded.json`) or a respelling.
   The feed build refuses a feed that drops more than 15% of the current addresses (before the data pull request), and the sync refuses to delist more than 15% at once (above the exclusions' 10% cap): the nightly sync job fails, every other job logs a warning and leaves the roster as it is for that run; for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which raises both and the shrink guard below (the share only ever raises a limit).
   Grading, AI comparisons, polls, blog facts and page evidence only use listed rows that passed their last health check, or were never checked (`AI_WORK`); captures, the screenshot refresh and the free measurements use listed rows that are not down, less the sites on the not-answering ladder while its marks hold (`ACTIVE`); the site shows listed rows that are not hidden (`lib/hidden.mjs`), and the comparison pool the home page, `/me`, the grade page and grade reports show keeps every listed row that is not down (`LISTED_NOT_DOWN`).
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries and its health marks), except a row whose site is listed under another address (see Respelled sites).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries and its health marks) when we removed the site: its key is in `data/excluded.json`, or the row is an old spelling of a listed row (the same `spellingKey`) or not a web address at all.
+  A row whose site is listed under another address (see Respelled sites) is never purged, and neither is any other delisted row (one the community list dropped before 2026-11-22): it is kept and counted in the run summary, so a community list removal can never delete a site.
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
 - **Health check** (`pipeline/health.mjs`, every night since 2026-11-16, weekly before): every listed site is checked for loading, parking, blank pages and duplicates, with one plain request per site (the browser only for unclear answers).
   A site that does not answer goes on the not-working ladder (below); one that answers with the wrong thing (parked, blank, a redirect to a social profile, a duplicate, a blocked capture) goes `live` → `suspect` (any failure) → `down` (3 failed checks in a row, each on a week of its own, spanning at least 13 days, however many runs); a pass resets to `live`.
@@ -147,9 +150,26 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Every decided row (the owner's, the rule's, or another rule's such as `rule:duplicate`) is listed under Decided with Undo: it goes back to pending, `undone_at` and `undone_by` are recorded, and what it changed is reversed: exactly when the apply kept the state before it, and for an apply from before that (the owner's 13 November verdicts) the grade only, from `rubric_history`, with the rest reported on the row; a rejection, a "Mark checked" or a rule's row changed nothing, so only the row moves.
   While rows wait, the Monday goals email carries their count and the link (see Owner goals).
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
+  Since a site the community list drops stays on the feed (see Community list removals), the same 5% also limits how much of our list the community list may drop in one night: a README cut short or rewritten to new addresses is refused instead of filling the record.
   `LIST_CLEANUP_SHARE` raises the limit for one run (see Roster sync).
 - **Nothing is reported to the community list**: the owner's decision.
   The list runs its own link checker every Saturday that removes broken and parked links, and PortfolioRank only reads it.
+
+#### Community list removals
+
+Owner, 2026-11-22: "a community list remove shouldnt change anything on our side".
+The community list mostly drops lines through its own automatic "Broken Links" reports (paused hosting, a 404, an expired domain), which says nothing about whether the site is a portfolio; and "if people want to remove their portfolio from our site they have to go through our claim process".
+
+- **The rebuild keeps the site** (`pipeline/build-feed.mjs` `buildFeed`): a site on the current `feed.json` that the README no longer has is carried into the new feed and recorded in `data/additions.json` as `{ name, url, tagline?, source: "left_community_list", left_on }`, `left_on` being the day the rebuild first saw it gone.
+  The sync workflow already commits `additions.json` with `feed.json`.
+- **Not carried**: a site in `data/excluded.json` (by `listKey` or `spellingKey`), an old spelling of a site the new feed has under the same `listKey` or `spellingKey` (a respelling: its old row is retired as before, see Respelled sites), and an address that is not a web address (`pipeline/list-key.mjs` `isWebAddress`: README lines an older parser misread, such as `<[Portfolio-Link](https://khushm.netlify.app` or `https\://shreyanshportfolio.in`).
+- **The record is the source**: a recorded site is listed every night from `additions.json`, even if something took it out of `feed.json`.
+  A recorded site our exclusions keep out stays recorded, so lifting the exclusion (an undone owner removal, a removed site that passes its re-check) lists it again.
+  A recorded site the README lists again leaves the record and is listed once, from the README (with the feed's spelling when the list respelled it).
+- **From then on our own machinery decides**: the health check hides and shows it like any listed site, and only our exclusions (dead, down, duplicate, not a portfolio) and an owner's removal through the claim process take it off.
+- **Guards**: more than `--max-shrink` (5%) of the current feed dropped by the community list in one night is refused (without `--max-shrink`, 15%); `LIST_CLEANUP_SHARE` raises it for one run.
+  The job summary ("Left the community list") lists each site that stays, each back on the list, and each address not kept.
+- **The 25 sites dropped before this rule** (stamped delisted on 2026-11-10 and 2026-11-16) were recorded by hand on 2026-11-22, with the spelling, name and tagline of the last `feed.json` that had them and the day that `feed.json` lost them; the next sync lists them again with their grade, votes and screenshots.
   The monthly upstream report (`upstream-removals.yml`) was removed.
 
 ## When checks re-run
@@ -726,7 +746,7 @@ serve images.
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - the nightly health check; `--exclusions` plans the export once a week and applies it until it lands; `--dry-run` checks every site and writes nothing, not even the roster sync (`LOCAL_DB_FILE=...` for a scratch database)
 - `node pipeline/recheck-due.mjs` - how many sites the hourly re-check has due; `node pipeline/recheck-run.mjs [--no-browser] [--controls N] [--dry-run]` - run it (`--dry-run`: writes nothing)
-- `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
+- `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days that we removed (in `data/excluded.json`, or an old spelling)
 - `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the nightly health workflow runs it)
 - `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the nightly health workflow run it)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
