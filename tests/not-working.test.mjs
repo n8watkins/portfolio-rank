@@ -279,12 +279,15 @@ test("a bot wall alone never puts a site in the pool; a real failure of a bot-wa
   await hourly(F + H);
   await hourly(F + D);
   assert.equal(await col(db, url, "health"), "down");
-  // It answers again: a pass on the ladder brings it back as it was (never left hidden behind the wall rule).
+  // It answers again: a pass on the ladder brings it back to where it was before the failure, unchecked, so
+  // it stays hidden until a capture gets through, never shown with no screenshot (#292 review, F5).
   w.mode.set(url, "ok");
   await db.execute({ sql: "UPDATE health_marks SET pool_next_at = ? WHERE url = ?", args: [at(F + 2 * D).toISOString(), url] });
   const s = await hourly(F + 2 * D);
   assert.deepEqual(s.returned.map((r) => r.url), [url]);
-  assert.equal(await col(db, url, "health"), "live");
+  assert.equal(await col(db, url, "health"), null);
+  assert.deepEqual(await standing(db, url), { ai: true, capture: true, hidden: true, gone: false }, "not shown with no screenshot; its capture keeps trying");
+  assert.equal((await marks(db, url)).pool_stage, null, "off the ladder");
   assert.equal(Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM health_returns WHERE url = ? AND from_where = 'pool'", args: [url] })).rows[0].n), 1, "the return is recorded");
 });
 
@@ -319,8 +322,15 @@ test("two failures on one bad day never skip a stage", async () => {
     w = health.nextHealth(w, { ok: false, reason }, at(F + 3 * H));
     assert.deepEqual([w.pool.stage, w.health], [pool.RECHECKED, "suspect"], `${reason}: not hidden the same day`);
     w = health.nextHealth(w, { ok: false, reason }, at(F + D));
-    assert.deepEqual([w.pool.stage, w.health], [pool.NOT_WORKING, "down"], `${reason}: hidden the next day`);
+    if (pool.WEAK_VERDICT.test(reason)) {
+      // A weak verdict (#292 review, F1): its confirming check is a week after the first failure.
+      assert.deepEqual([w.pool.stage, w.health], [pool.RECHECKED, "suspect"], `${reason}: not hidden on day 2`);
+      assert.equal(w.pool.nextAt, at(F + 7 * D).toISOString());
+      w = health.nextHealth(w, { ok: false, reason }, at(F + 7 * D));
+    }
+    assert.deepEqual([w.pool.stage, w.health], [pool.NOT_WORKING, "down"], `${reason}: hidden on its confirming day`);
   }
+  assert.ok(!pool.WEAK_VERDICT.test('parking phrase: "domain for sale"'), "a parked page is positive evidence: the next day");
   // A removal decided in the review queue stays down with its reason, off the ladder.
   const decided = health.nextHealth({ health: "down", fails: 3, reason: "x", pool: null }, { ok: false, reason: "AI grading says this is not a portfolio", decided: true }, at(F));
   assert.deepEqual([decided.health, decided.pool], ["down", null]);
@@ -529,7 +539,7 @@ test("a wrong-content suspect site that blips once is not backdated: the ladder 
   assert.equal((await marks(db, url)).pool_next_at, at(T0 + D).toISOString(), "the next day, as for any first failure");
 });
 
-test("a failing site that starts answering with the wrong thing stays on the one ladder: hidden the next day, captures still try it", async () => {
+test("a failing site that starts answering with a blank page stays on the one ladder: hidden on its confirming day, captures still try it", async () => {
   const url = "https://now-parked.example";
   const { db, w, nightly } = await setup([url]);
   await nightly(T0 - D);
@@ -543,8 +553,11 @@ test("a failing site that starts answering with the wrong thing stays on the one
   assert.equal(Number((await marks(db, url)).pool_stage), pool.RECHECKED, "the same ladder, its next stage");
   assert.equal(await col(db, url, "health_reason"), "renders blank");
   assert.deepEqual(await standing(db, url), { ...FAILING, capture: true }, "still shown; it answers, so captures may try it");
+  // Blank is a weak verdict: not hidden the next day, but a week after the first failure.
   await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + D), log: quiet });
-  assert.deepEqual(await standing(db, url), NOT_WORKING, "hidden in the temporary pool the next day");
+  assert.deepEqual(await standing(db, url), { ...FAILING, capture: true }, "not hidden on day 2");
+  await runRecheck({ db, fetchImpl: blank, render: blankRender, now: at(T0 + 7 * D), log: quiet });
+  assert.deepEqual(await standing(db, url), NOT_WORKING, "hidden in the temporary pool on day 8");
 });
 
 test("review 2.4: a down row stays down on a failure of any kind; only a pass restores it", async () => {

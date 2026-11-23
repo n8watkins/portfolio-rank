@@ -62,13 +62,15 @@ import { HELD_SQL, notPortfolioReason } from "./portfolio-guard.mjs";
 import { replaceGradeStatements } from "./rubric-history.mjs";
 import { atTheDoor } from "../lib/reviews/door.mjs";
 import { APPLIED, OPEN_CASE_SQL, ensureReviewSchema } from "../lib/reviews/store.mjs";
-import { rankForWrite } from "../lib/tiers-store.mjs";
+import { rankForWrite, rankFromCode } from "../lib/tiers-store.mjs";
 import { assignShownRanks } from "../lib/ranking/store.mjs";
 import { reconcileAlerts } from "./alerts.mjs";
 import {
   LADDER_UNKNOWN_SQL,
+  HIDE_PER_DAY,
   LEAVE_AFTER_DAYS,
   NOT_WORKING,
+  RECHECKED,
   ON_LADDER_SQL,
   PURGE_BACK,
   PURGE_GONE,
@@ -163,6 +165,17 @@ const fold = (s) =>
 const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 
 /**
+ * Whether a page carries the listed person's name (any of their name words,
+ * nameTokens, in its address, title or text): the archive check's test that a
+ * site that answers again is still that person's, not a re-registered domain
+ * (#292 review, F4). A name with no word of three letters or more never matches.
+ */
+export function carriesName(name, { finalUrl = "", title = "", text = "" } = {}) {
+  const haystack = fold(`${finalUrl} ${title} ${String(text ?? "").slice(0, 20000)}`);
+  return nameTokens(name).some((t) => haystack.includes(t));
+}
+
+/**
  * Judge a redirect to another registrable domain. Most are a person moving
  * from a free host to their own domain (73 of 2,103 roster sites on
  * 2026-11-10), so a move is not a failure: it is reported so the stored URL
@@ -228,6 +241,16 @@ export function browserFailure(e) {
 const COLD_START_STATUS = new Set([502, 503, 504]);
 export const COLD_START_WAIT_MS = 30000;
 
+/**
+ * The markup of a bot or captcha service's challenge (Cloudflare's challenge
+ * platform and Turnstile, Vercel's checkpoint, hCaptcha, reCAPTCHA, Imperva,
+ * DDoS-Guard, PerimeterX, DataDome, Sucuri), for a page that shows no words:
+ * a challenge still deciding, not a blank site. The `cf-mitigated` header
+ * would say it too, but the plain request (./gate.mjs) does not keep headers.
+ */
+export const CHALLENGE_MARKUP =
+  /challenges\.cloudflare\.com|\/cdn-cgi\/challenge-platform|cf-turnstile|_vercel\/(security|challenge)|vercel-challenge|hcaptcha\.com|www\.google\.com\/recaptcha|_Incapsula_Resource|ddos-guard|px-captcha|captcha-delivery\.com|sucuri_cloudproxy/i;
+
 const blocked = (status, finalUrl) => ({
   ok: null,
   reason: `blocked by a bot check${status ? ` (HTTP ${status})` : ""}`,
@@ -267,7 +290,7 @@ export async function checkSite(
   const wall = gateWall(gate);
   if (gate.status === "error" || text.length < BLANK_TEXT || wall) {
     if (!render) {
-      if (wall) return blocked(gate.httpStatus, finalUrl);
+      if (wall || (gate.status !== "error" && (gate.httpStatus === 202 || CHALLENGE_MARKUP.test(String(gate.html ?? ""))))) return blocked(gate.httpStatus, finalUrl);
       if (gate.transient) return unknown(gate.reason, finalUrl);
       return { ok: false, reason: gate.status === "error" ? gate.reason : "renders blank", finalUrl };
     }
@@ -305,7 +328,12 @@ export async function checkSite(
     // Where the browser ended up, after the page's own redirects (./gate.mjs parkedPage, as the capture judges it).
     const parked = parkedPage({ finalUrl, html: String(page.html ?? ""), text, title: String(page.title ?? "") });
     if (parked) return { ok: false, reason: parked, finalUrl };
-    if (text.length < BLANK_TEXT && !page.media) return { ok: false, reason: "renders blank", finalUrl };
+    if (text.length < BLANK_TEXT && !page.media) {
+      // A blank page that is a challenge with no words of its own (a 202 while a script decides, or the
+      // markup of a known bot or captcha service): a bot wall, inconclusive, never a failure (#292 review, F2).
+      if (page.status === 202 || gate.httpStatus === 202 || CHALLENGE_MARKUP.test(`${page.html ?? ""}\n${gate.html ?? ""}`)) return blocked(page.status, finalUrl);
+      return { ok: false, reason: "renders blank", finalUrl };
+    }
   }
   const redirect = redirectVerdict(url, finalUrl, name, text);
   if (redirect?.fail) return { ok: false, reason: redirect.fail, finalUrl };
@@ -318,8 +346,10 @@ export async function checkSite(
       if (again.score > signals.score) signals = again;
     }
   }
-  if (redirect?.moved) return { ok: true, reason: "", finalUrl, moved: true, hijack: redirect.hijack, signals };
-  return { ok: true, reason: "", finalUrl, signals };
+  // What the page says, for the archive check's same-person test (./exclusions.mjs passesFullCheck).
+  const seen = { pageText: text.slice(0, 20000), title: titleOf(html) };
+  if (redirect?.moved) return { ok: true, reason: "", finalUrl, moved: true, hijack: redirect.hijack, signals, ...seen };
+  return { ok: true, reason: "", finalUrl, signals, ...seen };
 }
 
 /**
@@ -683,6 +713,11 @@ export async function runHealthCheck({
         r.ok = null;
         r.reason = String(row.reason);
       }
+      // A blank page behind a known wall is the wall still deciding, not a blank site (#292 review, F2).
+      if (r.ok === false && !r.decidedDown && /^renders blank/.test(String(r.reason))) {
+        r.ok = null;
+        r.reason = String(row.reason);
+      }
       continue;
     }
     if (String(row.status) !== "error" || !isBlockedReason(row.reason)) continue;
@@ -716,6 +751,27 @@ export async function runHealthCheck({
     // The listed address failed but the site answered at its own www or https address: not counted.
     answersElsewhere: [],
   };
+  // The brake on hiding (./not-working.mjs HIDE_PER_DAY): the sites hidden in the last day plus those at
+  // the stage before whose confirming check falls within the next day (this run's among them). Over the
+  // limit, nobody new is hidden: each waits at stage 2, still shown, re-checked a day later, and the owner's
+  // alert stands while it holds. Read from the marks, so the nightly run and every hourly batch agree.
+  const hideBrake = { count: 0, held: [] };
+  if (hasPool) {
+    const day = (k) => new Date(now.getTime() + k * 86400000).toISOString();
+    hideBrake.count = Number(
+      (
+        await db.execute({
+          sql: `SELECT (SELECT COUNT(*) FROM health_marks m JOIN portfolios p ON p.url = m.url
+                          WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND m.pool_stage = ${RECHECKED} AND m.pool_next_at <= ?)
+                     + (SELECT COUNT(*) FROM health_marks m JOIN portfolios p ON p.url = m.url
+                          WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND m.pool_stage = ${NOT_WORKING} AND m.pool_since >= ?) AS n`,
+          args: [day(1), day(-1)],
+        })
+      ).rows[0]?.n ?? 0
+    );
+  }
+  const braking = hideBrake.count > HIDE_PER_DAY;
+  summary.hideBrake = hideBrake;
   const plans = [];
   const str = (v) => (v == null ? null : String(v));
   for (const r of results) {
@@ -736,7 +792,16 @@ export async function runHealthCheck({
     const at = r.at ?? now;
     const stamp = at.toISOString();
     // A removal decided in the review queue is down with its reason (rule 3 of nextHealth), off the ladder.
-    const next = nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at);
+    let next = nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at);
+    if (braking && next.pool?.stage === NOT_WORKING && prev?.pool?.stage !== NOT_WORKING && prev?.health !== "down") {
+      // Held by the brake: the stage before, still shown, its confirming check again a day later.
+      next = { ...next, health: "suspect", fails: RECHECKED, pool: { ...next.pool, stage: RECHECKED, since: null, nextAt: new Date(at.getTime() + 86400000).toISOString() } };
+      hideBrake.held.push({ url: r.url, reason: next.reason });
+    }
+    // A bot-walled site that never had a good capture, back from a real failure: unchecked again, as before
+    // its failure (never "live"), so it stays hidden until a capture gets through instead of being shown
+    // with no screenshot (lib/hidden.mjs: a failed capture is hidden unless the health check says live).
+    if (r.ok === true && botWalled.has(r.url) && String(row?.status ?? "") === "error") next = { ...next, health: null };
     const marks = nextUnknown(row ? { unknownSince: str(row.unknown_since) } : null, r, at);
     const pool = next.pool ?? null;
     // Whether this write changes what visitors see (lib/hidden.mjs, the rule itself, before and after) and
@@ -959,6 +1024,58 @@ export async function runHealthCheck({
     now,
     log,
   });
+  // The brake on hiding: the owner's alert stands while it holds (read from the marks, so every run agrees).
+  await reconcileAlerts(db, {
+    conditions: braking
+      ? [
+          {
+            key: HIDE_BRAKE_ALERT_KEY,
+            kind: "problem",
+            title: `${hideBrake.count} sites would be hidden within a day, more than the ${HIDE_PER_DAY} the health check hides without you`,
+            detail: `So many at once usually means the checker (a browser update, a network or CDN outage) rather than the sites, so none is hidden: each waits, still shown, and is checked again a day later. The alert clears once the count is back under the limit. Held in this run: ${hideBrake.held.map((h) => `${h.url} (${h.reason})`).join("; ") || "none"}.`,
+          },
+        ]
+      : [],
+    scope: (key) => key === HIDE_BRAKE_ALERT_KEY,
+    now,
+    log,
+  });
+  // The nightly look at the pool (#292 review, item 6): one plain request to every site hidden in the pool
+  // that is not due for its re-check within the hour. It can only bring a site back sooner, never fail one:
+  // a page that answers with words moves its re-check to now, and the hourly re-check's full check decides.
+  // A site fixed on day 36 is back the next day, not at its day-65 check.
+  if (scheduled === "skip" && hasPool) {
+    const soon = new Date(now.getTime() + 3600000).toISOString();
+    const waiting = (
+      await db.execute({
+        sql: `SELECT p.url FROM health_marks m JOIN portfolios p ON p.url = m.url
+              WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND m.pool_stage = ${NOT_WORKING} AND m.pool_next_at > ?
+                AND NOT (p.status = 'error' AND substr(COALESCE(p.reason, ''), 1, 17) = 'capture blocked: ')`,
+        args: [soon],
+      })
+    ).rows.map((r) => String(r.url));
+    const nudged = [];
+    await mapPool(waiting, concurrency, async (url) => {
+      const gate = await httpGate(url, { fetchImpl }).catch(() => null);
+      if (gate?.status === "live" && !gateWall(gate) && visibleText(gate.html).length >= BLANK_TEXT) nudged.push(url);
+    });
+    for (const url of nudged) {
+      await db.execute({
+        sql: `UPDATE health_marks SET pool_next_at = ? WHERE url = ? AND EXISTS (SELECT 1 FROM portfolios p WHERE p.url = health_marks.url AND ${VALID_MARKS("health_marks", "p")})`,
+        args: [now.toISOString(), url],
+      });
+    }
+    summary.poolNudged = nudged;
+  }
+  // A site back from the pool rejoins the library at once with the rating it had (lib/tiers-store.mjs
+  // rankFromCode puts a seeded row back), not at the next daily tiers run.
+  for (const b of summary.returned) {
+    try {
+      await rankFromCode(db, b.url, { now: now.getTime() });
+    } catch (e) {
+      log(`tiers: ${b.url} not put back now (${String(e?.message ?? e).slice(0, 120)}); the daily run does it`);
+    }
+  }
   return { aborted: false, checked: results.length, controls: controlResults.length, ...summary };
 }
 
@@ -966,6 +1083,8 @@ export async function runHealthCheck({
 export const UNKNOWN_ALERT_KEY = "health-unknown";
 /** The same for sites on the not-working ladder (./not-working.mjs), read from the marks. */
 export const UNKNOWN_LADDER_ALERT_KEY = "health-unknown-ladder";
+/** The owner alert while the brake on hiding holds (./not-working.mjs HIDE_PER_DAY). */
+export const HIDE_BRAKE_ALERT_KEY = "health-hide-brake";
 
 /**
  * SQL (never NULL): a removal of the portfolios row aliased `p` is on record
@@ -1048,6 +1167,17 @@ export function healthSummary(s) {
     for (const c of s.changes) lines.push(`| ${cell(c.url)} | ${cell(c.from ?? "unchecked")} | ${cell(c.to ?? "unchecked")} | ${c.stage ?? ""} | ${c.hidden ? "yes" : "no"} | ${cell(c.reason)} |`);
     lines.push("");
   }
+  if (s.hideBrake?.held?.length) {
+    lines.push(
+      `### Held by the brake on hiding (${s.hideBrake.held.length})`,
+      "",
+      `${s.hideBrake.count} sites would be hidden within a day, more than ${HIDE_PER_DAY}: none was hidden; each waits, still shown, and is checked again a day later (owner alert ${HIDE_BRAKE_ALERT_KEY}).`,
+      "",
+      ...s.hideBrake.held.map((h) => `- ${cell(h.url)} (${cell(h.reason)})`),
+      ""
+    );
+  }
+  if (s.poolNudged?.length) lines.push(`Hidden sites that answered a plain request tonight, re-checked within the hour: ${s.poolNudged.map(cell).join(", ")}.`, "");
   if (s.newlyHidden?.length) {
     lines.push(`### Into the temporary pool (hidden ${s.dryRun ? "if written" : "now"})`, "", "| URL | Reason |", "| --- | --- |");
     for (const d of s.newlyHidden) lines.push(`| ${cell(d.url)} | ${cell(d.reason)} |`);

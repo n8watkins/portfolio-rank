@@ -46,16 +46,18 @@ export default function RemovedPage() {
           <h1 className="text-3xl font-bold tracking-tight">Removed portfolios</h1>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
-              Every night PortfolioRank checks each site on its list. A site that
-              fails is checked again an hour later and the next day, and is hidden
-              only if it still fails then. It is taken off the list only after 90
-              days of failing checks, so a short outage never takes anyone off. Bot
-              checks that block automated visitors don&apos;t count as failures.
+              PortfolioRank checks the sites on its list every night. A site that
+              fails is checked again an hour later and once more the next day (a
+              week later when it only looks blank), and is hidden only if it still
+              fails then; a hidden site keeps being checked and comes back as soon
+              as it works. It is taken off the list only after 90 days of failing
+              checks, so a short outage never takes anyone off. Bot checks that
+              block automated visitors don&apos;t count as failures.
             </p>
             <p>
-              A site taken off because it was down or gone is checked again a week,
-              two weeks and three weeks later, then every month. When it works again
-              it comes back as a new site and starts fresh: its old votes, rank and
+              A site taken off because it was down or gone is checked again at least
+              once a month. When it works again and still shows the same person, it
+              comes back as a new site and starts fresh: its old votes, rank and
               grade do not come with it.
             </p>
             <p>

@@ -125,13 +125,18 @@ export async function ensureRosterSchema(db) {
  * NOT_ANSWERING_SQL). Everything else keeps its capture work: a site failing
  * for a blocked capture or a page with the wrong thing (that is how it
  * recovers), and one whose row something else changed since (the review
- * queue's confirm, which queues a capture). Reads the health_marks table,
- * which ensureRosterSchema creates (as lib/schema.mjs does). `p` is the
- * table alias.
+ * queue's confirm, which queues a capture). A site hidden in the temporary
+ * pool for a blocked capture keeps its capture retries too: only a capture
+ * that gets through can bring it back (#292 review, F3). Reads the
+ * health_marks table, which ensureRosterSchema creates (as lib/schema.mjs
+ * does). `p` is the table alias.
  */
-export const ACTIVE = (p = "portfolios") =>
-  `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'
-   AND NOT (${NOT_ANSWERING_SQL(`${p}.health_reason`)} AND EXISTS (SELECT 1 FROM health_marks lm WHERE lm.url = ${p}.url AND ${VALID_MARKS("lm", p)}))`;
+export const ACTIVE = (p = "portfolios") => {
+  const onLadder = `EXISTS (SELECT 1 FROM health_marks lm WHERE lm.url = ${p}.url AND ${VALID_MARKS("lm", p)})`;
+  return `${p}.delisted_at IS NULL
+   AND (COALESCE(${p}.health, '') != 'down' OR (substr(COALESCE(${p}.health_reason, ''), 1, 17) = 'capture blocked: ' AND ${onLadder}))
+   AND NOT (${NOT_ANSWERING_SQL(`${p}.health_reason`)} AND ${onLadder})`;
+};
 
 /**
  * SQL condition for rows the AI may spend on (grading, re-grading, AI

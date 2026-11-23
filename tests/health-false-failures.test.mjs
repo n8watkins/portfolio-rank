@@ -346,14 +346,16 @@ test("f: a temporary DNS failure (EAI_AGAIN) is retried and inconclusive, not de
   assert.equal(nx.status, "dead");
 });
 
-test("f: a page with the wrong thing takes the one ladder: two runs on one bad day never hide it, the next day's failure does", () => {
+test("f: a blank page takes the one ladder: never hidden the same day nor the next (a weak verdict), hidden a week on", () => {
   const fail = { ok: false, reason: "renders blank" };
   let s = health.nextHealth(null, fail, at(0));
   s = health.nextHealth(s, fail, at(0.04));
   s = health.nextHealth(s, fail, at(0.1));
   assert.equal(s.health, "suspect", "not hidden the same day");
   s = health.nextHealth(s, fail, at(1));
-  assert.equal(s.health, "down", "hidden the next day");
+  assert.equal(s.health, "suspect", "not hidden on day 2");
+  s = health.nextHealth(s, fail, at(7));
+  assert.equal(s.health, "down", "hidden on day 8");
   // A pass at any point brings it straight back.
   assert.equal(health.nextHealth(s, { ok: true, reason: "" }, at(2)).health, "live");
 });

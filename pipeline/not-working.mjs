@@ -79,6 +79,28 @@ const DAY = 86400000;
 export const RECHECK_AFTER_MS = 1 * HOUR;
 /** DEFAULT: the confirming re-check, the next day; still failing then, the site is not working. */
 export const CONFIRM_AFTER_MS = 1 * DAY;
+/**
+ * The confirming re-check for a weak verdict (WEAK_VERDICT): a week after the
+ * first failure (the 2026-11-23 review of #292, F1). A blank render, a blocked
+ * capture, a redirect to a social profile and a duplicate can come from the
+ * checker itself (a browser update, a CDN outage making single-page apps
+ * render blank), so they get a week to clear; positive evidence (nothing
+ * answers, an HTTP error, a parked or for-sale page) keeps the next day.
+ */
+export const CONFIRM_WEAK_AFTER_MS = 7 * DAY;
+/** A failure reason that is weak evidence (CONFIRM_WEAK_AFTER_MS). */
+export const WEAK_VERDICT = /^(renders blank|capture blocked: |redirects to \S+, not a portfolio|duplicate of )/;
+/** The wait from the first failure to the confirming re-check, for a failure with `reason`. */
+export const confirmAfterMs = (reason) => (WEAK_VERDICT.test(String(reason ?? "")) ? CONFIRM_WEAK_AFTER_MS : CONFIRM_AFTER_MS);
+/**
+ * DEFAULT: at most this many sites hidden in one day by failing checks
+ * (the brake, F1 of the same review): about 1% of the 2,154 listed sites. The
+ * real outages seen so far come a few at a time (21 really down sites were
+ * found in one go on 2026-11-16, the backlog of a first full check); more at
+ * once means the checker or a host-wide event, so every site that would be
+ * hidden waits at the stage before, still shown, and the owner is alerted.
+ */
+export const HIDE_PER_DAY = 20;
 /** DEFAULT: how often a not-working site is checked again, by days since it became not working: daily for a week, weekly to day 30, then monthly. */
 export const POOL_CADENCE = [
   { untilDays: 7, everyDays: 1 },
@@ -235,11 +257,16 @@ export function failOnLadder(prev, result, now = new Date()) {
   const due = pool.nextAt == null || t >= ms(pool.nextAt) - DUE_SLACK_MS;
   let next = { ...pool, unclear: 0 };
   if (due) {
+    // The confirming re-check: the next day, or a week after the first failure for a weak verdict.
+    const confirmAt = ms(pool.startedAt) + confirmAfterMs(result.reason);
     if (pool.stage === FAILING) {
-      // The first re-check failed: the confirming one comes the next day (and never within the hour).
-      next = { ...next, stage: RECHECKED, nextAt: iso(Math.max(ms(pool.startedAt) + CONFIRM_AFTER_MS, t + RECHECK_AFTER_MS)) };
+      // The first re-check failed: the confirming one comes later (and never within the hour).
+      next = { ...next, stage: RECHECKED, nextAt: iso(Math.max(confirmAt, t + RECHECK_AFTER_MS)) };
+    } else if (pool.stage === RECHECKED && t < confirmAt - DUE_SLACK_MS) {
+      // Due on the next day's terms, but this failure is a weak verdict: it waits for its own confirming day.
+      next = { ...next, nextAt: iso(confirmAt) };
     } else if (pool.stage === RECHECKED) {
-      // Still failing the next day: not working.
+      // Still failing on its confirming day: into the temporary pool.
       next = { ...next, stage: NOT_WORKING, since: iso(t), nextAt: iso(notWorkingNext(t, t)) };
     } else {
       next = { ...next, stage: NOT_WORKING, nextAt: iso(notWorkingNext(ms(pool.since ?? pool.startedAt), t)) };
@@ -347,7 +374,7 @@ export const ANSWERS_ELSEWHERE_SQL = `SELECT p.url, p.name, m.answers_at, p.heal
  * SQL: the pool as the owner's admin pages show it: listed sites failing (not
  * hidden yet) or in the temporary pool (hidden), with their ladder.
  */
-export const POOL_SQL = `SELECT p.url, p.name, p.health, p.health_reason, p.health_checked_at,
+export const POOL_SQL = `SELECT p.url, p.name, p.health, p.health_reason, p.health_checked_at, p.reason AS capture_reason,
     m.pool_stage, m.pool_started_at, m.pool_next_at, m.pool_since
   FROM health_marks m JOIN portfolios p ON p.url = m.url
   WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND p.health IN ('suspect', 'down')

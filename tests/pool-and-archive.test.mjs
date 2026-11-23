@@ -151,7 +151,10 @@ test("a duplicate stays a duplicate on the hourly re-check, though its original 
   assert.equal(await col(db, copy, "health_reason"), `duplicate of ${original}`);
   await hourly(T0 + H);
   assert.equal(await col(db, copy, "health"), "suspect", "still failing as a duplicate");
+  // A duplicate is a weak verdict: confirmed a week after the first failure.
   await hourly(T0 + D);
+  assert.equal(await col(db, copy, "health"), "suspect", "not hidden on day 2");
+  await hourly(T0 + 7 * D);
   assert.equal(await col(db, copy, "health"), "down", "hidden: the original stays listed");
   assert.equal(await hidden(db, original), false);
 });

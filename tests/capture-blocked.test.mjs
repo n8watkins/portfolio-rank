@@ -359,14 +359,17 @@ test("health check: a blank site that stays blocked goes into the temporary pool
   const recheck = (t) => runHealthCheck({ db, feed: [feed[0]], fetchImpl: fetchAll, now: new Date(t), scheduled: "check", alerts: false, doorLimit: 0, log: () => {} });
   await recheck(start + HOUR);
   assert.equal((await rowOf(db, EMPTY)).health, "suspect", "never hidden on the first day");
+  // A blocked capture is a weak verdict: its confirming check is a week after the first failure.
   await recheck(start + DAY);
-  assert.equal((await rowOf(db, EMPTY)).health, "down", "in the temporary pool the next day");
+  assert.equal((await rowOf(db, EMPTY)).health, "suspect", "not hidden the next day: a weak verdict waits a week");
+  await recheck(start + 7 * DAY);
+  assert.equal((await rowOf(db, EMPTY)).health, "down", "in the temporary pool a week on");
   for (const url of [WALLED, WALLED_OPEN, EMPTY_WALLED]) assert.equal((await rowOf(db, url)).health, null, `${url} is not failed`);
   assert.equal((await rowOf(db, GOOD_WALLED)).health, "live");
   // Not archived before 90 days in the pool.
   assert.deepEqual((await planExclusions({ db, excluded: [], feed: all, now: new Date(start + 20 * DAY) })).added, []);
   // Its check on day 90 still fails: archived with the next weekly export.
-  const day90 = start + DAY + 90 * DAY;
+  const day90 = start + 7 * DAY + 90 * DAY;
   await db.execute({ sql: "UPDATE health_marks SET pool_next_at = ? WHERE url = ?", args: [new Date(day90).toISOString(), EMPTY] });
   await recheck(day90);
 

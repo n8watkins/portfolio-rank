@@ -19,8 +19,17 @@ import { ARCHIVE_EVERY_DAYS, ARCHIVE_FIRST_DAYS, LEAVE_AFTER_DAYS, RETURNS_SHOWN
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Health pool - PortfolioRank admin", robots: { index: false, follow: false } };
 
-type PoolSite = { url: string; name: string; reason: string; started: string | null; since: string | null; next: string | null; hidden: boolean; archiveOn: string | null };
-type ArchiveSite = { url: string; name: string; kind: string; reason: string; archived: string | null; lastChecked: string | null; next: string };
+type PoolSite = { url: string; name: string; reason: string; started: string | null; since: string | null; next: string | null; hidden: boolean; walled: boolean; archiveOn: string | null };
+type ArchiveSite = {
+  url: string;
+  name: string;
+  kind: string;
+  reason: string;
+  archived: string | null;
+  lastChecked: string | null;
+  next: string;
+  found: { finalUrl: string | null; title: string; why: string } | null;
+};
 type Returned = { url: string; at: string; from: "pool" | "archive"; reason: string; since: string | null; hidden: boolean };
 type Elsewhere = { url: string; name: string; at: string; checked: string | null };
 type Pool = { failing: PoolSite[]; pool: PoolSite[]; archive: ArchiveSite[]; returned: Returned[]; elsewhere: Elsewhere[] };
@@ -142,7 +151,11 @@ export default async function AdminHealthPoolPage() {
             name={s.name}
             reason={s.reason || "no reason recorded"}
             data={{ "data-pool-site": s.url }}
-            facts={[day(s.since ?? s.started) && `Hidden since ${day(s.since ?? s.started)}`, when(s.next) && `next check ${when(s.next)}`, day(s.archiveOn) && `archived ${day(s.archiveOn)} if it still fails`]}
+            facts={[
+              day(s.since ?? s.started) && `Hidden since ${day(s.since ?? s.started)}`,
+              when(s.next) && `next check ${when(s.next)}`,
+              s.walled ? "never archived: its capture met a bot wall" : day(s.archiveOn) && `archived ${day(s.archiveOn)} if it still fails`,
+            ]}
           />
         ))}
       </Section>
@@ -225,7 +238,7 @@ export default async function AdminHealthPoolPage() {
             key={s.url}
             url={s.url}
             name={s.name}
-            reason={s.reason}
+            reason={s.found ? `${s.reason}. Last check: ${s.found.why}${s.found.finalUrl ? ` (${s.found.finalUrl}${s.found.title ? `, "${s.found.title}"` : ""})` : ""}` : s.reason}
             badge={{ text: s.kind === "dead" ? "Gone" : "Down", cls: tagDown }}
             data={{ "data-archive-site": s.url }}
             facts={[day(s.archived) && `Archived ${day(s.archived)}`, day(s.lastChecked) && `last checked ${day(s.lastChecked)}`, day(s.next) && `next check ${day(s.next)}`]}

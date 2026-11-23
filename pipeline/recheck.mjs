@@ -53,6 +53,8 @@ function merge(total, s) {
     if (typeof v === "number" && typeof total[k] === "number" && k !== "ladderUnknown") out[k] = total[k] + v;
     else if (Array.isArray(v) && Array.isArray(total[k]) && k !== "ladderUnknown") out[k] = [...total[k], ...v];
   }
+  // The brake on hiding: its count is the latest batch's (read from the marks), the sites it held add up.
+  if (s.hideBrake && total.hideBrake) out.hideBrake = { count: s.hideBrake.count, held: [...total.hideBrake.held, ...s.hideBrake.held] };
   return out;
 }
 

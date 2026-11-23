@@ -342,11 +342,18 @@ test("state machine: every failure takes the one ladder: a failure once is never
   assert.deepEqual([s.health, s.fails, s.pool.stage], ["suspect", 1, 1]);
   // Fails once and recovers: never hidden.
   assert.equal(nextHealth(s, { ok: true }, at(0.05)).health, "live");
-  // The hour's re-check and the next day's: hidden.
+  // The hour's re-check; a blank page is a weak verdict, so not hidden the next day, but a week on.
   s = nextHealth(s, fail, at(0.05));
   assert.equal(s.health, "suspect");
   s = nextHealth(s, fail, at(1));
+  assert.equal(s.health, "suspect", "a blank page is not hidden on day 2");
+  s = nextHealth(s, fail, at(7));
   assert.deepEqual([s.health, s.firstFailAt], ["down", at(0).toISOString()]);
+  // Positive evidence (a parked page) is hidden the next day.
+  let p = nextHealth(null, { ok: false, reason: 'parking phrase: "domain for sale"' }, at(0));
+  p = nextHealth(p, { ok: false, reason: 'parking phrase: "domain for sale"' }, at(0.05));
+  p = nextHealth(p, { ok: false, reason: 'parking phrase: "domain for sale"' }, at(1));
+  assert.equal(p.health, "down");
   // A bot wall leaves the state alone.
   const same = nextHealth(s, { ok: null, reason: "blocked by a bot check" }, at(1.5));
   assert.equal(same.health, "down");
