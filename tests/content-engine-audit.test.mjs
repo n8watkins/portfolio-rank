@@ -288,3 +288,10 @@ test("G: starting a new job clears a stale one first, and a queued job that neve
   assert.equal((await getJob(db, "c".repeat(16))).status, "failed");
   assert.equal((await getJob(db, "d".repeat(16))).status, "queued");
 });
+
+test("Write a draft now runs in production only, at its daily cap", () => {
+  assert.deepEqual(jobsModule.draftNowPolicy({ SITE_ENV: "production" }), { cap: jobsModule.MANUAL_PER_DAY });
+  for (const env of [{ SITE_ENV: "test" }, { SITE_ENV: "staging", GEMINI_API_KEY: "k" }, { SITE_ENV: "Production" }, {}]) {
+    assert.deepEqual(jobsModule.draftNowPolicy(env), { error: "production_only" }, JSON.stringify(env));
+  }
+});

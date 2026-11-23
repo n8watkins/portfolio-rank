@@ -1,7 +1,7 @@
 # Free tools
 
 The free tools check any portfolio address without an account.
-They are built, on staging only: every page and API answers 404 until the Worker variable `TOOLS_ENABLED` is `"true"` (`wrangler.jsonc`; staging has it on, production off).
+They are built and off: every page and API answers 404 until the Worker variable `TOOLS_ENABLED` is `"true"` (`wrangler.jsonc`; off in production).
 
 | Tool | Page | API | Saved under |
 | --- | --- | --- | --- |

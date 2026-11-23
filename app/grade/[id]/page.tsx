@@ -65,7 +65,7 @@ function LinkNote({ link }: { link?: string }) {
 
 /**
  * A grade whose screenshots and AI grade can't start ("unavailable": the
- * capture service isn't connected, as on staging): the free checks are the
+ * capture service isn't connected): the free checks are the
  * whole answer, so the page shows them as the report does and says plainly
  * what is missing, instead of calling it a failure.
  */

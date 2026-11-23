@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { recheckStartTick } from "../worker/recheck-start.ts";
 import { runEach } from "../pipeline/hourly.mjs";
 import { DUE_COUNT_SQL } from "../pipeline/not-working.mjs";
-import { STAGING_TASKS, SCHEDULED_TASKS } from "../worker/crons.ts";
+import { SCHEDULED_TASKS } from "../worker/crons.ts";
 
 const AT = Date.parse("2026-11-18T18:15:00Z");
 const dbWith = (n, seen = []) => ({
@@ -80,16 +80,15 @@ test("a count that cannot be read still starts the workflow, then throws so it i
 
 test("the first hourly task, so a slow task cannot delay it", () => {
   assert.equal(SCHEDULED_TASKS.hourly[0], "recheck start");
-  assert.match(readFileSync("worker/index.ts", "utf8"), /only\(\[\n(\s*\/\/.*\n)*\s*\["recheck start"/);
+  assert.match(readFileSync("worker/index.ts", "utf8"), /runEach\(\n\s*\[\n(\s*\/\/.*\n)*\s*\["recheck start"/);
 });
 
 test("the fallback guard runs the count when GitHub will not list the runs", () => {
   assert.match(readFileSync(".github/workflows/recheck.yml", "utf8"), /\| length'\) \|\| n=0/);
 });
 
-test("production-only: in the hourly group, never in the staging allowlist", () => {
+test("in the hourly group", () => {
   assert.ok(SCHEDULED_TASKS.hourly.includes("recheck start"));
-  assert.ok(!STAGING_TASKS.includes("recheck start"));
 });
 
 test("recheck.yml: manual dispatch kept, schedule guarded like health.yml, own concurrency group", () => {

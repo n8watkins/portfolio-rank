@@ -7,13 +7,12 @@ import { parseJsonc } from "./scripts/check-worker-exports.mjs";
 // time (the home page, /top and its views, the sitemap: ISR) read them too,
 // so the build must see the values the Worker will run with: the variable
 // when the build environment sets it (the test runs), else wrangler.jsonc's
-// value for the Worker being built (staging or production). Flipping one in
-// wrangler.jsonc ships with a deploy, which rebuilds.
+// value. Flipping one in wrangler.jsonc ships with a deploy, which rebuilds.
 function launchSwitch(name: "GRADER_ENABLED" | "GAMES_V2" | "RANKING_V2" | "TOOLS_ENABLED" | "EMAIL_SIGNIN_ENABLED" | "NEWSLETTER_ENABLED" | "FULLPAGE_PREVIEW_ENABLED"): "true" | "false" {
   if (process.env[name] !== undefined) return /^true$/i.test(String(process.env[name])) ? "true" : "false";
   try {
     const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
-    const vars = process.env.NEXT_PUBLIC_SITE_ENV === "staging" ? config.env?.staging?.vars : config.vars;
+    const vars = config.vars;
     return /^true$/i.test(String(vars?.[name] ?? "")) ? "true" : "false";
   } catch {
     return "false";

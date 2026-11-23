@@ -217,5 +217,4 @@ test("the hourly page fingerprints are gone: no cron task, no worker module, no 
   assert.doesNotMatch(readFileSync("worker/index.ts", "utf8"), /freshness/i);
   const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
   assert.equal(config.vars.FRESHNESS_ENABLED, undefined);
-  assert.equal(config.env.staging.vars.FRESHNESS_ENABLED, undefined);
 });
