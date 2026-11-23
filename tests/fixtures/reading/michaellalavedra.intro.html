@@ -1,0 +1,345 @@
+<html lang="en" data-theme="light" class="light" style="color-scheme: light;"><head><meta charset="UTF-8"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Michaell Alavedra | Software Engineer</title><link rel="canonical" href="https://michaellalavedra.com/"> <link rel="alternate" hreflang="en" href="https://michaellalavedra.com/en/"><link rel="alternate" hreflang="es" href="https://michaellalavedra.com/es/"><link rel="alternate" hreflang="pt" href="https://michaellalavedra.com/pt/"><link rel="alternate" hreflang="zh" href="https://michaellalavedra.com/zh/"><link rel="alternate" hreflang="x-default" href="https://michaellalavedra.com/"> <link rel="sitemap" href="/sitemap-index.xml"> <meta name="title" content="Michaell Alavedra | Software Engineer"> <meta name="description" content="Software Engineer with 7 years of experience developing and evolving enterprise platforms. Full-Stack Development · Software Architecture."> <meta name="keywords" content="software engineer, fullstack development, software architecture, ai agents, claude code, domain-driven design, turborepo, nestjs, react, angular, typescript, eficientis"> <meta property="og:title" content="Michaell Alavedra | Software Engineer"><meta property="og:type" content="website"><meta property="og:url" content="https://michaellalavedra.com/"><meta property="og:image" content="https://michaellalavedra.com/og/site/en.png"><meta property="og:locale" content="en_US"><meta property="og:locale:alternate" content="es_ES"><meta property="og:locale:alternate" content="pt_BR"><meta property="og:locale:alternate" content="zh_CN"><meta property="og:description" content="Software Engineer with 7 years of experience developing and evolving enterprise platforms. Full-Stack Development · Software Architecture."><meta property="og:site_name" content="Michaell Alavedra"><meta property="og:image:url" content="https://michaellalavedra.com/og/site/en.png"><meta property="og:image:secure_url" content="https://michaellalavedra.com/og/site/en.png"><meta property="og:image:type" content="image/png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Michaell Alavedra | Software Engineer"> <meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@michaellalaved"><meta name="twitter:creator" content="@michaellalaved"><meta name="twitter:description" content="Software Engineer with 7 years of experience developing and evolving enterprise platforms. Full-Stack Development · Software Architecture."><meta name="twitter:title" content="Michaell Alavedra | Software Engineer"><meta name="twitter:image" content="https://michaellalavedra.com/og/site/en.png"><meta name="twitter:image:alt" content="Michaell Alavedra | Software Engineer"> <meta name="robots" content="max-image-preview:large"><style>
+		:root {
+			--bg-color: #030303;
+			--fg: #f5f5f5;
+			--muted: #a3a3a3;
+			--kbd-bg: #171717;
+			--kbd-border: #404040;
+			--ambient: rgba(255, 255, 255, 0.03);
+			--teal-halo: rgba(45, 212, 191, 0.28);
+			--teal-ring: rgba(45, 212, 191, 0.45);
+			--action: var(--color-primary-700, #0f766e);
+			--action-hover: var(--color-primary-800, #115e59);
+			--on-action: #ffffff;
+			--focus: var(--color-primary-400, #2dd4bf);
+		}
+
+		:root[data-theme="light"] {
+			--bg-color: #fafafa;
+			--fg: #171717;
+			--muted: #525252;
+			--kbd-bg: #ffffff;
+			--kbd-border: #d4d4d4;
+			--ambient: rgba(15, 118, 110, 0.05);
+			--teal-halo: rgba(20, 184, 166, 0.24);
+			--teal-ring: rgba(13, 148, 136, 0.4);
+			--focus: var(--color-primary-700, #0f766e);
+		}
+
+		::selection {
+			background: var(--action);
+			color: var(--on-action);
+		}
+
+		body {
+			margin: 0;
+			padding: 0;
+			background-color: var(--bg-color);
+			height: 100dvh;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			color: var(--fg);
+			overflow: hidden;
+		}
+
+		/* Start screen: who this is, what to do, and the one action that enters the site. */
+		.start-screen {
+			position: fixed;
+			inset: 0;
+			z-index: 9999;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 1.5rem 1rem;
+			box-sizing: border-box;
+			overflow-y: auto;
+			background: var(--bg-color);
+			transition: opacity 0.3s ease;
+		}
+
+		.welcome {
+			width: 100%;
+			max-width: 28rem;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			text-align: center;
+			animation: rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+		}
+
+		.avatar {
+			position: relative;
+			width: 7rem;
+			height: 7rem;
+			margin-bottom: 1.75rem;
+		}
+
+		.avatar::before {
+			content: "";
+			position: absolute;
+			inset: -1.75rem;
+			border-radius: 50%;
+			background: radial-gradient(circle, var(--teal-halo) 0%, transparent 68%);
+			filter: blur(6px);
+		}
+
+		.avatar img {
+			position: relative;
+			display: block;
+			width: 100%;
+			height: 100%;
+			border-radius: 50%;
+			object-fit: cover;
+			box-shadow:
+				0 0 0 2px var(--teal-ring),
+				0 10px 30px -12px rgba(0, 0, 0, 0.45);
+			user-select: none;
+		}
+
+		.welcome-name {
+			margin: 0;
+			font-size: clamp(2rem, 1.4rem + 3vw, 3rem);
+			font-weight: 400;
+			line-height: 1.1;
+			letter-spacing: -0.01em;
+			text-wrap: balance;
+			color: var(--fg);
+		}
+
+		.welcome-role {
+			margin: 0.5rem 0 0;
+			font-size: 1rem;
+			font-variation-settings: "wght" 500;
+			color: var(--muted);
+		}
+
+		.welcome-greeting {
+			margin: 1.75rem 0 0;
+			max-width: 34ch;
+			font-size: 1rem;
+			line-height: 1.55;
+			text-wrap: balance;
+			color: var(--fg);
+		}
+
+		.start-btn {
+			position: relative;
+			margin-top: 1.75rem;
+			min-height: 3.5rem;
+			min-width: 10rem;
+			padding: 0 2rem;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.625rem;
+			border: 0;
+			border-radius: 999px;
+			background: var(--action);
+			color: var(--on-action);
+			font: inherit;
+			font-size: 1.0625rem;
+			font-variation-settings: "wght" 600;
+			letter-spacing: 0.01em;
+			cursor: pointer;
+			box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.45);
+			transition:
+				background-color 0.2s ease,
+				transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+
+		.start-btn::before {
+			content: "";
+			position: absolute;
+			inset: 0;
+			border-radius: inherit;
+			pointer-events: none;
+			animation: pulse 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+		}
+
+		.start-btn:hover {
+			background: var(--action-hover);
+		}
+
+		.start-btn:active {
+			transform: scale(0.98);
+		}
+
+		.start-btn:focus-visible {
+			outline: 2px solid var(--focus);
+			outline-offset: 4px;
+		}
+
+		.start-btn svg {
+			width: 1.25rem;
+			height: 1.25rem;
+		}
+
+		.start-hint {
+			margin: 1rem 0 0;
+			font-size: 0.875rem;
+			color: var(--muted);
+		}
+
+		.start-hint kbd {
+			display: inline-block;
+			margin: 0 0.125rem;
+			padding: 0.125rem 0.5rem;
+			border: 1px solid var(--kbd-border);
+			border-bottom-width: 2px;
+			border-radius: 0.375rem;
+			background: var(--kbd-bg);
+			color: var(--fg);
+			font-family: "Geist Mono", monospace;
+			font-size: 0.8125rem;
+		}
+
+		/* Touch screens have no Enter key in reach: the button alone carries the instruction. */
+		@media (hover: none) and (pointer: coarse) {
+			.start-hint {
+				display: none;
+			}
+		}
+
+		@media (min-width: 768px) {
+			.avatar {
+				width: 8rem;
+				height: 8rem;
+			}
+		}
+
+		@keyframes rise {
+			from {
+				opacity: 0;
+				transform: translateY(12px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		@keyframes pulse {
+			0% {
+				box-shadow: 0 0 0 0 var(--teal-ring);
+			}
+			70%,
+			100% {
+				box-shadow: 0 0 0 14px rgba(45, 212, 191, 0);
+			}
+		}
+
+		.ambient-glow {
+			position: absolute;
+			width: 60vw;
+			height: 60vw;
+			background: radial-gradient(circle, var(--ambient) 0%, transparent 70%);
+			z-index: 1;
+			filter: blur(60px);
+			animation: drift 15s linear infinite;
+		}
+
+		@keyframes drift {
+			0% {
+				transform: translate(-20%, -20%) rotate(0deg);
+			}
+			50% {
+				transform: translate(20%, 20%) rotate(180deg);
+			}
+			100% {
+				transform: translate(-20%, -20%) rotate(360deg);
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.welcome,
+			.start-btn::before,
+			.ambient-glow {
+				animation: none;
+			}
+
+			.start-btn {
+				transition: background-color 0.2s ease;
+			}
+
+			.start-btn:active {
+				transform: none;
+			}
+		}
+		</style><link rel="stylesheet" href="/_astro/SEO.CFut1pln.css"><style>
+            /* Prevent layout shifts by setting minimum height */
+            pre.mermaid {
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              margin: 2rem 0;
+              padding: 1rem;
+              background-color: transparent;
+              border: none;
+              overflow: auto;
+              min-height: 200px; /* Prevent layout shift */
+              position: relative;
+            }
+            
+            /* Loading state with skeleton loader */
+            pre.mermaid:not([data-processed]) {
+              background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+              background-size: 200% 100%;
+              animation: shimmer 1.5s infinite;
+            }
+            
+            /* Dark mode skeleton loader */
+            [data-theme="dark"] pre.mermaid:not([data-processed]) {
+              background: linear-gradient(90deg, #2a2a2a 25%, #3a3a3a 50%, #2a2a2a 75%);
+              background-size: 200% 100%;
+            }
+            
+            @keyframes shimmer {
+              0% {
+                background-position: -200% 0;
+              }
+              100% {
+                background-position: 200% 0;
+              }
+            }
+            
+            /* Show processed diagrams with smooth transition */
+            pre.mermaid[data-processed] {
+              animation: none;
+              background: transparent;
+              min-height: auto; /* Allow natural height after render */
+            }
+            
+            /* Ensure responsive sizing for mermaid SVGs */
+            pre.mermaid svg {
+              max-width: 100%;
+              height: auto;
+            }
+            
+            /* Optional: Add subtle background for better visibility */
+            @media (prefers-color-scheme: dark) {
+              pre.mermaid[data-processed] {
+                background-color: rgba(255, 255, 255, 0.02);
+                border-radius: 0.5rem;
+              }
+            }
+            
+            @media (prefers-color-scheme: light) {
+              pre.mermaid[data-processed] {
+                background-color: rgba(0, 0, 0, 0.02);
+                border-radius: 0.5rem;
+              }
+            }
+            
+            /* Respect user's color scheme preference */
+            [data-theme="dark"] pre.mermaid[data-processed] {
+              background-color: rgba(255, 255, 255, 0.02);
+              border-radius: 0.5rem;
+            }
+            
+            [data-theme="light"] pre.mermaid[data-processed] {
+              background-color: rgba(0, 0, 0, 0.02);
+              border-radius: 0.5rem;
+            }
+          </style></head> <body> <div class="ambient-glow" aria-hidden="true"></div> <div id="start-screen" class="start-screen"> <div class="welcome"> <div class="avatar"> <img src="/images/me/me.webp" alt="" width="737" height="737" decoding="async"> </div> <h1 class="welcome-name">Michaell Alavedra</h1> <p id="start-role" class="welcome-role">Software Engineer</p> <p id="start-greeting" class="welcome-greeting">Welcome. Press the button to begin.</p> <button id="start-btn" type="button" class="snd__button start-btn"> <svg class="inline-block" aria-hidden="true" width="1em" height="1em" fill="currentColor"> <use xlink:href="/icons/line.sprites.svg#power"></use> </svg> <span id="start-label">Enter</span> </button> <p class="start-hint"> <span id="hint-before">Press</span> <kbd>Enter <span aria-hidden="true">↵</span></kbd> <span id="hint-after"></span> </p> </div> </div>   </body></html>

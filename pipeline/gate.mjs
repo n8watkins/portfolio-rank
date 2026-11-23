@@ -30,14 +30,34 @@ export const PARKING_PHRASES = [
 // the script that draws GoDaddy's lander (img1.wsimg.com/parking-lander,
 // window.LANDER_SYSTEM, its traffic tag "ap: parking"; nic-nguyen.com/lander,
 // 2026-11-23) and scripts loaded (a `src`, never a `data-src`) from the
-// parking hosts themselves. Like the phrases, a marker counts only on a page
-// with little visible text.
+// parking hosts themselves; and Sedo's lander, which loads its spinner and
+// icon from img.sedoparking.com (`<img src>`, `<link href>`; abdulmomin.dev,
+// 2026-11-23, served by "Parking/1.0"). Like the phrases, a marker counts only
+// on a page with little visible text.
 const PARKING_MARKERS = [
   [/\bwindow\.LANDER_SYSTEM\s*=/, "GoDaddy parking lander"],
   [/\/\/img\d*\.wsimg\.com\/parking-lander\//i, "GoDaddy parking lander"],
   [/_trfd\.push\([^)]*?["']?\bap["']?\s*:\s*["']parking["']/, "GoDaddy parking lander"],
+  [/<(?:img|link)\b[^>]*?\s(?:src|href)\s*=\s*["']?(?:https?:)?\/\/img\.sedoparking\.com\//i, "Sedo parking lander"],
   [/<script\b[^>]*?\ssrc\s*=\s*["']?(?:https?:)?\/\/(?:[\w-]+\.)*(sedoparking\.com|parkingcrew\.net|bodis\.com|parklogic\.com|above\.com|dan\.com|afternic\.com|hugedomains\.com)\//i, "a script from a parking service"],
 ];
+
+// The title of Sedo's lander: the domain itself, a dash, a keyword and
+// "Resources and Information." ("abdulmomin.dev - abdulmomin Resources and
+// Information.", 2026-11-23). The whole title must be that, and the domain
+// must be the page's own (www. aside), so a page that says "resources and
+// information" in a sentence, or a title naming another site, is not it.
+const SEDO_TITLE = /^((?:[a-z0-9-]+\.)+[a-z]{2,})\s+-\s+[^|]{1,80}?\s+resources and information\.?$/i;
+
+/** The parking lander a page's title says it is (SEDO_TITLE on the page's own domain), or undefined. */
+export function parkingTitle(title, finalUrl) {
+  const t = String(title ?? "").replace(/&nbsp;|&#160;| /gi, " ").replace(/\s+/g, " ").trim();
+  const m = t.match(SEDO_TITLE);
+  const own = netloc(finalUrl);
+  if (!m || !own) return undefined;
+  const named = m[1].toLowerCase().replace(/^www\./, "");
+  return named === own ? "Sedo parking lander" : undefined;
+}
 // The User-Agent of the plain requests (and of the capture's browser, which
 // imports UA). It names a current Chrome, worked out from the date, so it
 // never goes stale: a pinned "Chrome/124" was 2.5 years old by 2026-11, and
@@ -128,7 +148,8 @@ export function parkingMarker(html, text) {
  * evidence counts, in order:
  *   - it ended on a parking host (isParkingDomain): "redirects to <host>";
  *   - a parking phrase in the title, or on a short page: "parking phrase: ...";
- *   - a parking service's lander (parkingMarker): "parking page: <service>".
+ *   - a parking service's lander (parkingMarker, or on a short page a lander's
+ *     own title, parkingTitle): "parking page: <service>".
  * A path, a short or empty page, or a page that could not be read is never
  * evidence: a single-page app's first HTML is nearly empty too.
  */
@@ -137,7 +158,7 @@ export function parkedPage({ finalUrl = "", html = "", text, title } = {}) {
   const visible = String(text ?? visibleText(html)).trim();
   const phrase = parkingPhrase({ html, text: visible, title });
   if (phrase) return `parking phrase: "${phrase}"`;
-  const marker = parkingMarker(html, visible);
+  const marker = parkingMarker(html, visible) ?? (visible.length <= PARKED_MAX_TEXT ? parkingTitle(title ?? titleOf(html), finalUrl) : undefined);
   if (marker) return `parking page: ${marker}`;
   return null;
 }
@@ -239,7 +260,7 @@ async function parkedAfterClientRedirect(from, to, { fetchImpl, timeoutMs, userA
     const landed = res.url || to;
     if (isParkingDomain(landed)) return { reason: `redirects to ${netloc(landed)}`, finalUrl: landed };
     if (!res.ok) return null;
-    const reason = parkedPage({ finalUrl: landed, html: await readBody(res, 262144) });
+    const reason = parkedPage({ finalUrl: landed, html: await readBody(res, PAGE_MAX_HTML) });
     return reason ? { reason, finalUrl: landed } : null;
   } catch {
     return null;
@@ -264,15 +285,30 @@ export function readRenderedPage() {
   // srcsets, style attributes, inline data: images, SVG path data), so the
   // cut no longer takes its footer's GitHub and email links (facts audit,
   // 2026-11-21: two of 70 listed sites lost them to inline images and
-  // srcsets).
+  // srcsets). Then, if it is still too long, the empty elements that carry
+  // nothing but classes go: singhshailendra.in (2026-11-23) drew its
+  // background grid from 4,700 empty Tailwind divs, 340,000 characters of
+  // class names before its menu and text, so the cut took all of them. An
+  // element goes only when it holds no text and no other element and its only
+  // attributes are class or style, and only a wrapper kind (div, span, i, p,
+  // li, ul, section, figure): never a link, button, image, an id or a label.
+  // Its wrapper then goes on the next of at most 12 passes if it is empty too.
+  // The cut stays the bound against a pathological page.
+  const MAX = 400000;
   let html = document.documentElement.outerHTML;
-  if (html.length > 400000) {
+  if (html.length > MAX) {
     html = html
       .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2>)/gi, "$1$3")
       .replace(/\s(?:srcset|sizes|style|d|points)="[^"]*"/g, "")
       .replace(/data:[\w.+-]+\/[\w.+-]+[^"')\s]{64,}/g, "data:");
+    const empty = /<(div|span|i|p|li|ul|section|figure)((?:\s+(?:class|style)="[^"<>]*")*)\s*>\s*<\/\1>/gi;
+    for (let pass = 0; pass < 12 && html.length > MAX; pass++) {
+      const before = html.length;
+      html = html.replace(empty, "");
+      if (html.length === before) break;
+    }
   }
-  html = html.slice(0, 400000);
+  html = html.slice(0, MAX);
   return { text, media, html };
 }
 
@@ -318,6 +354,15 @@ function requestFailed(e) {
 
 /** The body of an answer, read under the same deadline as the request; throws like the request does. */
 const readBody = async (res, limit) => String(await res.text()).slice(0, limit);
+
+/**
+ * The most of a page's HTML the gate keeps (the whole body is downloaded
+ * either way): a bound against a pathological page, the same as the
+ * signals' (./signals.mjs SIGNALS_MAX_HTML). It was 262,144, and singhshailendra.in's
+ * 591,613-character home page (2026-11-23) starts its menu and text at
+ * 533,000, after its background grid's class names.
+ */
+export const PAGE_MAX_HTML = 2000000;
 
 /**
  * The page-request headers of a desktop Chrome that Node's fetch carries as
@@ -379,7 +424,7 @@ export async function httpGate(url, { fetchImpl = globalThis.fetch, timeoutMs = 
     return { status: "parked", reason: `redirects to ${netloc(finalUrl)}`, finalUrl, httpStatus: res.status };
   let html;
   try {
-    html = await readBody(res, 262144);
+    html = await readBody(res, PAGE_MAX_HTML);
   } catch (e) {
     return { ...requestFailed(e), finalUrl, httpStatus: res.status };
   }
