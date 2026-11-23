@@ -273,8 +273,7 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       // ./night-watch.ts, ./newsletter.ts); the night never clears them.
       const r = await reconcileAlerts(ctx.db, {
         conditions,
-        scope: (key: string) =>
-          !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key) && !(captureProblems.failed && key === CAPTURE_PROBLEMS_ALERT),
+        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key) && !(captureProblems.failed && key === CAPTURE_PROBLEMS_ALERT),
         email: ctx.email,
         to: this.env.OWNER_EMAIL ?? null,
         log: ctx.log,
