@@ -174,9 +174,9 @@ const isCertificate = (h, path) => CERTIFICATE_HOSTS.test(h) || Boolean(CERTIFIC
 /** A CodePen profile (codepen.io/name), not one of its pens (codepen.io/name/pen/id). */
 const isCodepenProfile = (u) => /(^|\.)codepen\.io$/i.test(u.hostname) && u.pathname.split("/").filter(Boolean).length <= 1;
 
-// Hosts that are profiles or services, not project demos.
+// Hosts that are profiles or services, not project demos (booking links too: calendar.app.google, Cal.com, TidyCal).
 const NOT_PROJECT =
-  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
+  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|app\.google|tidycal\.com|zcal\.co|savvycal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
 // App store and extension store listings are projects, though their parent hosts are on the list above.
 const STORE_HOST = /^(?:play\.google\.com|chromewebstore\.google\.com)$/i;
 // The sites of the tools a developer uses, as named in a "Tools I use" list: languages, frameworks and
@@ -644,12 +644,27 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       return "";
     }
   })();
-  const seen = new Set();
   const tiers = [[], [], []];
   // The projects page's menus, whatever they are built from (menuLinks): their links to the site's own pages are
   // its frame (a demo or a repository never is).
   const pageLinksOnly = links.filter((l) => l.from === "projects_page");
   const menu = pageLinksOnly.length ? menuLinks(pageLinksOnly, siteUrl, pageLinksOnly[0].page) : new Set();
+  // The site's own pages that the projects page's menu, header or footer links: at any path (isProjectsPageLink) a
+  // section of the site, never a project, however its main content links it ("Work together" to "/contact",
+  // "Explore skills" to "/skills" on portfolio.lewishadden.com, "read the notes" to "/blog" on marbelona.com).
+  const framePaths = new Set(pageLinksOnly.filter((l) => l.inChrome || menu.has(l)).map((l) => ownPageUrl(l, self)?.path).filter(Boolean));
+  // Each link once, in the highest tier it is seen in: a link in a work-experience list that the projects list
+  // links again is a project (avi-aggarwal.com's hypjam.com, marbelona.com's ParkinganPH).
+  const best = new Map();
+  // The labels the home page (either view) shows a link under outside its projects, by the link's address.
+  const homeLow = new Map();
+  const place = (key, t, entry) => {
+    const had = best.get(key);
+    if (had && had.t <= t) return;
+    if (had) tiers[had.t].splice(tiers[had.t].indexOf(had.entry), 1);
+    best.set(key, { t, entry });
+    tiers[t].push(entry);
+  };
   for (const l of links) {
     const from = l.from ?? "home";
     const onProjectsPage = from === "projects_page";
@@ -661,7 +676,7 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     const p = projectUrl(l, self);
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
-      if (seen.has(p.key) || (l.inSocial && !p.repo)) continue;
+      if (l.inSocial && !p.repo) continue;
       // On the site's own projects page (a listing page by its path or label, projectsPageFor) the whole
       // main content is the projects, whatever its headings and classes: its title is almost always an h1
       // "Projects", which opens no section, and utility-class cards say nothing. Nav, header and footer stay out.
@@ -674,14 +689,19 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // A repository, or a subdomain of the site's own domain (its own work), counts as in the projects anywhere
       // but the page's frame and a section whose heading says it is not projects ("Work Experience" with an
       // employer's repositories, "Repos I like").
-      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside);
-      seen.add(p.key);
-      tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
+      const label = labelOf(l).toLowerCase();
+      // What the home page also shows outside its projects, under the same label, is on every page of the site (a
+      // webring's "←", "Tech writing blog webring" at the foot of amanhimself.dev's pages): the projects page's main
+      // content does not make it a project.
+      const furniture = onProjectsPage && !l.inProjects && Boolean(homeLow.get(p.key)?.has(label));
+      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside && !furniture);
+      if (!onProjectsPage && !inProjects) homeLow.set(p.key, (homeLow.get(p.key) ?? new Set()).add(label));
+      place(p.key, inProjects ? 0 : 2, { url: p.key, from, kind: "outbound" });
       continue;
     }
     const own = ownPageUrl(l, self);
     // Never the home page itself (a site served under a path, as samrinjaji.github.io/my-portfolio/ is).
-    if (!own || own.path.replace(/\/index\.html?$/, "") === homePath || seen.has(own.key) || l.inChrome || l.inSocial) continue;
+    if (!own || own.path.replace(/\/index\.html?$/, "") === homePath || best.has(own.key) || l.inChrome || l.inSocial) continue;
     const rel = homePath && own.path.startsWith(`${homePath}/`) ? own.path.slice(homePath.length) : own.path;
     let ok = false;
     if (onProjectsPage) {
@@ -690,15 +710,16 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // Under a listing or the projects page's own path; or, in its main content (not an aside), a page of the site
       // at any path that is not one of its section pages (amanhimself.dev's apps at "/rht", "/lasttimei").
       // Not in an aside, a section that is not projects or a list of profiles, and not labelled as a section of the site.
-      ok = own.path !== base && (isOwnProjectPath(rel, relBase) || (!l.inAside && !l.inOther && isProjectsPageLink(rel, labelOf(l))));
+      // A page at any path also counts only when the page's menu, header or footer does not link it too (framePaths);
+      // a project under the listing may be in a sidebar list of projects as well (bhavaniravi.com's).
+      ok = own.path !== base && (isOwnProjectPath(rel, relBase) || (!l.inAside && !l.inOther && !framePaths.has(own.path) && isProjectsPageLink(rel, labelOf(l))));
     } else {
       // In a home page projects section, with a project page's path, or a page of its own whose name says
       // project ("project-sync.html", sebascherny.github.io's case studies at the site's root).
       ok = Boolean(l.inProjects) && (isOwnProjectPath(rel) || isNamedProjectPage(rel));
     }
     if (!ok) continue;
-    seen.add(own.key);
-    tiers[1].push({ url: own.key, from, kind: "own page" });
+    place(own.key, 1, { url: own.key, from, kind: "own page" });
   }
   // Every own project page goes ahead of the lowest tier, which only fills the slots left over (sujanbhatta.tech:
   // 6 case studies, then partner logos). stimmie.dev's own apps on its subdomains are in the first tier now, so

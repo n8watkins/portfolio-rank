@@ -46,7 +46,7 @@ const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
 const whole = (alternatives, anywhere = "") =>
   new RegExp(String.raw`(?<!\p{L})(?:${alternatives})(?!\p{L})${anywhere ? `|${anywhere}` : ""}`, "iu");
 // The "projects" family: the word itself in each language. Only these make an h1 a section's title (close()).
-const PROJECTS_FAMILY = String.raw`projects?|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти`;
+const PROJECTS_FAMILY = String.raw`projects?|projets|proyectos|projekte|projetos|progetti|projecten|projekty|projeler|projelerim|proyek|проекты|проекти`;
 // A heading that says the person built, made, created, shipped or founded things, or worked on them (madeIt):
 // "Things I built", "What have I built?", "What I've been building", "Things I've worked on", "Stuff I've made",
 // "Companies I founded", "Products and platforms I built". The verb needs a made-things word for its object
@@ -70,8 +70,11 @@ function madeIt(words) {
   if (MADE_NOW.test(words)) return /^\W*what\b/i.test(words) ? "strong" : "weak";
   return null;
 }
-const STRONG_ATTR_WORDS = String.raw`${PROJECTS_FAMILY}|portfolio|portafolio|portf[oó]lio|case\s*stud(?:y|ies)|showcase|my creations|client work|freelance (?:work|projects)|trabajos|travaux`;
-const CJK_WORDS = "项目|專案|作品|プロジェクト|프로젝트";
+// "Projects" and "work" as portfolios say it in Spanish, Portuguese, German, Italian, French, Dutch, Turkish and
+// Indonesian: "Réalisations" (www.aalexis.fr), "Trabalhos", "Meine Arbeiten", "Lavori", "Mijn werk", "Çalışmalarım",
+// "Karya".
+const STRONG_ATTR_WORDS = String.raw`${PROJECTS_FAMILY}|portfolio|portafolio|portf[oó]lio|case\s*stud(?:y|ies)|showcase|my creations|client work|freelance (?:work|projects)|trabajos|travaux|r[eé]alisations|trabalhos|meine arbeiten|lavori|mijn werk|çalışmalar(?:ım)?|karya(?: saya)?`;
+const CJK_WORDS = "项目|專案|作品|プロジェクト|ポートフォリオ|프로젝트|포트폴리오|작업물";
 // Chinese, Japanese and Korean words that say a heading is about something else: experience, management, a blog,
 // articles ("项目管理经验" is project management experience). They win over a Chinese "projects" word.
 const CJK_NOT = /经验|经历|博客|文章|管理|复盘|总结|笔记|ブログ|経験|블로그|경력/u;

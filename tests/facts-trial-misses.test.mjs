@@ -421,6 +421,78 @@ test("a project page written in Chinese, Japanese or Thai counts by its letters;
   assert.deepEqual([r.own_check, r.ok, r.own_unverified], ["text", 3, 1]);
 });
 
+// The independent trial of 103 sites on 28c972d (trial-100.json), from its saved pages.
+const withPages = (home, homeFile, page, pageFile) => {
+  const links = homeFile ? homeProjectLinks({ html: fixture(homeFile), url: home, finalUrl: home }) : [];
+  if (pageFile) links.push(...pageLinks(fixture(pageFile), page).map((l) => ({ ...l, from: "projects_page", page })));
+  return projectCandidates(links, home).map((c) => [c.url, c.tier]);
+};
+
+test("a page the projects page's own menu, header or footer links is never a project: lewishadden's /contact and /skills, marbelona's /blog", () => {
+  assert.deepEqual(withPages("https://portfolio.lewishadden.com/", null, "https://portfolio.lewishadden.com/projects", "portfolio.lewishadden.com.projects.html"), [
+    ["https://getsidenote.app/", 1],
+    ["https://portfolio.lewishadden.com/projects/sidenote", 2],
+  ]);
+  const marbelona = withPages("https://marbelona.com/", "marbelona.com.home.html", "https://marbelona.com/projects", "marbelona.com.projects.html");
+  assert.ok(!marbelona.some(([u]) => u === "https://marbelona.com/blog"), JSON.stringify(marbelona));
+  // The real projects at any path still count where the menu does not link them: amanhimself.dev's apps, yujay.dev's.
+  assert.deepEqual(withPages("https://amanhimself.dev/", "amanhimself.dev.trial.home.html", "https://amanhimself.dev/projects/", "amanhimself.dev.trial.projects.html").filter(([, t]) => t <= 2).map(([u]) => u), [
+    "https://github.com/amandeepmittal/react-native-examples",
+    "https://github.com/amandeepmittal/mobilenet-tfjs-expo",
+    "https://amanhimself.dev/rht",
+    "https://amanhimself.dev/lasttimei",
+    "https://amanhimself.dev/skillsbar",
+  ]);
+  assert.deepEqual(withPages("https://yujay.dev/", null, "https://yujay.dev/projects/", "yujay.dev.projects.html").map(([u]) => u), [
+    "https://hanzidrill.com/",
+    "https://ahashelf.com/",
+    "https://yujay.dev/projects/video2any",
+    "https://yujay.dev/projects/nearmetal",
+    "https://yujay.dev/projects/subtitlerocket",
+    "https://yujay.dev/templates",
+  ]);
+  // In plain markup: the menu links "/blog" and "/now"; the main content's "read the notes" to "/blog" is not a project,
+  // and "/meter" (no menu link) is. A project under the listing stays one even when a sidebar lists it too.
+  const page = `<header><a href="/">Ana</a> <a href="/blog">Blog</a> <a href="/now">Now</a> <a href="/projects/tracker">Tracker</a></header>
+    <main><div class="card"><a href="/blog">read the notes</a></div><div class="card"><a href="/meter">Meter</a><p>A power meter.</p></div><div class="card"><a href="/projects/tracker">Tracker</a><p>Habits.</p></div></main>`;
+  assert.deepEqual(ownOf(page), ["https://ana.dev/meter", "https://ana.dev/projects/tracker"]);
+});
+
+test("a link keeps the highest tier it is seen in: avi-aggarwal.com's hypjam.com, marbelona.com's ParkinganPH", () => {
+  const avi = withPages("https://avi-aggarwal.com/", "avi-aggarwal.com.home.html");
+  assert.deepEqual(avi.find(([u]) => u === "https://hypjam.com/"), ["https://hypjam.com/", 1]);
+  const marbelona = withPages("https://marbelona.com/", "marbelona.com.home.html", "https://marbelona.com/projects", "marbelona.com.projects.html");
+  assert.deepEqual(marbelona.find(([u]) => u === "https://parkinganph.com/"), ["https://parkinganph.com/", 1]);
+  // Either order: first in the projects, then in a work list, or the other way round.
+  const home = "https://ana.dev/";
+  const work = `<section><h2>Experience</h2><a href="https://acme.example/">Acme</a></section>`;
+  const projects = `<section id="projects"><h2>Projects</h2><a href="https://acme.example/">Acme app</a></section>`;
+  for (const html of [work + projects, projects + work]) {
+    assert.deepEqual(projectCandidates(homeProjectLinks({ html, url: home, finalUrl: home }), home).map((c) => [c.url, c.tier]), [["https://acme.example/", 1]]);
+  }
+  // A link only in the work list stays low.
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: work, url: home, finalUrl: home }), home).map((c) => c.tier), [3]);
+  // What every page of the site shows at its foot under the same label (amanhimself.dev's webrings) is not made a
+  // project by the projects page's main content: the webring links stay low, and the apps keep their places.
+  const aman = withPages("https://amanhimself.dev/", "amanhimself.dev.trial.home.html", "https://amanhimself.dev/projects/", "amanhimself.dev.trial.projects.html");
+  assert.ok(aman.filter(([u]) => /webring|static\.quest/.test(u)).every(([, t]) => t === 3), JSON.stringify(aman));
+  // A booking link is never a project, in the projects or not.
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<section id="projects"><a href="https://calendar.app.google/abc">Book a call</a><a href="https://cal.com/ana">Cal</a></section>`, url: home, finalUrl: home }), home), []);
+});
+
+test("'Réalisations' and the other common words for projects and work open a projects section", () => {
+  const home = "https://ana.dev/";
+  for (const heading of ["Réalisations", "Mes réalisations", "Trabalhos", "Meine Arbeiten", "Lavori", "Mijn werk", "Projelerim", "Çalışmalarım", "Proyek", "Karya Saya", "作品集", "ポートフォリオ", "포트폴리오", "Proyectos", "Projetos", "Projekte", "Progetti", "Projets", "Projecten"]) {
+    const html = `<section><h2>${heading}</h2><div><a href="https://demo.example/">Demo</a></div></section>`;
+    assert.deepEqual(projectCandidates(homeProjectLinks({ html, url: home, finalUrl: home }), home).map((c) => c.tier), [1], heading);
+  }
+  // Not a heading about work experience or "how we work".
+  for (const heading of ["Expériences", "Wie wir arbeiten", "Werkervaring", "Deneyim"]) {
+    const html = `<section><h2>${heading}</h2><div><a href="https://acme.example/">Acme</a></div></section>`;
+    assert.deepEqual(projectCandidates(homeProjectLinks({ html, url: home, finalUrl: home }), home).map((c) => c.tier), [3], heading);
+  }
+});
+
 // Found in the sample of 40 sites after the fixes (houssambouzid.dev).
 test("a certificate's verification or badge page is never a project, on any host; an app named for certificates is", () => {
   const home = "https://ana.dev/";
