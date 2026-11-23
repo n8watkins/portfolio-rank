@@ -12,7 +12,7 @@ Decisions and their reasons live in `docs/DECISIONS.md`; the plan in `docs/ROADM
 - [ ] **Redesign preview** at http://localhost:7690 (branch `preview/redesign`): approve, or send changes.
 - [ ] Guess the rank scoring (100 points for exact, zero at 4x off, "close" within 2x) and whether players guess the merged rank only or pick a view.
 - [ ] Polls in the main nav. Recommended: no, footer and the phone "More" menu.
-- [x] Staging site: approved 2026-11-10 and built at https://staging.portfoliorank.n8builds.dev; it needs the setup steps under "Commands to run once".
+- [x] Staging site: approved 2026-11-10, removed by the owner's decision on 2026-11-22 (`docs/DECISIONS.md`, "No staging site").
 - [ ] Pause the daily AI face-off votes until the new ranking switches on. Recommended: yes.
 - [x] Email provider for reports, alerts and the newsletter: Cloudflare Email Service for all email (decided 2026-11-10; SES dropped).
 - [x] Require CI checks before merging: approved 2026-11-10.
@@ -33,16 +33,12 @@ New values go into pass-env with `pass-env set <entry>` in your own terminal; ag
   - `portfolio-rank/PEXELS_API_KEY`: from https://www.pexels.com/api/ (free: 200 requests an hour, 20,000 a month).
 - [ ] Content engine dry run: switch `CONTENT_MODE` to `dry-run` in `wrangler.jsonc` when you want the week of private drafts to start, review them at `/api/admin/content`, then switch to `publish` by hand (docs/CONTENT-ENGINE.md).
 - [ ] Optional: `SENTRY_AUTH_TOKEN` secret and `SENTRY_ORG` / `SENTRY_PROJECT` variables for readable error traces.
-- [x] Turnstile widget `PortfolioRank`: created, and `TURNSTILE_SECRET_KEY` is on both Workers.
+- [x] Turnstile widget `PortfolioRank`: created, and `TURNSTILE_SECRET_KEY` is on the Worker.
   The site key `0x4AAAAAAF8GDSY7kmBfRpoD` goes into `wrangler.jsonc` with the redesign (`DEPLOY.md`, "Grade my portfolio: owner steps", step 1).
 
 ## Commands to run once
 
-- [x] Staging database: created, filled from the 2026-11-10 backup and wired to the staging Worker and the deploy workflow (`DEPLOY.md`, "Setting staging up", steps 1 to 3 and 5).
-- [ ] Staging GitHub OAuth app (`DEPLOY.md`, "Setting staging up", step 4); an agent then sends the two values to the staging Worker (step 5).
-  Until it exists the staging smoke check fails at sign-in, and that stops production deploys from main.
-- [ ] Refresh the staging copy once a full backup exists (any from 2026-11-11 on): the 2026-11-10 one held only votes, ratings and part of portfolios.
-  Delete `portfolio-rank-staging` in Turso and recreate it with a new token (step 2); an agent runs steps 3 and 5 again.
+- [ ] Staging is gone from the repository (2026-11-22); what it still owns outside it (the `portfolio-rank-staging` Worker, its Turso database, cache bucket, secrets and the `staging` label) is deleted one item at a time on your word.
 
 - [ ] Restore test: restore last night's backup into a scratch database and compare counts (steps in `docs/ASSUMPTIONS.md`, section G, once merged).
 - [ ] Ratings recompute, when the new leaderboard switches on: `pass-env run -e TURSO_DATABASE_URL=portfolio-rank/TURSO_DATABASE_URL -e TURSO_AUTH_TOKEN=portfolio-rank/TURSO_AUTH_TOKEN -- node scripts/recompute-ratings.mjs --read-only`, then without `--read-only`.

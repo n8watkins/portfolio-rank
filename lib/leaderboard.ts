@@ -116,11 +116,6 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   return out;
 }
 
-/** The tier of each url's stored grade (ELO board), skipping hidden grades. */
-function tierOf(why: Map<string, Why>, tiers: Map<string, string>, url: string) {
-  return why.has(url) ? (tiers.get(url) ?? null) : null;
-}
-
 /** Places moved between the last two weekly snapshots of a view. */
 async function movement(view: View, urls: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
@@ -244,7 +239,8 @@ export async function loadLeaderboard(kind: BoardKind, limit = 100): Promise<Lea
       move: moves.get(r.url) ?? null,
       likely: likely?.[i] ?? null,
       topPct: kind === "ai" ? topPct(r.rank, board.total) : null,
-      tier: why.has(r.url) ? r.tier : null,
+      // The views' tier is Gemini's letter (lib/ranking/views.mjs): never shown (owner, 2026-11-22).
+      tier: null,
       disagree: split.get(r.url) ?? null,
       votes: null,
       why: why.get(r.url) ?? null,
@@ -273,14 +269,6 @@ async function loadElo(limit: number): Promise<Leaderboard> {
     .slice(0, limit);
   const urls = ranked.map((r) => r.url);
   const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);
-  const tiers = new Map<string, string>();
-  if (urls.length) {
-    const t = await db().execute({
-      sql: `SELECT url, json_extract(ai_rubric, '$.tier') AS tier FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)`,
-      args: urls,
-    });
-    for (const r of t.rows) if (r.tier != null) tiers.set(String(r.url), String(r.tier));
-  }
   const rows: Entry[] = ranked.map((r, i) => {
     const p = byUrl.get(r.url)!;
     return {
@@ -296,7 +284,8 @@ async function loadElo(limit: number): Promise<Leaderboard> {
       move: null,
       likely: null,
       topPct: null,
-      tier: tierOf(why, tiers, r.url),
+      // Gemini's letter is never shown, and Tiers stay hidden on this board (RANKING_V2 off).
+      tier: null,
       disagree: null,
       votes: r.votes,
       why: why.get(r.url) ?? null,

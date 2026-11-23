@@ -24,6 +24,7 @@ import {
   validateCandidates,
 } from "../pipeline/polls.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
+import { ensureTierSchema } from "../lib/tiers-db.mjs";
 import { createGemini, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import feed from "../data/feed.json" with { type: "json" };
 
@@ -156,15 +157,21 @@ test("rate limits: a fixed window per key, in the database", async () => {
 const urls = feed.map((p) => p.url);
 const facts = (over = {}) => JSON.stringify({ contact: true, own_domain: true, motion: false, signals: { resume: true, github: true, about: true }, ...over });
 
+/**
+ * `top` sites with an A Tier and `low` with a C Tier (the tier store: what polls pick by, owner 2026-11-22).
+ * Gemini's letters are the other way round, so a pick by Gemini's letter would show.
+ */
 async function nightDb({ top = 4, low = 3 } = {}) {
   const db = await freshDb();
+  await ensureTierSchema(db);
   let i = 0;
-  for (const [n, tier] of [[top, "A"], [low, "D"]]) {
+  for (const [n, tier, gemini] of [[top, "A", "D"], [low, "C", "S"]]) {
     for (let k = 0; k < n; k++, i++) {
       await db.execute({
         sql: `INSERT INTO portfolios (url, name, status, shot_key, captured_at, ai_rubric, facts) VALUES (?, ?, 'live', ?, '2026-11-01 00:00:00', ?, ?)`,
-        args: [urls[i], feed[i].name, `k${i}`, JSON.stringify({ tier, is_portfolio: true }), facts({ signals: { resume: k % 2 === 0, github: true, about: true } })],
+        args: [urls[i], feed[i].name, `k${i}`, JSON.stringify({ tier: gemini, is_portfolio: true }), facts({ signals: { resume: k % 2 === 0, github: true, about: true } })],
       });
+      await db.execute({ sql: "INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded, tier) VALUES (?, 25, 8, 9, 36, 1, 1, ?)", args: [urls[i], tier] });
     }
   }
   return db;

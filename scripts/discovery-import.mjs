@@ -4,7 +4,7 @@
 //
 //   node scripts/discovery-import.mjs <pilot folder> [--dry-run]
 //
-// With TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (the staging pair first), or
+// With TURSO_DATABASE_URL and TURSO_AUTH_TOKEN, or
 // LOCAL_DB_FILE. Safe to repeat: rows already in discovery_sites are left
 // alone.
 //

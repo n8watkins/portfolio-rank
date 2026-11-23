@@ -4,6 +4,53 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.7.0",
+      "tag": "v0.7.0",
+      "date": "2026-11-22",
+      "time": "2026-11-23T06:35:39Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.7.0",
+      "previous": "v0.6.1",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "list",
+          "text": "A portfolio the community list drops now stays on PortfolioRank, and 25 sites dropped earlier are back; only our own checks and an owner's removal take a site off.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "2e1020387a44de2e197b394db11da71075fb9d08",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/2e1020387a44de2e197b394db11da71075fb9d08"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "grades",
+          "text": "A portfolio's automated check points, fix list and report card now reflect its latest re-measure instead of the facts from the day it was graded.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "845e18b43802a94a4fabaed28323e26b6bfaaa90",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/845e18b43802a94a4fabaed28323e26b6bfaaa90"
+        },
+        {
+          "section": "safer",
+          "type": "security",
+          "scope": "ownership",
+          "text": "When an owner removes their site or hides its grade, that now covers every spelling of the address, and a removed site can't be added again.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "1a9b4a26ab346b2b28e5d6068a46523975d918d2",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/1a9b4a26ab346b2b28e5d6068a46523975d918d2"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.6.1",
       "tag": "v0.6.1",
       "date": "2026-11-22",

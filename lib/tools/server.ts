@@ -13,7 +13,7 @@ import { addRefusal } from "@/lib/ownership/same-site.mjs";
 // address, an hourly attempt limit, then Turnstile. A result is reused from
 // the cache table for a day; only a fresh run reserves the daily caps.
 
-/** The free tools answer only when TOOLS_ENABLED is "true" (staging first). */
+/** The free tools answer only when TOOLS_ENABLED is "true". */
 export const toolsEnabled = () => /^true$/i.test(String(process.env.TOOLS_ENABLED ?? ""));
 
 /** How long one result is reused for anyone who checks the same address. */

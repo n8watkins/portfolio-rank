@@ -7,7 +7,7 @@ import { migrate, schemaIsCurrent } from "./schema.mjs";
 let client: Client | null = null;
 let ready: Promise<void> | null = null;
 
-/** True on Cloudflare Workers (production, staging, `wrangler dev`), where there is no local file to fall back to. */
+/** True on Cloudflare Workers (production, `wrangler dev`), where there is no local file to fall back to. */
 export function onWorkers(): boolean {
   return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
 }

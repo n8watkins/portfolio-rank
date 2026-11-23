@@ -17,9 +17,11 @@ name: Discover portfolios
 # the repository variable DISCOVERY_SCHEDULE=on (else each daily run is skipped
 # at once, without a runner).
 #
-# Target: the staging database unless the repository variable
-# DISCOVERY_TARGET is "production". Switch (a repository variable, off until
-# the owner turns it on): DISCOVERY_HANDOFF=on (grading). DISCOVERY_CAPS (JSON) lowers or raises the
+# Target: the production database, and only when the repository variable
+# DISCOVERY_TARGET is "production" (the owner's word); without it every run
+# stops at its first step and writes nothing. There is no other database since
+# staging was removed (docs/DECISIONS.md, 2026-11-22). Switch (a repository
+# variable, off until the owner turns it on): DISCOVERY_HANDOFF=on (grading). DISCOVERY_CAPS (JSON) lowers or raises the
 # caps in pipeline/discovery/run.mjs.
 on:
   workflow_dispatch:
@@ -55,15 +57,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      TARGET: ${{ vars.DISCOVERY_TARGET == 'production' && 'production' || 'staging' }}
-      TURSO_DATABASE_URL: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_DATABASE_URL || secrets.STAGING_TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_AUTH_TOKEN || secrets.STAGING_TURSO_AUTH_TOKEN }}
+      TARGET: ${{ vars.DISCOVERY_TARGET == 'production' && 'production' || 'none' }}
+      TURSO_DATABASE_URL: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_DATABASE_URL || '' }}
+      TURSO_AUTH_TOKEN: ${{ vars.DISCOVERY_TARGET == 'production' && secrets.TURSO_AUTH_TOKEN || '' }}
       # GitHub search (30 a minute) and the owners' profiles (GraphQL).
       GITHUB_TOKEN: ${{ github.token }}
       DISCOVERY_HANDOFF: ${{ vars.DISCOVERY_HANDOFF || 'off' }}
       DISCOVERY_CAPS: ${{ inputs.caps || vars.DISCOVERY_CAPS }}
       GRADER_CAPS: ${{ vars.GRADER_CAPS }}
     steps:
+      - name: Check the target
+        run: |
+          if [ "$TARGET" != "production" ]; then
+            echo "::error::Discovery writes to the production database only when the repository variable DISCOVERY_TARGET is \"production\" (the owner's word). Nothing was run."
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           persist-credentials: false

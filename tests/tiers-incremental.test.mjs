@@ -9,7 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
-import { applyFaceoff, bucketOf, computeCutoffs, dailyTiers, ensureTierSchema, readSiteRow, readTierMeta, standingOf, undoFaceoff } from "../lib/tiers-db.mjs";
+import { applyFaceoff, bucketOf, computeCutoffs, dailyTiers, ensureTierSchema, readSiteRow, readTierMeta, standingOf, undoFaceoff, writeTierMeta } from "../lib/tiers-db.mjs";
+import { seedNewcomers } from "../lib/tiers-store.mjs";
 import { cautious, orderLibrary, rankLibrary, seedRating, tierForRating } from "../lib/tiers.mjs";
 
 async function db() {
@@ -163,7 +164,7 @@ test("the daily run reads a few rows, rewrites only changed letters, and never s
   }
 });
 
-test("a site delisted, marked down or graded 'not a portfolio' leaves the cutoffs at once, and comes back when it recovers", async () => {
+test("a site delisted, marked down or graded 'not a portfolio' leaves the cutoffs at once, and comes back at the next daily run when it recovers", async () => {
   const client = await db();
   await library(client, 100);
   const members = async () => Number((await client.execute("SELECT COALESCE(SUM(n), 0) AS n FROM tier_hist")).rows[0].n);
@@ -181,7 +182,13 @@ test("a site delisted, marked down or graded 'not a portfolio' leaves the cutoff
   await client.execute({ sql: "UPDATE portfolios SET delisted_at = NULL WHERE url = ?", args: [url(1)] });
   await client.execute({ sql: "UPDATE portfolios SET health = 'live' WHERE url = ?", args: [url(2)] });
   await client.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.is_portfolio', json('true')) WHERE url = ?", args: [url(3)] });
+  // The trigger only takes sites out; coming back goes through the membership rule, at the daily run (here its first step).
+  assert.equal(await members(), 97);
+  await writeTierMeta(client, { n: 97, cutoffs: [], hist: [], perPoint: 4, at: "2026-11-13T00:00:00Z" });
+  const before = Number((await client.execute({ sql: "SELECT mu FROM tier_ratings WHERE url = ?", args: [url(2)] })).rows[0].mu);
+  assert.deepEqual((await seedNewcomers(client)).sort(), [url(1), url(2), url(3)].sort());
   assert.equal(await members(), 100);
+  assert.equal(Number((await client.execute({ sql: "SELECT mu FROM tier_ratings WHERE url = ?", args: [url(2)] })).rows[0].mu), before, "back with its rating");
   await histMatches(client);
   // A grade written in place (the daily letter) changes nothing; a removed portfolio leaves.
   await client.execute({ sql: "UPDATE portfolios SET ai_rubric = json_set(ai_rubric, '$.rank.tier', 'A') WHERE url = ?", args: [url(4)] });

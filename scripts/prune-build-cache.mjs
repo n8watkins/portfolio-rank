@@ -1,14 +1,13 @@
 // Removes the ISR cache of old builds from the Worker's R2 cache bucket, after
-// a deploy (.github/workflows/deploy.yml, staging.yml):
-//   node scripts/prune-build-cache.mjs [--env staging] [--dry-run]
+// a deploy (.github/workflows/deploy.yml):
+//   node scripts/prune-build-cache.mjs [--dry-run]
 //
 // Why: OpenNext keys every incremental-cache entry by the build that wrote it,
 // `incremental-cache/<build id>/<sha256 of the key>.cache|.fetch`
 // (@opennextjs/cloudflare computeCacheKey, with process.env.OPEN_NEXT_BUILD_ID,
 // which is the Next build id, as next.config.ts sets no deploymentId). A Worker
 // only ever reads its own build's folder, so every deploy leaves the previous
-// folder behind for good: 88 builds and 383 MB in production, 113 builds and
-// 970 MB in staging on 2026-11-12 (docs/COSTS.md "Staging").
+// folder behind for good: 88 builds and 383 MB in production on 2026-11-12.
 //
 // Why not an R2 lifecycle rule: the deploy uploads the live build's
 // prerendered entries once, and only pages that revalidate write theirs again,
@@ -28,13 +27,11 @@ export const PREFIX = "incremental-cache/";
 const BINDING = "NEXT_INC_CACHE_R2_BUCKET";
 const KEY = /^incremental-cache\/([A-Za-z0-9_-]+)\/[0-9a-f]{64}\.(cache|fetch|composable)$/;
 
-/** The cache bucket and account of the production config or of one environment. */
-export function cacheBucket(config, env) {
-  const scope = env ? config.env?.[env] : config;
-  if (!scope) throw new Error(`wrangler.jsonc has no environment "${env}"`);
-  if (scope.vars?.NEXT_INC_CACHE_R2_PREFIX) throw new Error("NEXT_INC_CACHE_R2_PREFIX is set; this script only knows the default prefix");
-  const bucket = (scope.r2_buckets ?? []).find((b) => b.binding === BINDING)?.bucket_name;
-  if (!bucket) throw new Error(`no ${BINDING} bucket in ${env ? `env.${env}` : "the production config"}`);
+/** The cache bucket and account in wrangler.jsonc. */
+export function cacheBucket(config) {
+  if (config.vars?.NEXT_INC_CACHE_R2_PREFIX) throw new Error("NEXT_INC_CACHE_R2_PREFIX is set; this script only knows the default prefix");
+  const bucket = (config.r2_buckets ?? []).find((b) => b.binding === BINDING)?.bucket_name;
+  if (!bucket) throw new Error(`no ${BINDING} bucket in wrangler.jsonc`);
   if (!config.account_id) throw new Error("wrangler.jsonc has no account_id");
   return { accountId: config.account_id, bucket };
 }
@@ -107,14 +104,13 @@ async function listObjects(token, accountId, bucket) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
-  const env = args.includes("--env") ? args[args.indexOf("--env") + 1] : undefined;
   const dryRun = args.includes("--dry-run");
   const token = process.env.CLOUDFLARE_API_TOKEN;
   if (!token) {
     console.error("CLOUDFLARE_API_TOKEN is not set");
     process.exit(1);
   }
-  const { accountId, bucket } = cacheBucket(parseJsonc(readFileSync("wrangler.jsonc", "utf8")), env);
+  const { accountId, bucket } = cacheBucket(parseJsonc(readFileSync("wrangler.jsonc", "utf8")));
   const current = uploadedBuild();
   const plan = planPrune(await listObjects(token, accountId, bucket), current);
   const mb = (plan.bytes / 1e6).toFixed(1);
