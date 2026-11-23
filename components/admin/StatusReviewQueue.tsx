@@ -75,6 +75,7 @@ const GROUPS: Record<string, string> = {
   door_strong_signals: "Gemini says no, the code says portfolio",
   door_held: "Gemini says no, held for you",
   bot_wall: "Bot-walled, never captured",
+  recapture_blocked: "Re-capture blocked",
   signals_collapsed: "Listed, portfolio signals collapsed",
 };
 const CURRENT: Record<string, string> = { ranked: "Listed and ranked", listed: "Listed, not ranked", hidden: "Hidden", delisted: "Off the list" };

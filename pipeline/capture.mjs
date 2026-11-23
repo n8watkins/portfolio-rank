@@ -46,7 +46,7 @@
 // no good capture records it as a failed capture and is retried (a bot wall
 // also sets needs_review for the owner); a site that has one keeps it, and a
 // refresh that met a bot wall or a page still covered by a dialog also goes
-// to the owner's review list (a pending bot_wall row: lib/reviews/door.mjs
+// to the owner's review list (a pending recapture_blocked row: lib/reviews/door.mjs
 // blockedRefreshReview), unless only the phone view saw it
 // (refreshNeedsReview). A new capture that lost a portfolio sign or most of
 // the text of the one it replaced is recorded (lib/capture-problems.mjs);
@@ -172,9 +172,10 @@ export async function recordCaptureFailure(db, url, name, status, reason, { need
 // (roster.captureRetryAt) in lib/freshness.mjs's refresh_failures, which
 // screenshotsDue reads. The table exists once ensureFreshnessSchema ran (main
 // runs it first). `needsReview` (refreshNeedsReview decides) also puts the
-// site on the owner's review list: a pending bot_wall row
-// (lib/reviews/door.mjs blockedRefreshReview, the durable record) and
-// portfolios.needs_review = 1; the stored capture and grade stay as they are.
+// site on the owner's review list: a pending recapture_blocked row
+// (lib/reviews/door.mjs blockedRefreshReview, the durable record), and sets
+// portfolios.needs_review = 1, which his "Mark checked" leaves as it is (the
+// weekly health check rewrites it); the stored capture and grade stay as they are.
 export async function recordRefreshFailure(db, url, reason, now = new Date(), { needsReview = false } = {}) {
   const prev = (await db.execute({ sql: "SELECT attempts FROM refresh_failures WHERE url = ?", args: [url] })).rows[0];
   const attempts = Number(prev?.attempts ?? 0) + 1;

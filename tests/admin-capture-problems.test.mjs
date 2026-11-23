@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { createClient } from "@libsql/client";
 import { chromium } from "playwright";
 import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
+import { blockedRefreshReview } from "../lib/reviews/door.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
@@ -61,14 +62,13 @@ before(async () => {
   await failure(A, "error: capture blocked: a bot or security check stood in for the site (phone view)");
   await failure(A2, "error: capture blocked: a bot or security check stood in for the site");
   // On the review list means an open row on /admin/review (the needs_review flag alone is not).
-  const review = (url, batch) =>
-    db.execute({
-      sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, reason, verdicts, signals, status, created_at)
-            VALUES (?, ?, 'bot_wall', 'ranked', 'review', 0, 'e2e', '{}', '{}', 'pending', '2026-11-22T04:00:00.000Z')`,
-      args: [batch, url],
-    });
-  await review(A2, "bot-wall:refresh:e2e");
-  await review(B, "bot-wall");
+  // A2's row is the one the capture job writes (lib/reviews/door.mjs), B's the never-captured bot wall's.
+  assert.ok((await blockedRefreshReview(db, { url: A2, reason: "capture blocked: a bot or security check stood in for the site", now: new Date("2026-11-22T04:00:00Z") })) > 0);
+  await db.execute({
+    sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, reason, verdicts, signals, status, created_at)
+          VALUES ('bot-wall', ?, 'bot_wall', 'hidden', 'review', 0, 'e2e', '{}', '{}', 'pending', '2026-11-22T04:00:00.000Z')`,
+    args: [B],
+  });
   await db.execute({ sql: "DELETE FROM capture_changes WHERE url IN (?, ?)", args: [D, M] });
   const change = (url, lost, oldV, newV, measuring) =>
     db.execute({
@@ -137,6 +137,26 @@ test("capture problems: the four groups with counts and a row in each, at deskto
       assert.deepEqual(errors, []);
       await context.close();
     }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("the review page shows a blocked re-capture's row under its own true label", async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, extraHTTPHeaders: { cookie } });
+    const page = await context.newPage();
+    await page.goto(`${BASE}/admin/review`);
+    const row = page.locator("[data-review-row]", { hasText: "e2e-cp-refresh-bot-check.dev" });
+    await row.waitFor();
+    const text = (await row.textContent()) ?? "";
+    assert.match(text, /Re-capture blocked/);
+    assert.doesNotMatch(text, /never captured/);
+    assert.match(text, /A nightly re-capture of this listed site met a bot or security check/);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.equal(overflow, 0, "no sideways scroll at 390px");
+    await context.close();
   } finally {
     await browser.close();
   }

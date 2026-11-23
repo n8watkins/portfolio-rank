@@ -5,7 +5,8 @@ import { captureProblems } from "@/lib/capture-problems.mjs";
 
 // The Capture problems list (lib/capture-problems.mjs, the admin page
 // /admin/capture-problems) as JSON:
-//   GET /api/admin/capture-problems   { A, B, C, D, measuring, counts }
+//   GET /api/admin/capture-problems   { A, B, C, D, measuring, counts, sites, unmeasured }
+// (sites: different sites across A to D, each once; unmeasured: captures with no stored page text to check).
 // Read-only. Admin only (ADMIN_GITHUB_ID); anyone else gets 401 or 403.
 export const dynamic = "force-dynamic";
 

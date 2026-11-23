@@ -19,6 +19,7 @@ import {
   captureProblemCondition,
   captureProblemConditions,
   captureProblemConditionsOrLog,
+  alertBaseline,
   captureProblems,
   countsOfTitle,
   plainReason,
@@ -27,7 +28,7 @@ import {
 import { recordRefreshFailure, refreshNeedsReview } from "../pipeline/capture.mjs";
 import { BLOCKED_PREFIX, BOT_WALL_REASON, MEDIA_REVIEW_REASON, SHOWS_SITE_REASON } from "../pipeline/capture-blocked.mjs";
 import { closeBlockedRefreshReviews } from "../lib/reviews/door.mjs";
-import { listReviews, decideReviews } from "../lib/reviews/store.mjs";
+import { GROUPS, listReviews, decideReviews } from "../lib/reviews/store.mjs";
 import { reconcileAlerts } from "../pipeline/alerts.mjs";
 import { runHealthCheck } from "../pipeline/health.mjs";
 
@@ -241,7 +242,8 @@ test("a blocked refresh writes one review row for a listed, graded site and leav
   for (const k of ["shot_key", "page_text", "facts", "status", "ai_rubric"]) assert.equal(row[k], before[k], k);
   let rows = await pendingOf(db, url);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].grp, "bot_wall");
+  assert.equal(rows[0].grp, "recapture_blocked");
+  assert.equal(GROUPS.recapture_blocked, "Re-capture blocked", "its own true label, not the never-captured bot wall's");
   assert.equal(rows[0].proposed, "review");
   assert.equal(rows[0].current, "ranked");
   assert.equal(rows[0].shot_key, before.shot_key, "the review page shows the stored capture");
@@ -340,7 +342,17 @@ test("the alert condition: counts per group and the link while any is open, quie
   assert.equal(captureProblemCondition({ A: 40, B: 10, C: 9, D: 11 }, told)[0].quiet, true, "a fall: quiet");
   const [up] = captureProblemCondition({ A: 60, B: 10, C: 9, D: 12 }, told);
   assert.equal(up.quiet, false, "D rose, even though A fell");
-  assert.match(up.detail, /Up since the last email: D 11 to 12\./);
+  assert.match(up.detail, /Up since the last email \(from the lowest count since\): D 11 to 12\./);
+});
+
+test("alertBaseline: zero before any email and after a clear, the last email's counts after a send, else the lowest since", () => {
+  const zero = { A: 0, B: 0, C: 0, D: 0 };
+  const title = "Capture problems: A 100 · B 0 · C 0 · D 5";
+  assert.deepEqual(alertBaseline(null, null), zero);
+  assert.deepEqual(alertBaseline({ sent_title: null, sends: 0, cleared_at: null }, null), zero, "never emailed");
+  assert.deepEqual(alertBaseline({ sent_title: title, sends: 1, cleared_at: "2026-11-24T05:00:00Z" }, { low: JSON.stringify({ A: 100, B: 0, C: 0, D: 5 }), sends: 1 }), zero, "cleared since");
+  assert.deepEqual(alertBaseline({ sent_title: title, sends: 2, cleared_at: null }, { low: JSON.stringify({ A: 20, B: 0, C: 0, D: 0 }), sends: 1 }), { A: 100, B: 0, C: 0, D: 5 }, "an email went out since");
+  assert.deepEqual(alertBaseline({ sent_title: title, sends: 2, cleared_at: null }, { low: JSON.stringify({ A: 20, B: 0, C: 0, D: 1 }), sends: 2 }), { A: 20, B: 0, C: 0, D: 1 }, "the lowest since");
 });
 
 test("the alert end to end: one email for 100 open problems, none the next nights, one when a count rises", async () => {
@@ -374,9 +386,90 @@ test("the alert end to end: one email for 100 open problems, none the next night
     await adb.execute({ sql: "INSERT INTO portfolios (url, name, status, reason) VALUES ('https://b-new.dev', 'x', 'error', 'HTTP 500')" });
     r = await night("2026-11-26");
     assert.deepEqual(r.sent, [ALERT_KEY]);
-    assert.match(sent[1].text, /Up since the last email: B 0 to 1\./);
+    assert.match(sent[1].text, /Up since the last email \(from the lowest count since\): B 0 to 1\./);
     r = await night("2026-11-27");
     assert.deepEqual(r.sent, []);
+
+    // Fall then rise: A 100 falls to 20 (quiet), then 40 new failures make 60: emailed.
+    const failing = async (n) => {
+      await adb.execute("DELETE FROM refresh_failures");
+      for (let i = 0; i < n; i++) await recordRefreshFailure(adb, `https://a${i}.dev`, "error: HTTP 503", new Date("2026-11-22T04:00:00Z"));
+    };
+    await failing(20);
+    r = await night("2026-11-28");
+    assert.deepEqual(r.sent, [], "a fall is quiet");
+    await failing(60);
+    r = await night("2026-11-29");
+    assert.deepEqual(r.sent, [ALERT_KEY], "a rise from the lowest since the last email");
+    assert.match(sent[2].text, /A 20 to 60/);
+    assert.equal(sent.length, 3);
+  } finally {
+    adb.close();
+    fs.rmSync(adir, { recursive: true, force: true });
+  }
+});
+
+test("the alert end to end: a problem that comes back after the alert cleared is emailed again", async () => {
+  const adir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-alert2-"));
+  const adb = createClient({ url: `file:${path.join(adir, "db.sqlite")}` });
+  try {
+    await migrate(adb);
+    const sent = [];
+    const email = { send: async (m) => void sent.push(m) };
+    const night = async (day) => {
+      const { conditions } = await captureProblemConditionsOrLog(adb, { siteUrl: "https://portfoliorank.dev" });
+      return reconcileAlerts(adb, { conditions, now: new Date(`${day}T05:00:00Z`), email, to: "owner@example.com" });
+    };
+    // D 5: emailed.
+    const worse = async (n) => {
+      await adb.execute("DELETE FROM capture_changes");
+      for (let i = 0; i < n; i++) {
+        const url = `https://d${i}.dev`;
+        await adb.execute({ sql: "INSERT OR IGNORE INTO portfolios (url, name, status, reason, shot_key, page_text) VALUES (?, 'x', 'live', '', 'k', ?)", args: [url, SITE_TEXT] });
+        await recordCaptureChange(adb, { url, prev: { facts: facts(2, { github: true }), chars: 3000 }, next: { facts: facts(2, {}), chars: 3000 } });
+      }
+    };
+    await worse(5);
+    let r = await night("2026-11-23");
+    assert.deepEqual(r.sent, [ALERT_KEY]);
+    // Everything fixed: the alert clears.
+    await worse(0);
+    r = await night("2026-11-24");
+    assert.deepEqual(r.cleared, [ALERT_KEY]);
+    // D comes back at 3, under the 5 the last email said: emailed, since the alert had cleared.
+    await worse(3);
+    r = await night("2026-11-25");
+    assert.deepEqual(r.sent, [ALERT_KEY]);
+    assert.match(sent[1].subject, /D 3/);
+    // And quiet the night after.
+    r = await night("2026-11-26");
+    assert.deepEqual(r.sent, []);
+    assert.equal(sent.length, 2);
+  } finally {
+    adb.close();
+    fs.rmSync(adir, { recursive: true, force: true });
+  }
+});
+
+test("the alert end to end: an email that failed is tried again the next night", async () => {
+  const adir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-alert3-"));
+  const adb = createClient({ url: `file:${path.join(adir, "db.sqlite")}` });
+  try {
+    await migrate(adb);
+    await adb.execute("INSERT INTO portfolios (url, name, status, reason) VALUES ('https://b1.dev', 'x', 'error', 'HTTP 500')");
+    let fail = true;
+    const sent = [];
+    const email = { send: async (m) => (fail ? Promise.reject(new Error("gate refused")) : void sent.push(m)) };
+    const night = async (day) => {
+      const { conditions } = await captureProblemConditionsOrLog(adb);
+      return reconcileAlerts(adb, { conditions, now: new Date(`${day}T05:00:00Z`), email, to: "owner@example.com" });
+    };
+    let r = await night("2026-11-23");
+    assert.deepEqual(r.unsent, [ALERT_KEY]);
+    fail = false;
+    r = await night("2026-11-24");
+    assert.deepEqual(r.sent, [ALERT_KEY]);
+    assert.equal(sent.length, 1);
   } finally {
     adb.close();
     fs.rmSync(adir, { recursive: true, force: true });

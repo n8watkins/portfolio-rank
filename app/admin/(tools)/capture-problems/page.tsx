@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { CaptureAgain } from "@/components/admin/CaptureAgain";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";
@@ -91,7 +91,13 @@ function ProblemRow({ r, base }: { r: Row; base: string | null }) {
     <li className="card p-4 sm:p-5" data-capture-problem={r.url} data-group={r.group}>
       <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-4 gap-y-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
         <div className="min-w-0">
-          <ScreenshotFrame src={base ? frameOf(base, "hero.jpg") : null} alt={captured ? `${domain}, the stored capture from ${captured}` : `${domain}: no stored capture`} domain={domain} className="rounded-lg ring-1 ring-edge" />
+          {/* The fallback's domain on one line with an ellipsis (the full domain is beside it), never broken mid-word. */}
+          <ScreenshotFrame
+            src={base ? frameOf(base, "hero.jpg") : null}
+            alt={captured ? `${domain}, the stored capture from ${captured}` : `${domain}: no stored capture`}
+            domain={domain}
+            className="rounded-lg ring-1 ring-edge [&>span]:w-full [&>span>span]:block [&>span>span]:truncate [&>span>span]:break-normal"
+          />
           <p className="mt-1.5 text-xs text-mute" data-capture-date>
             {captured ? (
               <>
@@ -206,14 +212,15 @@ export default async function AdminCaptureProblemsPage() {
             )}
             {g === "C" && p.unmeasured > 0 && (
               <p className="mt-3 max-w-3xl text-sm text-mute text-pretty" data-unmeasured>
-                Not checked: {n(p.unmeasured)} {p.unmeasured === 1 ? "capture was" : "captures were"} made before captures stored their page text (2026-11-10), so there is no text to
-                measure. They are not counted here.
+                {p.unmeasured === 1
+                  ? "Not checked: 1 capture was made before captures stored their page text (2026-11-10), so it has no text to measure. It is not counted here."
+                  : `Not checked: ${n(p.unmeasured)} captures were made before captures stored their page text (2026-11-10), so they have no text to measure. They are not counted here.`}
               </p>
             )}
             {g === "D" && p.measuring.length > 0 && (
               <details className="group/m mt-4" data-measuring>
                 <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-semibold text-mute hover:text-ink [&::-webkit-details-marker]:hidden">
-                  <ChevronDown className="h-4 w-4 shrink-0 transition group-open/m:rotate-180" aria-hidden />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-mute transition group-open/m:rotate-90 motion-reduce:transition-none" aria-hidden />
                   {n(p.measuring.length)} changed with new measuring code (not counted)
                 </summary>
                 <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">
