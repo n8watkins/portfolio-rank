@@ -71,6 +71,10 @@ import {
   LEAVE_AFTER_DAYS,
   NOT_WORKING,
   RECHECKED,
+  RECHECK_AFTER_MS,
+  SPIKE_CLASS,
+  SPIKE_NEW,
+  SPIKE_WINDOW_MS,
   ON_LADDER_SQL,
   PURGE_BACK,
   PURGE_GONE,
@@ -80,7 +84,9 @@ import {
   holdOnLadder,
   leavesList,
   poolOf,
+  confirmAfterMs,
   pruneReturns,
+  reasonClass,
 } from "./not-working.mjs";
 import { listKey } from "./list-key.mjs";
 import { isHiddenRow } from "../lib/hidden.mjs";
@@ -165,14 +171,82 @@ const fold = (s) =>
 const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 
 /**
- * Whether a page carries the listed person's name (any of their name words,
- * nameTokens, in its address, title or text): the archive check's test that a
- * site that answers again is still that person's, not a re-registered domain
- * (#292 review, F4). A name with no word of three letters or more never matches.
+ * What a page links to, in the shape the capture's own rule reads
+ * (./capture-blocked.mjs capturedBlocked, as pageEvidence counts in the
+ * browser): other hosts (outboundLinks), other pages of the same site
+ * (siteLinks) and mailto: or tel: links (contactLinks), from the HTML's hrefs.
  */
-export function carriesName(name, { finalUrl = "", title = "", text = "" } = {}) {
-  const haystack = fold(`${finalUrl} ${title} ${String(text ?? "").slice(0, 20000)}`);
-  return nameTokens(name).some((t) => haystack.includes(t));
+export function linksOf(html, base) {
+  const hosts = new Set();
+  const pages = new Set();
+  let contactLinks = 0;
+  let here;
+  try {
+    here = new URL(String(base));
+  } catch {
+    return { outboundLinks: 0, siteLinks: 0, contactLinks: 0 };
+  }
+  const host = (u) => u.hostname.replace(/^www\./, "");
+  const path = (u) => u.pathname.replace(/\/+$/, "") || "/";
+  for (const m of String(html ?? "").matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"']+)["']/gi)) {
+    let u;
+    try {
+      u = new URL(m[1], here);
+    } catch {
+      continue;
+    }
+    if (u.protocol === "mailto:" || u.protocol === "tel:") contactLinks++;
+    else if (!/^https?:$/.test(u.protocol)) continue;
+    else if (host(u) !== host(here)) hosts.add(u.hostname);
+    else if (path(u) !== path(here)) pages.add(path(u));
+  }
+  return { outboundLinks: hosts.size, siteLinks: pages.size, contactLinks };
+}
+
+/** Scripts written without spaces between words: a name in them is matched as written, whole. */
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+/** How much of a page's text the name test reads: its opening, where a portfolio says whose it is. */
+export const NAME_TEXT_CHARS = 2000;
+
+/**
+ * Whether a page carries the listed person's name: the archive check's test
+ * that a site that answers again is still that person's, not a re-registered
+ * domain (#292 reviews, F4 and the second review's item 2). Read in the title
+ * and the first NAME_TEXT_CHARS of the text, Unicode-aware, case and accents
+ * folded:
+ *   every name word of three letters or more, as whole words, together (only
+ *   spaces, punctuation and words of one or two letters between them), in
+ *   any order, a later word allowed as its initial with a full stop ("Mnelisi
+ *   M."), so "Ann Arbor lee county" and "annual" are not "Ann Lee", and
+ *   "Jane Doe" is not "Jane Smith";
+ *   a part in a script written without spaces (Chinese, Japanese, Korean,
+ *   Thai...) as written, whatever its length;
+ *   a one-word name in the title or the first heading only (`heading`);
+ *   a name with nothing to test (only words under three letters) never matches.
+ * The address never counts: a re-registered domain keeps the name in it.
+ */
+export function carriesName(name, { title = "", text = "", heading = "" } = {}) {
+  const parts = String(name ?? "").normalize("NFC").split(/[^\p{L}\p{N}\p{M}]+/u).filter(Boolean);
+  const unspaced = parts.filter((p) => UNSPACED.test(p));
+  const words = parts.filter((p) => !UNSPACED.test(p)).map(fold).filter((w) => [...w].length >= 3);
+  if (!unspaced.length && !words.length) return false;
+  const one = unspaced.length + words.length === 1 && !unspaced.length;
+  const where = one ? `${title}\n${heading}` : `${title}\n${String(text ?? "").slice(0, NAME_TEXT_CHARS)}`;
+  const folded = fold(where);
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The name's words as one phrase, in order: between two of them only spaces, punctuation and short words
+  // ("José de la Cruz"), so "Ann Arbor lee county" is not "Ann Lee".
+  const between = "(?:[^\\p{L}\\p{N}\\p{M}]+(?:[\\p{L}\\p{M}]{1,2}[^\\p{L}\\p{N}\\p{M}]+)*)";
+  // In any order ("Cyubahiro Benjamin" for Benjamin Cyubahiro), the first word in full and a later one in
+  // full or as its initial with a full stop ("Mnelisi M." for Mnelisi Mthuli).
+  const orders = (list) => (list.length <= 1 || list.length > 4 ? [list] : list.flatMap((w, i) => orders([...list.slice(0, i), ...list.slice(i + 1)]).map((rest) => [w, ...rest])));
+  const later = (w) => `(?:${escape(w)}|${escape([...w][0])}\\.)`;
+  // A name of three words or more may drop its middle ones ("Yogesh Paliyal" for Yogesh Choudhary Paliyal).
+  const forms = words.length >= 3 ? [words, [words[0], words[words.length - 1]]] : [words];
+  const phrase = words.length
+    ? forms.flatMap(orders).some((o) => new RegExp(`(^|[^\\p{L}\\p{N}\\p{M}])${[escape(o[0]), ...o.slice(1).map(later)].join(between)}($|[^\\p{L}\\p{N}\\p{M}])`, "u").test(folded))
+    : true;
+  return phrase && unspaced.every((p) => String(where).normalize("NFC").includes(p));
 }
 
 /**
@@ -347,21 +421,24 @@ export async function checkSite(
     }
   }
   // What the page says, for the archive check's same-person test (./exclusions.mjs passesFullCheck).
-  const seen = { pageText: text.slice(0, 20000), title: titleOf(html) };
+  // With the page's first heading and what it links to, for the capture's own rule on what shows a site.
+  const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(String(html ?? ""));
+  const seen = { pageText: text.slice(0, 20000), title: titleOf(html), heading: h1 ? visibleText(h1[1]).slice(0, 200) : "", links: linksOf(html, finalUrl) };
   if (redirect?.moved) return { ok: true, reason: "", finalUrl, moved: true, hijack: redirect.hijack, signals, ...seen };
   return { ok: true, reason: "", finalUrl, signals, ...seen };
 }
 
 /**
  * The address a site ended at on an earlier read (row.final_url, else the
- * capture's facts.final_url), when it is the same site as the listed address
- * written another way: the same host but for a leading www, and a different
- * address (the scheme, the www or the path). null otherwise, and always for
- * another host (a move, never followed here).
+ * capture's facts.final_url), when it is the listed address written another
+ * way: only the scheme or a leading www differs, the path and query are the
+ * same (second review of #292, item 5). null otherwise, and always for another
+ * host (a move, never followed here) or another page of the site.
  */
 export function sameSiteAddress(url, row) {
   const host = (u) => u.hostname.toLowerCase().replace(/^www\./, "");
-  const plain = (u) => `${u.protocol}//${u.hostname.toLowerCase()}${u.port ? `:${u.port}` : ""}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  const rest = (u) => `${u.port}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  const plain = (u) => `${u.protocol}//${u.hostname.toLowerCase()}${rest(u)}`;
   let a;
   try {
     a = new URL(String(url));
@@ -376,7 +453,7 @@ export function sameSiteAddress(url, row) {
     } catch {
       continue;
     }
-    if (/^https?:$/.test(b.protocol) && host(a) === host(b) && plain(a) !== plain(b)) return b.href;
+    if (/^https?:$/.test(b.protocol) && host(a) === host(b) && rest(a) === rest(b) && plain(a) !== plain(b)) return b.href;
   }
   return null;
 }
@@ -434,7 +511,7 @@ export function nextHealth(prev, result, now = new Date()) {
   //    shows again on a failure and goes to the archive only on a fresh failed check.
   if (!prev?.pool && prev?.health === "down") {
     const since = prev.firstFailAt ?? now.toISOString();
-    return failOnLadder({ ...prev, pool: { stage: NOT_WORKING, startedAt: since, since, nextAt: null, unclear: 0 } }, result, now);
+    return failOnLadder({ ...prev, pool: { stage: NOT_WORKING, startedAt: since, since, nextAt: null, unclear: 0, firstAt: since, held: null } }, result, now);
   }
   return failOnLadder(prev, result, now);
 }
@@ -515,6 +592,10 @@ export async function runHealthCheck({
   alerts = true,
   dryRun = false,
   schemaReady = false,
+  // The day's pace of hiding and the spike freeze's limits (./not-working.mjs); a test may set its own.
+  hidePerDay = HIDE_PER_DAY,
+  spikeNew = SPIKE_NEW,
+  spikeClass = SPIKE_CLASS,
   // The time a site's check finished, as ms: the real clock in a real run; a run given its own `now` (a
   // simulated clock) stays at that time unless it passes a clock of its own.
   clock = nowIn ? () => nowIn.getTime() : Date.now,
@@ -604,7 +685,7 @@ export async function runHealthCheck({
             CASE WHEN ${NOT_PORTFOLIO("p")} THEN 1 ELSE 0 END AS not_portfolio,
             CASE WHEN ${OPEN_CASE_SQL("p")} THEN 1 ELSE 0 END AS open_case,
             CASE WHEN ${REMOVAL_ON_RECORD_SQL("p")} THEN 1 ELSE 0 END AS decided_removal,
-            ${["last_fail_at", "unknown_weeks", "unknown_last_at", "unknown_since", "pool_stage", "pool_started_at", "pool_next_at", "pool_since", "pool_unclear", "answers_at"].map((c) => `${mark(c)} AS ${c}`).join(", ")},
+            ${["last_fail_at", "unknown_weeks", "unknown_last_at", "unknown_since", "pool_stage", "pool_started_at", "pool_next_at", "pool_since", "pool_unclear", "answers_at", "pool_first_at", "pool_held"].map((c) => `${mark(c)} AS ${c}`).join(", ")},
             ${hasPool ? `CASE WHEN ${VALID_MARKS()} THEN 1 ELSE 0 END` : "0"} AS pool_valid,
             ${marksCols.size ? "CASE WHEN m.url IS NULL THEN 0 ELSE 1 END" : "0"} AS has_marks
      FROM portfolios p ${marksCols.size ? "LEFT JOIN health_marks m ON m.url = p.url" : ""} WHERE p.delisted_at IS NULL ${where}`;
@@ -751,29 +832,9 @@ export async function runHealthCheck({
     // The listed address failed but the site answered at its own www or https address: not counted.
     answersElsewhere: [],
   };
-  // The brake on hiding (./not-working.mjs HIDE_PER_DAY): the sites hidden in the last day plus those at
-  // the stage before whose confirming check falls within the next day (this run's among them). Over the
-  // limit, nobody new is hidden: each waits at stage 2, still shown, re-checked a day later, and the owner's
-  // alert stands while it holds. Read from the marks, so the nightly run and every hourly batch agree.
-  const hideBrake = { count: 0, held: [] };
-  if (hasPool) {
-    const day = (k) => new Date(now.getTime() + k * 86400000).toISOString();
-    hideBrake.count = Number(
-      (
-        await db.execute({
-          sql: `SELECT (SELECT COUNT(*) FROM health_marks m JOIN portfolios p ON p.url = m.url
-                          WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND m.pool_stage = ${RECHECKED} AND m.pool_next_at <= ?)
-                     + (SELECT COUNT(*) FROM health_marks m JOIN portfolios p ON p.url = m.url
-                          WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND m.pool_stage = ${NOT_WORKING} AND m.pool_since >= ?) AS n`,
-          args: [day(1), day(-1)],
-        })
-      ).rows[0]?.n ?? 0
-    );
-  }
-  const braking = hideBrake.count > HIDE_PER_DAY;
-  summary.hideBrake = hideBrake;
-  const plans = [];
   const str = (v) => (v == null ? null : String(v));
+  // Every site's next state first, so the day's pace and the spike freeze can see them all at once.
+  const computed = new Map();
   for (const r of results) {
     const row = rows.get(r.url);
     const prev = row
@@ -790,14 +851,54 @@ export async function runHealthCheck({
     // This site's own time: when its check finished, not when the run started (a nightly run takes most
     // of an hour; the ladder's next re-check counts from the failure it saw).
     const at = r.at ?? now;
-    const stamp = at.toISOString();
     // A removal decided in the review queue is down with its reason (rule 3 of nextHealth), off the ladder.
-    let next = nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at);
-    if (braking && next.pool?.stage === NOT_WORKING && prev?.pool?.stage !== NOT_WORKING && prev?.health !== "down") {
-      // Held by the brake: the stage before, still shown, its confirming check again a day later.
-      next = { ...next, health: "suspect", fails: RECHECKED, pool: { ...next.pool, stage: RECHECKED, since: null, nextAt: new Date(at.getTime() + 86400000).toISOString() } };
-      hideBrake.held.push({ url: r.url, reason: next.reason });
+    computed.set(r, { row, prev, at, next: nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at) });
+  }
+  const pace = await hidingPace(db, { hasPool, hasFirst: marksCols.has("pool_first_at"), now, hidePerDay, spikeNew, spikeClass });
+  summary.pace = pace;
+  const DAYMS = 86400000;
+  const isoAt = (ms) => new Date(ms).toISOString();
+  // Out of a freeze once the spike is over: a site still failing starts its evidence again from now (the next
+  // day, or a week for a weak verdict), so nothing frozen is hidden on what was seen during the spike.
+  if (!pace.frozen) {
+    for (const [r, c] of computed) {
+      if (c.prev?.pool?.held !== "freeze" || !c.next.pool) continue;
+      const t = c.at.getTime();
+      c.next = { ...c.next, health: c.next.health === "down" ? "suspect" : c.next.health, fails: Math.min(Number(c.next.fails ?? 0), RECHECKED), pool: { ...c.next.pool, stage: Math.min(c.next.pool.stage, RECHECKED), since: null, startedAt: isoAt(t), nextAt: isoAt(t + confirmAfterMs(c.next.reason)), held: null } };
+      pace.released.push({ url: r.url, reason: c.next.reason });
     }
+  }
+  // The sites this run would hide, oldest first failure first.
+  const hiding = [...computed.entries()]
+    .filter(([, c]) => c.next.pool?.stage === NOT_WORKING && c.prev?.pool?.stage !== NOT_WORKING && c.prev?.health !== "down")
+    .sort(([, a], [, b]) => String(a.prev?.pool?.firstAt ?? "").localeCompare(String(b.prev?.pool?.firstAt ?? "")));
+  const spikeFrom = now.getTime() - SPIKE_WINDOW_MS;
+  let allowance = pace.allowance;
+  for (const [r, c] of hiding) {
+    const firstAt = Date.parse(String(c.prev?.pool?.firstAt ?? ""));
+    const fromSpike = pace.frozen && ((Number.isFinite(firstAt) && firstAt >= spikeFrom) || c.prev?.pool?.held === "freeze");
+    const holdAt = (pool) => ({ ...c.next, health: "suspect", fails: RECHECKED, pool: { ...c.next.pool, stage: RECHECKED, since: null, ...pool } });
+    if (fromSpike) {
+      // A spike (a fault on our side, most likely): held, and its evidence starts again from now, so once the
+      // spike is over it still needs its full confirming wait (the next day, or a week for a weak verdict).
+      c.next = holdAt({ startedAt: isoAt(c.at.getTime()), nextAt: isoAt(c.at.getTime() + DAYMS), held: "freeze" });
+      pace.frozenHeld.push({ url: r.url, reason: c.next.reason });
+    } else if (allowance <= 0) {
+      // The day's allowance is used: waits, still shown, until a place frees (the oldest hide of the day turns 24 hours).
+      const free = pace.oldestToday ? Date.parse(pace.oldestToday) + DAYMS : c.at.getTime() + DAYMS;
+      c.next = holdAt({ nextAt: isoAt(Math.max(c.at.getTime() + RECHECK_AFTER_MS, free)), held: "drain" });
+      pace.drained.push({ url: r.url, reason: c.next.reason });
+    } else {
+      allowance--;
+      c.next = { ...c.next, pool: { ...c.next.pool, held: null } };
+      pace.oldestToday = pace.oldestToday ?? isoAt(c.at.getTime());
+    }
+  }
+  const plans = [];
+  for (const r of results) {
+    const { row, prev, at } = computed.get(r);
+    let next = computed.get(r).next;
+    const stamp = at.toISOString();
     // A bot-walled site that never had a good capture, back from a real failure: unchecked again, as before
     // its failure (never "live"), so it stays hidden until a capture gets through instead of being shown
     // with no screenshot (lib/hidden.mjs: a failed capture is hidden unless the health check says live).
@@ -859,11 +960,20 @@ export async function runHealthCheck({
       ],
     };
     // The check's own memory, written only when the row above was (changes() is that statement's count).
+    // Columns added later, written when the table has them: where the site answers when its listed address
+    // does not (the rescue above: set by a pass through it, cleared by a pass of the listed address itself,
+    // kept by a failure or a check that could not tell), the first failure of this run of failures, and why
+    // it waits at stage 2 (the drain or a spike freeze).
+    const later = [
+      ["answers_at", r.ok === true ? r.answersAt ?? null : row?.answers_at == null ? null : String(row.answers_at)],
+      ["pool_first_at", pool?.firstAt ?? null],
+      ["pool_held", pool?.held ?? null],
+    ].filter(([c]) => marksCols.has(c));
     const mark = {
       sql: `INSERT INTO health_marks (url, last_fail_at, unknown_weeks, unknown_last_at, unknown_since,
                                       pool_stage, pool_started_at, pool_next_at, pool_since, pool_unclear,
-                                      pool_health, pool_checked_at, purge_pending${marksCols.has("answers_at") ? ", answers_at" : ""})
-            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${marksCols.has("answers_at") ? ", ?" : ""} WHERE changes() > 0
+                                      pool_health, pool_checked_at, purge_pending${later.map(([c]) => `, ${c}`).join("")})
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${later.map(() => ", ?").join("")} WHERE changes() > 0
             ON CONFLICT(url) DO UPDATE SET last_fail_at = excluded.last_fail_at, unknown_weeks = excluded.unknown_weeks,
               unknown_last_at = excluded.unknown_last_at, unknown_since = excluded.unknown_since,
               pool_stage = excluded.pool_stage, pool_started_at = excluded.pool_started_at,
@@ -872,7 +982,7 @@ export async function runHealthCheck({
               -- Set when this write takes the profile away (1) or brings it back (2); cleared by the hourly purge
               -- once the cached copies agree (./not-working.mjs purgeGoneProfiles).
               purge_pending = CASE WHEN excluded.purge_pending > 0 THEN excluded.purge_pending ELSE health_marks.purge_pending END
-              ${marksCols.has("answers_at") ? ", answers_at = excluded.answers_at" : ""}`,
+              ${later.map(([c]) => `, ${c} = excluded.${c}`).join("")}`,
       args: [
         r.url,
         next.lastFailAt,
@@ -888,9 +998,7 @@ export async function runHealthCheck({
         pool ? next.health : null,
         pool ? stamp : null,
         purgeState,
-        // Where the site answers when its listed address does not (the rescue above): set by a pass through it,
-        // cleared by a pass of the listed address itself, kept as it was by a failure or a check that could not tell.
-        ...(marksCols.has("answers_at") ? [r.ok === true ? r.answersAt ?? null : row?.answers_at == null ? null : String(row.answers_at)] : []),
+        ...later.map(([, v]) => v),
       ],
     };
     // A marks row only when there is something to keep or to clear: a ladder, a counted failure, a streak
@@ -1024,19 +1132,20 @@ export async function runHealthCheck({
     now,
     log,
   });
-  // The brake on hiding: the owner's alert stands while it holds (read from the marks, so every run agrees).
+  // The spike freeze: one owner alert while it holds, cleared by itself once the spike is over (read from
+  // the marks, so every run agrees). The day's ordinary pace (the drain) never alerts.
   await reconcileAlerts(db, {
-    conditions: braking
+    conditions: pace.frozen
       ? [
           {
-            key: HIDE_BRAKE_ALERT_KEY,
+            key: SPIKE_ALERT_KEY,
             kind: "problem",
-            title: `${hideBrake.count} sites would be hidden within a day, more than the ${HIDE_PER_DAY} the health check hides without you`,
-            detail: `So many at once usually means the checker (a browser update, a network or CDN outage) rather than the sites, so none is hidden: each waits, still shown, and is checked again a day later. The alert clears once the count is back under the limit. Held in this run: ${hideBrake.held.map((h) => `${h.url} (${h.reason})`).join("; ") || "none"}.`,
+            title: `${pace.newFailures} listed sites started failing within ${SPIKE_WINDOW_MS / 86400000} days: none of them is hidden while it lasts`,
+            detail: `So many new failures at once (by kind: ${Object.entries(pace.byClass).map(([k, n]) => `${k} ${n}`).join(", ")}) usually means the checker or a host-wide outage rather than the sites. They stay shown; once the spike is over, each still failing is hidden only after its full confirming wait, ${hidePerDay} a day. This clears by itself.`,
           },
         ]
       : [],
-    scope: (key) => key === HIDE_BRAKE_ALERT_KEY,
+    scope: (key) => key === SPIKE_ALERT_KEY,
     now,
     log,
   });
@@ -1083,8 +1192,39 @@ export async function runHealthCheck({
 export const UNKNOWN_ALERT_KEY = "health-unknown";
 /** The same for sites on the not-working ladder (./not-working.mjs), read from the marks. */
 export const UNKNOWN_LADDER_ALERT_KEY = "health-unknown-ladder";
-/** The owner alert while the brake on hiding holds (./not-working.mjs HIDE_PER_DAY). */
-export const HIDE_BRAKE_ALERT_KEY = "health-hide-brake";
+/** The owner alert while a spike of new failures freezes hiding (./not-working.mjs SPIKE_NEW). */
+export const SPIKE_ALERT_KEY = "health-spike-freeze";
+
+/**
+ * The day's pace of hiding and the spike freeze, read from the marks so the
+ * nightly run and every hourly batch agree (./not-working.mjs HIDE_PER_DAY,
+ * SPIKE_NEW, SPIKE_CLASS, SPIKE_WINDOW_MS):
+ *   hiddenToday   sites hidden in the last 24 hours; allowance what is left of
+ *                 the day's HIDE_PER_DAY; oldestToday the first of them
+ *   newFailures   sites that entered the ladder within the spike window and
+ *                 still fail, by kind (byClass); frozen when over the limits
+ * Returns that, with empty lists for the sites this run holds.
+ */
+async function hidingPace(db, { hasPool, hasFirst, now, hidePerDay, spikeNew, spikeClass }) {
+  const out = { hiddenToday: 0, allowance: hidePerDay, oldestToday: null, newFailures: 0, byClass: {}, frozen: false, frozenHeld: [], drained: [], released: [] };
+  if (!hasPool) return out;
+  const join = `FROM health_marks m JOIN portfolios p ON p.url = m.url WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL`;
+  const today = (
+    await db.execute({ sql: `SELECT COUNT(*) AS n, MIN(m.pool_since) AS oldest ${join} AND m.pool_stage = ${NOT_WORKING} AND m.pool_since > ?`, args: [new Date(now.getTime() - 86400000).toISOString()] })
+  ).rows[0];
+  out.hiddenToday = Number(today?.n ?? 0);
+  out.oldestToday = today?.oldest == null ? null : String(today.oldest);
+  out.allowance = Math.max(0, hidePerDay - out.hiddenToday);
+  const first = hasFirst ? "COALESCE(m.pool_first_at, m.pool_started_at)" : "m.pool_started_at";
+  const recent = (await db.execute({ sql: `SELECT p.health_reason ${join} AND ${first} >= ?`, args: [new Date(now.getTime() - SPIKE_WINDOW_MS).toISOString()] })).rows;
+  out.newFailures = recent.length;
+  for (const r of recent) {
+    const k = reasonClass(r.health_reason);
+    out.byClass[k] = (out.byClass[k] ?? 0) + 1;
+  }
+  out.frozen = out.newFailures > spikeNew || Object.values(out.byClass).some((n) => n > spikeClass);
+  return out;
+}
 
 /**
  * SQL (never NULL): a removal of the portfolios row aliased `p` is on record
@@ -1167,15 +1307,18 @@ export function healthSummary(s) {
     for (const c of s.changes) lines.push(`| ${cell(c.url)} | ${cell(c.from ?? "unchecked")} | ${cell(c.to ?? "unchecked")} | ${c.stage ?? ""} | ${c.hidden ? "yes" : "no"} | ${cell(c.reason)} |`);
     lines.push("");
   }
-  if (s.hideBrake?.held?.length) {
+  if (s.pace?.frozenHeld?.length) {
     lines.push(
-      `### Held by the brake on hiding (${s.hideBrake.held.length})`,
+      `### Held by the spike freeze (${s.pace.frozenHeld.length})`,
       "",
-      `${s.hideBrake.count} sites would be hidden within a day, more than ${HIDE_PER_DAY}: none was hidden; each waits, still shown, and is checked again a day later (owner alert ${HIDE_BRAKE_ALERT_KEY}).`,
+      `${s.pace.newFailures} sites started failing within ${SPIKE_WINDOW_MS / 86400000} days, more than a real outage brings: none of them is hidden while it lasts (owner alert ${SPIKE_ALERT_KEY}).`,
       "",
-      ...s.hideBrake.held.map((h) => `- ${cell(h.url)} (${cell(h.reason)})`),
+      ...s.pace.frozenHeld.map((h) => `- ${cell(h.url)} (${cell(h.reason)})`),
       ""
     );
+  }
+  if (s.pace?.drained?.length) {
+    lines.push(`Waiting for a place in today's ${HIDE_PER_DAY} hides (still shown, hidden as places free): ${s.pace.drained.map((h) => cell(h.url)).join(", ")}.`, "");
   }
   if (s.poolNudged?.length) lines.push(`Hidden sites that answered a plain request tonight, re-checked within the hour: ${s.poolNudged.map(cell).join(", ")}.`, "");
   if (s.newlyHidden?.length) {

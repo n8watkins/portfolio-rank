@@ -45,13 +45,10 @@
 
 import { columnsOf } from "./not-working.mjs";
 import { listKey } from "./list-key.mjs";
-
-/** The closed-off key the old site's rows move to on an archive return on `day` (YYYY-MM-DD). */
-export const archivedKey = (url, day) => `archived:${day}:${url}`;
-/** Whether an address is such a key (never a site). */
-export const isArchivedKey = (url) => String(url ?? "").startsWith("archived:");
-/** SQL (never NULL): the column `col` is not such a key. */
-export const NOT_ARCHIVED_KEY_SQL = (col) => `substr(COALESCE(${col}, ''), 1, 9) != 'archived:'`;
+import { archivedKey } from "../lib/archived-key.mjs";
+import { siteKeyOf } from "../lib/grader/url.mjs";
+// The closed key's helpers live in lib/archived-key.mjs (the app reads them too).
+export { archivedKey, isArchivedKey, NOT_ARCHIVED_SQL } from "../lib/archived-key.mjs";
 
 /** [table, column]: rows moved to the closed key. */
 export const RETIRE_RENAME = [
@@ -176,10 +173,20 @@ export async function retireArchivedSite(db, url, { now = new Date(), dryRun = f
       stmts.push({ sql: `DELETE FROM ${t} WHERE ${c} = ?`, args: [u] });
     }
     if ((await cols("cache")).has("k")) {
-      const n = Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM cache WHERE k IN (?, ?)", args: [`psi:${u}`, `inspect:${u}`] })).rows[0].n);
+      // Saved results about the old site (lib/tools/keys.ts): Lighthouse, the polish fetch, the share preview,
+      // the grader's free checks and the last visitor re-check, the last two by site key.
+      let site = null;
+      try {
+        site = siteKeyOf(u);
+      } catch {
+        site = null;
+      }
+      const keys = [`psi:${u}`, `psi-desktop:${u}`, `inspect:${u}`, `share:${u}`, ...(site ? [`grader:quick:${site}`, `recheck:${site}`] : [])];
+      const ph = keys.map(() => "?").join(", ");
+      const n = Number((await db.execute({ sql: `SELECT COUNT(*) AS n FROM cache WHERE k IN (${ph})`, args: keys })).rows[0].n);
       if (n) {
         deleted["cache.k"] = (deleted["cache.k"] ?? 0) + n;
-        stmts.push({ sql: "DELETE FROM cache WHERE k IN (?, ?)", args: [`psi:${u}`, `inspect:${u}`] });
+        stmts.push({ sql: `DELETE FROM cache WHERE k IN (${ph})`, args: keys });
       }
     }
     // The star count the votes' trigger moved to the closed key leaves an emptied row behind.

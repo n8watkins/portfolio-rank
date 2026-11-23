@@ -269,7 +269,8 @@ Nothing at any step writes a row to your review page.
    It is hidden from browse, search, the leaderboard, the tiers, the games and the sitemap, and its profile page answers "not found" (`lib/hidden.mjs`).
    Nothing is deleted: its rank, votes, grade and captures stay.
    Two failures on one day never hide a site: the hiding check comes at least a day after the first failure, and a week after it for a blank page, a blocked capture, a redirect to a social profile or a duplicate (weak evidence the checker itself can cause).
-   No more than 20 sites are hidden in a day: above that, every one waits, still shown, and you get an alert, since so many at once usually means the checker.
+   No more than 20 sites are hidden in any 24 hours, oldest first failure first; the rest wait their turn, still shown, and are hidden as places free (36 dead sites: 20 one day, 16 the next). This is the ordinary pace and sends you nothing; `/admin/health-pool` shows who is waiting.
+   A spike is different: when more than 100 sites (about 5% of the list), or more than 50 for one kind of reason, start failing within 48 hours, the fault is most likely ours or a host-wide outage, so none of them is hidden while it lasts and you get one alert. It lifts by itself once the spike is over; a site still failing then needs its full wait again (the next day, or a week) before it is hidden, at the same 20 a day.
 4. **Keep re-checking** (hourly, when due): daily for the first 7 days, weekly to day 30, then monthly.
    Every night one plain request also goes to each hidden site; if it answers with words, its full re-check comes within the hour.
    A check that passes brings the site straight back, exactly as it was, tier included.
@@ -280,7 +281,7 @@ Nothing at any step writes a row to your review page.
    The site is added to `data/excluded.json` (kind `down`, or `duplicate` for a duplicate) and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
 7. **The archive check** (the same weekly export, `pipeline/not-working.mjs` `archiveCheckDue`): every `down` and `dead` entry is checked again on days 7, 14 and 21 after it was archived, then every 30 days; plain health checks only, no Gemini, at most 40 a run.
    One that passes leaves the archive and is recorded in `data/additions.json`, so the next sync lists it again even when the community list dropped it.
-   It counts as back only when the page carries the listed person's name (in its words, not its address), so a lapsed domain someone else bought does not come back under the old name; otherwise it stays archived and `/admin/health-pool` shows what was found.
+   It counts as back only when the page carries the listed person's whole name, together and in order, in its title or its opening text (not its address; a name in Chinese or Japanese as written; a one-word name in the title or the first heading), so a lapsed domain someone else bought does not come back under the old name; otherwise it stays archived and `/admin/health-pool` shows what was found.
    It comes back as a new site, whenever that is, because we cannot know it is the same site (your rule, 2026-11-23: "It can't keep its own votes."): captured, measured and ranked from code like a site listed for the first time, with none of the old site's votes, rating, tier, grade, face-offs, likes, claim or review decisions.
    The old site's rows are kept as history under a closed-off key, `archived:<day>:<address>`, which nothing lists (`pipeline/archive-return.mjs`); no other site's rating moves for it.
    A site back from the temporary pool (step 4) is different: the same site after a bad spell, back exactly as it was.

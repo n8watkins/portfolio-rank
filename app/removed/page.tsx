@@ -47,10 +47,13 @@ export default function RemovedPage() {
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
               PortfolioRank checks the sites on its list every night. A site that
-              fails is checked again an hour later and once more the next day (a
-              week later when it only looks blank), and is hidden only if it still
-              fails then; a hidden site keeps being checked and comes back as soon
-              as it works. It is taken off the list only after 90 days of failing
+              fails is checked again an hour later and once more the next day, and
+              is hidden only if it still fails then. When the failure could be our
+              own checker&apos;s mistake (the page looks empty, our screenshot never
+              showed the site, it sends visitors to a social profile, or it repeats
+              another site on the list), that last check comes a week later
+              instead. A hidden site keeps being checked and comes back as soon as
+              it works. It is taken off the list only after 90 days of failing
               checks, so a short outage never takes anyone off. Bot checks that
               block automated visitors don&apos;t count as failures.
             </p>

@@ -93,14 +93,42 @@ export const WEAK_VERDICT = /^(renders blank|capture blocked: |redirects to \S+,
 /** The wait from the first failure to the confirming re-check, for a failure with `reason`. */
 export const confirmAfterMs = (reason) => (WEAK_VERDICT.test(String(reason ?? "")) ? CONFIRM_WEAK_AFTER_MS : CONFIRM_AFTER_MS);
 /**
- * DEFAULT: at most this many sites hidden in one day by failing checks
- * (the brake, F1 of the same review): about 1% of the 2,154 listed sites. The
- * real outages seen so far come a few at a time (21 really down sites were
- * found in one go on 2026-11-16, the backlog of a first full check); more at
- * once means the checker or a host-wide event, so every site that would be
- * hidden waits at the stage before, still shown, and the owner is alerted.
+ * DEFAULT: the drain (second review of #292): at most this many sites are
+ * hidden in any 24 hours, oldest first failure first; the rest of a day's
+ * confirmations wait at the stage before, still shown, and are hidden as the
+ * allowance frees (36 dead sites: 20 one day, 16 the next). About 1% of the
+ * 2,154 listed sites: real outages come a few at a time (21 really down sites
+ * in one go on 2026-11-16 was the backlog of a first full check). No alert:
+ * it is the normal pace, shown on /admin/health-pool.
  */
 export const HIDE_PER_DAY = 20;
+/**
+ * DEFAULT: the freeze for faults on our side, measured by NEW first failures,
+ * not by the backlog: more than SPIKE_NEW sites (about 5% of the list) entering
+ * the ladder within SPIKE_WINDOW_MS, or more than SPIKE_CLASS of them for one
+ * kind of reason (about 2%: a browser update that renders single-page apps
+ * blank, a host-wide 5xx, a CDN outage), is a spike. A normal week brings a
+ * handful of new failures; the benchmark's 60 random listed sites had one. The
+ * sites from the spike are held at the stage before, still shown, and the
+ * owner gets one alert; once the spike is over the hold lifts by itself, and
+ * each held site still needs its full evidence (the next day, or a week for a
+ * weak verdict) counted from the end of the hold, then the drain's pace.
+ * HTTP errors are not exempt: a host-wide 5xx is exactly the many-at-once case.
+ */
+export const SPIKE_NEW = 100;
+export const SPIKE_CLASS = 50;
+export const SPIKE_WINDOW_MS = 2 * DAY;
+/** The kind of a failure reason, for the spike's per-kind count. */
+export function reasonClass(reason) {
+  const r = String(reason ?? "");
+  if (/^HTTP \d/.test(r)) return "http-error";
+  if (notAnswering(r)) return "not-answering";
+  if (/^renders blank/.test(r)) return "blank";
+  if (/^capture blocked: /.test(r)) return "blocked-capture";
+  if (/^duplicate of /.test(r)) return "duplicate";
+  if (/^redirects to \S+, not a portfolio/.test(r)) return "social-redirect";
+  return "wrong-content";
+}
 /** DEFAULT: how often a not-working site is checked again, by days since it became not working: daily for a week, weekly to day 30, then monthly. */
 export const POOL_CADENCE = [
   { untilDays: 7, everyDays: 1 },
@@ -229,7 +257,17 @@ export function poolOf(row) {
   const stage = Number(row?.pool_stage ?? 0);
   if (!stage || Number(row?.pool_valid ?? 0) !== 1) return null;
   const str = (v) => (v == null ? null : String(v));
-  return { stage, startedAt: str(row.pool_started_at), nextAt: str(row.pool_next_at), since: str(row.pool_since), unclear: Number(row.pool_unclear ?? 0) };
+  return {
+    stage,
+    startedAt: str(row.pool_started_at),
+    nextAt: str(row.pool_next_at),
+    since: str(row.pool_since),
+    unclear: Number(row.pool_unclear ?? 0),
+    // The first failure of this run of failures, never moved (the spike counts it); and why a site waits at
+    // stage 2 past its confirming check: "drain" (the day's allowance is used) or "freeze" (a spike).
+    firstAt: str(row.pool_first_at) ?? str(row.pool_started_at),
+    held: str(row.pool_held),
+  };
 }
 
 /**
@@ -251,7 +289,7 @@ export function failOnLadder(prev, result, now = new Date()) {
       firstFailAt: iso(t),
       lastFailAt: iso(t),
       reason: result.reason,
-      pool: { stage: FAILING, startedAt: iso(t), nextAt: iso(t + RECHECK_AFTER_MS), since: null, unclear: 0 },
+      pool: { stage: FAILING, startedAt: iso(t), nextAt: iso(t + RECHECK_AFTER_MS), since: null, unclear: 0, firstAt: iso(t), held: null },
     };
   }
   const due = pool.nextAt == null || t >= ms(pool.nextAt) - DUE_SLACK_MS;
@@ -375,7 +413,7 @@ export const ANSWERS_ELSEWHERE_SQL = `SELECT p.url, p.name, m.answers_at, p.heal
  * hidden yet) or in the temporary pool (hidden), with their ladder.
  */
 export const POOL_SQL = `SELECT p.url, p.name, p.health, p.health_reason, p.health_checked_at, p.reason AS capture_reason,
-    m.pool_stage, m.pool_started_at, m.pool_next_at, m.pool_since
+    m.pool_stage, m.pool_started_at, m.pool_next_at, m.pool_since, m.pool_held
   FROM health_marks m JOIN portfolios p ON p.url = m.url
   WHERE ${VALID_MARKS()} AND p.delisted_at IS NULL AND p.health IN ('suspect', 'down')
   ORDER BY m.pool_stage DESC, m.pool_since, m.pool_started_at`;

@@ -190,7 +190,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
                 <ShareButton url={`${SITE_URL}${p.path}`} title={p.name} />
               </>
             )}
-            <a href={p.url} target="_blank" rel="noopener" className="group btn-sheen inline-flex h-11 items-center gap-2 rounded-lg bg-fill px-5 text-sm font-semibold text-on-fill transition active:scale-[0.97]">
+            <a href={p.visitUrl} target="_blank" rel="noopener" className="group btn-sheen inline-flex h-11 items-center gap-2 rounded-lg bg-fill px-5 text-sm font-semibold text-on-fill transition active:scale-[0.97]">
               Visit {p.domain} <ArrowUpRight className="h-4 w-4" aria-hidden />
             </a>
           </div>

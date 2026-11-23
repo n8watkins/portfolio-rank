@@ -50,31 +50,89 @@ async function setup(urls, fillerCount = 30) {
 const hiddenCount = async (db) => Number((await db.execute("SELECT COUNT(*) AS n FROM portfolios WHERE health = 'down'")).rows[0].n);
 
 // ---------------------------------------------------------------------------
-// F1: the brake on hiding, and a week for weak verdicts
+// F1 and the second review: the drain (20 hides a day, oldest first) and the spike freeze
 
-test("F1: a night where 25 sites fail at once hides none of them and alerts the owner; once it is back to a few, they are hidden", async () => {
-  const many = Array.from({ length: 25 }, (_, i) => `https://outage-${String(i).padStart(2, "0")}.example`);
-  const { db, w, nightly, hourly } = await setup(many, 70);
+const spikeAlert = async (db) => (await activeAlerts(db)).some((a) => a.key === health.SPIKE_ALERT_KEY);
+
+for (const n of [25, 36]) {
+  test(`the drain: ${n} really dead sites are all hidden within two days of their confirming day, 20 a day, with no alert`, async () => {
+    const many = Array.from({ length: n }, (_, i) => `https://dead-${String(i).padStart(2, "0")}.example`);
+    const { db, w, nightly, hourly } = await setup(many, 100);
+    await nightly(T0);
+    for (const u of many) w.mode.set(u, "paused");
+    const F = T0 + D;
+    await nightly(F);
+    await hourly(F + H);
+    const s = await hourly(F + D);
+    assert.equal(await hiddenCount(db), pool.HIDE_PER_DAY, "20 on the confirming day");
+    assert.equal(s.pace.drained.length, n - pool.HIDE_PER_DAY, "the rest wait their turn");
+    for (const d of s.pace.drained) assert.equal(String((await db.execute({ sql: "SELECT pool_held FROM health_marks WHERE url = ?", args: [d.url] })).rows[0].pool_held), "drain");
+    assert.equal(await spikeAlert(db), false, "no alert for the ordinary pace");
+    await hourly(F + 2 * D);
+    assert.equal(await hiddenCount(db), n, "all hidden the next day");
+    assert.equal(await spikeAlert(db), false);
+    // The oldest first failures went first.
+    const order = (await db.execute("SELECT m.url FROM health_marks m WHERE m.pool_stage = 3 ORDER BY m.pool_since, m.pool_first_at")).rows.map((r) => String(r.url));
+    assert.equal(order.length, n);
+  });
+}
+
+test("the drain: two batches in one hour never hide more than the day's 20 between them", async () => {
+  const many = Array.from({ length: 30 }, (_, i) => `https://batch-${String(i).padStart(2, "0")}.example`);
+  const { db, w, nightly } = await setup(many, 100);
   await nightly(T0);
   for (const u of many) w.mode.set(u, "paused");
-  const F = T0 + D;
-  await nightly(F);
-  await hourly(F + H);
-  const s = await hourly(F + D);
-  assert.equal(await hiddenCount(db), 0, "nobody hidden: more than the limit at once");
-  assert.ok(s.hideBrake.count > pool.HIDE_PER_DAY);
-  assert.equal(s.hideBrake.held.length, s.checked);
-  for (const u of many) assert.equal(await col(db, u, "health"), "suspect", `${u} still shown`);
-  assert.ok((await activeAlerts(db)).some((a) => a.key === health.HIDE_BRAKE_ALERT_KEY), "the owner's alert stands");
-  // The outage was the checker's: most come back at the next day's check. The brake counts the sites still
-  // waiting when each batch starts, so the 3 really down are held that day too, and hidden the day after,
-  // when the alert clears.
-  for (const u of many.slice(3)) w.mode.set(u, "ok");
-  await hourly(F + 2 * D);
-  for (const u of many.slice(3)) assert.equal(await col(db, u, "health"), "live", u);
-  await hourly(F + 3 * D);
-  assert.equal(await hiddenCount(db), 3);
-  assert.ok(!(await activeAlerts(db)).some((a) => a.key === health.HIDE_BRAKE_ALERT_KEY), "the alert clears");
+  const check = (feed, t) => health.runHealthCheck({ db, feed, fetchImpl: w.fetchImpl, render: w.render, now: at(t), scheduled: "check", alerts: false, doorLimit: 0, log: quiet });
+  const feed = many.map((url) => ({ url, name: "Ann Lee" }));
+  await check(feed, T0 + D);
+  await check(feed, T0 + D + H);
+  await check(feed.slice(0, 15), T0 + 2 * D);
+  await check(feed.slice(15), T0 + 2 * D + 60000);
+  assert.equal(await hiddenCount(db), pool.HIDE_PER_DAY);
+});
+
+test("the drain: the day-8 wave of weak verdicts (40 blank pages that started on one day) drains, 20 a day", async () => {
+  const many = Array.from({ length: 40 }, (_, i) => `https://wave-${String(i).padStart(2, "0")}.example`);
+  const { db } = await setup(many, 0);
+  const blank = async (u) => response(200, "<div id=root></div>", u);
+  const blankRender = async (u) => ({ status: 200, finalUrl: u, title: "", text: "", media: false, html: "<div id=root></div>" });
+  const feed = many.map((url) => ({ url, name: "Ann Lee" }));
+  const check = (t) => health.runHealthCheck({ db, feed, fetchImpl: blank, render: blankRender, now: at(t), scheduled: "check", alerts: false, doorLimit: 0, log: quiet });
+  await check(T0);
+  await check(T0 + H);
+  await check(T0 + D);
+  assert.equal(await hiddenCount(db), 0, "a weak verdict waits a week");
+  await check(T0 + 7 * D);
+  assert.equal(await hiddenCount(db), 20);
+  assert.equal(await spikeAlert(db), false, "40 blank pages is under the spike limits");
+  await check(T0 + 8 * D);
+  assert.equal(await hiddenCount(db), 40);
+});
+
+test("the spike freeze: 300 sites failing at once (a host-wide 500) are none hidden and alert; when it ends, those still failing need their full evidence again and drain", async () => {
+  const many = Array.from({ length: 300 }, (_, i) => `https://spike-${String(i).padStart(3, "0")}.example`);
+  const { db } = await setup(many, 0);
+  const failing = new Set(many);
+  const fetchImpl = async (u) => (failing.has(u.replace(/\/$/, "")) ? response(500, "Internal Server Error", u) : response(200, PORTFOLIO_HTML, u));
+  const render = async (u) => (failing.has(u.replace(/\/$/, "")) ? { status: 500, finalUrl: u, title: "", text: "Internal Server Error", media: false, html: "" } : goodPage(u));
+  const feed = many.map((url) => ({ url, name: "Ann Lee" }));
+  const check = (t) => health.runHealthCheck({ db, feed, fetchImpl, render, now: at(t), scheduled: "check", alerts: false, doorLimit: 0, log: quiet });
+  await check(T0);
+  await check(T0 + H);
+  let s = await check(T0 + D);
+  assert.equal(await hiddenCount(db), 0, "none hidden during the spike");
+  assert.ok(s.pace.frozen);
+  assert.equal(s.pace.frozenHeld.length, 300);
+  assert.equal(await spikeAlert(db), true, "one owner alert");
+  // The host is fixed for 280 of them; 20 stay broken. The spike is over once its window has passed.
+  for (const u of many.slice(20)) failing.delete(u);
+  s = await check(T0 + 2 * D + H);
+  assert.equal(s.pace.frozen, false);
+  assert.equal(await spikeAlert(db), false, "the alert clears by itself");
+  assert.equal(await hiddenCount(db), 0, "the 20 still failing need a full day of evidence from the end of their hold");
+  for (const u of many.slice(20)) assert.equal(await col(db, u, "health"), "live", u);
+  s = await check(T0 + 3 * D + H);
+  assert.equal(await hiddenCount(db), 20, "hidden once their evidence is complete, at the drain's pace");
 });
 
 test("F1: a dead domain is still hidden on day 2; a blank page waits for day 8", async () => {
@@ -223,4 +281,78 @@ test("item 8: a site back from the pool is a tier member again at its return, wi
   const after = (await db.execute({ sql: "SELECT member, mu FROM tier_ratings WHERE url = ?", args: [urls[0]] })).rows[0];
   assert.equal(Number(after.member), 1, "a member again at once");
   assert.equal(Number(after.mu), Number(before.mu), "with the rating it had");
+});
+
+// ---------------------------------------------------------------------------
+// The second review: the name test, a short page's links, the rescue's limits, closed keys on pages
+
+test("item 2: the name test needs every name word as a whole word near the top; non-Latin names match as written; a one-word name in the title or first heading", () => {
+  const yes = (name, page) => assert.equal(health.carriesName(name, page), true, `${name}: ${JSON.stringify(page).slice(0, 80)}`);
+  const no = (name, page) => assert.equal(health.carriesName(name, page), false, `${name}: ${JSON.stringify(page).slice(0, 80)}`);
+  yes("Ann Lee", { title: "Ann Lee | Engineer", text: "I build apps." });
+  no("Ann Lee", { title: "Best loans", text: "Ann Arbor lee county loans annual rates" });
+  no("Jane Doe", { title: "Jane Smith | Designer", text: "Hello, I am Jane Smith." });
+  no("Ali Khan", { title: "Slots", text: "Play alibaba slots, win khanate bonuses" });
+  yes("José Martínez", { title: "Jose Martinez", text: "" });
+  no("Ann Lee", { title: "Welcome", text: `${"filler words here ".repeat(200)} Ann Lee` }, "only the first 2,000 characters count");
+  yes("李小龙", { title: "李小龙的作品集", text: "" });
+  no("李小龙", { title: "作品集", text: "欢迎" });
+  yes("Bruce 李小龙 Lee", { title: "Bruce Lee", text: "李小龙" });
+  yes("Matvey", { title: "Matvey", text: "" });
+  yes("Matvey", { title: "Home", heading: "Matvey Ivanov", text: "" });
+  no("Matvey", { title: "Home", heading: "Welcome", text: "Matvey made this" }, "a one-word name only in the title or the first heading");
+  no("Al Bo", { title: "Al Bo", text: "Al Bo" }, "nothing to test: never a match");
+  // Real portfolios from the benchmark: the surname first, and the surname as an initial.
+  yes("Benjamin Cyubahiro", { title: "Cyubahiro Benjamin | Portfolio", text: "" });
+  yes("Mnelisi Mthuli", { title: "Home - Mnelisi M. | Senior .NET Developer", text: "" });
+  no("Mnelisi Mthuli", { title: "M. Mnelisi", text: "" }, "the first word is never an initial");
+  no("Ann Lee", { title: "Ann L", text: "" }, "an initial needs its full stop");
+  yes("Yogesh Choudhary Paliyal", { title: "Yogesh Paliyal", text: "" }, "a middle name may be left out");
+  no("Yogesh Choudhary Paliyal", { title: "Yogesh Choudhary", text: "" }, "but not the last name");
+});
+
+test("item 4: a short page that links out still shows a site to the archive check's capture rule", async () => {
+  const entry = { url: "https://minimal.example", name: "Ann Lee", kind: "down", reason: "capture blocked: 9 words and no outbound links", removed: "2026-11-01" };
+  const short = '<html><head><title>Ann Lee</title></head><body><h1>Ann Lee</h1><p>Designer and developer in Oslo, building small careful things.</p><a href="https://github.com/annlee">GitHub</a><a href="https://dribbble.com/annlee">Dribbble</a><a href="mailto:ann@example.com">Mail</a></body></html>';
+  const answers = passesFullCheck({ fetchImpl: async (u) => response(200, short, u) });
+  assert.equal(await answers(entry.url, entry), true);
+  // The same words with no links: still no site by the capture's rule.
+  const bare = "<html><head><title>Ann Lee</title></head><body><h1>Ann Lee</h1><p>Designer and developer in Oslo, building small careful things.</p></body></html>";
+  const a = await passesFullCheck({ fetchImpl: async (u) => response(200, bare, u) })(entry.url, entry);
+  assert.equal(a.ok, false);
+});
+
+test("item 5: the rescue is only for the scheme and www of the same page; the Visit link goes where the site answers", async () => {
+  assert.equal(health.sameSiteAddress("http://ann.example", { final_url: "https://www.ann.example/" }), "https://www.ann.example/");
+  assert.equal(health.sameSiteAddress("https://ann.example/work", { final_url: "https://www.ann.example/work/" }), "https://www.ann.example/work/");
+  assert.equal(health.sameSiteAddress("https://ann.example", { final_url: "https://ann.example/en/" }), null, "another page of the site");
+  assert.equal(health.sameSiteAddress("https://ann.example/a", { final_url: "https://www.ann.example/b" }), null);
+  const { visitAddress } = await import("../lib/visit-address.mjs");
+  assert.equal(visitAddress("http://ann.example", "https://www.ann.example/"), "https://www.ann.example/");
+  assert.equal(visitAddress("http://ann.example", null), "http://ann.example");
+  assert.equal(visitAddress("http://ann.example", "https://elsewhere.example/"), "http://ann.example");
+  assert.equal(visitAddress("https://ann.example/a", "https://www.ann.example/b"), "https://ann.example/a");
+  // Both profile pages use it for their Visit link.
+  assert.match(fs.readFileSync("app/p/[slug]/page.tsx", "utf8"), /href=\{visitUrl\}/);
+  assert.match(fs.readFileSync("app/p/[slug]/profile-v2.tsx", "utf8"), /href=\{p\.visitUrl\}/);
+});
+
+test("item 3: a closed key is never an address on a person's own pages, and admin review lists leave it out", async () => {
+  const { isArchivedKey, NO_LONGER_LISTED, NOT_ARCHIVED_SQL } = await import("../lib/archived-key.mjs");
+  assert.equal(isArchivedKey("archived:2026-12-13:https://a.example"), true);
+  assert.equal(isArchivedKey("https://archived.example"), false);
+  assert.equal(NO_LONGER_LISTED, "a site no longer listed");
+  const { db } = await freshDb();
+  const { ensureReviewSchema, listReviews } = await import("../lib/reviews/store.mjs");
+  await ensureReviewSchema(db);
+  for (const u of ["https://kept.example", "archived:2026-12-13:https://old.example"]) {
+    await db.execute({ sql: "INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, verdicts, status, created_at, decided_at, decided_by) VALUES ('b', ?, 'door_held', 'ranked', 'remove', 0, '{}', 'rejected', '2026-11-01', '2026-11-02', 'admin:owner')", args: [u] });
+  }
+  const q = await listReviews(db);
+  assert.deepEqual(q.decided.map((r) => r.url), ["https://kept.example"]);
+  assert.equal(Number((await db.execute(`SELECT COUNT(*) AS n FROM status_reviews WHERE ${NOT_ARCHIVED_SQL("url")}`)).rows[0].n), 1);
+  // The pages render it as a site no longer listed, with no link.
+  const votes = fs.readFileSync("app/votes/page.tsx", "utf8");
+  assert.match(votes, /isArchivedKey\(url\)[\s\S]*NO_LONGER_LISTED/);
+  assert.match(fs.readFileSync("lib/me.ts", "utf8"), /isArchivedKey\(url\)/);
 });

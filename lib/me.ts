@@ -12,6 +12,7 @@ import { gradedPool } from "@/lib/grader/report.mjs";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
 import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { domainOf, reportPath } from "@/lib/home";
+import { NO_LONGER_LISTED, isArchivedKey } from "@/lib/archived-key.mjs";
 
 // The visitor's own portfolio page (/me): their latest grade, read through
 // the signed owner cookie (lib/grader/server.ts ownedJobs), so it is never
@@ -161,9 +162,11 @@ async function listedOf(site: FeedRow): Promise<Listed> {
     people,
     fights: fights.rows.map((x) => {
       const url = String(x.other);
+      // An old site whose address came back from the archive as a new site (lib/archived-key.mjs).
+      const gone = isArchivedKey(url);
       return {
         won: Number(x.won) === 1,
-        other: { url, name: names.get(url) ?? domainOf(url), domain: domainOf(url), hero: shots.has(url) ? heroOf(shots.get(url)!) : null },
+        other: { url, name: gone ? NO_LONGER_LISTED : names.get(url) ?? domainOf(url), domain: gone ? NO_LONGER_LISTED : domainOf(url), hero: shots.has(url) ? heroOf(shots.get(url)!) : null },
         at: String(x.created_at),
       };
     }),

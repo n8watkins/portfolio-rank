@@ -8,6 +8,7 @@ import { db, ensureSchema } from "@/lib/db";
 import { gamesEnabled } from "@/lib/games/server";
 import { QUIZ_ID } from "@/lib/games/quiz.mjs";
 import { heroOf, shotBases } from "@/lib/shots";
+import { NOT_ARCHIVED_SQL } from "@/lib/archived-key.mjs";
 
 // Play: the face-off and, with GAMES_V2 on, Guess the percentile, behind one
 // entry (/rank redirects here). With GAMES_V2 off the quiz and every link to
@@ -28,7 +29,8 @@ const MODES = [
 async function cardShots(): Promise<(string | null)[]> {
   try {
     await ensureSchema();
-    const urls = (await db().execute("SELECT url FROM ratings ORDER BY elo DESC LIMIT 2")).rows.map((r) => String(r.url));
+    // Never an old site's rows moved out of a returning address's way (lib/archived-key.mjs).
+    const urls = (await db().execute(`SELECT url FROM ratings WHERE ${NOT_ARCHIVED_SQL("url")} ORDER BY elo DESC LIMIT 2`)).rows.map((r) => String(r.url));
     const bases = await shotBases(urls);
     return [0, 1].map((k) => (bases.get(urls[k]) ? heroOf(bases.get(urls[k])!) : null));
   } catch {

@@ -3,6 +3,7 @@ import type { Portfolio } from "@/app/page";
 import { auth } from "@/auth";
 import { SignInButton } from "@/components/SignInModal";
 import { db, ensureSchema } from "@/lib/db";
+import { NO_LONGER_LISTED, isArchivedKey } from "@/lib/archived-key.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,15 @@ function domainOf(url: string): string {
 
 function Entry({ url, won }: { url: string; won: boolean }) {
   const p = byUrl.get(url);
+  // An old site whose address came back from the archive as a new site (lib/archived-key.mjs): no link.
+  if (isArchivedKey(url)) {
+    return (
+      <span className={`truncate text-sm ${won ? "font-semibold" : "text-mute"}`}>
+        {won ? "✓ " : ""}
+        {NO_LONGER_LISTED}
+      </span>
+    );
+  }
   return (
     <a
       href={`/p/${encodeURIComponent(url)}`}

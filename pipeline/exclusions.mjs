@@ -139,13 +139,14 @@ export const passesFullCheck =
     // The same person's site, not a re-registered domain serving something else (#292 review, F4): the page
     // carries the listed person's name. Otherwise it stays archived, with what was found for the owner.
     // The page's own words only: a re-registered domain keeps the person's name in its address.
-    if (!carriesName(entry?.name ?? "", { title: r.title, text: r.pageText })) {
+    if (!carriesName(entry?.name ?? "", { title: r.title, text: r.pageText, heading: r.heading })) {
       return { ok: false, found: { ...found, why: "answers, but the page does not carry the listed person's name" } };
     }
     // Archived for a capture that never showed the site: back only when the page itself shows one by the
-    // capture's own rule (./capture-blocked.mjs capturedBlocked on its words), so a gate or a loader that
-    // is still there does not cycle through the list and the archive (#292 review, F3).
-    if (isBlockedReason(entry?.reason) && capturedBlocked({ text: r.pageText ?? "", title: r.title ?? "" }) !== null) {
+    // capture's own rule (./capture-blocked.mjs capturedBlocked on its words and links, so a short page that
+    // links out still shows a site), so a gate or a loader that is still there does not cycle through the
+    // list and the archive (#292 review, F3).
+    if (isBlockedReason(entry?.reason) && capturedBlocked({ text: r.pageText ?? "", title: r.title ?? "", ...(r.links ?? {}) }) !== null) {
       return { ok: false, found: { ...found, why: "answers, but the page still does not show the site" } };
     }
     return true;
