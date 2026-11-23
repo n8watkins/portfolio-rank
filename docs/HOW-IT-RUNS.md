@@ -288,6 +288,11 @@ A different path exists for a site that answers with the wrong thing (parked, bl
 A parked domain counts as the wrong thing also when its home page is only a redirect made on load (a script or a meta refresh of a few seconds) to a parking service or a parking page on the same domain, such as GoDaddy's `/lander`.
 The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
 A short page that loads Sedo's lander images, or whose whole title is Sedo's ("abdulmomin.dev - abdulmomin Resources and Information." on its own domain), is parked the same way.
+So is a short page that stands where the site was (`pipeline/gate.mjs` `placeholderPage`): a web server's default page (nginx, Apache, IIS, Caddy, cPanel, Plesk), an empty "Index of /", GitHub Pages' "there isn't a site here", a host's unpublished-site page, Streamlit's "Error running app", a maintenance page, a notice that the site was removed, or a page whose only text is "not found".
+Each is told by the page's whole title or a sentence only that page says, never by a word in a longer page.
+A listed domain that now forwards to another domain showing at least two different gambling words fails the same way (`pipeline/health.mjs` `redirectVerdict`); a move to any other domain is still only reported.
+A browser that shows only its own error page (`chrome-error://`) for the site counts as the site not loading.
+All of these are failed checks on the ladder above, never a removal.
 A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
 
 ### The community list drops a site

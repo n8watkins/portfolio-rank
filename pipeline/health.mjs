@@ -165,6 +165,17 @@ const fold = (s) =>
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "");
 
+// A listed domain that now forwards to a gambling site (expired and bought for
+// its links): www.abhisheksah.dev (angkasa338win.com), indrajeet.me
+// (app.lunabet89.com) and vallarasuk.com (pika77terkuat.com) in the
+// 2026-11-23 benchmark. Only after a move to another domain, and only with
+// GAMBLING_MIN different words from this list; on the 312 saved benchmark
+// sites no page without a move had two of them, and no real portfolio one.
+const GAMBLING = /(?<![a-z0-9])(slots?|casinos?|togel|judi|gacor|maxwin|jackpot|poker|betting|sportsbook|lottery|baccarat|roulette|no hu|taruhan|toto|bandar|gambling)(?![a-z0-9])/g;
+export const GAMBLING_MIN = 2;
+/** The different gambling words in a page's text (its first 20,000 characters). */
+export const gamblingWords = (text) => [...new Set([...fold(String(text ?? "").slice(0, 20000)).matchAll(GAMBLING)].map((m) => m[1].replace(/s$/, "")))];
+
 /** Name words that must appear on a redirect target for it to count as the same person's site. */
 const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
 
@@ -173,7 +184,8 @@ const nameTokens = (name) => fold(name).split(/[^a-z0-9]+/).filter((t) => t.leng
  * from a free host to their own domain (73 of 2,103 roster sites on
  * 2026-11-10), so a move is not a failure: it is reported so the stored URL
  * can be updated. Returns null (no cross-domain redirect),
- * { fail: reason } (a social profile, not a portfolio) or
+ * { fail: reason } (a social profile, not a portfolio, or a gambling site:
+ * gamblingWords; a failed check on the weekly-counted rule, never a removal) or
  * { moved: true, hijack, to } where hijack means the target carries none of
  * the person's name (flagged for a person to look at, never removed on its own).
  */
@@ -183,6 +195,7 @@ export function redirectVerdict(url, finalUrl, name, text) {
   const to = registrableDomain(finalUrl);
   if (!from || !to || from === to) return null;
   if (NOT_A_PORTFOLIO_HOSTS.includes(to)) return { fail: `redirects to ${to}, not a portfolio` };
+  if (gamblingWords(text).length >= GAMBLING_MIN) return { fail: `redirects to ${to}, a gambling site` };
   const haystack = fold(`${finalUrl} ${String(text ?? "").slice(0, 20000)}`);
   const hijack = !nameTokens(name).some((t) => haystack.includes(t));
   return { moved: true, hijack, to };
@@ -300,6 +313,9 @@ export async function checkSite(
       // Neither opinion learned anything about the site: inconclusive, never a failed check.
       return unknown(`${gate.status === "error" ? gate.reason : "plain request answered"}; browser: ${browserSaid}`, finalUrl, broke?.launch ? { browserDown: true } : {});
     }
+    // The browser showed its own error page in place of the site (a load that failed after the page began,
+    // collinskoechportfolio.web.app, 2026-11-23): the site does not load, whatever the plain request read.
+    if (String(page.finalUrl ?? "").startsWith("chrome-error://")) return { ok: false, reason: "does not load (the browser's error page)", finalUrl };
     finalUrl = page.finalUrl || finalUrl;
     if (BOT_WALL_STATUS.has(page.status) || isBotWallPage({ title: page.title, text: page.text })) {
       return blocked(page.status, finalUrl);
