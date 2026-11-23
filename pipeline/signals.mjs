@@ -21,7 +21,7 @@ export const SIGNALS_MAX_HTML = 2000000;
 // What a person calls themselves in the page's own head ("Abhishek Singh |
 // Software Developer | MERN Stack & 3D Expert"): a role ends in one of these.
 // One person, so singular: "Our engineers" is not a role.
-const ROLE_NOUN = String.raw`(?:developer|engineer|designer|programmer|architect|scientist|analyst|consultant|freelancer|researcher|technologist|devops|sre|student|coder|lead|founder|cto)`;
+const ROLE_NOUN = String.raw`(?:developer|engineer|designer|programmer|architect|scientist|analyst|consultant|freelancer|researcher|technologist|devops|sre|student|coder|(?:team|tech|technical|engineering) lead|founder|cto)`;
 const WORD = String.raw`[\p{L}\d+#.&/-]+`;
 // In a title's part: everything up to its last role word ("Frontend Team Lead and Senior Javascript/Typescript Engineer").
 const ROLE_IN_PART = new RegExp(String.raw`^(.*\b${ROLE_NOUN})(?![\p{L}\d])`, "iu");
@@ -39,7 +39,7 @@ const ROLE_MAX_WORDS = 8;
 const tidy = (s) => decodeEntities(String(s ?? "")).replace(/\s+/g, " ").trim();
 /** The role a piece of text ends in, or null: at most ROLE_MAX_WORDS words, without self-praise. */
 const roleFrom = (s, re) => {
-  const m = tidy(s).match(re);
+  const m = tidy(s).slice(0, 500).match(re);
   if (!m) return null;
   const role = m[1].replace(PUFFERY, "").replace(/^(?:an?|the)\s+/i, "").replace(/^[\s,;&+-]+/, "").trim();
   return role && role.split(" ").length <= ROLE_MAX_WORDS ? role : null;
@@ -54,7 +54,7 @@ const roleFrom = (s, re) => {
  * @param {string} title @param {string} [description]
  */
 export function statedRole(title, description = "") {
-  for (const part of tidy(title).split(TITLE_SPLIT)) {
+  for (const part of tidy(title).slice(0, 500).split(TITLE_SPLIT)) {
     const role = roleFrom(part, ROLE_IN_PART);
     if (role) return role;
   }
