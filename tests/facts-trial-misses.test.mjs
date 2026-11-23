@@ -226,6 +226,19 @@ test("nevo.is-a.dev: a host whose made-up address answers 200 but says not found
   assert.equal(saysNotFound(BH_NONSENSE), false, "bhavaniravi.com's made-up address is its home page, not a not-found page");
 });
 
+// Found in the sample of 40 sites after the fixes (expensive.toys).
+test("expensive.toys: a first-level '/toys' page labelled 'Toys' is the projects page, and its toys are its own pages", () => {
+  const home = "https://expensive.toys/";
+  const links = homeProjectLinks({ html: `<header><a href="/blog">Blog</a> <a href="/toys">Toys</a></header><main><p>I build quality UIs for fun.</p></main>`, url: home, finalUrl: home });
+  assert.equal(projectsPageFor(links, home), "https://expensive.toys/toys");
+  const page = "https://expensive.toys/toys";
+  const got = fromPages({ home, page, pageHtml: `<header><a href="/blog">Blog</a></header><main><a href="/toys/reactions">Reactions</a> <a href="/toys/stickers">Stickers</a> <a href="/blog">Blog</a></main>` });
+  assert.deepEqual(got.map((c) => [c.url, c.kind]), [["https://expensive.toys/toys/reactions", "own page"], ["https://expensive.toys/toys/stickers", "own page"]]);
+  // Not under another label, and not below the first segment.
+  assert.equal(projectsPageFor(homeProjectLinks({ html: `<a href="/toys">Shop</a>`, url: home, finalUrl: home }), home), null);
+  assert.equal(projectsPageFor(homeProjectLinks({ html: `<a href="/shop/toys">Toys</a>`, url: home, finalUrl: home }), home), null);
+});
+
 // Found in the sample of 40 sites after the fixes (houssambouzid.dev).
 test("a certificate's verification or badge page is never a project, on any host; an app named for certificates is", () => {
   const home = "https://ana.dev/";

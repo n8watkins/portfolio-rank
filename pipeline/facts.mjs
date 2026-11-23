@@ -374,8 +374,9 @@ const LISTING_NAME = new RegExp(String.raw`^(?:${LISTING_WORDS})$`, "iu");
 const LISTING_SEGMENT = { test: (s) => LISTING_NAME.test(pageName(s)) };
 // Names that are a projects page only as the site's first path segment and under a label that says the same:
 // "/made" labelled "Made" (milan.milanovic.org), "/lab" labelled "Lab". Not "/research/lab", not "/ci/builds"
-// labelled "CI", and never a listing above a project's own page ("/builds/1234").
-const MAKER_PAGE = /^(?:made|builds|lab|creations)$/i;
+// labelled "CI", and never a listing above a project's own page ("/builds/1234"). "/toys" labelled "Toys"
+// (expensive.toys: its UI toys, each a page of its own under /toys).
+const MAKER_PAGE = /^(?:made|builds|lab|creations|toys)$/i;
 const makerPage = (segs, label) =>
   segs.length === 1 && MAKER_PAGE.test(pageName(segs[0])) && new RegExp(String.raw`(?<!\p{L})${pageName(segs[0])}(?!\p{L})`, "iu").test(String(label ?? ""));
 // A segment that a GET could act on: sign-in and sign-out, subscription and account actions ("/unsubscribe",
