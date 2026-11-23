@@ -286,24 +286,27 @@ A page there that could not be read, answered an error or is merely short is lef
 The health check answers "is this site alive", not "is this alive site a portfolio".
 `pipeline/portfolio-flags.mjs` holds named suspicion flags for that second question, each a pure function over a site's saved page (no network, no AI).
 A raised flag gives its name, one plain sentence quoting what it found on the page, and the snippets it matched.
+Email addresses and phone numbers in a quote are replaced by `[email]` and `[phone]`.
 They are not yet wired to anything: no flag removes, hides, ranks or queues a site today.
 The plan is that a flagged site goes to your review queue, listed meanwhile.
 
 | Flag | What it looks for |
 | --- | --- |
 | `filler-text` | Template filler in the text: "Lorem ipsum", "your name here". |
-| `placeholder-page` | A short page that says it is coming soon, under construction or a work in progress. |
-| `little-text` | Almost no text (under 60 characters): a logo, an intro or gate screen, a page drawn in a canvas. Often a real portfolio the code cannot read. |
-| `moved-notice` | A short page saying the site has moved, with a link elsewhere. |
-| `blog-only` | Dated posts and no projects anywhere the code can see: no projects section, heading, menu link ("Projects", "Work") or project link. A portfolio with a blog is never flagged. |
-| `link-card` | A name, a line and a handful of profile or email links, nothing else. |
-| `company-voice` | The page speaks as "we" far more than "I" and sells services or names a team or jobs. A freelancer ("freelance", "hire me") or a one-person studio is protected. |
+| `placeholder-page` | A short page with no projects that says it is coming soon, under construction or a work in progress. |
+| `moved-notice` | A short page with no projects saying the site has moved to another site. |
+| `blog-only` | Dated posts and nothing else the code can see. A portfolio with a blog is never flagged: any project evidence keeps it quiet (a projects section, heading or link, a "Projects" or "Work" menu entry or button, links to the site's own project pages, case studies), and so does a resume or work history. |
+| `link-card` | A name, a line and a handful of profile or email links, nothing else: a contact card. You have not ruled on these yet. |
+| `company-voice` | The page speaks as "we" far more than "I" and sells services or names a team or jobs. A freelancer or a one-person studio is protected; a page naming two people says so. |
 | `sells-teaching` | Coaching, courses, speaking or a book for sale, and no projects. |
-| `product-page` | One product's or tool's own site: pricing, sign up, documentation, terms, and no person behind it. |
+| `product-page` | One product's or tool's own site: pricing, sign up, documentation, terms, and no person behind it. A one-person business is protected. |
 | `readme-page` | A code repository's README rendered as the page: install steps, commands, the folder layout. |
-| `single-document` | One long document (an essay) in paragraphs, barely a link, no projects. |
-| `forwards-elsewhere` | The address forwards to another domain without the person's name: the health check's own "moved" verdict, given a flag's name. |
-| `sub-page` | The listed address is a sub-page that is not itself a portfolio (a blog category page); says whether the site's home page is one. A github.io project site, a `/portfolio` path or any sub-page with projects is never flagged. |
+| `hidden-spam-links` | Gambling, adult or pharmacy links hidden in an invisible block: the site appears to have been compromised. |
+| `forwards-elsewhere` | The address forwards to another domain without the person's name or handle: the health check's own "moved" verdict, given a flag's name. |
+| `sub-page` | The listed address is a sub-page that is not itself a portfolio (a blog category page); says in plain words what the site's home page is. A github.io project site, a `/portfolio` or `/portfolio.html` path, a university's `/~name/` page or any sub-page with projects is never flagged, and a code host's or a university's home page is never judged. |
+
+Beside the flags, and never one of them, `unreadable-page` notes a page the code could not read (under 60 characters of text: an intro or gate screen, a lock screen, a canvas, a bot check).
+Most are real portfolios, so it is never a suspicion and never goes to the review queue as one; it is for fixing how pages are read.
 
 How each flag scores on the labelled benchmark and on a fresh sample of listed sites is printed by the benchmark scorer kept with the owner's handoff files (`run-benchmark.mjs`), which runs them against any checkout.
 
