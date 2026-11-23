@@ -149,12 +149,32 @@ test("a list drawn from data that arrives late is read once it is there, past th
 
 test("a page that has already settled is read as soon as before: the settling adds next to nothing", async () => {
   const p = await open("/");
-  const t0 = Date.now();
   const got = await readProjectsPage(p, `${base}/settled`);
-  const ms = Date.now() - t0;
   assert.match(got?.html ?? "", /demo5\.example/);
-  // The fixed waits alone are 2.5 s (1 s, then six scrolls of 250 ms), plus the load and the network going quiet.
-  assert.ok(ms < 2500 + SETTLE_STABLE_MS, `${ms} ms`);
+  // The settling against the waits it replaced (main's: the network quiet for up to 5 s, 1 s, six scrolls of
+  // 250 ms), each on a fresh load of the same settled page in the same browser, so a busy machine slows both alike.
+  const oldWaits = async (tab) => {
+    await tab.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+    await tab.waitForTimeout(1000);
+    for (let i = 0; i < 6; i++) {
+      await tab.mouse.wheel(0, 1200).catch(() => {});
+      await tab.waitForTimeout(250);
+    }
+  };
+  const timed = async (fn) => {
+    const tab = await p.context().newPage();
+    const net = watchRequests(tab);
+    await tab.goto(`${base}/settled`);
+    const t0 = Date.now();
+    await fn(tab, net);
+    const ms = Date.now() - t0;
+    net.stop();
+    await tab.close();
+    return ms;
+  };
+  const before = await timed(oldWaits);
+  const now = await timed((tab, net) => settleAndRead(tab, net));
+  assert.ok(now - before < SETTLE_STABLE_MS / 2, `settling ${now} ms, the old waits ${before} ms`);
   await p.context().close();
 });
 
