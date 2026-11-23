@@ -16,7 +16,8 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
-import { DROPPED_OUTPUTS, GEMINI_ANSWERED_SQL, RESPONSE_SCHEMA, RUBRIC_VERSION, gradeRecord, keptOutputs, parseRubricResponse } from "../pipeline/rubric.mjs";
+import { DROPPED_OUTPUTS, GEMINI_ANSWERED_SQL, RESPONSE_SCHEMA, RUBRIC_VERSION, codeChecks, gradeRecord, keptOutputs, parseRubricResponse } from "../pipeline/rubric.mjs";
+import { checksReading, withFreshFacts } from "../lib/fresh-facts.mjs";
 import { V2_RESPONSE_SCHEMA } from "../pipeline/rubric-v2.mjs";
 import { GEMINI_YES_SQL, geminiYes, libraryMember, rankForWrite, rankFromCode, refreshTiers } from "../lib/tiers-store.mjs";
 import { readSiteRow } from "../lib/tiers-db.mjs";
@@ -150,6 +151,16 @@ test("rank: a v3 yes keeps a code-ranked site exactly where it was; a v3 yes ran
   const no = await rankForWrite(db, v3({}, { is_portfolio: false, portfolio_reason: "A GitHub profile" }), { url: "https://coded.dev/", now: NOW + 2000 });
   assert.equal(no.rank, undefined);
   assert.equal((await readSiteRow(db, "https://coded.dev/")).member, 0);
+});
+
+test("a v3 grade's code score follows newer measurements, as a v2 grade's and an ungraded site's do", () => {
+  const now = new Date(NOW);
+  const stale = { v: 2, resume: false, github: false, contact: false, own_domain: false, footer_year: 2019, project_links: { checked: 3, ok: 0, broken: 3, blocked: 0 } };
+  const newer = JSON.stringify(facts(6));
+  const graded = (g) => ({ ...g, facts: stale, checks: codeChecks(stale, now), checks_score: 0 });
+  const reads = [graded(v2()), graded(v3()), null].map((g) => checksReading(g, newer, { now }).checks_score);
+  assert.deepEqual(reads, [100, 100, 100], "v2, v3 and no grade read the same newest facts");
+  assert.equal(withFreshFacts(graded(v3()), newer, { now }).facts_from, "measured");
 });
 
 test("the grade key never reads a Gemini output: two grades with the same checks score have the same key", () => {
