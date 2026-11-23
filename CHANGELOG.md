@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 - 2026-11-23
+
+### New
+
+- Every listed portfolio now gets its starting rank from clear code checks as soon as it is measured, and the AI's letter no longer stands in for a site's grade.
+
+### Fixed
+
+- A domain that has expired and now shows a parking page is taken off the rankings instead of staying listed as a working portfolio.
+- Project links are now read from your projects section and your own projects page, and count as working when at least three load; footer years written as "2026 ©" are recognised, and content shown only on phones is counted.
+- Only links you present as projects count toward your project links now, so certificates, employers and footer credits no longer do, and project sections in other languages are recognised.
+
 ## 0.7.0 - 2026-11-22
 
 ### Fixed

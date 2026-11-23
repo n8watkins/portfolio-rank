@@ -4,6 +4,64 @@
   "repository": "n8watkins/portfolio-rank",
   "releases": [
     {
+      "version": "0.8.0",
+      "tag": "v0.8.0",
+      "date": "2026-11-23",
+      "time": "2026-11-23T16:42:06Z",
+      "url": "https://github.com/n8watkins/portfolio-rank/releases/tag/v0.8.0",
+      "previous": "v0.7.0",
+      "summary": null,
+      "breaking": false,
+      "notes": [
+        {
+          "section": "new",
+          "type": "feat",
+          "scope": "tiers",
+          "text": "Every listed portfolio now gets its starting rank from clear code checks as soon as it is measured, and the AI's letter no longer stands in for a site's grade.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "e7003c5755a8613f6aa5465c77dbcb95cd7a999d",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/e7003c5755a8613f6aa5465c77dbcb95cd7a999d"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "health",
+          "text": "A domain that has expired and now shows a parking page is taken off the rankings instead of staying listed as a working portfolio.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "c4d8ab68fa4b8132b5df3922de72449284e6603f",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/c4d8ab68fa4b8132b5df3922de72449284e6603f"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "facts",
+          "text": "Project links are now read from your projects section and your own projects page, and count as working when at least three load; footer years written as \"2026 ©\" are recognised, and content shown only on phones is counted.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "463928c7d8b65b088224a56ba691f6abcf5fc0e7",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/463928c7d8b65b088224a56ba691f6abcf5fc0e7"
+        },
+        {
+          "section": "fixed",
+          "type": "fix",
+          "scope": "facts",
+          "text": "Only links you present as projects count toward your project links now, so certificates, employers and footer credits no longer do, and project sections in other languages are recognised.",
+          "breaking": false,
+          "pr": null,
+          "prUrl": null,
+          "commit": "bd225d56e4679b83b5961c93be7a2591158b0791",
+          "commitUrl": "https://github.com/n8watkins/portfolio-rank/commit/bd225d56e4679b83b5961c93be7a2591158b0791"
+        }
+      ],
+      "source": "release",
+      "unattributed": 0
+    },
+    {
       "version": "0.7.0",
       "tag": "v0.7.0",
       "date": "2026-11-22",
