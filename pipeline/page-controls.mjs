@@ -51,7 +51,8 @@ const STRONG_WORDS = [
   String.raw`projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|trabajos|travaux`,
 ].join("|");
 const CJK_WORDS = "项目|專案|作品|プロジェクト|프로젝트";
-const WEAK_WORDS = String.raw`works|(?:my|our|selected|featured|recent|latest|past|personal|side|client|some of my) ?work|works? ?samples?|featured|open ?source|apps|products|experiments|lab|playground|builds|creations`;
+// "What I build" is mubaidr.js.org's (the label scan).
+const WEAK_WORDS = String.raw`works|(?:my|our|selected|featured|recent|latest|past|personal|side|client|some of my) ?work|works? ?samples?|featured|open ?source|apps|products|experiments|lab|playground|builds|creations|what i build|things i build`;
 const STRONG = whole(STRONG_WORDS, CJK_WORDS);
 const WEAK = whole(WEAK_WORDS);
 export const PROJECT_ATTR = whole(`${STRONG_WORDS}|${WEAK_WORDS}`, CJK_WORDS);
@@ -61,8 +62,17 @@ export const PROJECT_ATTR = whole(`${STRONG_WORDS}|${WEAK_WORDS}`, CJK_WORDS);
 const NOT_PROJECT_HEADING = whole(
   String.raw`experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition|featured in|as seen in|press|articles?|posts?|blog|talks?|publications?|contributions?|repos i like|starred|favou?rite repos|platforms|partners|integrations|sponsors|brands|companies|trusted by|worked with`
 );
-/** Whether a heading opens a projects section: a strong word, or a weak one with no not-projects word. */
-const projectHeading = (words) => STRONG.test(words) || (WEAK.test(words) && !NOT_PROJECT_HEADING.test(words));
+/**
+ * Whether a heading opens a projects section: a strong word, or a weak one with no not-projects word, in a
+ * heading short enough to be a section's title. A long one is an article's or a card's title ("Exploring Framer
+ * Motion: Adding Smooth Animations to React Apps", "使用项目来代替计划" in a blog list: the label scan of 150 sites).
+ */
+const projectHeading = (words) => {
+  const latin = words.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length;
+  const cjk = (words.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu) ?? []).length;
+  if (latin > 7 || cjk > 8) return false;
+  return STRONG.test(words) || (WEAK.test(words) && !NOT_PROJECT_HEADING.test(words));
+};
 /** A heading that names projects (projectHeading: strong words win, weak ones yield to not-projects words). */
 export const PROJECT_HEADING = { test: (words) => projectHeading(String(words)) };
 // The words right before a link that make it a credit, not a project: "Powered by Hugo & Narrow", "Theme by
@@ -143,6 +153,8 @@ function resolve(u, baseUrl) {
 export function scanPage(html, baseUrl) {
   const s = String(html ?? "");
   const n = s.length;
+  // Three or more h1s: the page titles its sections with them (see close()).
+  const h1Sections = (s.match(/<h1[\s>]/gi) ?? []).length >= 3;
   const links = [];
   const controls = [];
   const text = [];
@@ -216,8 +228,11 @@ export function scanPage(html, baseUrl) {
       // only h2 to h4 open a section; a page whose projects sit under an h1 alone is read by its projects
       // elements (id, class, aria-label) and its repository links. A title-like h2 to h4 opens nothing either.
       // A projects heading at any level from h2 to h4 ends an open aside ("Skills" h2, then "Projects" h3).
+      // A page with several h1s may use them as section titles ("about", "skills", "projects", "contact" on
+      // beatrizneaime.com): there an h1 that names projects opens a projects section like an h2. Only projects:
+      // big titles split into h1s ("TURNING", "IDEAS", "Crafting Digital Experiences" on nitishkr.fun) open nothing.
       const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
-      const titled = rec.heading.level >= 2 && !TITLE_LIKE.test(words);
+      const titled = (rec.heading.level >= 2 || (h1Sections && PROJECT_HEADING.test(words))) && !TITLE_LIKE.test(words);
       if (titled && (scope?.kind === "aside" || scope?.kind === "other") && PROJECT_HEADING.test(words)) endScope();
       if (!scope && titled) {
         // "Work Experiences", "Education", "Network & recognition." are never projects, whatever their classes. Inside

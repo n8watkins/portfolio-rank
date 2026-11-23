@@ -201,6 +201,16 @@ test("the words that mark a projects section, in English and other languages, wh
   // hezy.netlify.app); an h2 there still ends the projects ("Clients").
   assert.deepEqual(tiers(`<main><section id="projects"><div><h3>Dashboard for Companies' Data Analysis</h3>${demos}</div><div><h3>E-Commerce Platforms</h3><a href="https://three.example/">x</a></div></section></main>`), [1, 1, 1]);
   assert.deepEqual(tiers(`<main><section class="projects"><h2>Clients</h2>${demos}</section></main>`), [3, 3]);
+  // From the label scan of 150 sites: "What I build" (mubaidr.js.org); a long heading with a weak or CJK word is an
+  // article's title, not a section ("... Adding Smooth Animations to React Apps", "使用项目来代替计划").
+  assert.deepEqual(tiers(`<main><section><h2>What I build</h2>${demos}</section></main>`), [1, 1]);
+  assert.deepEqual(tiers(`<main><section><h3>Exploring Framer Motion: Adding Smooth Animations to React Apps</h3>${demos}</section></main>`), [3, 3]);
+  assert.deepEqual(tiers(`<main><section><h3>1、使用项目来代替计划的方法和经验</h3>${demos}</section></main>`), [3, 3]);
+  // A page that titles each section with an h1 (beatrizneaime.com: "about", "skills", "projects", "contact"); a big
+  // title split into h1s opens nothing (nitishkr.fun: "TURNING", "IDEAS", "Crafting Digital Experiences").
+  assert.deepEqual(tiers(`<main><h1>about</h1><p>x</p><h1>skills</h1><p>y</p><h1>projects</h1>${demos}<h1>contact</h1><a href="https://c.example/">c</a></main>`), [1, 1, 3]);
+  assert.deepEqual(tiers(`<main><h1>TURNING</h1><h1>IDEAS</h1><h1>Crafting Digital Experiences</h1><section id="projects">${demos}</section></main>`), [1, 1]);
+  assert.deepEqual(tiers(`<main><h1>Projects</h1>${demos}</main>`), [3, 3], "a single h1 is still the page's title");
   // Not inside other words: a class "label laboratory" is neither "lab".
   assert.deepEqual(tiers(`<main><section class="label laboratory">${demos}</section></main>`), [3, 3]);
 });
