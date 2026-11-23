@@ -50,7 +50,14 @@ test("www.masirjafri.in: one project on the home page, the rest from its Project
 
 test("www.adhamdannaway.com: its case studies are its own pages under /portfolio, and they count as project links", () => {
   const url = "https://www.adhamdannaway.com/";
-  assert.equal(projectsPageFor(homeOf("www.adhamdannaway.com", url), url), "https://www.adhamdannaway.com/portfolio");
+  // Its home page shows 3 case studies under "<div><h3>Some of my latest work</h3></div>" (the heading's wrapper
+  // holds no link, so the section is the element around it): 3 projects shown, so its /portfolio is not needed.
+  assert.deepEqual(projectCandidates(homeOf("www.adhamdannaway.com", url), url).map((c) => [c.tier, c.url.replace(url, "/")]), [
+    [2, "/portfolio/figma-design-system"],
+    [2, "/portfolio/ui-design-book"],
+    [2, "/portfolio/creating-a-lean-design-system"],
+  ]);
+  assert.equal(projectsPageFor(homeOf("www.adhamdannaway.com", url), url), null);
   const got = projectCandidates(withProjectsPage("www.adhamdannaway.com", url), url);
   assert.equal(got.length, 8);
   assert.ok(got.every((c) => c.kind === "own page" && /^https:\/\/www\.adhamdannaway\.com\/portfolio\/[a-z0-9-]+$/.test(c.url)), JSON.stringify(got));
@@ -229,15 +236,19 @@ test("tool lists, article sites, cookie banners and comment widgets: the host li
   assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<section id="projects"><a href="https://www.npmjs.com/">npm</a><a href="https://pypi.org/">PyPI</a></section>`, url, finalUrl: url }), url), []);
 });
 
-test("only as many own pages as the pass counts go ahead of other outbound links (stimmie.dev's case)", () => {
+test("apps on the site's own subdomains are its own work, ahead of its own pages (stimmie.dev's case)", () => {
   const url = "https://ana.dev/";
+  // stimmie.dev's "~ stimmieverse ~": "Apps, tools, and services I make and offer" on its own subdomains.
   const html = `<section id="projects">${[1, 2, 3, 4, 5, 6, 7].map((i) => `<a href="/projects/p${i}">p${i}</a>`).join("")}</section>
-    <section><h2>~ ana-verse ~</h2><a href="https://app.ana.example/">App</a><a href="https://tool.ana.example/">Tool</a></section>`;
+    <div><h2>~ ana-verse ~</h2><ul><li><a href="https://gradesim.ana.dev">GradeSim</a></li><li><a href="https://tutor.ana.dev/">Tutor</a></li><li><a href="https://blog.ana.dev/">Blog</a></li><li><a href="https://app.ana.example/">Other</a></li></ul></div>`;
   const got = projectCandidates(homeProjectLinks({ html, url, finalUrl: url }), url);
   assert.deepEqual(
-    got.map((c) => c.url.replace("https://ana.dev", "")),
-    ["/projects/p1", "/projects/p2", "https://app.ana.example/", "https://tool.ana.example/", "/projects/p3", "/projects/p4", "/projects/p5", "/projects/p6"]
+    got.map((c) => [c.tier, c.url.replace("https://ana.dev", "")]),
+    [[1, "https://gradesim.ana.dev/"], [1, "https://tutor.ana.dev/"], [2, "/projects/p1"], [2, "/projects/p2"], [2, "/projects/p3"], [2, "/projects/p4"], [2, "/projects/p5"], [2, "/projects/p6"]]
   );
+  // Not on a shared host: another *.github.io is someone else's.
+  const gh = "https://ana.github.io/";
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<p><a href="https://bob.github.io/x/">x</a><a href="https://app.ana.github.io/">y</a></p>`, url: gh, finalUrl: gh }), gh).map((c) => [c.tier, c.url]), [[1, "https://app.ana.github.io/"], [3, "https://bob.github.io/x/"]]);
 });
 
 test("a 'Portfolio' title heading opens no projects section, and a projects heading's section ends at the next heading", () => {
@@ -284,7 +295,7 @@ test("measurePage records where the checked links came from and keeps the list f
   assert.deepEqual(f.views, ["desktop", "projects page"]);
   assert.deepEqual(f.project_links_from, { home: 1, phone: 0, projects_page: { url: page, count: 7 }, own_pages: 0 });
   assert.equal(f.project_candidates.length, 8);
-  assert.deepEqual(Object.keys(f.project_candidates[0]).sort(), ["from", "kind", "url"]);
+  assert.deepEqual(Object.keys(f.project_candidates[0]).sort(), ["from", "kind", "tier", "url"]);
   // Without a projects page or buttons: no projects page is recorded.
   const plain = await measurePage({ html: fixture("www.masirjafri.in.home.html"), text: "", url, finalUrl: url }, { fetchImpl: ok });
   assert.equal(plain.project_links_from.projects_page, null);

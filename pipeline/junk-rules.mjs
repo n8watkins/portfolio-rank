@@ -50,7 +50,7 @@ export function urlNotPortfolio(url) {
     return false;
   }
   const h = u.hostname.toLowerCase().replace(/^www\./, "");
-  if (/^(github\.com|gitlab\.com|linktr\.ee|bio\.link|beacons\.ai)$/.test(h)) return true;
+  if (/^(github\.com|gitlab\.com|bitbucket\.org|linktr\.ee|bio\.link|beacons\.ai)$/.test(h)) return true;
   return /\/(admin|login|wp-admin)(\/|$)/i.test(u.pathname);
 }
 

@@ -26,8 +26,16 @@ export const LINK_TIMEOUT_MS = 8000;
 /** The fewest project links that load for "project links load" to pass (and for full project points, lib/check-points.mjs). */
 export const MIN_PROJECT_LINKS = 3;
 
-/** How many of the site's own project pages go ahead of its other outbound links in the list of 8 (projectCandidates). */
-export const OWN_PAGES_AHEAD = 2;
+/** The candidates' lowest tier (projectCandidates): outbound links outside any projects section. */
+export const LOW_TIER = 3;
+/**
+ * The owner's choice for links of the lowest tier (checkLinks):
+ *   "beside"  they count toward the three only when at least one higher-tier project link loads (variant A);
+ *   "never"   they never count and are not requested: only links in a section the page labels as projects,
+ *             the projects page's main content, the site's own project pages and repositories count (variant B).
+ * Either way, when they are left out the result names how many (`not_counted`).
+ */
+export const LOW_LINKS = "beside";
 /**
  * Own project pages on a host that answers 200 for an address that cannot exist (a catch-all host, an app
  * shell) are verified by their text instead of their status (checkProjectLinks): at least this many words of
@@ -97,14 +105,16 @@ export function projectLinksPass(links, version) {
 export function projectLinksText(links, version) {
   if (!isLinks(links)) return null;
   if (!newProjectRule(version)) return links.checked ? `${n(links.ok)} of ${links.checked} load${n(links.broken) ? `, ${n(links.broken)} broken` : ""}` : "No project links to check";
-  if (links.checked <= 0) return "Project links: none found";
+  // Other links on the page, left out because no project link in the projects loads (checkLinks).
+  const others = n(links.not_counted) ? `${n(links.not_counted)} other ${n(links.not_counted) === 1 ? "link" : "links"} on the page ${n(links.not_counted) === 1 ? "was" : "were"} not counted` : "";
+  if (links.checked <= 0) return others ? `No project links found in a projects section; ${others}` : "Project links: none found";
   const blocked = n(links.blocked);
   const tested = links.checked - blocked;
   const wall = blocked ? `${blocked} behind a bot check` : "";
-  if (tested <= 0) return `Project links: ${wall}`;
+  if (tested <= 0) return `Project links: ${[wall, others].filter(Boolean).join("; ")}`;
   // Own pages that answered but could not be told from a page that does not exist (a catch-all host) do not load.
   const shell = n(links.own_unverified) ? `${n(links.own_unverified)} of the site's own project pages could not be told apart from an empty page, so they were not counted` : "";
-  return `${n(links.ok)} of ${tested} project links load${[wall, shell].filter(Boolean).map((s) => `; ${s}`).join("")}`;
+  return `${n(links.ok)} of ${tested} project links load${[wall, shell, others].filter(Boolean).map((s) => `; ${s}`).join("")}`;
 }
 
 // Free hosting subdomains: a site served from one is not on its own domain.
@@ -116,13 +126,39 @@ export const FREE_HOSTS =
 // 2026-11-22: stimmie.dev's "find me" list, hellosagar's Upwork and Fiverr):
 // a profile is never a project, so it never fills a project-link slot.
 const PROFILE_HOSTS =
-  /(^|\.)(upwork\.com|fiverr\.com|freelancer\.com|toptal\.com|linktr\.ee|bio\.link|beacons\.ai|kaggle\.com|codeforces\.com|codechef\.com|hackerearth\.com|geeksforgeeks\.org|kattis\.com|topcoder\.com|imdb\.com|goodreads\.com|letterboxd\.com|myanimelist\.net|anilist\.co|deviantart\.com|artstation\.com|youpic\.com|500px\.com|flickr\.com|unsplash\.com|pinterest\.com|reddit\.com|twitch\.tv|spotify\.com|soundcloud\.com|substack\.com|producthunt\.com|wellfound\.com|angel\.co|glassdoor\.com|indeed\.com)$/i;
+  /(^|\.)(upwork\.com|fiverr\.com|freelancer\.com|toptal\.com|linktr\.ee|bio\.link|beacons\.ai|kaggle\.com|codeforces\.com|codechef\.com|hackerearth\.com|geeksforgeeks\.org|kattis\.com|topcoder\.com|imdb\.com|goodreads\.com|letterboxd\.com|myanimelist\.net|anilist\.co|deviantart\.com|artstation\.com|youpic\.com|500px\.com|flickr\.com|unsplash\.com|pinterest\.com|reddit\.com|twitch\.tv|spotify\.com|soundcloud\.com|substack\.com|producthunt\.com|wellfound\.com|angel\.co|glassdoor\.com|indeed\.com|vsco\.co|about\.me|peerlist\.io|read\.cv|polywork\.com|bento\.me|contra\.com|layers\.to)$/i;
+/** An address on a code host itself (github.com/ana, gitlab.com/ana/x, bitbucket.org/ana): not a portfolio site. */
+export function isCodeHostAddress(url) {
+  try {
+    return /^(?:github\.com|gitlab\.com|bitbucket\.org)$/i.test(new URL(url).hostname.replace(/^www\./i, ""));
+  } catch {
+    return false;
+  }
+}
+// Profiles on sites whose other pages are projects: a Devpost, GitLab, Bitbucket, Hugging Face or Replit user
+// page (one segment: devpost.com/ana, replit.com/@ana), and an itch.io creator's home page. Their project
+// pages (devpost.com/software/x, gitlab.com/ana/x, huggingface.co/spaces/ana/x, ana.itch.io/game) count.
+const PROFILE_PATH_HOSTS = /^(?:devpost\.com|gitlab\.com|bitbucket\.org|huggingface\.co|replit\.com)$/i;
+const isPathProfile = (h, path) => {
+  const segs = path.split("/").filter(Boolean);
+  if (PROFILE_PATH_HOSTS.test(h)) return segs.length === 1 && !/^(?:software|hackathons)$/i.test(segs[0]);
+  return /\.itch\.io$/i.test(h) && segs.length === 0;
+};
+// Certificates and course records: proof of learning, not projects (aradhyapuneeth.github.io's Microsoft Learn
+// and Neo4j certificates). Whole hosts, or the certificate paths of a learning site. (Coursera, Udemy,
+// freeCodeCamp, LinkedIn and HackerRank are left out whole, NOT_PROJECT.)
+const CERTIFICATE_HOSTS = /(^|\.)(credly\.com|youracclaim\.com|accredible\.com|credential\.net|certmetrics\.com|graphacademy\.neo4j\.com)$/i;
+const CERTIFICATE_PATH = {
+  "learn.microsoft.com": /\/(?:api\/)?credentials\b|\/users\/[^/]+\/(?:credentials|transcript|achievements)\b/i,
+  "datacamp.com": /^\/(?:completed\/)?statement-of-accomplishment\//i,
+};
+const isCertificate = (h, path) => CERTIFICATE_HOSTS.test(h) || Boolean(CERTIFICATE_PATH[h]?.test(path));
 /** A CodePen profile (codepen.io/name), not one of its pens (codepen.io/name/pen/id). */
 const isCodepenProfile = (u) => /(^|\.)codepen\.io$/i.test(u.hostname) && u.pathname.split("/").filter(Boolean).length <= 1;
 
 // Hosts that are profiles or services, not project demos.
 const NOT_PROJECT =
-  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
+  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
 // App store and extension store listings are projects, though their parent hosts are on the list above.
 const STORE_HOST = /^(?:play\.google\.com|chromewebstore\.google\.com)$/i;
 // The sites of the tools a developer uses, as named in a "Tools I use" list: languages, frameworks and
@@ -174,6 +210,9 @@ const BUILDERS = [
   [/\/wp-content\//i, "WordPress"],
   [/readymag/i, "Readymag"],
 ];
+
+/** Subdomains of a person's own domain that are services, not work: mail, a blog, static files, sign-in, a CV. */
+const OWN_SERVICE_SUBDOMAIN = /^(?:mail|webmail|smtp|blog|news|cdn|static|assets|media|img|images|files|status|api|auth|login|admin|analytics|stats|links?|cal|calendar|book|resume|cv|shop|store)$/i;
 
 const host = (u) => {
   try {
@@ -276,11 +315,15 @@ function projectUrl(l, self) {
     const segs = u.pathname.split("/").filter(Boolean);
     if (segs.length < 2 || GH_RESERVED.test(segs[0])) return null; // a profile, not a repository
     repo = true;
-  } else if ((NOT_PROJECT.test(h) && !STORE_HOST.test(h)) || isToolSite(h, u.pathname) || (REGISTRY_HOME.test(h) && u.pathname.replace(/\/+$/, "") === "") || PROFILE_HOSTS.test(h) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
+  } else if ((NOT_PROJECT.test(h) && !STORE_HOST.test(h)) || isToolSite(h, u.pathname) || (REGISTRY_HOME.test(h) && u.pathname.replace(/\/+$/, "") === "") || PROFILE_HOSTS.test(h) || isPathProfile(h, u.pathname) || isCertificate(h, u.pathname) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
     return null;
   }
   u.hash = "";
-  return { key: u.href, repo };
+  // A subdomain of the site's own domain is the person's own work ("gradesim.stimmie.dev" on stimmie.dev,
+  // "photography.siemvanbree.nl"), except the usual service subdomains. Never on a shared host: on
+  // "ana.github.io" another "*.github.io" is someone else's, and it is not a subdomain of "ana.github.io" anyway.
+  const ownSub = Boolean(self) && h.endsWith(`.${self}`) && !OWN_SERVICE_SUBDOMAIN.test(h.slice(0, -self.length - 1));
+  return { key: u.href, repo, ownSub };
 }
 
 /**
@@ -368,11 +411,10 @@ function isOwnProjectPath(path, base = "") {
  *      on the site's projects page (`from: "projects_page"`);
  *   2. the site's own pages for single projects (isOwnProjectPath): in a home
  *      page projects section, or on the projects page outside its nav,
- *      header and footer; at most OWN_PAGES_AHEAD here, any more only after
- *      kind 3;
- *   3. every other outbound link of the home page, in page order. The
- *      projects page adds no links of this kind: a client list or a press
- *      page called "Work" does not make its links projects.
+ *      header and footer;
+ *   3. every other outbound link (LOW_TIER), in page order: outside any
+ *      projects section, or in what looks like a tool list, a banner or a
+ *      section that is not projects. These count only as LOW_LINKS says.
  * A profile, a link in a "find me" list, the site's home page and the
  * projects page itself are never candidates. `links` carry `from` ("home",
  * "phone" or "projects_page"; "home" when missing) and, for the projects
@@ -393,6 +435,10 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   for (const l of links) {
     const from = l.from ?? "home";
     const onProjectsPage = from === "projects_page";
+    // A credit ("Powered by Hugo & Narrow", "Theme by ..."), repository included: never a project. The one place a
+    // repository is dropped. Not inside the projects, nor in the main content of the projects page, where "Built
+    // with Next.js & <a>source</a>" describes the project itself.
+    if (l.credit && !l.inProjects && (l.inChrome || !onProjectsPage)) continue;
     const p = projectUrl(l, self);
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
@@ -406,7 +452,9 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // only when slots remain, on either page; a repository is never lowered. What keeps a tool list or a
       // banner from passing is the host lists (TOOL_SITE, NOT_PROJECT), which remove the tools' own sites.
       if (onProjectsPage && l.inChrome) continue;
-      const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome) || (onProjectsPage && !l.inAside);
+      // A repository, or a subdomain of the site's own domain (its own work), counts as in the projects anywhere
+      // but the page's frame.
+      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome) || (onProjectsPage && !l.inAside);
       seen.add(p.key);
       tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
       continue;
@@ -427,10 +475,11 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     seen.add(own.key);
     tiers[1].push({ url: own.key, from, kind: "own page" });
   }
-  // Only OWN_PAGES_AHEAD own pages go ahead of the other outbound links; the rest fill the slots left over, so
-  // a site's own pages never push its outbound project sites out of the 8 (stimmie.dev: 7 own pages had).
+  // Every own project page goes ahead of the lowest tier, which only fills the slots left over (sujanbhatta.tech:
+  // 6 case studies, then partner logos). stimmie.dev's own apps on its subdomains are in the first tier now, so
+  // its own pages no longer push them out.
   const own = tiers[1].map((c) => ({ ...c, tier: 2 }));
-  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own.slice(0, OWN_PAGES_AHEAD), ...tiers[2].map((c) => ({ ...c, tier: 3 })), ...own.slice(OWN_PAGES_AHEAD)].slice(0, max);
+  return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own, ...tiers[2].map((c) => ({ ...c, tier: LOW_TIER }))].slice(0, max);
 }
 
 /** A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies". Not "How I work". */
@@ -592,7 +641,7 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
  * `own_ok` how many of the loading ones are own pages, `own_check` "status",
  * "text" or null (no own pages).
  */
-export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "" } = {}) {
+export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "", lowLinks = LOW_LINKS } = {}) {
   const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
   const headers = { Accept: "text/html,*/*;q=0.8", ...(userAgent ? { "User-Agent": userAgent } : {}) };
   /** A plain GET with its visible text (the body capped), or null when it failed. */
@@ -633,7 +682,11 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     if ([401, 403, 429, 999].includes(status)) return "blocked";
     return "broken";
   }
-  const queue = urls.map((u) => (typeof u === "string" ? { url: u, kind: "outbound" } : u));
+  const all = urls.map((u) => (typeof u === "string" ? { url: u, kind: "outbound" } : u));
+  // LOW_LINKS "never": the lowest tier is not requested at all, only named.
+  const isLow = (c) => c.tier >= LOW_TIER;
+  const skipped = lowLinks === "never" ? all.filter(isLow).length : 0;
+  const queue = skipped ? all.filter((c) => !isLow(c)) : all;
   // Once per check: does the host answer an address that cannot exist?
   const firstOwn = queue.find((c) => c.kind === "own page");
   let byText = null;
@@ -653,6 +706,7 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     seenTexts.add(key);
     return real ? "ok" : "own_unverified";
   }
+  const done = [];
   await Promise.all(
     Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
       while (queue.length) {
@@ -664,13 +718,25 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
         } catch {
           verdict = null;
         }
-        if (!verdict) continue;
-        res.checked++;
-        res[verdict]++;
-        if (verdict === "ok" && c.kind === "own page") res.own_ok++;
+        if (verdict) done.push({ c, verdict });
       }
     })
   );
+  // The lowest tier (LOW_TIER: links outside any projects section, the projects page's asides) cannot make the
+  // pass on its own: with LOW_LINKS "beside" it counts only when at least one link of a higher tier (in the
+  // projects, on the projects page, a repository, an own project page) loads; with "never" it was not requested.
+  // Either way what was left out is named (`not_counted`), so certificates, a tool list or documentation links
+  // never pass a site with no projects.
+  const low = done.filter(({ c }) => isLow(c));
+  const highLoads = done.some(({ c, verdict }) => !isLow(c) && verdict === "ok");
+  const counted = low.length && !highLoads ? done.filter(({ c }) => !isLow(c)) : done;
+  const notCounted = skipped + (counted !== done ? low.length : 0);
+  if (notCounted) res.not_counted = notCounted;
+  for (const { c, verdict } of counted) {
+    res.checked++;
+    res[verdict]++;
+    if (verdict === "ok" && c.kind === "own page") res.own_ok++;
+  }
   return res;
 }
 
@@ -827,14 +893,17 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
     links.push(...pageLinks(projectsPage.html, projectsPageUrl).map((l) => ({ ...l, from: "projects_page", page: projectsPageUrl })));
     views.push("projects page");
   }
-  const candidates = projectCandidates(links, facts.final_url);
+  // A listed address on a code host (github.com/ana, gitlab.com/ana) is not a portfolio site: the host's own menu
+  // (docs.github.com, github.blog) is no project, and its repositories are on the same host. None found.
+  const candidates = isCodeHostAddress(desktopInput.url) || isCodeHostAddress(facts.final_url) ? [] : projectCandidates(links, facts.final_url);
   // With their kind, and the home page's text: the site's own pages must be real pages (checkLinks). The
   // capture passes the page text it stores (`input.homeText`, portfolios.page_text), so the nightly re-check,
   // which reads that stored text, compares own pages against exactly the same words.
   const homeText = storedText ?? (desktopInput.text || visibleText(desktopInput.html));
   facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText });
-  // The links checked, with where each came from: the nightly re-check (pipeline/evidence.mjs) tests these again.
-  facts.project_candidates = candidates.map(({ url, from, kind }) => ({ url, from, kind }));
+  // The links checked, with where each came from and their tier: the nightly re-check (pipeline/evidence.mjs)
+  // tests these again, by the same rule for the lowest tier.
+  facts.project_candidates = candidates.map(({ url, from, kind, tier }) => ({ url, from, kind, tier }));
   facts.project_links_from = sourcesOf(candidates, projectsPageUrl);
   facts.views = views;
   return facts;
