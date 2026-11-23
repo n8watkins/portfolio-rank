@@ -128,9 +128,12 @@ export function readSite(site) {
   return out;
 }
 
-/** A link label that is the projects and nothing else, in the languages the list has. */
+/**
+ * A link label that is the projects and nothing else, in the languages the list has, after any numbering or
+ * decoration ("/Projects", "03 Work", "// Portfolio").
+ */
 const PROJECTS_LABEL =
-  /^(?:\d+\.?\s*)?(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view|see|mis|meus|mes|meine|i miei|mijn|ons|onze|мои)\s+)?(?:projects?|works?|portfolio|portafolio|portf[oó]lio|case stud(?:y|ies)|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|projeler|projelerim|werk|проекты|проекти|项目|作品|obras|trabalhos|trabajos|travaux|r[eé]alisations|creations|builds|experiments|lab)\s*[→›»↗]?$/iu;
+  /^[\s/#~>|.:\d\p{Pd}]*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view|see|mis|meus|mes|meine|i miei|mijn|ons|onze|мои)\s+)?(?:projects?|works?|portfolio|portafolio|portf[oó]lio|case stud(?:y|ies)|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|projeler|projelerim|werk|проекты|проекти|项目|作品|obras|trabalhos|trabajos|travaux|r[eé]alisations|creations|builds|experiments|lab)\s*[→›»↗]?$/iu;
 
 // ---------- the flags ----------
 
@@ -226,7 +229,8 @@ export const MOVED_MAX_TEXT = 1500;
 /** A short page that says the site has moved somewhere else. */
 export function movedNotice(site) {
   const p = readSite(site);
-  if (p.text.length > MOVED_MAX_TEXT) return null;
+  // A page with projects is the site itself, whatever it says ("I moved to Lisbon").
+  if (p.text.length > MOVED_MAX_TEXT || p.projects.any) return null;
   const m = p.text.match(MOVED);
   if (!m) return null;
   const elsewhere = p.outbound.map((l) => hostOf(l.href)).filter(Boolean);
@@ -255,7 +259,18 @@ const monthLike = (d) => {
   const w = d.match(/\p{L}{3,10}/u)?.[0]?.toLowerCase();
   return !w || !NOT_MONTH.test(w);
 };
-const NOT_MONTH = /^(?:since|from|version|page|step|chapter|part|level|season|episode|issue|vol|volume|room|year|years|about|over|with|and|the|for|copyright|rights|reserved)$/i;
+/**
+ * The dates without a calendar's: a contribution graph or a date picker lists every day in a row
+ * ("2025-11-23", "2025-11-24", ...), posts do not. ISO dates go when most of them are a day after another.
+ */
+function notACalendar(dates) {
+  const iso = dates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  if (iso.length < 10) return dates;
+  const days = new Set(iso.map((d) => Date.parse(`${d}T00:00:00Z`) / 864e5));
+  const runs = [...days].filter((d) => days.has(d - 1) || days.has(d + 1)).length;
+  return runs / days.size >= 0.5 ? dates.filter((d) => !iso.includes(d)) : dates;
+}
+const NOT_MONTH =/^(?:since|from|version|page|step|chapter|part|level|season|episode|issue|vol|volume|room|year|years|about|over|with|and|the|for|copyright|rights|reserved)$/i;
 
 /**
  * A list of dated posts and no projects anywhere: a blog. Projects anywhere
@@ -275,7 +290,7 @@ const BLOG_LINK = /^(?:(?:my|the|read (?:my|the))\s+)?(?:blog|weblog|writing|wri
  */
 export function blogFacts(site) {
   const p = readSite(site);
-  const dates = allMatches(p.text, DATE_RE, 300).filter(monthLike);
+  const dates = notACalendar(allMatches(p.text, DATE_RE, 400).filter(monthLike));
   const times = allMatches(p.text, READ_TIME, 300);
   const more = allMatches(p.text, POST_WORD, 300);
   const articles = (p.html.match(/<article\b/gi) ?? []).length;
@@ -289,8 +304,9 @@ export function blogFacts(site) {
   if (posts < BLOG_MIN_POSTS) return { ...base, verdict: null, why: base.hasBlog ? `a "${blogLink}" link but only ${plural(posts, "dated post")} on this page: the posts live elsewhere` : "no blog" };
   if (!p.projects.any) return { ...base, verdict: "blog-only" };
   // A page of whole posts names projects inside them ("New Project", a repository in a post): many posts, few
-  // project links and no projects menu link or section title is still only a blog.
-  const titled = p.projects.headings.some((h) => PROJECTS_LABEL.test(h));
+  // project links and no projects menu link or section title is still only a blog. A section title names the
+  // projects in the plural ("Innovative Projects", "Selected work"); a post's subheading in the singular does not.
+  const titled = p.projects.headings.some((h) => SECTION_TITLE.test(h));
   if (posts >= BLOG_MANY_POSTS && posts >= 3 * p.projects.shown && !p.projects.nav.length && !titled) return { ...base, verdict: "posts-few-project-links" };
   const why = p.projects.nav.length
     ? `a projects link in its menu ("${p.projects.nav[0]}")`
@@ -313,9 +329,10 @@ export function blogFacts(site) {
 export function blogOnly(site) {
   const b = blogFacts(site);
   if (b.verdict === "blog-only") return raised("blog-only", `The page has ${b.what} and no projects section, project heading, projects menu link or project link.`, b.snippets);
-  if (b.verdict === "posts-few-project-links") return raised("blog-only", `The page has ${b.what}, only ${plural(b.projects.shown, "project link")} and no projects menu link or section title: only a blog.`, b.snippets);
+  if (b.verdict === "posts-few-project-links") return raised("blog-only", `The page has ${b.what}, ${b.projects.shown ? `only ${plural(b.projects.shown, "project link")}` : "no project link"} and no projects menu link or section title: only a blog.`, b.snippets);
   return null;
 }
+const SECTION_TITLE = /\b(?:projects|portfolio|works|(?:my|selected|recent|featured|side|client) work|case studies|things i(?:'ve| have)? built|projets|proyectos|projekte|projetos|progetti|projecten|projeler|r[eé]alisations|trabajos|trabalhos)\b/i;
 /** With this many posts, a few project links inside them do not make the page a portfolio. */
 export const BLOG_MANY_POSTS = 10;
 
@@ -483,6 +500,8 @@ export const ESSAY_MIN_PARAGRAPH_SHARE = 0.6;
 /** Paragraphs this long, and at least this many of them. */
 export const ESSAY_PARAGRAPH = 120;
 export const ESSAY_MIN_PARAGRAPHS = 6;
+/** This many years named make the prose a resume, not an essay. */
+export const ESSAY_MAX_YEARS = 3;
 
 /**
  * The page is one document (an essay, a manifesto, a letter): long prose in
@@ -492,6 +511,9 @@ export const ESSAY_MIN_PARAGRAPHS = 6;
 export function singleDocument(site) {
   const p = readSite(site);
   if (p.text.length < ESSAY_MIN_TEXT || p.projects.any) return null;
+  // A resume written as prose names its years ("From 2021 I have been working ..."); the owner keeps a
+  // digital resume with no projects listed (lorandkissdev.github.io/github-portfolio).
+  if ((p.text.match(/\b(?:19|20)\d\d\b/g) ?? []).length >= ESSAY_MAX_YEARS) return null;
   const linkCount = new Set(p.links.filter((l) => !/^#/.test(l.raw ?? "")).map((l) => l.href)).size;
   if (linkCount > ESSAY_MAX_LINKS || p.social.length + p.contact.length > 1) return null;
   const paragraphs = [...p.html.matchAll(/<p\b[^>]*>([\s\S]{0,20000}?)<\/p\s*>/gi)].map((m) => squash(decodeEntities(stripTags(m[1]))));

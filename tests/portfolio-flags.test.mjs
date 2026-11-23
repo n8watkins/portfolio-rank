@@ -116,6 +116,27 @@ test("blog-only never flags a blog beside projects: a projects menu link, headin
   assert.equal(blogOnly(withRepo), null);
 });
 
+test("blog-only: a decorated menu label and a contribution calendar never make a portfolio a blog", () => {
+  // haffee.dev: "/Projects" in the menu, an "Innovative Projects" section, and a year of calendar days.
+  const days = Array.from({ length: 300 }, (_, i) => new Date(Date.UTC(2025, 0, 1) + i * 864e5).toISOString().slice(0, 10));
+  const site = page(`<nav><a href="/">Home</a><a href="/projects">/Projects</a></nav><h1>Hafeez</h1>
+    <h2>Innovative Projects</h2><p><a href="https://github.com/h/a">A</a></p><div>${days.map((d) => `<span>${d}</span>`).join(" ")}</div>`);
+  assert.equal(blogOnly(site), null);
+  assert.ok(blogFacts(site).posts < 10);
+  // Without the menu link and the section title, a page of many posts and a few repositories is still a blog.
+  const posts = Array.from({ length: 12 }, (_, i) => `<article><h2>Post ${i}</h2><p>March ${i + 1}, 2026 · 5 min read</p></article>`).join("");
+  const blog = page(`<h1>Patrick's Blog</h1>${posts}<h3>New Project</h3><p><a href="https://github.com/x/y">y</a> <a href="https://github.com/x/z">z</a></p>`);
+  assert.match(blogOnly(blog)?.reason ?? "", /12 dated posts, only 2 project links and no projects menu link or section title/);
+});
+
+test("moved-notice and single-document stay quiet on a portfolio or a prose resume", () => {
+  const moved = page(`<nav><a href="/projects">Projects</a></nav><h1>Hi. I'm Dima.</h1><p>I moved to Lisbon and build products.</p>`);
+  assert.equal(movedNotice(moved), null);
+  const para = (y) => `<p>${`From ${y} I worked as a web developer at a company and built its shop, its intranet and its billing. `.repeat(2)}</p>`;
+  const resume = page(`<h1>Lorand Kiss</h1>${[2015, 2017, 2019, 2021, 2023, 2025].map(para).join("")}`);
+  assert.equal(singleDocument(resume), null);
+});
+
 test("blog-only: 'read more' links alone are not posts (testimonials have them)", () => {
   const recs = page(`<h1>Andrew Smith</h1>${"<blockquote>Great engineer. <a href='/r'>Read more</a></blockquote>".repeat(6)}`);
   assert.equal(blogOnly(recs), null);
