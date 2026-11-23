@@ -318,7 +318,8 @@ function Row({
                   className={`${thumb} w-[22%] max-w-[5.25rem] shrink-0`}
                   data-review-thumb="phone"
                 >
-                  <ScreenshotFrame src={base ? frameOf(base, "mobile.jpg") : null} alt="" domain={domain} kind="mobile" />
+                  {/* Too narrow for the fallback's domain (it would break mid-word): the icon only; the desktop frame names it. */}
+                  <ScreenshotFrame src={base ? frameOf(base, "mobile.jpg") : null} alt="" domain={domain} kind="mobile" className="[&>span>span:last-child]:hidden" />
                 </button>
                 {blocked && (
                   <p className="pointer-events-none absolute inset-x-2 top-2 rounded-md bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-down shadow-[var(--card-drop)] ring-1 ring-down/40" data-review-blocked>

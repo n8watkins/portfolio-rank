@@ -96,7 +96,7 @@ function ProblemRow({ r, base }: { r: Row; base: string | null }) {
             src={base ? frameOf(base, "hero.jpg") : null}
             alt={captured ? `${domain}, the stored capture from ${captured}` : `${domain}: no stored capture`}
             domain={domain}
-            className="rounded-lg ring-1 ring-edge [&>span]:w-full [&>span>span]:block [&>span>span]:truncate [&>span>span]:break-normal"
+            className="rounded-lg ring-1 ring-edge [&>span]:w-full [&>span>span:last-child]:block [&>span>span:last-child]:truncate [&>span>span:last-child]:break-normal"
           />
           <p className="mt-1.5 text-xs text-mute" data-capture-date>
             {captured ? (
@@ -219,11 +219,12 @@ export default async function AdminCaptureProblemsPage() {
             )}
             {g === "D" && p.measuring.length > 0 && (
               <details className="group/m mt-4" data-measuring>
-                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-semibold text-mute hover:text-ink [&::-webkit-details-marker]:hidden">
-                  <ChevronRight className="h-4 w-4 shrink-0 text-mute transition group-open/m:rotate-90 motion-reduce:transition-none" aria-hidden />
+                {/* The same disclosure bar as the Images page's "How images are made". */}
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-xl border border-edge bg-card px-4 py-2.5 text-sm font-bold [&::-webkit-details-marker]:hidden">
                   {n(p.measuring.length)} changed with new measuring code (not counted)
+                  <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-mute transition group-open/m:rotate-90 motion-reduce:transition-none" />
                 </summary>
-                <p className="mt-1 max-w-3xl text-sm text-mute text-pretty">
+                <p className="mt-3 max-w-3xl text-sm text-mute text-pretty">
                   These captures were measured by newer code than the ones before them, so a lost link may be the code reading the page differently, not the site changing.
                 </p>
                 <ul className="mt-3 grid gap-3">

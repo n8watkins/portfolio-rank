@@ -27,7 +27,7 @@ import {
 } from "../lib/capture-problems.mjs";
 import { recordRefreshFailure, refreshNeedsReview } from "../pipeline/capture.mjs";
 import { BLOCKED_PREFIX, BOT_WALL_REASON, MEDIA_REVIEW_REASON, SHOWS_SITE_REASON } from "../pipeline/capture-blocked.mjs";
-import { closeBlockedRefreshReviews } from "../lib/reviews/door.mjs";
+import { atTheDoor, closeBlockedRefreshReviews } from "../lib/reviews/door.mjs";
 import { GROUPS, listReviews, decideReviews } from "../lib/reviews/store.mjs";
 import { reconcileAlerts } from "../pipeline/alerts.mjs";
 import { runHealthCheck } from "../pipeline/health.mjs";
@@ -296,6 +296,28 @@ test("a blocked refresh: a covering dialog is worded as such; phone-only, delist
   assert.deepEqual(rows.map((r) => r.grp), ["signals_collapsed"]);
 });
 
+test("a grade at the door, read from the old stored capture, leaves a blocked re-capture's row open", async () => {
+  // Listed and captured, not graded yet; its re-capture met a bot check.
+  const url = "https://door-after-block.dev";
+  await site(url, { captured_at: "2026-11-20 03:00:00" });
+  await recordRefreshFailure(db, url, `error: ${BOT_WALL_REASON}`, new Date("2026-11-22T04:00:00Z"), { needsReview: true });
+  assert.equal((await pendingOf(db, url)).length, 1);
+  const row = (await db.execute({ sql: "SELECT url, name, shot_key, captured_at, meta, ai_rubric, page_text, facts, signals FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+  // Gemini says portfolio: a settled grade. It read the stored capture, so the block is not over.
+  const door = await atTheDoor(db, {
+    grade: { is_portfolio: true, tier: "B", judged_at: "2026-11-23T04:00:00.000Z" },
+    row,
+    now: new Date("2026-11-23T04:00:00Z"),
+    autoApply: true,
+    captureChecked: true,
+    gradeStatements: async () => [],
+  });
+  assert.equal(door.outcome, "portfolio");
+  const rows = await pendingOf(db, url);
+  assert.deepEqual(rows.map((r) => r.grp), ["recapture_blocked"], "still pending");
+  assert.equal(Number((await db.execute({ sql: "SELECT needs_review FROM portfolios WHERE url = ?", args: [url] })).rows[0].needs_review), 1, "and still marked");
+});
+
 test("a weekly health check after a blocked refresh leaves the site on the review list", async () => {
   // Its own database: the health check reads the whole feed it is given.
   const hdir = fs.mkdtempSync(path.join(os.tmpdir(), "capture-problems-health-"));
@@ -342,7 +364,7 @@ test("the alert condition: counts per group and the link while any is open, quie
   assert.equal(captureProblemCondition({ A: 40, B: 10, C: 9, D: 11 }, told)[0].quiet, true, "a fall: quiet");
   const [up] = captureProblemCondition({ A: 60, B: 10, C: 9, D: 12 }, told);
   assert.equal(up.quiet, false, "D rose, even though A fell");
-  assert.match(up.detail, /Up since the last email \(from the lowest count since\): D 11 to 12\./);
+  assert.match(up.detail, /New since the last email: D up from 11 to 12\./);
 });
 
 test("alertBaseline: zero before any email and after a clear, the last email's counts after a send, else the lowest since", () => {
@@ -386,7 +408,7 @@ test("the alert end to end: one email for 100 open problems, none the next night
     await adb.execute({ sql: "INSERT INTO portfolios (url, name, status, reason) VALUES ('https://b-new.dev', 'x', 'error', 'HTTP 500')" });
     r = await night("2026-11-26");
     assert.deepEqual(r.sent, [ALERT_KEY]);
-    assert.match(sent[1].text, /Up since the last email \(from the lowest count since\): B 0 to 1\./);
+    assert.match(sent[1].text, /New since the last email: B up from 0 to 1\./);
     r = await night("2026-11-27");
     assert.deepEqual(r.sent, []);
 
@@ -401,7 +423,7 @@ test("the alert end to end: one email for 100 open problems, none the next night
     await failing(60);
     r = await night("2026-11-29");
     assert.deepEqual(r.sent, [ALERT_KEY], "a rise from the lowest since the last email");
-    assert.match(sent[2].text, /A 20 to 60/);
+    assert.match(sent[2].text, /New since the last email: A up from 20 to 60\./);
     assert.equal(sent.length, 3);
   } finally {
     adb.close();
