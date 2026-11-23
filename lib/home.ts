@@ -10,7 +10,7 @@ import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
 import { familyOf, isPublicTier, tierLabel } from "@/lib/tiers.mjs";
-import { readTierMeta } from "@/lib/tiers-db.mjs";
+import { peekTierMeta } from "@/lib/tiers-db.mjs";
 import { publicLetters, siteTiers } from "@/lib/tiers-letters.mjs";
 import { tiersShown } from "@/lib/tiers-view";
 import { readPolls } from "@/lib/polls/store.mjs";
@@ -206,9 +206,7 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
   const shown = tiersShown();
   // Portfolios with an S Tier (earned with face-off wins), from the daily run's S band; never Gemini's S.
   const sTiers = shown
-    ? await readTierMeta(db())
-        .then((m) => Object.values((m as { sBand?: { counts?: Record<string, number> } } | null)?.sBand?.counts ?? {}).reduce((a, b) => a + b, 0))
-        .catch(() => 0)
+    ? await peekTierMeta(db()).then((m) => Object.values((m as { sBand?: { counts?: Record<string, number> } } | null)?.sBand?.counts ?? {}).reduce((a, b) => a + b, 0))
     : 0;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [

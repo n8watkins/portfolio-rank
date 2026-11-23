@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
-import { readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
+import { peekTierMeta, readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 import { isPublicTier } from "@/lib/tiers.mjs";
 import { pointFixes, unpackCheck } from "@/lib/check-points.mjs";
 import { checkSources, pointsOf } from "@/lib/tiers-store.mjs";
@@ -73,7 +73,7 @@ const parseGrade = (raw: unknown): Record<string, unknown> | null => {
 export async function loadCodeChecks(url: string, rawRubric: unknown, hideGrade: boolean, meta?: unknown): Promise<CodeChecks | null> {
   if (hideGrade) return null;
   const [m, sources] = await Promise.all([
-    meta === undefined ? readTierMeta(db()).catch(() => null) : meta,
+    meta === undefined ? peekTierMeta(db()) : meta,
     checkSources(db(), { only: url })
       .then((s) => s.get(url) ?? null)
       .catch(() => null),
