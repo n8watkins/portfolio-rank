@@ -81,7 +81,8 @@ test("a graded site whose newest facts say resume yes, and whose grade says no, 
   const lines = Object.fromEntries(factLines(read).map((l) => [l.id, l]));
   assert.equal(lines.resume.pass, true);
   assert.equal(lines.resume.detail, "Resume or CV link found");
-  assert.equal(lines.project_links.detail, "4 of 4 load");
+  // "4 of 4 load" for these version 2 facts; facts of version 3 read "4 of 4 project links load" (#278).
+  assert.match(lines.project_links.detail, /^4 of 4 (?:project links )?load$/);
   assert.ok(!strengthsAndFixes(read).fixes.some((f) => f.criterion === "resume"));
   assert.ok(strengthsAndFixes(g).fixes.some((f) => f.criterion === "resume"), "the grade's own copy would ask for a resume");
   assert.equal(printView(read).facts.find((f) => f.id === "resume").pass, true);
