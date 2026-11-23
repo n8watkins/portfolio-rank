@@ -561,8 +561,7 @@ function Decided({
                 </p>
                 <p className="text-xs text-mute">
                   <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{decidedLabel(r)}</span>
-                  {" · "}
-                  {PROPOSED[r.proposed]}
+                  {` · proposed: ${PROPOSED[r.proposed].toLowerCase()}`}
                   {r.decidedBy && ` · by ${decider(r.decidedBy)}`}
                   {r.decidedAt && `, ${when(r.decidedAt)}`}
                 </p>
