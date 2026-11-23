@@ -15,9 +15,11 @@ export const PREWARM_LIMIT = 400;
 export const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
 
 /**
- * The sites to prewarm: listed (active(p)), live, graded without an error
- * and not marked "not a portfolio", whatever Gemini's letter, and without a
- * fresh PSI result; never measured first, then the oldest.
+ * The sites to prewarm: listed (active(p)), live, not graded "not a
+ * portfolio", and either graded without an error or measured by the capture
+ * (facts), so every library member gets its own Lighthouse whether Gemini
+ * graded it or not (owner, 2026-11-22: the Starting rank comes from code);
+ * without a fresh PSI result; never measured first, then the oldest.
  * @param {{ execute: Function }} db
  * @param {{ active: (p: string) => string, limit?: number, now?: number }} options
  */
@@ -26,9 +28,8 @@ export async function prewarmQueue(db, { active, limit = PREWARM_LIMIT, now = Da
     sql: `SELECT p.url FROM portfolios p
           LEFT JOIN cache c ON c.k = 'psi:' || p.url
           WHERE p.status = 'live' AND ${active("p")}
-            AND json_valid(p.ai_rubric)
-            AND json_extract(p.ai_rubric, '$.error') IS NULL
-            AND COALESCE(json_extract(p.ai_rubric, '$.is_portfolio'), 1) != 0
+            AND NOT COALESCE(json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.is_portfolio') = 0, 0)
+            AND (COALESCE(json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.error') IS NULL, 0) OR COALESCE(json_valid(p.facts), 0))
             AND (c.at IS NULL OR c.at < ?)
           ORDER BY COALESCE(c.at, 0), p.url
           LIMIT ?`,

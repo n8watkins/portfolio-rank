@@ -9,8 +9,9 @@ import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
 import { BASE_ELO } from "@/lib/elo";
-import { loadProfileTier } from "@/lib/tiers-view";
+import { type CodeChecks, loadCodeChecks, loadProfileTier } from "@/lib/tiers-view";
 import { ProfileTier } from "@/components/tiers/ProfileTier";
+import { CheckItems } from "@/components/tiers/CheckItems";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { isGone } from "@/lib/roster";
@@ -22,7 +23,6 @@ import { ProfileV2, profileMetadata } from "./profile-v2";
 import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
-import { freshGrade } from "@/lib/fresh-facts.mjs";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -97,16 +97,13 @@ export async function generateMetadata({
   };
 }
 
-// The AI review shows for any graded site, but only the top tiers (S/A/B) get the
-// prominent letter badge - lower tiers show the axis scores under a neutral "AI"
-// mark, so we never slap a public "D" on someone's work.
+// The Gemini report card shows for any graded site under a neutral "AI" mark:
+// Gemini's own letter is never shown (owner, 2026-11-22: the grading is kept
+// apart from the ranking; the Tier comes from the code checks and votes).
 function publicGrade(raw: unknown): null | {
-  tier: string;
-  showTier: boolean;
   model?: string;
-  /** Rubric v2: weighted AI quality (1-5) and the share of code checks passed (0-100). */
+  /** Rubric v2: Gemini's weighted quality (1-5). */
   quality?: number;
-  checks?: number;
   axes: { key: string; label: string; score: number; note?: string }[];
 } {
   type Raw = Record<string, { score?: number; note?: string } | string | undefined>;
@@ -130,13 +127,23 @@ function publicGrade(raw: unknown): null | {
     })
     .filter((a): a is NonNullable<typeof a> => a !== null);
   return {
-    tier,
-    showTier: ["S", "A", "B"].includes(tier),
     model: typeof r.model === "string" ? r.model : undefined,
     quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
-    checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
     axes,
   };
+}
+
+/** The Code checks score item by item, while the tier card (RANKING_V2) is off: the same list it shows. */
+function CodeChecksCard({ code }: { code: CodeChecks }) {
+  return (
+    <section aria-labelledby="code-checks" className="mb-4 rounded-xl border border-edge bg-card p-5">
+      <h2 id="code-checks" className="font-semibold">
+        Code checks score: <span className="tabular-nums">{code.check.total}</span> of 100
+      </h2>
+      <p className="mt-0.5 text-xs text-mute">Measured by code from the page, its speed and its share card. No AI is involved.</p>
+      <CheckItems check={code.check} />
+    </section>
+  );
 }
 
 export default async function PortfolioPage({
@@ -198,10 +205,15 @@ export default async function PortfolioPage({
   // Fresh, never the minute cache: this render is kept at the edge for a day.
   const owner = await ownerState(db(), url, { fresh: true });
   if (owner.removedAt) notFound();
-  // "Checks passed" from the newest measured facts, as the points below read them (lib/fresh-facts.mjs).
-  const grade = owner.hideGrade ? null : publicGrade(freshGrade(rubricRow?.ai_rubric, rubricRow?.facts));
-  // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise, and the page stays as it was.
+  const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
+  // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise.
   const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
+  // The Code checks score, one number for the site wherever it is shown: the tier card's, else made here.
+  const code: CodeChecks | null = eloTier
+    ? eloTier.check
+      ? { check: eloTier.check, fixes: eloTier.fixes }
+      : null
+    : await loadCodeChecks(url, rubricRow?.ai_rubric, owner.hideGrade);
 
   const [shot, facts] = await Promise.all([shotFor(url), seoFacts(portfolio)]);
   // A ProfilePage about the person and its breadcrumb trail, indexable profiles only.
@@ -271,37 +283,50 @@ export default async function PortfolioPage({
         </div>
 
         {eloTier && <ProfileTier t={eloTier} />}
+        {!eloTier && code && <CodeChecksCard code={code} />}
 
         <DetailDiagnostics url={url} initialInspection={inspection} />
+
+        {!grade && !owner.hideGrade && (
+          <section aria-labelledby="report-card" className="mt-4 rounded-xl border border-edge bg-card p-5">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-edge text-lg font-bold text-mute" aria-hidden>
+                AI
+              </span>
+              <div>
+                <h2 id="report-card" className="font-semibold">
+                  {eloTier ? "Report card: how to improve" : "Gemini report card"}
+                </h2>
+                <p className="text-sm text-mute">
+                  The model has not looked at this site yet.{code ? " The code checks above are measured without it." : ""}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {grade && (
           <div className="mt-4 rounded-xl border border-edge bg-card p-5">
             <div className="flex items-center gap-3">
-              {/* With tiers by ELO the grade is the report card: no letter here (the tier above comes from votes). */}
-              <span
-                className={`flex h-10 w-10 items-center justify-center rounded-lg text-lg font-bold ${
-                  grade.showTier && !eloTier ? "bg-fill text-on-fill" : "bg-edge text-ink"
-                }`}
-              >
-                {grade.showTier && !eloTier ? grade.tier : "AI"}
-              </span>
+              {/* Gemini's own letter is never shown: the report card sits under a neutral mark. */}
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-edge text-lg font-bold text-ink">AI</span>
               <div>
-                <p className="font-semibold">{eloTier ? "Report card: how to improve" : "AI design review"}</p>
+                <p className="font-semibold">{eloTier ? "Report card: how to improve" : "Gemini report card"}</p>
                 <p className="text-xs text-mute">
                   by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
                   a verdict
                 </p>
-                {(grade.quality !== undefined || grade.checks !== undefined) && (
+                {(grade.quality !== undefined || code) && (
                   <p className="mt-0.5 text-xs text-mute">
                     {grade.quality !== undefined && (
                       <>
                         Quality <span className="font-semibold tabular-nums text-ink">{grade.quality.toFixed(1)}/5</span>
                       </>
                     )}
-                    {grade.quality !== undefined && grade.checks !== undefined && " · "}
-                    {grade.checks !== undefined && (
+                    {grade.quality !== undefined && code && " · "}
+                    {code && (
                       <>
-                        Checks passed <span className="font-semibold tabular-nums text-ink">{grade.checks}/100</span>
+                        Code checks score <span className="font-semibold tabular-nums text-ink">{code.check.total}/100</span>
                       </>
                     )}
                   </p>

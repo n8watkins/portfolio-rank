@@ -18,7 +18,7 @@
 // in any 7 days (retries included), counted in poll_generations. Topics are
 // positive and about portfolios and the developer job market; Gemini never
 // sees or names a person or a site, and code picks the screenshots (only
-// sites graded S or A, so a low scorer is never shown).
+// sites with a Tier in the S or A family, so a low scorer is never shown).
 import { ensurePollsSchema } from "../lib/polls/schema.mjs";
 import { nextWeek, pollWeek } from "../lib/polls/week.mjs";
 import { prunePolls } from "../lib/polls/store.mjs";
@@ -38,7 +38,7 @@ export const ACCEPT_MAX = 3;
 export const SITE_COOLDOWN_WEEKS = 12;
 /** Polls are scheduled at most this many weeks ahead. */
 export const MAX_WEEKS_AHEAD = 8;
-/** Only sites graded this well are ever shown in a poll. */
+/** Only sites with a Tier in these families (SSS and S+ to S- count as S) are ever shown in a poll. */
 export const SHOWN_TIERS = ["S", "A"];
 
 export const TOPICS = [
@@ -171,18 +171,28 @@ export async function insertPoll(db, { week, kind, topic = null, question, detai
 // The sites a hero poll may show
 // ---------------------------------------------------------------------------
 
-/** Live, listed, captured sites graded S or A, that no recent hero poll showed. */
+/**
+ * Live, listed, captured sites whose Tier is in the S or A family (the tier
+ * store, tier_ratings.tier as the daily run wrote it: code checks and votes,
+ * never Gemini's letter, owner 2026-11-22), that no recent hero poll showed.
+ * None before the tier tables exist.
+ */
 export async function heroCandidates(db, { known, now }) {
   const cutoff = iso(now - SITE_COOLDOWN_WEEKS * 7 * 86400000);
   const recent = new Set(known.filter((p) => p.opensAt >= cutoff).flatMap((p) => p.sites));
-  const rows = (
-    await db.execute(
-      `SELECT url, shot_key FROM portfolios p
-       WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")} AND NOT ${NOT_PORTFOLIO("p")}
-         AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IN (${SHOWN_TIERS.map((t) => `'${t}'`).join(",")})
-       ORDER BY p.url`
-    )
-  ).rows;
+  let rows = [];
+  try {
+    rows = (
+      await db.execute(
+        `SELECT p.url, p.shot_key FROM portfolios p JOIN tier_ratings t ON t.url = p.url
+         WHERE p.status = 'live' AND p.shot_key IS NOT NULL AND ${AI_WORK("p")} AND NOT ${NOT_PORTFOLIO("p")}
+           AND t.member = 1 AND substr(t.tier, 1, 1) IN (${SHOWN_TIERS.map((t) => `'${t}'`).join(",")})
+         ORDER BY p.url`
+      )
+    ).rows;
+  } catch (e) {
+    if (!/no such table/i.test(String(e?.message ?? e))) throw e;
+  }
   return rows.map((r) => ({ url: String(r.url), shotKey: String(r.shot_key) })).filter((s) => !recent.has(s.url));
 }
 

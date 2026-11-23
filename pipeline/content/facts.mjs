@@ -135,22 +135,41 @@ async function removedUrls(db) {
 /** Listed, visible, real portfolios (the only ones that may be named). */
 const VISIBLE = `p.status = 'live' AND ${AI_WORK("p")} AND NOT (${HIDDEN_WHERE}) AND NOT ${NOT_PORTFOLIO("p")}`;
 
+/**
+ * The graded, visible portfolios, each with its Tier (`rank`: the tier store's
+ * letter, tier_ratings.tier as the daily run wrote it, or null outside the
+ * library). Which portfolios are "top" comes from the Tier, never from
+ * Gemini's letter (owner, 2026-11-22); Gemini's axis scores are what the
+ * sheets compare.
+ */
 async function gradedRows(db) {
   const removed = await removedUrls(db);
+  const hasTiers = (await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tier_ratings'")).rows.length > 0;
   const rows = (
     await db.execute(
-      `SELECT p.url, p.name, p.shot_key, p.ai_rubric, p.meta FROM portfolios p
+      `SELECT p.url, p.name, p.shot_key, p.ai_rubric, p.meta, ${hasTiers ? "t.tier" : "NULL"} AS rank_tier FROM portfolios p
+       ${hasTiers ? "LEFT JOIN tier_ratings t ON t.url = p.url AND t.member = 1" : ""}
        WHERE ${VISIBLE} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IS NOT NULL
          AND json_extract(p.ai_rubric, '$.error') IS NULL ORDER BY p.url`
     )
   ).rows;
   return rows
     .filter((r) => !removed.has(String(r.url)))
-    .map((r) => ({ url: String(r.url), name: r.name == null ? null : String(r.name), shotKey: r.shot_key == null ? null : String(r.shot_key), rubric: parse(r.ai_rubric), meta: parse(r.meta) }))
+    .map((r) => ({
+      url: String(r.url),
+      name: r.name == null ? null : String(r.name),
+      shotKey: r.shot_key == null ? null : String(r.shot_key),
+      rubric: parse(r.ai_rubric),
+      meta: parse(r.meta),
+      rank: r.rank_tier == null ? null : String(r.rank_tier),
+    }))
     .filter((r) => r.rubric && TIER[r.rubric.tier] && r.rubric.is_portfolio !== false);
 }
 
-const top = (r) => r.rubric.tier === "S" || r.rubric.tier === "A";
+/** In the S or A family of the Tier (SSS and S+ to S- count as S). */
+const top = (r) => r.rank != null && (r.rank[0] === "S" || r.rank[0] === "A");
+/** In the S family of the Tier: earned with face-off wins in the top 1%. */
+const topTier = (r) => r.rank != null && r.rank[0] === "S";
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const median = (xs) => {
   if (!xs.length) return null;
@@ -189,8 +208,8 @@ export async function topGrades(db, { now }) {
   b.fact("Share of all graded portfolios that are top-graded", best.length / rows.length, fmt.pct(best.length / rows.length), {
     scope: { need: "graded|all portfolios|every portfolio|everyone", avoid: "of (?:the )?(?:top|best|leading) (?:portfolios|sites)" },
   });
-  const sCount = rows.filter((r) => r.rubric.tier === "S").length;
-  b.fact("Portfolios with the judge's highest grade, a small part of the top-graded group", sCount, fmt.int(sCount));
+  const sCount = rows.filter(topTier).length;
+  b.fact("Portfolios in the highest tier, a small part of the top-graded group", sCount, fmt.int(sCount));
   const per = [];
   const bestIds = [];
   const restIds = [];
@@ -237,14 +256,14 @@ export async function topGrades(db, { now }) {
     ],
     alt: "Bar chart of the average AI score per axis, the top-graded portfolios next to all others; the top group leads on every axis.",
   });
-  // Up to 5 S-tier sites with a name, highest total first: named only for being graded S.
+  // Up to 5 tier S sites with a name, highest total first: named only for being in tier S.
   const named = rows
-    .filter((r) => r.rubric.tier === "S" && r.name)
+    .filter((r) => topTier(r) && r.name)
     .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
     .slice(0, 5);
   for (const r of named) {
-    b.name(r, "has the AI judge's highest grade");
-    b.fact(`${r.name} (${domainOf(r.url)}) has the AI judge's highest grade`, "S", "the highest grade", { tone: "positive", about: r.url });
+    b.name(r, "is in the highest tier");
+    b.fact(`${r.name} (${domainOf(r.url)}) is in the highest tier`, "S", "the highest tier", { tone: "positive", about: r.url });
     // What it does well, for the post to say when it links the site: its full-mark axes.
     const strong = per.filter((p) => axisScore(r, p.k) === 5).map((p) => p.label);
     if (strong.length) b.fact(`${r.name} (${domainOf(r.url)}) scores 5 out of 5 on ${joinWords(strong)}`, strong.length, joinWords(strong), { tone: "positive", about: r.url });
@@ -316,13 +335,13 @@ export async function pageCraft(db, { now }) {
   // weigh no more than the others' median: positive examples to link, each
   // with what it does well. Named only for those reasons.
   const examples = best
-    .filter((r) => r.rubric.tier === "S" && r.name && r.meta.overflow390 === false && r.meta.consoleErrors === 0 && typeof r.meta.bytes === "number" && r.meta.bytes > 0 && (wr == null || r.meta.bytes <= wr))
+    .filter((r) => topTier(r) && r.name && r.meta.overflow390 === false && r.meta.consoleErrors === 0 && typeof r.meta.bytes === "number" && r.meta.bytes > 0 && (wr == null || r.meta.bytes <= wr))
     .sort((x, y) => axisSum(y) - axisSum(x) || x.url.localeCompare(y.url))
     .slice(0, 5);
   for (const r of examples) {
-    b.name(r, "has the AI judge's highest grade, fits a phone screen and loads light with no console errors");
+    b.name(r, "is in the highest tier, fits a phone screen and loads light with no console errors");
     const traits = ["fits a phone screen", "no console errors", ...(r.meta.darkMode === true ? ["dark mode by default"] : []), ...(r.meta.motion === true ? ["motion on the page"] : [])];
-    b.fact(`${r.name} (${domainOf(r.url)}) has the highest grade and ${joinWords(traits)}`, "S", "the highest grade", { tone: "positive", about: r.url });
+    b.fact(`${r.name} (${domainOf(r.url)}) is in the highest tier and has ${joinWords(traits)}`, "S", "the highest tier", { tone: "positive", about: r.url });
     b.fact(`${r.name} (${domainOf(r.url)}) page weight, first load`, r.meta.bytes, `${fmt.dec(r.meta.bytes / 1e6)} MB`, { tone: "positive", about: r.url });
   }
   if (cats.length) {

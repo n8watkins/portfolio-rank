@@ -96,6 +96,7 @@ import { blockedRefreshReview, closeBlockedRefreshReviews } from "../lib/reviews
 import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
 import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
+import { rankFromCode } from "../lib/tiers-store.mjs";
 
 /** Now as SQLite's datetime('now') writes it ("YYYY-MM-DD HH:MM:SS", UTC), like portfolios.captured_at. */
 const sqliteNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -863,6 +864,8 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
         warn(`old images ${key}/${prevFullPage.v} not deleted`)
       );
     }
+    // Measured: its Starting rank from the code checks now, before Gemini (lib/tiers-store.mjs rankFromCode).
+    if (facts) await within(rankFromCode(db, url), stepLimitMs, "setting the Starting rank").catch(warn("Starting rank not set"));
     return `live → ${key} (motion=${meta.motion} dark=${meta.darkMode} overflow=${meta.overflow390})`;
   } catch (e) {
     // Decided from the browser's own state, before this capture closes anything (watchBrowser).

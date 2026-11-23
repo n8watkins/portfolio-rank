@@ -2,6 +2,7 @@ import { EloTierBadge } from "@/components/ui/badges";
 import { ROUTES } from "@/lib/nav";
 import { BELOW_TOP_TIERS, SETTLED_FACEOFFS, familyOf, tierLabel } from "@/lib/tiers.mjs";
 import type { ProfileTier as Data } from "@/lib/tiers-view";
+import { CheckItems } from "./CheckItems";
 
 // A profile's tier by ELO (RANKING_V2 only, lib/tiers-view.ts): the letter,
 // its place, "Starting rank from automated checks" and the real votes, how
@@ -47,7 +48,7 @@ export function ProfileTier({ t }: { t: Data }) {
               </p>
             </>
           ) : (
-            <p className="mt-0.5 text-sm text-mute">Not graded yet, so no tier. ELO from {votes}.</p>
+            <p className="mt-0.5 text-sm text-mute">Not ranked yet, so no tier. ELO from {votes}.</p>
           )}
         </div>
         {ROUTES.faceoff && (
@@ -62,19 +63,7 @@ export function ProfileTier({ t }: { t: Data }) {
             <h3 className="text-sm font-semibold">
               {t.checkIsCurrent ? "Automated checks now" : "Automated checks"}: <span className="tabular-nums">{t.check.total}</span> of 100
             </h3>
-            <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
-              {t.check.items.map((i) => (
-                <li key={i.id} className="flex items-baseline justify-between gap-3 border-b border-edge py-1.5">
-                  <span className={i.measured ? "" : "text-mute"}>
-                    {i.name}
-                    {!i.measured && <span className="block text-[11px]">Not measured yet: library median</span>}
-                  </span>
-                  <span className={`shrink-0 tabular-nums ${i.measured && i.points >= i.max ? "text-up" : "text-mute"}`}>
-                    {`${i.points}/${i.max}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <CheckItems check={t.check} />
           </div>
           <div>
             <h3 className="text-sm font-semibold">Quickest points</h3>

@@ -39,11 +39,15 @@ export async function fixture({ motion = null } = {}) {
   await ensureRubricHistory(db);
   await ensureRankingSchema(db);
   await ensureGeminiLog(db);
-  const add = async ({ url, name, tier, score, meta = {}, delisted = null, over = {} }) =>
-    db.execute({
+  // Each site's Tier (the tier store; the sheets group by it, never by Gemini's letter): here the same family as its grade.
+  const RANK = { S: "S", A: "A", B: "B", C: "C", D: "C-" };
+  const add = async ({ url, name, tier, score, meta = {}, delisted = null, over = {} }) => {
+    await db.execute({
       sql: "INSERT INTO portfolios (url, name, status, shot_key, ai_rubric, meta, delisted_at) VALUES (?, ?, 'live', ?, ?, ?, ?)",
       args: [url, name, hex(url.length * 7919 + name.length), JSON.stringify(rubric(tier, score, over)), JSON.stringify({ darkMode: true, motion: true, overflow390: false, bytes: 900000, requests: 30, consoleErrors: 0, ...meta }), delisted],
     });
+    await db.execute({ sql: "INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded, tier) VALUES (?, 25, 8, 9, 36, 1, 1, ?)", args: [url, RANK[tier]] });
+  };
   for (let i = 1; i <= 30; i++) await add({ url: `https://top-${i}.dev`, name: `Top Person ${i}`, tier: i <= 8 ? "S" : "A", score: i <= 8 ? 5 : 4, over: motion ? { motion: { score: motion[0], note: "n" } } : {} });
   for (let i = 1; i <= 30; i++) await add({ url: `https://low-${i}.dev`, name: `Low Person ${i}`, tier: ["B", "C", "D"][i % 3], score: 2, meta: { darkMode: false, overflow390: true, consoleErrors: 3, bytes: 4000000 }, over: motion ? { motion: { score: motion[1], note: "n" } } : {} });
   // Best-scoring of all, but removed by its owner, delisted, or not a portfolio: never named.

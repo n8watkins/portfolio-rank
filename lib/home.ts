@@ -9,7 +9,10 @@ import { freshGrade } from "@/lib/fresh-facts.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
-import { isPublicTier } from "@/lib/tiers.mjs";
+import { familyOf, isPublicTier, tierLabel } from "@/lib/tiers.mjs";
+import { readTierMeta } from "@/lib/tiers-db.mjs";
+import { publicLetters, siteTiers } from "@/lib/tiers-letters.mjs";
+import { tiersShown } from "@/lib/tiers-view";
 import { readPolls } from "@/lib/polls/store.mjs";
 import { publicPolls, type PublicPoll, type StoredPoll, type UpcomingPoll } from "@/lib/polls/server";
 
@@ -41,6 +44,7 @@ type PoolSite = {
   url: string;
   name: string;
   mu: number;
+  /** Gemini's letter: the pool's order only, never shown (owner, 2026-11-22). */
   tier: string;
   quality: number | null;
   axes: Record<string, number | null>;
@@ -71,12 +75,22 @@ async function rankedPool(): Promise<(PoolSite & { aiRank: number })[]> {
  */
 export const strongCapture = (p: Pick<PoolSite, "axes">) => p.axes.visual_design === 5 && (p.axes.five_second_test ?? 0) >= 4;
 
+/**
+ * The letter a home card shows for each site: its public Tier while tiers are
+ * shown (RANKING_V2), else none. Never Gemini's letter (owner, 2026-11-22).
+ */
+async function lettersFor(urls: string[]): Promise<Map<string, string | null>> {
+  if (!tiersShown() || !urls.length) return new Map();
+  return publicLetters(db(), urls).catch(() => new Map());
+}
+
 export type ShowItem = {
   url: string;
   name: string;
   domain: string;
   hero: string;
-  tier: string;
+  /** The public Tier, or null (tiers hidden, or none). */
+  tier: string | null;
   rank: number;
   href: string;
 };
@@ -85,18 +99,17 @@ export type ShowItem = {
 async function showcase(pool: (PoolSite & { aiRank: number })[], count = 6): Promise<ShowItem[]> {
   const strong = pool.filter(strongCapture).slice(0, count * 2);
   const shots = await shotBases(strong.map((p) => p.url));
-  return strong
-    .filter((p) => shots.has(p.url))
-    .slice(0, count)
-    .map((p) => ({
-      url: p.url,
-      name: p.name,
-      domain: domainOf(p.url),
-      hero: heroOf(shots.get(p.url)!),
-      tier: p.tier,
-      rank: p.aiRank,
-      href: reportPath(p.url),
-    }));
+  const picked = strong.filter((p) => shots.has(p.url)).slice(0, count);
+  const letters = await lettersFor(picked.map((p) => p.url));
+  return picked.map((p) => ({
+    url: p.url,
+    name: p.name,
+    domain: domainOf(p.url),
+    hero: heroOf(shots.get(p.url)!),
+    tier: letters.get(p.url) ?? null,
+    rank: p.aiRank,
+    href: reportPath(p.url),
+  }));
 }
 
 export type BoardItem = {
@@ -120,7 +133,8 @@ export type TopTen =
  * The top 10. With RANKING_V2 on: the ranked board's first 10, tiers by ELO
  * (lib/tiers-board.ts), the same rows /top shows first. Until then the order
  * of the AI grade (the people's ELO board is too thin to rank on yet: most
- * sites share one vote), with the tier in the score column.
+ * sites share one vote), with no letter: Gemini's is never shown (owner,
+ * 2026-11-22) and the Tiers are hidden.
  */
 async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> {
   await ensureSchema();
@@ -136,35 +150,36 @@ async function topTen(pool: (PoolSite & { aiRank: number })[]): Promise<TopTen> 
     for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
     return { kind: "ranked", rows };
   }
-  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, p.tier));
+  const rows = pool.slice(0, 10).map((p) => item(p.url, p.aiRank, ""));
   const shots = await shotBases(rows.map((r) => r.url));
   for (const r of rows) r.hero = shots.has(r.url) ? heroOf(shots.get(r.url)!) : null;
   return { kind: "ai", rows };
 }
 
-export type GradedItem = { url: string; name: string; domain: string; tier: string; at: string; hero: string | null; href: string };
+/** `tier`: the site's public Tier while tiers are shown, else null; never Gemini's letter. */
+export type GradedItem = { url: string; name: string; domain: string; tier: string | null; at: string; hero: string | null; href: string };
 
 /** The portfolios Gemini graded most recently. Cached an hour: it reads the whole list. */
 async function recentlyGraded(count = 6): Promise<GradedItem[]> {
   const hidden = await hiddenUrls();
-  const { items } = await cached<{ items: { url: string; tier: string; at: string }[] }>("home", "recent-grades", { ttlMs: HOUR }, async () => {
+  const { items } = await cached<{ items: { url: string; at: string }[] }>("home", "recent-grades", { ttlMs: HOUR }, async () => {
     const res = await db().execute(
-      `SELECT url, json_extract(ai_rubric, '$.tier') AS tier, json_extract(ai_rubric, '$.judged_at') AS at
+      `SELECT url, json_extract(ai_rubric, '$.judged_at') AS at
        FROM portfolios
        WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)
          AND json_extract(ai_rubric, '$.tier') IS NOT NULL AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
          AND COALESCE(json_extract(ai_rubric, '$.is_portfolio'), 1) != 0
        ORDER BY at DESC LIMIT 30`
     );
-    return { items: res.rows.map((r) => ({ url: String(r.url), tier: String(r.tier), at: String(r.at) })) };
+    return { items: res.rows.map((r) => ({ url: String(r.url), at: String(r.at) })) };
   });
   const list = items.filter((r) => byUrl.has(r.url) && !hidden.has(r.url)).slice(0, count);
-  const shots = await shotBases(list.map((r) => r.url));
+  const [shots, letters] = await Promise.all([shotBases(list.map((r) => r.url)), lettersFor(list.map((r) => r.url))]);
   return list.map((r) => ({
     url: r.url,
     name: byUrl.get(r.url)?.name ?? domainOf(r.url),
     domain: domainOf(r.url),
-    tier: r.tier,
+    tier: letters.get(r.url) ?? null,
     at: r.at,
     hero: shots.has(r.url) ? heroOf(shots.get(r.url)!) : null,
     href: reportPath(r.url),
@@ -188,7 +203,13 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
       return { n: Number(r.rows[0]?.n ?? 0) };
     }),
   ]);
-  const sGrades = pool.filter((p) => p.tier === "S").length;
+  const shown = tiersShown();
+  // Portfolios with an S Tier (earned with face-off wins), from the daily run's S band; never Gemini's S.
+  const sTiers = shown
+    ? await readTierMeta(db())
+        .then((m) => Object.values((m as { sBand?: { counts?: Record<string, number> } } | null)?.sBand?.counts ?? {}).reduce((a, b) => a + b, 0))
+        .catch(() => 0)
+    : 0;
   const n = (v: number) => v.toLocaleString("en-US");
   const out: (LiveStat | null)[] = [
     // The same count as the hero: listed and not hidden.
@@ -202,10 +223,12 @@ async function liveStats(listed: number, pool: PoolSite[]): Promise<LiveStat[]> 
     // A quiet week would read as a dead site: then a number that is never 0.
     week.n > 0
       ? { key: "votesWeek", label: "Votes this week", value: n(week.n), tone: 3 }
-      : { key: "sGrades", label: "Portfolios graded S", value: n(sGrades), tone: 3 },
+      : sTiers > 0
+        ? { key: "sTiers", label: "Portfolios in tier S", value: n(sTiers), tone: 3 }
+        : null,
     counts.votes > 0 ? { key: "votes", label: "Votes all time", value: n(counts.votes), tone: 1 } : null,
     site.resumePct == null ? null : { key: "resume", label: "Link a resume", value: `${site.resumePct}%`, tone: 2 },
-    site.averageTier ? { key: "tier", label: "Average tier", value: site.averageTier.tier, tone: 4 } : null,
+    shown && site.averageTier ? { key: "tier", label: "Average tier", value: tierLabel(site.averageTier.tier), tone: 4 } : null,
     site.gradedThisWeek > 0 ? { key: "week", label: "Graded this week", value: n(site.gradedThisWeek), tone: 2 } : null,
     gamesEnabled() && counts.quizzesPlayed > 0 ? { key: "quizzes", label: "Quizzes played", value: n(counts.quizzesPlayed), tone: 1 } : null,
   ];
@@ -218,7 +241,8 @@ export type PortfolioOfTheDay = {
   line: string;
   domain: string;
   hero: string;
-  tier: string;
+  /** The public Tier while tiers are shown, else null; never Gemini's letter. */
+  tier: string | null;
   rank: number;
   total: number;
   best: { label: string; note: string }[];
@@ -226,9 +250,15 @@ export type PortfolioOfTheDay = {
   href: string;
 };
 
-/** One strong portfolio a day, the same for everyone, never one the hero shows. */
+/**
+ * One strong portfolio a day, the same for everyone, never one the hero
+ * shows: a strong capture whose Tier (lib/tiers-letters.mjs siteTiers: code
+ * checks and votes, never Gemini's letter) is in the S or A family.
+ */
 async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  const candidates = pool.filter((p) => strongCapture(p) && !skip.has(p.url) && (p.tier === "S" || p.tier === "A")).slice(0, 100);
+  const strong = pool.filter((p) => strongCapture(p) && !skip.has(p.url)).slice(0, 300);
+  const tiers = await siteTiers(db(), strong.map((p) => p.url)).catch(() => new Map<string, string | null>());
+  const candidates = strong.filter((p) => ["S", "A"].includes(familyOf(tiers.get(p.url) ?? null) ?? "")).slice(0, 100);
   if (candidates.length === 0) return null;
   const day = Math.floor(now.getTime() / 86_400_000);
   // Walk from today's pick to the first one with a capture.
@@ -256,7 +286,7 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
       line: byUrl.get(p.url)?.tagline || domainOf(p.url),
       domain: domainOf(p.url),
       hero: heroOf(base),
-      tier: p.tier,
+      tier: (await lettersFor([p.url])).get(p.url) ?? null,
       rank: p.aiRank,
       total: pool.length,
       best: judgments.slice(0, 2).map((j) => ({ label: j.label, note: j.note })),
