@@ -144,8 +144,15 @@ test("settleText: a thin page that holds still is watched to the thin limit; a p
   assert.ok(stays.ms >= SETTLE_THIN_MAX_MS && stays.ms <= SETTLE_THIN_MAX_MS + 500, `a page that stays thin costs the thin limit (${stays.ms} ms)`);
   const rich = await run([3000]);
   assert.ok(rich.ms >= 2000 && rich.ms <= 2500, `a page with text costs the quiet time (${rich.ms} ms)`);
-  const ticker = await run(Array.from({ length: 100 }, (_, n) => 1000 + n));
-  assert.ok(ticker.ms <= 10500, `a page with text that never stops changing gets the usual limit (${ticker.ms} ms)`);
+  const ticker = await run(Array.from({ length: 100 }, (_, n) => 1000 + 100 * n));
+  assert.ok(ticker.ms >= 10000 && ticker.ms <= 10500, `a page with text that never stops growing gets the usual limit (${ticker.ms} ms)`);
+  // lamine.cc: a loader, then the site with a typing line that changes it by a few characters each sample.
+  const typing = await run([32, 32, 33, 2183, 2185, 2193, 2194, 2190, 2185, 2190, 2194, 2185, 2189, 2194]);
+  assert.ok(typing.ms >= 3500 && typing.ms <= 4000, `a typing effect is the page holding still (${typing.ms} ms)`);
+  // A section that arrives later is waited for.
+  const section = await run([2183, 2185, 2190, 2700, 2702, 2700]);
+  assert.ok(section.ms >= 3500, `real growth restarts the quiet time (${section.ms} ms)`);
+  assert.equal(section.grew, 2700 - 2183);
 });
 
 // --- 2. A size cap throws the content away -------------------------------------------------------

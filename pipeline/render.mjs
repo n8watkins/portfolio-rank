@@ -38,6 +38,15 @@ export const SETTLE_MAX_MS = 10000;
 export const SETTLE_THIN_CHARS = 400;
 /** The most settleText waits on a page that has been thin: the overall limit of the wait. */
 export const SETTLE_THIN_MAX_MS = 15000;
+/**
+ * Text that changes by at most this much (characters, or this share of its
+ * length, whichever is more) holds still: a typing effect or a counter is not
+ * the page still arriving. lamine.cc, ciangoon.dev and rohit-raj.netlify.app
+ * (2026-11-23) showed a loader, then 2,000 to 5,000 characters that a typing
+ * line changed by 3 to 17 characters every half second, to the limit.
+ */
+export const SETTLE_JITTER_CHARS = 40;
+export const SETTLE_JITTER_SHARE = 0.02;
 
 /**
  * Runs in the page (page.evaluate): scrolls one screen further down, unless
@@ -53,8 +62,8 @@ export function scrollAndMeasure() {
 
 /**
  * Waits until the page's visible text has rendered and stopped growing: its
- * length, sampled every `pollMs`, unchanged for `quietMs`, at most `maxMs` in
- * all. A thin page (under `thinChars` characters) is not finished however
+ * length, sampled every `pollMs`, unchanged for `quietMs` (give or take
+ * SETTLE_JITTER_CHARS or SETTLE_JITTER_SHARE), at most `maxMs` in all. A thin page (under `thinChars` characters) is not finished however
  * long it holds still: it is watched until it grows past that, and once it
  * has been thin the limit is `thinMaxMs`. Each sample scrolls one screen
  * down (scrollAndMeasure), so content that loads as it scrolls into view
@@ -81,6 +90,8 @@ export async function settleText(page, opts = {}) {
   const first = await len();
   if (first == null) return { ms: 0, grew: 0 };
   let last = first;
+  // The length the text has held near since `stillSince`.
+  let held = first;
   let stillSince = t0;
   let wasThin = first < thinChars;
   const limit = () => (wasThin ? Math.max(maxMs, thinMaxMs) : maxMs);
@@ -88,7 +99,10 @@ export async function settleText(page, opts = {}) {
     await page.waitForTimeout(pollMs);
     const n = await len();
     if (n == null) break;
-    if (n !== last) stillSince = Date.now();
+    if (Math.abs(n - held) > Math.max(SETTLE_JITTER_CHARS, held * SETTLE_JITTER_SHARE)) {
+      held = n;
+      stillSince = Date.now();
+    }
     last = n;
     if (n < thinChars) wasThin = true;
   }
