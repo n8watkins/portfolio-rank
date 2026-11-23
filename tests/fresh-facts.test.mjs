@@ -121,6 +121,12 @@ test("newest facts from an older measuring version than the grade's are ignored"
   // A project-link check the newest facts don't have yet keeps the grade's.
   const noLinks = { ...measured(), project_links: null };
   assert.deepEqual(withFreshFacts(g, noLinks, { now: NOW }).facts.project_links, g.facts.project_links);
+  // ... and is judged by the rule of the grade's version: 2 of 2 loading passes under version 2, not under 3.
+  const g2 = grade({ v: 2 });
+  g2.facts.project_links = { checked: 2, ok: 2, broken: 0, blocked: 0 };
+  const kept = withFreshFacts(g2, { ...measured(3), project_links: null }, { now: NOW });
+  assert.equal(kept.facts.v, 2);
+  assert.equal(kept.checks.project_links, true);
   // A footer year the newest facts no longer find is unknown, not the grade's old answer.
   assert.equal(withFreshFacts(g, { ...measured(), footer_year: null }, { now: NOW }).checks.fresh_footer, null);
 });

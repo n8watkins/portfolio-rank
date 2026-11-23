@@ -40,14 +40,15 @@ export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selecte
 // "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
 const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
 const SOCIAL_HEADING = /\b(?:find me|connect|socials?|follow me|elsewhere|get in touch|contact(?: me)?)\b/i;
-// An element or a section whose links are never projects, repositories included: the tools the person uses
-// ("Tools I use", "Tech stack", "Skills", "/uses", a "tech-stack" list beside the cards), a cookie or consent
-// banner, a comment widget. The heading must name only that, whole ("Tools I use", "My tech stack", "Skills &
-// tools", "~ Technologies ~"): "Bridging Technology & Human Potential" (michellebrenner.com's about section) and
-// "Tools I've built" open nothing.
-const ASIDE_ATTR = /\b(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|technolog(?:y|ies)|skills?|uses)\b/i;
-const ASIDE_ATTR_PART = /cookie|consent|gdpr|disqus|giscus|utterances/i;
-const TOOL_WORD = String.raw`(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|stack|technolog(?:y|ies)|skills|skill ?set|languages|frameworks|uses|what i use)`;
+// An element or a section that looks like an aside (inAside): the tools the person uses ("Tools I use", "Tech
+// stack", "Skills", "Built with", a "tech-stack" list), a cookie or consent banner, a comment widget. A guess,
+// so it only lowers a link (projectCandidates: not in the projects), never removes it. A projects element or
+// section wins: an aside opens only while none is open, and a projects heading ends an open aside. A heading
+// must name only that, whole ("Tools I use", "My tech stack", "Skills & tools", "~ Technologies ~"):
+// "Bridging Technology & Human Potential" (michellebrenner.com's about section) and "Tools I built" open nothing.
+// Class and id words are whole words ("cookie clicker" is a cookie word; a project card inside the projects wins).
+const ASIDE_ATTR = /\b(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|technolog(?:y|ies)|skills?|uses|cookies?|cookiebot|onetrust|consent|gdpr|disqus|giscus|utterances|comments)\b/i;
+const TOOL_WORD = String.raw`(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|stack|technolog(?:y|ies)|skills|skill ?set|languages|frameworks|uses|what i use|what i work with|built with|powered by)`;
 const ASIDE_HEADING = new RegExp(
   String.raw`^(?:(?:my|our|the|current)\s+)?${TOOL_WORD}(?:\s*(?:&|and|,)\s*${TOOL_WORD})*(?:\s+(?:i use|i work with|i love|i know|of choice|used))?$`,
   "i"
@@ -160,13 +161,16 @@ export function scanPage(html, baseUrl) {
       // An h1 is the page's title ("Portfolio", "My Portfolio", "Ana Ruiz - Portfolio") and opens nothing:
       // only h2 to h4 open a section; a page whose projects sit under an h1 alone is read by its projects
       // elements (id, class, aria-label) and its repository links. A title-like h2 to h4 opens nothing either.
+      // A projects heading at any level from h2 to h4 ends an open aside ("Skills" h2, then "Projects" h3).
       const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
-      if (!scope && rec.heading.level >= 2 && !TITLE_LIKE.test(words)) {
+      const titled = rec.heading.level >= 2 && !TITLE_LIKE.test(words);
+      if (titled && scope?.kind === "aside" && PROJECT_HEADING.test(words)) endScope();
+      if (!scope && titled) {
         const kind = PROJECT_HEADING.test(words)
           ? "project"
           : SOCIAL_HEADING.test(words)
             ? "social"
-            : ASIDE_HEADING.test(headingCore(words))
+            : !projectOpen && ASIDE_HEADING.test(headingCore(words))
               ? "aside"
               : null;
         if (kind) {
@@ -310,11 +314,10 @@ export function scanPage(html, baseUrl) {
     else if (name !== "html" && name !== "body" && name !== "main") {
       const own = `${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`;
       const words = attrWords(own);
-      // A cookie banner or a comment widget never holds projects, whatever else its classes say.
-      if (ASIDE_ATTR_PART.test(own)) rec.aside = true;
-      else if (PROJECT_ATTR.test(words)) rec.project = true;
+      if (PROJECT_ATTR.test(words)) rec.project = true;
       else if (SOCIAL_ATTR.test(words)) rec.social = true;
-      else if (ASIDE_ATTR.test(words)) rec.aside = true;
+      // Only while no projects element or section is open: a "card-tech" footer in a project card is the card's.
+      else if (!projectOpen && ASIDE_ATTR.test(words)) rec.aside = true;
     }
     if (HEADINGS.has(name)) {
       rec.heading = { parts: [], len: 0, level: Number(name[1]) };
@@ -325,8 +328,10 @@ export function scanPage(html, baseUrl) {
     const where = () => {
       const chrome = chromeOpen + (rec.chrome ? 1 : 0) > 0;
       const social = socialOpen + (rec.social ? 1 : 0) > 0;
-      const aside = asideOpen + (rec.aside ? 1 : 0) > 0;
-      return { inProjects: projectOpen + (rec.project ? 1 : 0) > 0 && !chrome && !social && !aside, inChrome: chrome, inSocial: social, inAside: aside };
+      // A projects element opened inside an aside (a "tech-theme" page wrapper) wins over it.
+      const projects = projectOpen + (rec.project ? 1 : 0) > 0;
+      const aside = asideOpen + (rec.aside ? 1 : 0) > 0 && !projects;
+      return { inProjects: projects && !chrome && !social, inChrome: chrome, inSocial: social, inAside: aside };
     };
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();

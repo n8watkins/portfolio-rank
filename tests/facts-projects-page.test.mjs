@@ -142,12 +142,12 @@ test("a project's own name may be any word; the path above it must not be a blog
   const url = "https://ana.dev/";
   const counted = (p) => projectCandidates(homeProjectLinks({ html: `<section id="projects"><a href="${p}">x</a></section>`, url, finalUrl: url }), url).length === 1;
   for (const p of ["/projects/api-gateway", "/work/dashboard-redesign", "/portfolio/admin-panel", "/projects/dashboard", "/projects/admin", "/projects/api", "/work/store", "/projects/auth",
-    "/projects/profile", "/projects/export", "/portfolio/settings", "/case-studies/checkout", "/projects/news", "/projects/download"]) {
+    "/projects/profile", "/projects/export", "/portfolio/settings", "/case-studies/checkout", "/projects/news", "/projects/download", "/projects/photo-editor", "/work/cancel-culture", "/projects/remove-bg"]) {
     assert.ok(counted(p), p);
   }
   // An action is never requested, even as the name right under the listing ("/projects/logout", "/projects/x/delete").
   for (const p of ["/projects/tag/react", "/projects/category/web", "/blog/projects/x", "/account/projects/x", "/projects/download/file", "/admin/work/x", "/projects/page/2",
-    "/projects/logout", "/projects/unsubscribe", "/projects/delete", "/work/sign-out", "/projects/x/delete", "/projects/x/edit", "/projects/react/tag"]) {
+    "/projects/logout", "/projects/edit", "/projects/verify", "/projects/register", "/projects/unsubscribe", "/projects/delete", "/work/sign-out", "/projects/x/delete", "/projects/x/edit", "/projects/react/tag"]) {
     assert.ok(!counted(p), p);
   }
   // On the projects page, the name right under that page's path is the project's too ("/builds/checkout" under "/builds").
@@ -159,7 +159,7 @@ test("a project's own name may be any word; the path above it must not be a blog
   assert.equal(projectsPageFor(homeProjectLinks({ html: `<nav><a href="/projects/unsubscribe">Projects</a></nav>`, url, finalUrl: url }), url), null);
 });
 
-test("tool lists, article sites, cookie banners and comment widgets are never projects, on either page", async () => {
+test("tool lists, article sites, cookie banners and comment widgets: the host lists remove, a class or heading guess only lowers", async () => {
   const url = "https://ana.dev/";
   const ok = async () => new Response(null, { status: 200 });
   const homeNav = `<nav><a href="/projects">Projects</a></nav><main><h1>Ana</h1></main>`;
@@ -167,29 +167,59 @@ test("tool lists, article sites, cookie banners and comment widgets are never pr
     const g = await measurePage({ html: homeNav, text: "", url, finalUrl: url, projectsPage: { html: ppHtml, finalUrl: pp } }, { fetchImpl: ok });
     return { urls: (g.project_candidates || []).map((c) => c.url), pass: codeChecks(g).project_links };
   };
-  // The reviewer's cases: a "Tools I use" section beside image-only cards (repositories in it too).
+  const show = (html) => projectCandidates(homeProjectLinks({ html, url, finalUrl: url }), url).map((c) => [c.tier, c.url]);
+  const asideOf = (html, host) => homeProjectLinks({ html, url, finalUrl: url }).find((l) => l.href.includes(host))?.inAside;
+  // pure4: a "Tools I use" section beside image-only cards on a projects page still fails: the tools' sites are
+  // removed by host; a repository in it stays (never lowered), but one link is no pass.
   const tools = await viaPage(`<main><h1>Projects</h1><section><h2>Tools I use</h2><a href="https://nodejs.org/">Node</a><a href="https://www.typescriptlang.org/">TS</a><a href="https://www.mongodb.com/">Mongo</a><a href="https://www.figma.com/">Figma</a><a href="https://www.docker.com/">Docker</a><a href="https://react.dev/">React</a><a href="https://vercel.com/">Vercel</a><a href="https://github.com/facebook/react">repo</a></section><div><img alt="project shot"></div></main>`);
-  assert.deepEqual(tools, { urls: [], pass: false });
-  // The same sites in a list with no heading still do not count: they are tool sites.
-  assert.deepEqual((await viaPage(`<main><h1>Projects</h1><a href="https://nodejs.org/">Node</a><a href="https://www.mongodb.com/">Mongo</a><a href="https://www.figma.com/">Figma</a></main>`)).urls, []);
-  // An element named for the stack (in a project card) holds tools; the card's live link still counts.
-  assert.deepEqual((await viaPage(`<main><h1>Projects</h1><div><a href="https://alpha.example/">Live</a><ul class="tech-stack"><li><a href="https://alpha-lib.example/">lib</a></li></ul></div></main>`)).urls, ["https://alpha.example/"]);
-  // An article list on /portfolio.
+  assert.deepEqual(tools, { urls: ["https://github.com/facebook/react"], pass: false });
+  // An article list on /portfolio still fails: every host is an article site.
   const articles = await viaPage(`<main><h1>Portfolio</h1><article><a href="https://smashingmagazine.com/2024/a">a</a></article><article><a href="https://css-tricks.com/b">b</a></article><article><a href="https://medium.com/@ana/c">c</a></article><article><a href="https://www.freecodecamp.org/news/d">d</a></article></main>`, "https://ana.dev/portfolio");
   assert.deepEqual(articles, { urls: [], pass: false });
-  // A cookie banner and a comment widget.
-  const cookie = await viaPage(`<main><h1>Projects</h1><div><img alt="x"></div><div id="disqus_thread"><a href="https://p.example/">p</a></div></main><div class="cookie-banner">We use cookies. <a href="https://www.cookiebot.com/">Cookiebot</a> <a href="https://www.onetrust.com/">OneTrust</a> <a href="https://consent.example/">More</a></div><div id="CybotCookiebotDialog"><a href="https://cmp.example/">x</a></div>`);
-  assert.deepEqual(cookie, { urls: [], pass: false });
-  // On the home page too: a "Tech stack" section after the projects, and a skills element.
+  // A cookie banner's provider links never count; a comment widget's link is lowered to tier 3.
+  const cookie = await viaPage(`<main><h1>Projects</h1><div><img alt="x"></div><div id="disqus_thread"><a href="https://p.example/">p</a></div></main><div class="cookie-banner">We use cookies. <a href="https://www.cookiebot.com/">Cookiebot</a> <a href="https://www.onetrust.com/">OneTrust</a> <a href="/privacy">Privacy</a></div>`);
+  assert.deepEqual(cookie, { urls: ["https://p.example/"], pass: false });
+  // On the projects page an aside is not promoted by the whole-content rule: tier 3 after the card's own link.
+  assert.deepEqual((await viaPage(`<main><h1>Projects</h1><div><a href="https://alpha.example/">Live</a></div><ul class="tech-stack"><li><a href="https://alpha-lib.example/">lib</a></li></ul></main>`)).urls, ["https://alpha.example/", "https://alpha-lib.example/"]);
+  // pure5: a projects element wins over a class guess, and a guess never removes a link.
+  assert.deepEqual(show(`<section id="projects"><div class="project-card"><h3>A</h3><ul class="tech-stack"><li>React</li></ul><a href="https://a.example/">Live</a><a href="https://github.com/ana/a">Code</a></div></section>`), [[1, "https://a.example/"], [1, "https://github.com/ana/a"]]);
+  assert.deepEqual(show(`<section id="projects"><div class="card"><h3>A</h3><div class="card-tech"><span>React</span><a href="https://a.example/">Live</a><a href="https://github.com/ana/a">Code</a></div></div></section>`), [[1, "https://a.example/"], [1, "https://github.com/ana/a"]]);
+  assert.deepEqual(show(`<section><h2>Projects</h2><div class="project-tech"><a href="https://a.example/">Live</a></div></section>`), [[1, "https://a.example/"]]);
+  assert.deepEqual(show(`<section class="skills-projects"><a href="https://a.example/">a</a></section>`), [[1, "https://a.example/"]]);
+  assert.deepEqual(show(`<section class="houses causes"><h2>Projects</h2><a href="https://a.example/">a</a></section>`), [[1, "https://a.example/"]]);
+  // "Tools I built" is the person's own tools; an id "tools" around it only lowers the outbound link, and the repository stays.
+  assert.deepEqual(show(`<section><h2>Tools I built</h2><a href="https://a.example/">a</a><a href="https://github.com/ana/t">t</a></section>`), [[1, "https://github.com/ana/t"], [3, "https://a.example/"]]);
+  assert.deepEqual(show(`<section id="tools"><h2>Tools I built</h2><a href="https://a.example/">a</a><a href="https://github.com/ana/t">t</a></section>`), [[1, "https://github.com/ana/t"], [3, "https://a.example/"]]);
+  // A page wrapper "tech-theme": the projects inside it win, the rest is lowered, nothing is dropped.
+  assert.deepEqual(show(`<div class="app tech-theme"><section id="projects"><a href="https://a.example/">a</a></section><p><a href="https://b.example/">b</a></p></div>`), [[1, "https://a.example/"], [3, "https://b.example/"]]);
+  // A project card named "cookie-clicker" inside the projects is a project.
+  assert.deepEqual(show(`<section id="projects"><div class="cookie-clicker"><a href="https://cookie.example/">Cookie Clicker</a></div></section>`), [[1, "https://cookie.example/"]]);
+  // A projects heading at h2 to h4 ends an open aside: "Skills" h2, then "Projects" h3 in a flat main.
+  assert.deepEqual(show(`<main><h2>Skills</h2><p>React</p><h3>Projects</h3><a href="https://a.example/">a</a></main>`), [[1, "https://a.example/"]]);
+  assert.deepEqual(show(`<main><section><h2>Tech Stack</h2><a href="https://nodejs.org/">Node</a></section><section><h2>Projects</h2><a href="https://a.example/">a</a></section></main>`), [[1, "https://a.example/"]]);
+  // On the home page: a "Tech stack" section and a skills element are lowered, not removed.
   const home = `<main><section id="projects"><a href="https://p1.example/">p1</a></section><section><h2>Tech stack</h2><a href="https://tool.example/">tool</a></section><div class="skills"><a href="https://skill.example/">s</a></div><a href="https://other.example/">o</a></main>`;
-  assert.deepEqual(projectCandidates(homeProjectLinks({ html: home, url, finalUrl: url }), url).map((c) => [c.tier, c.url]), [[1, "https://p1.example/"], [3, "https://other.example/"]]);
-  // Only a heading that names tools, whole, opens a tool list: not "Tools I've built", nor an about section
-  // that mentions technology (michellebrenner.com's "Bridging Technology & Human Potential", whose links stay).
-  for (const h of ["Tools I've built", "Bridging Technology &amp; Human Potential", "Tech for good", "Skills that pay the bills: my work"]) {
-    assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<main><h2>${h}</h2><a href="https://t.example/">t</a></main>`, url, finalUrl: url }), url).map((c) => c.url), ["https://t.example/"], h);
+  assert.deepEqual(show(home), [[1, "https://p1.example/"], [3, "https://tool.example/"], [3, "https://skill.example/"], [3, "https://other.example/"]]);
+  // Only a heading that names tools, whole, is an aside: not "Tools I've built", nor an about section that
+  // mentions technology (michellebrenner.com's "Bridging Technology & Human Potential").
+  for (const h of ["Tools I've built", "Tools I built", "Open source tools", "Bridging Technology &amp; Human Potential", "Tech for good", "Skills that pay the bills: my work"]) {
+    assert.equal(asideOf(`<main><h2>${h}</h2><a href="https://t.example/">t</a></main>`, "t.example"), false, h);
   }
-  for (const h of ["Tools I use", "~ Technologies ~", "My Tech Stack", "Skills &amp; Tools", "02. Skills:", "Languages and frameworks", "Uses"]) {
-    assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<main><h2>${h}</h2><a href="https://t.example/">t</a></main>`, url, finalUrl: url }), url), [], h);
+  for (const h of ["Tools I use", "~ Technologies ~", "My Tech Stack", "Skills &amp; Tools", "02. Skills:", "Languages and frameworks", "Uses", "What I work with", "Built with", "Powered by"]) {
+    assert.equal(asideOf(`<main><h2>${h}</h2><a href="https://t.example/">t</a></main>`, "t.example"), true, h);
+  }
+  // Cookie, consent and comment words are whole words of the class or id, not parts of other words.
+  assert.equal(asideOf(`<div class="cookie-banner"><a href="https://t.example/">t</a></div>`, "t.example"), true);
+  assert.equal(asideOf(`<div id="CybotCookiebotDialog"><a href="https://t.example/">t</a></div>`, "t.example"), true);
+  assert.equal(asideOf(`<div class="fortune-cookies-app consentrate"><a href="https://t.example/">t</a></div>`, "t.example"), true);
+  assert.equal(asideOf(`<div class="consentrate disqusting"><a href="https://t.example/">t</a></div>`, "t.example"), false);
+  // A tool's site: its home and docs are removed, a person's own work on it counts.
+  const counted = (u) => show(`<section id="projects"><a href="${u}">x</a></section>`).length === 1;
+  for (const u of ["https://www.figma.com/community/file/123/my-design-system", "https://www.figma.com/proto/abc/App", "https://www.figma.com/file/abc/x", "https://www.figma.com/design/abc/x", "https://www.canva.com/design/DAF/view", "https://www.postman.com/ana/workspace/my-api", "https://huggingface.co/spaces/ana/demo", "https://ana.itch.io/game"]) {
+    assert.ok(counted(u), u);
+  }
+  for (const u of ["https://nodejs.org/api/fs.html", "https://www.figma.com/", "https://www.figma.com/pricing", "https://supabase.com/", "https://www.canva.com/", "https://www.postman.com/downloads/", "https://www.prisma.io/docs"]) {
+    assert.ok(!counted(u), u);
   }
   // Where people really ship stays in: their apps on the hosts' app domains, package pages, store listings.
   const shipped = ["https://ana-app.vercel.app/", "https://ana.netlify.app/", "https://ana.github.io/x/", "https://www.npmjs.com/package/ana-lib", "https://pypi.org/project/ana-lib/", "https://play.google.com/store/apps/details?id=dev.ana", "https://chromewebstore.google.com/detail/ana/abc", "https://apps.apple.com/app/id1", "https://hub.docker.com/r/ana/x", "https://addons.mozilla.org/firefox/addon/ana/"];

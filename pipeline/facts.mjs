@@ -132,6 +132,17 @@ const STORE_HOST = /^(?:play\.google\.com|chromewebstore\.google\.com)$/i;
 // (vercel.app, netlify.app, github.io, web.app, onrender.com, up.railway.app) are not on it at all.
 const TOOL_SITE =
   /^(?:www\.)?(?:nodejs\.org|typescriptlang\.org|javascript\.com|python\.org|go\.dev|golang\.org|rust-lang\.org|kotlinlang\.org|swift\.org|php\.net|ruby-lang\.org|java\.com|dart\.dev|flutter\.dev|angular\.dev|angular\.io|vuejs\.org|svelte\.dev|nuxt\.com|remix\.run|expressjs\.com|nestjs\.com|djangoproject\.com|laravel\.com|spring\.io|getbootstrap\.com|sass-lang\.com|mui\.com|redux\.js\.org|graphql\.org|prisma\.io|vitejs\.dev|vite\.dev|webpack\.js\.org|jestjs\.io|threejs\.org|d3js\.org|jquery\.com|tensorflow\.org|pytorch\.org|numpy\.org|jupyter\.org|mongodb\.com|postgresql\.org|mysql\.com|redis\.io|sqlite\.org|supabase\.com|firebase\.com|docker\.com|kubernetes\.io|git-scm\.com|aws\.amazon\.com|azure\.microsoft\.com|heroku\.com|render\.com|railway\.app|digitalocean\.com|cloudflare\.com|figma\.com|adobe\.com|canva\.com|sketch\.com|postman\.com|code\.visualstudio\.com|jetbrains\.com|openai\.com)$/i;
+// The paths on a tool's site where a person's own work lives: a Figma file, prototype or community file, a
+// Canva design, a Sketch share, a Postman workspace or collection. Everything else on a tool's site (its home,
+// docs such as nodejs.org/api/fs.html, pricing, blog) is the tool's. An exemption list rather than "the root or
+// one short segment": docs paths are unbounded, and work paths on these few design and API tools are not.
+const TOOL_WORK_PATH = {
+  "figma.com": /^\/(?:file|proto|design|board|slides|community\/(?:file|plugin|widget))\//i,
+  "canva.com": /^\/design\//i,
+  "sketch.com": /^\/s\//i,
+  "postman.com": /^\/[^/]+\/(?:workspace|collection|api|flows?)(?:\/|$)/i,
+};
+const isToolSite = (h, path) => TOOL_SITE.test(h) && !TOOL_WORK_PATH[h.replace(/^www\./, "")]?.test(path);
 // A package registry's home page names the registry, not a project; its package pages are projects.
 const REGISTRY_HOME = /^(?:www\.)?(?:npmjs\.com|pypi\.org|crates\.io|rubygems\.org|pub\.dev|packagist\.org|nuget\.org)$/i;
 
@@ -265,7 +276,7 @@ function projectUrl(l, self) {
     const segs = u.pathname.split("/").filter(Boolean);
     if (segs.length < 2 || GH_RESERVED.test(segs[0])) return null; // a profile, not a repository
     repo = true;
-  } else if ((NOT_PROJECT.test(h) && !STORE_HOST.test(h)) || TOOL_SITE.test(h) || (REGISTRY_HOME.test(h) && u.pathname.replace(/\/+$/, "") === "") || PROFILE_HOSTS.test(h) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
+  } else if ((NOT_PROJECT.test(h) && !STORE_HOST.test(h)) || isToolSite(h, u.pathname) || (REGISTRY_HOME.test(h) && u.pathname.replace(/\/+$/, "") === "") || PROFILE_HOSTS.test(h) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
     return null;
   }
   u.hash = "";
@@ -382,19 +393,20 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   for (const l of links) {
     const from = l.from ?? "home";
     const onProjectsPage = from === "projects_page";
-    // A list of the tools the person uses, a cookie banner or a comment widget: never a project, repositories included.
-    if (l.inAside) continue;
     const p = projectUrl(l, self);
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
       if (seen.has(p.key) || (l.inSocial && !p.repo)) continue;
       // On the site's own projects page (a listing page by its path or label, projectsPageFor) the whole
       // main content is the projects, whatever its headings and classes: its title is almost always an h1
-      // "Projects", which opens no section, and utility-class cards say nothing. Nav, header, footer and
-      // social lists stay out, and so do tool lists, cookie banners and comment widgets (inAside, above). On the
-      // home page only a projects element or section, or a repository, counts.
-      const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome) || (onProjectsPage && !l.inChrome);
-      if (onProjectsPage && !inProjects) continue;
+      // "Projects", which opens no section, and utility-class cards say nothing. Nav, header and footer stay out.
+      // On the home page only a projects element or section, or a repository, counts as in the projects.
+      // A guess from a class, id or heading only lowers a link, never removes it: a link in what looks like a
+      // tool list, a cookie banner or a comment widget (inAside) is an other outbound link (tier 3), checked
+      // only when slots remain, on either page; a repository is never lowered. What keeps a tool list or a
+      // banner from passing is the host lists (TOOL_SITE, NOT_PROJECT), which remove the tools' own sites.
+      if (onProjectsPage && l.inChrome) continue;
+      const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome) || (onProjectsPage && !l.inAside);
       seen.add(p.key);
       tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
       continue;
