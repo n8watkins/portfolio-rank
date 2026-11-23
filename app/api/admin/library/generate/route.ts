@@ -18,8 +18,8 @@ import { withGateway } from "@/lib/ai-gateway.mjs";
 //        409 production_only | off (with why), 429 no_room | no_gemini_budget
 //        (reason says which limit; the body is the same shape), 503 no_ai |
 //        no_gemini_key
-// Production only: the neuron counter lives in each environment's database,
-// and only production's guards the account (staging's ceiling is 0).
+// Production only: the neuron counter lives in production's database, which
+// guards the account.
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 

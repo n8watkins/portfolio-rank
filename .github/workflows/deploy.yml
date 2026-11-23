@@ -14,7 +14,7 @@
 # (.github/actions/release-code), so a release whose deploy failed is never
 # picked up by them, and going back to an older release stays in force until
 # the next release is deployed.
-# A merge to main that changes code reaches staging only (staging.yml).
+# A merge to main that changes code deploys nothing until it is released.
 # The deploy skips with a notice until the CLOUDFLARE_API_TOKEN secret exists.
 name: Deploy
 
@@ -68,7 +68,7 @@ jobs:
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
-      # Unreleased code is never deployed from here; staging has it.
+      # Unreleased code is never deployed from here.
       - name: Refuse to deploy unreleased code
         if: inputs.code == 'checkout'
         run: |
