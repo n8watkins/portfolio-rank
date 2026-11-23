@@ -18,6 +18,7 @@ pairwise-pass.log
 inspect-backfill.log
 prewarm.log
 retry-github.log
+__pycache__/
 
 # Cloudflare Workers (OpenNext build output, local state, dev secrets)
 .open-next

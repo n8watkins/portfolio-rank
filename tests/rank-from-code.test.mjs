@@ -16,7 +16,7 @@ import { migrate } from "../lib/schema.mjs";
 import { ensureRosterSchema, ACTIVE } from "../pipeline/roster.mjs";
 import { STRONG_SIGNALS } from "../pipeline/portfolio-guard.mjs";
 import { NEWCOMERS_PER_RUN, checkSources, dailyRun, geminiYes, goodCapture, libraryMember, pointsOf, rankForWrite, rankFromCode, refreshTiers, seedNewcomers } from "../lib/tiers-store.mjs";
-import { shownPoints } from "../lib/check-points.mjs";
+import { checkPoints, checkShares, formatPoints, libraryMedians, pointFixes, shownPoints } from "../lib/check-points.mjs";
 import { ensureTierSchema, readSiteRow, readTierMeta, standingOf, topRows } from "../lib/tiers-db.mjs";
 import { compareSeed, isTier } from "../lib/tiers.mjs";
 import { checksReading } from "../lib/fresh-facts.mjs";
@@ -261,38 +261,67 @@ test("rows the membership rule turns down never take the newcomers' places in th
   assert.deepEqual(ranked, ["https://zzz-real.example/"]);
 });
 
-test("the Code checks score shows in whole points that add up to the total shown", () => {
+// The display rule: a score shows to one decimal when it is not whole ("9.4",
+// "10", "61.6") and never rounds up to its maximum, so a shown score never
+// claims full marks that were not earned. The items then add up to the total
+// exactly, since every stored point is already to one decimal.
+test("the Code checks score never shows full marks that were not earned: 9.4 of 10 shows as 9.4, not 10", () => {
   const check = {
     total: 61.6,
     items: [
-      { id: "a", points: 9 },
-      { id: "b", points: 5 },
-      { id: "c", points: 8.2 },
-      { id: "d", points: 9.4 },
-      { id: "e", points: 5 },
-      { id: "f", points: 10 },
-      { id: "g", points: 5 },
-      { id: "h", points: 5 },
-      { id: "i", points: 5 },
+      { id: "a", points: 9, max: 10 },
+      { id: "b", points: 5, max: 5 },
+      { id: "c", points: 8.2, max: 10 },
+      { id: "d", points: 9.4, max: 10 },
+      { id: "e", points: 5, max: 5 },
+      { id: "f", points: 10, max: 10 },
+      { id: "g", points: 5, max: 5 },
+      { id: "h", points: 5, max: 10 },
+      { id: "i", points: 5, max: 15 },
     ],
   };
   const shown = shownPoints(check);
-  assert.equal(shown.total, 62);
-  assert.equal(Object.values(shown.items).reduce((a, b) => a + b, 0), 62);
-  // The missing point goes to the largest remainder (9.4 -> 10), the other stays down (8.2 -> 8).
-  assert.equal(shown.items.d, 10);
-  assert.equal(shown.items.c, 8);
-  // Many breakdowns: the items always add up to the rounded total, and no item moves by a whole point or more.
+  // The item reported in review: 9.4 of 10 showed as 10/10.
+  assert.equal(`${shown.items.d}/10`, "9.4/10");
+  assert.equal(shown.items.c, "8.2");
+  assert.equal(shown.items.f, "10", "a whole score shows without a decimal");
+  assert.equal(shown.total, "61.6");
+  // Close to the maximum but short of it: never the maximum.
+  assert.equal(formatPoints(9.96, 10), "9.9");
+  assert.equal(formatPoints(99.96, 100), "99.9");
+  assert.equal(formatPoints(10, 10), "10");
+  assert.equal(formatPoints(0, 5), "0");
+  // Many breakdowns: the items shown add up to the total shown, no shown item or total
+  // claims its maximum unless it has it, and none moves from its value by 0.1 or more.
   for (let seed = 1; seed <= 200; seed++) {
     let x = seed;
     const rnd = () => (x = (x * 16807) % 2147483647) / 2147483647;
-    const items = Array.from({ length: 13 }, (_, k) => ({ id: `i${k}`, points: Math.round(rnd() * 150) / 10 }));
+    const items = Array.from({ length: 13 }, (_, k) => ({ id: `i${k}`, points: Math.round(rnd() * 150) / 10, max: 15 }));
     const total = Math.round(items.reduce((a, i) => a + i.points, 0) * 10) / 10;
     const s = shownPoints({ total, items });
-    assert.equal(s.total, Math.round(total));
-    assert.equal(Object.values(s.items).reduce((a, b) => a + b, 0), s.total);
-    for (const i of items) assert.ok(Math.abs(s.items[i.id] - i.points) < 1, `${i.points} -> ${s.items[i.id]}`);
+    assert.equal(Number(s.total), total);
+    assert.equal(Math.round(Object.values(s.items).reduce((a, b) => a + Number(b), 0) * 10) / 10, Number(s.total));
+    for (const i of items) {
+      assert.ok(Math.abs(Number(s.items[i.id]) - i.points) < 0.1, `${i.points} -> ${s.items[i.id]}`);
+      if (i.points < i.max) assert.ok(Number(s.items[i.id]) < i.max, `${i.points} -> ${s.items[i.id]}`);
+    }
   }
+});
+
+test("an item short of full marks never scores its maximum: SEO 99 and best practices 100 is not 10 of 10", () => {
+  const shares = checkShares({ psi: { ok: true, scores: { performance: 100, accessibility: 100, seo: 99, "best-practices": 100 } } });
+  const pts = checkPoints(shares, libraryMedians([]));
+  const seo = pts.items.find((i) => i.id === "seoBest");
+  assert.ok(seo.points < seo.max, `seoBest ${seo.points} of ${seo.max}`);
+  assert.equal(seo.points, 9.9);
+  assert.equal(seo.gain, 0.1);
+  const full = pts.items.find((i) => i.id === "accessibility");
+  assert.equal(full.points, full.max, "a full share still scores its maximum");
+});
+
+test("the quickest points say the gain to one decimal, never more than fixing the item adds", () => {
+  const fixes = pointFixes({ items: [{ id: "a", measured: true, gain: 1.5, fix: "add a share image" }] });
+  assert.equal(fixes[0].text, "+1.5 if you add a share image");
 });
 
 /** A health check's write, as pipeline/health.mjs makes for every listed site every night. */

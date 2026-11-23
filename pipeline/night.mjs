@@ -440,6 +440,22 @@ export async function startNight(ctx, { trigger = "cron" } = {}) {
 }
 
 /**
+ * The sites tonight's "grade new" stage will take: the first of its queue, in
+ * its own order, up to what the stage may send tonight (the same sizing as
+ * planNight's estimate below). An empty set when the stage is off.
+ */
+async function gradedTonight(ctx) {
+  const st = STAGES.find((x) => x.key === "grade_new");
+  if (!st || handlers.grade_new.off?.(ctx)) return new Set();
+  const usage = await usageToday(ctx.db, { now: new Date(ctx.now()), plan: ctx.plan });
+  const room = Math.max(0, (ctx.quota[ctx.plan.model] ?? 0) - (usage.byModel[ctx.plan.model] ?? 0) - Math.max(ctx.plan.reserve, ctx.plan.demandFactor * usage.peopleLastHour));
+  const a = backgroundAllowance("grade_new", usage, { plan: ctx.plan, quota: ctx.quota });
+  const n = Math.max(0, Math.min(a.cap - a.used, room));
+  if (!n) return new Set();
+  return new Set((await queues.grade_new.next(ctx, { tried: [] }, n)).map((x) => x.id));
+}
+
+/**
  * After the free checks: what each stage has waiting and what the budget
  * allows, and so how long the AI part should take at the pace.
  */
@@ -456,15 +472,23 @@ export async function planNight(ctx, state) {
     s.polls = { error: msg(e) };
     ctx.log(`Polls: scheduling failed: ${msg(e)}`);
   }
-  // Free too: bot-walled sites and listed sites whose signals collapsed go to
-  // the owner's review queue (lib/reviews/door.mjs). A failure never stops the night.
+  // Free too: bot-walled sites, listed sites whose signals collapsed, and listed
+  // addresses that are not a portfolio page by the address alone go to the
+  // review queue (lib/reviews/door.mjs). A failure never stops the night.
   try {
-    const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()) });
+    // The sites tonight's grade will take go to the door in minutes: the roster pass leaves them to it, and
+    // only them (a backlog beyond tonight's share still gets its row).
+    const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()), skipUrls: await gradedTonight(ctx) });
+    s.addressBrake = sent.addressBrake ?? null;
+    if (sent.addressBrake) ctx.log(`Address rule: brake on, removals held for the owner (${sent.addressBrake.why})`);
     await recordSites(ctx, s, "plan", [
       ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
       ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
+      ...sent.address.map((url) => ({ url, entries: [["review", { url, why: "its address is not a portfolio page (the address rule)" }]] })),
     ]);
-    if (sent.botWall.length || sent.collapsed.length) ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.collapsed.length} collapsed site(s) sent to the owner`);
+    if (sent.botWall.length || sent.collapsed.length || sent.address.length) {
+      ctx.log(`Review queue: ${sent.botWall.length} bot-walled, ${sent.collapsed.length} collapsed and ${sent.address.length} not-a-portfolio address(es) sent to the Removal rule or the owner`);
+    }
   } catch (e) {
     ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);
   }
@@ -1030,6 +1054,8 @@ export async function finishNight(ctx, state) {
     parked,
     humanVotes: HUMAN_VOTES_NOTE,
     polls: s.polls ?? null,
+    // The address rule's brake held tonight's removals for the owner (lib/reviews/door.mjs ADDRESS_AUTO_PER_NIGHT).
+    addressBrake: s.addressBrake ?? null,
     // The sites tonight touched, as written (night_sites; SITE_LISTS, at most SITE_LIST_MAX each, counts in sites.counts).
     sites,
     // New sites set aside for a missing screenshot: waiting for a newer capture, and back in the queue tonight.

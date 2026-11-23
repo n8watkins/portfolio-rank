@@ -41,17 +41,60 @@ function normalise(text) {
 
 const hashOf = (text) => createHash("sha1").update(normalise(text)).digest("hex");
 
-/** A code host, a link-in-bio page, or an admin or login path: never a portfolio. */
-export function urlNotPortfolio(url) {
-  let u;
+/** The name junkCheck gives urlNotPortfolio's hit. */
+export const ADDRESS_RULE = "not a portfolio address";
+/**
+ * The hosts whose own addresses are never a portfolio: code hosts and their
+ * gists, link-in-bio pages. Exact: a site on its own subdomain, such as
+ * GitHub Pages (name.github.io), is its own host and is not caught.
+ */
+export const ADDRESS_HOSTS = ["github.com", "gist.github.com", "gitlab.com", "bitbucket.org", "bio.link", "beacons.ai"];
+/**
+ * Hosts caught with every subdomain, since a person's page there is often a
+ * subdomain of it (owner, 2026-11-23):
+ *   substack.com           "any substack should never be considered a portfolio page"
+ *   medium.com             "A medium page is not a portfolio page"
+ *   linktr.ee, linktree.com "A link tree is not a portfolio page ... you cannot be a
+ *                          subdomain of link tree and medium to be a portfolio page"
+ * Never a hosting place or site builder (vercel.app, netlify.app, github.io,
+ * framer.website, webflow.io, pages.dev and the like): "Vercel is different.
+ * Vercel is just a hosting place." Real portfolios live there
+ * (tests/address-rule.test.mjs names them). Notion is undecided and not here.
+ */
+export const ADDRESS_HOST_FAMILIES = ["substack.com", "medium.com", "linktr.ee", "linktree.com"];
+/** The path segments that are never a portfolio's page. */
+export const ADDRESS_PATHS = ["admin", "login", "wp-admin"];
+const ADDRESS_PATH_RE = new RegExp(`/(${ADDRESS_PATHS.join("|")})(/|$)`, "i");
+
+const hostOfUrl = (url) => {
   try {
-    u = new URL(url);
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
   } catch {
-    return false;
+    return null;
   }
-  const h = u.hostname.toLowerCase().replace(/^www\./, "");
-  if (/^(github\.com|gitlab\.com|bitbucket\.org|linktr\.ee|bio\.link|beacons\.ai)$/.test(h)) return true;
-  return /\/(admin|login|wp-admin)(\/|$)/i.test(u.pathname);
+};
+
+/**
+ * The address's host is never a portfolio (ADDRESS_HOSTS, ADDRESS_HOST_FAMILIES).
+ * The owner's ruling was about hosts ("Someone's GitHub is not a portfolio
+ * page"), so only this overrules a Gemini "yes" or acts on a site no grade has
+ * seen (lib/reviews/door.mjs).
+ */
+export function hostNotPortfolio(url) {
+  const h = hostOfUrl(url);
+  if (!h) return false;
+  return ADDRESS_HOSTS.includes(h) || ADDRESS_HOST_FAMILIES.some((f) => h === f || h.endsWith(`.${f}`));
+}
+
+/**
+ * A host that is never a portfolio (hostNotPortfolio), or an admin or login
+ * path: never a portfolio, by the address alone. The path part is a junk rule
+ * only beside a Gemini "not a portfolio" (junkCheck).
+ */
+export function urlNotPortfolio(url) {
+  if (hostNotPortfolio(url)) return true;
+  if (!hostOfUrl(url)) return false;
+  return ADDRESS_PATH_RE.test(new URL(url).pathname);
 }
 
 /** Page-text hash -> hosts, over every row with 20 words or more. */
@@ -80,7 +123,7 @@ export function junkCheck(row, dupIndex = new Map()) {
       : PARKED.some((re) => re.test(text))
         ? "parked or for sale"
         : urlNotPortfolio(row.url)
-          ? "not a portfolio address"
+          ? ADDRESS_RULE
           : null;
   if (rule) return { junk: true, review: false, rule };
   const dup = text && words(normalise(text)) >= MIN_DUP_WORDS && [...(dupIndex.get(hashOf(text)) ?? [])].some((h) => h !== hostOf(row.url));
