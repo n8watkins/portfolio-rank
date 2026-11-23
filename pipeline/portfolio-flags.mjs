@@ -513,11 +513,24 @@ export function singleDocument(site) {
  */
 export function forwardsElsewhere(site) {
   const r = site?.redirect;
-  if (!r?.moved || !r.hijack) return null;
+  if (!r?.moved) return null;
   const p = readSite(site);
-  const to = r.to || hostOf(p.finalUrl);
-  return raised("forwards-elsewhere", `The listed address forwards to ${to}, and the page there does not carry the name "${quote(p.name, 40)}"${p.title ? `; its title is "${quote(p.title, 50)}"` : ""}.`, [to, p.title]);
+  // redirectVerdict's `to` is a domain; a caller may pass the final address instead.
+  const to = hostOf(r.to) || r.to || hostOf(p.finalUrl);
+  const title = p.title ? `; its title is "${quote(p.title, 50)}"` : "";
+  if (r.hijack) return raised("forwards-elsewhere", `The listed address forwards to ${to}, and the page there does not carry the name "${quote(p.name, 40)}"${title}.`, [to, p.title]);
+  // The health check calls a move safe when any one part of the name is on the page. A move to a domain with
+  // none of the name in it, whose page carries only part of the name ("founded by batuhan and demir"), is
+  // someone else's site that mentions the person.
+  const tokens = fold(p.name).split(/[^\p{L}0-9]+/u).filter((t) => t.length >= 3);
+  if (tokens.length < 2) return null;
+  const host = fold(hostOf(p.finalUrl) || to);
+  const text = fold(`${p.title} ${p.text}`);
+  if (tokens.some((t) => host.includes(t)) || tokens.every((t) => text.includes(t))) return null;
+  const found = tokens.filter((t) => text.includes(t));
+  return raised("forwards-elsewhere", `The listed address forwards to ${to}, a domain without the person's name, and the page there carries only "${found.join(" ")}" of "${quote(p.name, 40)}"${title}.`, [to, ...found, p.title]);
 }
+const fold = (s) => String(s ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
 
 // ---------- the listed address is a sub-page ----------
 

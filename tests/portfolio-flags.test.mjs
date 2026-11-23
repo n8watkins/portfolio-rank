@@ -184,7 +184,14 @@ test("single-document: an essay of long paragraphs with no projects", () => {
 test("forwards-elsewhere: builds on the health check's redirect verdict", () => {
   const moved = page("<h1>Siadialiga</h1><p>Software solutions.</p>", { url: "https://siadialiga.com/", name: "Batuhan Yilmaz", redirect: { moved: true, hijack: true, to: "siadialiga.com" } });
   assert.match(forwardsElsewhere(moved).reason, /^The listed address forwards to siadialiga\.com, and the page there does not carry the name "Batuhan Yilmaz"/);
-  assert.equal(forwardsElsewhere({ ...moved, redirect: { moved: true, hijack: false, to: "ana.dev" } }), null);
+  // The check let it pass because "batuhan" is on the page; the domain has none of the name and the page only part.
+  const company = page("<h1>Welcome SIADIALIGA</h1><p>founded by batuhan and demir. software solutions.</p>", { url: "https://siadialiga.com/", name: "Batuhan Eroglu", redirect: { moved: true, hijack: false, to: "https://siadialiga.com/" } });
+  assert.match(forwardsElsewhere(company).reason, /forwards to siadialiga\.com, a domain without the person's name, and the page there carries only "batuhan" of "Batuhan Eroglu"/);
+  // A move to the person's own domain, or a page with the whole name, is a person moving house.
+  const own = page("<h1>Hi, I'm Ana</h1>", { url: "https://anaruiz.dev/", redirect: { moved: true, hijack: false, to: "anaruiz.dev" } });
+  assert.equal(forwardsElsewhere(own), null);
+  const named = page("<h1>Ana Ruiz</h1>", { url: "https://studio.dev/", redirect: { moved: true, hijack: false, to: "studio.dev" } });
+  assert.equal(forwardsElsewhere(named), null);
   assert.equal(forwardsElsewhere({ ...moved, redirect: null }), null);
 });
 
