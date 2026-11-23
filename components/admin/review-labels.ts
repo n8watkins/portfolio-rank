@@ -1,13 +1,21 @@
 // The review queue's words for what a decision does and when it shows, shared
-// by the row (./StatusReviewQueue.tsx), the bulk confirm bar and the
-// screenshot viewer (./ShotViewer.tsx). Plain verbs instead of "apply" (owner,
-// 2026-11-14: "what does apply even mean?"), and the real timing of each case
-// (lib/reviews/store.mjs planConfirm):
+// by the row (./StatusReviewQueue.tsx), the bulk confirm bar, the notices, the
+// Decided list and the screenshot viewer (./ShotViewer.tsx), so they cannot
+// drift. Both buttons say what happens to the site (owner, 2026-11-23:
+// "reject is unclear as the opposite. It should be like, take off the list,
+// keep on the list"), never "Reject" or "apply" (owner, 2026-11-14: "what does
+// apply even mean?"). The API actions stay "confirm" and "reject"; only the
+// words live here.
+// The real timing of the agree button (lib/reviews/store.mjs planConfirm):
 //   remove                      off the list at once (health down)
 //   relist, graded, listed      back in the rankings at once (grade flipped, re-ranked)
 //   relist, delisted            back on the list after the next daily sync (data/additions.json)
 //   relist, broken or hidden    shows again after its next capture
 //   relist, never graded        ranked after its first nightly grade
+// The other button (decideReviews "reject") changes nothing on the site and
+// moves the row to Decided; on a removal it also counts as the owner's keep, so
+// no rule removes the site again (keepsSite), and a held grade is settled as
+// his choice (settleOnReject).
 // Buttons ask first (./ConfirmButton.tsx): the question says the same verb.
 
 type Row = { proposed: "relist" | "remove" | "review"; group: string; current: string };
@@ -36,10 +44,52 @@ export function outcomeOf(r: Row): { key: string; verb: string; label: string; q
   return { key, verb: "bring back", label: "Bring back", question: "Confirm: bring this site back?", when };
 }
 
-/** The hint beside a row's buttons: "If confirmed, back on the list after the next daily sync." */
-export const ifConfirmed = (when: string) => `If confirmed, ${when.charAt(0).toLowerCase()}${when.slice(1)}`;
+/**
+ * The other button (the "reject" action): its label, its question, what it
+ * does (for the hint) and what it is called once done (the Decided list, the
+ * notices).
+ */
+export function declineOf(r: Row): { label: string; question: string; does: string; done: string } {
+  if (r.proposed === "remove") {
+    const listed = r.current === "ranked" || r.current === "listed";
+    return {
+      label: "Keep on the list",
+      question: "Confirm: keep this site on the list?",
+      does: listed ? "stays listed, and no rule removes it again." : "stays as it is, and no rule removes it.",
+      done: "Kept on the list",
+    };
+  }
+  if (r.proposed === "relist") {
+    const does = r.current === "delisted" || r.group.startsWith("delisted") ? "stays off the list." : r.current === "hidden" || r.group === "broken" ? "stays hidden." : "stays as it is.";
+    return { label: "Leave it off", question: "Confirm: leave this site off?", does, done: "Left off" };
+  }
+  return { label: "Dismiss", question: "Confirm: dismiss?", does: "not worth a look.", done: "Dismissed" };
+}
 
-export const REJECT_QUESTION = "Confirm: reject?";
+/**
+ * The one line beside a row's two buttons, saying what each does:
+ * "Take off the list: off the list at once. Keep on the list: stays listed, and no rule removes it again."
+ */
+export function hintOf(r: Row): string {
+  const o = outcomeOf(r);
+  const d = declineOf(r);
+  if (r.proposed === "review") return `${o.label}: you looked. ${d.label}: ${d.does} Neither changes the site.`;
+  return `${o.label}: ${o.when.charAt(0).toLowerCase()}${o.when.slice(1)} ${d.label}: ${d.does}`;
+}
+
+/** The Decided list's word for a decided row. */
+export function decidedLabel(r: Row & { status: string }): string {
+  if (r.status === "closed") return "Closed";
+  if (r.status === "rejected") return declineOf(r).done;
+  return r.proposed === "review" ? "Checked" : "Confirmed";
+}
+
+/** What the other button did, for the Decided list; `settled` when it settled a held grade as the owner's keep. */
+export function declinedEffect(r: Row, settled: boolean): string {
+  if (r.proposed === "remove" && settled) return "Stays listed; the grade records your decision.";
+  return "Nothing changed on the site.";
+}
+
 export const UNDO_QUESTION = "Confirm: undo?";
 
 /**

@@ -173,7 +173,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **When the code says it looks like a portfolio, the owner reviews it** (owner, 2026-11-16: "If Gemini says it's not a portfolio, and then the code says it looks like a portfolio, we can review it."). Status: building.
   With 4 or more of the six code signals (`STRONG_SIGNALS` in [pipeline/portfolio-guard.mjs](../pipeline/portfolio-guard.mjs)) the site stays listed and a pending review row says Gemini said no, the code found N of 6, with the screenshots.
   The health check keeps such a site's `needs_review` mark instead of overwriting it, until the owner decides.
-  His Confirm takes it off; his Reject settles the grade as his choice to keep it (review kind `owner_kept`, `needs_review` cleared), so nothing re-flags it, and Undo of that Reject restores the hold.
+  His Confirm ("Take off the list") takes it off; his Reject ("Keep on the list" since 2026-11-23) settles the grade as his choice to keep it (review kind `owner_kept`, `needs_review` cleared), so nothing re-flags it, and Undo of that Reject restores the hold.
 - **A junk rule is not protected by the signals** (agent, 2026-11-16). Status: building.
   The junk rules ([pipeline/junk-rules.mjs](../pipeline/junk-rules.mjs): an unedited template, a placeholder name such as "John Doe", a parked or for-sale page, a code host or link-in-bio address) run before the guard, and a hit is removed automatically like any other "no", even with 6 of 6 signals.
   Why: a starter template carries every portfolio signal by design.
@@ -192,7 +192,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A listed, graded site whose weekly signals collapse (1 or fewer) is not re-graded: a pending review row says so, and nothing is removed without Gemini's "no" at the door or the owner's decision.
   Once the owner has decided to keep the site (one definition everywhere: he rejected any proposal to remove it, in any group, or confirmed it is a portfolio himself, or the grade carries that decision), no new row is written for it unless the site is graded again after his decision (none is while re-grading is off).
 - **Bot-walled sites go to the owner** (owner, 2026-11-16: "Bot-walled sites can be sent to me for review."). Status: building.
-  A never-captured site (no capture, no grade) whose capture met a bot or security check (marked by #235) becomes a pending review row of the "review" kind: Confirm ("Mark checked") records that he looked and changes nothing, the capture keeps retrying with backoff, and once a capture gets through the site is graded at the door like any new site; Reject records it too.
+  A never-captured site (no capture, no grade) whose capture met a bot or security check (marked by #235) becomes a pending review row of the "review" kind: Confirm ("Mark checked") records that he looked and changes nothing, the capture keeps retrying with backoff, and once a capture gets through the site is graded at the door like any new site; Reject ("Dismiss" since 2026-11-23) records it too.
 - **A new site with a missing screenshot is graded once it is captured again** (agent, 2026-11-16). Status: building.
   The "no usable captures" marker no longer keeps a site out for good: a capture newer than the marker puts it back in the "grade new sites" queue, and the night summary counts both kinds.
 - **A stalled Gemini cannot kill a night** (agent, 2026-11-16). Status: building.
