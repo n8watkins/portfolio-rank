@@ -221,16 +221,59 @@ test("a div menu is still a menu with an image logo for its home link and long l
 test("root-level project pages named like a section count by their label; the same paths labelled as sections do not", () => {
   const link = (p, label) => `<div class="card"><a href="${p}">${label}</a><p>A line about it.</p></div>`;
   const page = (cards) => `<main><div class="grid">${cards.join("")}</div></main>`;
-  assert.deepEqual(ownOf(page([link("/2048/", "2048"), link("/notes/", "Notes, a markdown app"), link("/timeline/", "Timeline.js"), link("/tools/", "Dev Tools Hub"), link("/resume/", "Resume Builder")])), [
+  assert.deepEqual(ownOf(page([link("/2048/", "2048"), link("/notes/", "Notes, a markdown app"), link("/timeline/", "Timeline.js"), link("/tools/", "Dev Tools Hub"), link("/journal/", "Journal: a writing app"), link("/now/", "Now Playing")])), [
     "https://ana.dev/2048/",
     "https://ana.dev/notes/",
     "https://ana.dev/timeline/",
     "https://ana.dev/tools/",
-    "https://ana.dev/resume/",
+    "https://ana.dev/journal/",
+    "https://ana.dev/now/",
   ]);
   assert.deepEqual(ownOf(page([link("/notes/", "Notes"), link("/timeline/", "Timeline"), link("/tools/", "My tools"), link("/resume/", "Resume"), link("/2048/", "Page 2048"), link("/2024/", "2023"), link("/achievements", "")])), []);
+  // A page that is never a project at the top of a site is not counted whatever its label, a project named like one
+  // included: a resume at "/resume" is common, a "Resume Builder" project there rare (a known limit).
+  assert.deepEqual(ownOf(page([link("/resume/", "Resume Builder"), link("/services", "Studio 42"), link("/about-me", "Ana")])), []);
   // Below the top of the site the path still decides.
   assert.deepEqual(ownOf(page([link("/topics/react", "React apps"), link("/blog/2048", "2048")])), []);
+});
+
+// Final code review of #287: calls to action in the projects page's main content.
+test("a row of calls to action in the projects page's main content is not counted; one real demo stays a fail", () => {
+  const page = `<nav><a href="/">Home</a> <a href="/about">About</a> <a href="/projects">Projects</a></nav><main><h1>Projects</h1>
+    <div class="card"><h3>Weather</h3><p>A weather app.</p><a href="https://weather-ana.vercel.app/">Live demo</a></div>
+    <div class="cta-row"><a class="btn" href="/resume">Download Resume</a><a class="btn" href="/services">Work with me on your next product</a>
+    <a class="btn" href="/hire-me">Available for freelance</a><a class="btn" href="/blog">Read my latest articles</a>
+    <a class="btn" href="/certifications">See what I'm certified in</a><a class="btn" href="/curriculum">Get my CV</a>
+    <a class="btn" href="/kontakt">Schreib mir</a><a class="btn" href="/sobre-mi">Quién soy yo</a></div></main>`;
+  assert.deepEqual(ownOf(page), ["https://weather-ana.vercel.app/"]);
+  // A label that opens the project itself is not a call to action: "View project", "See the demo", "Explore the app".
+  const cards = `<main><div class="grid">${[["/tracker", "View project"], ["/budget", "See the demo"], ["/chess", "Explore the app"], ["/learn-go", "Learn Go: an interactive course"]]
+    .map(([p, t]) => `<div class="card"><h3>${p.slice(1)}</h3><p>One of my projects.</p><a href="${p}">${t}</a></div>`).join("")}</div></main>`;
+  assert.deepEqual(ownOf(cards), ["https://ana.dev/tracker", "https://ana.dev/budget", "https://ana.dev/chess"]);
+});
+
+test("what the home page shows outside its projects is not raised by the projects page's text, whatever its label there", () => {
+  const home = "https://ana.dev/";
+  const homeHtml = `<section id="about"><h2>About</h2><p>I worked at <a href="https://acme.example/">Acme</a>, <a href="https://globex.example/">Globex</a> and <a href="https://initech.example/">Initech</a>.</p></section>`;
+  const page = "https://ana.dev/projects";
+  const pageHtml = `<main><h1>Projects</h1><p>Before going freelance I built products at <a href="https://acme.example/">Acme Inc.</a>,
+    <a href="https://globex.example/">Globex Corporation</a> and <a href="https://initech.example/">Initech (2019)</a>.</p>
+    <div class="card"><h3>Weather</h3><a href="https://weather-ana.vercel.app/">Live demo</a></div></main>`;
+  const links = homeProjectLinks({ html: homeHtml, url: home, finalUrl: home });
+  links.push(...pageLinks(pageHtml, page).map((l) => ({ ...l, from: "projects_page", page })));
+  assert.deepEqual(projectCandidates(links, home).map((c) => [c.url, c.tier]), [
+    ["https://weather-ana.vercel.app/", 1],
+    ["https://acme.example/", 3],
+    ["https://globex.example/", 3],
+    ["https://initech.example/", 3],
+  ]);
+  // A project card that links it twice (its title and "open app →") is a project, as marbelona.com's ParkinganPH is.
+  const card = `<main><div class="card"><a href="https://acme.example/">Acme dashboard</a><p>An internal tool.</p><a href="https://acme.example/">open app →</a></div></main>`;
+  const twice = homeProjectLinks({ html: homeHtml, url: home, finalUrl: home });
+  twice.push(...pageLinks(card, page).map((l) => ({ ...l, from: "projects_page", page })));
+  assert.deepEqual(projectCandidates(twice, home).find((c) => c.url === "https://acme.example/")?.tier, 1);
+  const marbelona = withPages("https://marbelona.com/", "marbelona.com.home.html", "https://marbelona.com/projects", "marbelona.com.projects.html");
+  assert.deepEqual(marbelona.find(([u]) => u === "https://parkinganph.com/"), ["https://parkinganph.com/", 1]);
 });
 
 test("a beginner's one repository of practice projects: each folder is a project; releases and the wiki fold into it", () => {

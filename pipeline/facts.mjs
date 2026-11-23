@@ -496,23 +496,52 @@ const YEAR_SEGMENT = /^(?:19|20)\d{2}$/;
  * segment is an action, and its whole label does not name a section of the site or a step through a list
  * (SECTION_LABEL: "About", "Get in touch", "Next project", "2"). Below the top of the site no segment is a section
  * of the site (NOT_PROJECT_SEGMENT, SITE_SECTION_SEGMENT: "/topics/react", "/blog/post"), a year or a page number.
- * At the top of the site the path alone does not decide, since a project may be named like a section: "/notes/"
- * labelled "Notes, a markdown app", "/tools/" labelled "Dev Tools Hub" and "/2048/" labelled "2048" (the game) are
- * projects; "/notes" labelled "Notes" and "/achievements" labelled "My achievements" are not, nor is a link with
- * no label at a section's path. The home page, the projects page itself and its menus (menuLinks) are left out by
- * the caller. On the projects page only: on the home page a same-site link is a section of the site far more often
- * than a project.
+ * At the top of the site a page that is never a project is rejected by its path whatever its label
+ * (NEVER_PROJECT_TOP: "/resume" "Download Resume", "/services" "Work with me on your next product", "/blog"
+ * "Read my latest articles"), and a label that starts with an action is a section's call to action
+ * (ACTION_LABEL: "See what I'm certified in", "Explore skills"). Other section words may also name a project, so
+ * there the label decides: "/notes/" labelled "Notes, a markdown app", "/tools/" labelled "Dev Tools Hub" and "/2048/"
+ * labelled "2048" (the game) are projects; "/notes" labelled "Notes" and "/achievements" labelled "My achievements"
+ * are not, nor is a link with no label at a section's path. A project page named like one of the first kind
+ * ("/resume" labelled "Resume Builder") is not counted: a resume at "/resume" is common, a project there rare. The
+ * home page, the projects page itself and its menus (menuLinks) are left out by the caller. On the projects page
+ * only: on the home page a same-site link is a section of the site far more often than a project.
  */
 function isProjectsPageLink(path, label = "") {
   const segs = segmentsOf(path).map(pageName);
   if (!segs.length || LISTING_SEGMENT.test(segs.at(-1)) || MAKER_PAGE.test(segs.at(-1)) || isLanguage(segs[0]) || segs.some((s) => ACTION_SEGMENT.test(s))) return false;
   // A project named by a number, labelled by the same number ("/2048/" "2048"), is the one place a number is a name.
   const namedByNumber = segs.length === 1 && /^\d+$/.test(segs[0]) && label === segs[0];
-  if (!namedByNumber && SECTION_LABEL.test(label)) return false;
+  if (!namedByNumber && (SECTION_LABEL.test(label) || isActionLabel(label))) return false;
   const section = (s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s);
-  if (segs.length === 1) return namedByNumber || ((label !== "" || !section(segs[0])) && !/^\d+$/.test(segs[0]) && !YEAR_SEGMENT.test(segs[0]));
+  if (segs.length === 1) {
+    if (NEVER_PROJECT_TOP.test(segs[0])) return false;
+    return namedByNumber || ((label !== "" || !section(segs[0])) && !/^\d+$/.test(segs[0]) && !YEAR_SEGMENT.test(segs[0]));
+  }
   return !/^\d+$/.test(segs.at(-1)) && !segs.some((s) => section(s) || YEAR_SEGMENT.test(s));
 }
+
+// The pages at the top of a site that are never a project, whatever their label: who the person is and how to
+// reach or hire them, their resume and writing, what they sell, the site's legal pages and accounts, in English and
+// the common other languages. Words that may also name a project (notes, tools, timeline, stack, journal, gallery,
+// books, uses, now, lab) are not here: the label decides those (isProjectsPageLink).
+const NEVER_PROJECT_TOP = new RegExp(
+  String.raw`^(?:` +
+    [
+      String.raw`about(?:-me|-us)?|contact(?:-me|-us)?|get-?in-?touch|lets-?talk|say-?hello|say-?hi|hire(?:-me)?|work-with-me|book(?:-a)?-call`,
+      String.raw`resume|cv|curriculum|curriculum-vitae|lebenslauf|blog|posts?|articles?|newsletter|services?|pricing|faq|certifications?|certificates?|achievements?|awards?|testimonials?`,
+      String.raw`privacy(?:-policy)?|terms(?:-of-(?:service|use))?|imprint|impressum|datenschutz|legal(?:-notice)?|mentions-legales|aviso-legal|cookies?(?:-policy)?|login|log-?in|signin|sign-?in|signup|sign-?up|register|account`,
+      String.raw`sobre(?:-mi|-mim)?|acerca(?:-de(?:-mi)?)?|contacto|contato|contatti|kontakt|a-?propos|qui-suis-je|uber-?mich|ueber-?mich|über-?mich|chi-sono|over-?mij|o-?mnie|servicios|servicos|serviços|leistungen|tarifs|precios|preise`,
+    ].join("|") +
+    String.raw`)$`,
+  "i"
+);
+// A label that starts with an action is a call to action of a section ("Download Resume", "Read my latest
+// articles", "See what I'm certified in", "Work with me on your next product", "Get in touch"), unless it opens the
+// project itself ("View project", "See the demo", "Explore the app", "Check out the live site").
+const ACTION_LABEL = /^(?:download|read|see|view|explore|learn|check|hire|work with|book|contact|get)(?![\p{L}])/iu;
+const OPENS_PROJECT = /^(?:view|see|explore|check(?: out)?|get|download|read)\s+(?:the\s+|this\s+)?(?:project|demo|app|case study|live|site|website|game|code|source|repo|it)(?![\p{L}])/iu;
+const isActionLabel = (label) => ACTION_LABEL.test(label) && !OPENS_PROJECT.test(label);
 
 /**
  * Whether a same-site link names a section of the site, by its whole label or by a word of its path
@@ -656,8 +685,15 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   // Each link once, in the highest tier it is seen in: a link in a work-experience list that the projects list
   // links again is a project (avi-aggarwal.com's hypjam.com, marbelona.com's ParkinganPH).
   const best = new Map();
-  // The labels the home page (either view) shows a link under outside its projects, by the link's address.
-  const homeLow = new Map();
+  // The addresses the home page (either view) shows outside its projects.
+  const homeLow = new Set();
+  // How many times the projects page's main content links each outside address (furniture, below).
+  const cardLinks = new Map();
+  for (const l of pageLinksOnly) {
+    if (l.inChrome || l.inAside || menu.has(l)) continue;
+    const k = projectUrl(l, self)?.key;
+    if (k) cardLinks.set(k, (cardLinks.get(k) ?? 0) + 1);
+  }
   const place = (key, t, entry) => {
     const had = best.get(key);
     if (had && had.t <= t) return;
@@ -689,13 +725,13 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // A repository, or a subdomain of the site's own domain (its own work), counts as in the projects anywhere
       // but the page's frame and a section whose heading says it is not projects ("Work Experience" with an
       // employer's repositories, "Repos I like").
-      const label = labelOf(l).toLowerCase();
-      // What the home page also shows outside its projects, under the same label, is on every page of the site (a
-      // webring's "←", "Tech writing blog webring" at the foot of amanhimself.dev's pages): the projects page's main
-      // content does not make it a project.
-      const furniture = onProjectsPage && !l.inProjects && Boolean(homeLow.get(p.key)?.has(label));
+      // What the home page shows outside its projects (an employer in its About, a webring at its foot) is not made a
+      // project by the projects page's main content alone, whatever its label there ("Acme" at home, "Acme Inc." in
+      // the projects page's intro; amanhimself.dev's webrings). Unless the projects page links it as a project card
+      // does, more than once (its title and its "open app →": marbelona.com's ParkinganPH, first in its experience).
+      const furniture = onProjectsPage && !l.inProjects && homeLow.has(p.key) && (cardLinks.get(p.key) ?? 0) < 2;
       const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside && !furniture);
-      if (!onProjectsPage && !inProjects) homeLow.set(p.key, (homeLow.get(p.key) ?? new Set()).add(label));
+      if (!onProjectsPage && !inProjects) homeLow.add(p.key);
       place(p.key, inProjects ? 0 : 2, { url: p.key, from, kind: "outbound" });
       continue;
     }
