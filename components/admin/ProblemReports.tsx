@@ -133,30 +133,13 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
             const notes = s.reports.filter((r) => r.note);
             return (
               <li key={s.url} className="card p-4 sm:p-5" data-problem-site={s.url}>
-                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-base font-bold break-all">{domain}</span>
-                      <span className={tag} data-problem-count>
-                        {plural(s.count, "report")}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 text-xs text-mute">
-                      {s.count === 1 ? `Sent ${when(s.last)}` : `First ${when(s.first)} · latest ${when(s.last)}`}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={btnSecondary}
-                    disabled={busy !== null}
-                    onClick={() => act(s, "handle")}
-                    aria-label={`Mark the reports on ${domain} handled`}
-                    data-problem-handle
-                  >
-                    <Check className="h-4 w-4" aria-hidden />
-                    {busy === key ? "Saving..." : "Mark handled"}
-                  </button>
-                </div>
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-base font-bold break-all">{domain}</span>
+                  <span className={tag} data-problem-count>
+                    {plural(s.count, "report")}
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-mute">{s.count === 1 ? `Sent ${when(s.last)}` : `First ${when(s.first)} · latest ${when(s.last)}`}</p>
                 <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Reasons">
                   {s.reasons.map((r) => (
                     <li key={r.key} className={`${tag} h-auto min-h-6 py-0.5 text-ink`} data-problem-reason={r.key}>
@@ -172,20 +155,31 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
                         {/* Plain text: React escapes it, and line breaks are kept with whitespace-pre-line. */}
                         <p className="whitespace-pre-line break-words text-pretty">{r.note}</p>
                         <p className="mt-1 text-xs text-mute">
-                          {s.reasons.find((x) => x.key === r.reason)?.label ?? r.reason} · {when(r.updatedAt)}
+                          {s.reasons.find((x) => x.key === r.reason)?.label ?? r.reason} · <span className="whitespace-nowrap">{when(r.updatedAt)}</span>
                         </p>
                       </li>
                     ))}
                   </ul>
                 )}
-                <div className="mt-2">
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-edge pt-3">
+                  <button
+                    type="button"
+                    className={btnSecondary}
+                    disabled={busy !== null}
+                    onClick={() => act(s, "handle")}
+                    aria-label={`Mark the reports on ${domain} handled`}
+                    data-problem-handle
+                  >
+                    <Check className="h-4 w-4" aria-hidden />
+                    {busy === key ? "Saving..." : "Mark handled"}
+                  </button>
                   <SiteLinks url={s.url} />
+                  {errors[key] && (
+                    <p className="text-sm text-down" role="alert">
+                      {errors[key]}
+                    </p>
+                  )}
                 </div>
-                {errors[key] && (
-                  <p className="mt-2 text-sm text-down" role="alert">
-                    {errors[key]}
-                  </p>
-                )}
               </li>
             );
           })}

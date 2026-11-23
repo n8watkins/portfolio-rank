@@ -226,3 +226,20 @@ test("intake: past a site's day cap the visitor still gets thanks, and nothing m
   assert.equal((await run({ url: OTHER, reason: "gone" }, { visitor: "late", network: "net-late" })).status, 200);
   assert.equal((await rows(db)).length, LIMITS.SITE_DAY + 1);
 });
+
+test("retention: handled reports go 180 days after handling; open ones stay", async () => {
+  const { pruneLogs, HANDLED_REPORT_DAYS } = await import("../pipeline/retention.mjs");
+  const db = await freshDb();
+  const old = new Date(T0 - (HANDLED_REPORT_DAYS + 1) * 86_400_000);
+  const a = await saveReport(db, { url: SITE, reason: "screenshot", reporter: "v1", now: old });
+  const b = await saveReport(db, { url: SITE, reason: "gone", reporter: "v2", now: old });
+  await saveReport(db, { url: OTHER, reason: "other", reporter: "v3", now: old });
+  await markHandled(db, { ids: [a.id], actor: "admin:owner", now: old });
+  await markHandled(db, { ids: [b.id], actor: "admin:owner", now: new Date(T0 - 86_400_000) });
+  const out = await pruneLogs(db, { now: new Date(T0) });
+  assert.equal(out.problemReports, 1);
+  assert.deepEqual((await rows(db)).map((r) => [r.url, r.status]), [
+    [SITE, "handled"],
+    [OTHER, "open"],
+  ]);
+});

@@ -17,7 +17,9 @@ import { listReports } from "@/lib/problem-reports/store.mjs";
 // and records who and when; Reject records the decision only. With
 // REVIEW_AUTO_APPLY (lib/reviews/flag.ts), rows that pass the owner's rule
 // are applied by the hourly cron and listed under "Applied automatically",
-// each with Undo. Only the admin sees it; anyone else gets a 404.
+// each with Undo. Above the queue, visitors' "Report a problem" notes,
+// grouped by site (components/admin/ProblemReports.tsx). Only the admin sees
+// it; anyone else gets a 404.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Review - PortfolioRank admin", robots: { index: false, follow: false } };
 

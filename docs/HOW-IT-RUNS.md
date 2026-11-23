@@ -312,6 +312,29 @@ The 25 sites the community list had dropped before this rule were put back into 
 
 Known gaps, with fixes open as pull requests: a removal covers one exact spelling of the address (#268), and a respelled site can get a second row (#267).
 
+### A visitor reports a problem
+
+Screenshots and measurements are taken by code, and sometimes the capture is wrong: a cookie wall, a loader, the wrong page, a wrong measurement.
+Always on; no switch.
+
+1. **A visitor reports it** (`components/profile/ReportProblem.tsx`).
+   "Report a problem" sits under the screenshot on every profile.
+   It opens a panel with five reasons (the screenshot is wrong or broken, a measurement is wrong, this is not a portfolio, the site is gone or has changed, something else) and an optional note of at most 500 characters.
+   No account is needed.
+2. **The route checks it** (`app/api/problem-reports/route.ts`, the steps in `lib/problem-reports/intake.mjs`).
+   Same origin, a known reason and a short note first; then the limits: 6 an hour and 20 a day per network, 10 a day per visitor; then Turnstile (action `problem-report`); then that the site has a profile.
+   Past 30 new reports on one site in a day, the visitor still gets the thanks and nothing more is stored.
+   One visitor has at most one open report per site: sending again replaces the first.
+   The visitor and the network are kept only as keyed hashes, and the visitor's hash is cleared when the report is handled.
+3. **It is stored** in the `problem_reports` table (`lib/problem-reports/schema.mjs`).
+4. **You read it** on `/admin/review`, under "Visitor reports" above the review queue (`components/admin/ProblemReports.tsx`).
+   Open reports are grouped by site with the count, the reasons, every note (shown as plain text) and links to the site and its profile.
+   "Mark handled" closes a site's reports and records who and when; "Handled recently" keeps them with Reopen.
+   Nothing alerts you; look when you review.
+5. **What it changes: nothing.**
+   A report never moves a site's rank, tier, score, votes or listing.
+   Fixing what it points at is your own step: a re-capture, a review row or a removal.
+
 ### Ranking
 
 The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
@@ -493,6 +516,7 @@ When a job changes, re-check the file that holds the truth, then change this pag
 | the removal rule | `lib/reviews/door.mjs`, `worker/review.ts` |
 | owner removals | `lib/games/claims.mjs`, `worker/owner-removals.ts`, `pipeline/owner-removals.mjs` |
 | ranking and tiers | `app/api/rank/route.ts`, `lib/tiers.mjs`, `worker/tiers.ts` |
+| visitor reports | `lib/problem-reports/intake.mjs`, `lib/problem-reports/store.mjs` |
 | visitor grading | `worker/grader.ts`, `.github/workflows/grade.yml`, `pipeline/people.mjs` |
 | blog, polls, library, newsletter | `pipeline/content/**`, `pipeline/polls.mjs`, `worker/library.ts`, `worker/newsletter.ts` |
 | discovery | `pipeline/discovery/**`, `.github/workflows/discover.yml` |

@@ -87,7 +87,7 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
 
   return (
     <div className={`flex items-center justify-between gap-3 ${className}`}>
-      <p className="min-w-0 text-xs text-mute">Screenshot taken automatically</p>
+      <p className="min-w-0 truncate text-xs text-mute">Taken automatically</p>
       <button
         type="button"
         onClick={show}
