@@ -48,13 +48,20 @@ export const ADDRESS_RULE = "not a portfolio address";
  * gists, link-in-bio pages. Exact: a site on its own subdomain, such as
  * GitHub Pages (name.github.io), is its own host and is not caught.
  */
-export const ADDRESS_HOSTS = ["github.com", "gist.github.com", "gitlab.com", "bitbucket.org", "linktr.ee", "bio.link", "beacons.ai"];
+export const ADDRESS_HOSTS = ["github.com", "gist.github.com", "gitlab.com", "bitbucket.org", "bio.link", "beacons.ai"];
 /**
- * Hosts caught with every subdomain: a newsletter is not a portfolio page
- * (owner, 2026-11-23: "any substack should never be considered a portfolio
- * page"), and each writer's Substack is a subdomain of it.
+ * Hosts caught with every subdomain, since a person's page there is often a
+ * subdomain of it (owner, 2026-11-23):
+ *   substack.com           "any substack should never be considered a portfolio page"
+ *   medium.com             "A medium page is not a portfolio page"
+ *   linktr.ee, linktree.com "A link tree is not a portfolio page ... you cannot be a
+ *                          subdomain of link tree and medium to be a portfolio page"
+ * Never a hosting place or site builder (vercel.app, netlify.app, github.io,
+ * framer.website, webflow.io, pages.dev and the like): "Vercel is different.
+ * Vercel is just a hosting place." Real portfolios live there
+ * (tests/address-rule.test.mjs names them). Notion is undecided and not here.
  */
-export const ADDRESS_HOST_FAMILIES = ["substack.com"];
+export const ADDRESS_HOST_FAMILIES = ["substack.com", "medium.com", "linktr.ee", "linktree.com"];
 /** The path segments that are never a portfolio's page. */
 export const ADDRESS_PATHS = ["admin", "login", "wp-admin"];
 const ADDRESS_PATH_RE = new RegExp(`/(${ADDRESS_PATHS.join("|")})(/|$)`, "i");

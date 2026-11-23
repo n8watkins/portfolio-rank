@@ -19,7 +19,8 @@ import { ADDRESS_NOT_PORTFOLIO, AI_SAYS_NOT_PORTFOLIO, notPortfolioReason } from
 import { hostNotPortfolio, urlNotPortfolio } from "../pipeline/junk-rules.mjs";
 import { kindOf } from "../pipeline/exclusions.mjs";
 import { runHealthCheck } from "../pipeline/health.mjs";
-import { nightConditions } from "../pipeline/alerts.mjs";
+import { addressBrakeConditions, reconcileAlerts } from "../pipeline/alerts.mjs";
+import { startNight, planNight } from "../pipeline/night.mjs";
 import { PORTFOLIO_HTML } from "./helpers/door-night.mjs";
 import { DAY, T0, answer, col, context, drive, freshDb, grade, hidden, notPortfolio, reviewsOf, signals, site } from "./helpers/door-night.mjs";
 
@@ -170,7 +171,7 @@ test("review F2: the brake: more than 5 removals in one night and none is applie
   for (const u of urls) await site(db, u, { n: 2 });
   const sent = await syncReviewRows(db, { now: new Date(T0) });
   assert.equal(sent.address.length, urls.length);
-  assert.deepEqual(sent.addressBrake, { removals: 6, limit: 5 });
+  assert.deepEqual([sent.addressBrake.tonight, sent.addressBrake.limit], [6, 5]);
   for (const u of urls) {
     const [row] = await reviewsOf(db, u);
     const door = JSON.parse(String(row.signals)).door;
@@ -179,11 +180,10 @@ test("review F2: the brake: more than 5 removals in one night and none is applie
   }
   assert.deepEqual(await autoApplyReviews(db, { onFeed: () => true, now: new Date(T0 + 3600000) }), [], "nothing applied by the rule");
   for (const u of urls) assert.equal(await hidden(db, u), false, u);
-  // The night's one owner alert.
-  const alerts = nightConditions({ night: "2026-11-23", stages: [], addressBrake: sent.addressBrake }, { reserve: 0 });
+  // The owner alert, read from the waiting rows (review N2).
+  const alerts = await addressBrakeConditions(db);
   assert.deepEqual(alerts.map((a) => a.key), ["address-rule-brake"]);
-  assert.match(alerts[0].title, /held 6 removals/);
-  assert.deepEqual(nightConditions({ night: "2026-11-23", stages: [], addressBrake: null }, { reserve: 0 }), []);
+  assert.match(alerts[0].title, /^6 site\(s\)/);
 
   // At the limit: all automatic.
   const { db: db5 } = await freshDb();
@@ -215,6 +215,49 @@ test("review F3 and new hosts: only a host overrules a Gemini 'yes' or acts on a
   assert.deepEqual((await syncReviewRows(db, { now: new Date(T0) })).address, ["https://jane.substack.com/"]);
 });
 
+test("Medium and Linktree pages, subdomains included, are never a portfolio page (owner, 2026-11-23)", () => {
+  for (const u of [
+    "https://medium.com/@jane",
+    "https://jane.medium.com/",
+    "https://www.medium.com/@jane/my-post-123",
+    "https://linktr.ee/jane",
+    "https://jane.linktr.ee/",
+    "https://linktree.com/jane",
+    "https://www.linktree.com/jane",
+    "https://jane.linktree.com/",
+  ]) {
+    assert.equal(hostNotPortfolio(u), true, u);
+  }
+  for (const u of ["https://notmedium.com/", "https://medium.com.example.org/", "https://mylinktree.com/", "https://linktr.ee.example.org/"]) {
+    assert.equal(hostNotPortfolio(u), false, u);
+  }
+});
+
+test("hosting places and site builders are where real portfolios live: never caught (owner: 'Vercel is just a hosting place')", () => {
+  // Named here so nobody adds one to the address hosts by mistake. Notion is undecided and not caught either.
+  for (const u of [
+    "https://jane.vercel.app/",
+    "https://jane.netlify.app/",
+    "https://jane.github.io/",
+    "https://jane.gitlab.io/",
+    "https://jane.framer.website/",
+    "https://jane.framer.ai/",
+    "https://jane.webflow.io/",
+    "https://jane.pages.dev/",
+    "https://jane.onrender.com/",
+    "https://jane.herokuapp.com/",
+    "https://jane.wixsite.com/portfolio",
+    "https://jane.squarespace.com/",
+    "https://jane.carrd.co/",
+    "https://jane.godaddysites.com/",
+    "https://jane.notion.site/",
+    "https://www.notion.so/jane",
+  ]) {
+    assert.equal(hostNotPortfolio(u), false, u);
+    assert.equal(urlNotPortfolio(u), false, u);
+  }
+});
+
 test("review F5: a row closed because the site was down does not keep the site from the rule once it is back", async () => {
   const { db } = await freshDb();
   await ensureReviewSchema(db);
@@ -237,8 +280,99 @@ test("review F6: sites queued for tonight's grade are left to the door", async (
   await ensureReviewSchema(db);
   await site(db, "https://github.com/queued", { n: 2 });
   await site(db, "https://github.com/not-queued", { n: 2 });
-  const skipSql = (p) => `${p}.url = 'https://github.com/queued'`;
-  assert.deepEqual((await syncReviewRows(db, { now: new Date(T0), skipSql })).address, ["https://github.com/not-queued"]);
+  const skipUrls = new Set(["https://github.com/queued"]);
+  assert.deepEqual((await syncReviewRows(db, { now: new Date(T0), skipUrls })).address, ["https://github.com/not-queued"]);
+});
+
+test("review N1: a grading night does not release the sites the brake held: nothing is hidden", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  const urls = Array.from({ length: 6 }, (_, i) => `https://github.com/n1-${i}`);
+  for (const u of urls) await site(db, u, { n: 5 });
+  // Night 1, grading off (budget 0): the brake holds all six.
+  const off = context(db, { budget: { stages: { grade_new: { cap: 0 } } } });
+  await drive(off.ctx, off.clock);
+  for (const u of urls) assert.equal(JSON.parse(String((await reviewsOf(db, u))[0].signals)).door.brake, true, u);
+  // Night 2, grading on: Gemini says yes to all six. The held rows hold them; none is hidden.
+  const gemini = Object.fromEntries(urls.map((u) => [u, answer(true)]));
+  const on = context(db, { gemini, start: T0 + DAY });
+  const night = await drive(on.ctx, on.clock);
+  assert.equal(night.summary.stages.find((s) => s.key === "grade_new").done, 6, "graded");
+  for (const u of urls) {
+    assert.equal(await hidden(db, u), false, u);
+    const rows = await reviewsOf(db, u);
+    assert.equal(rows.filter((r) => String(r.status) === "auto_applied").length, 0, u);
+    const open = rows.filter((r) => String(r.status) === "pending");
+    assert.equal(open.length, 1, u);
+    assert.deepEqual([String(open[0].grp), JSON.parse(String(open[0].signals)).door.brake], ["door_held", true], u);
+  }
+  // And the alert still stands.
+  assert.equal((await addressBrakeConditions(db)).length, 1);
+});
+
+test("review N1: the door's own address removals count against the night's limit", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  const urls = Array.from({ length: 7 }, (_, i) => `https://github.com/door-${i}`);
+  for (const u of urls) await site(db, u, { n: 5 });
+  const gemini = Object.fromEntries(urls.map((u) => [u, answer(true)]));
+  const { ctx, clock } = context(db, { gemini });
+  await drive(ctx, clock);
+  const hiddenCount = (await Promise.all(urls.map((u) => hidden(db, u)))).filter(Boolean).length;
+  assert.equal(hiddenCount, 5, "the first 5 are removed at the door; the rest wait for the owner");
+  assert.equal((await addressBrakeConditions(db)).length, 1);
+});
+
+test("review N2: the brake's alert stays open while its rows wait, and clears once the owner has decided them", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  const urls = Array.from({ length: 6 }, (_, i) => `https://github.com/n2-${i}`);
+  for (const u of urls) await site(db, u, { n: 2 });
+  await syncReviewRows(db, { now: new Date(T0) });
+  const scope = (k) => k === "address-rule-brake";
+  const open = async (now) => (await reconcileAlerts(db, { conditions: await addressBrakeConditions(db), scope, now: new Date(now) })).active;
+  assert.deepEqual(await open(T0), ["address-rule-brake"]);
+  // The next night, with nothing new: still open.
+  assert.deepEqual(await open(T0 + DAY), ["address-rule-brake"]);
+  // The owner decides every row: it clears.
+  const ids = (await db.execute("SELECT id FROM status_reviews WHERE status = 'pending'")).rows.map((r) => Number(r.id));
+  await decideReviews(db, { ids, action: "reject", actor: "admin:owner", onFeed: () => true, now: new Date(T0 + DAY + 1000) });
+  assert.deepEqual(await open(T0 + 2 * DAY), []);
+});
+
+test("review N3: every row of the night counts, and so do the week's removals", async () => {
+  // 40 sites graded a portfolio before (held rows) and 5 never graded: 45 rows tonight trips the brake.
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  for (let i = 0; i < 40; i++) await site(db, `https://github.com/graded-${String(i).padStart(2, "0")}`, { n: 5, rubric: { ...answer(true), judged_at: "2026-11-10T00:00:00Z" } });
+  for (let i = 0; i < 5; i++) await site(db, `https://github.com/new-${i}`, { n: 2 });
+  const sent = await syncReviewRows(db, { now: new Date(T0) });
+  assert.ok(sent.addressBrake, "the brake holds");
+  assert.deepEqual(await autoApplyReviews(db, { onFeed: () => true, now: new Date(T0 + 3600000) }), []);
+
+  // The slow leak: 5 a night, night after night, stops once the week passes 10.
+  const { db: slow } = await freshDb();
+  await ensureReviewSchema(slow);
+  const applied = [];
+  for (let night = 0; night < 3; night++) {
+    for (let i = 0; i < 5; i++) await site(slow, `https://github.com/leak-${night}-${i}`, { n: 2 });
+    const at = T0 + night * DAY;
+    await syncReviewRows(slow, { now: new Date(at) });
+    applied.push((await autoApplyReviews(slow, { onFeed: () => true, now: new Date(at + 3600000) })).filter((a) => a.ok).length);
+  }
+  assert.deepEqual(applied, [5, 5, 0], "the third night would make 15 in a week");
+});
+
+test("review N4: only the sites tonight's grade will take are left to the door; a backlog gets its rows", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  const urls = Array.from({ length: 4 }, (_, i) => `https://github.com/backlog-${i}`);
+  for (const u of urls) await site(db, u, { n: 2 });
+  // Tonight grades at most 1 new site.
+  const { ctx } = context(db, { budget: { stages: { grade_new: { cap: 1 } } } });
+  await planNight(ctx, await startNight(ctx));
+  const rows = (await db.execute("SELECT url FROM status_reviews")).rows.map((r) => String(r.url));
+  assert.equal(rows.length, 3, `three get a row; one is left to tonight's grade: ${rows.join(", ")}`);
 });
 
 test("review F7: the cut to the limit comes after graded-no and held sites are left out", async () => {

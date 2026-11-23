@@ -71,7 +71,7 @@ export const AI_SAYS_NOT_PORTFOLIO = "AI grading says this is not a portfolio";
  * urlNotPortfolio, lib/reviews/door.mjs), which no AI may have seen or which
  * Gemini called a portfolio: the public reason says what is true.
  */
-export const ADDRESS_NOT_PORTFOLIO = "Its address is not a portfolio page (a code host, a newsletter or a link-in-bio page)";
+export const ADDRESS_NOT_PORTFOLIO = "Its address is not a portfolio page (a code host, a newsletter or blog platform, or a link-in-bio page)";
 
 /** Whether a health reason keeps a site off the list as "not a portfolio": either reason, the owner's confirmation included. */
 export const notPortfolioReason = (reason) => {

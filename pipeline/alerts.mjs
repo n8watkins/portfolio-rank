@@ -106,16 +106,6 @@ export function nightConditions(summary, plan) {
       out.push({ key: `circuit-breaker:${s.key}`, kind: "problem", title: `${s.label} stopped by the circuit breaker`, detail: `On ${summary.night}: ${s.result}` });
     }
   }
-  // The address rule's brake held the night's removals for the owner (lib/reviews/door.mjs ADDRESS_AUTO_PER_NIGHT).
-  if (summary.addressBrake) {
-    const b = summary.addressBrake;
-    out.push({
-      key: "address-rule-brake",
-      kind: "problem",
-      title: `The address rule held ${b.removals} removals for you`,
-      detail: `On ${summary.night} the address rule found ${b.removals} listed sites whose address is never a portfolio page, more than its limit of ${b.limit} a night. So many at once usually means the host list or the list sync changed, not the sites, so none was taken off: each waits on the review page.`,
-    });
-  }
   if (summary.parked?.length) {
     out.push({
       key: "parked",
@@ -125,6 +115,33 @@ export function nightConditions(summary, plan) {
     });
   }
   return out;
+}
+
+/**
+ * address-rule-brake: the address rule's brake held removals for the owner
+ * (lib/reviews/door.mjs addressBrake), read from the review queue itself, so
+ * the alert stands and repeats daily while any row it held still waits
+ * (signals.door.brake on a pending row), and clears once he has decided them all.
+ */
+export async function addressBrakeConditions(db) {
+  let n;
+  try {
+    n = Number(
+      (await db.execute("SELECT COUNT(*) AS n FROM status_reviews WHERE status = 'pending' AND COALESCE(json_valid(signals) AND json_extract(signals, '$.door.brake') = 1, 0)")).rows[0]?.n ?? 0
+    );
+  } catch (e) {
+    if (/no such table/i.test(String(e?.message ?? e))) return [];
+    throw e;
+  }
+  if (!n) return [];
+  return [
+    {
+      key: "address-rule-brake",
+      kind: "problem",
+      title: `${n} site(s) the address rule would take off wait for you`,
+      detail: `The address rule found more listed sites whose address is never a portfolio page than its limits allow without you (5 a night, 10 a week). So many usually means the host list or the list sync changed, not the sites, so none was taken off: ${n} row(s) wait on the review page. This alert stands until you have decided them.`,
+    },
+  ];
 }
 
 /** Days before GITHUB_DISPATCH_TOKEN expires that the owner is warned, every day until it is replaced. */
