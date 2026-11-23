@@ -87,6 +87,40 @@ export function hostNotPortfolio(url) {
 }
 
 /**
+ * The address a site ends at after its redirects, as stored: the health
+ * check's portfolios.final_url, else the capture's facts.final_url; null when
+ * neither is stored.
+ */
+export function finalAddressOf(row) {
+  if (row?.final_url) return String(row.final_url);
+  let facts = row?.facts;
+  if (typeof facts === "string") {
+    try {
+      facts = JSON.parse(facts);
+    } catch {
+      facts = null;
+    }
+  }
+  return facts && typeof facts === "object" && facts.final_url ? String(facts.final_url) : null;
+}
+
+/**
+ * The address rule on a site's row (coordinator, 2026-11-23, from the
+ * benchmark: git.id.au forwards to a GitHub profile): the listed address's
+ * host is never a portfolio, or the address it ends at after its redirects
+ * is (finalAddressOf). Returns null, or { url, forwarded } naming the address
+ * that was caught. A custom domain that forwards to its own GitHub Pages site
+ * (name.github.io) is not caught: github.io is hosting, not a profile.
+ */
+export function addressNotPortfolio(row) {
+  const listed = String(row?.url ?? "");
+  if (hostNotPortfolio(listed)) return { url: listed, forwarded: false };
+  const final = finalAddressOf(row);
+  if (final && hostNotPortfolio(final)) return { url: final, forwarded: true };
+  return null;
+}
+
+/**
  * A host that is never a portfolio (hostNotPortfolio), or an admin or login
  * path: never a portfolio, by the address alone. The path part is a junk rule
  * only beside a Gemini "not a portfolio" (junkCheck).
@@ -122,7 +156,7 @@ export function junkCheck(row, dupIndex = new Map()) {
       ? "placeholder name"
       : PARKED.some((re) => re.test(text))
         ? "parked or for sale"
-        : urlNotPortfolio(row.url)
+        : urlNotPortfolio(row.url) || addressNotPortfolio(row)
           ? ADDRESS_RULE
           : null;
   if (rule) return { junk: true, review: false, rule };

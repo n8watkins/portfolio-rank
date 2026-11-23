@@ -19,7 +19,10 @@ import { ARCHIVE_EVERY_DAYS, ARCHIVE_FIRST_DAYS, LEAVE_AFTER_DAYS, RETURNS_SHOWN
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Health pool - PortfolioRank admin", robots: { index: false, follow: false } };
 
-type Pool = Awaited<ReturnType<typeof healthPool>>;
+type PoolSite = { url: string; name: string; reason: string; started: string | null; since: string | null; next: string | null; hidden: boolean; archiveOn: string | null };
+type ArchiveSite = { url: string; name: string; kind: string; reason: string; archived: string | null; lastChecked: string | null; next: string };
+type Returned = { url: string; at: string; from: "pool" | "archive"; reason: string; since: string | null; hidden: boolean };
+type Pool = { failing: PoolSite[]; pool: PoolSite[]; archive: ArchiveSite[]; returned: Returned[] };
 
 const n = (v: number) => v.toLocaleString("en-US");
 const TZ = "America/Los_Angeles";
@@ -98,7 +101,7 @@ export default async function AdminHealthPoolPage() {
   const who = await requireAdmin();
   if ("error" in who) notFound();
   await ensureSchema();
-  const p: Pool = await healthPool(db(), { excluded: excluded as unknown[] });
+  const p = (await healthPool(db(), { excluded: excluded as unknown[] })) as Pool;
   const counts = [
     { id: "pool", label: "In the temporary pool", value: p.pool.length },
     { id: "failing", label: "Failing, not hidden yet", value: p.failing.length },
