@@ -17,6 +17,8 @@ import { btnGhost, btnSecondary } from "@/components/ui/styles";
 
 type Report = { id: number; url: string; reason: string; note: string | null; createdAt: string; updatedAt: string };
 export type ReportedSite = {
+  /** The group: the site for open reports; the site and the moment they were handled for handled ones. */
+  key: string;
   url: string;
   count: number;
   reasons: { key: string; label: string; count: number }[];
@@ -74,25 +76,32 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
   }
 
   async function act(site: ReportedSite, action: "handle" | "reopen") {
-    const key = `${action}:${site.url}`;
+    const key = `${action}:${site.key}`;
     setBusy(key);
     setErrors((e) => ({ ...e, [key]: "" }));
     try {
       const res = await fetch("/api/admin/problem-reports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids: site.reports.map((r) => r.id), action }),
+        // Handle sends each report as the page shows it: one a visitor resent since stays open.
+        body: JSON.stringify(
+          action === "handle" ? { action, reports: site.reports.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) } : { action, ids: site.reports.map((r) => r.id) }
+        ),
       });
+      const b = (await res.json().catch(() => ({}))) as { error?: string; stale?: number[] };
       if (!res.ok) {
-        const b = (await res.json().catch(() => ({}))) as { error?: string };
         setErrors((e) => ({ ...e, [key]: ERRORS[b.error ?? ""] ?? "That didn't work. Try again." }));
         return;
       }
-      setGone((g) => {
-        const next = new Set(g);
-        next.delete(`${action === "handle" ? "reopen" : "handle"}:${site.url}`);
-        return next.add(key);
-      });
+      if (b.stale?.length) {
+        // A visitor changed a report after this page loaded: show the fresh list, with that report still open.
+        setErrors((e) => ({
+          ...e,
+          [`handle:${site.url}`]: `${plural(b.stale!.length, "report")} changed since this page loaded and ${b.stale!.length === 1 ? "stays" : "stay"} open. Read ${b.stale!.length === 1 ? "it" : "them"}, then mark handled again.`,
+        }));
+      } else {
+        setGone((g) => new Set(g).add(key));
+      }
       router.refresh();
     } catch {
       setErrors((e) => ({ ...e, [key]: "We couldn't reach the server. Try again." }));
@@ -101,8 +110,8 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
     }
   }
 
-  const openShown = open.filter((s) => !gone.has(`handle:${s.url}`));
-  const handledShown = handled.filter((s) => !gone.has(`reopen:${s.url}`));
+  const openShown = open.filter((s) => !gone.has(`handle:${s.key}`));
+  const handledShown = handled.filter((s) => !gone.has(`reopen:${s.key}`));
   const total = openShown.reduce((n, s) => n + s.count, 0);
 
   return (
@@ -129,7 +138,7 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
         <ul className="mt-3 grid gap-3">
           {openShown.map((s) => {
             const domain = domainOf(s.url);
-            const key = `handle:${s.url}`;
+            const key = `handle:${s.key}`;
             const notes = s.reports.filter((r) => r.note);
             return (
               <li key={s.url} className="card p-4 sm:p-5" data-problem-site={s.url}>
@@ -194,9 +203,9 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
           <ul className="card mt-2 divide-y divide-edge">
             {handledShown.map((s) => {
               const domain = domainOf(s.url);
-              const key = `reopen:${s.url}`;
+              const key = `reopen:${s.key}`;
               return (
-                <li key={s.url} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm" data-problem-handled-site={s.url}>
+                <li key={s.key}className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm" data-problem-handled-site={s.url}>
                   <div className="min-w-0 flex-1 basis-64">
                     <p className="font-semibold break-all">{domain}</p>
                     <p className="text-xs text-mute text-pretty">

@@ -322,15 +322,20 @@ Always on; no switch.
    It opens a panel with five reasons (the screenshot is wrong or broken, a measurement is wrong, this is not a portfolio, the site is gone or has changed, something else) and an optional note of at most 500 characters.
    No account is needed.
 2. **The route checks it** (`app/api/problem-reports/route.ts`, the steps in `lib/problem-reports/intake.mjs`).
-   Same origin, a known reason and a short note first; then the limits: 6 an hour and 20 a day per network, 10 a day per visitor; then Turnstile (action `problem-report`); then that the site has a profile.
-   Past 30 new reports on one site in a day, the visitor still gets the thanks and nothing more is stored.
-   One visitor has at most one open report per site: sending again replaces the first.
-   The visitor and the network are kept only as keyed hashes, and the visitor's hash is cleared when the report is handled.
+   In this order: same origin, a known reason and a short note; the network limits (6 an hour and 20 a day per IPv4 address or IPv6 /64, 60 a day per IPv6 /48; a request without an address shares one "unknown" network); Turnstile (action `problem-report`); that the site has a live profile (the same checks that decide whether its page answers 404); then 10 a day per visitor.
+   If Cloudflare shows its checkbox, the panel says "tick the box" and waits up to two minutes for it.
+   One visitor has at most one open report per site: sending again replaces the first and adds no row.
+   Past 30 new reports on one site in a day, or 200 across the whole site, the visitor still gets the thanks and nothing more is stored.
+   Each cap is logged once a day (`problem_reports_site_cap`, `problem_reports_daily_cap` in Workers Logs), and the whole-site cap also opens a quiet alert on `/admin/alerts`, which clears when you next mark reports handled.
+   The visitor and the network are kept only as hashes keyed with the server's secret, and the visitor's hash is cleared when the report is handled.
 3. **It is stored** in the `problem_reports` table (`lib/problem-reports/schema.mjs`).
 4. **You read it** on `/admin/review`, under "Visitor reports" above the review queue (`components/admin/ProblemReports.tsx`).
    Open reports are grouped by site with the count, the reasons, every note (shown as plain text) and links to the site and its profile.
-   "Mark handled" closes a site's reports and records who and when; "Handled recently" keeps them with Reopen.
-   Nothing alerts you; look when you review.
+   "Mark handled" closes the reports as the page showed them and records who and when; a report the visitor resent after the page loaded stays open, so no note is closed unread.
+   "Handled recently" lists each "Mark handled" with Reopen, which puts back exactly those reports.
+   A reopened report has lost its visitor hash, so if that visitor reports the site again it becomes a second open report; this is rare and kept simple on purpose.
+   Handled reports are deleted 180 days later (nightly retention).
+   Nothing emails you about reports; look when you review.
 5. **What it changes: nothing.**
    A report never moves a site's rank, tier, score, votes or listing.
    Fixing what it points at is your own step: a re-capture, a review row or a removal.

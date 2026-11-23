@@ -200,7 +200,8 @@ export default function PrivacyPage() {
         <Bullets
           items={[
             "I store the site, the reason you picked, your note if you wrote one, and when.",
-            "So one person sends one report per site and can't flood the list, I keep a one-way hash of your browser id (or account) with the report, and count reports per browser and per network as one-way hashes. The hash on a report is cleared once I've handled it.",
+            "So one person keeps one open report per site and can't flood the list, I store with the report a hash, keyed with a secret only the server holds, of your browser id, or of your account when you're signed in. That hash is cleared once I've handled the report.",
+            "To stop abuse, I also count reports per person (the same keyed hash) and per network (a hash of your network address, keyed the same way). Those counters are kept at most a day.",
             "Only I see reports. A handled report is deleted 180 days later.",
           ]}
         />

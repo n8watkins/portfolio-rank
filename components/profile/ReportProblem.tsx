@@ -18,7 +18,7 @@ import { NOTE_MAX, REASONS, TURNSTILE_ACTION } from "@/lib/problem-reports/store
 
 const ERRORS: Record<string, string> = {
   rate_limited: "That's a lot of reports from here today. Try again tomorrow.",
-  turnstile_failed: "We couldn't check that you're a person. Reload the page and try again.",
+  turnstile_failed: "We couldn't check that you're a person. If a box appeared above, tick it, then send again.",
   note_too_long: `Keep the note under ${NOTE_MAX} characters.`,
   unknown_site: "We couldn't find this site any more. Reload the page.",
 };
@@ -32,13 +32,35 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
   const [sent, setSent] = useState(false);
   const token = useRef<string | null>(null);
   const widgetFailed = useRef(false);
+  // Set when Cloudflare shows its checkbox: the token waits for the visitor's tick.
+  const interactive = useRef(false);
+  const [needsTick, setNeedsTick] = useState(false);
   const widget = useRef<TurnstileHandle>(null);
   const id = useId();
 
   const show = () => {
+    // Each opening renders a fresh widget (below), so its state starts fresh too.
+    token.current = null;
+    widgetFailed.current = false;
+    interactive.current = false;
+    setNeedsTick(false);
     prefetchTurnstile();
     setOpen(true);
   };
+
+  /**
+   * Waits for the token: a few seconds for the invisible check, or up to two
+   * minutes while Cloudflare's checkbox waits for a tick (as the grade and
+   * tools forms do). Without one the request still goes, and the server
+   * decides (lib/turnstile.ts).
+   */
+  async function waitForToken() {
+    const start = Date.now();
+    while (!token.current && !widgetFailed.current && Date.now() - start < (interactive.current ? 120_000 : 4_500)) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return token.current;
+  }
   const close = () => {
     setOpen(false);
     // A sent report starts fresh next time; an unsent one keeps what was picked.
@@ -60,16 +82,20 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
     }
     setBusy(true);
     setError(null);
-    // The invisible check usually answers in well under a second; wait a little for it.
-    for (let k = 0; k < 30 && !token.current && !widgetFailed.current; k++) await new Promise((r) => setTimeout(r, 150));
+    const turnstileToken = await waitForToken();
     try {
       const res = await fetch("/api/problem-reports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url, reason, note: note.trim() || undefined, ...(token.current ? { turnstileToken: token.current } : {}) }),
+        body: JSON.stringify({ url, reason, note: note.trim() || undefined, ...(turnstileToken ? { turnstileToken } : {}) }),
       });
-      token.current = null;
-      widget.current?.reset();
+      // A token is good for one request: ask for a fresh one, but never reset a challenge still waiting for its tick.
+      // A widget that failed to run gets another go for the next send.
+      if (turnstileToken || widgetFailed.current) {
+        token.current = null;
+        widgetFailed.current = false;
+        widget.current?.reset();
+      }
       if (res.ok) {
         setSent(true);
         return;
@@ -177,14 +203,29 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
               </p>
             )}
 
-            <Turnstile
-              ref={widget}
-              action={TURNSTILE_ACTION}
-              onToken={(t) => (token.current = t)}
-              onExpire={() => (token.current = null)}
-              onError={() => (widgetFailed.current = true)}
-              className="mt-2 empty:hidden"
-            />
+            {/* Only while the panel is open: the dialog's content stays in the page when closed, and the script must not load on every profile view. */}
+            {open && (
+              <Turnstile
+                ref={widget}
+                action={TURNSTILE_ACTION}
+                onToken={(t) => {
+                  token.current = t;
+                  setNeedsTick(false);
+                }}
+                onExpire={() => (token.current = null)}
+                onError={() => (widgetFailed.current = true)}
+                onInteractive={() => {
+                  interactive.current = true;
+                  setNeedsTick(true);
+                }}
+                className="mt-2 empty:hidden"
+              />
+            )}
+            {needsTick && (
+              <p className="mt-2 text-sm text-pretty" role="status" data-report-tick>
+                Cloudflare wants a quick check first: tick the box{busy ? " and your report sends" : ""}.
+              </p>
+            )}
 
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={close} className={btnGhost}>
