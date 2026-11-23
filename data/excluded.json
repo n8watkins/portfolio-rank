@@ -2070,5 +2070,27 @@
     "evidence": {
       "review": "Owner verdict: not a portfolio (owner, 22 Nov). A personal site that sells coaching, with a book, a blog and a video and no technical projects. The owner's rule: a portfolio showcases technical projects the person created, design work included; selling coaching is not a portfolio, even for a software developer."
     }
+  },
+  {
+    "url": "https://github.com/ThiagoSousa81",
+    "name": "Thiago Sousa",
+    "removed": "2026-11-23",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "review": "Owner verdict: not a portfolio (owner, 23 Nov). The listed address is a GitHub profile page, not a website of the person's own. The owner's words: \"Someone's GitHub is not a portfolio page.\""
+    }
+  },
+  {
+    "url": "https://github.com/mgolikhatir",
+    "name": "Mohammad Goli Khatir",
+    "removed": "2026-11-23",
+    "kind": "not_portfolio",
+    "reason": "Not a portfolio, decided by the owner on review",
+    "decided_by": "owner",
+    "evidence": {
+      "review": "Owner verdict: not a portfolio (owner, 23 Nov). The listed address is a GitHub profile page, not a website of the person's own. The owner's words: \"Someone's GitHub is not a portfolio page.\""
+    }
   }
 ]
