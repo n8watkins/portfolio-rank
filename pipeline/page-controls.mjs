@@ -42,11 +42,18 @@ const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere
 const SOCIAL_HEADING = /\b(?:find me|connect|socials?|follow me|elsewhere|get in touch|contact(?: me)?)\b/i;
 // An element or a section whose links are never projects, repositories included: the tools the person uses
 // ("Tools I use", "Tech stack", "Skills", "/uses", a "tech-stack" list beside the cards), a cookie or consent
-// banner, a comment widget. Not "Tools I've built": a heading that says built, made or created opens nothing.
+// banner, a comment widget. The heading must name only that, whole ("Tools I use", "My tech stack", "Skills &
+// tools", "~ Technologies ~"): "Bridging Technology & Human Potential" (michellebrenner.com's about section) and
+// "Tools I've built" open nothing.
 const ASIDE_ATTR = /\b(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|technolog(?:y|ies)|skills?|uses)\b/i;
 const ASIDE_ATTR_PART = /cookie|consent|gdpr|disqus|giscus|utterances/i;
-const ASIDE_HEADING = /\b(?:tools|tool ?box|tool ?kit|tech|tech ?stack|stack|technolog(?:y|ies)|skills|uses|what i use)\b/i;
-const NOT_ASIDE_HEADING = /\b(?:built|made|created)\b/i;
+const TOOL_WORD = String.raw`(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|stack|technolog(?:y|ies)|skills|skill ?set|languages|frameworks|uses|what i use)`;
+const ASIDE_HEADING = new RegExp(
+  String.raw`^(?:(?:my|our|the|current)\s+)?${TOOL_WORD}(?:\s*(?:&|and|,)\s*${TOOL_WORD})*(?:\s+(?:i use|i work with|i love|i know|of choice|used))?$`,
+  "i"
+);
+/** A heading's words without the decoration around them ("~ Tools ~", "02. Skills:", "Tech stack 🛠"). */
+const headingCore = (words) => words.replace(/^[^a-z]+|[^a-z]+$/gi, "").replace(/\s+/g, " ");
 // A heading that titles the page or the person rather than a section: "Ana Ruiz - Portfolio", "Ana's
 // portfolio", "Portfolio of Ana Ruiz", "Portfolio website".
 // (The dashes are a hyphen, an en dash and an em dash, U+2013 and U+2014.)
@@ -159,7 +166,7 @@ export function scanPage(html, baseUrl) {
           ? "project"
           : SOCIAL_HEADING.test(words)
             ? "social"
-            : ASIDE_HEADING.test(words) && !NOT_ASIDE_HEADING.test(words)
+            : ASIDE_HEADING.test(headingCore(words))
               ? "aside"
               : null;
         if (kind) {

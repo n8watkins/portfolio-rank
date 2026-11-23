@@ -183,8 +183,14 @@ test("tool lists, article sites, cookie banners and comment widgets are never pr
   // On the home page too: a "Tech stack" section after the projects, and a skills element.
   const home = `<main><section id="projects"><a href="https://p1.example/">p1</a></section><section><h2>Tech stack</h2><a href="https://tool.example/">tool</a></section><div class="skills"><a href="https://skill.example/">s</a></div><a href="https://other.example/">o</a></main>`;
   assert.deepEqual(projectCandidates(homeProjectLinks({ html: home, url, finalUrl: url }), url).map((c) => [c.tier, c.url]), [[1, "https://p1.example/"], [3, "https://other.example/"]]);
-  // "Tools I've built" is a projects heading's kind of section, not a tool list.
-  assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<main><h2>Tools I've built</h2><a href="https://t.example/">t</a></main>`, url, finalUrl: url }), url).map((c) => c.url), ["https://t.example/"]);
+  // Only a heading that names tools, whole, opens a tool list: not "Tools I've built", nor an about section
+  // that mentions technology (michellebrenner.com's "Bridging Technology & Human Potential", whose links stay).
+  for (const h of ["Tools I've built", "Bridging Technology &amp; Human Potential", "Tech for good", "Skills that pay the bills: my work"]) {
+    assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<main><h2>${h}</h2><a href="https://t.example/">t</a></main>`, url, finalUrl: url }), url).map((c) => c.url), ["https://t.example/"], h);
+  }
+  for (const h of ["Tools I use", "~ Technologies ~", "My Tech Stack", "Skills &amp; Tools", "02. Skills:", "Languages and frameworks", "Uses"]) {
+    assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<main><h2>${h}</h2><a href="https://t.example/">t</a></main>`, url, finalUrl: url }), url), [], h);
+  }
   // Where people really ship stays in: their apps on the hosts' app domains, package pages, store listings.
   const shipped = ["https://ana-app.vercel.app/", "https://ana.netlify.app/", "https://ana.github.io/x/", "https://www.npmjs.com/package/ana-lib", "https://pypi.org/project/ana-lib/", "https://play.google.com/store/apps/details?id=dev.ana", "https://chromewebstore.google.com/detail/ana/abc", "https://apps.apple.com/app/id1", "https://hub.docker.com/r/ana/x", "https://addons.mozilla.org/firefox/addon/ana/"];
   const got = projectCandidates(homeProjectLinks({ html: `<section id="projects">${shipped.map((u) => `<a href="${u}">x</a>`).join("")}</section>`, url, finalUrl: url }), url, 20).map((c) => c.url);
