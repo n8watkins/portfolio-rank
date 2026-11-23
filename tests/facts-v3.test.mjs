@@ -129,7 +129,16 @@ test("own project pages count fully, but only as real pages: a catch-all host's 
   const r = await checkLinks(own(["/work/a", "/work/b", "/work/c"]), { fetchImpl: shell, homeText: HOME });
   assert.deepEqual(r, { checked: 3, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 3, own_check: "text" });
   assert.equal(projectLinksPass(r, 3), false);
-  assert.equal(projectLinksText(r, 3), "0 of 3 project links load; 3 of the site's own pages look like any other address on it");
+  assert.equal(projectLinksText(r, 3), "0 of 3 project links load; 3 of the site's own project pages could not be told apart from an empty page, so they were not counted");
+});
+
+test("own pages are compared with the page text as stored, the same words the nightly re-check reads", async () => {
+  // A catch-all host whose own page repeats the stored home text: not a page of its own.
+  const stored = `${HOME} ${Array.from({ length: 60 }, (_, i) => `homeword${i}`).join(" ")}`;
+  const f = host({ "/work/a": [200, `<p>${stored}</p>`] }, [200, SHELL]);
+  const html = `<section id="projects"><a href="/work/a">A</a></section>`;
+  const r = await measurePage({ html, text: "something else entirely", url: "https://ana.dev/", finalUrl: "https://ana.dev/", homeText: stored }, { fetchImpl: f });
+  assert.equal(r.project_links.own_unverified, 1, "compared with homeText, not the reading's text");
 });
 
 test("a host with real case-study pages and a 404 for nonsense passes on its own pages alone", async () => {

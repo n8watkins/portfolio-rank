@@ -99,7 +99,8 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
   }
   const { text } = page;
   const measuredFacts = await measurePage(
-    { html: page.html, text, url, finalUrl: page.finalUrl, name: String(row.name ?? ""), motion, source: page.source },
+    // homeText: the page text as it is stored below, so later link re-checks compare against the same words.
+    { html: page.html, text, url, finalUrl: page.finalUrl, name: String(row.name ?? ""), motion, source: page.source, homeText: normalizePageText(text) },
     { userAgent: UA, fetchImpl }
   );
   if (relinkOnly) {

@@ -141,9 +141,11 @@ export function scanPage(html, baseUrl) {
       openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
       // A "Projects" heading opens a projects section, a "Find me" heading a list of profiles: what follows
       // it, up to the next heading of the same or a higher level, or the end of the element around it.
-      // A page title such as "Ana Ruiz - Portfolio" opens nothing.
+      // An h1 is the page's title ("Portfolio", "My Portfolio", "Ana Ruiz - Portfolio") and opens nothing:
+      // only h2 to h4 open a section; a page whose projects sit under an h1 alone is read by its projects
+      // elements (id, class, aria-label) and its repository links. A title-like h2 to h4 opens nothing either.
       const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
-      if (!scope && !TITLE_LIKE.test(words)) {
+      if (!scope && rec.heading.level >= 2 && !TITLE_LIKE.test(words)) {
         const kind = PROJECT_HEADING.test(words) ? "project" : SOCIAL_HEADING.test(words) ? "social" : null;
         if (kind) {
           scope = { kind, level: rec.heading.level, parent: stack.at(-1) ?? null };

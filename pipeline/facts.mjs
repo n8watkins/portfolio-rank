@@ -103,7 +103,7 @@ export function projectLinksText(links, version) {
   const wall = blocked ? `${blocked} behind a bot check` : "";
   if (tested <= 0) return `Project links: ${wall}`;
   // Own pages that answered but could not be told from a page that does not exist (a catch-all host) do not load.
-  const shell = n(links.own_unverified) ? `${n(links.own_unverified)} of the site's own pages look like any other address on it` : "";
+  const shell = n(links.own_unverified) ? `${n(links.own_unverified)} of the site's own project pages could not be told apart from an empty page, so they were not counted` : "";
   return `${n(links.ok)} of ${tested} project links load${[wall, shell].filter(Boolean).map((s) => `; ${s}`).join("")}`;
 }
 
@@ -278,9 +278,10 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 // A path segment that names a list of projects: "/projects", "/work", "/portfolio", "/case-studies",
 // "/solutions". Whole segments only, so "/how-it-works", "/networks" and "/workshop" are not.
 const LISTING_SEGMENT = /^(?:projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase)$/i;
-// A segment that is never a project page, wherever it sits ("/projects/tag/react", "/about", "/blog/post").
+// A segment that is never a project page, wherever it sits ("/projects/tag/react", "/about", "/blog/post"), and
+// never one a GET could act on: account, subscription and payment actions ("/unsubscribe", "/logout", "/pay").
 const NOT_PROJECT_SEGMENT =
-  /^(?:about(?:-me|-us)?|contact(?:-me|-us)?|blog|posts?|articles?|news|press|resume|cv|tags?|category|categories|page|search|feed|rss|privacy|terms|cookies|legal|login|logout|sign-?in|sign-?up|register|account|cart|checkout|shop|store|faq|pricing|services|clients|team|careers|jobs|how-it-works)$/i;
+  /^(?:about(?:-me|-us)?|contact(?:-me|-us)?|blog|posts?|articles?|news|newsletter|press|resume|cv|tags?|category|categories|page|search|feed|rss|privacy|terms|cookies|legal|log-?in|log-?out|sign-?in|sign-?out|sign-?up|register|account|profile|settings|admin|dashboard|auth|oauth|session|cart|basket|checkout|pay|payment|payments|subscribe|unsubscribe|opt-?out|confirm|confirmation|verify|activate|delete|remove|cancel|download|downloads|export|shop|store|faq|pricing|services|clients|team|careers|jobs|how-it-works|api|wp-admin|wp-login\.php)$/i;
 const segmentsOf = (p) => String(p ?? "").split("/").filter(Boolean).map((s) => {
   try {
     return decodeURIComponent(s);
@@ -765,7 +766,7 @@ function sourcesOf(candidates, projectsPage) {
  * checked came from.
  */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
-  const { phone = null, projectsPage = null, ...desktopInput } = input;
+  const { phone = null, projectsPage = null, homeText: storedText = null, ...desktopInput } = input;
   const scan = scanPage(desktopInput.html, desktopInput.finalUrl || desktopInput.url);
   let facts = measureFacts({ ...desktopInput, scan });
   const views = ["desktop"];
@@ -783,8 +784,10 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
     views.push("projects page");
   }
   const candidates = projectCandidates(links, facts.final_url);
-  // With their kind, and the home page's text: the site's own pages must be real pages (checkLinks).
-  const homeText = desktopInput.text || visibleText(desktopInput.html);
+  // With their kind, and the home page's text: the site's own pages must be real pages (checkLinks). The
+  // capture passes the page text it stores (`input.homeText`, portfolios.page_text), so the nightly re-check,
+  // which reads that stored text, compares own pages against exactly the same words.
+  const homeText = storedText ?? (desktopInput.text || visibleText(desktopInput.html));
   facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText });
   // The links checked, with where each came from: the nightly re-check (pipeline/evidence.mjs) tests these again.
   facts.project_candidates = candidates.map(({ url, from, kind }) => ({ url, from, kind }));

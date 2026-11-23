@@ -98,7 +98,9 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   assert.equal(projectsPageFor(links(three), url), null);
   assert.equal(projectsPageFor(links(`<a href="/blog">Blog</a><a href="/about">About</a>`), url), null);
   // Never a page whose path only contains the word: "/how-it-works", "/networks", "/workshop", a query, a client list.
-  for (const html of [`<a href="/how-it-works">How it works</a>`, `<a href="/networks">Networks</a><a href="/workshop">Workshop</a>`, `<a href="/?page=work">FR</a>`, `<a href="/clients">Our work</a>`, `<a href="/api/download?file=projects">Download</a>`]) {
+  // Nor a link a GET could act on, whatever its label says ("/unsubscribe", "/logout", "/pay", "/download").
+  for (const html of [`<a href="/how-it-works">How it works</a>`, `<a href="/networks">Networks</a><a href="/workshop">Workshop</a>`, `<a href="/?page=work">FR</a>`, `<a href="/clients">Our work</a>`, `<a href="/api/download?file=projects">Download</a>`,
+    `<a href="/unsubscribe">Projects</a>`, `<a href="/newsletter/unsubscribe">Work</a>`, `<a href="/logout">Projects</a>`, `<a href="/sign-out">Projects</a>`, `<a href="/account/delete">Projects</a>`, `<a href="/checkout">Projects</a>`, `<a href="/pay">Portfolio</a>`, `<a href="/download">Projects</a>`, `<a href="/confirm">Work</a>`]) {
     assert.equal(projectsPageFor(links(html), url), null, html);
   }
   assert.equal(projectsPageFor(links(`<a href="/es/projects">Proyectos</a>`), url), "https://ana.dev/es/projects");
@@ -150,6 +152,18 @@ test("a 'Portfolio' title heading opens no projects section, and a projects head
   assert.deepEqual(
     projectCandidates(homeProjectLinks({ html: sec, url, finalUrl: url }), url).map((c) => [c.tier, c.url]),
     [[1, "https://one.example/"], [1, "https://old.example/"], [2, "https://ana.dev/projects/two"], [3, "https://employer.example/"]]
+  );
+  // An h1 is the page's title and opens no section at all, "Portfolio" and "My Portfolio" included (the reviewer's case):
+  // the employer is not a project, and /work/a is no own page from that heading alone.
+  for (const title of ["Portfolio", "My Portfolio", "Projects"]) {
+    const h1only = `<main><h1>${title}</h1><a href="https://p1.example/">p1</a><a href="https://employer.example/">job</a><p>more</p><a href="/work/a">a</a></main>`;
+    assert.deepEqual(projectCandidates(homeProjectLinks({ html: h1only, url, finalUrl: url }), url).map((c) => [c.tier, c.url]), [[3, "https://p1.example/"], [3, "https://employer.example/"]], title);
+  }
+  // A page whose projects sit under an h1 alone is read by its projects elements: cards with a project class count.
+  const cards = `<main><h1>Projects</h1><div class="project-card"><a href="https://p1.example/">p1</a><a href="/work/a">a</a></div><p><a href="https://employer.example/">job</a></p></main>`;
+  assert.deepEqual(
+    projectCandidates(homeProjectLinks({ html: cards, url, finalUrl: url }), url).map((c) => [c.tier, c.url]),
+    [[1, "https://p1.example/"], [2, "https://ana.dev/work/a"], [3, "https://employer.example/"]]
   );
 });
 

@@ -756,7 +756,8 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     const home = { html: seen.html, text: seen.text, url, finalUrl: homeUrl, phone: phoneSeen ? { html: phoneSeen.html, text: phoneSeen.text, finalUrl: mpage.url() } : null };
     const projectsUrl = projectsPageFor(homeProjectLinks(home), homeUrl);
     const projectsPage = projectsUrl ? await readProjectsPage(page, projectsUrl).catch(() => null) : null;
-    const facts = await measurePage({ ...home, name, motion, source: "rendered", projectsPage }, { userAgent: UA }).catch(() => null);
+    // homeText: the page text as stored, which the nightly link re-check compares own project pages against too.
+    const facts = await measurePage({ ...home, name, motion, source: "rendered", projectsPage, homeText: pageText }, { userAgent: UA }).catch(() => null);
 
     // A browser that died while the views were taken leaves them half made (their own errors are caught): not stored.
     if (await run.watch.lost()) return BROWSER_GONE;
