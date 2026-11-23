@@ -15,6 +15,8 @@ import { ADMIN_ID, sessionCookie } from "./helpers/session.mjs";
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:7691";
 const DB_URL = process.env.E2E_DB_URL ?? `file:${process.cwd()}/data/portfoliorank.db`;
 const A = "https://e2e-cp-refresh-phone-only-with-a-very-long-address-that-must-wrap.dev";
+const A2 = "https://e2e-cp-refresh-bot-check.dev";
+const U = "https://e2e-cp-unmeasured.dev";
 const B = "https://e2e-cp-first-capture.dev";
 const C = "https://e2e-cp-stored-wall.dev";
 const D = "https://e2e-cp-worse.dev";
@@ -46,11 +48,27 @@ before(async () => {
   await add(C, { page_text: "Just a moment... Verifying you are human.", health: "suspect", health_reason: "HTTP 503" });
   await add(D, { ai_rubric: '{"tier":"B","is_portfolio":true}' });
   await add(M, {});
-  await db.execute({ sql: "DELETE FROM refresh_failures WHERE url = ?", args: [A] });
-  await db.execute({
-    sql: "INSERT INTO refresh_failures (url, attempts, failed_at, retry_at, reason) VALUES (?, 2, ?, ?, ?)",
-    args: [A, Date.parse("2026-11-22T04:00:00Z"), Date.parse("2026-11-26T04:00:00Z"), "error: capture blocked: a bot or security check stood in for the site (phone view)"],
-  });
+  await add(A2, { name: "Bot Check", ai_rubric: '{"tier":"B","is_portfolio":true}', health: "live" });
+  // Captured before captures stored page text: not checked, counted apart under group C.
+  await add(U, { page_text: null });
+  await db.execute({ sql: "DELETE FROM refresh_failures WHERE url IN (?, ?)", args: [A, A2] });
+  await db.execute({ sql: "DELETE FROM status_reviews WHERE url IN (?, ?)", args: [A2, B] });
+  const failure = (url, reason) =>
+    db.execute({
+      sql: "INSERT INTO refresh_failures (url, attempts, failed_at, retry_at, reason) VALUES (?, 2, ?, ?, ?)",
+      args: [url, Date.parse("2026-11-22T04:00:00Z"), Date.parse("2026-11-26T04:00:00Z"), reason],
+    });
+  await failure(A, "error: capture blocked: a bot or security check stood in for the site (phone view)");
+  await failure(A2, "error: capture blocked: a bot or security check stood in for the site");
+  // On the review list means an open row on /admin/review (the needs_review flag alone is not).
+  const review = (url, batch) =>
+    db.execute({
+      sql: `INSERT INTO status_reviews (batch, url, grp, current, proposed, agreed, reason, verdicts, signals, status, created_at)
+            VALUES (?, ?, 'bot_wall', 'ranked', 'review', 0, 'e2e', '{}', '{}', 'pending', '2026-11-22T04:00:00.000Z')`,
+      args: [batch, url],
+    });
+  await review(A2, "bot-wall:refresh:e2e");
+  await review(B, "bot-wall");
   await db.execute({ sql: "DELETE FROM capture_changes WHERE url IN (?, ?)", args: [D, M] });
   const change = (url, lost, oldV, newV, measuring) =>
     db.execute({
@@ -98,10 +116,19 @@ test("capture problems: the four groups with counts and a row in each, at deskto
       assert.equal(await a.locator("[data-review]").getAttribute("data-review"), "no");
       assert.equal(await a.locator("[data-grade]").textContent(), "Gemini: tier A");
       assert.equal(await a.locator("[data-capture-again]").count(), 1);
+      assert.equal(await a.locator("[data-open-review]").count(), 0);
+      const a2 = row("A", A2);
+      assert.equal(await a2.locator("[data-review]").getAttribute("data-review"), "yes");
+      assert.equal(await a2.locator("[data-open-review]").textContent(), "Open Review");
+      assert.equal(await a2.locator("[data-phone-only]").count(), 0);
       const b = row("B", B);
       assert.equal(await b.locator("[data-review]").getAttribute("data-review"), "yes");
       assert.equal(await b.locator("[data-capture-date]").textContent(), "No capture");
       assert.equal(await row("C", C).locator("[data-health]").textContent(), "Health: failing");
+      assert.equal(await page.locator(`[data-capture-problem="${U}"]`).count(), 0, "an unmeasured capture is not a bad one");
+      assert.match((await page.locator("[data-unmeasured]").textContent()) ?? "", /^Not checked: [\d,]+ captures? (was|were) made before/);
+      // The header counts sites, each once.
+      assert.match((await page.locator("[data-admin-header]").textContent()) ?? "", /[\d,]+ sites? with an open problem/);
       assert.match((await row("D", D).locator("[data-reason]").textContent()) ?? "", /lost its résumé and GitHub links/);
       assert.equal(await page.locator(`[data-capture-group="D"] > ul [data-capture-problem="${M}"]`).count(), 0, "the measuring change is not in group D's list");
       assert.equal(await page.locator(`[data-measuring] [data-capture-problem="${M}"]`).count(), 1);

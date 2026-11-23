@@ -7,8 +7,10 @@ import { btnSecondary } from "@/components/ui/styles";
 // "Capture again" on a row of the Capture problems page
 // (app/admin/(tools)/capture-problems): the admin's existing Re-measure
 // (app/api/admin/remeasure, the same request the portfolio page's Re-measure
-// sends). The screenshots are taken again in tonight's capture, past any
-// refresh backoff. Nothing else changes.
+// sends). Every check of the site is due again: the screenshots are taken
+// again in tonight's capture, past any refresh backoff, the link checks run
+// in tonight's free checks, and Lighthouse and the polish check run on the
+// site's next page view. The grade and the listing do not change.
 export function CaptureAgain({ url, domain }: { url: string; domain: string }) {
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
   const [error, setError] = useState<string | null>(null);

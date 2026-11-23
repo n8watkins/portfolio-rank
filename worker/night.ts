@@ -41,7 +41,7 @@ import { contentMode } from "../lib/content/store.mjs";
 import { reviewAutoApplyEnabled } from "../lib/reviews/flag";
 import { contentSummaryConditions } from "../pipeline/content/engine.mjs";
 import { isNewsletterAlert } from "../lib/newsletter/alerts.mjs";
-import { captureProblemConditions } from "../lib/capture-problems.mjs";
+import { ALERT_KEY as CAPTURE_PROBLEMS_ALERT, captureProblemConditionsOrLog } from "../lib/capture-problems.mjs";
 import { isDuplicateInstance, isNightWatchAlert } from "../pipeline/night-watch.mjs";
 
 /** The bindings and vars from wrangler.jsonc plus the Worker secrets this file reads. */
@@ -251,15 +251,21 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       const ctx = engine(this.env, runId);
       const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
       const startedAt = Date.parse(String(state.startedAt));
+      // Open capture problems per group, with the admin page's link (lib/capture-problems.mjs):
+      // emailed only when a count rose since the last email. Never on staging, which emails no one.
+      // Its own read of four groups: a failure is logged and never holds up the other alerts, and
+      // its alert is left as it was (out of scope below) rather than cleared.
+      const captureProblems =
+        String(this.env.SITE_ENV ?? "production") === "staging"
+          ? { conditions: [], failed: false }
+          : await captureProblemConditionsOrLog(ctx.db, { siteUrl: String(this.env.SITE_URL ?? ""), log: (error: string) => log("night.alerts.capture-problems.failed", { error }) });
       const conditions = [
         ...nightConditions(night, ctx.plan),
         // A missing or expiring GITHUB_DISPATCH_TOKEN (GitHub says when it expires on the dispatch's answer).
         ...dispatchTokenConditions((state.checks as { nightly?: { skipped?: string; tokenExpires?: string | null } } | undefined)?.nightly, { now: new Date(startedAt) }),
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
-        // Open capture problems per group, with the admin page's link (lib/capture-problems.mjs):
-        // only while a count is above zero or changed. Never on staging, which emails no one.
-        ...(String(this.env.SITE_ENV ?? "production") === "staging" ? [] : await captureProblemConditions(ctx.db, { siteUrl: String(this.env.SITE_URL ?? "") })),
+        ...captureProblems.conditions,
       ];
       // The weekly model watch, the hourly removals, the hourly email caps
       // and the hourly dead-man check and the newsletter tick own their alerts
@@ -267,7 +273,8 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       // ./night-watch.ts, ./newsletter.ts); the night never clears them.
       const r = await reconcileAlerts(ctx.db, {
         conditions,
-        scope: (key: string) => !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key),
+        scope: (key: string) =>
+          !isModelWatchAlert(key) && !isRemovalAlert(key) && !isEmailCapAlert(key) && !isNightWatchAlert(key) && !isNewsletterAlert(key) && !(captureProblems.failed && key === CAPTURE_PROBLEMS_ALERT),
         email: ctx.email,
         to: this.env.OWNER_EMAIL ?? null,
         log: ctx.log,

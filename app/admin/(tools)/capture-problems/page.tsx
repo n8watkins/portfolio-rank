@@ -17,9 +17,11 @@ import { GROUPS, GROUP_LABELS, SHORT_TEXT, TEXT_DROP_MIN_OLD, TEXT_DROP_RATIO, c
 // C the stored capture itself is bad, D a re-capture got worse. Newest first
 // in each group. Each row shows the site, the reason in plain words, the
 // stored capture's date and thumbnail, Gemini's grade, the health check's
-// state and whether the site is on the owner's review list. Its only actions
-// are ones the admin already has: Capture again (the Re-measure request) and
-// a link to the Review page. Only the admin sees it; anyone else gets a 404.
+// state and whether the site is on the owner's review list (an open review
+// row, never the needs_review flag alone). Its only actions are ones the
+// admin already has: Capture again (the Re-measure request) and a link to
+// the Review page, which has no link to one row. Only the admin sees it;
+// anyone else gets a 404.
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Capture problems - PortfolioRank admin", robots: { index: false, follow: false } };
 
@@ -27,9 +29,9 @@ type Problems = Awaited<ReturnType<typeof captureProblems>>;
 type Row = Problems["A"][number] & { lost?: string[]; measuring?: boolean };
 
 const ABOUT: Record<string, string> = {
-  A: "A nightly re-capture did not show the site. The good capture it had is kept and shown; the re-capture is tried again after a growing wait.",
-  B: "A listed site that has never had a good capture. It is kept off the list and tried again after a growing wait.",
-  C: `A live site whose stored capture reads as a bot or security check, or has no page text or under ${SHORT_TEXT} characters of it.`,
+  A: "A nightly re-capture of a listed site did not show the site. The good capture it had is kept and shown; the re-capture is tried again after a growing wait.",
+  B: "A site on our list that has never had a good capture. Until the health check sees it working, it is hidden from browsing, face-offs and boards; the capture is tried again after a growing wait.",
+  C: `A listed site whose stored capture reads as a bot or security check, or has no words or under ${SHORT_TEXT} characters of page text.`,
   D: `A re-capture that lost a résumé, GitHub or contact link the capture before it had, or kept under ${Math.round(TEXT_DROP_RATIO * 100)}% of a text over ${TEXT_DROP_MIN_OLD} characters. Only captures measured by the same code are compared.`,
 };
 
@@ -144,7 +146,7 @@ function ProblemRow({ r, base }: { r: Row; base: string | null }) {
               {again && <CaptureAgain url={r.url} domain={domain} />}
               {r.reviewId != null && (
                 <Link href="/admin/review" className="inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline" data-open-review>
-                  Open in Review
+                  Open Review
                 </Link>
               )}
             </div>
@@ -162,14 +164,13 @@ export default async function AdminCaptureProblemsPage() {
   const p = await captureProblems(db());
   const all = [...p.A, ...p.B, ...p.C, ...p.D, ...p.measuring] as Row[];
   const bases = await shotBases([...new Set(all.filter((r) => r.shotKey).map((r) => r.url))]);
-  const total = GROUPS.reduce((s, g) => s + p.counts[g as keyof typeof p.counts], 0);
   const baseOf = (r: Row) => bases.get(r.url) ?? null;
 
   return (
     <>
       <AdminHeader title="Capture problems">
-        Every capture that failed, is bad, or got worse. A bad capture is never graded; a site behind a bot check, or still covered by a gate, loader or dialog, goes to your review list.{" "}
-        {total === 0 ? "Nothing open right now." : `${n(total)} open, newest first in each group.`}
+        Every capture that failed, is bad, or got worse. A re-capture that meets a bot check, or a dialog still covering the page, also goes to your review list, unless only the phone-size visit saw it.{" "}
+        {p.sites === 0 ? "Nothing open right now." : `${n(p.sites)} ${p.sites === 1 ? "site" : "sites"} with an open problem, newest first in each group.`}
       </AdminHeader>
 
       <nav aria-label="Groups" className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-capture-counts>
@@ -202,6 +203,12 @@ export default async function AdminCaptureProblemsPage() {
                   <ProblemRow key={`${g}:${r.url}`} r={r} base={baseOf(r)} />
                 ))}
               </ul>
+            )}
+            {g === "C" && p.unmeasured > 0 && (
+              <p className="mt-3 max-w-3xl text-sm text-mute text-pretty" data-unmeasured>
+                Not checked: {n(p.unmeasured)} {p.unmeasured === 1 ? "capture was" : "captures were"} made before captures stored their page text (2026-11-10), so there is no text to
+                measure. They are not counted here.
+              </p>
             )}
             {g === "D" && p.measuring.length > 0 && (
               <details className="group/m mt-4" data-measuring>
