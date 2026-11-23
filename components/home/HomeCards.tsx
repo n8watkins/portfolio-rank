@@ -63,18 +63,18 @@ function Board({ rows, scoreLabel, elo = false }: { rows: BoardItem[]; scoreLabe
   );
 }
 
-/** Top 10: Merged, AI and People with ranking v2; the people's board until then. */
+/** Top 10: the ranked order (code checks, then votes), with the Tier while tiers are shown. */
 export function TopTen({ top, className = "" }: { top: TopTenData; className?: string }) {
-  const empty = top.kind === "ai" && top.rows.length === 0;
+  const empty = top.kind === "code" && top.rows.length === 0;
   return (
     <section aria-labelledby="top10" className={`card flex flex-col p-4 sm:p-6 ${className}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 id="top10" className={sectionTitle}>
           Top 10
         </h3>
-        {top.kind === "ai" && (
+        {top.kind === "code" && (
           <p className="flex items-center gap-1.5 text-xs text-mute">
-            <Bot className="h-3.5 w-3.5" aria-hidden /> By AI grade
+            <Code className="h-3.5 w-3.5" aria-hidden /> By code checks and votes
           </p>
         )}
         {top.kind === "ranked" && <p className="text-xs text-mute">By tier and ELO</p>}
@@ -86,8 +86,8 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           <span className="icon-tile h-11 w-11">
             <Swords className="h-5 w-5" aria-hidden />
           </span>
-          <p className="font-semibold">The board fills as portfolios are graded</p>
-          <p className="max-w-sm text-sm text-mute">New portfolios are graded when the AI has room in its daily budget. Meanwhile, every face-off vote moves two of them.</p>
+          <p className="font-semibold">The board fills as portfolios are measured</p>
+          <p className="max-w-sm text-sm text-mute">Each portfolio gets its starting rank from the checks our code measures. Every face-off vote moves two of them.</p>
           {ROUTES.faceoff && (
             <a href={ROUTES.faceoff} className="group mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent">
               Vote in a face-off <ArrowRight className="nudge h-4 w-4" aria-hidden />
@@ -95,7 +95,7 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           )}
         </div>
       ) : (
-        // The AI grade's order with no letter: Gemini's is never shown, and Tiers are hidden while RANKING_V2 is off.
+        // The ranked order with no letter: Tiers are hidden while RANKING_V2 is off, and Gemini gives no letter.
         <Board rows={top.rows} scoreLabel="" />
       )}
     </section>
@@ -270,9 +270,9 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
           {p.tier && <EloTierBadge tier={p.tier} size="lg" />}
           <p className="text-sm">
             <span className="block font-semibold">
-              Top {topPct(p.rank, p.total)}% · #{p.rank} by AI grade
+              Top {topPct(p.rank, p.total)}% · #{p.rank} by code checks and votes
             </span>
-            <span className="block text-mute">of {p.total.toLocaleString("en-US")} graded portfolios</span>
+            <span className="block text-mute">of {p.total.toLocaleString("en-US")} ranked portfolios</span>
           </p>
         </div>
         {p.best.length > 0 && (

@@ -14,6 +14,7 @@ import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo"
 import { jsonLdHtml } from "@/lib/json-ld";
 import { FixList } from "@/components/profile/FixList";
 import { RecheckButton } from "@/components/profile/RecheckButton";
+import { GeminiOpinion } from "@/components/profile/GeminiOpinion";
 
 // A portfolio's profile with "Add your portfolio" (TOOLS_ENABLED on; ./page.tsx
 // picks it): four parts, Rank, Report card, Fix list and Share, for a listed
@@ -113,47 +114,22 @@ function Rank({ p }: { p: Profile }) {
 
 function ReportCard({ p }: { p: Profile }) {
   const r = p.report;
+  // Gemini's three kept answers only (lib/profile.ts reportCard), with what it was asked (components/profile/GeminiOpinion.tsx).
+  if (r) return <GeminiOpinion r={r} />;
   return (
     <section aria-labelledby="report" className="card p-5 sm:p-6">
-      <SectionTitle id="report" kicker="Report card" title={r ? "How to improve, weakest first" : "Coming"} />
-      {r ? (
-        <>
-          <p className="-mt-2 mb-4 text-xs text-mute">
-            AI design review by Gemini{r.model ? ` (${r.model})` : ""}: an opinion, not a verdict ·{" "}
-            <a href="/grading" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
-              how grading works
-            </a>
-          </p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {[...r.axes]
-              .sort((a, b) => a.score - b.score)
-              .map((ax) => (
-                <div key={ax.key} className="rounded-lg border border-edge p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{ax.label}</span>
-                    <span className="text-sm font-bold tabular-nums">{ax.score}/5</span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
-                    <div className="h-1.5 rounded-full bg-accent" style={{ width: `${(ax.score / 5) * 100}%` }} />
-                  </div>
-                  {ax.note && <p className="mt-1.5 text-xs text-mute">{ax.note}</p>}
-                </div>
-              ))}
-          </div>
-        </>
-      ) : (
-        <p className="flex items-start gap-3 text-sm text-mute">
-          {p.stage === "grading" ? <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden /> : <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />}
-          <span>
-            {p.stage === "grading"
-              ? "Being graded now: Gemini reads a screenshot and the page and scores design, writing and projects. This page fills in when it's done."
-              : p.hideGrade
-                ? "The owner hid the grade."
-                : "Waiting for its AI grade. We grade new portfolios when there's room in the day's free quota; this page fills in when it's done."}
-            {p.job?.reason ? ` ${p.job.reason}` : ""}
-          </span>
-        </p>
-      )}
+      <SectionTitle id="report" kicker="Gemini report card" title="Coming" />
+      <p className="flex items-start gap-3 text-sm text-mute">
+        {p.stage === "grading" ? <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden /> : <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />}
+        <span>
+          {p.stage === "grading"
+            ? "Being looked at now: Gemini reads a screenshot and the page, and answers whether it is a portfolio, the five-second test and the roles you name. This page fills in when it's done."
+            : p.hideGrade
+              ? "The owner hid the grade."
+              : "Waiting for Gemini's look. It runs when there's room in the day's free quota; this page fills in when it's done. The rank never waits for it."}
+          {p.job?.reason ? ` ${p.job.reason}` : ""}
+        </span>
+      </p>
     </section>
   );
 }

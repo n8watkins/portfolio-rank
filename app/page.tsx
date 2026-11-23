@@ -72,7 +72,7 @@ export default async function Home() {
                     <span className="bg-gradient-to-r from-[#fcd34d] via-[#f59e0b] to-[#ea7a0c] bg-clip-text text-transparent">ranked</span>.
                   </h1>
                   <p className="rise mx-auto mt-5 max-w-xl text-[15px] text-mute text-pretty sm:text-lg lg:mx-0" style={d(120)}>
-                    {total} community-curated portfolios, graded by AI on design, first impression and writing. Your votes in face-offs decide who rises.
+                    {total} community-curated portfolios, ranked by checks our code measures. Your votes in face-offs decide who rises.
                   </p>
                   <div className="rise mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start" style={d(180)}>
                     {ROUTES.faceoff && (

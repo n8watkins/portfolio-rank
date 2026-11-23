@@ -66,7 +66,7 @@ import {
 } from "./gemini.mjs";
 import { createRequestLog, ensureGeminiLog } from "./gemini-log.mjs";
 import { BUSY_WAIT_MINUTES, CONTENT_GEMINI, isBusy, retryClock } from "./content/busy.mjs";
-import { RESPONSE_SCHEMA, buildRubricRequest, gradeRecord, parseRubricResponse } from "./rubric.mjs";
+import { RUBRIC_V3 } from "./rubric.mjs";
 import { ensureRubricHistory, parseRubric, replaceGradeStatements } from "./rubric-history.mjs";
 import { REGRADE_REQUEST_TABLES } from "../lib/games/schema.mjs";
 import { rankForWrite } from "../lib/tiers-store.mjs";
@@ -257,22 +257,24 @@ async function gradeItem(ctx, gemini, item) {
   });
   // A re-grade someone asked for is answered: they may ask again later.
   await closeRegradeRequest(ctx.db, url, "done", now);
-  return { status: "ok", door: { ...door, tier: grade.tier ?? null } };
+  return { status: "ok", door };
 }
 
 /**
- * A rubric v2 grade from stored evidence (row: url, name, page_text, facts,
- * meta) and the hero image, on 3.5 only. Shared with people's requests
- * (pipeline/people.mjs). Throws Gemini errors and malformed answers.
+ * A grade from stored evidence (row: url, name, page_text, facts, meta) and
+ * the hero image, on 3.5 only. `rubric` is the prompt to ask: rubric v3 for a
+ * listed site (./rubric.mjs RUBRIC_V3); a person's own request passes the
+ * frozen v2 (./rubric-v2.mjs RUBRIC_V2, pipeline/people.mjs). Throws Gemini
+ * errors and malformed answers.
  */
-export async function gradeFromEvidence(gemini, { row, image, now }) {
+export async function gradeFromEvidence(gemini, { row, image, now, rubric = RUBRIC_V3 }) {
   const stored = parseJson(row.facts);
   const motion = parseJson(row.meta)?.motion;
   const facts = stored && stored.motion == null && typeof motion === "boolean" ? { ...stored, motion } : stored;
-  const request = buildRubricRequest({ name: String(row.name ?? ""), url: String(row.url), pageText: String(row.page_text ?? ""), facts, image, now });
-  const { result, model, usage } = await gemini.generate(request.parts, RESPONSE_SCHEMA, request.options);
+  const request = rubric.build({ name: String(row.name ?? ""), url: String(row.url), pageText: String(row.page_text ?? ""), facts, image, now });
+  const { result, model, usage } = await gemini.generate(request.parts, rubric.schema, request.options);
   if (model !== PRIMARY_MODEL) throw new Error(`answered by ${model}, not ${PRIMARY_MODEL}`);
-  return gradeRecord({ parsed: parseRubricResponse(result), model, usage, facts, source: "r2", now });
+  return rubric.record({ parsed: rubric.parse(result), model, usage, facts, source: "r2", now });
 }
 
 // ---------------------------------------------------------------------------
@@ -876,7 +878,7 @@ export async function runBatch(ctx, state) {
           if (h.parkable) await clearItemFailure(db, stage.job, item.id);
           const door = res && typeof res === "object" ? res.door : null;
           if (door) {
-            notes = [["graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome, tier: door.tier ?? null }]];
+            notes = [["graded", { url: item.id, stage: stage.key, verdict: VERDICT_WORDS[door.outcome] ?? door.outcome }]];
             if (door.outcome === "remove") notes.push(["removed", { url: item.id, reviewId: door.reviewId }]);
             else if (["review", "strong_signals", "held"].includes(door.outcome)) {
               notes.push(["review", { url: item.id, why: VERDICT_WORDS[door.outcome], reviewId: door.reviewId }]);
@@ -1078,7 +1080,7 @@ export async function finishNight(ctx, state) {
       ? `**The check of stored captures did not finish** (${summary.unusableCapture.error}); each grade still checked its own site before any request.\n`
       : "",
     summary.unrecorded ? `${summary.unrecorded} site outcome(s) could not be recorded; the lists below may miss them.\n` : "",
-    ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.tier ? ` (tier ${x.tier})` : ""}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
+    ...siteLines("Sites graded", "graded", (x) => `${x.url}: ${x.verdict}${x.stage === "grade_new" ? "" : ` [${x.stage}]`}`),
     ...siteLines("Removed automatically", "removed", (x) => `${x.url}${x.reviewId ? ` (review ${x.reviewId})` : ""}`, "Each one has Undo on /admin/review."),
     ...siteLines("Sent to review", "review", (x) => `${x.url}: ${x.why}`),
     ...siteLines("Failed", "failed", (x) => `${x.url}: ${x.reason}`),

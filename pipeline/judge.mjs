@@ -3,10 +3,11 @@
 // captured portfolios with 3.5 Flash-Lite only (no fallback to a lower model;
 // see pipeline/gemini.mjs).
 //
-//   rubric   - 1 call/site, rubric v2 (pipeline/rubric.mjs): the top-of-page
+//   rubric   - 1 call/site, rubric v3 (pipeline/rubric.mjs): the top-of-page
 //              screenshot, the facts measured by code (pipeline/facts.mjs)
-//              and the page's visible text -> tier, is_portfolio and five 1-5
-//              quality scores with one short clause each, stored as JSON in
+//              and the page's visible text -> is_portfolio with a short
+//              reason, the five-second test (1-5 with a clause) and the
+//              roles the page names, stored as JSON in
 //              portfolios.ai_rubric with the rubric version, the model, the
 //              token usage, the facts and the code checks.
 //
@@ -295,7 +296,7 @@ async function runRubric() {
       });
       ok++;
       console.log(
-        `${label} ${url} - tier ${out.rubric.tier}, portfolio=${out.rubric.is_portfolio}, door=${door.outcome}, design=${out.rubric.visual_design?.score}, checks=${out.rubric.checks_score ?? "-"} (${out.model}, v${RUBRIC_VERSION})`
+        `${label} ${url} - portfolio=${out.rubric.is_portfolio}, door=${door.outcome}, five-second=${out.rubric.five_second_test?.score ?? "-"}, checks=${out.rubric.checks_score ?? "-"} (${out.model}, v${RUBRIC_VERSION})`
       );
       return true;
     } catch (e) {

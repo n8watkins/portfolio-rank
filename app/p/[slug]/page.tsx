@@ -17,11 +17,11 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { db, ensureSchema } from "@/lib/db";
 import { isGone } from "@/lib/roster";
 import { SITE_URL } from "@/lib/site";
-import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { ProfileV2, profileMetadata } from "./profile-v2";
-import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
+import { loadSeoExtras, profileJsonLd, reportCard } from "@/lib/profile";
+import { GeminiOpinion } from "@/components/profile/GeminiOpinion";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
 
@@ -36,12 +36,6 @@ export const revalidate = 300;
 export async function generateStaticParams() {
   return [];
 }
-
-// The AI-judged criteria and their names come from the rubric itself
-// (pipeline/rubric.mjs), so the page follows it when it changes.
-const AXIS_LABELS: Record<string, string> = Object.fromEntries(
-  AI_CRITERIA.map((c) => [c.id, c.name])
-);
 
 function domainOf(url: string): string {
   try {
@@ -98,42 +92,6 @@ export async function generateMetadata({
   };
 }
 
-// The Gemini report card shows for any graded site under a neutral "AI" mark:
-// Gemini's own letter is never shown (owner, 2026-11-22: the grading is kept
-// apart from the ranking; the Tier comes from the code checks and votes).
-function publicGrade(raw: unknown): null | {
-  model?: string;
-  /** Rubric v2: Gemini's weighted quality (1-5). */
-  quality?: number;
-  axes: { key: string; label: string; score: number; note?: string }[];
-} {
-  type Raw = Record<string, { score?: number; note?: string } | string | undefined>;
-  let r: Raw;
-  if (raw && typeof raw === "object") r = raw as Raw;
-  else if (typeof raw !== "string") return null;
-  else {
-    try {
-      r = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  const tier = r.tier as string | undefined;
-  if (!tier || !["S", "A", "B", "C", "D"].includes(tier)) return null;
-  const axes = Object.entries(AXIS_LABELS)
-    .map(([key, label]) => {
-      const ax = r[key];
-      if (!ax || typeof ax === "string" || typeof ax.score !== "number") return null;
-      return { key, label, score: ax.score, note: ax.note };
-    })
-    .filter((a): a is NonNullable<typeof a> => a !== null);
-  return {
-    model: typeof r.model === "string" ? r.model : undefined,
-    quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
-    axes,
-  };
-}
-
 /** The Code checks score item by item, while the tier card (RANKING_V2) is off: the same list it shows. */
 function CodeChecksCard({ code }: { code: CodeChecks }) {
   return (
@@ -141,7 +99,7 @@ function CodeChecksCard({ code }: { code: CodeChecks }) {
       <h2 id="code-checks" className="font-semibold">
         Code checks score: <span className="tabular-nums">{shownPoints(code.check).total}</span> of 100
       </h2>
-      <p className="mt-0.5 text-xs text-mute">Measured by code from the page, its speed and its share card. No AI is involved.</p>
+      <p className="mt-0.5 text-xs text-mute">Measured by code from the page, its speed and its share card. No AI is involved. The starting rank comes from this score; votes move it from there.</p>
       <CheckItems check={code.check} />
     </section>
   );
@@ -206,7 +164,8 @@ export default async function PortfolioPage({
   // Fresh, never the minute cache: this render is kept at the edge for a day.
   const owner = await ownerState(db(), url, { fresh: true });
   if (owner.removedAt) notFound();
-  const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
+  // Gemini's answer, its three kept outputs only, for an older grade too (lib/profile.ts reportCard).
+  const grade = owner.hideGrade || rubricRow?.ai_rubric == null ? null : reportCard(rubricRow.ai_rubric);
   // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise.
   const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
   // The Code checks score, one number for the site wherever it is shown: the tier card's, else made here.
@@ -296,58 +255,18 @@ export default async function PortfolioPage({
               </span>
               <div>
                 <h2 id="report-card" className="font-semibold">
-                  {eloTier ? "Report card: how to improve" : "Gemini report card"}
+                  Gemini report card
                 </h2>
                 <p className="text-sm text-mute">
-                  The model has not looked at this site yet.{code ? " The code checks above are measured without it." : ""}
+                  The model has not looked at this site yet.{code ? " The code checks above are measured without it, and the rank never waits for it." : ""}
                 </p>
               </div>
             </div>
           </section>
         )}
 
-        {grade && (
-          <div className="mt-4 rounded-xl border border-edge bg-card p-5">
-            <div className="flex items-center gap-3">
-              {/* Gemini's own letter is never shown: the report card sits under a neutral mark. */}
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-edge text-lg font-bold text-ink">AI</span>
-              <div>
-                <p className="font-semibold">{eloTier ? "Report card: how to improve" : "Gemini report card"}</p>
-                <p className="text-xs text-mute">
-                  by Gemini{grade.model ? ` (${grade.model})` : ""} - an opinion, not
-                  a verdict
-                </p>
-                {/* Gemini's own numbers only: the Code checks score is code's and sits in its own card above. */}
-                {grade.quality !== undefined && (
-                  <p className="mt-0.5 text-xs text-mute">
-                    Quality <span className="font-semibold tabular-nums text-ink">{grade.quality.toFixed(1)}/5</span>
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {grade.axes.map((ax) => (
-                <div key={ax.key} className="rounded-lg border border-edge p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{ax.label}</span>
-                    <span className="text-sm font-bold tabular-nums">
-                      {ax.score}/5
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-edge">
-                    <div
-                      className="h-1.5 rounded-full bg-accent"
-                      style={{ width: `${(ax.score / 5) * 100}%` }}
-                    />
-                  </div>
-                  {ax.note && (
-                    <p className="mt-1.5 text-xs text-mute">{ax.note}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Gemini's own letter and dropped scores are never shown: three answers under a neutral mark. */}
+        {grade && <GeminiOpinion r={grade} />}
 
         <p className="py-8 text-center text-xs text-mute">
           Diagnostics run live against the site and are cached. Think something

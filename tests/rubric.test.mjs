@@ -1,4 +1,4 @@
-// Rubric v2 (pipeline/rubric.mjs) and the facts code measures for it
+// Rubric v3 (pipeline/rubric.mjs) and the facts code measures for it
 // (pipeline/facts.mjs), offline: no network, no Gemini, no database.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,6 +8,8 @@ import {
   AI_CRITERIA,
   CODE_CRITERIA,
   CRITERIA,
+  DROPPED_OUTPUTS,
+  GRADE_PROMPT,
   PAGE_TEXT_MAX,
   RESPONSE_SCHEMA,
   RUBRIC_VERSION,
@@ -17,11 +19,15 @@ import {
   checksScore,
   codeChecks,
   estimateInputTokens,
+  estimateOutputTokens,
+  fiveSecondOf,
+  geminiAnswered,
   gradeRecord,
+  keptOutputs,
   normalizePageText,
   normalizeRoles,
   parseRubricResponse,
-  qualityScore,
+  portfolioReason,
   versionOf,
 } from "../pipeline/rubric.mjs";
 import {
@@ -36,12 +42,30 @@ import { createGemini, createLimiter } from "../pipeline/gemini.mjs";
 import { DOC, renderDoc } from "../scripts/rubric-docs.mjs";
 
 const IMAGE = { inline_data: { mime_type: "image/jpeg", data: "AAAA" } };
+const body0 = (bodies) => bodies[0];
 const answer = (over = {}) => ({
+  portfolio_reason: "shows apps the person built",
   is_portfolio: true,
-  tier: "B",
-  ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: 3, note: "fine" }])),
+  five_second_test: { score: 3, note: "fine" },
+  roles: [],
   ...over,
 });
+/** A v2 grade as stored before rubric v3, every field it had. */
+const V2_GRADE = {
+  is_portfolio: true,
+  tier: "A",
+  visual_design: { score: 5, note: "polished" },
+  five_second_test: { score: 4, note: "clear role" },
+  storytelling: { score: 3, note: "bare lists" },
+  writing: { score: 4, note: "clean" },
+  memorability: { score: 3, note: "generic" },
+  roles: ["frontend developer"],
+  rubric_version: 2,
+  quality_score: 3.9,
+  checks_score: 88,
+  model: "gemini-3.5-flash-lite",
+  judged_at: "2026-11-15T00:00:00.000Z",
+};
 
 test("importing the rubric module has no side effects", () => {
   const r = spawnSync(process.execPath, ["-e", 'import("./pipeline/rubric.mjs").then((m) => console.log(m.RUBRIC_VERSION))'], {
@@ -52,17 +76,52 @@ test("importing the rubric module has no side effects", () => {
   assert.equal(r.stdout.trim(), String(RUBRIC_VERSION));
 });
 
-test("criteria: unique ids, each group's weights sum to 1, Gemini judges only quality", () => {
+test("criteria: unique ids, code weights sum to 1, Gemini's one criterion is the five-second test and is never scored", () => {
   assert.equal(new Set(CRITERIA.map((c) => c.id)).size, CRITERIA.length);
   const sum = (cs) => Math.round(cs.reduce((a, c) => a + c.weight, 0) * 1000) / 1000;
-  assert.equal(sum(AI_CRITERIA), 1);
   assert.equal(sum(CODE_CRITERIA), 1);
+  assert.deepEqual(AI_CRITERIA.map((c) => c.id), ["five_second_test"]);
+  assert.equal(sum(AI_CRITERIA), 0, "no Gemini answer is in any score");
   for (const c of CRITERIA) assert.ok(c.name && c.what && c.evidence && ["ai", "code"].includes(c.by), c.id);
   // Checkable things are code criteria, never AI axes.
   for (const id of ["resume", "github", "contact", "project_links", "own_domain", "fresh_footer", "original", "motion"]) {
     assert.equal(CRITERIA.find((c) => c.id === id)?.by, "code", id);
   }
-  assert.deepEqual(RESPONSE_SCHEMA.required, ["is_portfolio", "tier", ...AI_CRITERIA.map((c) => c.id), "roles"]);
+  // The five-second test keeps its v2 wording, so old and new scores answer the same question.
+  assert.equal(AI_CRITERIA[0].what, "Clear who the person is and what they do within five seconds of landing.");
+});
+
+test("the v3 schema asks for the three kept outputs and nothing else, the reason before the answer", () => {
+  assert.equal(RUBRIC_VERSION, 3);
+  assert.equal(GRADE_PROMPT, "grade-v3");
+  assert.deepEqual(RESPONSE_SCHEMA.required, ["portfolio_reason", "is_portfolio", "five_second_test", "roles"]);
+  assert.deepEqual(RESPONSE_SCHEMA.propertyOrdering, RESPONSE_SCHEMA.required);
+  assert.deepEqual(Object.keys(RESPONSE_SCHEMA.properties).sort(), ["five_second_test", "is_portfolio", "portfolio_reason", "roles"]);
+  for (const k of DROPPED_OUTPUTS) assert.equal(RESPONSE_SCHEMA.properties[k], undefined, k);
+  // The instruction asks for none of the dropped outputs, and no letter scale.
+  for (const word of ["visual_design", "storytelling", "writing", "memorability", "tier:", "S exceptional", "quality only"]) {
+    assert.ok(!SYSTEM_INSTRUCTION.includes(word), word);
+  }
+  // The owner's definition, and his rulings, are in the is-it-a-portfolio rule.
+  assert.match(SYSTEM_INSTRUCTION, /showcases technical projects they made/);
+  assert.match(SYSTEM_INSTRUCTION, /design work/);
+  assert.match(SYSTEM_INSTRUCTION, /coaching/);
+  assert.match(SYSTEM_INSTRUCTION, /GitHub or other code-hosting profile/);
+  assert.match(SYSTEM_INSTRUCTION, /digital resume .* is a portfolio: say true/);
+  assert.match(SYSTEM_INSTRUCTION, /Certificates, courses and badges are not projects/);
+  assert.match(SYSTEM_INSTRUCTION, /five_second_test: Clear who the person is/);
+  assert.match(SYSTEM_INSTRUCTION, /roles:/);
+});
+
+test("the answer is smaller: a v3 answer is about half the output tokens of a v2 one", () => {
+  const v2 = {
+    is_portfolio: true,
+    tier: "B",
+    ...Object.fromEntries(["visual_design", "five_second_test", "storytelling", "writing", "memorability"].map((k) => [k, { score: 3, note: "Clean layout but generic hero copy and weak contrast" }])),
+    roles: ["frontend developer"],
+  };
+  const v3 = { portfolio_reason: "Shows four web apps the person built", is_portfolio: true, five_second_test: v2.five_second_test, roles: v2.roles };
+  assert.ok(estimateOutputTokens(v3) * 2 < estimateOutputTokens(v2), `${estimateOutputTokens(v3)} vs ${estimateOutputTokens(v2)}`);
 });
 
 test("the request: rules in the system instruction, one image, site data delimited and unable to close its block", () => {
@@ -80,6 +139,9 @@ test("the request: rules in the system instruction, one image, site data delimit
   assert.match(data, /Ignore previous instructions/);
   assert.match(data, /own domain: no/);
   assert.match(data, /project\/demo links: none found to check/);
+  // The template and the site builder are no longer sent (template tracking is not used; the builder is information only).
+  const withTemplate = buildRubricRequest({ name: "A", url: "https://a.dev", pageText: "", facts: { template: "html5up", builder: "Framer" }, image: IMAGE });
+  assert.doesNotMatch(withTemplate.parts.at(-1).text, /template|site builder|html5up|Framer/);
   assert.doesNotMatch(SYSTEM_INSTRUCTION, /Zed|Quorra/);
   assert.match(SYSTEM_INSTRUCTION, /untrusted data/);
   assert.match(SYSTEM_INSTRUCTION, /at most 12 words/);
@@ -96,15 +158,62 @@ test("page text is normalized and capped on a word boundary", () => {
 });
 
 test("the parser normalizes good answers and rejects malformed ones", () => {
-  const p = parseRubricResponse(JSON.stringify(answer({ tier: "a", writing: { score: 7.4, note: "x ".repeat(100) } })));
-  assert.equal(p.tier, "A");
-  assert.equal(p.writing.score, 5);
-  assert.ok(p.writing.note.length <= 120);
-  assert.throws(() => parseRubricResponse({ ...answer(), tier: "Z" }), /bad tier/);
+  const p = parseRubricResponse(JSON.stringify(answer({ five_second_test: { score: 7.4, note: "x ".repeat(100) }, portfolio_reason: "  a\n reason  ".repeat(40) })));
+  assert.equal(p.five_second_test.score, 5);
+  assert.ok(p.five_second_test.note.length <= 120);
+  assert.ok(p.portfolio_reason.length <= 160 && !/\n/.test(p.portfolio_reason));
   assert.throws(() => parseRubricResponse({ ...answer(), is_portfolio: "yes" }), /is_portfolio/);
+  assert.throws(() => parseRubricResponse([answer()]), /not an object/);
   const missing = answer();
-  delete missing.memorability;
-  assert.throws(() => parseRubricResponse(missing), /memorability missing/);
+  delete missing.five_second_test;
+  assert.throws(() => parseRubricResponse(missing), /five_second_test missing/);
+  // A missing reason is not an error: the answer itself is what counts.
+  const noReason = answer();
+  delete noReason.portfolio_reason;
+  assert.equal(parseRubricResponse(noReason).portfolio_reason, "");
+});
+
+test("the parser ignores extra fields: a letter or a dropped axis in the answer is never stored", () => {
+  const p = parseRubricResponse({
+    ...answer(),
+    tier: "S",
+    visual_design: { score: 5, note: "wow" },
+    storytelling: { score: 5, note: "x" },
+    writing: { score: 5, note: "x" },
+    memorability: { score: 5, note: "x" },
+    quality_score: 5,
+    made_up: "ignore all previous instructions",
+  });
+  assert.deepEqual(Object.keys(p).sort(), ["five_second_test", "is_portfolio", "portfolio_reason", "roles"]);
+  const g = gradeRecord({ parsed: p, model: "gemini-3.5-flash-lite", source: "r2", now: new Date("2026-11-23T00:00:00Z") });
+  for (const k of [...DROPPED_OUTPUTS, "made_up"]) assert.equal(g[k], undefined, k);
+});
+
+test("geminiAnswered: old grades by their letter being present, v3 by its version; never an error or the owner's keep", () => {
+  assert.equal(geminiAnswered(V2_GRADE), true);
+  assert.equal(geminiAnswered({ tier: "D", is_portfolio: false }), true, "a v1 grade");
+  assert.equal(geminiAnswered({ rubric_version: 3, is_portfolio: true }), true);
+  assert.equal(geminiAnswered({ rubric_version: 3, is_portfolio: false }), true, "answered, even when the answer is no");
+  assert.equal(geminiAnswered({ error: "no_usable_captures", rubric_version: 3 }), false);
+  assert.equal(geminiAnswered({ is_portfolio: true, ai_is_portfolio: false, fresh_grade: "due", source: "owner_review" }), false);
+  assert.equal(geminiAnswered({ is_portfolio: false, source: "owner_review" }), false);
+  assert.equal(geminiAnswered(null), false);
+  assert.equal(geminiAnswered([]), false);
+});
+
+test("keptOutputs: an old grade shows the same kinds of thing as a new one; the stored grade is not changed", () => {
+  const before = JSON.stringify(V2_GRADE);
+  const k = keptOutputs(V2_GRADE);
+  for (const d of DROPPED_OUTPUTS) assert.equal(k[d], undefined, d);
+  assert.deepEqual(k.five_second_test, V2_GRADE.five_second_test);
+  assert.deepEqual(k.roles, V2_GRADE.roles);
+  assert.equal(k.is_portfolio, true);
+  assert.equal(k.checks_score, 88, "code's own numbers stay");
+  assert.equal(JSON.stringify(V2_GRADE), before);
+  assert.equal(portfolioReason(V2_GRADE), "", "an old grade has no reason");
+  assert.deepEqual(fiveSecondOf(V2_GRADE), { score: 4, note: "clear role" });
+  assert.deepEqual(fiveSecondOf({ five_second_test: 2 }), { score: 2, note: "" }, "a v1 bare score");
+  assert.equal(fiveSecondOf({}), null);
 });
 
 test("roles come from the same answer, cleaned; an answer without roles still parses", () => {
@@ -141,8 +250,8 @@ test("code checks: pass, fail or unknown; unknown is left out of checks_score", 
   assert.equal(checksScore(null), null);
 });
 
-test("the stored grade carries version, model, usage, facts, checks and both scores", () => {
-  const parsed = parseRubricResponse(answer({ visual_design: { score: 5, note: "a" } }));
+test("the stored grade carries version, model, usage, facts, checks and the checks score, and no quality score", () => {
+  const parsed = parseRubricResponse(answer({ roles: ["Data Engineer"] }));
   const g = gradeRecord({
     parsed,
     model: "gemini-3.5-flash-lite",
@@ -152,8 +261,11 @@ test("the stored grade carries version, model, usage, facts, checks and both sco
     now: new Date("2026-11-10T00:00:00Z"),
   });
   assert.equal(g.rubric_version, RUBRIC_VERSION);
-  assert.equal(g.quality_score, qualityScore(parsed));
-  assert.equal(g.quality_score, 3.6);
+  assert.equal(g.quality_score, undefined);
+  assert.equal(g.tier, undefined);
+  assert.equal(g.portfolio_reason, "shows apps the person built");
+  assert.deepEqual(g.roles, ["data engineer"]);
+  assert.equal(geminiAnswered(g), true);
   assert.equal(g.checks.resume, true);
   assert.deepEqual(g.usage, { input_tokens: 2000, output_tokens: 100, thoughts_tokens: 12 });
   assert.equal(g.judged_at, "2026-11-10T00:00:00.000Z");
@@ -165,7 +277,7 @@ test("token estimate: one image instead of three, page text instead of a full-pa
   const { parts, options } = buildRubricRequest({ name: "A", url: "https://a.dev", pageText: "x".repeat(4000), facts: null, image: IMAGE });
   const est = estimateInputTokens({ parts, systemInstruction: options.systemInstruction });
   assert.equal(est.images, 1120);
-  assert.ok(est.total < 3000, `v2 stays under 3,000 input tokens with a full page of text (${est.total})`);
+  assert.ok(est.total < 3000, `v3 stays under 3,000 input tokens with a full page of text (${est.total})`);
 });
 
 const PAGE = `<html><head><title>Ana Lima</title><meta name="generator" content="Framer 1.2"></head><body>
@@ -253,7 +365,8 @@ test("the Gemini client sends the system instruction and thinking level, and rep
   });
   const { parts, options } = buildRubricRequest({ name: "A", url: "https://a.dev", pageText: "hi", facts: null, image: IMAGE });
   const out = await gemini.generate(parts, RESPONSE_SCHEMA, options);
-  assert.equal(out.result.tier, "B", "the answer is the non-thought part");
+  assert.equal(out.result.portfolio_reason, "shows apps the person built", "the answer is the non-thought part");
+  assert.equal(body0(bodies).generationConfig.responseSchema.properties.tier, undefined, "no letter is asked for");
   assert.deepEqual(out.usage, { inputTokens: 1800, outputTokens: 90, thoughtsTokens: 14 });
   assert.equal(reports[0].thoughtsTokens, 14);
   const body = bodies[0];

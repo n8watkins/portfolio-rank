@@ -1,6 +1,6 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
-import { AI_CRITERIA } from "@/pipeline/rubric.mjs";
+import { AI_CRITERIA, geminiAnswered, keptOutputs, portfolioReason, versionOf } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { BASE_ELO } from "@/lib/elo";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
@@ -29,24 +29,39 @@ export const profilePath = (url: string) => `/p/${encodeURIComponent(url)}`;
 
 const AXIS_LABELS: Record<string, string> = Object.fromEntries(AI_CRITERIA.map((c) => [c.id, c.name]));
 
+/**
+ * Gemini's answer as a profile shows it (owner, 2026-11-22): only the three
+ * kept outputs, whatever rubric version made the grade. An older grade's
+ * letter, its four dropped scores and their quality score stay in the
+ * database and are never read here (pipeline/rubric.mjs keptOutputs).
+ */
 export type ReportCard = {
   model?: string;
-  quality?: number;
   checks?: number;
   roles: string[];
   isPortfolio: boolean;
+  /** What Gemini itself answered to "is it a portfolio", even when a hold or the owner's verdict overrode it. */
+  aiIsPortfolio: boolean;
+  /** Gemini's short reason for "is it a portfolio" (rubric v3 and later; "" for an older grade). */
+  reason: string;
+  /** The rubric version the grade was made with (1 for the oldest grades). */
+  rubricVersion: number;
+  /** When Gemini answered (ISO), or null. */
+  judgedAt: string | null;
+  /** The kept score: the five-second test. */
   axes: { key: string; label: string; score: number; note?: string }[];
 };
 
-/** The AI grade's public part (never Gemini's own letter), or null for none or an error. */
+/** Gemini's answer, its kept part only (never a letter or a dropped score), or null for none or an error. */
 export function reportCard(raw: unknown): ReportCard | null {
-  let r: Record<string, unknown>;
+  let parsed: unknown;
   try {
-    r = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+    parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
   } catch {
     return null;
   }
-  if (!r || typeof r !== "object" || typeof r.tier !== "string" || !r.tier || "error" in r) return null;
+  if (!geminiAnswered(parsed)) return null;
+  const r = keptOutputs(parsed) as Record<string, unknown>;
   const axes = Object.entries(AXIS_LABELS)
     .map(([key, label]) => {
       const ax = r[key] as { score?: number; note?: string } | undefined;
@@ -56,10 +71,13 @@ export function reportCard(raw: unknown): ReportCard | null {
     .filter((a): a is NonNullable<typeof a> => a !== null);
   return {
     model: typeof r.model === "string" ? r.model : undefined,
-    quality: typeof r.quality_score === "number" ? r.quality_score : undefined,
     checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
     roles: Array.isArray(r.roles) ? r.roles.filter((x): x is string => typeof x === "string").slice(0, 3) : [],
     isPortfolio: r.is_portfolio !== false,
+    aiIsPortfolio: typeof r.ai_is_portfolio === "boolean" ? r.ai_is_portfolio : r.is_portfolio !== false,
+    reason: portfolioReason(r),
+    rubricVersion: versionOf(r),
+    judgedAt: typeof r.judged_at === "string" ? r.judged_at : null,
     axes,
   };
 }
