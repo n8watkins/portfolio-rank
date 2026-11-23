@@ -87,3 +87,12 @@ At most 3,000 model requests in all (every HTTP attempt counts, retries included
 Every version stays in `prompts.mjs`.
 
 - v1 (2026-11-23, before any answer): written from the owner's definition and rulings in the brief, `PORTFOLIO_RULE` on `origin/feat/gemini-three-outputs`, and the 2026-11-13 lessons (reason first; a weak portfolio is still a portfolio; an intro screen is not a no; the owner's call that a personal blog with no work is not a portfolio).
+  Design half, full arm: no real portfolio got a double no (0 of 71); the combined system left 8 of 27 non-portfolios listed (code alone: 18).
+  Gemini called two real sites plain blogs (andrew.codes has a resume link; vidu.sh/an is a blog with an about blurb); Haiku answered "cannot tell (too little to see)" on pages it had fully seen: a link-only page on the person's own domain (devlato.com), a hobbies page (matvey.codes), a "this site has moved" notice (akhshyganesh.github.io); and it called a GitHub profile README a portfolio.
+- v2 (frozen as the final prompt before the held-out run): four additions to the rules, nothing removed.
+  A personal site with a resume link, a work history or an experience section counts as a digital resume even with a blog.
+  A code-host profile is not a portfolio even when its README lists projects.
+  A page that is only an avatar or handle and social or contact links is a link page, on the person's own domain too.
+  A personal page about hobbies or life with no technical work, and a page that only says the site moved, are not portfolios (kind other).
+  Design half, full arm: still 0 of 71 real portfolios with a double no; the combined system leaves 4 of 27 non-portfolios listed (three near-empty pages both models call "cannot tell", and nicobachner.com).
+  I stopped here: the four left are pages where "cannot tell" is defensible under the brief's rule, and pushing the models to say no on near-empty pages would also hit near-empty real portfolios such as ericc.vercel.app.
