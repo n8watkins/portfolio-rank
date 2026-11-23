@@ -19,7 +19,7 @@ export type SeoFacts = {
   domain: string;
   tagline: string | null;
   /** The AI grade's public part, or null when there is none or the owner hid it. */
-  report: Pick<ReportCard, "roles" | "axes" | "isPortfolio"> | null;
+  report: Pick<ReportCard, "roles" | "isPortfolio"> | null;
   /** The health check hides the site (down, dead, parked; lib/hidden.mjs). */
   hidden: boolean;
   socials: Socials;
@@ -27,13 +27,6 @@ export type SeoFacts = {
 
 /** Graded, a real portfolio and not hidden: the only profiles search engines are asked to index. */
 export const indexable = (f: Pick<SeoFacts, "report" | "hidden">) => Boolean(f.report?.isPortfolio) && !f.hidden;
-
-/** The AI review's best criteria (4 or 5 out of 5), best first, at most two. */
-function strengths(f: SeoFacts): string | null {
-  const best = [...(f.report?.axes ?? [])].filter((a) => a.score >= 4).sort((a, b) => b.score - a.score).slice(0, 2);
-  if (!best.length) return null;
-  return `Strongest in the AI review: ${best.map((a) => `${a.label.toLowerCase()} (${a.score}/5)`).join(" and ")}.`;
-}
 
 /** Cut at a word boundary with an ellipsis. */
 function clip(s: string, max: number): string {
@@ -44,13 +37,13 @@ function clip(s: string, max: number): string {
 
 /**
  * At most DESCRIPTION_MAX characters from the data: who and what (the
- * grade's roles), the review's strongest criteria, then the person's own
- * tagline, each added while it fits.
+ * roles the page names, as Gemini read them), then the person's own tagline,
+ * each added while it fits. No Gemini score (owner, 2026-11-23).
  */
 export function profileDescription(f: SeoFacts): string {
   const roles = f.report?.roles ?? [];
   const kind = roles.length ? `${roles.slice(0, 2).join(" and ")} portfolio` : "developer portfolio";
-  const parts = [`${f.name}'s ${kind} at ${f.domain}.`, strengths(f), f.tagline ? `“${f.tagline.trim().replace(/[.\s]+$/, "")}.”` : null];
+  const parts = [`${f.name}'s ${kind} at ${f.domain}.`, f.tagline ? `“${f.tagline.trim().replace(/[.\s]+$/, "")}.”` : null];
   let out = "";
   for (const part of parts) {
     if (!part) continue;

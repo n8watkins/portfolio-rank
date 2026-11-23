@@ -1,7 +1,6 @@
 import feed from "@/data/feed.json";
 import { db, ensureSchema } from "@/lib/db";
-import { AI_CRITERIA, RUBRIC_VERSION, geminiAnswered, keptOutputs, portfolioReason, versionOf } from "@/pipeline/rubric.mjs";
-import { guardedForReview } from "@/pipeline/portfolio-guard.mjs";
+import { geminiAnswered, keptOutputs, versionOf } from "@/pipeline/rubric.mjs";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { BASE_ELO } from "@/lib/elo";
 import { siteKeyOf } from "@/lib/grader/url.mjs";
@@ -28,49 +27,26 @@ export type Feed = { name: string; url: string; tagline?: string };
 
 export const profilePath = (url: string) => `/p/${encodeURIComponent(url)}`;
 
-const AXIS_LABELS: Record<string, string> = Object.fromEntries(AI_CRITERIA.map((c) => [c.id, c.name]));
-
 /**
- * Gemini's answer as a profile shows it (owner, 2026-11-22): only the three
- * kept outputs, whatever rubric version made the grade. An older grade's
- * letter, its four dropped scores and their quality score stay in the
- * database and are never read here (pipeline/rubric.mjs keptOutputs).
+ * What a profile reads from Gemini's stored answer (owner, 2026-11-23: no
+ * Gemini report card is shown): whether it is a portfolio, which decides
+ * whether search engines may index the page, and the roles, which name the
+ * page for search (lib/profile-seo.ts). The five-second test, the reason and
+ * an older grade's letter and dropped scores stay in the database and are
+ * never read here.
  */
 export type ReportCard = {
   model?: string;
   checks?: number;
   roles: string[];
   isPortfolio: boolean;
-  /** What Gemini itself answered to "is it a portfolio", even when a hold or the owner's verdict overrode it. */
-  aiIsPortfolio: boolean;
-  /** Gemini's short reason for "is it a portfolio" (rubric v3 and later; "" for an older grade). */
-  reason: string;
   /** The rubric version the grade was made with (1 for the oldest grades). */
   rubricVersion: number;
   /** When Gemini answered (ISO), or null. */
   judgedAt: string | null;
-  /** The kept score: the five-second test. */
-  axes: { key: string; label: string; score: number; note?: string }[];
-  /** Gemini's "no" is held for the owner's decision and he has not decided yet (pipeline/portfolio-guard.mjs guardedForReview). */
-  awaitingOwner: boolean;
 };
 
-/**
- * The card's words that depend on the grade (components/profile/GeminiOpinion.tsx):
- * what the model was asked (a grade from before rubric v3 was asked a wider
- * set of questions; only these three answers are shown), and what a "no"
- * means for the listing, which says a person decides only while he has not.
- */
-export function opinionWords(r: Pick<ReportCard, "rubricVersion" | "isPortfolio" | "aiIsPortfolio" | "awaitingOwner">): { asked: string; listing: string | null } {
-  const asked =
-    r.rubricVersion >= RUBRIC_VERSION
-      ? "We asked it three things and nothing else."
-      : "It was asked a wider set of questions when it looked; only these three answers are shown.";
-  const listing = r.aiIsPortfolio || !r.isPortfolio ? null : r.awaitingOwner ? "It stays listed: a person decides." : "It stays listed: a person decided to keep it.";
-  return { asked, listing };
-}
-
-/** Gemini's answer, its kept part only (never a letter or a dropped score), or null for none or an error. */
+/** What a profile reads from Gemini's answer (above), or null for none or an error. */
 export function reportCard(raw: unknown): ReportCard | null {
   let parsed: unknown;
   try {
@@ -80,24 +56,13 @@ export function reportCard(raw: unknown): ReportCard | null {
   }
   if (!geminiAnswered(parsed)) return null;
   const r = keptOutputs(parsed) as Record<string, unknown>;
-  const axes = Object.entries(AXIS_LABELS)
-    .map(([key, label]) => {
-      const ax = r[key] as { score?: number; note?: string } | undefined;
-      if (!ax || typeof ax !== "object" || typeof ax.score !== "number") return null;
-      return { key, label, score: ax.score, note: ax.note };
-    })
-    .filter((a): a is NonNullable<typeof a> => a !== null);
   return {
     model: typeof r.model === "string" ? r.model : undefined,
     checks: typeof r.checks_score === "number" ? r.checks_score : undefined,
     roles: Array.isArray(r.roles) ? r.roles.filter((x): x is string => typeof x === "string").slice(0, 3) : [],
     isPortfolio: r.is_portfolio !== false,
-    aiIsPortfolio: typeof r.ai_is_portfolio === "boolean" ? r.ai_is_portfolio : r.is_portfolio !== false,
-    reason: portfolioReason(r),
     rubricVersion: versionOf(r),
     judgedAt: typeof r.judged_at === "string" ? r.judged_at : null,
-    axes,
-    awaitingOwner: guardedForReview(r),
   };
 }
 

@@ -6,7 +6,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
 import { ownerMarks } from "@/lib/ownership/same-site.mjs";
-import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
+import { factLines } from "@/lib/grader/report.mjs";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
 import { keptOutputs } from "@/pipeline/rubric.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
@@ -104,16 +104,15 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   for (const r of grades.rows) {
     const url = String(r.url);
     if (gradeHidden(url)) continue;
-    // The fact chips from the newest measured facts (lib/fresh-facts.mjs); Gemini's kept outputs only
-    // (pipeline/rubric.mjs keptOutputs): an older grade's dropped scores and letter are never shown.
+    // The fact chips from the newest measured facts (lib/fresh-facts.mjs), code only: no Gemini answer is
+    // shown (owner, 2026-11-23), so there is no "best" line from the model.
     const g = keptOutputs(freshGrade(String(r.ai_rubric), r.facts)) as Record<string, unknown> | null;
     if (!g || typeof g !== "object") continue;
     // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their chip.
     const facts = (factLines(g) as { id: string; label: string; pass: boolean | null; shownAs: string }[])
       .filter((f) => CHIP[f.id] && typeof f.pass === "boolean")
       .map((f) => ({ label: f.id === "project_links" && f.shownAs !== f.label ? f.shownAs : CHIP[f.id], pass: f.pass as boolean }));
-    const top = (strengthsAndFixes(g).strengths as { title: string; why: string; by: string }[]).find((s) => s.by === "ai");
-    out.set(url, { facts, best: top ? { label: top.title, note: top.why } : null });
+    out.set(url, { facts, best: null });
   }
   return out;
 }

@@ -83,9 +83,10 @@ test("a graded profile: a ProfilePage about the person with their socials, a bre
   assert.equal(crumbs.itemListElement[2].item, profile.url);
   const description = unescape(html.match(/<meta name="description" content="([^"]+)"/)?.[1] ?? "");
   assert.ok(description.startsWith(`${graded.name}'s frontend developer portfolio at `), description);
-  // Only the kept score is named (rubric v3); an old grade's dropped scores never are.
-  assert.ok(description.includes("five-second test (5/5)"), description);
-  assert.ok(!description.includes("visual design"), description);
+  // No Gemini score is named (owner, 2026-11-23), not even the five-second test.
+  assert.ok(!/five-second|visual design|\/5/.test(description), description);
+  // No Gemini report card on the page.
+  assert.ok(!html.includes("Gemini report card") && !html.includes("Five-second test"), "no report card");
   assert.equal(profile.description, description);
 });
 

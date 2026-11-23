@@ -1,10 +1,10 @@
 import { PORTFOLIO_COUNT_LABEL } from "@/lib/portfolio-count";
-import { AI_JUDGES, CODE_CHECKS, CODE_CONTEXT } from "@/lib/rubric-copy";
+import { CODE_CHECKS, CODE_CONTEXT } from "@/lib/rubric-copy";
 
 export const metadata = {
   title: "How it works - PortfolioRank",
   description:
-    "How PortfolioRank ranks developer portfolios: ELO from head-to-head votes, AI bootstrapping, and objective scorecards.",
+    "How PortfolioRank ranks developer portfolios: checks our code measures, ELO from head-to-head votes, and objective scorecards.",
 };
 
 export default function HowPage() {
@@ -15,8 +15,7 @@ export default function HowPage() {
           <h1 className="text-3xl font-bold tracking-tight">How it works</h1>
           <p className="mt-2 text-mute">
             A list of {PORTFOLIO_COUNT_LABEL} portfolios, turned into a ranking you
-            can trust - by a mix of a crowd, an AI, and some boring-but-honest
-            measurements.
+            can trust - by a crowd and some boring-but-honest measurements.
           </p>
         </div>
 
@@ -46,10 +45,7 @@ export default function HowPage() {
               is why a handful of votes can sort thousands of sites sensibly.
             </p>
             <p>
-              Two twists specific to here:{" "}
-              <strong className="text-ink">AI seeds, humans refine.</strong> Before
-              any people vote, Gemini casts the first rounds so the board
-              isn&apos;t empty on day one; then real votes take over.{" "}
+              One twist specific to here:{" "}
               <strong className="text-ink">Superstars</strong> let you spend an
               earned ⭐ to make a vote count double - for the rare site you think is
               genuinely exceptional.
@@ -64,7 +60,7 @@ export default function HowPage() {
 
         <article className="mb-10">
           <h2 className="text-xl font-bold tracking-tight">
-            🤖 How the AI judging works
+            🤖 What code measures, and the one thing AI decides
           </h2>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
@@ -75,23 +71,11 @@ export default function HowPage() {
               rank comes from those measurements, and votes move it from there.
             </p>
             <p>
-              Gemini then takes one look, and its answer is{" "}
-              <strong className="text-ink">a separate opinion that never changes the rank</strong>.
-              It reads the screenshot and the page&apos;s text and is asked three things
-              and nothing else: whether the site is a portfolio at all, the {AI_JUDGES}{" "}
-              (can a visitor tell who you are and what you do, scored 1 to 5), and which
-              roles you name for yourself. A &ldquo;not a portfolio&rdquo; answer can take
-              a site off the list, with a record the owner can undo.
-            </p>
-            <p>
-              The honest caveat:{" "}
-              <strong className="text-ink">
-                an AI looking at a screenshot sees how something looks
-              </strong>{" "}
-              - not whether the projects are real or the code is good. That&apos;s
-              why it is asked so little, and why the rank is code&apos;s and
-              people&apos;s. The model and prompt are fixed (one model, for
-              consistency).
+              An AI model is used for{" "}
+              <strong className="text-ink">one decision only: whether a page is a portfolio at all</strong>,
+              one that shows projects the person built. It never sets a rank or a tier.
+              A &ldquo;not a portfolio&rdquo; answer can take a site off the list, with a
+              record the owner can undo.
             </p>
             <p>
               What each grade means and what goes into it:{" "}

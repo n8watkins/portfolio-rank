@@ -93,7 +93,8 @@ The second signal is built: `pipeline/facts.mjs` records known template fingerpr
 
 Owner rule (2026-11-10): anything code can check is measured for free and stored; Gemini gets the measured facts as a few lines of context.
 Owner decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
-A site's rank and tier come only from code measurements and votes; Gemini's answer is a separate, optional opinion, shown on the profile under "What we asked the model".
+A site's rank and tier come only from code measurements and votes.
+Owner decision (2026-11-23): no Gemini report card is shown, on a profile, the printable report or anywhere else; the model is used for one decision, whether a page is a portfolio at all (the Removal rule below), and its other answers (the five-second test, the roles) are stored, not shown. The roles still name the profile for search engines (`lib/profile-seo.ts`). The five-second test is to be measured by code in a later change.
 The rubric lives in one pure module, `pipeline/rubric.mjs` (version, criteria, prompt, response schema, parser), used by the nightly grader, the eval and the docs.
 
 **Is it a portfolio** (the owner's definition, 2026-11-22): "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
@@ -182,7 +183,7 @@ AI comparisons are now ranking v2's ([RANKING.md](RANKING.md)), off until `RANKI
 - **Primary sort = ELO** (design, human-weighted).
 - Everything else is a scorecard + badges, not blended into one number:
   Engineering (PSI composite), Polish (% checklist),
-  Checks (the rubric's `checks_score`, section 6), Gemini's three answers (section 6, never in the rank),
+  Checks (the rubric's `checks_score`, section 6),
   badges: *Blazing fast*, *Original* (planned, see section 5), *Dark mode*, *Active builder*, *Motion*.
 - Disagreements ("gorgeous but slow") are surfaced, not averaged away - that's the
   interesting content.

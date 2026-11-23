@@ -14,7 +14,7 @@ import { CHECK_ITEMS, CHECK_POINTS } from "@/lib/check-points.mjs";
 // How grading works with tiers by ELO (RANKING_V2 only; app/grading/page.tsx
 // renders this instead of its own content while the flag is on): the ladder
 // with today's counts, the points from automated checks, the fine print, how
-// to climb, the grade as the report card, what is checked and how votes
+// to climb, what is checked (and the one decision an AI model makes) and how votes
 // combine. The criteria come from the rubric (pipeline/rubric.mjs) and the
 // tier settings from lib/tiers.mjs, so this page follows them when they change.
 
@@ -67,7 +67,7 @@ export async function EloGrading() {
             How grading works
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Code checks set where you start, face-offs set your tier. Gemini answers three questions on the side, never in the rank.
+            Code checks set where you start, face-offs set your tier. An AI model only decides whether a page is a portfolio at all.
           </p>
         </div>
       </section>
@@ -174,8 +174,7 @@ export async function EloGrading() {
             <div className="card p-5">
               <dt className="font-bold">Grade or tier</dt>
               <dd className="mt-2 text-sm text-mute text-pretty">
-                Gemini&apos;s answers don&apos;t set your tier or your place. It is asked three things: whether the page is a portfolio at all,
-                the five-second test and the roles you name.
+                No AI answer sets your tier or your place. An AI model is used for one decision only: whether the page is a portfolio at all.
               </dd>
             </div>
           </dl>
@@ -218,7 +217,7 @@ export async function EloGrading() {
 
         {/* What's checked */}
         <section aria-labelledby="checked" className="mt-14">
-          <SectionHeader id="checked" eyebrow="What's checked" title="Measured by code, asked of the model" className="mb-5" />
+          <SectionHeader id="checked" eyebrow="What's checked" title="Measured by code, and the one AI decision" className="mb-5" />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">

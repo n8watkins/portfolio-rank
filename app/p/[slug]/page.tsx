@@ -20,8 +20,7 @@ import { SITE_URL } from "@/lib/site";
 import { ownerState } from "@/lib/games/claims.mjs";
 import { toolsEnabled } from "@/lib/tools/server";
 import { ProfileV2, profileMetadata } from "./profile-v2";
-import { loadSeoExtras, profileJsonLd, reportCard } from "@/lib/profile";
-import { GeminiOpinion } from "@/components/profile/GeminiOpinion";
+import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
 
@@ -164,8 +163,6 @@ export default async function PortfolioPage({
   // Fresh, never the minute cache: this render is kept at the edge for a day.
   const owner = await ownerState(db(), url, { fresh: true });
   if (owner.removedAt) notFound();
-  // Gemini's answer, its three kept outputs only, for an older grade too (lib/profile.ts reportCard).
-  const grade = owner.hideGrade || rubricRow?.ai_rubric == null ? null : reportCard(rubricRow.ai_rubric);
   // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise.
   const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
   // The Code checks score, one number for the site wherever it is shown: the tier card's, else made here.
@@ -247,26 +244,8 @@ export default async function PortfolioPage({
 
         <DetailDiagnostics url={url} initialInspection={inspection} />
 
-        {!grade && !owner.hideGrade && (
-          <section aria-labelledby="report-card" className="mt-4 rounded-xl border border-edge bg-card p-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-edge text-lg font-bold text-mute" aria-hidden>
-                AI
-              </span>
-              <div>
-                <h2 id="report-card" className="font-semibold">
-                  Gemini report card
-                </h2>
-                <p className="text-sm text-mute">
-                  The model has not looked at this site yet.{code ? " The code checks above are measured without it, and the rank never waits for it." : ""}
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Gemini's own letter and dropped scores are never shown: three answers under a neutral mark. */}
-        {grade && <GeminiOpinion r={grade} />}
+        {/* No Gemini report card (owner, 2026-11-23): rank and tier come from code measurements and votes, and
+            the model's answers are stored, not shown. */}
 
         <p className="py-8 text-center text-xs text-mute">
           Diagnostics run live against the site and are cached. Think something

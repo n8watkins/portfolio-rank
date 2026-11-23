@@ -615,18 +615,15 @@ test("report links: the shared one-time links, scope report-link: a nonce hash, 
   assert.equal(await pruneLinks(db, { now: now + 2 * 86400000 }), 2);
 });
 
-test("the print report escapes what it shows and shows no letter and no dropped score (rubric v3)", () => {
+test("the print report escapes what it shows and shows the code checks only: no Gemini letter, score or note", () => {
   assert.equal(printView("{nope"), null);
   assert.equal(printView(JSON.stringify({ error: "no_usable_captures" })), null);
   const g = printView(JSON.stringify({ tier: "D", quality_score: 1.5, visual_design: { score: 2, note: "busy" }, five_second_test: { score: 2, note: "<b>vague</b>" }, writing: 3, checks: { resume: true, github: false } }));
-  assert.equal(g.showTier, undefined);
-  assert.deepEqual(g.judgments.map((j) => [j.id, j.score]), [["five_second_test", 2]], "only the kept score; an old grade's dropped ones are not shown");
-  assert.equal(printView(JSON.stringify({ tier: "D", five_second_test: 4 })).judgments[0].score, 4, "older bare scores count too");
+  assert.deepEqual(Object.keys(g).sort(), ["checksScore", "facts"]);
   const html = renderReportHtml({ name: "Zoë <script>", url: "https://z.dev", tagline: null, view: g, percentiles: { merged: 40, ai: 38, people: 61 }, hero: null, siteUrl: "https://portfoliorank.dev", now: T0 });
   assert.ok(html.includes("Zoë &lt;script&gt;"));
   assert.ok(!html.includes("<script>"));
-  assert.ok(html.includes("&lt;b&gt;vague&lt;/b&gt;"));
-  assert.ok(!html.includes("busy") && !html.includes("Quality"), "no dropped note or quality score");
+  assert.ok(!html.includes("vague") && !html.includes("busy") && !html.includes("Quality") && !html.includes("Gemini"), "no Gemini note or score");
   // Only the People board's place: the Merged and AI boards are seeded from Gemini's old letter.
   assert.ok(html.includes("Top 61%"));
   assert.ok(!html.includes("Top 40%") && !html.includes("Top 38%") && !html.includes("Merged"), "no Merged or AI place");

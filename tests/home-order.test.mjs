@@ -70,5 +70,5 @@ test("the home page reads /top's order in each flag state, never hides a databas
   has(/:\s*\(await eloOrder\(10\)\)/, "tiers off: the ELO board");
   assert.ok(!/rankedSites\([^)]*\)\.catch|eloOrder\([^)]*\)\.catch/.test(src), "an error is not turned into an empty board");
   assert.ok(!/gradedPool/.test(src), "never the AI grade's order");
-  has(/cached<\{ pool: PoolSite\[\]; total: number \}>\("home", `pool:/, "the pool is cached");
+  has(/cached<\{ sites: PoolSite\[\]; total: number \}>\("home", `pool:/, "the pool is cached");
 });

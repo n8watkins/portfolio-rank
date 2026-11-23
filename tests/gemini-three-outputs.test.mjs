@@ -26,7 +26,7 @@ import { parseRubric, replaceGradeStatements } from "../pipeline/rubric-history.
 import { gradedUrls } from "../lib/sitemap-profiles.mjs";
 import { lighthouseDue } from "../lib/freshness.mjs";
 import { siteStats } from "../lib/games/stats.mjs";
-import { printView, renderReportHtml, strengthsAndFixes } from "../lib/grader/report.mjs";
+import { printView, renderReportHtml } from "../lib/grader/report.mjs";
 import { geminiReason, doorDecision } from "../lib/reviews/door.mjs";
 import { gradeOf } from "../lib/capture-problems.mjs";
 import { gradeFromEvidence } from "../pipeline/night.mjs";
@@ -195,33 +195,30 @@ test("sitemap, Lighthouse queue and the list's numbers count a v3 grade as grade
   assert.equal(stats.graded, 2);
 });
 
-test("the printable report shows the three kept answers, for an old grade too: no letter, no quality, no dropped axis", () => {
+test("the printable report shows the code checks only: no Gemini answer, letter or score, for an old grade too", () => {
   for (const g of [v2(), v3()]) {
     const view = printView(JSON.stringify(g));
     assert.ok(view);
-    for (const k of ["tier", "showTier", "quality"]) assert.equal(view[k], undefined, k);
-    assert.deepEqual(view.judgments.map((j) => j.id), ["five_second_test"]);
+    assert.deepEqual(Object.keys(view).sort(), ["checksScore", "facts"]);
     const html = renderReportHtml({ name: "Ana", url: "https://ana.dev", tagline: null, view, percentiles: null, hero: null, siteUrl: "https://portfoliorank.dev", now: new Date(NOW) });
-    assert.match(html, /What Gemini was asked/);
-    assert.match(html, /Is it a portfolio\?/);
-    assert.match(html, /Five-second test/);
-    assert.match(html, /Roles named/);
-    for (const word of ["Visual design", "Project presentation", "Writing", "Memorability", "Quality", "polished hero", "crisp copy", ">S<"]) assert.ok(!html.includes(word), word);
+    for (const word of ["Gemini", "Five-second", "five-second", "Is it a portfolio", "Roles", "Visual design", "Quality", "polished hero", "role is vague", ">S<"]) assert.ok(!html.includes(word), word);
+    assert.match(html, /Measured by code/);
   }
-  assert.equal(printView(JSON.stringify(v3())).reason, "Shows four web apps the person built");
   assert.equal(printView(JSON.stringify({ is_portfolio: true, fresh_grade: "due" })), null);
 });
 
-test("the leaderboard's 'why it's good' reads the kept outputs only: an old grade's 5 for design is never a strength", () => {
-  const { strengths, fixes } = strengthsAndFixes(keptOutputs(v2()));
-  const ai = [...strengths, ...fixes].filter((x) => x.by === "ai").map((x) => x.criterion);
-  assert.deepEqual(ai, ["five_second_test"], "only the five-second test (a 3) is an AI fix");
+test("no Gemini score or note reaches a page: the leaderboard chips, home and the search description read code facts only", () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+  assert.match(read("lib/leaderboard.ts"), /out\.set\(url, \{ facts, best: null \}\)/);
+  assert.ok(!/fiveSecondOf|strongCapture|five_second/.test(read("lib/home.ts")), "home");
+  assert.ok(!/axes|AI review/.test(read("lib/profile-seo.ts")), "search description");
+  assert.ok(!/five_second|five-second/.test(read("components/admin/StatusReviewQueue.tsx")), "the review queue");
 });
 
-test("the Removal rule's reason and review row read the kept outputs: the portfolio reason first, never a dropped note", () => {
-  assert.equal(geminiReason(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })), "Sells coaching sessions; five second test: Name and frontend role are clear.");
-  const old = geminiReason(v2({ is_portfolio: false }));
-  assert.equal(old, "five second test: role is vague.");
+test("the Removal rule's reason is Gemini's own reason only, never a score or note; the rule itself is unchanged", () => {
+  assert.equal(geminiReason(v3({}, { is_portfolio: false, portfolio_reason: "Sells coaching sessions" })), "Sells coaching sessions.");
+  assert.match(geminiReason(v2({ is_portfolio: false })), /no reason/);
+  assert.ok(!/five|role is vague/.test(geminiReason(v2({ is_portfolio: false }))));
   const d = doorDecision({
     grade: { ...v2({ is_portfolio: false }), facts: { signals: { score: 1 } } },
     row: { url: "https://x.dev", name: "X", page_text: "x", facts: null },

@@ -218,7 +218,7 @@ Each chain is a list of steps in the order they happen.
    One Gemini request with the screenshot, the page text and the facts (rubric v3, prompt `grade-v3`, `pipeline/rubric.mjs`).
    It is asked three things and nothing else: whether it is a portfolio (with a short reason), the five-second test (1 to 5 with a note) and the roles the page names.
    Your decision (2026-11-22): "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
-   It never sets or moves the Starting rank or the Tier; the profile shows its three answers as the Gemini report card, under "What we asked the model".
+   It never sets or moves the Starting rank or the Tier, and none of its answers is shown (your decision, 2026-11-23: no Gemini report card); "is it a portfolio" feeds the removal rule below, the roles name the profile for search engines, and the five-second test is stored only.
    Grades made before v3 keep their old fields in the database, and no site is graded again because of v3.
    No profile, list, stat, rank or tier reads those fields.
    Three readers still use an older grade's letter, none shown while `GAMES_V2`, `GRADER_ENABLED` and `RANKING_V2` are off: the openskill views' seed (`lib/ranking/engine.mjs` `seedFromGrade`), the games' percentiles (`lib/games/pool.mjs`) and a person's grade report's comparison pool (`lib/grader/report.mjs` `gradedPool`).
@@ -228,7 +228,7 @@ Each chain is a list of steps in the order they happen.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
-   2. Gemini says portfolio: it is listed, with Gemini's three answers on its profile.
+   2. Gemini says portfolio: it is listed.
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
@@ -319,7 +319,7 @@ Known gaps, with fixes open as pull requests: a removal covers one exact spellin
 
 ### Ranking
 
-Gemini's three answers (is it a portfolio, the five-second test, roles) are an opinion from one look, kept apart from the ranking.
+No Gemini answer is in the ranking or shown on a page; the model decides only whether a page is a portfolio (the removal rule).
 The rank starts from the Code checks score and moves with face-off votes; no Gemini output is in it.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).

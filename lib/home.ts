@@ -6,7 +6,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { factLines } from "@/lib/grader/report.mjs";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
-import { GEMINI_SAYS_PORTFOLIO_SQL, fiveSecondOf, geminiAnswered } from "@/pipeline/rubric.mjs";
+import { GEMINI_SAYS_PORTFOLIO_SQL } from "@/pipeline/rubric.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
@@ -52,11 +52,7 @@ type PoolSite = {
   rank: number;
   /** Its Tier (every letter) while tiers are shown, else null: shown only when public. Never Gemini's letter. */
   tier: string | null;
-  /** Gemini's five-second test score (1-5), any rubric version, or null: the one kept score that reads the screenshot. */
-  fiveSecond: number | null;
 };
-
-type OrderSite = { url: string; name: string; rank: number; tier: string | null };
 
 /** True while tiers by ELO are on (RANKING_V2), as /top reads it (lib/leaderboard.ts rankingViewsEnabled). */
 const rankingV2 = () => /^true$/i.test(String(process.env.RANKING_V2 ?? ""));
@@ -70,7 +66,7 @@ const rankingV2 = () => /^true$/i.test(String(process.env.RANKING_V2 ?? ""));
  * A database error is thrown to the page's error path, never shown as an
  * empty board.
  */
-async function boardOrder(limit: number): Promise<{ sites: OrderSite[]; total: number }> {
+async function boardOrder(limit: number): Promise<{ sites: PoolSite[]; total: number }> {
   if (rankingV2()) {
     const { sites, total } = await rankedSites(limit);
     return { sites: sites.map((s) => ({ url: s.url, name: s.name, rank: s.rank, tier: s.tier })), total };
@@ -81,49 +77,18 @@ async function boardOrder(limit: number): Promise<{ sites: OrderSite[]; total: n
 }
 
 /**
- * The best of /top's order with each one's five-second test, for the
- * showcase and the portfolio of the day. Cached an hour, as the AI-grade
- * pool it replaced was (it reads up to POOL_SIZE grades), so their "#N" can
- * lag /top by up to an hour; the Top 10 reads the order fresh (topTen).
- * Gemini's dropped outputs (pipeline/rubric.mjs DROPPED_OUTPUTS) are never
- * read.
+ * The best of /top's order, for the showcase and the portfolio of the day.
+ * Cached an hour, as the AI-grade pool it replaced was, so their "#N" can lag
+ * /top by up to an hour; the Top 10 reads the order fresh (topTen). No Gemini
+ * answer is read (owner, 2026-11-23).
  */
 async function rankedPool(): Promise<{ pool: PoolSite[]; total: number }> {
   await ensureSchema();
-  const { pool, total } = await cached<{ pool: PoolSite[]; total: number }>("home", `pool:${rankingV2() ? "tiers" : "elo"}`, { ttlMs: HOUR }, readPool);
-  return { pool, total };
+  const { sites, total } = await cached<{ sites: PoolSite[]; total: number }>("home", `pool:${rankingV2() ? "tiers" : "elo"}`, { ttlMs: HOUR }, () =>
+    boardOrder(POOL_SIZE)
+  );
+  return { pool: sites, total };
 }
-
-async function readPool(): Promise<{ pool: PoolSite[]; total: number }> {
-  const { sites, total } = await boardOrder(POOL_SIZE);
-  const urls = sites.map((s) => s.url);
-  const five = new Map<string, number | null>();
-  if (urls.length) {
-    const res = await db().execute({
-      sql: `SELECT url, ai_rubric FROM portfolios WHERE url IN (${urls.map(() => "?").join(", ")})`,
-      args: urls,
-    });
-    for (const r of res.rows) {
-      let g: unknown = null;
-      try {
-        g = JSON.parse(String(r.ai_rubric ?? "null"));
-      } catch {
-        g = null;
-      }
-      five.set(String(r.url), geminiAnswered(g) ? (fiveSecondOf(g)?.score ?? null) : null);
-    }
-  }
-  return { pool: sites.map((s) => ({ ...s, fiveSecond: five.get(s.url) ?? null })), total };
-}
-
-/**
- * Showcase quality: Gemini scores the five-second test from the very
- * screenshot we show (the top-of-page capture, pipeline/rubric.mjs
- * buildRubricRequest), so at least 4 means the capture itself reads well:
- * not blank, not a cookie wall, not a broken layout. Blank and failed
- * captures never reach the grade at all (pipeline/capture.mjs gate).
- */
-export const strongCapture = (p: Pick<PoolSite, "fiveSecond">) => (p.fiveSecond ?? 0) >= 4;
 
 /**
  * The letter a home card shows for each site: its public Tier while tiers are
@@ -147,7 +112,8 @@ export type ShowItem = {
 
 /** The hero's card deck: the best-ranked portfolios whose screenshots are strong. */
 async function showcase(pool: PoolSite[], count = 6): Promise<ShowItem[]> {
-  const strong = pool.filter(strongCapture).slice(0, count * 2);
+  // The best of the order with a stored screenshot (no Gemini score picks them, owner 2026-11-23).
+  const strong = pool.slice(0, count * 4);
   const shots = await shotBases(strong.map((p) => p.url));
   const picked = strong.filter((p) => shots.has(p.url)).slice(0, count);
   const letters = await lettersFor(picked.map((p) => p.url));
@@ -299,7 +265,7 @@ export type PortfolioOfTheDay = {
  * checks and votes, never Gemini's letter) is in the S or A family.
  */
 async function portfolioOfTheDay(pool: PoolSite[], total: number, skip: Set<string>, now = new Date()): Promise<PortfolioOfTheDay | null> {
-  const strong = pool.filter((p) => strongCapture(p) && !skip.has(p.url)).slice(0, 300);
+  const strong = pool.filter((p) => !skip.has(p.url)).slice(0, 300);
   const tiers = await siteTiers(db(), strong.map((p) => p.url)).catch(() => new Map<string, string | null>());
   const candidates = strong.filter((p) => ["S", "A"].includes(familyOf(tiers.get(p.url) ?? null) ?? "")).slice(0, 100);
   if (candidates.length === 0) return null;
@@ -315,8 +281,6 @@ async function portfolioOfTheDay(pool: PoolSite[], total: number, skip: Set<stri
     if (!base) continue;
     // Its fact lines from the newest measured facts (lib/fresh-facts.mjs).
     const grade = (freshGrade(String(row.rows[0]?.ai_rubric ?? "{}"), row.rows[0]?.facts) ?? {}) as Record<string, unknown>;
-    // Gemini's one kept score (the five-second test) with its note; the dropped outputs are never shown.
-    const five = fiveSecondOf(grade);
     // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their label.
     const facts = (factLines(grade) as { id: string; label: string; pass: boolean | null; shownAs: string }[])
       .filter((f) => f.pass !== null)
@@ -331,7 +295,8 @@ async function portfolioOfTheDay(pool: PoolSite[], total: number, skip: Set<stri
       rank: p.rank,
       total,
       order: rankingV2() ? "code checks and votes" : "people's votes",
-      best: five?.note ? [{ label: "Five-second test", note: five.note }] : [],
+      // No Gemini answer is shown (owner, 2026-11-23).
+      best: [],
       facts: facts.slice(0, 6),
       href: reportPath(p.url),
     };

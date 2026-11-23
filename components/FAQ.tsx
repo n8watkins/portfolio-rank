@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { SITE } from "@/lib/site";
 
-const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
+const ITEMS: { q: string; a: React.ReactNode }[] = [
   {
     q: "How are portfolios ranked?",
     a: (
@@ -18,7 +18,7 @@ const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
   },
   {
     q: "What does the AI do?",
-    a: `Code measures the facts that rank a site (links, domain, speed, a fresh footer and the like). Gemini reads each site's screenshot and text once and is asked three things: whether it is a portfolio, the ${aiJudges} (1 to 5) and the roles you name. Its answer is an opinion shown on the site's page; it never changes the rank.`,
+    a: `Code measures the facts that rank a site (links, domain, speed, a fresh footer and the like), and people's votes move it. An AI model is used for one decision only: whether a page is a portfolio at all. It never changes the rank.`,
   },
   {
     q: "Why do I have to sign in to vote?",
@@ -62,9 +62,7 @@ const items = (aiJudges: string): { q: string; a: React.ReactNode }[] => [
   },
 ];
 
-/** aiJudges: what Gemini scores, from the rubric (lib/rubric-copy.ts, read on the server). */
-export function FAQ({ aiJudges }: { aiJudges: string }) {
-  const ITEMS = items(aiJudges);
+export function FAQ() {
   // Accordion: one panel open at a time. Animated open/close via the
   // grid-template-rows 0fr→1fr trick (see .accordion-panel in globals.css).
   const [open, setOpen] = useState<number | null>(null);

@@ -126,7 +126,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Since 2026-11-23 Gemini is asked only three things (rubric v3, below).
 - **Gemini is asked three things: is it a portfolio, the five-second test, roles** (owner, 2026-11-22). Status: building (rubric v3, `grade-v3`).
   "Gemini outputs kept: is_portfolio, five-second test, roles. Dropped: the letter, project presentation, visual design, writing, memorability."
-  A site's rank and tier come only from code measurements and votes; Gemini's answer is a separate, optional opinion, and the profile says plainly what code measured and what the model was asked.
+  A site's rank and tier come only from code measurements and votes.
+  Then (owner, 2026-11-23): no Gemini report card at all, on profiles or the printable report; the model is used for one decision, whether a page is a portfolio, and its other answers are stored, not shown ("the five second test should just be actually a code which is deterministic"; that code measure is a later change).
   The portfolio rule carries his definition: "a portfolio page is fundamentally defined by showcasing technical projects you've created. And some of the technical products could be design-oriented."
   With his rulings: a personal page whose main purpose is selling coaching is not a portfolio, even a developer's; hosted profiles are not portfolio pages: a GitHub or other code-host profile, a Substack, a Medium page, a Linktree or other link-in-bio page; a digital resume may stay listed; certificates are not projects.
   The prompt keeps the rest narrow: a portfolio that also offers freelance work or says hire me is still a portfolio, and so is a solo developer or designer under a studio name who shows projects they built; a company or agency site presenting a team's services is not.

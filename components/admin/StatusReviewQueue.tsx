@@ -26,9 +26,8 @@ import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } fro
 // large viewer (./ShotViewer.tsx) with the whole capture and the same
 // buttons. Decisions go to POST /api/admin/review.
 
-// A verdict's scores: only the five-second test is shown. Older rows also hold visual design, project presentation
-// and writing; those were dropped from what Gemini is asked (owner, 2026-11-22) and are no longer shown.
-type Verdict = { is_portfolio: boolean; reason?: string; scores?: { five_second_test?: number } } | null;
+// A verdict: the answer and its reason. Older rows also hold scores; no Gemini score is shown (owner, 2026-11-23).
+type Verdict = { is_portfolio: boolean; reason?: string } | null;
 type Grader = { batch?: Verdict; solo?: Verdict };
 export type Review = {
   id: number;
@@ -127,18 +126,12 @@ const sentence = (parts: string[]) => {
 
 function VerdictCell({ v }: { v: Verdict | undefined }) {
   if (!v) return <span className="text-mute">not run</span>;
-  const five = v.scores?.five_second_test;
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-2">
       <span className={`inline-flex items-center gap-1 font-semibold ${v.is_portfolio ? "text-up" : "text-down"}`}>
         {v.is_portfolio ? <Check className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <X className="h-3.5 w-3.5 shrink-0" aria-hidden />}
         {v.is_portfolio ? "Portfolio" : "Not a portfolio"}
       </span>
-      {typeof five === "number" && (
-        <span className="text-xs tabular-nums text-mute" title="Five-second test, 1 to 5">
-          five-second {five}/5
-        </span>
-      )}
     </span>
   );
 }

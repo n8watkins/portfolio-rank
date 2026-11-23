@@ -1,7 +1,7 @@
-// The profile's Gemini report card (lib/profile.ts reportCard) under rubric
-// v3: only the three kept outputs (is it a portfolio and why, the five-second
-// test, the roles), for a grade made before v3 too, which still stores its
-// letter, its four dropped scores and its quality score (owner, 2026-11-22).
+// What a profile reads from Gemini's stored answer (lib/profile.ts
+// reportCard): whether it is a portfolio and the roles, for search, and no
+// report card on the page (owner, 2026-11-23), for a grade made before v3
+// too, which still stores its letter and dropped scores.
 // Offline: lib/profile.ts loaded the way Next does, no database touched.
 import { before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -40,9 +40,9 @@ export async function load(url, context, next) {
 process.env.LOCAL_DB_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "profile-report-card-")), "db.sqlite");
 delete process.env.TURSO_DATABASE_URL;
 
-let reportCard, opinionWords;
+let reportCard;
 before(async () => {
-  ({ reportCard, opinionWords } = await import("../lib/profile.ts"));
+  ({ reportCard } = await import("../lib/profile.ts"));
 });
 
 const V2 = {
@@ -71,57 +71,30 @@ const V3 = {
   judged_at: "2026-11-23T00:00:00.000Z",
 };
 
-test("an old v2 grade still renders, with only the kept outputs: no letter, no quality score, no dropped axis", () => {
-  const r = reportCard(JSON.stringify(V2));
-  assert.ok(r, "an old grade still has a report card");
-  assert.deepEqual(r.axes, [{ key: "five_second_test", label: "Five-second test", score: 4, note: "clear role" }]);
-  assert.deepEqual(r.roles, ["frontend developer", "designer"]);
-  assert.equal(r.isPortfolio, true);
-  assert.equal(r.aiIsPortfolio, true);
-  assert.equal(r.reason, "", "an old grade had no reason");
-  assert.equal(r.rubricVersion, 2);
-  assert.equal(r.judgedAt, "2026-11-15T00:00:00.000Z");
-  assert.equal(r.checks, 82);
-  for (const k of ["quality", "tier"]) assert.equal(k in r, false, k);
-  assert.ok(!JSON.stringify(r).includes("polished"), "no dropped note leaks");
+test("what a profile reads from a grade: whether it is a portfolio and the roles, never a Gemini score or reason (old and new grades)", () => {
+  for (const g of [V2, V3]) {
+    const r = reportCard(JSON.stringify(g));
+    assert.ok(r, "an old grade still reads");
+    assert.equal(r.isPortfolio, true);
+    assert.deepEqual(r.roles, g.roles);
+    assert.equal(r.rubricVersion, g.rubric_version);
+    for (const k of ["axes", "reason", "quality", "tier", "aiIsPortfolio"]) assert.equal(k in r, false, k);
+    assert.ok(!/polished|clear role|second line|Shows four/.test(JSON.stringify(r)), "no Gemini note or reason leaks");
+  }
 });
 
-test("a v3 grade renders its reason, its five-second test and its roles", () => {
-  const r = reportCard(V3);
-  assert.equal(r.reason, "Shows four web apps she built");
-  assert.equal(r.rubricVersion, 3);
-  assert.deepEqual(r.axes.map((a) => a.key), ["five_second_test"]);
-  assert.deepEqual(r.roles, ["full stack developer"]);
-});
-
-test("Gemini's own 'no' shows as its answer even while a hold keeps the site listed", () => {
-  const r = reportCard({ ...V3, is_portfolio: true, ai_is_portfolio: false, portfolio_reason: "A GitHub profile, not a site" });
-  assert.equal(r.isPortfolio, true);
-  assert.equal(r.aiIsPortfolio, false);
-});
-
-test("no report card for nothing, an error, broken JSON or the owner's keep that waits for a fresh grade", () => {
+test("no report data for nothing, an error, broken JSON or the owner's keep that waits for a fresh grade", () => {
   assert.equal(reportCard(null), null);
   assert.equal(reportCard(JSON.stringify({ error: "no_usable_captures" })), null);
   assert.equal(reportCard("{not json"), null);
   assert.equal(reportCard({ is_portfolio: true, ai_is_portfolio: false, fresh_grade: "due", source: "owner_review" }), null);
 });
 
-test("the card says what this grade was asked: three things for v3, a wider set (only three shown) for an older grade", () => {
-  assert.equal(opinionWords(reportCard(V3)).asked, "We asked it three things and nothing else.");
-  const old = opinionWords(reportCard(V2)).asked;
-  assert.match(old, /wider set of questions/);
-  assert.match(old, /only these three answers are shown/);
-  assert.ok(!/three things and nothing else/.test(old), "never claimed for an old grade");
-});
-
-test("'a person decides' only while the owner has not decided; after his keep, it says he kept it", () => {
-  const no = { ...V3, is_portfolio: true, ai_is_portfolio: false };
-  const held = reportCard({ ...no, review: { kind: "held_for_owner", reason: "waits" } });
-  assert.equal(held.awaitingOwner, true);
-  assert.equal(opinionWords(held).listing, "It stays listed: a person decides.");
-  const kept = reportCard({ ...no, review: { kind: "owner_kept", reason: "kept" } });
-  assert.equal(kept.awaitingOwner, false);
-  assert.equal(opinionWords(kept).listing, "It stays listed: a person decided to keep it.");
-  assert.equal(opinionWords(reportCard(V3)).listing, null, "a yes needs no line");
+test("no profile page shows a Gemini report card (owner, 2026-11-23)", () => {
+  const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+  for (const f of ["app/p/[slug]/page.tsx", "app/p/[slug]/profile-v2.tsx"]) {
+    const src = read(f);
+    assert.ok(!/GeminiOpinion|Five-second test|five_second_test|reportCard\(/.test(src), f);
+  }
+  assert.equal(fs.existsSync(new URL("../components/profile/GeminiOpinion.tsx", import.meta.url)), false, "the card component is gone");
 });

@@ -367,8 +367,8 @@ test("report download: signed in, or a one-time link sent through the email gate
   const page = await call(me, "GET", path);
   assert.equal(page.status, 200);
   assert.match(page.headers.get("content-type"), /text\/html/);
-  assert.ok(page.text.includes("Name and role clear at the top") && page.text.includes("@media print"));
-  assert.ok(!page.text.includes("Clean type and spacing"), "an old grade's dropped note is not shown (rubric v3)");
+  assert.ok(page.text.includes("Checks by code") && page.text.includes("@media print"));
+  assert.ok(!page.text.includes("Clean type and spacing") && !page.text.includes("Name and role clear at the top"), "no Gemini note is shown (owner, 2026-11-23)");
   assert.equal((await call(me, "GET", `/report/print?url=${encodeURIComponent("https://not-listed.example")}`)).status, 404);
 
   const j = jar();

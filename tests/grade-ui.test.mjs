@@ -375,11 +375,12 @@ test("how grading works: the Code checks score, the bands, what's checked, how v
     const { page: p, context, errors } = await freshPage(width);
     await p.goto(`${BASE}/grading`);
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
-    for (const name of ["The Code checks score, out of 100", "Measured by code, asked of the model", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
+    for (const name of ["The Code checks score, out of 100", "Measured by code, and the one AI decision", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
     assert.equal(await p.getByRole("region", { name: "The Code checks score, out of 100" }).getByRole("listitem").count(), 13, "the 13 items of lib/check-points.mjs");
-    const checked = p.getByRole("region", { name: "Measured by code, asked of the model" });
-    assert.equal(await checked.getByRole("listitem").count(), 9, "6 code checks (no template) and the 3 things Gemini is asked (rubric v3)");
-    for (const gone of ["Visual design", "Memorability", "Project presentation"]) assert.equal(await checked.getByText(gone).count(), 0, gone);
+    const checked = p.getByRole("region", { name: "Measured by code, and the one AI decision" });
+    assert.equal(await checked.getByRole("listitem").count(), 6, "6 code checks (no template); the AI decides only whether it is a portfolio");
+    await checked.getByText("An AI model is used for one decision only").waitFor();
+    for (const gone of ["Visual design", "Five-second", "report card"]) assert.equal(await checked.getByText(gone).count(), 0, gone);
     // The AI never sets the rank: no letter scale, no "the AI makes the call".
     assert.equal(await p.getByText("The AI makes the call").count(), 0);
     assert.equal(await p.getByRole("img", { name: /^Tier [SABCD]$/ }).count(), 0);

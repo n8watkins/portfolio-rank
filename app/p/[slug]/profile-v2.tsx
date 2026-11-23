@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ArrowUpRight, Clock, Hourglass, ShieldCheck, Sparkles, Trophy } from "lucide-react";
+import { ArrowUpRight, Clock, ShieldCheck, Trophy } from "lucide-react";
 import { Socials } from "@/components/Diagnostics";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
@@ -14,7 +14,6 @@ import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo"
 import { jsonLdHtml } from "@/lib/json-ld";
 import { FixList } from "@/components/profile/FixList";
 import { RecheckButton } from "@/components/profile/RecheckButton";
-import { GeminiOpinion } from "@/components/profile/GeminiOpinion";
 
 // A portfolio's profile with "Add your portfolio" (TOOLS_ENABLED on; ./page.tsx
 // picks it): four parts, Rank, Report card, Fix list and Share, for a listed
@@ -112,28 +111,6 @@ function Rank({ p }: { p: Profile }) {
   );
 }
 
-function ReportCard({ p }: { p: Profile }) {
-  const r = p.report;
-  // Gemini's three kept answers only (lib/profile.ts reportCard), with what it was asked (components/profile/GeminiOpinion.tsx).
-  if (r) return <GeminiOpinion r={r} />;
-  return (
-    <section aria-labelledby="report" className="card p-5 sm:p-6">
-      <SectionTitle id="report" kicker="Gemini report card" title="Coming" />
-      <p className="flex items-start gap-3 text-sm text-mute">
-        {p.stage === "grading" ? <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden /> : <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />}
-        <span>
-          {p.stage === "grading"
-            ? "Being looked at now: Gemini reads a screenshot and the page, and answers whether it is a portfolio, the five-second test and the roles you name. This page fills in when it's done."
-            : p.hideGrade
-              ? "The owner hid the grade."
-              : "Waiting for Gemini's look. It runs when there's room in the day's free quota; this page fills in when it's done. The rank never waits for it."}
-          {p.job?.reason ? ` ${p.job.reason}` : ""}
-        </span>
-      </p>
-    </section>
-  );
-}
-
 export async function ProfileV2({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const p = await loadProfile(decodeURIComponent(slug));
@@ -154,7 +131,6 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
               {p.tagline ? `${p.tagline} · ` : ""}
               {p.domain}
             </p>
-            {p.report?.roles.length ? <p className="mt-2 text-xs font-medium uppercase tracking-wider text-mute">{p.report.roles.join(" · ")}</p> : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {p.listed && (
@@ -184,7 +160,7 @@ export async function ProfileV2({ params }: { params: Promise<{ slug: string }> 
       )}
 
       <Rank p={p} />
-      <ReportCard p={p} />
+      {/* No Gemini report card (owner, 2026-11-23): its answers are stored, not shown. */}
 
       <section aria-labelledby="fixes" className="card p-5 sm:p-6">
         <SectionTitle id="fixes" kicker="Fix list" title="What to fix, and how">
