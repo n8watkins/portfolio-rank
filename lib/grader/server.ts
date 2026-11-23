@@ -96,7 +96,7 @@ export async function addOwnedJob(id: string): Promise<void> {
   });
 }
 
-/** The site's own address for links in emails (lib/site.ts siteUrl: staging or production). */
+/** The site's own address for links in emails (lib/site.ts siteUrl). */
 export function siteBase(): string {
   return siteUrl();
 }

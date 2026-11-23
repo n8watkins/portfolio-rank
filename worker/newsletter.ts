@@ -3,9 +3,7 @@
 // (lib/newsletter/send.mjs), scheduled or a draft by KIT_BROADCAST_MODE. A
 // draft sends the owner a one-line note through the owner-alert email. It
 // returns at once, before any database read, while NEWSLETTER_ENABLED is not
-// "true" or there is no KIT_API_KEY. It calls no AI. Staging does not run it on
-// a schedule (worker/crons.ts, pull request #233); if it is ever run there it
-// only makes drafts, marked [staging]. An issue that stopped
+// "true" or there is no KIT_API_KEY. It calls no AI. An issue that stopped
 // (Kit refused or never answered) is reported to the owner once a day
 // (lib/newsletter/alerts.mjs); it is never retried.
 import { db as database } from "../lib/db";
@@ -33,15 +31,12 @@ const log = (event: string, data: object = {}) => console.log(JSON.stringify({ e
 export async function newsletterTick(env: NewsletterEnv, scheduledTime: number) {
   if (!/^true$/i.test(String(env.NEWSLETTER_ENABLED ?? "")) || !env.KIT_API_KEY) return null;
   const db = database();
-  const staging = env.SITE_ENV === "staging";
   try {
     const sender = emailSender(env, { db });
     const r = await tick({
       db,
       kit: kitClient({ apiKey: env.KIT_API_KEY, base: testStandInsAllowed(env) ? env.KIT_TEST_API : undefined }),
-      // Staging shares the owner's one Kit account with production: drafts only.
-      mode: staging ? "draft" : broadcastMode(env.KIT_BROADCAST_MODE),
-      label: staging ? "staging" : null,
+      mode: broadcastMode(env.KIT_BROADCAST_MODE),
       base: env.SITE_URL.replace(/\/$/, ""),
       now: scheduledTime,
       notify: async (line: string) => {

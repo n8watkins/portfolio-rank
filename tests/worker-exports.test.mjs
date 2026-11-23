@@ -9,7 +9,6 @@ test("wrangler.jsonc parses with its comments, and binds the ISR queue, the nigh
   const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
   assert.match(config.vars.SENTRY_DSN, /^https:\/\//, "a // inside a string is not a comment");
   assert.deepEqual(boundClasses(config).sort(), ["DOQueueHandler", "DraftWorkflow", "EndOfDayWorkflow"]);
-  assert.deepEqual(boundClasses(config.env.staging).sort(), ["DOQueueHandler", "DraftWorkflow", "EndOfDayWorkflow"]);
 });
 
 test("worker/index.ts re-exports every bound class", () => {

@@ -252,13 +252,10 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
       const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
       const startedAt = Date.parse(String(state.startedAt));
       // Open capture problems per group, with the admin page's link (lib/capture-problems.mjs):
-      // emailed only when a count rose since the last email. Never on staging, which emails no one.
+      // emailed only when a count rose since the last email.
       // Its own read of four groups: a failure is logged and never holds up the other alerts, and
       // its alert is left as it was (out of scope below) rather than cleared.
-      const captureProblems =
-        String(this.env.SITE_ENV ?? "production") === "staging"
-          ? { conditions: [], failed: false }
-          : await captureProblemConditionsOrLog(ctx.db, { siteUrl: String(this.env.SITE_URL ?? ""), log: (error: string) => log("night.alerts.capture-problems.failed", { error }) });
+      const captureProblems = await captureProblemConditionsOrLog(ctx.db, { siteUrl: String(this.env.SITE_URL ?? ""), log: (error: string) => log("night.alerts.capture-problems.failed", { error }) });
       const conditions = [
         ...nightConditions(night, ctx.plan),
         // A missing or expiring GITHUB_DISPATCH_TOKEN (GitHub says when it expires on the dispatch's answer).
