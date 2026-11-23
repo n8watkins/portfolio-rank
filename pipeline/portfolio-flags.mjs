@@ -393,7 +393,8 @@ export const TEACHING_MIN = 2;
  */
 export function sellsTeaching(site) {
   const p = readSite(site);
-  if (p.projects.shown > 0 || p.projects.headings.length) return null;
+  // A projects menu link ("Portfolio") is a freelancer who also teaches, not only a teacher.
+  if (p.projects.shown > 0 || p.projects.headings.length || p.projects.nav.length) return null;
   const hits = [...new Set(allMatches(p.text, TEACHING, 100).map((x) => x.toLowerCase()))];
   if (hits.length < TEACHING_MIN) return null;
   return raised("sells-teaching", `The page sells teaching (${hits.slice(0, 4).map((h) => `"${h}"`).join(", ")}) and shows no projects.`, hits);
@@ -570,12 +571,19 @@ export function subPageOutcome(site) {
   // On a github.io project site, a site builder or a short link the path is the site; its "home" is an account
   // root or the service. The page's own flags speak for it, never this one.
   if (sub.pathIsSite || looksLikePortfolio(site)) return { outcome: "sub-page-is-portfolio", ...sub };
-  // A "/portfolio" or "/en" path that raises no flag is the portfolio, read poorly.
-  if (sub.portfolioPath && !PAGE_FLAGS.some((fn) => fn(site))) return { outcome: "sub-page-is-portfolio", ...sub };
+  // A "/portfolio" or "/en" path, or a path with the person's name in it (a page on a portfolio builder,
+  // dinq.me/keith), that raises no flag is the portfolio, read poorly. Little text alone says the code could not
+  // read it (an app that draws itself), not that it is something else.
+  const tokens = String(site.name ?? "").toLowerCase().split(/[^\p{L}0-9]+/u).filter((t) => t.length >= 3);
+  const namedPath = tokens.some((t) => sub.path.toLowerCase().includes(t));
+  if ((sub.portfolioPath || namedPath) && !PAGE_FLAGS.some((fn) => fn !== littleText && fn(site))) return { outcome: "sub-page-is-portfolio", ...sub, namedPath };
   const h = site.home;
   if (!h || !String(h.html || h.plainHtml || h.text || "").trim()) return { outcome: "home-not-read", ...sub };
   const home = { url: sub.home, finalUrl: h.finalUrl || sub.home, name: site.name, html: h.html ?? "", text: h.text ?? "", plainHtml: h.plainHtml ?? "" };
-  return { outcome: looksLikePortfolio(home) ? "home-is-portfolio" : "home-not-portfolio", ...sub, homeFlags: PAGE_FLAGS.map((fn) => fn(home)).filter(Boolean).map((f) => f.flag) };
+  const homeFlags = PAGE_FLAGS.map((fn) => fn(home)).filter(Boolean).map((f) => f.flag);
+  // A home page with almost no text (a bot wall's "Just a moment...", an app that draws itself) was not read.
+  if (homeFlags.length === 1 && homeFlags[0] === "little-text") return { outcome: "home-not-read", ...sub, homeFlags };
+  return { outcome: looksLikePortfolio(home) ? "home-is-portfolio" : "home-not-portfolio", ...sub, homeFlags };
 }
 
 /**

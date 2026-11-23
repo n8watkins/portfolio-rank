@@ -281,6 +281,32 @@ A parked domain counts as the wrong thing also when its home page is only a redi
 The check follows that one redirect with one plain request on the same domain and judges where it lands (`pipeline/gate.mjs` `parkedPage`): only a parking service's address, a parking phrase or a parking service's own lander code count.
 A page there that could not be read, answered an error or is merely short is left to the browser, and a site that redirects to a language, a home page or its owner's other domain, or shows a nearly empty app shell, is not parked for that.
 
+### A live site that may not be a portfolio (suspicion flags, not wired yet)
+
+The health check answers "is this site alive", not "is this alive site a portfolio".
+`pipeline/portfolio-flags.mjs` holds named suspicion flags for that second question, each a pure function over a site's saved page (no network, no AI).
+A raised flag gives its name, one plain sentence quoting what it found on the page, and the snippets it matched.
+They are not yet wired to anything: no flag removes, hides, ranks or queues a site today.
+The plan is that a flagged site goes to your review queue, listed meanwhile.
+
+| Flag | What it looks for |
+| --- | --- |
+| `filler-text` | Template filler in the text: "Lorem ipsum", "your name here". |
+| `placeholder-page` | A short page that says it is coming soon, under construction or a work in progress. |
+| `little-text` | Almost no text (under 60 characters): a logo, an intro or gate screen, a page drawn in a canvas. Often a real portfolio the code cannot read. |
+| `moved-notice` | A short page saying the site has moved, with a link elsewhere. |
+| `blog-only` | Dated posts and no projects anywhere the code can see: no projects section, heading, menu link ("Projects", "Work") or project link. A portfolio with a blog is never flagged. |
+| `link-card` | A name, a line and a handful of profile or email links, nothing else. |
+| `company-voice` | The page speaks as "we" far more than "I" and sells services or names a team or jobs. A freelancer ("freelance", "hire me") or a one-person studio is protected. |
+| `sells-teaching` | Coaching, courses, speaking or a book for sale, and no projects. |
+| `product-page` | One product's or tool's own site: pricing, sign up, documentation, terms, and no person behind it. |
+| `readme-page` | A code repository's README rendered as the page: install steps, commands, the folder layout. |
+| `single-document` | One long document (an essay) in paragraphs, barely a link, no projects. |
+| `forwards-elsewhere` | The address forwards to another domain without the person's name: the health check's own "moved" verdict, given a flag's name. |
+| `sub-page` | The listed address is a sub-page that is not itself a portfolio (a blog category page); says whether the site's home page is one. A github.io project site, a `/portfolio` path or any sub-page with projects is never flagged. |
+
+How each flag scores on the labelled benchmark and on a fresh sample of listed sites is printed by the benchmark scorer kept with the owner's handoff files (`run-benchmark.mjs`), which runs them against any checkout.
+
 ### The community list drops a site
 
 Your rule (2026-11-22): a removal on the community list changes nothing on our side.
