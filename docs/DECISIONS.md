@@ -77,6 +77,12 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Every background job works only on sites on the current list; rows that leave the list are deleted after 30 days, with their votes kept.
   Our exclusions override the community list, and `/removed` shows what was removed and why.
   Why: 254 unlisted sites were still being graded and voted on, and we can't rely on the community list being right for our purposes.
+  Changed on 2026-11-22 (next entry): a site the community list drops no longer leaves our list, and only rows we removed are deleted.
+- **A community list removal changes nothing on our side** (owner, 2026-11-22: "a community list remove shouldnt change anything on our side"; earlier: "it could be the case that the removed sites are still portfolios ... we should be doing our checks on the sites they are removing as a failsafe. if people want to remove their portfolio from our site they have to go through our claim process."). Status: building (#274).
+  A site on our list that the community list drops stays on `data/feed.json`, recorded in `data/additions.json` (`source: "left_community_list"`, `left_on`, the day the nightly rebuild first saw it gone); the health check hides and shows it like any listed site, and only our exclusions (dead, down, duplicate, not a portfolio) and an owner's removal through the claim process take it off.
+  Respellings, excluded sites and README lines that were never web addresses are not carried; the purge deletes only rows we removed (in `data/excluded.json`, or an old spelling of a listed site); nothing is sent to the community list.
+  The 25 sites dropped before this rule, delisted on 2026-11-10 and 2026-11-16, were recorded by hand so the next sync lists them again.
+  Why: the community list removes lines through its automatic broken-link reports (paused hosting, a 404, an expired domain), which is not a judgement that a site is not a portfolio, and the first of those rows would have been deleted on about 2026-12-10.
 - **The capture gives a working site every chance before calling it failed** (agent, 2026-11-14). Status: building (this PR).
   A 401, 403, 429 or 503 or a TLS failure on the plain pre-check is left to the browser (often a bot filter, or a certificate the browser accepts); a page with no text yet gets up to 15 seconds to render before it counts as blank; a screenshot that times out or hits Chrome's "Unable to capture screenshot" is taken again through the DevTools protocol.
   Why: 30 sites the owner confirmed as portfolios on 14 November failed the nightly capture (13 on a 403 to the pre-check alone, 9 blank after 3 seconds, 6 on a screenshot error) while a browser loaded all of them.
@@ -109,7 +115,8 @@ Each entry says who decided ("owner" for Nathan, "agent" for a technical choice 
   Why: the owner wants a verdict to stand, not to be re-earned on every capture, while a dead site gets a way back.
 - **Feed shrink guard** (agent, 2026-11-10). Status: built (#53).
   The sync fails rather than write a list more than 5% smaller.
-  Why: a broken upstream file should never wipe the site.
+  Since 2026-11-22 it also fails when the community list drops more than 5% of our list in one night, since such sites now stay on the feed (agent).
+  Why: a broken upstream file should never wipe the site, or fill the record of sites the community list dropped.
 
 ## Grading
 
@@ -199,7 +206,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **A site is graded once and never re-graded automatically, and only one Gemini model is used** (owner, 2026-11-21). Status: building (#273).
   Five scheduled jobs are removed: the nightly change detection ("Record page changes", which wrote `rating_resets`), the weekly comparison of two Gemini versions' grades (`grade-compare.yml`), the "grade changed sites" night stage, the "re-grades" night stage (with the fallback grader's re-grade queues), and the ELO-era AI votes that `judge-vote.yml` ran without `RANKING_V2`.
   No table is dropped: `rating_resets` and `site_fingerprints` keep what they hold and are no longer written, and the resets already stored still count in the ranking recompute.
-  The hourly change fingerprints ("When checks re-run") are not part of this: the owner has not decided on them.
+  The hourly change fingerprints ("When checks re-run") were not part of this; the owner removed them on 2026-11-22 (see "A check is due by age or by request" under Infrastructure).
   Why: a site is asked "is it a portfolio" once, at the door, and with one model there is nothing to compare.
 - **Confirmed, and discovery's AI screen goes too** (owner, 2026-11-22: "you can remove these" and "yeah we can remove the discover screen ask to gemini"). Status: building (#273).
   The rule: never ask Gemini what code can answer, and never ask it about a site twice; discovery checks a site with code first, then hands it to grading.
@@ -207,6 +214,34 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **A person may still ask for a re-grade** (owner, 2026-11-22). Status: building (#273).
   A listed site's verified owner's "Re-grade" asks for a new capture; the night's "grade new sites" stage grades the site once from a capture newer than the request, ahead of new sites and inside the same cap, keeps the old grade in `rubric_history` and closes the request, so it can be asked again later.
   Nothing else re-grades a listed site.
+
+### Capture problems the owner can see (2026-11-22)
+
+- **A Capture problems page in the admin, and one line in the nightly alert** (owner, 2026-11-22: yes to a "Capture problems" list). Status: building (#275).
+  Why: a whole-list re-capture that day left 100 sites on their old capture and 11 more got worse, and the owner could see none of it, because a failed re-capture of a site with a good capture was recorded only in `refresh_failures`.
+  `/admin/capture-problems` lists four groups of listed sites, newest first (`lib/capture-problems.mjs` has each rule):
+  A, a re-capture of a live site failed and the old capture is kept (its `refresh_failures` row);
+  B, a listed site has no good capture (`status` error, dead or parked);
+  C, the stored capture is bad (its page text reads as a bot check by the capture's own `isBotWallPage`, or is empty, or under 200 characters);
+  D, a re-capture got worse (it lost a résumé, GitHub or contact link the old facts had, or kept under 30% of an old text over 500 characters).
+  A capture with no stored page text at all was made before captures stored it (#57, 2026-11-10), so it was never measured: it is not in C, and the page counts it apart as not checked.
+  D is recorded at capture time in `capture_changes`, and only facts of the same version (`facts.v`) are compared: a change that comes with new measuring code is listed apart as the code's, not counted.
+  A site the health check marks down or suspect is not a capture problem; its health state is a column.
+  "On your review list" means the site has an open row on `/admin/review`, never the `needs_review` flag alone, which the weekly health check rewrites.
+- **The capture-problems alert is a weekly summary** (owner, 2026-11-22: "lets just do a weekly capture alert"). Status: building (#275).
+  The night's owner alert holds it while any count is above zero, with each group's count, its change since the last email in plain words, and the page's link; never on staging.
+  An email goes out on a night when both hold: a group's count is above its lowest since the last email (zero after the alert cleared, which it does when every count reaches zero), and at least 7 days have passed since the last email that was actually sent (`owner_alerts.last_sent_day`).
+  A rise inside those 7 days is held: if the count is still above that lowest point on the first night after the gap, that night's email reports it; if it has gone, nothing is sent.
+  A failed email does not start the 7 days and is tried again the next night.
+  Every other night the alert is recorded quiet: the admin sees it, no email goes out.
+  The lowest counts are kept in `capture_problem_alert`, starting from the last email's counts (`owner_alerts.sent_title`).
+  Why: about 100 old re-capture failures in group A would otherwise send the same email every night, and a daily email for small changes is more than the owner wants.
+- **A re-capture that hits a bot check or a covering dialog goes to the owner's review list** (owner, 2026-11-22, with the Capture problems list; his standing rule "bot-walled sites go to owner review", applied to re-captures). Status: building (#275).
+  A re-capture that meets a bot or security check, or a dialog still on top after the capture tried to close it, writes a pending row in its own group, `recapture_blocked` ("Re-capture blocked"), on `/admin/review` (`lib/reviews/door.mjs` `blockedRefreshReview`, the same "Mark checked" decision as a first capture's bot wall), and the good stored capture and grade stay as they are.
+  One row per episode: none while the site has another open case, none again after he decided one since the stored capture was made, and the row closes by itself once a later re-capture gets through.
+  This is narrower than a first capture: a gate, loader or mode picker still in the way, a page of only a canvas, video or image, and an error status on a page that shows a site stay refresh failures in group A, with their reason.
+  A bot check seen only on the phone-size visit, after the desktop view of the same capture showed the site, does not go to review either: it stays a refresh failure in group A with that reason.
+  Why: that day 28 of 33 bot checks were phone-view only, on sites whose stored capture is good, so they may be the site's protection answering our own second visit rather than a wall a visitor meets.
 
 ## Ranking
 
@@ -636,6 +671,14 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Every listed site is checked once a week on the hourly cron, never twice in a day.
   Measured on 2026-11-11 by fetching 400 listed sites twice: before the noise rules 9% looked changed between two fetches seconds apart, after them about 1.5%, all of them pages that really differ per request (a live clock, a random quote, a "now playing" track); those get re-measured weekly.
   Why: the old fixed timers re-ran Lighthouse every 30 days, re-captured 150 sites a night whether or not they changed and re-ran the polish check weekly, so unchanged sites waited on slow re-runs, and a changed site could show stale results for weeks.
+  Superseded on 2026-11-22 by "A check is due by age or by request": the fingerprints never ran in production (`FRESHNESS_ENABLED` stayed `"false"`) and were removed; the maximum ages and failure windows above still hold.
+- **A check is due by age or by request; the hourly page fingerprints are removed** (owner, 2026-11-22: "the hourly page fingerprints should be removed."). Status: building (`chore/remove-page-fingerprints`).
+  A check or capture is due again only when it is missing, when it is past its maximum age (the numbers above), when the admin's "Re-measure" or a verified owner's request came after it was measured (`site_freshness.forced_at`), or when it failed and its retry window passed.
+  A failed nightly re-capture keeps its growing backoff (`refresh_failures`), which a later request skips.
+  The hourly task (`worker/freshness.ts`), the `FRESHNESS_ENABLED` switch and the profile's "site unchanged since" lines are gone.
+  No table or column is dropped: `site_freshness` keeps `forced_at` in use, its fingerprint columns are no longer written or read, and an old row's `changed_at` makes nothing due.
+  The grader's own page fingerprint ("Grade my portfolio"'s re-grade cooldown and link-check reuse) stays.
+  Why: a site is graded once (2026-11-21), so a page change no longer leads to a new grade, and a fetch of every listed site each week bought nothing a 90-day refresh and a person's request do not already cover.
 - **Require CI checks before merging** (owner, 2026-11-10). Status: approved; the owner adds "Worker build" and "E2E" to the `main` ruleset, since agents can't edit rulesets.
   Why: what merges is what the next deploy ships.
 - **Email sign-in beside GitHub; email accounts' votes count fully** (owner, 2026-11-12). Status: building (branch `feat/email-signin`).

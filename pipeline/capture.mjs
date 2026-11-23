@@ -22,8 +22,8 @@
 //
 // --refresh N also re-captures up to N listed sites whose screenshots are due
 // by the check rule (lib/freshness.mjs, AUTOMATION.md "When checks re-run"):
-// the weekly change fingerprint found the page changed, the admin pressed
-// "Re-measure" or the owner asked for a re-grade, or the capture is 90 days
+// the admin pressed "Re-measure" or the owner asked for a new capture
+// (site_freshness.forced_at), or the capture is 90 days
 // old (the nightly checks, sync-upstream.yml). Their screenshots, text,
 // facts and page fingerprint are renewed; the grade stays (a site is graded
 // once, owner 2026-11-21). A refresh that
@@ -44,7 +44,13 @@
 // to the owner's review. The desktop view decides; the phone view stops the
 // capture only with an error status or a bot wall of its own. A site with
 // no good capture records it as a failed capture and is retried (a bot wall
-// also sets needs_review for the owner); a site that has one keeps it.
+// also sets needs_review for the owner); a site that has one keeps it, and a
+// refresh that met a bot wall or a page still covered by a dialog also goes
+// to the owner's review list (a pending recapture_blocked row: lib/reviews/door.mjs
+// blockedRefreshReview), unless only the phone view saw it
+// (refreshNeedsReview). A new capture that lost a portfolio sign or most of
+// the text of the one it replaced is recorded (lib/capture-problems.mjs);
+// the admin's Capture problems page lists all of these.
 // Where a rule cannot tell, the outcome is the owner's review or "keep the
 // existing capture and retry", never "stored as live" or "excluded as broken".
 //
@@ -66,6 +72,7 @@ import {
   BLOCKED_PREFIX,
   BOT_WALL,
   BOT_WALL_REASON,
+  isBotWallReason,
   MEDIA_ONLY,
   MEDIA_REVIEW_REASON,
   capturedBlocked,
@@ -85,9 +92,14 @@ import {
   syncRoster,
 } from "./roster.mjs";
 import { ensureFreshnessSchema, screenshotsDue } from "../lib/freshness.mjs";
+import { ensureCaptureProblemSchema, recordCaptureChange } from "../lib/capture-problems.mjs";
+import { blockedRefreshReview, closeBlockedRefreshReviews } from "../lib/reviews/door.mjs";
 import { IMAGE_FILES, captureView, fullPageComplete, nextFullPage, settleFirstScreen } from "./fullpage.mjs";
 import { deleteVersion, imagesBucket, legacyFramesOn, notStored, storeVersion } from "./shot-store.mjs";
 import { SERVE_FILES, contentTypeOf } from "./shot-files.mjs";
+
+/** Now as SQLite's datetime('now') writes it ("YYYY-MM-DD HH:MM:SS", UTC), like portfolios.captured_at. */
+const sqliteNow = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 
 const ROOT = path.join(import.meta.dirname, "..");
 
@@ -115,14 +127,19 @@ async function uploadDir(s3, key, dir) {
 // ---------------------------------------------------------------------------
 // Per-site capture
 // ---------------------------------------------------------------------------
-/** The row's stored capture: { fullPage (meta.fullPage or null), good (a live row with screenshots) }. */
+/**
+ * The row's stored capture: { fullPage (meta.fullPage or null), good (a live
+ * row with screenshots), facts and chars (its facts and the length of its
+ * page text, which a new capture is compared with: lib/capture-problems.mjs) }.
+ */
 async function storedCapture(db, url) {
-  const row = (await db.execute({ sql: "SELECT status, shot_key, meta FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+  const row = (await db.execute({ sql: "SELECT status, shot_key, meta, facts, length(page_text) AS chars FROM portfolios WHERE url = ?", args: [url] })).rows[0];
   const good = Boolean(row && String(row.status) === "live" && row.shot_key != null);
+  const was = { good, facts: row?.facts == null ? null : String(row.facts), chars: row?.chars == null ? null : Number(row.chars) };
   try {
-    return { good, fullPage: JSON.parse(String(row?.meta ?? "null"))?.fullPage ?? null };
+    return { ...was, fullPage: JSON.parse(String(row?.meta ?? "null"))?.fullPage ?? null };
   } catch {
-    return { good, fullPage: null };
+    return { ...was, fullPage: null };
   }
 }
 
@@ -155,16 +172,50 @@ export async function recordCaptureFailure(db, url, name, status, reason, { need
 // site only waits out the same growing backoff a failed capture gets
 // (roster.captureRetryAt) in lib/freshness.mjs's refresh_failures, which
 // screenshotsDue reads. The table exists once ensureFreshnessSchema ran (main
-// runs it first).
-export async function recordRefreshFailure(db, url, reason, now = new Date()) {
+// runs it first). `needsReview` (refreshNeedsReview decides) also puts the
+// site on the owner's review list: a pending recapture_blocked row
+// (lib/reviews/door.mjs blockedRefreshReview, the durable record), and sets
+// portfolios.needs_review = 1, which his "Mark checked" leaves as it is (the
+// weekly health check rewrites it); the stored capture and grade stay as they are.
+export async function recordRefreshFailure(db, url, reason, now = new Date(), { needsReview = false } = {}) {
   const prev = (await db.execute({ sql: "SELECT attempts FROM refresh_failures WHERE url = ?", args: [url] })).rows[0];
   const attempts = Number(prev?.attempts ?? 0) + 1;
-  await db.execute({
+  const backoff = {
     sql: `INSERT INTO refresh_failures (url, attempts, failed_at, retry_at, reason) VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(url) DO UPDATE SET attempts = excluded.attempts, failed_at = excluded.failed_at,
             retry_at = excluded.retry_at, reason = excluded.reason`,
     args: [url, attempts, now.getTime(), Date.parse(captureRetryAt(attempts, now)), String(reason ?? "").slice(0, 200)],
-  });
+  };
+  if (!needsReview) return void (await db.execute(backoff));
+  await db.batch([backoff, { sql: "UPDATE portfolios SET needs_review = 1 WHERE url = ? AND COALESCE(needs_review, 0) != 1", args: [url] }], "write");
+  // The review row; the backoff above is written either way, so a failure here is only logged.
+  const why = String(reason ?? "").replace(/^(error|dead|parked|pending): /, "");
+  await blockedRefreshReview(db, { url, reason: why, now }).catch((e) => console.warn(`  ${url}: review row not written (${String(e?.message ?? e).slice(0, 80)})`));
+}
+
+/** The one covered page besides the bot wall that sends a failed refresh to the owner: a dialog still on top. */
+const COVERED = /^still a dialog on top\b/;
+
+/**
+ * Whether a failed refresh goes to the owner's review list (owner,
+ * 2026-11-22: a re-capture that hits a bot check or a covering dialog goes
+ * there): a bot or security check (BOT_WALL_REASON, from the screen or the
+ * error status), or a dialog still covering the page after the capture tried
+ * to close it. Not the other verdicts a first capture sends to review (a page
+ * of only a canvas, video or image, an error status on a page that shows a
+ * site), and not a gate, loader or mode picker still in the way: those stay
+ * refresh failures, listed on the Capture problems page (group A) with their
+ * reason. Never a verdict of the phone view alone (`phone`): the phone view
+ * is a second visit of the same capture, after the desktop view showed the
+ * site, so a bot check there may be the site's protection answering our own
+ * second visit.
+ * @param {{ reason?: string, phone?: boolean }} verdict
+ */
+export function refreshNeedsReview({ reason = "", phone = false } = {}) {
+  if (phone) return false;
+  const r = String(reason);
+  if (isBotWallReason(r)) return true;
+  return r.startsWith(BLOCKED_PREFIX) && COVERED.test(r.slice(BLOCKED_PREFIX.length));
 }
 
 /** The longest one site's capture may take, everything included; a normal one takes one to three minutes. */
@@ -389,8 +440,8 @@ async function judgePhone(page, doc, passes) {
   const shown = await readBlockedInputs(page);
   const suffix = " (phone view)";
   const verdict = httpVerdict({ status: doc.status, cfMitigated: doc.cfMitigated, text: shown.text, title: shown.title, shown: { ...shown, ...passes } });
-  if (verdict) return { verdict: { ...verdict, reason: `${verdict.reason}${suffix}` }, note: null };
-  if (isBotWallPage(shown)) return { verdict: { status: "error", reason: `${BOT_WALL_REASON}${suffix}`, needsReview: true }, note: null };
+  if (verdict) return { verdict: { ...verdict, reason: `${verdict.reason}${suffix}`, phone: true }, note: null };
+  if (isBotWallPage(shown)) return { verdict: { status: "error", reason: `${BOT_WALL_REASON}${suffix}`, needsReview: true, phone: true }, note: null };
   return { verdict: null, note: capturedBlocked({ ...shown, ...passes }) };
 }
 
@@ -405,10 +456,12 @@ async function judgePhone(page, doc, passes) {
  */
 export async function captureSite(browser, entry, { refresh = false, db, s3 = null, root = ROOT, limitMs = SITE_LIMIT_MS, stepLimitMs = STEP_LIMIT_MS } = {}) {
   const { url, name } = entry;
-  // A refresh never marks a site failed (see the header): it only waits out a backoff.
+  // A refresh never marks a site failed (see the header): it only waits out a
+  // backoff, and a bot check or a covering dialog also goes to the owner's
+  // review list, unless only the phone view saw it (refreshNeedsReview).
   const record = refresh
-    ? (status, reason) => recordRefreshFailure(db, url, `${status}: ${reason}`)
-    : (status, reason, opts) => recordCaptureFailure(db, url, name, status, reason, opts);
+    ? (status, reason, opts = {}) => recordRefreshFailure(db, url, `${status}: ${reason}`, new Date(), { needsReview: refreshNeedsReview({ reason, ...opts }) })
+    : (status, reason, opts = {}) => recordCaptureFailure(db, url, name, status, reason, { needsReview: Boolean(opts.needsReview) });
   // run.aborted: the time limit passed, so the capture must write nothing more;
   // run.committed: the good capture is being written (each write bounded), so the limit waits for it;
   // run.storedGood: the site has a good capture, which a failed one never marks failed.
@@ -498,11 +551,12 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
   // without is a failed capture with its reason, retried later with backoff.
   // A verdict reached while the browser was dying (a page that read as
   // blank because it was closing) is not the site's: nothing is recorded.
-  const reject = async ({ status, reason, needsReview = false }) => {
+  // `phone`: the verdict is the phone view's alone (judgePhone), after the desktop view showed the site.
+  const reject = async ({ status, reason, needsReview = false, phone = false }) => {
     if (await run.watch.lost()) return BROWSER_GONE;
     await closeOwn();
     if (run.watch.now()) return BROWSER_GONE;
-    await fail(status, reason, { needsReview });
+    await fail(status, reason, { needsReview, phone });
     return kept(resultOf(status, reason));
   };
 
@@ -800,6 +854,20 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // Neither can undo the capture, and each is bounded: a failure here is only logged.
     const warn = (what) => (e) => console.warn(`  ${url}: ${what} (${String(e?.message ?? e).slice(0, 80)})`);
     await within(db.execute({ sql: "DELETE FROM refresh_failures WHERE url = ?", args: [url] }), stepLimitMs, "clearing the refresh backoff").catch(warn("refresh backoff not cleared"));
+    // A blocked re-capture's row on the owner's review list closes: this one got through (lib/reviews/door.mjs).
+    if (stored.good) {
+      await within(closeBlockedRefreshReviews(db, url), stepLimitMs, "closing the blocked re-capture's review row").catch(warn("blocked re-capture's review row not closed"));
+    }
+    // A capture that replaced a good one: whether it lost a portfolio sign or most of the text
+    // (lib/capture-problems.mjs, the admin's Capture problems page). Facts the capture could not
+    // measure keep the old ones (the write's COALESCE), so they are compared as kept.
+    if (stored.good) {
+      await within(
+        recordCaptureChange(db, { url, prev: { facts: stored.facts, chars: stored.chars }, next: { facts: facts ?? stored.facts, chars: pageText.length }, capturedAt: sqliteNow() }),
+        stepLimitMs,
+        "recording what the new capture changed"
+      ).catch(warn("capture change not recorded"));
+    }
     if (uploadedV && prevFullPage?.v && prevFullPage.v !== uploadedV) {
       const commands = await import("@aws-sdk/client-s3");
       await within(deleteVersion({ send: (c) => s3.send(c), commands, bucket: IMAGES_BUCKET, shotKey: key, v: prevFullPage.v }), stepLimitMs, "deleting the old images").catch(
@@ -873,6 +941,8 @@ async function main() {
   const db = pipelineDb(ROOT);
   await ensureRosterSchema(db);
   await ensureFreshnessSchema(db);
+  // What a re-capture made worse (lib/capture-problems.mjs).
+  await ensureCaptureProblemSchema(db);
 
   let s3 = null;
   if (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) {
@@ -916,7 +986,7 @@ async function main() {
   }
   queue = queue.slice(0, LIMIT);
   // The nightly refresh: listed, healthy sites whose screenshots are due
-  // (changed or asked for first, then captures past 90 days).
+  // (asked for first, then captures past 90 days).
   if (REFRESH > 0 && !ONLY && !RECAPTURE) {
     const queued = new Set(queue.map((p) => p.url));
     const listed = new Map(feed.map((p) => [p.url, p]));
@@ -924,7 +994,7 @@ async function main() {
       .filter((u) => !queued.has(u) && listed.has(u))
       .slice(0, REFRESH);
     for (const u of due) queue.push({ ...listed.get(u), refresh: true });
-    console.log(`refresh: re-capturing ${due.length} site(s) that changed, were asked for, or are 90 days old`);
+    console.log(`refresh: re-capturing ${due.length} site(s) that were asked for or are 90 days old`);
   }
   console.log(`capturing ${queue.length} site(s), concurrency ${CONCURRENCY}, R2 ${s3 ? "on" : "off (local only)"}`);
 

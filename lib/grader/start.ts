@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Client } from "@libsql/client";
 import { quickFacts } from "@/lib/grader/quick";
-import { listedSite } from "@/lib/me";
 import { createJob, countWaiting, existingReportBody, readJob, regradeCheck } from "@/lib/grader/jobs.mjs";
 import { graderCaps, reserveCaps } from "@/lib/grader/caps.mjs";
 import { startCapture } from "@/lib/grader/dispatch.mjs";
@@ -43,7 +42,7 @@ export async function startGrade(
   // The free checks, at once (cached per address for a day).
   // The page is fetched again (its fingerprint is what the cooldown compares),
   // its link checks reused while it is unchanged (lib/grader/quick.ts).
-  const quick = await quickFacts(client, { url: target.url, siteKey: target.siteKey, fetcher: graderFetcher(), now, listedUrl: listedSite(target.siteKey)?.url ?? null });
+  const quick = await quickFacts(client, { url: target.url, siteKey: target.siteKey, fetcher: graderFetcher(), now });
   if (!quick.ok) {
     const { cached, ...checks } = quick;
     void cached;

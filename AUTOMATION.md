@@ -12,6 +12,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
         ▼
   sync-upstream Action  ──rebuild──►  data/feed.json
         │                               = upstream − excluded.json + additions.json
+        │                                 + sites upstream dropped (they stay; recorded in additions.json)
         ▼
   roster sync  ──►  rows not in feed.json marked delisted (Turso portfolios.delisted_at)
         ▼
@@ -30,7 +31,7 @@ emmabostian/developer-portfolios (upstream, community-curated)
 
 ## The list (two intake doors + a takedown)
 
-`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site.
+`data/feed.json` is rebuilt daily as **`upstream − excluded.json + additions.json`**, one entry per site, where `additions.json` also records the sites the community list dropped while they were on our list: they stay (see Community list removals).
 Two addresses are one site when their keys are equal ([pipeline/list-key.mjs](pipeline/list-key.mjs) `listKey`, exactly the health check's `normKey`: the address lower-cased, host without www, path without the trailing slash; scheme, port, query and fragment ignored).
 `generate_feed.py` only reads the README; [pipeline/build-feed.mjs](pipeline/build-feed.mjs) keeps one entry per key (the first), drops excluded keys, and writes every address as the list spells it, except a site already on the feed that the list respelled (below).
 
@@ -60,9 +61,11 @@ Merging the sites split before the sticky spelling is a separate change.
 PortfolioRank runs its own cleanup instead of relying on the community list being right, and background jobs only work on sites on the current list.
 
 - **Roster sync** (`pipeline/roster.mjs`, run by capture, judge, prewarm and the health check): database rows whose URL is no longer in `feed.json` get `delisted_at`; a URL that comes back is restored.
+  Since 2026-11-22 a site the community list drops stays in `feed.json` (see Community list removals), so a row is delisted only by our own removals (`data/excluded.json`) or a respelling.
   The feed build refuses a feed that drops more than 15% of the current addresses (before the data pull request), and the sync refuses to delist more than 15% at once (above the exclusions' 10% cap): the nightly sync job fails, every other job logs a warning and leaves the roster as it is for that run; for a real upstream cleanup the owner runs it once with `LIST_CLEANUP_SHARE` set to the share to allow (for example `0.3`), which raises both and the shrink guard below (the share only ever raises a limit).
   Grading, AI comparisons, polls, blog facts and page evidence only use listed rows that passed their last health check, or were never checked (`AI_WORK`); captures, the screenshot refresh and the free measurements use listed rows that are not down, less the sites on the not-answering ladder while its marks hold (`ACTIVE`); the site shows listed rows that are not hidden (`lib/hidden.mjs`), and the comparison pool the home page, `/me`, the grade page and grade reports show keeps every listed row that is not down (`LISTED_NOT_DOWN`).
-  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries and its health marks), except a row whose site is listed under another address (see Respelled sites).
+  After 30 days delisted, `purge-delisted.mjs` deletes the row's R2 screenshots and the row (and its `psi:`/`inspect:` cache entries and its health marks) when we removed the site: its key is in `data/excluded.json`, or the row is an old spelling of a listed row (the same `spellingKey`) or not a web address at all.
+  A row whose site is listed under another address (see Respelled sites) is never purged, and neither is any other delisted row (one the community list dropped before 2026-11-22): it is kept and counted in the run summary, so a community list removal can never delete a site.
   Votes and ratings stay: the vote log is the source of truth for ELO, and the leaderboard only shows roster URLs, so rankings stay consistent.
 - **Health check** (`pipeline/health.mjs`, every night since 2026-11-16, weekly before): every listed site is checked for loading, parking, blank pages and duplicates, with one plain request per site (the browser only for unclear answers).
   A site that does not answer goes on the not-working ladder (below); one that answers with the wrong thing (parked, blank, a redirect to a social profile, a duplicate, a blocked capture) goes `live` → `suspect` (any failure) → `down` (3 failed checks in a row, each on a week of its own, spanning at least 13 days, however many runs); a pass resets to `live`.
@@ -147,55 +150,56 @@ PortfolioRank runs its own cleanup instead of relying on the community list bein
   Every decided row (the owner's, the rule's, or another rule's such as `rule:duplicate`) is listed under Decided with Undo: it goes back to pending, `undone_at` and `undone_by` are recorded, and what it changed is reversed: exactly when the apply kept the state before it, and for an apply from before that (the owner's 13 November verdicts) the grade only, from `rubric_history`, with the rest reported on the row; a rejection, a "Mark checked" or a rule's row changed nothing, so only the row moves.
   While rows wait, the Monday goals email carries their count and the link (see Owner goals).
 - **Feed shrink guard**: `generate_feed.py --max-shrink 0.05` refuses to write a feed more than 5% smaller than the current one, which fails the sync run instead of wiping the list.
+  Since a site the community list drops stays on the feed (see Community list removals), the same 5% also limits how much of our list the community list may drop in one night: a README cut short or rewritten to new addresses is refused instead of filling the record.
   `LIST_CLEANUP_SHARE` raises the limit for one run (see Roster sync).
 - **Nothing is reported to the community list**: the owner's decision.
   The list runs its own link checker every Saturday that removes broken and parked links, and PortfolioRank only reads it.
+
+#### Community list removals
+
+Owner, 2026-11-22: "a community list remove shouldnt change anything on our side".
+The community list mostly drops lines through its own automatic "Broken Links" reports (paused hosting, a 404, an expired domain), which says nothing about whether the site is a portfolio; and "if people want to remove their portfolio from our site they have to go through our claim process".
+
+- **The rebuild keeps the site** (`pipeline/build-feed.mjs` `buildFeed`): a site on the current `feed.json` that the README no longer has is carried into the new feed and recorded in `data/additions.json` as `{ name, url, tagline?, source: "left_community_list", left_on }`, `left_on` being the day the rebuild first saw it gone.
+  The sync workflow already commits `additions.json` with `feed.json`.
+- **Not carried**: a site in `data/excluded.json` (by `listKey` or `spellingKey`), an old spelling of a site the new feed has under the same `listKey` or `spellingKey` (a respelling: its old row is retired as before, see Respelled sites), and an address that is not a web address (`pipeline/list-key.mjs` `isWebAddress`: README lines an older parser misread, such as `<[Portfolio-Link](https://khushm.netlify.app` or `https\://shreyanshportfolio.in`).
+- **The record is the source**: a recorded site is listed every night from `additions.json`, even if something took it out of `feed.json`.
+  A recorded site our exclusions keep out stays recorded, so lifting the exclusion (an undone owner removal, a removed site that passes its re-check) lists it again.
+  A recorded site the README lists again leaves the record and is listed once, from the README (with the feed's spelling when the list respelled it).
+- **From then on our own machinery decides**: the health check hides and shows it like any listed site, and only our exclusions (dead, down, duplicate, not a portfolio) and an owner's removal through the claim process take it off.
+- **Guards**: more than `--max-shrink` (5%) of the current feed dropped by the community list in one night is refused (without `--max-shrink`, 15%); `LIST_CLEANUP_SHARE` raises it for one run.
+  The job summary ("Left the community list") lists each site that stays, each back on the list, and each address not kept.
+- **The 25 sites dropped before this rule** (stamped delisted on 2026-11-10 and 2026-11-16) were recorded by hand on 2026-11-22, with the spelling, name and tagline of the last `feed.json` that had them and the day that `feed.json` lost them; the next sync lists them again with their grade, votes and screenshots.
   The monthly upstream report (`upstream-removals.yml`) was removed.
 
 ## When checks re-run
 
-Owner decision of 2026-11-11 ([docs/DECISIONS.md](docs/DECISIONS.md#infrastructure)): if a site hasn't changed, don't measure it again; if it has, measure it again.
-It isn't about saving free API requests: re-runs take time, and a changed site should not show old results.
-It has a launch switch, `FRESHNESS_ENABLED` ([lib/freshness-flag.ts](lib/freshness-flag.ts)): `"false"` in production and `"true"` on staging.
-While it is off, the hourly cron makes no fingerprint fetches and profiles say "Measured on <date>" as before, without "site unchanged since" or "re-measuring"; the reuse rules below apply either way.
+Owner decision of 2026-11-22 ([docs/DECISIONS.md](docs/DECISIONS.md#infrastructure)): a check is due by age or by a person's request, never because the page changed.
+Nothing watches pages for changes: the hourly page fingerprints (decided 2026-11-11, never switched on in production) were removed once a site came to be graded once (2026-11-21).
 The rule and its numbers live in one place, [lib/freshness.mjs](lib/freshness.mjs).
 
-**The rule, for every check on a portfolio:** reuse the stored result while the site is unchanged.
-Run it again when:
+**The rule, for every check on a portfolio:** reuse the stored result until one of these holds:
 
-- the site's change fingerprint changed after the result was measured;
-- the admin pressed "Re-measure" on the portfolio's page, or its verified owner asked for a re-grade;
-- the result is older than its maximum age (below), because some things break without the page changing;
+- the admin pressed "Re-measure" on the portfolio's page, or its verified owner asked for a new capture, after the result was measured (`site_freshness.forced_at`);
+- the result is older than its maximum age (below);
 - the result is a failure and its short retry window has passed.
 
 | Check | Where it is stored | Maximum age | A failure is retried after | When a due result runs again |
 | --- | --- | --- | --- | --- |
-| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` for S, A and B sites |
+| Lighthouse (PageSpeed) | `cache` `psi:<url>` | 90 days | 1 hour | On the next view of the portfolio page (the old result shows at once, then the new one), and the daily `prewarm.yml` |
 | Polish checklist and share card | `cache` `inspect:<url>` | 30 days (the share image and favicon can break on their own) | 1 hour | On the next view, and `prewarm.yml` |
 | Project link checks | `portfolios.facts` (`facts_at`) | 30 days (links rot without the page changing) | the next night | Tonight's free checks (`evidence.mjs --links`, up to 120 a night) |
-| Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | the next night | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, changed and asked-for sites first) |
-| "Grade my portfolio" free checks | `cache` `grader:quick:<site>` | links 30 days | 10 minutes (the visitor may have just fixed the site) | A request is a grade: the page is always fetched again, and only its link checks are reused while the page is unchanged |
+| Screenshots, page text and facts (the capture) | R2 and `portfolios` (`captured_at`) | 90 days | a growing backoff (`refresh_failures`) | Tonight's free checks (`capture.mjs --refresh`, up to 150 a night, asked-for sites first) |
+| "Grade my portfolio" free checks | `cache` `grader:quick:<site>` | links 30 days | 10 minutes (the visitor may have just fixed the site) | A request is a grade: the page is always fetched again, and only its link checks are reused while the grader's page fingerprint is unchanged |
 
-**The change fingerprint** ([lib/freshness.mjs](lib/freshness.mjs) `pageFingerprint`), from one ordinary page fetch, the same one the polish check and the grader's free checks make (`safeFetch`, the body capped at 800 KB):
+A nightly re-capture that fails keeps the good stored capture and waits out a growing backoff (`refresh_failures`) before it is tried again, unless the admin or the owner asks again after that failure.
 
-- a hash of the HTML with per-request noise removed: inline scripts, comments, CSP nonces, CSRF and trace tokens (and Sentry's trace tags), timestamps and epoch numbers, UUIDs and long hex or base64 ids, numbers in counter ids (`bits-5`, React's ids), Cloudflare's per-response links and email obfuscation, `@font-face` rules (font CDNs reorder their subsets), whitespace between tags, and the order of the `<head>` (streaming renderers emit it in a different order);
-- plus the sorted script and stylesheet URLs (without per-request query parameters such as `?t=<epoch>`), whose build hashes change on every deploy;
-- ETag and Last-Modified count only when the body is byte-for-byte the same as last time (a redeploy of identical HTML); a Last-Modified equal to the response's own time is a dynamic page and never counts.
+The state is `site_freshness`: per address `forced_at`.
+Its other columns (`hash`, `checked_at`, `attempted_at`, `changed_at` and the rest) held the removed fingerprints: nothing writes or reads them any more, and their rows stay.
+An old row's `changed_at` never makes anything due.
 
-The first fingerprint of a site is its baseline, never a change.
-About 1.5% of sites really differ on every request (a live clock, a random quote, a "now playing" track): they look changed at each weekly check and get re-measured weekly.
-A client-rendered page whose HTML shell and asset names stay the same across deploys looks unchanged; the maximum ages catch it.
-
-**The weekly check** ([worker/freshness.ts](worker/freshness.ts)): the hourly Cron Trigger (`15 * * * *`) fingerprints the listed, live sites attempted longest ago, about a 168th of the list each hour (14 of 2,106), so each site is checked once a week, and a site attempted in the last day is never fetched again.
-The polish check and the grader's free checks record the fingerprint of the page they already fetched, so a change found there counts at once.
-A fetch that fails keeps the stored fingerprint and only notes the attempt.
-The state is `site_freshness`: per address the fingerprint, `checked_at`, `attempted_at`, `changed_at` (and why), and `forced_at`.
-
-**What it costs** (2,106 listed sites, measured on 400 of them): about 300 page fetches a day, about 400 subrequests with redirects plus 3 Turso requests a tick (about 17 to 20 subrequests per hourly run, far under a run's limit); the fingerprint takes about 1 ms of CPU at the median and 8 ms at the 90th percentile, so with the fetch's own work about 1.5 to 3 seconds of Workers CPU a day, roughly 0.1 to 0.3 million ms a month of the 30 million included.
-Turso: the due query reads about 4,200 rows a tick (about 3 million a month of 500 million) and writes about 300 rows a day.
-
-**What people see:** under Lighthouse and the polish checklist, "Measured Nov 11 · site unchanged since" when a later check found the page the same, or "Re-measuring, the site changed · last measured Nov 3" while a due result runs again (the page asks again until the new result is in).
-**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`), and the counts in `GET /api/admin/quota` `freshness` and on `/admin/usage`: sites unchanged, changed this week, never checked, checked today, and re-measured today (Lighthouse, polish, captures, link checks).
+**What people see:** under Lighthouse and the polish checklist, "Measured on <date>", with "updating in the background" while a due result runs again.
+**The admin:** a "Re-measure" button on every portfolio page (shown only to `ADMIN_GITHUB_ID`, `POST /api/admin/remeasure`).
 
 ## End-of-day run
 
@@ -206,7 +210,7 @@ GitHub's own schedule starts jobs 4 to 10 hours late, so the clock is Cloudflare
 | When (Pacific) | Where | What |
 | --- | --- | --- |
 | All day, as they arrive | Worker and `grade.yml` | People's grade requests ("Grade my portfolio" below, [pipeline/people.mjs](pipeline/people.mjs)): the whole day's quota minus the evening reserve, 3.5 only; a request 3.5 can't answer waits in a queue |
-| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), checks the change fingerprint of a 168th of the list ("When checks re-run" above), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)), then starts the not-working re-check on GitHub Actions when a site is due ([worker/recheck-start.ts](worker/recheck-start.ts)) |
+| Every hour at :15 | Worker cron | Finishes queued people's requests when 3.5 is available (their report emails go out on the grader's next tick), then the image library's hourly batch: up to 2 images, none from 20:00 to midnight ([worker/library.ts](worker/library.ts)), then starts the not-working re-check on GitHub Actions when a site is due ([worker/recheck-start.ts](worker/recheck-start.ts)) |
 | Every 5 minutes | Worker cron | The grader's tick ([worker/grader.ts](worker/grader.ts)): report emails, captures that didn't start, requests waiting for a later day, cleanup; nothing while `GRADER_ENABLED` is off |
 | 20:30 | Worker cron, Workflow `portfolio-rank-night` | Starts tonight's run ([worker/night.ts](worker/night.ts)) |
 | 20:30 to 21:15 at the latest | GitHub Actions, started by the Workflow | The free checks: `sync-upstream.yml` (feed, capture of new sites, re-capture of up to 150 sites whose screenshots are due, page evidence, link checks that are due); every night also `health.yml` (not waited for) |
@@ -685,7 +689,7 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
   It is shown as "5 of 8 project links load" (and "; 1 behind a bot check"), or "Project links: none found".
   Facts of version 1 and 2 keep the rule and the words they were measured under (`projectLinksPass`, `projectLinksShare`, `projectLinksText`: one broken link fails, "4 of 5 load, 1 broken"), everywhere they are shown, until the site is measured again, so nothing a visitor sees changes between this release and the whole-list re-measure.
   The footer year is read on either side of the copyright mark ("© 2026", "2020 - 2026 ©"), the year first only where it opens a footer line (the start of a line or after a separator, with only spaces before the mark on the same line), never from a bare year.
-  Stored facts carry their version (`v`, `FACTS_VERSION`); nothing re-measures a row for a new version: a row gets the new facts at its next capture, and a grade keeps the code checks it was made with.
+  Stored facts carry their version (`v`, `FACTS_VERSION`); a row gets the new facts at its next capture, or for the whole list at once from the manual `remeasure-all.yml`.
   A project shown in a projects section counts as a project link when its GitHub or demo URL is a link or is written in its button; a "Projects" button that only scrolls to that section is not a link itself, but it counts for the `projects` signal and as an in-page section.
   A grade sends one image (the settled top of the page, local capture or R2 `hero.jpg`), the facts and the page text in a `<site_data>` block the system instruction marks as untrusted, with thinking at `minimal` and a strict JSON schema.
   Rows captured before v2 get their text and facts measured when graded (plain HTTP, or a browser when the server sends under 200 characters; `--no-browser` turns that off) and stored.
@@ -754,14 +758,14 @@ serve images.
 - `pipeline/generate_feed.py <readme> <out> [--exclude f] [--add f] [--max-shrink 0.05]` - build feed.json (reads the README, then runs `pipeline/build-feed.mjs`)
 - `pipeline/health-check.mjs [--limit N] [--no-browser] [--exclusions] [--dry-run]` - the nightly health check; `--exclusions` plans the export once a week and applies it until it lands; `--dry-run` checks every site and writes nothing, not even the roster sync (`LOCAL_DB_FILE=...` for a scratch database)
 - `node pipeline/recheck-due.mjs` - how many sites the hourly re-check has due; `node pipeline/recheck-run.mjs [--no-browser] [--controls N] [--dry-run]` - run it (`--dry-run`: writes nothing)
-- `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days
+- `pipeline/purge-delisted.mjs [--dry-run]` - delete screenshots and rows delisted for 30+ days that we removed (in `data/excluded.json`, or an old spelling)
 - `node pipeline/owner-removals.mjs [--dry-run]` - add portfolios their verified owners removed to `data/excluded.json` (the nightly health workflow runs it)
 - `node pipeline/review-additions.mjs [--dry-run]` - add sites the owner confirmed (or the review rule applied) as portfolios on `/admin/review` that are off the list to `data/additions.json`, and take back undone ones (the daily upstream sync and the nightly health workflow run it)
 - `node scripts/recompute-ratings.mjs [--read-only] [--export f] [--from f]` - rebuild the ranking v2 boards from the stored comparisons (RANKING.md)
 - `node pipeline/compare.mjs` - ranking v2 AI comparisons by hand (off unless `RANKING_V2=true`)
 - `node scripts/model-watch.mjs [--dry-run]` - the weekly model watch by hand (needs `GEMINI_API_KEY` for the model list; no generate calls)
 - `node pipeline/fullpage-backfill.mjs [--limit N] [--minutes M] [--concurrency C] [--only s] [--dry-run]` - tall desktop and phone images with thumbnails (AVIF, `<shot_key>/<v>/`) for up to N listed sites captured before the capture made them; changes no grade, hero.jpg or capture date (the nightly free checks run it with a cap)
-- `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: changed or asked for, then 90 days old (finds redesigns)
+- `node pipeline/capture.mjs --refresh N` - also re-capture up to N sites whose screenshots are due: asked for, then 90 days old (finds redesigns)
 - `node pipeline/evidence.mjs [--limit N] [--links N] [--no-browser]` - measure page text and facts for rows waiting for a grade without them; `--links N` also measures again up to N sites whose project link checks are due
 - `node scripts/simulate-ranking.mjs [--grades csv] [--votes-log log] [--out dir]` - offline evaluation of ranking v2
 - `scripts/backup-db.mjs` - DB → R2 snapshot · `scripts/restore-db.mjs` - snapshot → a new, empty database · `scripts/export-grades.mjs` - grades → CSV

@@ -119,8 +119,9 @@ test("purgeDelisted deletes screenshots and rows after 30 days, keeps votes and 
   await db.execute("INSERT INTO ratings VALUES ('https://old.example', 1250)");
   await db.execute({ sql: "INSERT INTO cache VALUES ('psi:https://old.example', '{}', 1)" });
   const deleted = [];
-  const r = await purgeDelisted(db, { now, deleteShots: async (k) => deleted.push(k), log: () => {} });
-  assert.deepEqual(r, { due: 1, purged: 1, failed: 0 });
+  const excluded = [{ url: "https://old.example", kind: "dead" }, { url: "https://recent.example", kind: "dead" }];
+  const r = await purgeDelisted(db, { now, excluded, deleteShots: async (k) => deleted.push(k), log: () => {} });
+  assert.deepEqual(r, { due: 1, purged: 1, failed: 0, notOurs: 0 });
   assert.deepEqual(deleted, ["oldkey"]);
   const urls = (await db.execute("SELECT url FROM portfolios")).rows.map((x) => x.url);
   assert.ok(!urls.includes("https://old.example"));
@@ -137,14 +138,15 @@ test("purgeDelisted keeps a row whose screenshots could not be deleted, and refu
   const old = new Date(now - 40 * DAY).toISOString();
   for (let i = 0; i < 9; i++) await db.execute({ sql: "INSERT INTO portfolios (url) VALUES (?)", args: [`https://k${i}.example`] });
   await db.execute({ sql: "INSERT INTO portfolios (url, shot_key, delisted_at) VALUES ('https://x.example', 'x', ?)", args: [old] });
-  const r = await purgeDelisted(db, { now, deleteShots: async () => { throw new Error("R2 down"); }, log: () => {} });
-  assert.deepEqual(r, { due: 1, purged: 0, failed: 1 });
+  const excluded = ["https://x.example", "https://y.example", "https://z.example"];
+  const r = await purgeDelisted(db, { now, excluded, deleteShots: async () => { throw new Error("R2 down"); }, log: () => {} });
+  assert.deepEqual(r, { due: 1, purged: 0, failed: 1, notOurs: 0 });
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM portfolios WHERE url = 'https://x.example'")).rows[0].n, 1);
   // 3 of 10 due (30% > 20%): refused, nothing deleted.
   for (const u of ["https://y.example", "https://z.example"]) {
     await db.execute({ sql: "INSERT INTO portfolios (url, delisted_at) VALUES (?, ?)", args: [u, old] });
   }
-  await assert.rejects(purgeDelisted(db, { now, deleteShots: async () => {} }), /refusing/);
+  await assert.rejects(purgeDelisted(db, { now, excluded, deleteShots: async () => {} }), /refusing/);
 });
 
 test("capture retries back off: 1, 2, 4, 8, 16, then 30 days", () => {
@@ -482,8 +484,8 @@ test("generate_feed.py honors object exclusions and refuses to shrink the feed b
   assert.equal(r.status, 2);
   assert.match(r.stdout, /refusing to write/);
   assert.equal(JSON.parse(fs.readFileSync(out, "utf8")).length, 98);
-  // 95 of 98 is within 5%.
+  // Upstream drops 3 of 98 (within 5%): they stay on our list (owner, 2026-11-22).
   fs.writeFileSync(readme, lines.slice(0, 97).join("\n"));
   execFileSync("python3", ["pipeline/generate_feed.py", readme, out, "--exclude", excl, "--max-shrink", "0.05"]);
-  assert.equal(JSON.parse(fs.readFileSync(out, "utf8")).length, 95);
+  assert.equal(JSON.parse(fs.readFileSync(out, "utf8")).length, 98);
 });

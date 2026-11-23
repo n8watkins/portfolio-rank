@@ -4,14 +4,14 @@ import { checkLinks, measureFacts, pageLinks, projectCandidates } from "@/pipeli
 import { scanPage } from "@/pipeline/page-controls.mjs";
 import { parkingPhrase, titleOf, visibleText } from "@/pipeline/gate.mjs";
 import { codeChecks } from "@/pipeline/rubric.mjs";
-import { CHECK_KINDS, pageFingerprint, recordCheck } from "@/lib/freshness.mjs";
+import { CHECK_KINDS, pageFingerprint } from "@/lib/freshness.mjs";
 
 // The free checks of "grade my portfolio", from the Worker at once (owner
 // decision 2026-11-10: a plain fetch, no browser, no Gemini): is the page
 // up, and the facts code can check from its HTML (pipeline/facts.mjs:
 // resume, GitHub, contact, project links that load, own domain, footer
-// year, template), plus the page's change fingerprint (lib/freshness.mjs)
-// that the re-grade cooldown compares.
+// year, template), plus the page's fingerprint (lib/freshness.mjs
+// pageFingerprint) that the re-grade cooldown compares.
 //
 // Every fetch goes through safeFetch (lib/safefetch.ts): redirects followed
 // by hand with every hop re-checked against private addresses, the body
@@ -43,7 +43,7 @@ export type QuickFacts = {
   facts?: Record<string, unknown>;
   /** Pass/fail/unknown per code criterion (pipeline/rubric.mjs codeChecks). */
   checks?: Record<string, boolean | null> | null;
-  /** The page's change fingerprint (lib/freshness.mjs pageFingerprint hash). */
+  /** The page's fingerprint (lib/freshness.mjs pageFingerprint hash). */
   fingerprint?: string | null;
   /** When the project links were checked: now, or an earlier check reused while the page was unchanged. */
   linksCheckedAt?: string;
@@ -72,7 +72,7 @@ function linkFetch(fetcher: Fetcher) {
 export async function measureQuick(
   url: string,
   { fetcher = publicFetcher, now = new Date(), reuse = null }: { fetcher?: Fetcher; now?: Date; reuse?: Reuse | null } = {}
-): Promise<QuickFacts & { fp?: ReturnType<typeof pageFingerprint> }> {
+): Promise<QuickFacts> {
   const measuredAt = now.toISOString();
   const got = await fetcher(url, { timeoutMs: PAGE_TIMEOUT_MS });
   if (!got) return { ok: false, error: "unreachable", message: "We couldn't reach that address (it didn't answer, or it points somewhere we don't visit).", measuredAt };
@@ -119,7 +119,6 @@ export async function measureQuick(
     fingerprint: fp.hash,
     linksCheckedAt,
     measuredAt,
-    fp,
     ...(text.length < 30 ? { message: "The page sends almost no text without JavaScript; the screenshot step reads the rendered page." } : {}),
   };
 }
@@ -128,13 +127,11 @@ export async function measureQuick(
 /**
  * The free checks for a site address. A failure is reused for 10 minutes;
  * otherwise the page is fetched again and only the link checks of an
- * unchanged page are reused (see the header). For a listed portfolio
- * (`listedUrl`), the fetch also records its change fingerprint, so the
- * leaderboard's checks of a site its owner just changed are due again.
+ * unchanged page are reused (see the header).
  */
 export async function quickFacts(
   db: Client,
-  { url, siteKey, fetcher, now = Date.now(), listedUrl = null }: { url: string; siteKey: string; fetcher?: Fetcher; now?: number; listedUrl?: string | null }
+  { url, siteKey, fetcher, now = Date.now() }: { url: string; siteKey: string; fetcher?: Fetcher; now?: number }
 ): Promise<QuickFacts & { cached: boolean }> {
   const k = `grader:quick:${siteKey}`;
   const row = (await db.execute({ sql: "SELECT v, at FROM cache WHERE k = ?", args: [k] })).rows[0];
@@ -148,8 +145,7 @@ export async function quickFacts(
       /* measure again */
     }
   }
-  const { fp, ...v } = await measureQuick(url, { fetcher, now: new Date(now), reuse });
+  const v = await measureQuick(url, { fetcher, now: new Date(now), reuse });
   await db.execute({ sql: "INSERT OR REPLACE INTO cache (k, v, at) VALUES (?, ?, ?)", args: [k, JSON.stringify(v), now] });
-  if (fp && listedUrl) await recordCheck(db, listedUrl, fp, { now }).catch(() => {});
   return { ...v, cached: false };
 }

@@ -162,7 +162,6 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   | Night watch | off | Would alert that the end-of-day run never started |
   | People queue | kept | Does nothing unless a grade asked for on staging is queued; then it calls Gemini, and only with staging's own key |
   | Tiers | kept | Database and edge cache only |
-  | Freshness | off | Fetches every listed portfolio |
   | Review auto-apply | kept | Database and edge cache only |
   | Image library | off | Workers AI and Gemini |
   | Goals | off | Only emails the owner and reads Kit |
@@ -171,7 +170,7 @@ https://staging.portfoliorank.dev runs the same code as production on its own Wo
   | Newsletter tick | off | Kit |
 
   Staging never gets production's `GEMINI_API_KEY` or the `GITHUB_DISPATCH_TOKEN`, so it never spends the production quota or starts production's GitHub jobs.
-  A job's own feature flag (`FRESHNESS_ENABLED` and the like) still decides what pages show; the allowlist only decides what runs on a schedule.
+  A job's own feature flag (`REVIEW_AUTO_APPLY` and the like) still decides what pages show; the allowlist only decides what runs on a schedule.
   To try a new scheduled job, run it by hand against staging or add it to the allowlist in the pull request that proves it; once it works, it belongs to production.
   To exercise the people queue, give staging its own key from a separate Google project (`! pass-env set portfolio-rank/STAGING_GEMINI_API_KEY`, then `pass-env pipe portfolio-rank/STAGING_GEMINI_API_KEY -- npx wrangler secret put GEMINI_API_KEY --env staging`); `GEMINI_DAILY_QUOTA` and `GEMINI_BUDGET` in `env.staging` hold it to a tenth of production's day.
   "Write a draft now" runs on staging only with that key, at most `STAGING_DRAFTS_PER_DAY` (1) a day (`lib/content/jobs.mjs` `draftNowPolicy`).

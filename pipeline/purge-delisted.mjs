@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Delete the screenshots (R2) and the row of every portfolio delisted for 30+
-// days (pipeline/roster.mjs purgeDelisted). Votes and ratings are kept, so
-// the vote log stays complete and rankings stay recomputable. Run by the
-// weekly health workflow after the health check.
+// days that we removed: in data/excluded.json, or an old spelling of a listed
+// site (pipeline/roster.mjs purgeDelisted). A row the community list dropped
+// is never deleted for that (owner, 2026-11-22). Votes and ratings are kept,
+// so the vote log stays complete and rankings stay recomputable. Run by the
+// nightly health workflow after the health check.
 //
 // Usage: node pipeline/purge-delisted.mjs [--dry-run]
 import fs from "fs";
@@ -10,6 +12,7 @@ import path from "path";
 import * as commands from "@aws-sdk/client-s3";
 import { pipelineDb, purgeDelisted } from "./roster.mjs";
 import { deleteAllShots, imagesBucket } from "./shot-store.mjs";
+import { readList } from "./list-util.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const DRY = process.argv.includes("--dry-run");
@@ -34,8 +37,9 @@ const deleteShots = async (key) => {
   for (const bucket of buckets) await deleteAllShots({ send: (c) => s3.send(c), commands, bucket, shotKey: key });
 };
 
-const result = await purgeDelisted(pipelineDb(ROOT), { deleteShots, dryRun: DRY });
-const md = `### Purge\n\n${result.due} row(s) delisted for 30+ days: ${result.purged} purged, ${result.failed} failed${DRY ? " (dry run)" : ""}.\n`;
+const excluded = readList(path.join(ROOT, "data", "excluded.json"));
+const result = await purgeDelisted(pipelineDb(ROOT), { excluded, deleteShots, dryRun: DRY });
+const md = `### Purge\n\n${result.due} row(s) we removed delisted for 30+ days: ${result.purged} purged, ${result.failed} failed${DRY ? " (dry run)" : ""}. ${result.notOurs} delisted row(s) kept: not removed by us.\n`;
 console.log(md);
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md}\n`);
 process.exit(result.failed ? 1 : 0);

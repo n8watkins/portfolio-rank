@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { cached, type CacheMeta } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
-import { db } from "@/lib/db";
-import { CHECK_KINDS, FINGERPRINT_MAX_BYTES, pageFingerprint, recordCheck } from "@/lib/freshness.mjs";
+import { CHECK_KINDS } from "@/lib/freshness.mjs";
 import { footerYear } from "@/pipeline/facts.mjs";
 import { stripTags } from "@/pipeline/page-controls.mjs";
+
+/** The body cap for the polish check's page fetch. */
+const MAX_HTML_BYTES = 800_000;
 
 const FREE_HOSTS =
   /\.(vercel\.app|netlify\.app|github\.io|framer\.website|framer\.app|pages\.dev|web\.app|surge\.sh|onrender\.com|herokuapp\.com)$/i;
@@ -84,10 +86,7 @@ async function inspect(target: string): Promise<Inspection> {
   if (!res.ok) return { ok: false, error: `http_${res.status}` };
 
   // Cap the body so a hostile server can't OOM the function by streaming GBs.
-  const html = await readCapped(res, FINGERPRINT_MAX_BYTES);
-  // The same fetch is the site's change fingerprint (lib/freshness.mjs): a
-  // change found here makes the site's other checks due again.
-  await recordCheck(db(), target, pageFingerprint({ html, finalUrl, headers: res.headers })).catch(() => {});
+  const html = await readCapped(res, MAX_HTML_BYTES);
   const meta = parseMetaTags(html);
   const host = new URL(finalUrl).hostname;
 
@@ -165,10 +164,10 @@ export async function GET(req: Request) {
   if (!url || !isKnownPortfolio(url)) {
     return NextResponse.json({ ok: false, error: "unknown_url" }, { status: 403 });
   }
-  // When the polish check runs again (lib/freshness.mjs): reused while the
-  // site is unchanged; measured again when it changed, on "Re-measure", or
-  // after 30 days (the share image and favicon can break without the page
-  // changing); a site that couldn't be reached is tried again after an hour.
+  // When the polish check runs again (lib/freshness.mjs): measured again on
+  // "Re-measure" or after 30 days (the share image and favicon can break
+  // without the page changing); a site that couldn't be reached is tried
+  // again after an hour.
   const data = await cached<Inspection>(
     "inspect",
     url,

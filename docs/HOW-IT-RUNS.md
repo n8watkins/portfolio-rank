@@ -105,15 +105,14 @@ Each task runs on its own, so one that fails is reported to Sentry and the rest 
    The other ticks that day do nothing.
    The letters stay hidden from visitors while `RANKING_V2` is false (per `wrangler.jsonc`).
    Running.
-9. **Change fingerprints** (`freshness`, `worker/freshness.ts`): checks one 168th of the list a tick to see whether pages changed.
-   Off (`FRESHNESS_ENABLED` is false, per `wrangler.jsonc`).
-   Going, but not removed yet: "when checks re-run" (`lib/freshness.mjs`) uses the same fingerprints to decide when Lighthouse, polish, screenshots and link checks are measured again, so removing it waits for the owner.
-   It never triggered a re-grade.
-10. **Apply review decisions** (`review auto-apply`, `worker/review.ts`): applies waiting rows in the review queue that pass the owner's rule.
-    On with `REVIEW_AUTO_APPLY` true (per `wrangler.jsonc`).
-    Running.
-11. **Image library** (`image library`, `worker/library.ts`): does something only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 15:15 Pacific in winter), and nothing in the other 23 hours.
+9. **Apply review decisions** (`review auto-apply`, `worker/review.ts`): applies waiting rows in the review queue that pass the owner's rule.
+   On with `REVIEW_AUTO_APPLY` true (per `wrangler.jsonc`).
+   Running.
+10. **Image library** (`image library`, `worker/library.ts`): does something only in the UTC hour `LIBRARY_RUN_HOUR_UTC` (23, so 23:15 UTC, 15:15 Pacific in winter), and nothing in the other 23 hours.
     Its Gemini checks use the `library` AI budget, so it is Paused.
+
+Nothing checks pages for changes.
+The hourly change fingerprints were removed on 2026-11-22, before they ever ran in production.
 
 Staging runs only some of these (`owner removals`, `removal alerts`, `edge purge`, `tiers`, `review auto-apply`, `people queue`, and `grader`).
 It does not start GitHub jobs, and its emails go only to its own test address.
@@ -152,7 +151,7 @@ A `GEMINI_BUDGET` key for a stage that no longer exists (the production one stil
 | 1 | Grade new sites (`grade_new`) | listed, captured, healthy, not yet graded; and re-grades people asked for | 300 | 60 min | Paused |
 | 2 | AI ranking comparisons (`compare`) | pairs of sites, then the boards are rebuilt | 200 | 45 min | Off (`RANKING_V2` is false) and Paused |
 | 3 | Content (`content`) | poll writing, then blog picks and drafts | 100 | 30 min | Paused |
-| 4 | Image library (`library`) | nothing at night | 40 | 25 min | Off at night, see the hourly task 11 |
+| 4 | Image library (`library`) | nothing at night | 40 | 25 min | Off at night, see the hourly task 10 |
 | 5 | Experiments (`experiment`) | nothing scheduled | 50 | 15 min | Off |
 
 The run begins at 20:30, the AI stages get going after the free checks (by 21:15 at the latest), and nothing starts after 23:30.
@@ -173,17 +172,21 @@ Each chain is a list of steps in the order they happen.
 2. **The owner's confirmed relists go in first** (`sync-upstream.yml`, `pipeline/review-additions.mjs`).
    Sites you confirmed as portfolios on the review page that had left the list are added to `data/additions.json`.
 3. **Our list is rebuilt** (`sync-upstream.yml`, `pipeline/generate_feed.py`).
-   It is the community list, minus our exclusions, plus our additions.
-   Two guards refuse a list that shrinks by more than 5%, or that loses more than 15% of the current addresses.
+   It is the community list, minus our exclusions, plus our additions, plus every site already on our list that the community list dropped (see "The community list drops a site" below).
+   Three guards refuse a list that shrinks by more than 5%, a community list that drops more than 5% of our list in one night (a README cut short or rewritten), or a list that loses more than 15% of the current addresses.
    A refusal fails the run, which files an issue.
 4. **The list change becomes a pull request that merges itself** (`sync-upstream.yml`, branch `data/sync-upstream`).
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
-   The database roster is synced first: rows not on the list are marked delisted, with a 15% safety limit.
+   The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
    A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
    When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link (`pipeline/capture-projects.mjs`).
    When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
-   The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`).
+   The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`), `lib/freshness.mjs` `screenshotsDue`.
+   A capture is due again for one of two reasons only: it is 90 days old, or a person asked for a new one (your "Re-measure", or a re-grade an owner asked for).
+   Asked-for sites go first, then the oldest captures.
+   A refresh that fails keeps the old capture and waits out a growing backoff, unless someone asks again after the failure.
+   A change to the page is not a reason: nothing watches for one.
 6. **Capture checks** (same step, code only).
    A capture that does not show the site is never stored or graded:
    1. An error, a parked page or a blank page is retried on later nights, after 1, 2, 4, 8 and 16 days, then every 30 days.
@@ -191,6 +194,14 @@ Each chain is a list of steps in the order they happen.
       A site that was never captured gets a row on your review page at the night's plan step.
    3. A page with only a canvas or video is held back and marked for review, but no review row is written for it yet.
       The fix is open as #266.
+   4. A re-capture of a site that already has a good capture never replaces or fails it: the site waits 1, 2, 4, 8, 16 then 30 days before the next try (`refresh_failures`).
+      From the next release, a re-capture that meets a bot or security check, or a dialog still covering the page, also puts the site on your review list: a row on your review page ("Mark checked" records that you looked), and the stored capture and grade stay as they are.
+      The row closes by itself once a later re-capture gets through.
+      A gate, loader or mode picker still in the way, a page of only a canvas or video, or an error status does not go to your review list after a re-capture; it stays a refresh failure with its reason.
+      Neither does a bot check seen only on the phone-size visit, after the desktop view showed the site.
+   5. From the next release, a re-capture that lost a résumé, GitHub or contact link the old capture had, or most of its text, is recorded (`capture_changes`).
+      A change that comes with new measuring code (a new `facts.v`) is recorded as the code's, not the site's.
+   All of these are listed on the Capture problems page (see "Keeping watch").
 7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), and project link checks that are due (up to 120).
    A link check tests again the links the site's capture chose and only renews which of them load (`pipeline/evidence.mjs`).
 8. **Grade** (night stage 1, `grade_new`).
@@ -208,7 +219,7 @@ Each chain is a list of steps in the order they happen.
    5. You undid an earlier removal, a rule once listed the site, an earlier grade said portfolio, or another case is waiting: the site stays listed and waits for you.
 10. **Apply the removal.**
     With `REVIEW_AUTO_APPLY` true (per `wrangler.jsonc`), the night applies a recorded removal at once.
-    The hourly task (hourly task 10) applies any that were left waiting, and also confirms waiting relist rows when both graders say portfolio.
+    The hourly task (hourly task 9) applies any that were left waiting, and also confirms waiting relist rows when both graders say portfolio.
     Every automatic decision shows on your review page with Undo.
 11. **Starting rank** (`lib/tiers-store.mjs` `rankForWrite`, as the grade is written).
     The site's starting place in the tiers comes from the code checks, not from Gemini's letter.
@@ -238,12 +249,33 @@ Each chain is a list of steps in the order they happen.
 6. **The weekly export** (`health.yml`, `pipeline/exclusions.mjs`, every 6 or more days).
    The site is added to `data/excluded.json` and dropped from the list, through a pull request (`data/health-exclusions`) that merges itself, at most 10% of the list at once.
    Removed sites are re-checked later (days 7, 14 and 21, then monthly) and come back when they pass.
-7. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots.
+7. **Delisted rows are purged** (`health.yml`, `pipeline/purge-delisted.mjs`): a row off the list for 30 days is deleted with its screenshots, but only when we removed the site (it is in `data/excluded.json`) or the row is an old spelling of a listed site.
+   Any other delisted row is kept and counted in the run summary.
    Votes and ratings stay.
 
 No one is emailed at any step.
 A site the check could not tell about for 28 days gives you an alert on the alerts page.
 A different path exists for a site that answers with the wrong thing (parked, blank, a duplicate): 3 failed checks, a week apart, spanning at least 13 days.
+
+### The community list drops a site
+
+Your rule (2026-11-22): a removal on the community list changes nothing on our side.
+The community list drops lines mostly through its own broken-link reports (paused hosting, a 404, an expired domain), which is not a judgement that the site is not a portfolio.
+
+1. **The nightly list rebuild keeps it** (`sync-upstream.yml`, `pipeline/generate_feed.py`, `pipeline/build-feed.mjs` `buildFeed`).
+   A site on our list that the community list no longer has stays on `data/feed.json`.
+   It is recorded in `data/additions.json` with `"source": "left_community_list"` and `left_on`, the day the rebuild first saw it gone, and both files go into the same self-merging pull request.
+   Not kept: a site in `data/excluded.json` (under either spelling key), an old spelling of a site the list now spells differently, and a line that was never a web address (such as `https\://shreyanshportfolio.in`, misread by an older parser).
+2. **Nothing changes in the database.**
+   The roster sync sees the site still on the list, so its row, grade, votes, ratings and screenshots stay as they are.
+3. **Only our own checks decide from then on.**
+   The nightly health check hides it while it fails and shows it again when it passes, as for any listed site.
+   It leaves the list only through our exclusions (dead, down, duplicate, not a portfolio) or an owner's removal through the claim process.
+   A recorded site that we exclude stays recorded, so lifting the exclusion (an undone owner removal, a removed site that passes its re-check) lists it again.
+4. **If the community list lists it again**, the rebuild takes the community list's entry (with our spelling, if it respelled it), and the site leaves the record.
+
+Nothing is sent to the community list.
+The 25 sites the community list had dropped before this rule were put back into the record by hand on 2026-11-22, each with the day our list lost it.
 
 ### An owner removes their site
 
@@ -316,7 +348,7 @@ The routes answer 404 and the five-minute tick returns at once.
    Paused.
    `CONTENT_MODE` is `dry-run` (per `wrangler.jsonc`), which allows drafts for review only, so nothing publishes without you.
    Whether the writer has ever produced a real draft is not confirmed.
-5. **Images** (hourly task 11, once a day at 15:15 Pacific, `worker/library.ts`).
+5. **Images** (hourly task 10, once a day at 15:15 Pacific, `worker/library.ts`).
    Makes images from the image library's queue, up to what is left of 40 a day.
    Paused.
 6. **Your review, then publish.**
@@ -358,6 +390,8 @@ Each one watches the jobs above.
 | hourly | Night watch: an alert when last night's run never started or died. | Running |
 | hourly | Email caps: an alert at 80% of a cap. | Running |
 | after each night | Owner alerts: quota used up, a stage stopped, parked items, traction, a missing or expiring dispatch token. | Running |
+| after each night | Owner alerts: a weekly summary of the open capture problems, each group's count and its change since the last email, with the page's link (`lib/capture-problems.mjs`). Emailed at most once in 7 days, and only when a count has gone up since the last email (a rise inside the 7 days is reported after them if it is still there; after the alert clears, a problem that comes back counts as new). The other nights it is shown in the admin but not emailed. Never on staging. | Off until the next release |
+| any time | The Capture problems page (`/admin/capture-problems`), listed sites only: A a re-capture failed and the old capture is kept, B a first capture failed, C the stored capture is a bot check or has under 200 characters of text (captures from before page text was stored are counted apart as not checked), D a re-capture got worse. Each row has its reason, capture date and thumbnail, Gemini's grade, the health state and whether it has an open row on your review page. | Off until the next release |
 | daily | A backup of the database (`backup.yml`), and a check that it is fresh (`limits.yml`). | Running |
 | daily | A snapshot of free limits for Turso, R2 and Workers (`limits.yml`). | Running |
 | weekly | Model watch and your goals email (Worker), and the security scan (`security.yml`). | Running |
@@ -398,7 +432,7 @@ Dependabot (`.github/dependabot.yml`) opens pull requests daily for release-kit 
 | Cron (UTC) | Group | Tasks, in order | State today |
 | --- | --- | --- | --- |
 | `30 3 * * *` and `30 4 * * *` | nightly | `night start` (only the one that is 20:30 Pacific acts) | Running |
-| `15 * * * *` | hourly | the eleven tasks in section 3 | Running, with the states in section 3 |
+| `15 * * * *` | hourly | the ten tasks in section 3 | Running, with the states in section 3 |
 | `0 16 * * MON` | weekly | `goals`, then `model watch` | Running |
 | `*/5 * * * *` | five-minute | `grader`, then `newsletter` | Off |
 
@@ -415,7 +449,6 @@ Dependabot (`.github/dependabot.yml`) opens pull requests daily for release-kit 
 | `night watch` | alerts when a night is missing | Running |
 | `people queue` | finishes queued visitor requests | Running, idle while grading is Off |
 | `tiers` | daily tier cutoffs | Running (letters hidden) |
-| `freshness` | weekly change fingerprints | Off (`FRESHNESS_ENABLED`), Going |
 | `review auto-apply` | applies passing review rows | Running (`REVIEW_AUTO_APPLY` true) |
 | `image library` | one daily batch of images | Paused |
 | `goals` | weekly goals email | Running |
@@ -427,13 +460,10 @@ Other settings, per `wrangler.jsonc`: `RANKING_V2` false, `GAMES_V2` false, `TOO
 
 ### Decided, not yet done
 
-Decided to be removed by the owner on 2026-11-21, and still in code:
+Nothing decided is still waiting in code.
 
-- The hourly change fingerprints (hourly task 9, Off).
-  "When checks re-run" uses the same fingerprints, so this waits for the owner's word on what replaces them.
-
-Already removed: the monthly report to the community list; and, on 2026-11-22, the nightly "Record page changes" step, the weekly comparison of two Gemini versions (`grade-compare.yml`), the older AI votes in `judge-vote.yml`, the "grade changed sites" and "re-grades" night stages, and discovery's AI screen.
-Their tables stay, with what they hold: `rating_resets` and `site_fingerprints` are no longer written.
+Already removed: the monthly report to the community list; on 2026-11-22, the nightly "Record page changes" step, the weekly comparison of two Gemini versions (`grade-compare.yml`), the older AI votes in `judge-vote.yml`, the "grade changed sites" and "re-grades" night stages, and discovery's AI screen; and, also on 2026-11-22, the hourly change fingerprints (the `freshness` task and its `FRESHNESS_ENABLED` switch, which was never on in production).
+Their tables stay, with what they hold: `rating_resets` and `site_fingerprints` are no longer written, and `site_freshness` keeps only `forced_at` in use (its fingerprint columns are no longer written or read).
 Scheduled jobs run released code, so these stop in production only with the next release.
 
 ## 8. How to keep this page true
