@@ -91,7 +91,7 @@ test("links with a stray quote are read as main read them; a > inside a quoted c
   assert.deepEqual(extractLinks(`<a href=/o'neil>Home</a>`, base).map((l) => [l.href, l.text]), [["https://ana.dev/o'neil", "Home"]]);
   assert.deepEqual(extractLinks(`<a href="/x" title=5">X</a>`, base).map((l) => [l.href, l.text]), [["https://ana.dev/x", "X"]]);
   assert.deepEqual(extractLinks(`<a class="[&>svg]:size-4" href="https://github.com/ana">GitHub</a>`, base).map((l) => l.href), ["https://github.com/ana"]);
-  assert.deepEqual(extractLinks(`<a href="#a" aria-label="About">x</a>`, base), [{ raw: "#a", href: "https://ana.dev/#a", text: "x About", inProjects: false, inChrome: false, inSocial: false }]);
+  assert.deepEqual(extractLinks(`<a href="#a" aria-label="About">x</a>`, base), [{ raw: "#a", href: "https://ana.dev/#a", text: "x About", inProjects: false, inChrome: false, inSocial: false, inAside: false }]);
 });
 
 test("the word GitHub on a control is not a GitHub link: it needs a github.com URL", () => {

@@ -145,7 +145,9 @@ test("a project's own name may be any word; the path above it must not be a blog
     "/projects/profile", "/projects/export", "/portfolio/settings", "/case-studies/checkout", "/projects/news", "/projects/download"]) {
     assert.ok(counted(p), p);
   }
-  for (const p of ["/projects/tag/react", "/projects/category/web", "/blog/projects/x", "/account/projects/x", "/projects/download/file", "/admin/work/x", "/projects/page/2"]) {
+  // An action is never requested, even as the name right under the listing ("/projects/logout", "/projects/x/delete").
+  for (const p of ["/projects/tag/react", "/projects/category/web", "/blog/projects/x", "/account/projects/x", "/projects/download/file", "/admin/work/x", "/projects/page/2",
+    "/projects/logout", "/projects/unsubscribe", "/projects/delete", "/work/sign-out", "/projects/x/delete", "/projects/x/edit", "/projects/react/tag"]) {
     assert.ok(!counted(p), p);
   }
   // On the projects page, the name right under that page's path is the project's too ("/builds/checkout" under "/builds").
@@ -155,6 +157,40 @@ test("a project's own name may be any word; the path above it must not be a blog
   assert.ok(!own("/builds/tag/react"));
   // The page that is loaded in a browser is never an action, at any depth (projectsPageFor, tested above).
   assert.equal(projectsPageFor(homeProjectLinks({ html: `<nav><a href="/projects/unsubscribe">Projects</a></nav>`, url, finalUrl: url }), url), null);
+});
+
+test("tool lists, article sites, cookie banners and comment widgets are never projects, on either page", async () => {
+  const url = "https://ana.dev/";
+  const ok = async () => new Response(null, { status: 200 });
+  const homeNav = `<nav><a href="/projects">Projects</a></nav><main><h1>Ana</h1></main>`;
+  const viaPage = async (ppHtml, pp = "https://ana.dev/projects") => {
+    const g = await measurePage({ html: homeNav, text: "", url, finalUrl: url, projectsPage: { html: ppHtml, finalUrl: pp } }, { fetchImpl: ok });
+    return { urls: (g.project_candidates || []).map((c) => c.url), pass: codeChecks(g).project_links };
+  };
+  // The reviewer's cases: a "Tools I use" section beside image-only cards (repositories in it too).
+  const tools = await viaPage(`<main><h1>Projects</h1><section><h2>Tools I use</h2><a href="https://nodejs.org/">Node</a><a href="https://www.typescriptlang.org/">TS</a><a href="https://www.mongodb.com/">Mongo</a><a href="https://www.figma.com/">Figma</a><a href="https://www.docker.com/">Docker</a><a href="https://react.dev/">React</a><a href="https://vercel.com/">Vercel</a><a href="https://github.com/facebook/react">repo</a></section><div><img alt="project shot"></div></main>`);
+  assert.deepEqual(tools, { urls: [], pass: false });
+  // The same sites in a list with no heading still do not count: they are tool sites.
+  assert.deepEqual((await viaPage(`<main><h1>Projects</h1><a href="https://nodejs.org/">Node</a><a href="https://www.mongodb.com/">Mongo</a><a href="https://www.figma.com/">Figma</a></main>`)).urls, []);
+  // An element named for the stack (in a project card) holds tools; the card's live link still counts.
+  assert.deepEqual((await viaPage(`<main><h1>Projects</h1><div><a href="https://alpha.example/">Live</a><ul class="tech-stack"><li><a href="https://alpha-lib.example/">lib</a></li></ul></div></main>`)).urls, ["https://alpha.example/"]);
+  // An article list on /portfolio.
+  const articles = await viaPage(`<main><h1>Portfolio</h1><article><a href="https://smashingmagazine.com/2024/a">a</a></article><article><a href="https://css-tricks.com/b">b</a></article><article><a href="https://medium.com/@ana/c">c</a></article><article><a href="https://www.freecodecamp.org/news/d">d</a></article></main>`, "https://ana.dev/portfolio");
+  assert.deepEqual(articles, { urls: [], pass: false });
+  // A cookie banner and a comment widget.
+  const cookie = await viaPage(`<main><h1>Projects</h1><div><img alt="x"></div><div id="disqus_thread"><a href="https://p.example/">p</a></div></main><div class="cookie-banner">We use cookies. <a href="https://www.cookiebot.com/">Cookiebot</a> <a href="https://www.onetrust.com/">OneTrust</a> <a href="https://consent.example/">More</a></div><div id="CybotCookiebotDialog"><a href="https://cmp.example/">x</a></div>`);
+  assert.deepEqual(cookie, { urls: [], pass: false });
+  // On the home page too: a "Tech stack" section after the projects, and a skills element.
+  const home = `<main><section id="projects"><a href="https://p1.example/">p1</a></section><section><h2>Tech stack</h2><a href="https://tool.example/">tool</a></section><div class="skills"><a href="https://skill.example/">s</a></div><a href="https://other.example/">o</a></main>`;
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: home, url, finalUrl: url }), url).map((c) => [c.tier, c.url]), [[1, "https://p1.example/"], [3, "https://other.example/"]]);
+  // "Tools I've built" is a projects heading's kind of section, not a tool list.
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<main><h2>Tools I've built</h2><a href="https://t.example/">t</a></main>`, url, finalUrl: url }), url).map((c) => c.url), ["https://t.example/"]);
+  // Where people really ship stays in: their apps on the hosts' app domains, package pages, store listings.
+  const shipped = ["https://ana-app.vercel.app/", "https://ana.netlify.app/", "https://ana.github.io/x/", "https://www.npmjs.com/package/ana-lib", "https://pypi.org/project/ana-lib/", "https://play.google.com/store/apps/details?id=dev.ana", "https://chromewebstore.google.com/detail/ana/abc", "https://apps.apple.com/app/id1", "https://hub.docker.com/r/ana/x", "https://addons.mozilla.org/firefox/addon/ana/"];
+  const got = projectCandidates(homeProjectLinks({ html: `<section id="projects">${shipped.map((u) => `<a href="${u}">x</a>`).join("")}</section>`, url, finalUrl: url }), url, 20).map((c) => c.url);
+  assert.deepEqual(got, shipped);
+  // A registry's own home page is not a project.
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<section id="projects"><a href="https://www.npmjs.com/">npm</a><a href="https://pypi.org/">PyPI</a></section>`, url, finalUrl: url }), url), []);
 });
 
 test("only as many own pages as the pass counts go ahead of other outbound links (stimmie.dev's case)", () => {

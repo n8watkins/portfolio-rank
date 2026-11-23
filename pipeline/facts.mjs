@@ -122,7 +122,18 @@ const isCodepenProfile = (u) => /(^|\.)codepen\.io$/i.test(u.hostname) && u.path
 
 // Hosts that are profiles or services, not project demos.
 const NOT_PROJECT =
-  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com)$/i;
+  /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com|smashingmagazine\.com|css-tricks\.com|freecodecamp\.org|hashnode\.dev|w3schools\.com|developer\.mozilla\.org|cookiebot\.com|onetrust\.com)$/i;
+// App store and extension store listings are projects, though their parent hosts are on the list above.
+const STORE_HOST = /^(?:play\.google\.com|chromewebstore\.google\.com)$/i;
+// The sites of the tools a developer uses, as named in a "Tools I use" list: languages, frameworks and
+// libraries, databases, cloud and hosting providers, design tools. The exact site only (with or without www),
+// never a subdomain, so a project shipped on one of them (an app on a provider's subdomain, hub.docker.com/r/x,
+// flask.palletsprojects.com is not on the list) still counts; the hosting platforms' own app domains
+// (vercel.app, netlify.app, github.io, web.app, onrender.com, up.railway.app) are not on it at all.
+const TOOL_SITE =
+  /^(?:www\.)?(?:nodejs\.org|typescriptlang\.org|javascript\.com|python\.org|go\.dev|golang\.org|rust-lang\.org|kotlinlang\.org|swift\.org|php\.net|ruby-lang\.org|java\.com|dart\.dev|flutter\.dev|angular\.dev|angular\.io|vuejs\.org|svelte\.dev|nuxt\.com|remix\.run|expressjs\.com|nestjs\.com|djangoproject\.com|laravel\.com|spring\.io|getbootstrap\.com|sass-lang\.com|mui\.com|redux\.js\.org|graphql\.org|prisma\.io|vitejs\.dev|vite\.dev|webpack\.js\.org|jestjs\.io|threejs\.org|d3js\.org|jquery\.com|tensorflow\.org|pytorch\.org|numpy\.org|jupyter\.org|mongodb\.com|postgresql\.org|mysql\.com|redis\.io|sqlite\.org|supabase\.com|firebase\.com|docker\.com|kubernetes\.io|git-scm\.com|aws\.amazon\.com|azure\.microsoft\.com|heroku\.com|render\.com|railway\.app|digitalocean\.com|cloudflare\.com|figma\.com|adobe\.com|canva\.com|sketch\.com|postman\.com|code\.visualstudio\.com|jetbrains\.com|openai\.com)$/i;
+// A package registry's home page names the registry, not a project; its package pages are projects.
+const REGISTRY_HOME = /^(?:www\.)?(?:npmjs\.com|pypi\.org|crates\.io|rubygems\.org|pub\.dev|packagist\.org|nuget\.org)$/i;
 
 
 // Known templates, by a marker they leave in the HTML. The value is the name
@@ -229,7 +240,7 @@ export { isGithubProfile };
  */
 export function pageLinks(html, baseUrl, scan = null) {
   const page = scan ?? scanPage(html, baseUrl);
-  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial })));
+  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside })));
   return [...page.links, ...fromControls];
 }
 
@@ -254,7 +265,7 @@ function projectUrl(l, self) {
     const segs = u.pathname.split("/").filter(Boolean);
     if (segs.length < 2 || GH_RESERVED.test(segs[0])) return null; // a profile, not a repository
     repo = true;
-  } else if (NOT_PROJECT.test(h) || PROFILE_HOSTS.test(h) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
+  } else if ((NOT_PROJECT.test(h) && !STORE_HOST.test(h)) || TOOL_SITE.test(h) || (REGISTRY_HOME.test(h) && u.pathname.replace(/\/+$/, "") === "") || PROFILE_HOSTS.test(h) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
     return null;
   }
   u.hash = "";
@@ -278,10 +289,15 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 // A path segment that names a list of projects: "/projects", "/work", "/portfolio", "/case-studies",
 // "/solutions". Whole segments only, so "/how-it-works", "/networks" and "/workshop" are not.
 const LISTING_SEGMENT = /^(?:projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase)$/i;
-// A segment that is never a project page, wherever it sits ("/projects/tag/react", "/about", "/blog/post"), and
-// never one a GET could act on: account, subscription and payment actions ("/unsubscribe", "/logout", "/pay").
-const NOT_PROJECT_SEGMENT =
-  /^(?:about(?:-me|-us)?|contact(?:-me|-us)?|blog|posts?|articles?|news|newsletter|press|resume|cv|tags?|category|categories|page|search|feed|rss|privacy|terms|cookies|legal|log-?in|log-?out|sign-?in|sign-?out|sign-?up|register|account|profile|settings|admin|dashboard|auth|oauth|session|cart|basket|checkout|pay|payment|payments|subscribe|unsubscribe|opt-?out|confirm|confirmation|verify|activate|delete|remove|cancel|download|downloads|export|shop|store|faq|pricing|services|clients|team|careers|jobs|how-it-works|api|wp-admin|wp-login\.php)$/i;
+// A segment that a GET could act on: sign-in and sign-out, subscription and account actions ("/unsubscribe",
+// "/logout", "/delete", "/pay"). Never requested, wherever it sits, even as a project's own name.
+const ACTION_SEGMENT =
+  /^(?:log-?in|log-?out|sign-?in|sign-?out|sign-?up|register|subscribe|unsubscribe|opt-?out|confirm|confirmation|verify|activate|delete|remove|cancel|edit|pay|wp-login\.php)$/i;
+// A segment that is not a project page above a project's name ("/projects/tag/react", "/blog/projects/x"),
+// and never the projects page: pages about the person or the site, and sections of an app.
+const SECTION_SEGMENT =
+  /^(?:about(?:-me|-us)?|contact(?:-me|-us)?|blog|posts?|articles?|news|newsletter|press|resume|cv|tags?|category|categories|page|search|feed|rss|privacy|terms|cookies|legal|account|profile|settings|admin|dashboard|auth|oauth|session|cart|basket|checkout|payment|payments|download|downloads|export|shop|store|faq|pricing|services|clients|team|careers|jobs|how-it-works|api|wp-admin)$/i;
+const NOT_PROJECT_SEGMENT = { test: (s) => ACTION_SEGMENT.test(s) || SECTION_SEGMENT.test(s) };
 const segmentsOf = (p) => String(p ?? "").split("/").filter(Boolean).map((s) => {
   try {
     return decodeURIComponent(s);
@@ -315,9 +331,10 @@ function ownPageUrl(l, self) {
  * `base` (the projects page's own path), and no segment above the project's
  * name is an about, contact, blog, tag, category or action page
  * ("/projects/tag/react", "/blog/projects/x"). The name right under the
- * listing is the project's own and may be any word: "/projects/dashboard",
- * "/projects/api", "/case-studies/checkout", "/work/store" are projects. The
- * listing itself is not one.
+ * listing is the project's own and may be any word but an action:
+ * "/projects/dashboard", "/projects/api", "/case-studies/checkout",
+ * "/work/store" are projects; "/projects/logout" or "/projects/delete" is
+ * never requested. The listing itself is not one.
  */
 function isOwnProjectPath(path, base = "") {
   const segs = segmentsOf(path);
@@ -327,7 +344,8 @@ function isOwnProjectPath(path, base = "") {
   const underBase = base !== "" && path.startsWith(`${base}/`);
   if (!underListing && !underBase) return false;
   const nameUnderListing = (parents.length > 0 && LISTING_SEGMENT.test(parents.at(-1))) || (base !== "" && `/${parents.join("/")}`.toLowerCase() === base);
-  return !(nameUnderListing ? parents : segs).some((s) => NOT_PROJECT_SEGMENT.test(s));
+  if (segs.some((s) => ACTION_SEGMENT.test(s))) return false;
+  return !(nameUnderListing ? parents : segs).some((s) => SECTION_SEGMENT.test(s));
 }
 
 /**
@@ -364,6 +382,8 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   for (const l of links) {
     const from = l.from ?? "home";
     const onProjectsPage = from === "projects_page";
+    // A list of the tools the person uses, a cookie banner or a comment widget: never a project, repositories included.
+    if (l.inAside) continue;
     const p = projectUrl(l, self);
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
@@ -371,7 +391,8 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // On the site's own projects page (a listing page by its path or label, projectsPageFor) the whole
       // main content is the projects, whatever its headings and classes: its title is almost always an h1
       // "Projects", which opens no section, and utility-class cards say nothing. Nav, header, footer and
-      // social lists stay out. On the home page only a projects element or section, or a repository, counts.
+      // social lists stay out, and so do tool lists, cookie banners and comment widgets (inAside, above). On the
+      // home page only a projects element or section, or a repository, counts.
       const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome) || (onProjectsPage && !l.inChrome);
       if (onProjectsPage && !inProjects) continue;
       seen.add(p.key);

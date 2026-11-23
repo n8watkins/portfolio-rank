@@ -40,6 +40,13 @@ export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selecte
 // "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
 const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
 const SOCIAL_HEADING = /\b(?:find me|connect|socials?|follow me|elsewhere|get in touch|contact(?: me)?)\b/i;
+// An element or a section whose links are never projects, repositories included: the tools the person uses
+// ("Tools I use", "Tech stack", "Skills", "/uses", a "tech-stack" list beside the cards), a cookie or consent
+// banner, a comment widget. Not "Tools I've built": a heading that says built, made or created opens nothing.
+const ASIDE_ATTR = /\b(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|technolog(?:y|ies)|skills?|uses)\b/i;
+const ASIDE_ATTR_PART = /cookie|consent|gdpr|disqus|giscus|utterances/i;
+const ASIDE_HEADING = /\b(?:tools|tool ?box|tool ?kit|tech|tech ?stack|stack|technolog(?:y|ies)|skills|uses|what i use)\b/i;
+const NOT_ASIDE_HEADING = /\b(?:built|made|created)\b/i;
 // A heading that titles the page or the person rather than a section: "Ana Ruiz - Portfolio", "Ana's
 // portfolio", "Portfolio of Ana Ruiz", "Portfolio website".
 // (The dashes are a hyphen, an en dash and an em dash, U+2013 and U+2014.)
@@ -106,6 +113,7 @@ export function scanPage(html, baseUrl) {
   let projectOpen = 0;
   let chromeOpen = 0;
   let socialOpen = 0;
+  let asideOpen = 0;
   const noQuote = { '"': false, "'": false };
 
   const addText = (t) => {
@@ -135,6 +143,7 @@ export function scanPage(html, baseUrl) {
     if (rec.project) projectOpen--;
     if (rec.chrome) chromeOpen--;
     if (rec.social) socialOpen--;
+    if (rec.aside) asideOpen--;
     // The element a heading's section belongs to closed: its section ends with it.
     if (scope && scope.parent === rec) endScope();
     if (rec.heading) {
@@ -146,11 +155,18 @@ export function scanPage(html, baseUrl) {
       // elements (id, class, aria-label) and its repository links. A title-like h2 to h4 opens nothing either.
       const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
       if (!scope && rec.heading.level >= 2 && !TITLE_LIKE.test(words)) {
-        const kind = PROJECT_HEADING.test(words) ? "project" : SOCIAL_HEADING.test(words) ? "social" : null;
+        const kind = PROJECT_HEADING.test(words)
+          ? "project"
+          : SOCIAL_HEADING.test(words)
+            ? "social"
+            : ASIDE_HEADING.test(words) && !NOT_ASIDE_HEADING.test(words)
+              ? "aside"
+              : null;
         if (kind) {
           scope = { kind, level: rec.heading.level, parent: stack.at(-1) ?? null };
           if (kind === "project") projectOpen++;
-          else socialOpen++;
+          else if (kind === "social") socialOpen++;
+          else asideOpen++;
         }
       }
     }
@@ -160,6 +176,7 @@ export function scanPage(html, baseUrl) {
   const endScope = () => {
     if (scope?.kind === "project") projectOpen--;
     else if (scope?.kind === "social") socialOpen--;
+    else if (scope?.kind === "aside") asideOpen--;
     scope = null;
   };
 
@@ -284,9 +301,13 @@ export function scanPage(html, baseUrl) {
     const rec = { name };
     if (CHROME.has(name) || /^(?:navigation|banner|contentinfo)$/i.test(String(attrs.get("role") ?? "").trim())) rec.chrome = true;
     else if (name !== "html" && name !== "body" && name !== "main") {
-      const words = attrWords(`${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`);
-      if (PROJECT_ATTR.test(words)) rec.project = true;
+      const own = `${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`;
+      const words = attrWords(own);
+      // A cookie banner or a comment widget never holds projects, whatever else its classes say.
+      if (ASIDE_ATTR_PART.test(own)) rec.aside = true;
+      else if (PROJECT_ATTR.test(words)) rec.project = true;
       else if (SOCIAL_ATTR.test(words)) rec.social = true;
+      else if (ASIDE_ATTR.test(words)) rec.aside = true;
     }
     if (HEADINGS.has(name)) {
       rec.heading = { parts: [], len: 0, level: Number(name[1]) };
@@ -297,7 +318,8 @@ export function scanPage(html, baseUrl) {
     const where = () => {
       const chrome = chromeOpen + (rec.chrome ? 1 : 0) > 0;
       const social = socialOpen + (rec.social ? 1 : 0) > 0;
-      return { inProjects: projectOpen + (rec.project ? 1 : 0) > 0 && !chrome && !social, inChrome: chrome, inSocial: social };
+      const aside = asideOpen + (rec.aside ? 1 : 0) > 0;
+      return { inProjects: projectOpen + (rec.project ? 1 : 0) > 0 && !chrome && !social && !aside, inChrome: chrome, inSocial: social, inAside: aside };
     };
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();
@@ -350,6 +372,7 @@ export function scanPage(html, baseUrl) {
     if (rec.project) projectOpen++;
     if (rec.chrome) chromeOpen++;
     if (rec.social) socialOpen++;
+    if (rec.aside) asideOpen++;
   }
   addText(s.slice(t0, n));
 
@@ -359,13 +382,13 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside };
       })
       .filter(Boolean),
     controls: controls.map((c) => {
       const own = decodeEntities(c.textParts.join(" ")).replace(/\s+/g, " ").trim();
       const parts = [own.length <= LABEL_MAX ? own : "", c.aria, c.title, ...c.alts, c.value].map((x) => decodeEntities(x).replace(/\s+/g, " ").trim()).filter(Boolean);
-      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial };
+      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside };
     }),
     text: text.join(" "),
     head: head.join(" "),
