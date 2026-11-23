@@ -41,7 +41,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@typescript/typescript6": "^6.0.2",
-    "eslint": "^9.39.5",
+    "eslint": "^10.15.0",
     "eslint-config-next": "^16.4.6",
     "playwright": "^1.65.1",
     "pngjs": "^7.0.0",
