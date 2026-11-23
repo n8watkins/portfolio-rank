@@ -188,7 +188,9 @@ export const PLACEHOLDER_MAX_TEXT = 600;
 /** A short page that says it is coming soon, under construction or a work in progress. */
 export function placeholderPage(site) {
   const p = readSite(site);
-  if (p.text.length > PLACEHOLDER_MAX_TEXT) return null;
+  // A projects menu link is a site with its parts, joking that it is "permanently under construction"
+  // (robert.hase-zheng.net).
+  if (p.text.length > PLACEHOLDER_MAX_TEXT || p.projects.nav.length) return null;
   const m = p.text.match(PLACEHOLDER);
   if (!m) return null;
   return raised("placeholder-page", `The page is ${p.text.length} characters long and says "${quote(m[0])}": a placeholder, not a finished site.`, [m[0], p.text.slice(0, 120)]);

@@ -76,6 +76,8 @@ test("placeholder-page: a short coming-soon page, not a long page that mentions 
   assert.match(placeholderPage(soon).reason, /"cooking up something"/);
   const long = page(`<h1>Ana</h1><p>${"I build tools for teams. ".repeat(40)}</p><p>My next app is coming soon.</p>`);
   assert.equal(placeholderPage(long), null);
+  const joke = page(`<h1>Robert Zheng</h1><p>permanent... under construction</p><nav><a href="#projects">Projects</a><a href="#contact">Contact</a></nav>`);
+  assert.equal(placeholderPage(joke), null);
 });
 
 test("little-text: almost nothing to read, said as what the code sees", () => {
