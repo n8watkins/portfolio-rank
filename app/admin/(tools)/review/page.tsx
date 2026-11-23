@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/admin";
 import { db, ensureSchema } from "@/lib/db";
 import { listReviews } from "@/lib/reviews/store.mjs";
 import { reviewAutoApplyEnabled } from "@/lib/reviews/flag";
+import { ProblemReports, type ReportedSite } from "@/components/admin/ProblemReports";
+import { listReports } from "@/lib/problem-reports/store.mjs";
 
 // /admin/review: status changes a re-check proposes (lib/reviews/store.mjs),
 // one row per site whose listed or ranked state would change, with its fresh
@@ -24,6 +26,8 @@ export default async function AdminReviewPage() {
   if ("error" in who) notFound();
   await ensureSchema();
   const { pending, autoApplied, decided } = (await listReviews(db())) as { pending: Review[]; autoApplied: Review[]; decided: Review[] };
+  // Visitors' "Report a problem" notes, grouped by site (lib/problem-reports/store.mjs).
+  const reports = (await listReports(db())) as { open: ReportedSite[]; handled: ReportedSite[] };
   const auto = reviewAutoApplyEnabled(process.env);
   const agreed = pending.filter((r) => r.agreed).length;
   return (
@@ -40,6 +44,7 @@ export default async function AdminReviewPage() {
           </span>
         )}
       </AdminHeader>
+      <ProblemReports open={reports.open} handled={reports.handled} />
       <StatusReviewQueue pending={pending} autoApplied={autoApplied} decided={decided} shotsBase={process.env.SHOTS_BASE_URL ?? null} />
     </>
   );

@@ -8,6 +8,7 @@ import { peekCached } from "@/lib/cache";
 import { LikeButton } from "@/components/LikeButton";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToListButton } from "@/components/AddToListButton";
+import { ReportProblem } from "@/components/profile/ReportProblem";
 import { BASE_ELO } from "@/lib/elo";
 import { type CodeChecks, loadCodeChecks, loadProfileTier } from "@/lib/tiers-view";
 import { ProfileTier } from "@/components/tiers/ProfileTier";
@@ -281,6 +282,7 @@ export default async function PortfolioPage({
             fetchPriority="high"
             className="mt-4 h-56 w-full rounded-lg border border-edge bg-edge object-cover object-top sm:h-72"
           />
+          <ReportProblem url={url} domain={domainOf(url)} className="-mb-3 mt-0.5" />
         </div>
 
         {eloTier && <ProfileTier t={eloTier} />}
