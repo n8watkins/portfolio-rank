@@ -69,17 +69,27 @@ let failed = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const BACKOFF = [5_000, 20_000, 60_000];
 let geminiPauseUntil = 0;
+let geminiNextSlot = 0;
+const GEMINI_GAP_MS = Number(opt("gemini-gap-ms", "7500"));
 
 async function one(job) {
   for (let attempt = 0; ; attempt++) {
     if (stopped) return;
     if (requests >= MAX_REQUESTS) return void (stopped = `request cap ${MAX_REQUESTS} reached`);
     if (usd >= MAX_SPEND_USD) return void (stopped = `spend cap $${MAX_SPEND_USD} reached`);
-    if (job.m === "gemini" && Date.now() < geminiPauseUntil) await sleep(geminiPauseUntil - Date.now());
+    if (job.m === "gemini") {
+      // One shared pace for Gemini (production's DEFAULT_RPM is 8): the free
+      // tier's per-minute limit answers 429s that still count against the
+      // daily quota, so stay under it instead of retrying into it.
+      const slot = Math.max(Date.now(), geminiNextSlot, geminiPauseUntil);
+      geminiNextSlot = slot + GEMINI_GAP_MS;
+      if (slot > Date.now()) await sleep(slot - Date.now());
+    }
     requests++;
     const t0 = Date.now();
+    await acquire();
     try {
-      const r = await ASK[job.m](job.req);
+      const r = await ASK[job.m](job.req).finally(release);
       const cost = costOf(job.model, r.usage);
       usd += cost;
       ledgerAdd({ at: new Date().toISOString(), model: job.model, url: job.url, arm: job.arm, prompt, rep, ok: true, usage: r.usage, usd: cost, ms: Date.now() - t0 });
@@ -105,14 +115,33 @@ async function one(job) {
   }
 }
 
-let next = 0;
-async function worker() {
-  while (!stopped && next < todo.length) {
-    const job = todo[next++];
+// At most MAX_IN_FLIGHT HTTP requests at once across both providers. Each
+// provider has its own workers, so one waiting out a Gemini backoff does
+// not hold up Claude (a waiting worker has no request in flight).
+let inFlight = 0;
+const waiters = [];
+async function acquire() {
+  if (inFlight < MAX_IN_FLIGHT) return void inFlight++;
+  await new Promise((r) => waiters.push(r));
+}
+function release() {
+  const w = waiters.shift();
+  if (w) w();
+  else inFlight--;
+}
+
+let reported = 0;
+async function worker(queue) {
+  while (!stopped && queue.length) {
+    const job = queue.shift();
     await one(job);
-    if ((done + failed) % 25 === 0) console.log(`  ${done + failed}/${todo.length}, ${requests} requests in the ledger, $${usd.toFixed(4)}`);
+    if (done + failed >= reported + 25) {
+      reported = done + failed;
+      console.log(`  ${done + failed}/${todo.length}, ${requests} requests in the ledger, $${usd.toFixed(4)}`);
+    }
   }
 }
-await Promise.all(Array.from({ length: MAX_IN_FLIGHT }, worker));
+const queues = Object.fromEntries(models.map((m) => [m, todo.filter((j) => j.m === m)]));
+await Promise.all(models.flatMap((m) => Array.from({ length: MAX_IN_FLIGHT }, () => worker(queues[m]))));
 console.log(`done ${done}, failed ${failed}${stopped ? `, STOPPED: ${stopped}` : ""}; ledger ${requests} requests, $${usd.toFixed(4)}`);
 if (stopped) process.exitCode = 2;

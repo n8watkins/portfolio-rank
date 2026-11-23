@@ -3,7 +3,7 @@
 //   node experiments/two-model-check/score.mjs --set design|heldout --prompt v1 [--arms old,pic,text,full] [--json out.json] [--detail]
 import fs from "node:fs";
 import {
-  MODELS, askable, buildRequest, cacheGet, cacheKey, normalise,
+  LEDGER, MODELS, askable, buildRequest, cacheGet, cacheKey, normalise,
   loadBench, loadSplit, savedPage, stabilitySample,
 } from "./common.mjs";
 
@@ -91,15 +91,19 @@ for (const arm of arms) {
   const groups = { real: both.filter((r) => r.label === "real"), np: both.filter((r) => r.label === "not_portfolio"), dead: both.filter((r) => r.label === "dead") };
   p(`Asked: ${both.length} sites with both answers (${groups.real.length} real, ${groups.np.length} not portfolios, ${groups.dead.length} dead).`);
   for (const m of ["gemini", "haiku"]) {
-    const real = groups.real;
-    const np = groups.np;
+    // --own: each model on every site it answered, not only where both did.
+    const mine = (label) => rows.filter((r) => r.a[m] && r.label === label);
+    const real = has("own") ? mine("real") : groups.real;
+    const np = has("own") ? mine("not_portfolio") : groups.np;
+    if (!real.length && !np.length) continue;
+    if (has("own")) p(`- ${m} answered ${rows.filter((r) => r.a[m]).length} sites:`);
     const wrongNo = real.filter((r) => r.a[m].answer === "not_portfolio");
     const npMiss = np.filter((r) => r.a[m].answer !== "not_portfolio");
     const npPort = np.filter((r) => r.a[m].answer === "portfolio");
     const realCt = real.filter((r) => r.a[m].answer === "cannot_tell");
     p(`- ${m}: real called not a portfolio ${rate(wrongNo.length, real.length)}; real called cannot tell ${realCt.length}; non-portfolios not called no ${rate(npMiss.length, np.length)} (portfolio ${npPort.length}, cannot tell ${npMiss.length - npPort.length})`);
     const dd = {};
-    for (const r of groups.dead) dd[short(r.a[m])] = (dd[short(r.a[m])] ?? 0) + 1;
+    for (const r of has("own") ? mine("dead") : groups.dead) dd[short(r.a[m])] = (dd[short(r.a[m])] ?? 0) + 1;
     p(`  dead: ${JSON.stringify(dd)}`);
     R[m] = { realNo: wrongNo.length, real: real.length, npMiss: npMiss.length, npPortfolio: npPort.length, np: np.length, realCannot: realCt.length, dead: dd };
   }
@@ -189,6 +193,30 @@ if (set === "heldout") {
     }
     p(`- the double-no decision changed on ${rate(dnChanged.length, dnPairs.length)}${dnChanged.length ? ": " + dnChanged.map((r) => r.url).join(", ") : ""}`);
     report.stability = { ...st, doubleNoChanged: dnChanged.length, doubleNoPairs: dnPairs.length };
+  }
+}
+
+// Spend: every HTTP attempt in the ledger, and projections from the full arm's per-site cost.
+{
+  const lines = fs.readFileSync(LEDGER, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const by = {};
+  for (const e of lines) {
+    const b = (by[e.model] ??= { requests: 0, failed: 0, tokensIn: 0, tokensOut: 0, usd: 0 });
+    b.requests++;
+    if (!e.ok) b.failed++;
+    b.tokensIn += e.usage?.in ?? 0;
+    b.tokensOut += e.usage?.out ?? 0;
+    b.usd += e.usd ?? 0;
+  }
+  const total = Object.values(by).reduce((s, b) => s + b.usd, 0);
+  p(`\n## Spend (the whole experiment so far, from the ledger)`);
+  for (const [m, b] of Object.entries(by)) p(`- ${m}: ${b.requests} HTTP requests (${b.failed} failed), ${b.tokensIn} tokens in, ${b.tokensOut} out, $${b.usd.toFixed(4)}`);
+  p(`- total $${total.toFixed(4)} over ${lines.length} requests`);
+  const f = report.arms.full;
+  if (f) {
+    const perSite = f.gemini.usdPerSite + f.haiku.usdPerSite;
+    p(`- the full request, both models: $${perSite.toFixed(5)} per site; a whole list of 2,150 sites $${(perSite * 2150).toFixed(2)}; 30 new sites a day $${(perSite * 30).toFixed(3)} a day, $${(perSite * 30 * 30).toFixed(2)} a month`);
+    report.spend = { by, total, perSite, list2150: perSite * 2150, daily30: perSite * 30 };
   }
 }
 
