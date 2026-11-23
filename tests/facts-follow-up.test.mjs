@@ -180,3 +180,50 @@ test("the third 25 (2026-11-23): one real project beside a tool list fails, name
   const phyo = `<section id="hero"><a href="https://git.phyominthein.com/">g</a><a href="https://linkedin.phyominthein.com/">l</a><a href="https://ig.phyominthein.com/">i</a><a href="https://weflix.phyominthein.com/">w</a></section>`;
   assert.deepEqual(show(phyo, "https://phyominthein.com/"), [[1, "https://weflix.phyominthein.com/"], [3, "https://git.phyominthein.com/"], [3, "https://linkedin.phyominthein.com/"], [3, "https://ig.phyominthein.com/"]]);
 });
+
+test("the words that mark a projects section, in English and other languages, whole words with Unicode boundaries", () => {
+  const demos = `<div><a href="https://one.example/">Live</a></div><div><a href="https://two.example/">Live</a></div>`;
+  const tiers = (html) => show(html).map(([t]) => t);
+  for (const h of ["Projects", "Things I've built", "Selected work", "Case studies", "Featured", "Featured projects", "Open source", "Side projects", "Apps", "Experiments", "Lab", "Playground", "Builds", "Creations", "Products", "Showcase", "Portfolio", "Recent work", "What I've made", "Things I've made", "Some of my work", "My creations",
+    "Projets", "Proyectos", "Mis proyectos", "Projekte", "Projetos", "Projetos pessoais", "Progetti", "Projecten", "Projekty", "Проекты", "Мои проекты", "Проекти", "项目", "我的项目", "專案", "作品", "プロジェクト", "프로젝트", "Portafolio", "Portfólio", "Trabajos", "Travaux"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${demos}</section></main>`), [1, 1], h);
+  }
+  for (const attr of ['id="projetos"', 'id="proyectos"', 'class="apps"', 'class="lab"', 'id="featured"', 'class="open-source"', 'class="mis-proyectos"', 'id="проекты"']) {
+    assert.deepEqual(tiers(`<main><section ${attr}>${demos}</section></main>`), [1, 1], attr);
+  }
+  // A not-projects word wins over a weak projects word; a strong one wins over it.
+  for (const h of ["Featured clients", "Featured in", "Featured articles", "Open source contributions", "Milestones", "Collaborators", "Labels"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${demos}</section></main>`), [3, 3], h);
+  }
+  assert.deepEqual(tiers(`<main><section><h2>Projects &amp; experience</h2>${demos}</section></main>`), [1, 1]);
+  // Not inside other words: a class "label laboratory" is neither "lab".
+  assert.deepEqual(tiers(`<main><section class="label laboratory">${demos}</section></main>`), [3, 3]);
+});
+
+test("a repository in a section that is not projects is lowered; a pull request or an issue is no repository", async () => {
+  const url = "https://ana.dev/";
+  const v = async (html) => {
+    const f = await measurePage({ html, text: "", url, finalUrl: url }, { fetchImpl: ok });
+    return [codeChecks(f).project_links, projectLinksText(f.project_links, f.v)];
+  };
+  assert.deepEqual(await v(`<main><section><h2>Contributions</h2><a href="https://github.com/facebook/react/pull/1">react</a><a href="https://github.com/vercel/next.js/pull/2">next</a><a href="https://github.com/nodejs/node/issues/3">node</a></section></main>`), [false, "Project links: none found"]);
+  assert.deepEqual(await v(`<main><section><h2>Work Experience</h2><a href="https://github.com/acme/platform">Acme</a><a href="https://github.com/acme/api">api</a><a href="https://github.com/acme/web">web</a></section></main>`), [false, "No project links found in a projects section; 3 other links on the page were not counted"]);
+  assert.deepEqual(await v(`<main><section><h2>Repos I like</h2><a href="https://github.com/a/b">b</a><a href="https://github.com/c/d">d</a><a href="https://github.com/e/f">f</a></section></main>`), [false, "No project links found in a projects section; 3 other links on the page were not counted"]);
+  // Outside every labelled section a repository still counts.
+  assert.deepEqual(await v(`<main><p><a href="https://github.com/ana/a">a</a><a href="https://github.com/ana/b">b</a><a href="https://github.com/ana/c">c</a></p></main>`), [true, "3 of 3 project links load"]);
+});
+
+test("a heading's link-less wrapper hands its section only to the next element; after it nothing is projects", () => {
+  // The reviewer's cases: an about line and a "Clients" block after the cards are not projects.
+  assert.deepEqual(show(`<main><div><h2>Projects</h2></div><div class="grid"><a href="https://one.example/">one</a></div><div><p>I worked at <a href="https://employer.example/">Employer</a> and studied at <a href="https://uni.example/">Uni</a>.</p></div></main>`), [[1, "https://one.example/"], [3, "https://employer.example/"], [3, "https://uni.example/"]]);
+  assert.deepEqual(show(`<main><div><h2>Projects</h2></div><div><a href="https://one.example/">one</a></div><section><p class="title">Clients</p><a href="https://client1.example/">c1</a></section></main>`), [[1, "https://one.example/"], [3, "https://client1.example/"]]);
+  // adhamdannaway.com: "<div><h3>Some of my latest work</h3></div><ul id="thumbs">" then the case studies.
+  assert.deepEqual(show(`<section><div><div><h3>Some of my latest work</h3></div><ul id="thumbs"><li><a href="/portfolio/a">a</a></li><li><a href="/portfolio/b">b</a></li></ul><p><a href="https://other.example/">o</a></p></div></section>`), [[2, "https://ana.dev/portfolio/a"], [2, "https://ana.dev/portfolio/b"], [3, "https://other.example/"]]);
+});
+
+test("named project pages and credits with a few words, the reviewer's cases", () => {
+  const inProj = (links) => `<main><section id="projects">${links}</section></main>`;
+  assert.deepEqual(show(inProj(`<a href="/project-sync.html">x</a><a href="/work-dashboard">y</a><a href="/works-cited">z</a><a href="/portfolio-2019">p</a>`)).map(([, u]) => u), ["https://ana.dev/project-sync.html", "https://ana.dev/work-dashboard"]);
+  assert.deepEqual(show(`<main><p>Made with care by <a href="https://github.com/ana/site">me</a></p></main>`), []);
+  assert.deepEqual(show(`<main><p>Made with love and coffee by <a href="https://credit.example/">me</a></p></main>`), []);
+});

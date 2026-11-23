@@ -37,17 +37,39 @@ const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
 // "work-section" (Work Experiences, nuwanjaliyagoda.com), "work-connections" (partners, sujanbhatta.tech) and
 // "work-item" (employers, reaganhsu.com) are timelines and logo walls. The plural "works" is: "ul.works" is
 // kentom.co.ke's list of its products.
-export const PROJECT_ATTR =
-  /\b(?:projects?|portfolio|works|(?:my|our|selected|featured|recent|latest|past|personal|side|client) ?work|work ?samples?|case\s*stud(?:y|ies)|showcase)\b/i;
+//
+// Words are matched whole with Unicode letter boundaries ("\b" does not work around "проекты" or "项目").
+// Strong words name projects outright and win over a not-projects word ("Projects & experience"); weak words
+// ("Featured", "Apps", "Lab", "Open source") count only when no not-projects word is there ("Featured clients",
+// "Featured in", "Open source contributions" are not projects).
+// Chinese, Japanese and Korean words are written without spaces ("我的项目"), so they match anywhere.
+const whole = (alternatives, anywhere = "") =>
+  new RegExp(String.raw`(?<!\p{L})(?:${alternatives})(?!\p{L})${anywhere ? `|${anywhere}` : ""}`, "iu");
+const STRONG_WORDS = [
+  String.raw`projects?|portfolio|portafolio|portf[oó]lio|case\s*stud(?:y|ies)|showcase`,
+  String.raw`things i(?:'|’)?ve (?:built|made)|what i(?:'|’)?ve (?:built|made)|stuff i(?:'|’)?ve (?:built|made)|my creations`,
+  String.raw`projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|trabajos|travaux`,
+].join("|");
+const CJK_WORDS = "项目|專案|作品|プロジェクト|프로젝트";
+const WEAK_WORDS = String.raw`works|(?:my|our|selected|featured|recent|latest|past|personal|side|client|some of my) ?work|works? ?samples?|featured|open ?source|apps|products|experiments|lab|playground|builds|creations`;
+const STRONG = whole(STRONG_WORDS, CJK_WORDS);
+const WEAK = whole(WEAK_WORDS);
+export const PROJECT_ATTR = whole(`${STRONG_WORDS}|${WEAK_WORDS}`, CJK_WORDS);
 // A heading that says its section is not projects, whatever the classes around it: work experience, education,
-// certificates, awards, testimonials, clients, a network ("Network & recognition."). Its links are lowered.
-const NOT_PROJECT_HEADING =
-  /\b(?:experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition)\b/i;
+// certificates, awards, testimonials, clients, a network ("Network & recognition."), what was written or said
+// about the person, and other people's code ("Contributions", "Repos I like"). Its links are lowered.
+const NOT_PROJECT_HEADING = whole(
+  String.raw`experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition|featured in|as seen in|press|articles?|posts?|blog|talks?|publications?|contributions?|repos i like|starred|favou?rite repos`
+);
+/** Whether a heading opens a projects section: a strong word, or a weak one with no not-projects word. */
+const projectHeading = (words) => STRONG.test(words) || (WEAK.test(words) && !NOT_PROJECT_HEADING.test(words));
+/** A heading that names projects (projectHeading: strong words win, weak ones yield to not-projects words). */
+export const PROJECT_HEADING = { test: (words) => projectHeading(String(words)) };
 // The words right before a link that make it a credit, not a project: "Powered by Hugo & Narrow", "Theme by
-// ...", "Designed by ...", "Built with Astro". Only the text since the last block boundary counts.
+// ...", "Designed by ...", "Built with Astro", "Made with care by". Only the text since the last block boundary
+// counts.
 const CREDIT_BEFORE =
-  /\b(?:(?:built|made|crafted|created|coded|developed|designed|design|powered|hosted|deployed|theme(?:d)?|template|inspired|icons?|fonts?|photos?|illustrations?)\s+(?:with|by|on|using|from)(?:\s+\S{1,3}\s+(?:by|in))?|theme|template|credits?)\s*:?\s*(?:[^\n]{0,40}?\s(?:&|and|,|\+|\/)\s*)?$/i;
-export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selected|featured|recent|latest) work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
+  /\b(?:(?:built|made|crafted|created|coded|developed|designed|design|powered|hosted|deployed|theme(?:d)?|template|inspired|icons?|fonts?|photos?|illustrations?)\s+(?:with|by|on|using|from)(?:(?:\s+\S{1,12}){1,3}\s+(?:by|in))?|theme|template|credits?)\s*:?\s*(?:[^\n]{0,40}?\s(?:&|and|,|\+|\/)\s*)?$/i;
 // An element or a section that lists where else to find the person ("~ find me ~", "Let's connect",
 // "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
 const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
@@ -177,10 +199,14 @@ export function scanPage(html, baseUrl) {
     if (rec.aside) asideOpen--;
     // The element a heading's section belongs to closed: its section ends with it. Unless that element only
     // wrapped the heading (no link since it): "<div><div>Projects</div><h2>Check out my latest work</h2></div>"
-    // then the cards (sahilbajajportfolio.vercel.app); the section then belongs to the element around it.
+    // then the cards (sahilbajajportfolio.vercel.app); the section then is the one element that comes next
+    // (the cards' container), and ends with it. Anything after that, an about line, a "Clients" block, is not in it.
     if (scope && scope.parent === rec) {
-      if (links.length === scope.linksAt && stack.length) scope.parent = stack.at(-1);
-      else endScope();
+      if (links.length === scope.linksAt && stack.length && !scope.handedOn) {
+        scope.parent = stack.at(-1);
+        scope.awaitSibling = true;
+        scope.handedOn = true;
+      } else endScope();
     }
     if (rec.heading) {
       openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
@@ -367,7 +393,8 @@ export function scanPage(html, baseUrl) {
       // heading says it is not projects ("Work Experiences") is not, whatever its classes, and is lowered.
       const projects = projectOpen + (rec.project ? 1 : 0) > 0 && !otherOpen;
       const aside = (asideOpen + (rec.aside ? 1 : 0) > 0 || otherOpen > 0) && !projects;
-      return { inProjects: projects && !chrome && !social, inChrome: chrome, inSocial: social, inAside: aside };
+      // inOther: in a section whose heading says it is not projects; even a repository there is lowered.
+      return { inProjects: projects && !chrome && !social, inChrome: chrome, inSocial: social, inAside: aside, ...(otherOpen > 0 ? { inOther: true } : {}) };
     };
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();
@@ -414,6 +441,11 @@ export function scanPage(html, baseUrl) {
     }
     if (name === "title" || name === "h1") rec.head = true;
     if (VOID.has(name) || tag.selfClosing) continue;
+    // The element right after a heading's link-less wrapper takes the section (see close()).
+    if (scope?.awaitSibling && stack.at(-1) === scope.parent) {
+      scope.parent = rec;
+      scope.awaitSibling = false;
+    }
     stack.push(rec);
     if (rec.link) openLinks.push(rec.link);
     if (rec.control) openControls.push(rec.control);
@@ -432,13 +464,13 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside, ...(l.credit ? { credit: true } : {}) };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside, ...(l.inOther ? { inOther: true } : {}), ...(l.credit ? { credit: true } : {}) };
       })
       .filter(Boolean),
     controls: controls.map((c) => {
       const own = decodeEntities(c.textParts.join(" ")).replace(/\s+/g, " ").trim();
       const parts = [own.length <= LABEL_MAX ? own : "", c.aria, c.title, ...c.alts, c.value].map((x) => decodeEntities(x).replace(/\s+/g, " ").trim()).filter(Boolean);
-      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside };
+      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside, ...(c.inOther ? { inOther: true } : {}) };
     }),
     text: text.join(" "),
     head: head.join(" "),

@@ -60,10 +60,23 @@ const fetchFor = (pageUrl) => async (input, init) => {
 
 // The links the capture chose, from its desktop and phone views and the projects page (facts version 3).
 const CHOSEN = [
-  { url: "https://ada.example/engine", from: "home", kind: "outbound" },
-  { url: "https://ada.example/gone", from: "phone", kind: "outbound" },
-  { url: "https://ada.dev/projects/notes", from: "projects_page", kind: "own page" },
+  { url: "https://ada.example/engine", from: "home", kind: "outbound", tier: 1 },
+  { url: "https://ada.example/gone", from: "phone", kind: "outbound", tier: 1 },
+  { url: "https://ada.dev/projects/notes", from: "projects_page", kind: "own page", tier: 2 },
 ];
+
+test("a link re-check of version 3 facts stored without tiers does not count every link: unknown until the next capture", async () => {
+  const db = await setup();
+  const url = "https://ada.dev/";
+  const untiered = CHOSEN.map(({ url: u, from, kind }) => ({ url: u, from, kind }));
+  await insert(db, { url, pageText: RENDERED_TEXT, facts: { ...RENDERED_FACTS, v: 3, project_candidates: untiered } });
+  const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+  const asked = [];
+  const out = await pageEvidence(db, row, { force: true, fetchImpl: async (input) => (asked.push(String(input)), new Response(null, { status: 200 })) });
+  assert.equal(out.facts.project_links, null);
+  assert.equal(out.facts.project_links_note, "measured before tiers: needs a new capture");
+  assert.deepEqual(asked, [], "nothing is requested");
+});
 
 test("a link re-check tests again the links the capture chose, and keeps the rendered text and signals byte for byte", async () => {
   const db = await setup();

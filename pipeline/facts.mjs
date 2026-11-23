@@ -298,7 +298,7 @@ export { isGithubProfile };
  */
 export function pageLinks(html, baseUrl, scan = null) {
   const page = scan ?? scanPage(html, baseUrl);
-  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside })));
+  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside, inOther: c.inOther })));
   return [...page.links, ...fromControls];
 }
 
@@ -322,6 +322,8 @@ function projectUrl(l, self) {
   if (h === "github.com") {
     const segs = u.pathname.split("/").filter(Boolean);
     if (segs.length < 2 || GH_RESERVED.test(segs[0])) return null; // a profile, not a repository
+    // A pull request, an issue, a commit or a comparison is a contribution to someone's code, not a repository.
+    if (/^(?:pull|pulls|issues?|commit|commits|compare|discussions)$/i.test(segs[2] ?? "")) return null;
     repo = true;
   } else if ((NOT_PROJECT.test(h) && !STORE_HOST.test(h)) || isToolSite(h, u.pathname) || (REGISTRY_HOME.test(h) && u.pathname.replace(/\/+$/, "") === "") || PROFILE_HOSTS.test(h) || isPathProfile(h, u.pathname) || isCertificate(h, u.pathname) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
     return null;
@@ -411,15 +413,15 @@ function isOwnProjectPath(path, base = "") {
 }
 
 /**
- * A page whose own name says it is one project: "project-sync.html", "/project_solar", "/work-dashboard"
- * (a word of LISTING_SEGMENT, then "-" or "_" and a name). Its other segments must not be a section or action.
+ * A page whose own name says it is one project: "project-sync.html", "/project_solar", "/work-dashboard",
+ * "/case-study-x": "project", "work" or "case study", then "-" or "_" and a name. Not "/works-cited" (a
+ * bibliography), nor "/portfolio-2019" (an archive of a year). Its other segments must not be a section or action.
  */
 function isNamedProjectPage(path) {
   const segs = segmentsOf(path);
   if (!segs.length || segs.some((s) => ACTION_SEGMENT.test(s) || SECTION_SEGMENT.test(s))) return false;
   const name = segs.at(-1).replace(/\.html?$/i, "");
-  const m = name.match(/^([a-z]+(?:-stud(?:y|ies))?)[-_](.{2,})$/i);
-  return Boolean(m && LISTING_SEGMENT.test(m[1]));
+  return /^(?:projects?|work|case-stud(?:y|ies))[-_].{2,}$/i.test(name);
 }
 
 /**
@@ -473,8 +475,9 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // banner from passing is the host lists (TOOL_SITE, NOT_PROJECT), which remove the tools' own sites.
       if (onProjectsPage && l.inChrome) continue;
       // A repository, or a subdomain of the site's own domain (its own work), counts as in the projects anywhere
-      // but the page's frame.
-      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome) || (onProjectsPage && !l.inAside);
+      // but the page's frame and a section whose heading says it is not projects ("Work Experience" with an
+      // employer's repositories, "Repos I like").
+      const inProjects = Boolean(l.inProjects) || ((p.repo || p.ownSub) && !l.inChrome && !l.inOther) || (onProjectsPage && !l.inAside);
       seen.add(p.key);
       tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
       continue;

@@ -72,8 +72,15 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
       ? stored.project_candidates.map((c) => (typeof c === "string" ? { url: c, kind: "outbound" } : c)).filter((c) => typeof c?.url === "string")
       : [];
     const at = new Date().toISOString();
-    // No list (none should lack one): the check is still recorded, so the due list moves on.
-    const facts = chosen.length || stored.project_candidates ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? "") }), measured_at: at } : stored;
+    // A list stored without tiers (version 3 facts measured before tiers, only if #278 shipped alone) cannot be
+    // judged by the rule for links outside the projects: its check is unknown until the site's next capture,
+    // never every link counting. No list (none should lack one): the check is still recorded, so the due list moves on.
+    const untiered = chosen.length > 0 && chosen.some((c) => typeof c.tier !== "number");
+    const facts = untiered
+      ? { ...stored, project_links: null, project_links_note: "measured before tiers: needs a new capture", measured_at: at }
+      : chosen.length || stored.project_candidates
+        ? { ...stored, project_links: await checkLinks(chosen, { fetchImpl, userAgent: UA, homeText: String(row.page_text ?? "") }), measured_at: at }
+        : stored;
     try {
       await db.execute({ sql: "UPDATE portfolios SET facts = ?, facts_at = ? WHERE url = ?", args: [JSON.stringify(facts), at, url] });
     } catch {
