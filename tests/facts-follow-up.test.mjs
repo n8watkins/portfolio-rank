@@ -15,33 +15,38 @@ async function viaPage(pp, ppUrl = "https://ana.dev/projects") {
   return measurePage({ html: homeNav, text: "", url, finalUrl: url, projectsPage: { html: pp, finalUrl: ppUrl } }, { fetchImpl: ok });
 }
 
-test("lowered links count only beside a project link that loads", async () => {
+test("links outside the projects never count (LOW_LINKS 'never', the default); 'beside' counts them next to one that loads", async () => {
   const low = (u) => ({ url: u, kind: "outbound", tier: 3 });
   const high = (u) => ({ url: u, kind: "outbound", tier: 1 });
-  // Only lowered links: none found, and the text says how many were left out.
-  const none = await checkLinks([low("https://a.example/"), low("https://b.example/"), low("https://c.example/"), low("https://d.example/")], { fetchImpl: ok });
-  assert.deepEqual([none.checked, none.ok, none.not_counted], [0, 0, 4]);
-  assert.equal(projectLinksPass(none, 3), false);
-  assert.equal(projectLinksText(none, 3), "No project links found in a projects section; 4 other links on the page were not counted");
-  // One project link that loads: the lowered links count toward the three.
-  const one = await checkLinks([high("https://p.example/"), low("https://a.example/"), low("https://b.example/")], { fetchImpl: ok });
-  assert.deepEqual([one.checked, one.ok, one.not_counted], [3, 3, undefined]);
-  assert.equal(projectLinksPass(one, 3), true);
-  // A project link that does not load does not open the door; the text names what was left out.
-  const down = async (u) => new Response(null, { status: String(u).includes("p.example") ? 404 : 200 });
-  const broken = await checkLinks([high("https://p.example/"), low("https://a.example/"), low("https://b.example/"), low("https://c.example/")], { fetchImpl: down });
-  assert.deepEqual([broken.checked, broken.ok, broken.broken, broken.not_counted], [1, 0, 1, 3]);
-  assert.equal(projectLinksText(broken, 3), "0 of 1 project links load; 3 other links on the page were not counted");
-  // Variant B (LOW_LINKS "never"): lowered links are never requested and never count, only named.
+  // The default: lowered links are never requested and never count, only named.
   const seen = [];
   const counting = async (u, init) => {
     seen.push(String(u));
     return ok(u, init);
   };
-  const strict = await checkLinks([high("https://p.example/"), low("https://a.example/"), low("https://b.example/")], { fetchImpl: counting, lowLinks: "never" });
+  const strict = await checkLinks([high("https://p.example/"), low("https://a.example/"), low("https://b.example/")], { fetchImpl: counting });
   assert.deepEqual([strict.checked, strict.ok, strict.not_counted], [1, 1, 2]);
   assert.ok(seen.every((u) => u.includes("p.example")), seen.join(" "));
   assert.equal(projectLinksText(strict, 3), "1 of 1 project links load; 2 other links on the page were not counted");
+  const none = await checkLinks([low("https://a.example/"), low("https://b.example/"), low("https://c.example/"), low("https://d.example/")], { fetchImpl: ok });
+  assert.deepEqual([none.checked, none.ok, none.not_counted], [0, 0, 4]);
+  assert.equal(projectLinksPass(none, 3), false);
+  assert.equal(projectLinksText(none, 3), "No project links found in a projects section; 4 other links on the page were not counted");
+  // "beside": only lowered links, none found; one project link that loads lets them count toward the three.
+  const beside = { lowLinks: "beside" };
+  const noneA = await checkLinks([low("https://a.example/"), low("https://b.example/"), low("https://c.example/"), low("https://d.example/")], { fetchImpl: ok, ...beside });
+  assert.deepEqual([noneA.checked, noneA.ok, noneA.not_counted], [0, 0, 4]);
+  const one = await checkLinks([high("https://p.example/"), low("https://a.example/"), low("https://b.example/")], { fetchImpl: ok, ...beside });
+  assert.deepEqual([one.checked, one.ok, one.not_counted], [3, 3, undefined]);
+  assert.equal(projectLinksPass(one, 3), true);
+  // A project link that does not load does not open the door; the text names what was left out.
+  const down = async (u) => new Response(null, { status: String(u).includes("p.example") ? 404 : 200 });
+  const broken = await checkLinks([high("https://p.example/"), low("https://a.example/"), low("https://b.example/"), low("https://c.example/")], { fetchImpl: down, ...beside });
+  assert.deepEqual([broken.checked, broken.ok, broken.broken, broken.not_counted], [1, 0, 1, 3]);
+  assert.equal(projectLinksText(broken, 3), "0 of 1 project links load; 3 other links on the page were not counted");
+  // "all" (the re-pick of facts of version 1 and 2): every link counts.
+  const all = await checkLinks([low("https://a.example/"), low("https://b.example/")], { fetchImpl: ok, lowLinks: "all" });
+  assert.deepEqual([all.checked, all.ok, all.not_counted], [2, 2, undefined]);
   // Every own project page goes ahead of the lowest tier in the list of 8 (sujanbhatta.tech's 6 case studies).
   const many = `<section id="projects">${[1, 2, 3, 4].map((i) => `<a href="/projects/p${i}">p${i}</a>`).join("")}</section><p><a href="https://other.example/">o</a></p>`;
   const url = "https://ana.dev/";
@@ -94,12 +99,12 @@ test("a bare 'work' class or id is no projects element, and an experience, netwo
   ]);
   // reaganhsu.com: div.work-item holds his employers under "Work"; not projects any more.
   assert.deepEqual(show(`<main><h2>Work</h2><div class="work-item">Member of Technical Staff at <a href="https://datacurve.ai/">Datacurve AI</a></div></main>`), [[3, "https://datacurve.ai/"]]);
-  // Still projects: "my-work", "selected-work", "recent-work", "work-samples", "case-studies", and a "Work" heading's
-  // projects element; a "Clients" or "Certifications" heading inside a projects element is not.
-  for (const cls of ["my-work", "selected-work", "recent-work", "work-samples", "case-studies", "featured-works"]) {
+  // Still projects: "my-work", "selected-work", "recent-work", "work-samples", "case-studies", and the plural "works"
+  // (kentom.co.ke's "ul.works", its products); a "Clients" or "Certifications" heading inside a projects element is not.
+  for (const cls of ["my-work", "selected-work", "recent-work", "work-samples", "case-studies", "featured-works", "works", "works-list"]) {
     assert.deepEqual(show(`<section class="${cls}"><a href="https://p.example/">p</a></section>`), [[1, "https://p.example/"]], cls);
   }
-  for (const cls of ["work", "works", "work-section", "work-grid", "work-item"]) {
+  for (const cls of ["work", "work-section", "work-grid", "work-item"]) {
     assert.deepEqual(show(`<section class="${cls}"><a href="https://p.example/">p</a></section>`), [[3, "https://p.example/"]], cls);
   }
   assert.deepEqual(show(`<section class="projects"><h2>Clients</h2><a href="https://client.example/">c</a></section>`), [[3, "https://client.example/"]]);
@@ -158,4 +163,20 @@ test("a project card's own header and a heading in a wrapper with no link do not
   assert.deepEqual(show(wrapped, "https://sahilbajajportfolio.vercel.app/"), [[1, "https://github.com/sahilbajaj2004/AlgoAnalyzer"], [1, "https://algo-analyzer.vercel.app/"]]);
   // A heading wrapper that holds a link still ends the section with it.
   assert.deepEqual(show(`<section><div><h2>Projects</h2><a href="https://p.example/">p</a></div><div><a href="https://q.example/">q</a></div></section>`), [[1, "https://p.example/"], [3, "https://q.example/"]]);
+});
+
+test("the third 25 (2026-11-23): one real project beside a tool list fails, named project pages and products count", async () => {
+  // gauravgrv.vercel.app: one repository under "Things I've built", then "What I work with": library sites.
+  const gaurav = `<main><section id="work"><h2>Things I've built</h2><a href="https://github.com/Gaurav-1008/JobPilot">GitHub</a></section>
+    <section><h2>What I work with</h2><a href="https://scikit-learn.org">Scikit-Learn</a><a href="https://pandas.pydata.org">Pandas</a><a href="https://dev.java">Java</a><a href="https://tableau.com">Tableau</a><a href="https://shap.readthedocs.io">SHAP</a></section></main>`;
+  const url = "https://gauravgrv.vercel.app/";
+  const g = await measurePage({ html: gaurav, text: "", url, finalUrl: url }, { fetchImpl: ok });
+  assert.deepEqual([g.project_links.checked, g.project_links.ok, g.project_links.not_counted], [1, 1, 5]);
+  assert.equal(codeChecks(g).project_links, false);
+  // sebascherny.github.io: its case studies are pages at the site's root named "project-...".
+  const seba = `<section id="latest-projects"><div class="work_grid_cell"><a href="project-sync.html"><h3>Dashboard</h3></a></div><div class="work_grid_cell"><a href="project-solar-energy.html"><h3>Solar</h3></a></div><a href="contact.html">Contact</a><a href="about.html">About</a></section>`;
+  assert.deepEqual(show(seba, "https://sebascherny.github.io/"), [[2, "https://sebascherny.github.io/project-sync.html"], [2, "https://sebascherny.github.io/project-solar-energy.html"]]);
+  // phyominthein.com: "git.", "linkedin." and "ig." on its own domain are short links to profiles, not its work.
+  const phyo = `<section id="hero"><a href="https://git.phyominthein.com/">g</a><a href="https://linkedin.phyominthein.com/">l</a><a href="https://ig.phyominthein.com/">i</a><a href="https://weflix.phyominthein.com/">w</a></section>`;
+  assert.deepEqual(show(phyo, "https://phyominthein.com/"), [[1, "https://weflix.phyominthein.com/"], [3, "https://git.phyominthein.com/"], [3, "https://linkedin.phyominthein.com/"], [3, "https://ig.phyominthein.com/"]]);
 });

@@ -101,7 +101,8 @@ export async function pageEvidence(db, row, { renderer = null, force = false, fe
   const measuredFacts = await measurePage(
     // homeText: the page text as it is stored below, so later link re-checks compare against the same words.
     { html: page.html, text, url, finalUrl: page.finalUrl, name: String(row.name ?? ""), motion, source: page.source, homeText: normalizePageText(text) },
-    { userAgent: UA, fetchImpl }
+    // A re-pick for facts of version 1 and 2 counts every link, as their rule did; a fresh measure uses LOW_LINKS.
+    { userAgent: UA, fetchImpl, ...(relinkOnly ? { lowLinks: "all" } : {}) }
   );
   if (relinkOnly) {
     // The plain fetch only finds the links to check. Its text and signals are

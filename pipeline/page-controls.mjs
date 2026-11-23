@@ -33,11 +33,12 @@ const CONTROL_ROLES = new Set(["button", "link", "menuitem", "tab"]);
 const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
 // An element whose id, class or aria-label says it holds projects ("projects", "project-card", "portfolio",
 // "my-work", "selected-work", "work-samples", "case-study", "showcase"), and a heading that names them
-// ("Projects", "Selected work", "Things I've built"). A bare "work" or "works" in a class or id is not one:
+// ("Projects", "Selected work", "Things I've built"). A bare singular "work" in a class or id is not one:
 // "work-section" (Work Experiences, nuwanjaliyagoda.com), "work-connections" (partners, sujanbhatta.tech) and
-// "work-item" (employers, reaganhsu.com) are timelines and logo walls.
+// "work-item" (employers, reaganhsu.com) are timelines and logo walls. The plural "works" is: "ul.works" is
+// kentom.co.ke's list of its products.
 export const PROJECT_ATTR =
-  /\b(?:projects?|portfolio|(?:my|our|selected|featured|recent|latest|past|personal|side|client) ?works?|works? ?samples?|case\s*stud(?:y|ies)|showcase)\b/i;
+  /\b(?:projects?|portfolio|works|(?:my|our|selected|featured|recent|latest|past|personal|side|client) ?work|work ?samples?|case\s*stud(?:y|ies)|showcase)\b/i;
 // A heading that says its section is not projects, whatever the classes around it: work experience, education,
 // certificates, awards, testimonials, clients, a network ("Network & recognition."). Its links are lowered.
 const NOT_PROJECT_HEADING =

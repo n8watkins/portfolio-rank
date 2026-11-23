@@ -33,9 +33,13 @@ export const LOW_TIER = 3;
  *   "beside"  they count toward the three only when at least one higher-tier project link loads (variant A);
  *   "never"   they never count and are not requested: only links in a section the page labels as projects,
  *             the projects page's main content, the site's own project pages and repositories count (variant B).
- * Either way, when they are left out the result names how many (`not_counted`).
+ * Either way, when they are left out the result names how many (`not_counted`). ("all", every link counts as
+ * before tiers, is only for the re-pick of facts of version 1 and 2.) "never" was chosen from the live tests of
+ * 75 sites (2026-11-23): both give the same pass on 72; on gauravgrv.vercel.app (a "What I work with" list of
+ * library sites) and ashlok.dev (a placeholder link, a DMCA badge, the site's own source) "beside" passed a site
+ * with one real project link, and its counts take in universities, partners and blog posts.
  */
-export const LOW_LINKS = "beside";
+export const LOW_LINKS = "never";
 /**
  * Own project pages on a host that answers 200 for an address that cannot exist (a catch-all host, an app
  * shell) are verified by their text instead of their status (checkProjectLinks): at least this many words of
@@ -211,8 +215,12 @@ const BUILDERS = [
   [/readymag/i, "Readymag"],
 ];
 
-/** Subdomains of a person's own domain that are services, not work: mail, a blog, static files, sign-in, a CV. */
-const OWN_SERVICE_SUBDOMAIN = /^(?:mail|webmail|smtp|blog|news|cdn|static|assets|media|img|images|files|status|api|auth|login|admin|analytics|stats|links?|cal|calendar|book|resume|cv|shop|store)$/i;
+/**
+ * Subdomains of a person's own domain that are services, not work: mail, a blog, static files, sign-in, a CV,
+ * and short links to their profiles ("git.phyominthein.com", "linkedin.", "ig.").
+ */
+const OWN_SERVICE_SUBDOMAIN =
+  /^(?:mail|webmail|smtp|blog|news|cdn|static|assets|media|img|images|files|status|api|auth|login|admin|analytics|stats|links?|go|cal|calendar|book|resume|cv|shop|store|git|github|gh|gitlab|linkedin|li|in|ig|insta|instagram|x|twitter|tw|fb|facebook|yt|youtube|tiktok|discord|telegram|tg|wa|whatsapp|mastodon|bsky|threads|dribbble|behance|medium|dev|contact|email|me|about)$/i;
 
 const host = (u) => {
   try {
@@ -403,6 +411,18 @@ function isOwnProjectPath(path, base = "") {
 }
 
 /**
+ * A page whose own name says it is one project: "project-sync.html", "/project_solar", "/work-dashboard"
+ * (a word of LISTING_SEGMENT, then "-" or "_" and a name). Its other segments must not be a section or action.
+ */
+function isNamedProjectPage(path) {
+  const segs = segmentsOf(path);
+  if (!segs.length || segs.some((s) => ACTION_SEGMENT.test(s) || SECTION_SEGMENT.test(s))) return false;
+  const name = segs.at(-1).replace(/\.html?$/i, "");
+  const m = name.match(/^([a-z]+(?:-stud(?:y|ies))?)[-_](.{2,})$/i);
+  return Boolean(m && LISTING_SEGMENT.test(m[1]));
+}
+
+/**
  * The project-link candidates with where each came from, at most `max`, in
  * this order:
  *   1. outbound demo and repository links in the projects: links inside a
@@ -468,8 +488,9 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       const base = pathOfUrl(l.page);
       ok = own.path !== base && isOwnProjectPath(rel, homePath && base.startsWith(homePath) ? base.slice(homePath.length) : base);
     } else {
-      // In a home page projects section, with a project page's path.
-      ok = Boolean(l.inProjects) && isOwnProjectPath(rel);
+      // In a home page projects section, with a project page's path, or a page of its own whose name says
+      // project ("project-sync.html", sebascherny.github.io's case studies at the site's root).
+      ok = Boolean(l.inProjects) && (isOwnProjectPath(rel) || isNamedProjectPage(rel));
     }
     if (!ok) continue;
     seen.add(own.key);
@@ -729,7 +750,8 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   // never pass a site with no projects.
   const low = done.filter(({ c }) => isLow(c));
   const highLoads = done.some(({ c, verdict }) => !isLow(c) && verdict === "ok");
-  const counted = low.length && !highLoads ? done.filter(({ c }) => !isLow(c)) : done;
+  // "all": every link counts, as before tiers (the plain-fetch re-pick of facts of version 1 and 2).
+  const counted = lowLinks !== "all" && low.length && !highLoads ? done.filter(({ c }) => !isLow(c)) : done;
   const notCounted = skipped + (counted !== done ? low.length : 0);
   if (notCounted) res.not_counted = notCounted;
   for (const { c, verdict } of counted) {
@@ -875,7 +897,7 @@ function sourcesOf(candidates, projectsPage) {
  * `views` records what was read, `project_links_from` where the candidates
  * checked came from.
  */
-export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
+export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs, lowLinks = LOW_LINKS } = {}) {
   const { phone = null, projectsPage = null, homeText: storedText = null, ...desktopInput } = input;
   const scan = scanPage(desktopInput.html, desktopInput.finalUrl || desktopInput.url);
   let facts = measureFacts({ ...desktopInput, scan });
@@ -900,7 +922,7 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
   // capture passes the page text it stores (`input.homeText`, portfolios.page_text), so the nightly re-check,
   // which reads that stored text, compares own pages against exactly the same words.
   const homeText = storedText ?? (desktopInput.text || visibleText(desktopInput.html));
-  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText });
+  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs, homeText, lowLinks });
   // The links checked, with where each came from and their tier: the nightly re-check (pipeline/evidence.mjs)
   // tests these again, by the same rule for the lowest tier.
   facts.project_candidates = candidates.map(({ url, from, kind, tier }) => ({ url, from, kind, tier }));
