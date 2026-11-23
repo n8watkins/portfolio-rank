@@ -3,13 +3,15 @@
 // sale? Tables ported from pipeline/check_parking_redirects.py.
 import { firstTitle, removeElements, stripTags } from "./page-controls.mjs";
 
+// Hosts that serve only parked or for-sale domains. Not godaddysites.com:
+// that is GoDaddy's website builder, which hosts real sites.
 export const PARKING_DOMAINS = new Set([
   "sedoparking.com", "sedo.com", "bodis.com", "parkingcrew.net",
   "sav.com", "dan.com", "afternic.com", "hugedomains.com",
   "undeveloped.com", "buydomains.com", "brandbucket.com", "efty.com",
   "domainmarket.com", "above.com", "parklogic.com", "uniregistry.com",
   "domainnameshop.com", "registrar-servers.com", "topdns.com",
-  "godaddysites.com", "secureserver.net", "domaincontrol.com",
+  "secureserver.net", "domaincontrol.com",
   "domainnamesales.com", "domainagents.com", "squadhelp.com",
   "flippa.com", "epik.com",
 ]);

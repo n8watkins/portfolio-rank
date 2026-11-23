@@ -13,7 +13,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { clientRedirect, httpGate, parkedPage, parkingPhrase } from "../pipeline/gate.mjs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { PARKING_DOMAINS, clientRedirect, httpGate, isParkingDomain, parkedPage, parkingPhrase } from "../pipeline/gate.mjs";
 import { checkSite } from "../pipeline/health.mjs";
 import { plainReason } from "../lib/capture-problems.mjs";
 
@@ -210,6 +212,28 @@ test("checkSite: the parked redirect fails as 'answers with the wrong thing'; re
 test("the Capture problems page says the new reason in plain words", () => {
   const p = plainReason("parked: parking page: GoDaddy parking lander");
   assert.deepEqual([p.kind, p.text], ["noanswer", "The page is a parked domain (GoDaddy parking lander)."]);
+});
+
+// godaddysites.com is GoDaddy's website builder: it hosts real sites, so an
+// address there is not parked by its host alone. secureserver.net (GoDaddy's
+// parking and hosting servers) stays on the list until there is evidence
+// either way. The Python table (pipeline/check_parking_redirects.py) is the
+// one gate.mjs was ported from; both must agree.
+test("a site on GoDaddy's website builder (godaddysites.com) is not a parking host; secureserver.net still is", () => {
+  const builder = "https://jane-doe.godaddysites.com/";
+  assert.equal(isParkingDomain(builder), false);
+  assert.equal(PARKING_DOMAINS.has("godaddysites.com"), false);
+  assert.equal(isParkingDomain("https://park.secureserver.net/"), true);
+  // -B: no bytecode is written next to the script (pipeline/__pycache__).
+  const py = spawnSync("python3", ["-I", "-B", "-c",
+    "import sys; sys.path.insert(0, sys.argv[1]); import check_parking_redirects as c; " +
+    "print(c._is_parking_domain(sys.argv[2]), c._is_parking_domain('https://park.secureserver.net/'), sorted(c.PARKING_DOMAINS) == sorted(sys.argv[3].split(',')))",
+    fileURLToPath(new URL("../pipeline/", import.meta.url)), builder, [...PARKING_DOMAINS].join(",")], { encoding: "utf8" });
+  assert.equal(py.status, 0, py.stderr);
+  const cache = new URL("../pipeline/__pycache__/", import.meta.url);
+  const left = fs.existsSync(cache) ? fs.readdirSync(cache).filter((f) => f.startsWith("check_parking_redirects.")) : [];
+  assert.deepEqual(left, [], "no bytecode left in pipeline/");
+  assert.equal(py.stdout.trim(), "False True True", "the Python table matches gate.mjs");
 });
 
 test("phrases: the GoDaddy lander's words count, a car 'parked free of charge' does not; phrases read across line breaks", () => {

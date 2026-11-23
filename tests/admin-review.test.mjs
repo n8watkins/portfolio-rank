@@ -80,7 +80,7 @@ test("review page: agreed rows ticked, disagreements flagged; Confirm applies; t
     const box = await p.locator("[data-review-viewer]").boundingBox();
     assert.deepEqual([box.x, box.y, box.width, box.height], [0, 0, 390, 844], "full screen");
     const reject = await p.locator("[data-review-viewer-reject]").boundingBox();
-    assert.ok(reject && reject.y + reject.height <= 844, "Reject is on screen");
+    assert.ok(reject && reject.y + reject.height <= 844, "the keep or leave button is on screen");
     await p.keyboard.press("Escape");
     await phone.close();
 
@@ -149,7 +149,7 @@ test("review page: agreed rows ticked, disagreements flagged; Confirm applies; t
       seen.add(await page.evaluate(() => (document.activeElement?.closest("[data-review-viewer]") ? document.activeElement.getAttribute("aria-label") || document.activeElement.textContent?.trim() || document.activeElement.getAttribute("role") : "OUTSIDE")));
     }
     assert.ok(!seen.has("OUTSIDE"), `focus stays in the viewer: ${[...seen].join(", ")}`);
-    for (const label of ["Close the screenshot", "Bring back", "Reject"]) assert.ok([...seen].some((s) => s?.includes(label)), `${label} is reachable by Tab: ${[...seen].join(", ")}`);
+    for (const label of ["Close the screenshot", "Bring back", "Leave it off"]) assert.ok([...seen].some((s) => s?.includes(label)), `${label} is reachable by Tab: ${[...seen].join(", ")}`);
     await page.keyboard.press("Escape");
     await viewer.waitFor({ state: "detached" });
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-review-thumb")), "phone", "focus returns to the thumbnail");

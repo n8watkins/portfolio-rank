@@ -11,7 +11,7 @@ import { frameOf } from "@/lib/shot-url";
 import { RULE_NAMES, ruleName } from "@/lib/reviews/rule-names.mjs";
 import { ShotViewer, type ViewerFrame } from "@/components/admin/ShotViewer";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
-import { REJECT_QUESTION, UNDO_QUESTION, bulkWords, ifConfirmed, outcomeOf } from "@/components/admin/review-labels";
+import { UNDO_QUESTION, bulkWords, decidedLabel, declineOf, declinedEffect, hintOf, outcomeOf } from "@/components/admin/review-labels";
 
 // The owner's review queue (app/admin/(tools)/review/page.tsx): one card per
 // proposed status change, with a tick box. Rows where the graders agree come
@@ -42,7 +42,14 @@ export type Review = {
   shotKey: string | null;
   /** prompt: the grading prompt's version (absent on rows written before it was recorded). gemini35: the nightly grade at the door. */
   verdicts: { gemini31?: Grader; haiku?: Grader; gemini35?: Grader; prompt?: string };
-  signals: { score?: number; names?: string[]; junk_rule?: string | null; capture?: { action?: string | null; blocked?: string | null; failed?: string | null } } | null;
+  signals: {
+    score?: number;
+    names?: string[];
+    junk_rule?: string | null;
+    capture?: { action?: string | null; blocked?: string | null; failed?: string | null };
+    /** The door's decision; address: the address rule decided, not Gemini's "no" (lib/reviews/door.mjs). */
+    door?: { address?: boolean };
+  } | null;
   status: string;
   decidedAt: string | null;
   decidedBy: string | null;
@@ -78,6 +85,9 @@ const GROUPS: Record<string, string> = {
   recapture_blocked: "Re-capture blocked",
   signals_collapsed: "Listed, portfolio signals collapsed",
 };
+/** A row's group in words; the address rule's door rows say so, never "Gemini says no". */
+const groupLabel = (r: Review) =>
+  r.signals?.door?.address ? (r.group === "door_held" ? "Not a portfolio address, held for you" : "Not a portfolio address") : (GROUPS[r.group] ?? r.group);
 const CURRENT: Record<string, string> = { ranked: "Listed and ranked", listed: "Listed, not ranked", hidden: "Hidden", delisted: "Off the list" };
 const PROPOSED = { relist: "List and rank it", remove: "Take it off the list", review: "A person checks it" } as const;
 const TONE = { relist: "text-up", remove: "text-down", review: "text-ink" } as const;
@@ -252,6 +262,7 @@ function Row({
   const action = r.signals?.capture?.action ?? null;
   const blocked = r.signals?.capture?.blocked ?? null;
   const outcome = outcomeOf(r);
+  const decline = declineOf(r);
   return (
     <li className={`card p-4 sm:p-5 ${r.agreed ? "" : "ring-1 ring-inset ring-down/35"}`} data-review-row={r.id} data-agreed={r.agreed ? "true" : "false"}>
       <div className="flex items-start gap-3">
@@ -278,7 +289,7 @@ function Row({
                 <CircleAlert className="h-3.5 w-3.5" aria-hidden /> Graders disagree
               </span>
             )}
-            <span className={tag}>{GROUPS[r.group] ?? r.group}</span>
+            <span className={tag}>{groupLabel(r)}</span>
             {r.offList && <span className={tag}>No longer on the community list</span>}
             {r.undoneAt && (
               <span className={tagWrap} data-review-undone>
@@ -354,13 +365,13 @@ function Row({
               className={btnGhost}
               disabled={busy}
               icon={<X className="h-4 w-4" aria-hidden />}
-              label="Reject"
-              question={REJECT_QUESTION}
+              label={decline.label}
+              question={decline.question}
               onConfirm={() => onDecide("reject")}
               data-review-reject
             />
             <p className="text-xs text-mute text-pretty" data-review-when>
-              {ifConfirmed(outcome.when)}
+              {hintOf(r)}
             </p>
             {r.applied?.error && !error && <p className="text-sm text-down">The last try failed: {r.applied.error}</p>}
             {error && (
@@ -442,7 +453,7 @@ function AutoApplied({
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
                 </a>
                 <p className="text-xs text-mute">
-                  <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
+                  <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span> · {groupLabel(r)}
                   {r.offList ? " · no longer on the community list" : ""} · applied {when(r.decidedAt)}
                   {r.decidedBy ? ` by ${decider(r.decidedBy)}` : ""}
                 </p>
@@ -505,7 +516,7 @@ function decider(by: string | null) {
 /** What a decision did, in one sentence. */
 function effect(r: Review) {
   if (r.status === "closed") return `Closed without acting: ${r.applied?.closed ?? "a newer decision made it stale"}.`;
-  if (r.status === "rejected") return r.applied?.grade === "settled" ? "Kept listed; the grade records your decision." : "Nothing changed.";
+  if (r.status === "rejected") return declinedEffect(r, r.applied?.grade === "settled");
   if (r.applied && "action" in r.applied) return "Marked checked; nothing to apply.";
   if (r.applied?.visibility?.length) return sentence(r.applied.visibility);
   return "Recorded; the grade already matched.";
@@ -559,9 +570,8 @@ function Decided({
                   {recent.has(r.id) && <span className="ml-2 align-[1px] text-xs font-semibold text-accent">just now</span>}
                 </p>
                 <p className="text-xs text-mute">
-                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{r.status === "closed" ? "Closed" : r.status === "rejected" ? "Rejected" : r.proposed === "review" ? "Checked" : "Confirmed"}</span>
-                  {" · "}
-                  {PROPOSED[r.proposed]}
+                  <span className={r.status === "confirmed" ? "font-semibold text-up" : "font-semibold"}>{decidedLabel(r)}</span>
+                  {` · proposed: ${PROPOSED[r.proposed].toLowerCase()}`}
                   {r.decidedBy && ` · by ${decider(r.decidedBy)}`}
                   {r.decidedAt && `, ${when(r.decidedAt)}`}
                 </p>
@@ -627,8 +637,8 @@ export function StatusReviewQueue({
   const [notice, setNotice] = useState<{ text: string; failures: string[]; toDecided: boolean } | null>(null);
   const [progress, setProgress] = useState<{ action: string; done: number; total: number } | null>(null);
   const running = progress !== null;
-  const all = useMemo(() => new Map([...pending, ...autoApplied, ...decided].map((r) => [r.id, r.url])), [pending, autoApplied, decided]);
-  const urlOf = (id: number) => all.get(id) ?? "";
+  const all = useMemo(() => new Map([...pending, ...autoApplied, ...decided].map((r) => [r.id, r])), [pending, autoApplied, decided]);
+  const urlOf = (id: number) => all.get(id)?.url ?? "";
   const [done, setDone] = useState<Record<number, "confirm" | "reject" | "undo">>({});
   // Rows confirmed or rejected on this page since it loaded, marked "just now" under Decided.
   const recentIds = useMemo(() => new Set(Object.entries(done).filter(([, a]) => a !== "undo").map(([id]) => Number(id))), [done]);
@@ -678,7 +688,9 @@ export function StatusReviewQueue({
     setAsking(false);
     setProgress(null);
     // Where the rows went, and what failed, by name.
-    const verb = action === "confirm" ? "Confirmed" : action === "undo" ? "Undone" : "Rejected";
+    // The other button's own words for one row ("Kept on the list"); "Decided" for several.
+    const one = ids.length === 1 ? all.get(ids[0]) : undefined;
+    const verb = action === "confirm" ? "Confirmed" : action === "undo" ? "Undone" : one ? declineOf(one).done : "Decided";
     const fails = Object.entries(failed);
     const where = action === "undo" ? "They wait for you again above." : "They are under Decided below, each with Undo.";
     setNotice({
@@ -711,6 +723,8 @@ export function StatusReviewQueue({
       onClose={() => setViewing(null)}
       returnFocus={viewing.from}
       outcome={outcomeOf(viewing.review)}
+      decline={declineOf(viewing.review)}
+      hint={hintOf(viewing.review)}
       prompt={viewing.review.verdicts.prompt ?? null}
     />
   );
@@ -764,7 +778,7 @@ export function StatusReviewQueue({
           // Many rows take a while: how far it is, and every decision button waits.
           <div className="basis-full rounded-xl bg-raised p-3" data-review-progress>
             <p className="text-sm font-semibold" aria-live="polite">
-              {progress.action === "confirm" ? "Confirming" : progress.action === "undo" ? "Undoing" : "Rejecting"} {progress.done.toLocaleString("en-US")} of {progress.total.toLocaleString("en-US")}...
+              {progress.action === "confirm" ? "Confirming" : progress.action === "undo" ? "Undoing" : "Deciding"} {progress.done.toLocaleString("en-US")} of {progress.total.toLocaleString("en-US")}...
             </p>
             <div
               role="progressbar"

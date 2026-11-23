@@ -5,7 +5,6 @@ import { Check, ExternalLink, X } from "lucide-react";
 import { btnGhost, btnIcon, btnSecondary } from "@/components/ui/styles";
 import { frameOf } from "@/lib/shot-url";
 import { ConfirmButton } from "./ConfirmButton";
-import { REJECT_QUESTION, ifConfirmed } from "./review-labels";
 
 // The large screenshot viewer of the owner's review queue
 // (components/admin/StatusReviewQueue.tsx): a thumbnail opens it on that view.
@@ -13,7 +12,8 @@ import { REJECT_QUESTION, ifConfirmed } from "./review-labels";
 // viewer (hero.jpg on a desktop, mobile.jpg on a phone). The old full-page
 // full.jpg is gone; the tall page images (lib/shots.ts fullPagePreview) can
 // take its place once their domain exists (docs/audits/fullpage-images.md). Desktop and Phone are tabs (the tablist pattern: arrow keys, Home
-// and End move between them). Confirm and Reject act on the row, through the
+// and End move between them). The row's two buttons, in its own words
+// (./review-labels.ts: "Take off the list" and "Keep on the list"), act on it through the
 // same handler as the row's own buttons, with the same pending, done and
 // error states.
 //
@@ -43,6 +43,8 @@ export function ShotViewer({
   returnFocus,
   prompt = null,
   outcome,
+  decline,
+  hint,
 }: {
   domain: string;
   url: string;
@@ -62,6 +64,10 @@ export function ShotViewer({
   prompt?: string | null;
   /** What Confirm does and when it shows (./review-labels.ts outcomeOf). */
   outcome: { label: string; question: string; when: string };
+  /** What the other button says and asks, and what it is called once done (./review-labels.ts declineOf). */
+  decline: { label: string; question: string; done: string };
+  /** The line saying what each button does (./review-labels.ts hintOf). */
+  hint: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -98,7 +104,7 @@ export function ShotViewer({
     tabs.current[next]?.focus();
   }
 
-  const doneText = done === "confirm" ? (proposed === "review" ? "Marked checked. It is under Decided, with Undo." : `Confirmed. ${outcome.when} It is under Decided, with Undo.`) : done === "reject" ? "Rejected: nothing changed. It is under Decided, with Undo." : null;
+  const doneText = done === "confirm" ? (proposed === "review" ? "Marked checked. It is under Decided, with Undo." : `Confirmed. ${outcome.when} It is under Decided, with Undo.`) : done === "reject" ? `${decline.done}: nothing changed on the site. It is under Decided, with Undo.` : null;
 
   return (
     <dialog
@@ -209,12 +215,12 @@ export function ShotViewer({
                 className={btnGhost}
                 disabled={busy}
                 icon={<X className="h-4 w-4" aria-hidden />}
-                label="Reject"
-                question={REJECT_QUESTION}
+                label={decline.label}
+                question={decline.question}
                 onConfirm={() => onDecide("reject")}
                 data-review-viewer-reject
               />
-              <p className="text-xs text-mute">{ifConfirmed(outcome.when)}</p>
+              <p className="text-xs text-mute">{hint}</p>
               {error && (
                 <p className="text-sm text-down" role="alert">
                   {error}

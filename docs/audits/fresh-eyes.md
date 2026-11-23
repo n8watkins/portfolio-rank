@@ -22,7 +22,7 @@ There is also one route that still lets a visitor start our Gemini key, and the 
 | 7 | Give the admin short sessions and add per-account session revocation | M5 | M |
 | 8 | Move to a nonce CSP, allow-list test seams, give staging its own mailroom apps, and fix contrast and CLS | M7, L2, L4, L5 | M |
 
-## P0 status (STRATEGY.md, approved 2026-11-13)
+## P0 status (STRATEGY-2026-11-13.md, approved 2026-11-13)
 
 | P0 item | Status |
 | --- | --- |
