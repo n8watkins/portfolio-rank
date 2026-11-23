@@ -3,7 +3,7 @@ import { ROUTES } from "@/lib/nav";
 import { BELOW_TOP_TIERS, SETTLED_FACEOFFS, familyOf, tierLabel } from "@/lib/tiers.mjs";
 import type { ProfileTier as Data } from "@/lib/tiers-view";
 import { CheckItems } from "./CheckItems";
-import { shownPoints } from "@/lib/check-points.mjs";
+import { formatPoints, shownPoints } from "@/lib/check-points.mjs";
 
 // A profile's tier by ELO (RANKING_V2 only, lib/tiers-view.ts): the letter,
 // its place, "Starting rank from automated checks" and the real votes, how
@@ -42,7 +42,7 @@ export function ProfileTier({ t }: { t: Data }) {
               <p className="text-sm text-mute">
                 {t.seeded
                   ? t.startingPoints != null
-                    ? `Starting rank set from automated checks when they scored ${Math.round(t.startingPoints)} of 100 · ${votes}. Votes move it from here.`
+                    ? `Starting rank set from automated checks when they scored ${formatPoints(t.startingPoints, 100)} of 100 · ${votes}. Votes move it from here.`
                     : `Starting rank from automated checks · ${votes}. Votes move it from here.`
                   : `ELO from ${votes}. It moves as people vote.`}
                 <span className="block text-xs">{settling}</span>
@@ -72,7 +72,7 @@ export function ProfileTier({ t }: { t: Data }) {
               <ul className="mt-2 grid gap-2 text-sm">
                 {t.fixes.map((f) => (
                   <li key={f.id} className="flex items-start gap-2">
-                    <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs font-bold leading-5 text-accent tabular-nums">+{Math.round(f.gain)}</span>
+                    <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs font-bold leading-5 text-accent tabular-nums">+{formatPoints(f.gain)}</span>
                     <span>{f.text.slice(f.text.indexOf(" if you ") + 1)}</span>
                   </li>
                 ))}

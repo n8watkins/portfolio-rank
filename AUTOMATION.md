@@ -766,7 +766,9 @@ All of this starts with the next release: every production job runs released cod
   So a site that recovers from `down` is out until the next daily run (at most about a day), where the old trigger put a graded site back at the health check's own write.
 - **Where the rank lives**: `tier_ratings` (the tier store); a Gemini grade still keeps its copy in `ai_rubric.rank`, and a site without a grade has none.
 - **Lighthouse**: the nightly prewarm measures every listed site the membership rule accepts (Gemini's "yes", or a capture with facts and 4 or more signals, or a member already), so code-ranked sites get their own speed scores.
-- **Shown in whole points**: the profile, the tier card and the printable report round the total and each item; the order uses the exact value.
+- **How points are shown** ([lib/check-points.mjs](lib/check-points.mjs) `formatPoints`): the profile, the tier card, the quickest points and the printable report show each item, the total and each gain to one decimal when it is not whole ("9.4/10", "10/10", "61.6 of 100"), and never round a score up to its maximum, so a shown score never claims full marks that were not earned.
+  An item short of full marks is also stored below its maximum (SEO 99 and best practices 100 is 9.9 of 10, not 10).
+  Every stored point is to one decimal, so the items shown add up to the total shown; the order uses the same values.
 - **Gemini's letter** is never shown or counted as a site's grade: the profile's report card has a neutral "AI" mark, the home page and the old leaderboard show the Tier only while `RANKING_V2` is on and nothing otherwise, and polls, live stats and blog facts choose by the Tier (`lib/tiers-letters.mjs` `siteTiers`).
   The visitor grader ("Grade my portfolio", off) still shows Gemini's letter on its own reports until the letter is retired.
 

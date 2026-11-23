@@ -316,6 +316,7 @@ Known gaps, with fixes open as pull requests: a removal covers one exact spellin
 
 The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
 The rank starts from the Code checks score and moves with face-off votes.
+Every place that shows the Code checks score shows each item and the total to one decimal when it is not whole, and never rounds a score up to its maximum (`lib/check-points.mjs` `formatPoints`): 9.4 of 10 shows as 9.4/10, never 10/10.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).
    Two sites are shown and one is picked.
