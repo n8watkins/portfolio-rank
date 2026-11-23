@@ -293,3 +293,21 @@ test("SQL over ai_rubric never throws on text that is not JSON: prewarm, fresh g
   const keeps = (await db.execute(`SELECT url FROM portfolios p WHERE ${OWNER_KEEPS_SQL("p")}`)).rows.map((r) => r.url);
   assert.deepEqual(keeps, ["https://kept.dev"]);
 });
+
+test("SQL over ai_rubric never throws on text that is not JSON: newcomers to the tiers, the night's ungraded list", async () => {
+  const { seedNewcomers } = await import("../lib/tiers-store.mjs");
+  const { UNGRADED } = await import("../pipeline/night.mjs");
+  const db = await freshDb();
+  await refreshTiers(db, { now: NOW });
+  const strong = JSON.stringify(facts(6));
+  // A row with broken JSON in ai_rubric (and in facts) sorted first, then a good one.
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', ?, ?, '2026-11-20 00:00:00')", args: ["https://a-broken.dev", "{not json", "{not json"] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', ?, ?, '2026-11-20 00:00:00')", args: ["https://b-broken.dev", "{not json", strong] });
+  await db.execute({ sql: "INSERT INTO portfolios (url, status, shot_key, ai_rubric, facts, captured_at) VALUES (?, 'live', 'k', NULL, ?, '2026-11-20 00:00:00')", args: ["https://c-good.dev", strong] });
+  await seedNewcomers(db, { now: NOW });
+  const members = (await db.execute("SELECT url FROM tier_ratings WHERE member = 1 ORDER BY url")).rows.map((r) => String(r.url));
+  assert.ok(members.includes("https://c-good.dev"), members.join(","));
+  assert.ok(!members.includes("https://a-broken.dev"));
+  const ungraded = (await db.execute(`SELECT url FROM portfolios p WHERE ${UNGRADED()} ORDER BY url`)).rows.map((r) => String(r.url));
+  assert.deepEqual(ungraded, ["https://c-good.dev"], "broken text is neither a grade to redo nor a crash");
+});

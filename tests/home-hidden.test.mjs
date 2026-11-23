@@ -56,6 +56,14 @@ before(async () => {
   await (await import("../lib/db.ts")).ensureSchema();
 });
 
+test("the recently graded list skips text that is not JSON instead of failing", async () => {
+  const { RECENT_GRADES_SQL } = await import("../lib/home.ts");
+  await db().execute({ sql: "INSERT OR REPLACE INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: ["https://broken-json.dev", "{not json"] });
+  await db().execute({ sql: "INSERT OR REPLACE INTO portfolios (url, status, ai_rubric) VALUES (?, 'live', ?)", args: ["https://graded.dev", JSON.stringify({ rubric_version: 3, is_portfolio: true, judged_at: "2026-11-20T00:00:00Z" })] });
+  const rows = (await db().execute(RECENT_GRADES_SQL)).rows.map((r) => String(r.url));
+  assert.ok(rows.includes("https://graded.dev") && !rows.includes("https://broken-json.dev"), rows.join(","));
+});
+
 test("a site hidden after the home pool was cached is not on the home page; the hide paths drop the cached pool", async () => {
   const { rankedPool, visiblePool } = await import("../lib/home.ts");
   const { clearPoolStatement, HOME_POOL_KEYS } = await import("../lib/games/pool.mjs");

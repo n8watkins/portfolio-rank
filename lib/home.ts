@@ -179,16 +179,19 @@ async function topTen(): Promise<TopTen> {
 /** `tier`: the site's public Tier while tiers are shown, else null; never Gemini's letter. */
 export type GradedItem = { url: string; name: string; domain: string; tier: string | null; at: string; hero: string | null; href: string };
 
+/** The newest Gemini grades that say portfolio; CASE forms, so text that is not JSON is skipped, never an error. */
+export const RECENT_GRADES_SQL = `SELECT url, at FROM (
+  SELECT url, CASE WHEN json_valid(ai_rubric) THEN json_extract(ai_rubric, '$.judged_at') END AS at
+  FROM portfolios
+  WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND ${GEMINI_SAYS_PORTFOLIO_SQL("ai_rubric")}
+) WHERE at IS NOT NULL ORDER BY at DESC LIMIT 30`;
+
 /** The portfolios Gemini graded most recently. Cached an hour: it reads the whole list. */
 async function recentlyGraded(count = 6): Promise<GradedItem[]> {
   const hidden = await hiddenUrls();
   const { items } = await cached<{ items: { url: string; at: string }[] }>("home", "recent-grades", { ttlMs: HOUR }, async () => {
     const res = await db().execute(
-      `SELECT url, json_extract(ai_rubric, '$.judged_at') AS at
-       FROM portfolios
-       WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)
-         AND ${GEMINI_SAYS_PORTFOLIO_SQL("ai_rubric")} AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
-       ORDER BY at DESC LIMIT 30`
+      RECENT_GRADES_SQL
     );
     return { items: res.rows.map((r) => ({ url: String(r.url), at: String(r.at) })) };
   });

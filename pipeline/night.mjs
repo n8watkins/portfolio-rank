@@ -162,15 +162,17 @@ const GRADE_COLS = "p.url, p.name, p.shot_key, p.meta, p.ai_rubric, p.page_text,
 // A new site's screenshot was missing when its grade was tried: the marker
 // (gradeItem) keeps it from being asked for every night, and a capture newer
 // than the marker makes it eligible again (audit F4, 2026-11-16).
+// CASE forms, so json_extract never runs on text that is not JSON (an AND is not guaranteed to stop early).
 const MISSING_IMAGE = (p = "p") =>
-  `(json_valid(${p}.ai_rubric) AND json_extract(${p}.ai_rubric, '$.error') = 'no_usable_captures')`;
-const RECAPTURED = (p = "p") => `COALESCE(datetime(${p}.captured_at) > datetime(json_extract(${p}.ai_rubric, '$.judged_at')), 0)`;
+  `(CASE WHEN json_valid(${p}.ai_rubric) THEN COALESCE(json_extract(${p}.ai_rubric, '$.error') = 'no_usable_captures', 0) ELSE 0 END)`;
+const RECAPTURED = (p = "p") =>
+  `(CASE WHEN json_valid(${p}.ai_rubric) THEN COALESCE(datetime(${p}.captured_at) > datetime(json_extract(${p}.ai_rubric, '$.judged_at')), 0) ELSE 0 END)`;
 /**
  * Not graded yet: no grade, or a marker older than the site's latest capture: a missing screenshot,
  * or the one fresh grade due after the owner undid or rejected a removal (lib/reviews/store.mjs
  * FRESH_GRADE_DUE), which the bad capture's scores never were.
  */
-const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
+export const UNGRADED = (p = "p") => `(${p}.ai_rubric IS NULL OR ((${MISSING_IMAGE(p)} OR ${FRESH_GRADE_DUE_SQL(p)}) AND ${RECAPTURED(p)}))`;
 /**
  * A person asked for a re-grade (regrade_requests, the owner's "Re-grade" action, lib/games/claims.mjs), and
  * the site has been captured again since: the request asks for that capture (site_freshness.forced_at, the
