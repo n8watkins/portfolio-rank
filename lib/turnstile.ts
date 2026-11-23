@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 // action ("poll-vote", "grade", "grade-email", "report-email"), and a token
 // made for another action is refused.
 //
-// Fails closed on the deployed Workers (production and staging, NODE_ENV
+// Fails closed on the deployed Worker (NODE_ENV
 // "production" with SITE_ENV other than "test"): no secret, or one of
 // Cloudflare's test secrets, refuses every request, and the hostname Siteverify
 // reports must be the Worker's own (SITE_URL). Only local runs (`next dev`,

@@ -203,6 +203,7 @@ Sources for this section are in ASSUMPTIONS.md section F.
 
 ## Staging
 
+Staging was removed on 2026-11-22 ([DECISIONS.md](DECISIONS.md), "No staging site"); this section is kept as the record of what it cost.
 Measured on 2026-11-10; the site is described in [DECISIONS.md](DECISIONS.md) ("A staging site checks every change before production").
 
 - Cloudflare: the account is on Workers Paid, the $5 a month add-on (not Pro or any zone plan), which includes 10M Worker requests a month.
@@ -265,7 +266,6 @@ That covers the library's hourly batches, the owner's "Make now" and each post's
 The day's 40 and the neurons did not change, so the most a day can cost is the same: about 2,320 neurons, $0.
 Behind it, a neuron guard: at most 2,500 neurons a UTC day (`AI_NEURON_CEILING`); 40 Schnell images are about 2,320.
 The settings can be lowered, never raised: a value above 40 or 2,500, or one that isn't a whole number, is rejected and fails closed (no Workers AI call at all; the library says why and `GET /api/admin/quota` shows it as `aiImages.problem`).
-Staging's limits are 0.
 
 - Before each call, one image and the call's estimated neurons are reserved for the UTC day ([lib/content/neurons.mjs](../lib/content/neurons.mjs), table `ai_image_calls`, one row per call) in one statement that only succeeds while the day's images, the last hour's images and the day's neurons all stay within their limits; without room the call is skipped, never retried, and a reservation is never given back.
 - The account's free allowance is 10,000 neurons a day, shared by every app on the account, and resets at 00:00 UTC ([pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)).

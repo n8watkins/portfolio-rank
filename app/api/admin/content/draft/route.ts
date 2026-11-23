@@ -13,13 +13,11 @@ import { newJobId } from "@/pipeline/content/manual.mjs";
 //   POST /api/admin/content/draft { rewriteOf, notes }         "Rewrite with these notes"
 //     -> 202 { job }; 400 (bad_request, or the cleaning message),
 //        401, 403, 404 not_found (the draft to rewrite), 409
-//        production_only | no_gemini, 429 daily_cap (5 a Pacific day; staging
-//        1 by default), 503 no_workflow
+//        production_only, 429 daily_cap (5 a Pacific day), 503 no_workflow
 //   GET  /api/admin/content/draft?id=<job>  -> { job }          the live status, with job.calls
 //                                                              (Gemini attempts, answered, busy, backup)
 //   GET  /api/admin/content/draft           -> { jobs, costs }  today's jobs and the cost panel
-// The draft runs in the DraftWorkflow (worker/draft.ts) in production, and on
-// staging once staging has its own Gemini key, under a lower daily cap
+// The draft runs in the DraftWorkflow (worker/draft.ts), in production only
 // (lib/content/jobs.mjs draftNowPolicy). POSTs must come from this
 // site with a JSON body (CSRF).
 export const dynamic = "force-dynamic";

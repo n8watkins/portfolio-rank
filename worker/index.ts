@@ -22,8 +22,6 @@ import { BLOG_TAG, appRequest, edgeRequest, forEdge, mayUseEdgeCache, probeAnswe
 import assetsFingerprint from "../.open-next/assets-fingerprint.json";
 import { canonicalRedirect } from "./canonical-host";
 import { OLD_SITE_HOSTS } from "../lib/site";
-import { markStaging, stagingRobots } from "./staging";
-import { stagingGate, type GateEnv } from "./staging-gate";
 import { PEOPLE_QUEUE_CRON, drainPeople, startTonight, type NightEnv } from "./night";
 import { tiersTick } from "./tiers";
 import { MODEL_WATCH_CRON, watchModels } from "./model-watch";
@@ -40,7 +38,6 @@ import { emailAlertsTick } from "./email-alerts";
 import { nightWatchTick } from "./night-watch";
 import { recheckStartTick } from "./recheck-start";
 import { runEach } from "../pipeline/hourly.mjs";
-import { jobCron, taskRuns } from "./crons";
 import { reviewAutoApplyEnabled, reviewAutoApplyTick } from "./review";
 
 // The end-of-day Workflow (wrangler.jsonc workflows, binding NIGHT).
@@ -65,7 +62,7 @@ const app = openNext as Handler;
  */
 export class CachedPages extends WorkerEntrypoint<CloudflareEnv> {
   async fetch(request: Request): Promise<Response> {
-    return forEdge(request, markStaging(await app.fetch(appRequest(request), this.env, this.ctx), this.env));
+    return forEdge(request, await app.fetch(appRequest(request), this.env, this.ctx));
   }
 
   /**
@@ -169,8 +166,7 @@ const ASSETS = String((assetsFingerprint as { fingerprint?: string })?.fingerpri
 // (./assets.ts); scanner probes get a plain 404, a signed-out session read
 // gets `null` (./anonymous-session.ts), and the public pages go through the
 // edge cache (./edge-cache.ts);
-// the rest is the app. On staging, robots.txt disallows everything and every
-// response says noindex (./staging.ts).
+// the rest is the app.
 const worker = {
   ...app,
   async fetch(request: Request, env: CloudflareEnv, ctx: { waitUntil(promise: Promise<unknown>): void }) {
@@ -178,11 +174,6 @@ const worker = {
     if (moved) return moved;
     const health = healthCheck(request);
     if (health) return health;
-    // The staging lock: off unless SITE_ENV is "staging" (./staging-gate.ts).
-    const locked = await stagingGate(request, env as unknown as GateEnv);
-    if (locked) return locked;
-    const robots = stagingRobots(request, env);
-    if (robots) return robots;
     const probe = probeAnswer(request);
     if (probe) return probe;
     // A signed-out visitor's session read is `null` without starting Next (./anonymous-session.ts).
@@ -191,7 +182,7 @@ const worker = {
     if (mayUseEdgeCache(request, new URL(env.SITE_URL).hostname)) {
       return (ctx as typeof ctx & CachedPagesExports).exports.CachedPages.fetch(edgeRequest(request, ASSETS));
     }
-    return markStaging((await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx)), env);
+    return (await serveImage(request, env, ctx)) ?? (await app.fetch(request, env, ctx));
   },
   // Cron Triggers (wrangler.jsonc triggers.crons): 03:30 and 04:30 UTC, one
   // of which is 20:30 in Los Angeles, start tonight's run; the hourly one
@@ -203,17 +194,14 @@ const worker = {
   // one is model watch (./model-watch.ts) and the owner's goals (./goals.ts); the five-minute one is the
   // grader's tick (./grader.ts), which does nothing while GRADER_ENABLED is off.
   async scheduled(controller: { scheduledTime: number; cron: string }, env: CloudflareEnv, ctx: { exports?: unknown }) {
-    // Staging's less frequent crons run the same jobs (./crons.ts), and only
-    // the ones its allowlist names: production runs every task.
-    const cron = jobCron(controller.cron);
-    const runs = (task: string) => taskRuns(task, env.SITE_ENV);
-    const only = (tasks: [string, () => unknown][]) => tasks.filter(([task]) => runs(task));
+    // Every task's name is in ./crons.ts (tests/crons.test.mjs keeps the two equal).
+    const cron = controller.cron;
     if (cron === PEOPLE_QUEUE_CRON) {
       // Each task on its own (../pipeline/hourly.mjs): one that throws goes to
       // Sentry and the log, and the rest still run this hour.
       const at = controller.scheduledTime;
       await runEach(
-        only([
+        [
           // Starts the not-working pool's hourly re-check on GitHub Actions when a site is due (./recheck-start.ts).
           // First, because it is the task with a time to keep: a slow task ahead of it must not delay it.
           ["recheck start", () => recheckStartTick(env as NightEnv, at, { db: database() })],
@@ -237,7 +225,7 @@ const worker = {
           // The owner's rule for the review queue: passes are applied without waiting (./review.ts); only with REVIEW_AUTO_APPLY.
           ["review auto-apply", () => (reviewAutoApplyEnabled(env) ? reviewAutoApplyTick(at, { purgeTags: purgeTagsOf(ctx) }) : null)],
           ["image library", () => libraryTick(env as NightEnv, at)],
-        ]),
+        ],
         {
           report: (e, task) => Sentry.captureException(e, { tags: { cron: "hourly", task } }),
           log: (line) => console.log(JSON.stringify(line)),
@@ -247,8 +235,8 @@ const worker = {
     else if (cron === MODEL_WATCH_CRON) {
       // The owner's goals: last week's progress, and an email the first time one is reached (./goals.ts).
       // First, since it never throws, so a model-watch failure can't skip it.
-      if (runs("goals")) await goalsTick(env as NightEnv, controller.scheduledTime);
-      if (runs("model watch")) await watchModels(env as NightEnv, new Date(controller.scheduledTime));
+      await goalsTick(env as NightEnv, controller.scheduledTime);
+      await watchModels(env as NightEnv, new Date(controller.scheduledTime));
     }
     else if (cron === GRADER_CRON) {
       // The grader's tick, then the blog newsletter's (./newsletter.ts) on the same
@@ -256,14 +244,14 @@ const worker = {
       // at once without NEWSLETTER_ENABLED or KIT_API_KEY.
       const at = controller.scheduledTime;
       await runEach(
-        only([
+        [
           ["grader", () => graderTick(env as GraderEnv, at)],
           ["newsletter", () => newsletterTick(env as unknown as NewsletterEnv, at)],
-        ]),
+        ],
         { report: (e, task) => Sentry.captureException(e, { tags: { cron: "five-minute", task } }), log: (line) => console.log(JSON.stringify(line)) }
       );
     }
-    else if (runs("night start")) await startTonight(controller.scheduledTime, env as NightEnv);
+    else await startTonight(controller.scheduledTime, env as NightEnv);
   },
 };
 

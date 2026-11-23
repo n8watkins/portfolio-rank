@@ -82,7 +82,7 @@ test("the switch: off unless REVIEW_AUTO_APPLY is exactly true (any case)", () =
   assert.equal(reviewAutoApplyEnabled({ REVIEW_AUTO_APPLY: "1" }), false);
   assert.equal(reviewAutoApplyEnabled({ REVIEW_AUTO_APPLY: "TRUE" }), true);
   const wrangler = fs.readFileSync("wrangler.jsonc", "utf8");
-  assert.equal((wrangler.match(/"REVIEW_AUTO_APPLY": "true"/g) ?? []).length, 2, "on in production and on staging (the owner's decision)");
+  assert.equal((wrangler.match(/"REVIEW_AUTO_APPLY": "true"/g) ?? []).length, 1, "on in production (the owner's decision)");
   assert.doesNotMatch(wrangler, /"REVIEW_AUTO_APPLY": "false"/);
 });
 

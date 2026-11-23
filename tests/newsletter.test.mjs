@@ -301,7 +301,6 @@ test("production creates drafts, not scheduled sends, until the owner has checke
   const { parseJsonc } = await import("../scripts/check-worker-exports.mjs");
   const config = parseJsonc(readFileSync("wrangler.jsonc", "utf8"));
   assert.equal(config.vars.KIT_BROADCAST_MODE, "draft");
-  assert.equal(config.env.staging.vars.KIT_BROADCAST_MODE, "draft");
   assert.equal(config.vars.NEWSLETTER_ENABLED, "false");
 });
 

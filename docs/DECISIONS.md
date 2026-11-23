@@ -229,7 +229,7 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A site the health check marks down or suspect is not a capture problem; its health state is a column.
   "On your review list" means the site has an open row on `/admin/review`, never the `needs_review` flag alone, which the weekly health check rewrites.
 - **The capture-problems alert is a weekly summary** (owner, 2026-11-22: "lets just do a weekly capture alert"). Status: building (#275).
-  The night's owner alert holds it while any count is above zero, with each group's count, its change since the last email in plain words, and the page's link; never on staging.
+  The night's owner alert holds it while any count is above zero, with each group's count, its change since the last email in plain words, and the page's link.
   An email goes out on a night when both hold: a group's count is above its lowest since the last email (zero after the alert cleared, which it does when every count reaches zero), and at least 7 days have passed since the last email that was actually sent (`owner_alerts.last_sent_day`).
   A rise inside those 7 days is held: if the count is still above that lowest point on the first night after the gap, that night's email reports it; if it has gone, nothing is sent.
   A failed email does not start the 7 days and is tried again the next night.
@@ -447,7 +447,7 @@ The design is [CONTENT-ENGINE.md](CONTENT-ENGINE.md).
   The engine writes drafts (`CONTENT_MODE` "dry-run" is the draft mode); the owner reads each one on `/admin/blog/[id]`, as readers would see it plus its checks, fact sheet, claims and image sources, and publishes or rejects it.
   Publish goes live at the draft's scheduled 08:00 Pacific while that is still ahead, else at once, and keeps the cap of 2 posts in any 7 days in the same write; Reject and Unpublish take an optional note; every decision is stored on the post (`checks.owner`) with who and when.
   A draft that fails its checks after two rounds is still dropped and never reaches the queue; the "publish" mode (automatic publishing) stays in the code, unused.
-  Draft mode is on in production since 2026-11-11 (owner); staging stays "off".
+  Draft mode is on in production since 2026-11-11 (owner).
   Why: the posts appear in the owner's name, and a person reading each one is the strongest check while the engine is new.
 - **Fully automatic and fail-closed** (owner, 2026-11-10). Status: the review part is superseded by the decision above (2026-11-11); failing closed still holds.
   A draft that fails a check is revised automatically, and if it still fails after two rounds it is dropped, never published and never queued for the owner.
@@ -662,6 +662,13 @@ The owner's overall rule (2026-11-10): keep it simple, don't overbuild.
   Scheduled jobs are deliberately not duplicated on staging: they would spend the shared Gemini quota, double the Actions minutes and risk writes to shared buckets, and stale data there would raise false alarms.
   Scheduled code is covered by tests instead.
   Why: the extra safety is worth keeping while the change rate is high, and it costs nothing ([COSTS.md](COSTS.md), "Staging").
+  Superseded on 2026-11-22 by "No staging site".
+- **No staging site** (owner, 2026-11-22: "Let's just kill staging, we're just gonna get rid of staging completely."). Status: building (`chore/remove-staging`).
+  The staging Worker, its workflows (`staging.yml`, `staging-data.yml`, `staging-capture.yml`), the `env.staging` block in `wrangler.jsonc`, the staging lock, ribbon and robots rules, and the staging-only branches in the code are gone from the repository.
+  A change is tried locally and in CI (unit tests, the Worker bundle and the end-to-end suite on a throwaway local database), then released, and checked on production by the deploy's smoke check; anything that needs real data or Cloudflare is tried as a small trial on production, on the owner's word.
+  Discovery (`discover.yml`) used to default to the staging database; it now runs only when `DISCOVERY_TARGET` is `production` and stops otherwise.
+  Deleting what staging owns outside the repository (the Worker `portfolio-rank-staging`, the Turso database `portfolio-rank-staging`, its cache bucket, its secrets and the `staging` label) is a separate step, each on the owner's word.
+  Why: staging had not deployed since 2026-11-22 04:38 UTC because its labelled pull request conflicted with main, its data went stale between weekly refreshes, and keeping it in step cost more than the problems it caught.
 - **Checks re-run only when the site changed, or when they are old** (owner, 2026-11-11: "If there have been no changes, don't regenerate; if there have been changes, regenerate. It's not about avoiding a free API request; it just takes time."; the fingerprint and the numbers are the agent's). Status: building (`feat/check-freshness`).
   One rule for every check on a portfolio ([lib/freshness.mjs](../lib/freshness.mjs), [AUTOMATION.md](../AUTOMATION.md#when-checks-re-run)): reuse the stored result while the site's change fingerprint is unchanged; re-run it when the fingerprint changed after it was measured, on a re-grade, on the admin's "Re-measure", or past a maximum age.
   Maximum ages: Lighthouse and screenshots 90 days; polish, link checks and the grader's link checks 30 days, since links and share images rot without the page changing.

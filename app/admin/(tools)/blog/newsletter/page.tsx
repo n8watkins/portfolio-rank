@@ -12,7 +12,6 @@ import { broadcastMode } from "@/lib/newsletter/send.mjs";
 import { kit, kitFormId, newsletterEnabled, subscriberCount } from "@/lib/newsletter/server";
 import { recentIssues } from "@/lib/newsletter/store.mjs";
 import { readSwitch, switchLog } from "@/lib/newsletter/switch.mjs";
-import { IS_STAGING } from "@/lib/site";
 
 // The blog newsletter for the owner (AUTOMATION.md "Newsletter"). Kit keeps
 // the list and sends the emails, so this page shows Kit's confirmed
@@ -90,7 +89,7 @@ export default async function AdminNewsletterPage() {
   const forms = diag?.forms.ok ? ((diag.forms as { forms?: { id: number | string; name: string; archived: boolean }[] }).forms ?? []).filter((x) => !x.archived) : [];
   const signupForm = forms.find((x) => String(x.id) === formId) ?? null;
   const formNote = !connected ? "-" : forms.length === 0 ? "None: make one inline form" : forms.length > 1 && !formId ? `${forms.length} forms: set KIT_FORM_ID` : formId ? `Form ${formId}` : "-";
-  const mode = IS_STAGING ? "draft" : broadcastMode(process.env.KIT_BROADCAST_MODE);
+  const mode = broadcastMode(process.env.KIT_BROADCAST_MODE);
 
   return (
     <>
@@ -123,7 +122,7 @@ export default async function AdminNewsletterPage() {
               <div className="rounded-lg border border-edge bg-raised px-4 py-3">
                 <dt className="text-xs font-semibold text-mute">New posts</dt>
                 <dd className="mt-0.5 text-2xl font-bold">{mode === "send" ? "Sent" : "Drafts"}</dd>
-                <dd className="text-xs text-mute">{IS_STAGING ? "staging only ever makes drafts" : "KIT_BROADCAST_MODE"}</dd>
+                <dd className="text-xs text-mute">KIT_BROADCAST_MODE</dd>
               </div>
             </dl>
           </section>

@@ -103,7 +103,7 @@ Sitemap: https://portfoliorank.n8builds.dev/sitemap.xml
 ```
 
 - No crawler-specific rules and no Content Signals line.
-- Staging answers `Disallow: /` and sends `X-Robots-Tag: noindex` on everything ([worker/staging.ts](../worker/staging.ts)); good.
+- Staging answered `Disallow: /` and sent `X-Robots-Tag: noindex` on everything; it was removed on 2026-11-22.
 - The zone's managed robots.txt is off (`is_robots_txt_managed: false`), so the file above is what crawlers see.
 
 ### Sitemaps

@@ -11,33 +11,25 @@ export const SITE = {
     "https://github.com/n8watkins/portfolio-rank/issues/new?template=remove-portfolio.yml",
 } as const;
 
-// True in the staging build (the deploy workflow sets NEXT_PUBLIC_SITE_ENV to
-// "staging" for it; DEPLOY.md "Staging"): pages show a "Staging" ribbon and
-// say noindex. Inlined at build time, so the prerendered home page has it too.
-// The Worker adds robots.txt and the X-Robots-Tag header (worker/staging.ts).
-export const IS_STAGING = process.env.NEXT_PUBLIC_SITE_ENV === "staging";
-
-// The site's public address, one setting per Worker: the `SITE_URL` variable
-// in wrangler.jsonc (production, and env.staging). The running Worker reads it
-// with siteUrl(); pages built ahead of time use SITE_URL below, picked by the
-// build's NEXT_PUBLIC_SITE_ENV, and tests/site-url.test.mjs keeps the two
-// equal. Canonical, Open Graph and Twitter URLs, structured data, the
+// The site's public address: the `SITE_URL` variable in wrangler.jsonc. The
+// running Worker reads it with siteUrl(); pages built ahead of time use
+// SITE_URL below, and tests/site-url.test.mjs keeps the two equal. Canonical, Open Graph and Twitter URLs, structured data, the
 // sitemap, robots.txt, RSS, email links, the origin and Turnstile checks and
 // Auth.js's callback URL (auth.ts) all come from it. Any other host the
 // Worker answers is redirected here (worker/canonical-host.ts).
 export const PRODUCTION_SITE_URL = "https://portfoliorank.dev";
-export const STAGING_SITE_URL = "https://staging.portfoliorank.dev";
 
 /**
- * Other hosts the Workers answer only to redirect them to their SITE_URL:
- * production's address before portfoliorank.dev (until 2026-11) and www, and
- * staging's old address. Links already written with them (blog posts' data
- * links) still count as the site's own.
+ * Other hosts the Worker answers only to redirect them to SITE_URL:
+ * production's address before portfoliorank.dev (until 2026-11) and www.
+ * Links already written with them (blog posts' data links) still count as
+ * the site's own, and so do links to the retired staging site's first
+ * address (staging.portfoliorank.n8builds.dev).
  */
 export const OLD_SITE_HOSTS: readonly string[] = ["portfoliorank.n8builds.dev", "www.portfoliorank.dev", "staging.portfoliorank.n8builds.dev"];
 
-/** The site's address as built: production's, or staging's in the staging build. */
-export const SITE_URL = IS_STAGING ? STAGING_SITE_URL : PRODUCTION_SITE_URL;
+/** The site's address as built. */
+export const SITE_URL = PRODUCTION_SITE_URL;
 /** SITE_URL's host ("portfoliorank.dev"), as share cards and printed reports show it. */
 export const SITE_HOST = new URL(SITE_URL).host;
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Fails when the newest backup in the private backup bucket is too old.
 // The backup workflow cannot report its own absence: a run that never starts
-// or is cancelled files nothing, and the staging refresh would take an old
-// snapshot without a word. The daily limits workflow (.github/workflows/
+// or is cancelled files nothing. The daily limits workflow (.github/workflows/
 // limits.yml) runs this, so a missing night shows up the same day.
 //
 //   R2_ACCOUNT_ID, R2_BACKUP_ACCESS_KEY_ID, R2_BACKUP_SECRET_ACCESS_KEY

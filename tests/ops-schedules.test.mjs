@@ -15,7 +15,6 @@ import { migrate } from "../lib/schema.mjs";
 import { finishedWeek } from "../pipeline/goals.mjs";
 import { isNewsletterAlert } from "../lib/newsletter/alerts.mjs";
 import { backupFreshness } from "../scripts/check-backup-fresh.mjs";
-import { MAX_BACKUP_AGE_HOURS, staleReason } from "../scripts/refresh-staging-db.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const read = (f) => fs.readFileSync(path.join(ROOT, f), "utf8");
@@ -58,9 +57,9 @@ test("the weekly cron fires on Monday, in Cloudflare's weekday numbering", () =>
   assert.match(read("worker/index.ts"), /cron === MODEL_WATCH_CRON/);
 });
 
-test("every trigger in wrangler.jsonc, production and staging, names its weekday or leaves it open", () => {
+test("every trigger in wrangler.jsonc names its weekday or leaves it open", () => {
   const crons = cronsOf(read("wrangler.jsonc"));
-  assert.ok(crons.length >= 7, `found ${crons.length} triggers`);
+  assert.ok(crons.length >= 5, `found ${crons.length} triggers`);
   for (const cron of crons) {
     assert.equal(cron.trim().split(/\s+/).length, 5, cron);
     const field = cron.trim().split(/\s+/)[4];
@@ -146,17 +145,6 @@ test("the freshness check fails when the newest backup is older than 30 hours or
   assert.match(missed.reason, /backups\/portfoliorank-2026-11-15\.json\.gz, is 32\.5 hours old/);
   assert.equal(backupFreshness([], now).ok, false);
   assert.equal(backupFreshness([{ Key: "backups/notes.txt", LastModified: now }], now).ok, false);
-});
-
-test("the staging refresh refuses a backup older than 48 hours unless told otherwise", () => {
-  const now = new Date("2026-11-16T12:00:00Z");
-  assert.equal(MAX_BACKUP_AGE_HOURS, 48);
-  assert.equal(staleReason("2026-11-16T05:00:00Z", now), null);
-  assert.equal(staleReason("2026-11-14T13:00:00Z", now), null);
-  assert.match(staleReason("2026-11-13T05:00:00Z", now), /79\.0 hours old \(limit 48\)/);
-  assert.match(staleReason(undefined, now), /no usable export date/);
-  assert.equal(staleReason("2026-11-13T05:00:00Z", now, 200), null);
-  assert.match(read("scripts/refresh-staging-db.mjs"), /--allow-old/);
 });
 
 // ---------------------------------------------------------------------------
