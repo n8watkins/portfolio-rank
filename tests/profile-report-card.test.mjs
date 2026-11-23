@@ -40,9 +40,9 @@ export async function load(url, context, next) {
 process.env.LOCAL_DB_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "profile-report-card-")), "db.sqlite");
 delete process.env.TURSO_DATABASE_URL;
 
-let reportCard;
+let reportCard, opinionWords;
 before(async () => {
-  ({ reportCard } = await import("../lib/profile.ts"));
+  ({ reportCard, opinionWords } = await import("../lib/profile.ts"));
 });
 
 const V2 = {
@@ -105,4 +105,23 @@ test("no report card for nothing, an error, broken JSON or the owner's keep that
   assert.equal(reportCard(JSON.stringify({ error: "no_usable_captures" })), null);
   assert.equal(reportCard("{not json"), null);
   assert.equal(reportCard({ is_portfolio: true, ai_is_portfolio: false, fresh_grade: "due", source: "owner_review" }), null);
+});
+
+test("the card says what this grade was asked: three things for v3, a wider set (only three shown) for an older grade", () => {
+  assert.equal(opinionWords(reportCard(V3)).asked, "We asked it three things and nothing else.");
+  const old = opinionWords(reportCard(V2)).asked;
+  assert.match(old, /wider set of questions/);
+  assert.match(old, /only these three answers are shown/);
+  assert.ok(!/three things and nothing else/.test(old), "never claimed for an old grade");
+});
+
+test("'a person decides' only while the owner has not decided; after his keep, it says he kept it", () => {
+  const no = { ...V3, is_portfolio: true, ai_is_portfolio: false };
+  const held = reportCard({ ...no, review: { kind: "held_for_owner", reason: "waits" } });
+  assert.equal(held.awaitingOwner, true);
+  assert.equal(opinionWords(held).listing, "It stays listed: a person decides.");
+  const kept = reportCard({ ...no, review: { kind: "owner_kept", reason: "kept" } });
+  assert.equal(kept.awaitingOwner, false);
+  assert.equal(opinionWords(kept).listing, "It stays listed: a person decided to keep it.");
+  assert.equal(opinionWords(reportCard(V3)).listing, null, "a yes needs no line");
 });

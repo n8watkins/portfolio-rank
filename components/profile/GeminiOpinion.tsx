@@ -1,6 +1,6 @@
 import { Check, X } from "lucide-react";
-import type { ReportCard } from "@/lib/profile";
-import { PAGE_TEXT_MAX, RUBRIC_VERSION } from "@/pipeline/rubric.mjs";
+import { opinionWords, type ReportCard } from "@/lib/profile";
+import { PAGE_TEXT_MAX } from "@/pipeline/rubric.mjs";
 
 // The Gemini report card on a profile (owner, 2026-11-22): a separate,
 // optional opinion that says plainly what the model was asked. The rank and
@@ -24,6 +24,7 @@ function Row({ q, children }: { q: string; children: React.ReactNode }) {
 export function GeminiOpinion({ r, title = "Gemini report card" }: { r: ReportCard; title?: string }) {
   const five = r.axes.find((a) => a.key === "five_second_test") ?? null;
   const answered = date(r.judgedAt);
+  const words = opinionWords(r);
   return (
     <section aria-labelledby="report-card" className="mt-4 rounded-xl border border-edge bg-card p-5">
       <div className="flex items-center gap-3">
@@ -42,7 +43,7 @@ export function GeminiOpinion({ r, title = "Gemini report card" }: { r: ReportCa
         <p className="font-semibold text-ink">What we asked the model</p>
         <p className="mt-1">
           We showed Google&apos;s Gemini{r.model ? ` (${r.model})` : ""} one screenshot of the top of the home page, up to {PAGE_TEXT_MAX.toLocaleString("en-US")} characters of
-          its text (emails and phone numbers removed) and the facts our code measured. We asked it three things and nothing else.
+          its text (emails and phone numbers removed) and the facts our code measured. {words.asked}
         </p>
       </div>
 
@@ -53,7 +54,7 @@ export function GeminiOpinion({ r, title = "Gemini report card" }: { r: ReportCa
             <span>
               <span className="font-semibold">{r.aiIsPortfolio ? "Yes" : "No"}</span>
               {r.reason ? <span className="text-mute"> - {r.reason}</span> : null}
-              {!r.aiIsPortfolio && r.isPortfolio ? <span className="block text-xs text-mute">It stays listed: a person decides.</span> : null}
+              {words.listing ? <span className="block text-xs text-mute">{words.listing}</span> : null}
             </span>
           </p>
         </Row>
@@ -89,9 +90,6 @@ export function GeminiOpinion({ r, title = "Gemini report card" }: { r: ReportCa
 
       <p className="mt-3 text-xs text-mute">
         {answered ? `Answered on ${answered}. ` : ""}
-        {r.rubricVersion < RUBRIC_VERSION
-          ? "This answer came from an earlier, wider set of questions; only the three asked today are shown. "
-          : ""}
         <a href="/grading" className="underline decoration-edge-strong underline-offset-2 hover:text-ink">
           How ranking and grading work
         </a>
