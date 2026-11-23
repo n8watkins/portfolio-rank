@@ -1,9 +1,10 @@
-import { ArrowRight, Bot, ChevronRight, CircleCheck, Code2, Crown, Flag, Swords } from "lucide-react";
+import { ArrowRight, ChevronRight, CircleCheck, Code2, Crown, Flag, Swords } from "lucide-react";
+import { GeminiQuestions } from "./GeminiQuestions";
 import { EloTierBadge } from "@/components/ui/badges";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { btnPrimary, btnSecondary } from "@/components/ui/styles";
 import { ROUTES } from "@/lib/nav";
-import { AI_CRITERIA, CODE_CRITERIA } from "@/pipeline/rubric.mjs";
+import { CODE_CRITERIA } from "@/pipeline/rubric.mjs";
 import { REGRADE_COOLDOWN_DAYS } from "@/pipeline/budget.mjs";
 import { AI_VOTE_WEIGHT, BELOW_TOP_TIERS, FAMILIES, SETTLED_FACEOFFS, S_MIN_WINS, TIER_LADDER, familyOf, tierCounts } from "@/lib/tiers.mjs";
 import { readTierMeta } from "@/lib/tiers-db.mjs";
@@ -51,7 +52,6 @@ const FACT_NAMES: Record<string, string> = {
   original: "Not a template",
 };
 
-const pct = (w: number) => `${Math.round(w * 100)}%`;
 /** An AI comparison's weight in words: "a quarter" for 0.25. */
 const share = (w: number) => ({ 0.25: "a quarter", 0.5: "half", 1: "the same" })[w] ?? `${w} of one`;
 
@@ -67,7 +67,7 @@ export async function EloGrading() {
             How grading works
           </h1>
           <p className="rise mx-auto mt-4 max-w-xl text-[15px] text-mute text-pretty sm:text-lg" style={d(80)}>
-            Face-offs set your tier. The AI grade is your report card: what to fix to climb.
+            Code checks set where you start, face-offs set your tier. Gemini answers three questions on the side, never in the rank.
           </p>
         </div>
       </section>
@@ -174,8 +174,8 @@ export async function EloGrading() {
             <div className="card p-5">
               <dt className="font-bold">Grade or tier</dt>
               <dd className="mt-2 text-sm text-mute text-pretty">
-                The AI grade doesn&apos;t set your tier. It is your report card: a score and a note for each part, so you know what to
-                fix. It also decides whether a page is a portfolio at all.
+                Gemini&apos;s answers don&apos;t set your tier or your place. It is asked three things: whether the page is a portfolio at all,
+                the five-second test and the roles you name.
               </dd>
             </div>
           </dl>
@@ -186,7 +186,7 @@ export async function EloGrading() {
           <SectionHeader id="improve" eyebrow="Climbing" title="How to improve your tier" className="mb-5" />
           <ol className="grid max-w-2xl list-decimal gap-2 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
             <li>Collect the quick points from automated checks (your page lists them), then get into face-offs: share your page so people vote.</li>
-            <li>Read your report card on your portfolio&apos;s page and fix the weakest part first.</li>
+            <li>Read your portfolio&apos;s page: it lists the code checks you miss, worth the most points first.</li>
             <li>Pass every code check: link a resume, your GitHub and a way to reach you; link at least three projects that load; use your own domain and a current footer year.</li>
             <li>Show each project with the problem, your part and the outcome, not just a list of tools.</li>
             <li>Make the first screen say who you are and what you do, in your own design.</li>
@@ -218,7 +218,7 @@ export async function EloGrading() {
 
         {/* What's checked */}
         <section aria-labelledby="checked" className="mt-14">
-          <SectionHeader id="checked" eyebrow="The report card" title="Facts by code, quality by AI" className="mb-5" />
+          <SectionHeader id="checked" eyebrow="What's checked" title="Measured by code, asked of the model" className="mb-5" />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="card p-5 sm:p-6">
               <h3 className="flex items-center gap-2 font-bold">
@@ -234,20 +234,7 @@ export async function EloGrading() {
               </ul>
             </div>
             <div className="card p-5 sm:p-6">
-              <h3 className="flex items-center gap-2 font-bold">
-                <Bot className="h-4 w-4 text-mute" aria-hidden /> AI: 1 to 5, from a screenshot and the text
-              </h3>
-              <ul className="mt-4 grid gap-2.5 text-sm">
-                {AI_CRITERIA.map((c) => (
-                  <li key={c.id} className="flex items-center gap-3">
-                    <span className="min-w-0 flex-1 font-medium">{c.name}</span>
-                    <span className="h-1.5 w-24 overflow-hidden rounded-full bg-edge" aria-hidden>
-                      <span className="block h-full rounded-full bg-fill" style={{ width: `${(c.weight / 0.3) * 100}%` }} />
-                    </span>
-                    <span className="w-9 shrink-0 text-right text-xs text-mute tabular-nums">{pct(c.weight)}</span>
-                  </li>
-                ))}
-              </ul>
+              <GeminiQuestions />
             </div>
           </div>
           <p className="mt-3 text-sm text-mute">A grade describes the page, not the developer.</p>

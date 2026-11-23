@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, BookOpen, Bot, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
+import { Activity, ArrowRight, BookOpen, Code, Users, CalendarCheck, Check, ExternalLink, History, Sparkles, Sun, Swords, Target, X } from "lucide-react";
 import { EloTierBadge, RankBadge, TierBadge } from "@/components/ui/badges";
 import { sectionTitle } from "@/components/ui/styles";
 import { ScreenshotFrame } from "@/components/ui/ScreenshotFrame";

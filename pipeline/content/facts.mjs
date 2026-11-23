@@ -22,7 +22,7 @@
 import { AI_WORK, NOT_PORTFOLIO } from "../roster.mjs";
 import { HIDDEN_WHERE } from "../../lib/hidden.mjs";
 import { ownerRemovals } from "../../lib/games/claims.mjs";
-import { AXES, TIER } from "../grade-pairs.mjs";
+import { AI_CRITERIA, GEMINI_ANSWERED_SQL, geminiAnswered, keptOutputs } from "../rubric.mjs";
 
 // The production address (lib/site.ts PRODUCTION_SITE_URL; tests/site-url.test.mjs keeps them equal).
 export const SITE_URL = "https://portfoliorank.dev";
@@ -31,13 +31,14 @@ export const MIN_GROUP = 20;
 /** Places a site must climb to be named as a climber. */
 export const MIN_CLIMB = 3;
 
+/**
+ * The Gemini scores a sheet may compare: only the kept ones (rubric v3, owner
+ * 2026-11-22), for older grades too. Gemini's letter and its dropped scores
+ * (pipeline/rubric.mjs DROPPED_OUTPUTS) are never read.
+ */
+const AXES = AI_CRITERIA.map((c) => c.id);
 export const AXIS_LABELS = {
-  visual_design: "visual design",
   five_second_test: "the five-second test",
-  storytelling: "project storytelling",
-  writing: "writing",
-  memorability: "memorability",
-  motion: "motion",
 };
 
 const nf = new Intl.NumberFormat("en-US");
@@ -139,8 +140,8 @@ const VISIBLE = `p.status = 'live' AND ${AI_WORK("p")} AND NOT (${HIDDEN_WHERE})
  * The graded, visible portfolios, each with its Tier (`rank`: the tier store's
  * letter, tier_ratings.tier as the daily run wrote it, or null outside the
  * library). Which portfolios are "top" comes from the Tier, never from
- * Gemini's letter (owner, 2026-11-22); Gemini's axis scores are what the
- * sheets compare.
+ * Gemini's letter (owner, 2026-11-22); Gemini's kept score (the five-second
+ * test) is what the sheets compare. `rubric` holds the kept outputs only.
  */
 async function gradedRows(db) {
   const removed = await removedUrls(db);
@@ -149,8 +150,7 @@ async function gradedRows(db) {
     await db.execute(
       `SELECT p.url, p.name, p.shot_key, p.ai_rubric, p.meta, ${hasTiers ? "t.tier" : "NULL"} AS rank_tier FROM portfolios p
        ${hasTiers ? "LEFT JOIN tier_ratings t ON t.url = p.url AND t.member = 1" : ""}
-       WHERE ${VISIBLE} AND json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.tier') IS NOT NULL
-         AND json_extract(p.ai_rubric, '$.error') IS NULL ORDER BY p.url`
+       WHERE ${VISIBLE} AND ${GEMINI_ANSWERED_SQL("p.ai_rubric")} ORDER BY p.url`
     )
   ).rows;
   return rows
@@ -159,11 +159,12 @@ async function gradedRows(db) {
       url: String(r.url),
       name: r.name == null ? null : String(r.name),
       shotKey: r.shot_key == null ? null : String(r.shot_key),
-      rubric: parse(r.ai_rubric),
+      raw: parse(r.ai_rubric),
       meta: parse(r.meta),
       rank: r.rank_tier == null ? null : String(r.rank_tier),
     }))
-    .filter((r) => r.rubric && TIER[r.rubric.tier] && r.rubric.is_portfolio !== false);
+    .filter((r) => geminiAnswered(r.raw) && r.raw.is_portfolio !== false)
+    .map(({ raw, ...r }) => ({ ...r, rubric: keptOutputs(raw) }));
 }
 
 /** In the S or A family of the Tier (SSS and S+ to S- count as S). */
@@ -185,7 +186,11 @@ export function extremes(items, key, dir = "max", d = 1) {
   return items.filter((x) => r(x) === best);
 }
 const joinWords = (xs) => (xs.length <= 2 ? xs.join(" and ") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
-const axisScore = (r, k) => (typeof r.rubric?.[k]?.score === "number" ? r.rubric[k].score : null);
+const axisScore = (r, k) => {
+  const v = r.rubric?.[k];
+  const s = typeof v === "number" ? v : v?.score;
+  return typeof s === "number" ? s : null;
+};
 const axisSum = (r) => AXES.reduce((a, k) => a + (axisScore(r, k) ?? 0), 0);
 
 // ---------------------------------------------------------------------------
@@ -387,18 +392,20 @@ export async function votePatterns(db, { now }) {
   const b = sheet(kind, {
     now,
     headline: "What people vote for when two portfolios go head to head",
-    angle: "In people's head-to-head votes, how often the portfolio with the better AI grade wins, and which things the winner has more often (dark mode, motion, a phone-friendly layout, no errors). A reader learns what real visitors reward.",
+    angle: "In people's head-to-head votes, how often the portfolio with the better five-second test wins, and which things the winner has more often (dark mode, motion, a phone-friendly layout, no errors). A reader learns what real visitors reward.",
     dataLink: `${SITE_URL}/top`,
-    query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI grades and capture measurements of both",
+    query: "votes: people's head-to-head votes between two listed, visible, graded portfolios, with the AI's five-second test and capture measurements of both",
   });
   b.fact("People's votes between two graded portfolios", votes.length, fmt.int(votes.length));
-  const decided = votes.filter((v) => TIER[v.w.rubric.tier] !== TIER[v.l.rubric.tier]);
+  // Gemini's kept score only (its letter is no longer asked for or read, owner 2026-11-22).
+  const five = (r) => axisScore(r, "five_second_test");
+  const decided = votes.filter((v) => five(v.w) != null && five(v.l) != null && five(v.w) !== five(v.l));
   if (decided.length >= MIN_GROUP) {
-    const agree = decided.filter((v) => TIER[v.w.rubric.tier] > TIER[v.l.rubric.tier]).length;
-    const id = b.fact("Share of votes, between portfolios of different AI grades, won by the better-graded one", agree / decided.length, fmt.pct(agree / decided.length), {
-      scope: { need: "different (?:AI )?grades?|better-graded|higher-graded", avoid: "of all votes" },
+    const agree = decided.filter((v) => five(v.w) > five(v.l)).length;
+    const id = b.fact("Share of votes, between portfolios with different five-second test scores, won by the higher-scoring one", agree / decided.length, fmt.pct(agree / decided.length), {
+      scope: { need: "different (?:five-second )?(?:test )?scores?|higher-scoring|five-second", avoid: "of all votes" },
     });
-    b.notable([id], `People pick the better-graded portfolio in {{${id}}} of votes where the grades differ.`);
+    b.notable([id], `People pick the portfolio with the better five-second test in {{${id}}} of votes where the scores differ.`);
   }
   const cats = [];
   const ids = [];

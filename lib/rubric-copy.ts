@@ -11,7 +11,7 @@ function list(items: string[]): string {
 // Sentence case inside a sentence, but names like GitHub keep their capitals.
 const lower = (s: string) => s.replace(/^[A-Z][a-z]*\b/, (w) => (/[A-Z]/.test(w.slice(1)) ? w : w.toLowerCase()));
 
-/** What Gemini scores, e.g. "visual design, five-second test, ...". */
+/** What Gemini scores (rubric v3: "five-second test"); it is also asked "is it a portfolio" and the roles, unscored. */
 export const AI_JUDGES = list(AI_CRITERIA.map((c) => lower(c.name)));
 
 /** The code checks that count towards the checks score. */

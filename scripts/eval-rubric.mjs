@@ -1,19 +1,23 @@
 #!/usr/bin/env node
-// Offline eval of rubric v2 (pipeline/rubric.mjs) against the grades already
-// stored. Read-only: it never writes a grade.
+// Offline eval of the current rubric (pipeline/rubric.mjs, v3: is it a
+// portfolio, the five-second test, roles) against the grades already stored.
+// Read-only: it never writes a grade. In the code, "v2" names the current
+// rubric's columns (the eval was written for v2); the output says v3.
 //
 //   npm run eval:rubric -- --sample 30            estimate only, no Gemini
-//   npm run eval:rubric -- --sample 30 --live     also grade the sample with v2
+//   npm run eval:rubric -- --sample 30 --live     also grade the sample with the current rubric
 //
-// Without --live it makes no Gemini call: it builds the v1 and v2 requests
-// for a seeded random sample of graded sites and estimates tokens offline
-// (text at ~4 characters per token, 1,120 tokens per image), and, when the
-// request log has them, shows the measured v1 averages from gemini_requests.
-// With --live it grades the same sample with v2 on 3.5 Flash-Lite only (no
-// fallback), records every request in gemini_requests (job "eval-rubric", so
-// the nightly budget sees them), refuses to start when today's quota left is
-// smaller than the sample, and compares v2 with the stored grades (tier
-// agreement, per-axis difference, is_portfolio) using real token usage.
+// Without --live it makes no Gemini call: it builds the v1 and current
+// requests for a seeded random sample of graded sites and estimates tokens
+// offline (text at ~4 characters per token, 1,120 tokens per image), and,
+// when the request log has them, shows the measured v1 averages from
+// gemini_requests. With --live it grades the same sample on 3.5 Flash-Lite
+// only (no fallback), records every request in gemini_requests (job
+// "eval-rubric", so the nightly budget sees them), refuses to start when
+// today's quota left is smaller than the sample, and compares the answers
+// with the stored grades (is_portfolio agreement and the five-second test's
+// difference; Gemini's letter and the dropped axes are never compared)
+// using real token usage.
 //
 // Sites come from the database (Turso with TURSO_*, else the local file); a
 // database without grades falls back to data/feed.json entries that have a
@@ -29,13 +33,14 @@ import { createHash } from "crypto";
 import { createGemini, createLimiter, DEFAULT_RPM, PRIMARY_MODEL } from "../pipeline/gemini.mjs";
 import { createRequestLog, dailyQuota, dailyTotals, ensureGeminiLog, prices } from "../pipeline/gemini-log.mjs";
 import {
-  AI_CRITERIA,
+  GEMINI_ANSWERED_SQL,
   IMAGE_TOKENS,
   RESPONSE_SCHEMA,
   RUBRIC_VERSION,
   buildRubricRequest,
   estimateInputTokens,
   estimateOutputTokens,
+  fiveSecondOf,
   normalizePageText,
   parseRubricResponse,
   versionOf,
@@ -44,7 +49,6 @@ import { measurePage } from "../pipeline/facts.mjs";
 import { httpGate, UA, visibleText } from "../pipeline/gate.mjs";
 import { AI_WORK, pipelineDb } from "../pipeline/roster.mjs";
 import { createRenderer } from "../pipeline/render.mjs";
-import { compareGrades } from "../pipeline/grade-pairs.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const args = process.argv.slice(2);
@@ -89,14 +93,15 @@ function v1PromptText(name, url, images) {
     `and whether this is actually a personal portfolio site.`
   );
 }
-// The audit's measured v1 answer size when a row has no stored grade.
+// The audit's measured v1 answer size (a stored grade's dropped fields are never read to size it).
 const V1_OUTPUT_FALLBACK = 400;
-// A typical v2 answer for the offline output estimate: five scores with a
-// ten-word clause each.
+// A typical v3 answer for the offline output estimate: a reason, the answer,
+// the five-second test with a ten-word clause, and two roles.
 const V2_TYPICAL_ANSWER = {
+  portfolio_reason: "Shows four web apps the person built with links",
   is_portfolio: true,
-  tier: "B",
-  ...Object.fromEntries(AI_CRITERIA.map((c) => [c.id, { score: 3, note: "Clean layout but generic hero copy and weak contrast overall" }])),
+  five_second_test: { score: 3, note: "Clean layout but generic hero copy and weak contrast overall" },
+  roles: ["frontend developer", "designer"],
 };
 
 const parseJson = (v) => {
@@ -135,8 +140,7 @@ async function gradedRows() {
     const res = await db.execute(
       `SELECT url, name, shot_key, meta, ai_rubric, page_text, facts FROM portfolios
        WHERE status = 'live' AND shot_key IS NOT NULL AND ${AI_WORK()}
-         AND json_valid(ai_rubric) AND json_extract(ai_rubric, '$.error') IS NULL
-         AND json_extract(ai_rubric, '$.tier') IS NOT NULL
+         AND ${GEMINI_ANSWERED_SQL("ai_rubric")}
        ORDER BY url`
     );
     return res.rows.map((r) => ({ ...r }));
@@ -257,9 +261,7 @@ async function main() {
     const v1In = estimateInputTokens({
       parts: [{ text: v1PromptText(String(row.name ?? ""), url, v1Images) }, ...Array.from({ length: v1Images }, () => ({ inline_data: {} }))],
     }).total;
-    const v1Out = old
-      ? estimateOutputTokens(Object.fromEntries(["is_portfolio", "tier", ...V1_AXES.map(([k]) => k)].map((k) => [k, old[k]])))
-      : V1_OUTPUT_FALLBACK;
+    const v1Out = V1_OUTPUT_FALLBACK;
     const image = LIVE ? localImage(String(row.shot_key)) ?? (await r2Image(String(row.shot_key))) : { inline_data: {} };
     const req = buildRubricRequest({ name: String(row.name ?? ""), url, pageText: ev.pageText, facts: ev.facts, image });
     const v2In = estimateInputTokens({ parts: req.parts, systemInstruction: req.options.systemInstruction }).total;
@@ -284,8 +286,10 @@ async function main() {
     }
     results.push(r);
     console.log(
-      `[${i + 1}/${picked.length}] ${url} - text ${r.textChars} chars (${r.from}), est. in v1 ${r.v1In} / v2 ${r.v2In}` +
-        (r.v2 ? `, tier ${old?.tier ?? "-"} -> ${r.v2.tier}, used in ${r.usage?.inputTokens} out ${r.usage?.outputTokens} thinking ${r.usage?.thoughtsTokens ?? 0}` : "") +
+      `[${i + 1}/${picked.length}] ${url} - text ${r.textChars} chars (${r.from}), est. in v1 ${r.v1In} / v${RUBRIC_VERSION} ${r.v2In}` +
+        (r.v2
+          ? `, portfolio ${old?.is_portfolio ?? "-"} -> ${r.v2.is_portfolio}, five-second ${fiveSecondOf(old)?.score ?? "-"} -> ${r.v2.five_second_test.score}, used in ${r.usage?.inputTokens} out ${r.usage?.outputTokens} thinking ${r.usage?.thoughtsTokens ?? 0}`
+          : "") +
         (r.error ? ` - ERROR ${r.error}` : "")
     );
   }
@@ -321,8 +325,8 @@ async function main() {
       ? `| v1 measured (gemini_requests, ${measured.n} grade(s) before ${V1_BEFORE.slice(0, 10)}) | ${round(measured.input)} | ${round(measured.output)} | ${measured.thoughts == null ? "not logged" : round(measured.thoughts)} | ${usd(cost(measured.input, measured.output + (measured.thoughts ?? 0)))} |`
       : "| v1 measured | - | - | - | no rubric requests in gemini_requests |",
     `| v1 estimate (${IMAGE_TOKENS} per image, ~4 chars per token) | ${round(e.v1In)} | ${round(e.v1Out)} | - | ${usd(cost(e.v1In, e.v1Out))} |`,
-    `| v2 estimate | ${round(e.v2In)} | ${round(e.v2Out)} | - | ${usd(cost(e.v2In, e.v2Out))} |`,
-    a ? `| v2 measured (${live.length} live grade(s)) | ${round(a.in)} | ${round(a.out)} | ${round(a.th)} | ${usd(cost(a.in, a.out + a.th))} |` : null,
+    `| v${RUBRIC_VERSION} estimate | ${round(e.v2In)} | ${round(e.v2Out)} | - | ${usd(cost(e.v2In, e.v2Out))} |`,
+    a ? `| v${RUBRIC_VERSION} measured (${live.length} live grade(s)) | ${round(a.in)} | ${round(a.out)} | ${round(a.th)} | ${usd(cost(a.in, a.out + a.th))} |` : null,
     "",
     `Estimated savings per grade: input ${pct(e.v1In, e.v2In)}, output ${pct(e.v1Out, e.v2Out)}, cost ${pct(cost(e.v1In, e.v1Out), cost(e.v2In, e.v2Out))}.`,
     `Average page text sent: ${round(avg(results.map((r) => r.textChars)))} characters; ${results.filter((r) => !r.textChars).length} site(s) without text.`,
@@ -330,21 +334,22 @@ async function main() {
   ].filter((l) => l !== null);
 
   if (live.length) {
-    const pairs = live.filter((r) => r.old).map((r) => ({ url: r.url, a: r.old, b: { ...r.v2, model: MODEL } }));
-    const c = compareGrades(pairs);
-    const share = (n) => (c.pairs ? `${((100 * n) / c.pairs).toFixed(0)}%` : "-");
+    // Only the kept outputs are compared (rubric v3): is_portfolio and the five-second test. Never the letter or a dropped axis.
+    const pairs = live.filter((r) => r.old);
+    const disagree = pairs.filter((r) => Boolean(r.old.is_portfolio !== false) !== r.v2.is_portfolio).length;
+    const five = pairs.filter((r) => fiveSecondOf(r.old)).map((r) => Math.abs(fiveSecondOf(r.old).score - r.v2.five_second_test.score));
+    const share = (n) => (pairs.length ? `${((100 * n) / pairs.length).toFixed(0)}%` : "-");
     md.push(
-      "### v2 against the stored grades",
+      `### v${RUBRIC_VERSION} against the stored grades`,
       "",
-      `${c.pairs} pair(s): tier exact ${share(c.exact)}, within one tier ${share(c.withinOne)}, is_portfolio disagrees ${share(c.portfolioDisagree)}.`,
+      `${pairs.length} pair(s): is_portfolio disagrees ${share(disagree)}; five-second test mean absolute difference ${five.length ? avg(five).toFixed(2) : "-"} over ${five.length}.`,
       "",
-      "| Axis | Mean absolute difference |",
-      "| --- | ---: |",
-      ...AI_CRITERIA.map((k) => `| ${k.id} | ${c.mae[k.id] == null ? "-" : c.mae[k.id].toFixed(2)} |`),
-      "",
-      "| Site | Stored | v2 | Stored rubric |",
-      "| --- | --- | --- | --- |",
-      ...live.map((r) => `| ${r.url} | ${r.old?.tier ?? "-"} | ${r.v2.tier} | v${r.old ? versionOf(r.old) : "-"} ${r.old?.model ?? ""} |`),
+      `| Site | Stored portfolio | v${RUBRIC_VERSION} portfolio | v${RUBRIC_VERSION} reason | Stored five-second | v${RUBRIC_VERSION} five-second | Stored rubric |`,
+      "| --- | --- | --- | --- | ---: | ---: | --- |",
+      ...live.map(
+        (r) =>
+          `| ${r.url} | ${r.old ? r.old.is_portfolio !== false : "-"} | ${r.v2.is_portfolio} | ${r.v2.portfolio_reason.replace(/\|/g, "/")} | ${fiveSecondOf(r.old)?.score ?? "-"} | ${r.v2.five_second_test.score} | v${r.old ? versionOf(r.old) : "-"} ${r.old?.model ?? ""} |`
+      ),
       ""
     );
   }

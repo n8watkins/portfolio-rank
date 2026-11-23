@@ -13,8 +13,8 @@ import type { BoardKind, Entry, Leaderboard as Board, Why } from "@/lib/leaderbo
 // every row and "why it's good" chips from the stored AI grade.
 
 const VIEWS = [
-  { key: "merged", href: "/top", label: "Merged", Icon: Merge, blurb: "People's votes and the AI grade, weighted together." },
-  { key: "ai", href: "/top/ai", label: "AI", Icon: Bot, blurb: "The AI's grade of design, first impression, project stories, writing and memorability." },
+  { key: "merged", href: "/top", label: "Merged", Icon: Merge, blurb: "People's votes and the AI's comparisons, weighted together." },
+  { key: "ai", href: "/top/ai", label: "AI", Icon: Bot, blurb: "The AI's head-to-head comparisons only." },
   { key: "people", href: "/top/people", label: "People", Icon: Users, blurb: "Head-to-head face-off votes from people only." },
 ] as const;
 

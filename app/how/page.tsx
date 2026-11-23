@@ -68,33 +68,30 @@ export default function HowPage() {
           </h2>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
-              Ranking {PORTFOLIO_COUNT_LABEL} sites by hand is a non-starter, so an
-              AI does the first pass. A real browser captures each site, and the
-              work is split: <strong className="text-ink">code checks facts,
-              Gemini judges quality</strong>. Gemini reads the screenshot and the
-              page&apos;s text and scores {AI_JUDGES}, each from 1 to 5, which
-              add up to a quality score. Code checks {CODE_CHECKS}, which add up to
-              a checks score out of 100; it also records {CODE_CONTEXT} as context,
-              without scoring them.
+              A real browser captures each of the {PORTFOLIO_COUNT_LABEL} sites, and{" "}
+              <strong className="text-ink">code measures the facts that rank it</strong>. Code
+              checks {CODE_CHECKS}, which add up to a checks score; it also records{" "}
+              {CODE_CONTEXT} as context, without scoring them. A site&apos;s starting
+              rank comes from those measurements, and votes move it from there.
             </p>
             <p>
-              For the leaderboard, the AI also votes head-to-head, the same way you
-              do - but it weighs more than looks. Its comparison folds in the{" "}
-              <strong className="text-ink">objective scorecard</strong> (Lighthouse
-              performance + accessibility, plus polish signals like a custom
-              domain and a working share card). A gorgeous page that&apos;s slow or
-              inaccessible loses ground it would&apos;ve won on looks alone.
+              Gemini then takes one look, and its answer is{" "}
+              <strong className="text-ink">a separate opinion that never changes the rank</strong>.
+              It reads the screenshot and the page&apos;s text and is asked three things
+              and nothing else: whether the site is a portfolio at all, the {AI_JUDGES}{" "}
+              (can a visitor tell who you are and what you do, scored 1 to 5), and which
+              roles you name for yourself. A &ldquo;not a portfolio&rdquo; answer can take
+              a site off the list, with a record the owner can undo.
             </p>
             <p>
               The honest caveat:{" "}
               <strong className="text-ink">
-                an AI judging a screenshot judges how something looks
+                an AI looking at a screenshot sees how something looks
               </strong>{" "}
               - not whether the projects are real or the code is good. That&apos;s
-              exactly why it only <em>seeds</em> the ranking and humans get the
-              final say. The model and prompt are fixed (one model, for
-              consistency) and every AI vote is tagged, so its influence can always
-              be separated out.
+              why it is asked so little, and why the rank is code&apos;s and
+              people&apos;s. The model and prompt are fixed (one model, for
+              consistency).
             </p>
             <p>
               What each grade means and what goes into it:{" "}

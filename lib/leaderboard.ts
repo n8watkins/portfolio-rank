@@ -8,6 +8,7 @@ import { topPct } from "@/lib/games/pool.mjs";
 import { ownerMarks } from "@/lib/ownership/same-site.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
+import { keptOutputs } from "@/pipeline/rubric.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
 
 // What the /top page shows, read on the server: one page of a ranking view
@@ -103,8 +104,9 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   for (const r of grades.rows) {
     const url = String(r.url);
     if (gradeHidden(url)) continue;
-    // The fact chips from the newest measured facts (lib/fresh-facts.mjs).
-    const g = freshGrade(String(r.ai_rubric), r.facts) as Record<string, unknown> | null;
+    // The fact chips from the newest measured facts (lib/fresh-facts.mjs); Gemini's kept outputs only
+    // (pipeline/rubric.mjs keptOutputs): an older grade's dropped scores and letter are never shown.
+    const g = keptOutputs(freshGrade(String(r.ai_rubric), r.facts)) as Record<string, unknown> | null;
     if (!g || typeof g !== "object") continue;
     // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their chip.
     const facts = (factLines(g) as { id: string; label: string; pass: boolean | null; shownAs: string }[])

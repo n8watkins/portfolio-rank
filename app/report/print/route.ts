@@ -90,9 +90,9 @@ export async function GET(req: Request) {
   // The code checks from the newest measured facts (lib/fresh-facts.mjs).
   const graded = printView(row?.ai_rubric == null ? null : freshGrade(String(row.ai_rubric), row.facts));
   if (!graded) return page(404, "No report yet", "This portfolio hasn't been graded yet.");
-  // Never Gemini's letter (the "AI" mark instead), and the one Code checks score the profile shows (lib/tiers-view.ts).
+  // Gemini's three kept answers only (printView), and the one Code checks score the profile shows (lib/tiers-view.ts).
   const code = await loadCodeChecks(url, row?.ai_rubric ?? null, false);
-  const view = { ...graded, showTier: false, checksScore: code ? shownPoints(code.check).total : null };
+  const view = { ...graded, checksScore: code ? shownPoints(code.check).total : null };
   const shot = (await shotBases([url])).get(url);
   const tagline = (feed as { url: string; tagline?: string }[]).find((p) => p.url === url)?.tagline ?? null;
   const html = renderReportHtml({
