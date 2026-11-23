@@ -10,7 +10,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
-import { readProjectsPage, swapped } from "../pipeline/capture-projects.mjs";
+import { PROJECTS_PAGE_MS, SETTLE_STABLE_MS, readProjectsPage, settleAndRead, swapped, watchRequests } from "../pipeline/capture-projects.mjs";
 
 const page = (body) => `<!doctype html><title>t</title><body>${body}</body>`;
 // Everything a script on a page might do that is not a plain read.
@@ -32,7 +32,19 @@ const PAGES = {
   "/sw-home": page(`<nav><a href="/sw-projects">Projects</a></nav><p>home</p><script>navigator.serviceWorker.register('/sw.js')</script>`),
   "/sw.js": "self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', (e) => e.waitUntil(clients.claim())); self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));",
   "/elsewhere": page(`<h1>Elsewhere</h1>`),
+  // Its list comes from an API that answers after LATE_MS (a cold serverless function, alestor123.is-a.dev's repositories).
+  "/late-list": page(`<main><h1>Projects</h1><div id="list">Loading…</div></main>
+    <script>fetch('/api/late').then((r) => r.json()).then((names) => { list.innerHTML = names.map((n) => '<a href="https://github.com/ana/' + n + '">' + n + '</a>').join(" "); });</script>`),
+  // Already settled when it loads.
+  "/settled": page(`<main><h1>Projects</h1>${Array.from({ length: 6 }, (_, i) => `<a href="https://demo${i}.example/">Demo ${i}</a>`).join(" ")}</main>`),
+  // Adds a link every 300 ms, for ever.
+  "/never-settles": page(`<main id="m"></main><script>let i = 0; setInterval(() => { m.insertAdjacentHTML("beforeend", '<a href="https://d' + i++ + '.example/">d</a>'); }, 300);</script>`),
+  // An app routed by the hash: "#/projects" shows its projects (chiragsamal.github.io).
+  "/hash/": page(`<nav><a href="#/home">Home</a> <a href="#/projects">Projects</a></nav><main id="m"></main>
+    <script>const show = () => { m.innerHTML = location.hash === "#/projects" ? '<h2>Projects</h2><a href="https://zomato.example/">Zomato</a> <a href="https://traffic.example/">Traffic</a>' : "<p>Welcome</p>"; };
+    addEventListener("hashchange", show); show();</script>`),
 };
+const LATE_MS = 8500;
 
 let server;
 let browser;
@@ -43,6 +55,7 @@ before(async () => {
     hits.push(`${req.method} ${req.url}`);
     const html = { "content-type": req.url.endsWith(".js") ? "text/javascript" : "text/html" };
     if (req.url === "/slow") return; // never answers
+    if (req.url === "/api/late") return setTimeout(() => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(["cascade-heal", "son-of-anton", "manga-cli"])), LATE_MS);
     if (req.url === "/away") return res.writeHead(302, { location: `http://localhost:${server.address().port}/elsewhere` }).end();
     if (req.url === "/broken") return res.writeHead(500, html).end(page("<h1>Server error</h1>"));
     // The app's and the service-worker site's projects pages answer 404 to a direct load (pages served only by their router).
@@ -119,6 +132,61 @@ test("another host, an error status and a page that never finishes add nothing, 
   assert.equal(await readProjectsPage(p, `${base}/slow`, { limitMs: 2000 }), null, "too slow");
   assert.ok(Date.now() - t0 < 5000, `held to its limit (${Date.now() - t0} ms)`);
   assert.equal(p.context().pages().length, 1, "the tab that never finished is closed");
+  await p.context().close();
+});
+
+test("a list drawn from data that arrives late is read once it is there, past the old fixed waits", async () => {
+  // The old reading (at most 5 s for the network, then 2.5 s of waits and scrolling) read this page with no links.
+  const p = await open("/");
+  const t0 = Date.now();
+  const got = await readProjectsPage(p, `${base}/late-list`);
+  const ms = Date.now() - t0;
+  assert.equal(got?.via, "load");
+  for (const n of ["cascade-heal", "son-of-anton", "manga-cli"]) assert.match(got.html, new RegExp(`github\\.com/ana/${n}`));
+  assert.ok(ms >= LATE_MS && ms < PROJECTS_PAGE_MS, `read after the data arrived, inside the limit (${ms} ms)`);
+  await p.context().close();
+});
+
+test("a page that has already settled is read as soon as before: the settling adds next to nothing", async () => {
+  const p = await open("/");
+  const t0 = Date.now();
+  const got = await readProjectsPage(p, `${base}/settled`);
+  const ms = Date.now() - t0;
+  assert.match(got?.html ?? "", /demo5\.example/);
+  // The fixed waits alone are 2.5 s (1 s, then six scrolls of 250 ms), plus the load and the network going quiet.
+  assert.ok(ms < 2500 + SETTLE_STABLE_MS, `${ms} ms`);
+  await p.context().close();
+});
+
+test("a page that never settles is read as it stands at the limit, not dropped", async () => {
+  const p = await open("/");
+  const t0 = Date.now();
+  const got = await readProjectsPage(p, `${base}/never-settles`, { limitMs: 7000 });
+  const ms = Date.now() - t0;
+  assert.ok(got, "read, not dropped at the limit");
+  assert.match(got.html, /d3\.example/);
+  assert.ok(ms < 7000, `held inside the limit (${ms} ms)`);
+  // settleAndRead on its own: held to its `until`.
+  const t1 = Date.now();
+  const tab = await p.context().newPage();
+  const net = watchRequests(tab);
+  await tab.goto(`${base}/never-settles`);
+  const seen = await settleAndRead(tab, net, { until: Date.now() + 3000 });
+  net.stop();
+  assert.ok(Date.now() - t1 < 5000 && /d\d+\.example/.test(seen.html), `${Date.now() - t1} ms`);
+  await p.context().close();
+});
+
+test("a hash route is read from a load of the home page's own address: the app's router shows it, nothing is pressed", async () => {
+  const p = await open("/hash/");
+  const from = hits.length;
+  const got = await readProjectsPage(p, `${base}/hash/#/projects`);
+  assert.equal(got?.via, "load");
+  assert.equal(got.finalUrl, `${base}/hash/#/projects`);
+  assert.match(got.html, /zomato\.example/);
+  // One plain GET of the home page's address (the route is never sent), and the home page was left as it was.
+  assert.deepEqual(hits.slice(from), ["GET /hash/"]);
+  assert.equal(p.url(), `${base}/hash/`);
   await p.context().close();
 });
 

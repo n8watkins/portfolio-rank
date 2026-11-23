@@ -435,9 +435,9 @@ function isOwnProjectPath(path, base = "") {
 
 // Pages of a personal site that are not one project, beside SECTION_SEGMENT's: what the person uses, is doing now,
 // writes, says and reads, and the like. Only for links on the projects page that are not under a listing
-// (isProjectsPageLink): "/uses", "/now", "/talks", "/til".
+// (isProjectsPageLink): "/uses", "/now", "/talks", "/til", "/slash" (an index of such pages, amanhimself.dev's).
 const SITE_SECTION_SEGMENT =
-  /^(?:uses|now|writing|writings|essays|notes|til|snippets|thoughts|journal|talks|speaking|podcasts?|videos|newsletters?|links|bookmarks|books|reading|library|photos|photography|gallery|archives?|sitemap|changelog|colophon|guestbook|experience|education|skills|testimonials|recommendations|hire(?:-me)?|work-with-me|sponsors?|donate|support|home|index)$/i;
+  /^(?:uses|now|slash(?:es)?|writing|writings|essays|notes|til|snippets|thoughts|journal|talks|speaking|podcasts?|videos|newsletters?|links|bookmarks|books|reading|library|photos|photography|gallery|archives?|sitemap|changelog|colophon|guestbook|experience|education|skills|testimonials|recommendations|hire(?:-me)?|work-with-me|sponsors?|donate|support|home|index)$/i;
 // A language or a year as a whole segment: "/en", "/pt-br" (a language switch), "/2024" (a dated archive of posts).
 const LOCALE_OR_YEAR = /^(?:[a-z]{2}(?:[-_][a-z]{2,4})?|(?:19|20)\d{2})$/i;
 

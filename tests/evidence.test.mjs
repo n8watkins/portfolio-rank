@@ -78,10 +78,11 @@ test("a link re-check of version 3 facts stored without tiers does not count eve
   assert.deepEqual(asked, [], "nothing is requested");
 });
 
-test("a link re-check tests again the links the capture chose, and keeps the rendered text and signals byte for byte", async () => {
+// Version 4 (the trial's misses fixed) is re-checked exactly as version 3 is.
+for (const v of [3, 4]) test(`a link re-check of version ${v} facts tests again the links the capture chose, and keeps the rendered text and signals byte for byte`, async () => {
   const db = await setup();
   await withSite(async (url) => {
-    await insert(db, { url, pageText: RENDERED_TEXT, facts: { ...RENDERED_FACTS, v: 3, project_candidates: CHOSEN } });
+    await insert(db, { url, pageText: RENDERED_TEXT, facts: { ...RENDERED_FACTS, v, project_candidates: CHOSEN } });
     const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
     const asked = [];
     const out = await pageEvidence(db, row, {
@@ -103,7 +104,7 @@ test("a link re-check tests again the links the capture chose, and keeps the ren
     assert.equal(JSON.stringify(facts.signals), JSON.stringify(RENDERED_FACTS.signals));
     assert.equal(facts.source, "rendered");
     assert.equal(facts.words, 14);
-    assert.equal(facts.v, 3, "the stored version stays");
+    assert.equal(facts.v, v, "the stored version stays");
     assert.deepEqual(facts.project_candidates, CHOSEN, "the capture's list is kept");
     // The host answers 404 for an address that cannot exist, so the own page counts by its status.
     assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1, own_unverified: 0, own_check: "status" });
