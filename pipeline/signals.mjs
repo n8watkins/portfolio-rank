@@ -33,7 +33,8 @@ const ROLE_IN_DESCRIPTION = new RegExp(
 );
 // Praise a person gives themselves, not part of the role ("a driven software developer").
 const PUFFERY = /^(?:(?:passionate|driven|curious|dedicated|motivated|enthusiastic|creative|results-driven|detail-oriented|highly|very|self-taught|friendly|hardworking|hard-working|skilled|talented)\s+)+/i;
-const TITLE_SPLIT = /\s+[|·•–—-]\s+|\s*[|·•]\s*|\s+[–—]\s*|:\s+/;
+// Between a title's parts: "|", "·", "•", a spaced hyphen, an en or em dash (–, \u2014), or ": ".
+const TITLE_SPLIT = /\s+[|·•–\u2014-]\s+|\s*[|·•]\s*|\s+[–\u2014]\s*|:\s+/;
 const ROLE_MAX_WORDS = 8;
 
 const tidy = (s) => decodeEntities(String(s ?? "")).replace(/\s+/g, " ").trim();
