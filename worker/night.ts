@@ -32,7 +32,7 @@ import { dispatchWorkflow, workflowRun } from "../pipeline/github-dispatch.mjs";
 import { finishNight, planNight, runBatch, startNight } from "../pipeline/night.mjs";
 import { withGateway } from "../lib/ai-gateway.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
-import { dispatchTokenConditions, emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
+import { addressBrakeConditions, dispatchTokenConditions, emailSender, nightConditions, reconcileAlerts, tractionConditions, tractionLevels } from "../pipeline/alerts.mjs";
 import { isModelWatchAlert } from "../pipeline/model-watch.mjs";
 import { isRemovalAlert } from "../lib/games/claims.mjs";
 import { isEmailCapAlert } from "../lib/email/gate.mjs";
@@ -263,6 +263,8 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         ...(await tractionConditions(ctx.db, { now: new Date(startedAt), levels: tractionLevels(this.env.ALERT_TRACTION) })),
         ...(await contentSummaryConditions(ctx.db, { now: startedAt, mode: ctx.flags.contentMode })),
         ...captureProblems.conditions,
+        // The address rule's brake: open while any row it held waits for the owner (lib/reviews/door.mjs addressBrake).
+        ...(await addressBrakeConditions(ctx.db)),
       ];
       // The weekly model watch, the hourly removals, the hourly email caps
       // and the hourly dead-man check and the newsletter tick own their alerts

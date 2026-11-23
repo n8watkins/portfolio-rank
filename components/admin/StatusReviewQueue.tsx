@@ -42,7 +42,14 @@ export type Review = {
   shotKey: string | null;
   /** prompt: the grading prompt's version (absent on rows written before it was recorded). gemini35: the nightly grade at the door. */
   verdicts: { gemini31?: Grader; haiku?: Grader; gemini35?: Grader; prompt?: string };
-  signals: { score?: number; names?: string[]; junk_rule?: string | null; capture?: { action?: string | null; blocked?: string | null; failed?: string | null } } | null;
+  signals: {
+    score?: number;
+    names?: string[];
+    junk_rule?: string | null;
+    capture?: { action?: string | null; blocked?: string | null; failed?: string | null };
+    /** The door's decision; address: the address rule decided, not Gemini's "no" (lib/reviews/door.mjs). */
+    door?: { address?: boolean };
+  } | null;
   status: string;
   decidedAt: string | null;
   decidedBy: string | null;
@@ -78,6 +85,9 @@ const GROUPS: Record<string, string> = {
   recapture_blocked: "Re-capture blocked",
   signals_collapsed: "Listed, portfolio signals collapsed",
 };
+/** A row's group in words; the address rule's door rows say so, never "Gemini says no". */
+const groupLabel = (r: Review) =>
+  r.signals?.door?.address ? (r.group === "door_held" ? "Not a portfolio address, held for you" : "Not a portfolio address") : (GROUPS[r.group] ?? r.group);
 const CURRENT: Record<string, string> = { ranked: "Listed and ranked", listed: "Listed, not ranked", hidden: "Hidden", delisted: "Off the list" };
 const PROPOSED = { relist: "List and rank it", remove: "Take it off the list", review: "A person checks it" } as const;
 const TONE = { relist: "text-up", remove: "text-down", review: "text-ink" } as const;
@@ -279,7 +289,7 @@ function Row({
                 <CircleAlert className="h-3.5 w-3.5" aria-hidden /> Graders disagree
               </span>
             )}
-            <span className={tag}>{GROUPS[r.group] ?? r.group}</span>
+            <span className={tag}>{groupLabel(r)}</span>
             {r.offList && <span className={tag}>No longer on the community list</span>}
             {r.undoneAt && (
               <span className={tagWrap} data-review-undone>
@@ -443,7 +453,7 @@ function AutoApplied({
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 text-mute" aria-hidden />
                 </a>
                 <p className="text-xs text-mute">
-                  <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span> · {GROUPS[r.group] ?? r.group}
+                  <span className={`font-semibold ${TONE[r.proposed]}`}>{PROPOSED[r.proposed]}</span> · {groupLabel(r)}
                   {r.offList ? " · no longer on the community list" : ""} · applied {when(r.decidedAt)}
                   {r.decidedBy ? ` by ${decider(r.decidedBy)}` : ""}
                 </p>

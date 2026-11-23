@@ -223,11 +223,20 @@ Each chain is a list of steps in the order they happen.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
-   2. Gemini says portfolio: it is listed with its report card.
+   2. Gemini says portfolio: it is listed with its report card, unless its address is not a portfolio page (step 3).
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
+      So does an address whose host is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist; any Substack or Medium page, subdomains included; any Linktree page on `linktr.ee` or `linktree.com`; and the link-in-bio pages `bio.link` and `beacons.ai`), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page.", "any substack should never be considered a portfolio page." and "A link tree is not a portfolio page ... A medium page is not a portfolio page".
+      A site on its own subdomain of a hosting place, such as `name.github.io`, `name.vercel.app` or `name.netlify.app`, is a real site and is never caught ("Vercel is different. Vercel is just a hosting place."). Notion pages are not decided and not caught.
+      An admin or login path is a junk rule only beside Gemini's "not a portfolio", as before.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
    5. You undid an earlier removal, a rule once listed the site, an earlier grade said portfolio, or another case is waiting: the site stays listed and waits for you.
+
+   The address rule also runs over every listed site in the night's free part, before any grade, so an address is seen the night it is synced in even while grading is paused (`lib/reviews/door.mjs` `addressRows`).
+   The same ladder applies: a site you ruled on, kept, or took a removal back from, or with a case already open, is left alone; a site tonight's grade will take (within tonight's share of the grading queue) is left to the door; one an earlier grade or a rule called a portfolio waits for you; one never graded gets a recorded removal for the hourly task to apply (step 11).
+   A brake (`lib/reviews/door.mjs` `addressBrake`): the rule may write at most 5 rows a night, held or automatic, the roster pass's and the door's together (`ADDRESS_AUTO_PER_NIGHT`), and take off at most 10 sites in 7 days (`ADDRESS_AUTO_PER_WEEK`). On a night with more, every one waits for you on the review page, and a later night's grade does not take them off either (a row held for you holds the site at the door). The owner alert `address-rule-brake` stands and repeats daily while any of those rows waits, since so many at once usually means the host list or the list sync changed, not the sites.
+   When Gemini said portfolio, or no grade has seen the site, the row says "Not a portfolio address" on your review page and is decided by `rule:not-a-portfolio-address`, not in Gemini's name; when Gemini itself said not a portfolio, the row is Gemini's, as for any junk rule.
+   The public Removed page then says "Its address is not a portfolio page (a code host, a newsletter or blog platform, or a link-in-bio page)", never "AI grading says".
 
    Whatever the outcome, the grade is written with `lib/tiers-store.mjs` `rankForWrite`: a site that already has its Starting rank keeps it exactly, a site without one (it had too few signals) gets it now from its Code checks score, and any answer that is not a "yes" takes the site out of the tiers at once.
    A site out of the tiers comes back only through the membership rule, at the next daily tiers task, with the rating and votes it had (`seedNewcomers`).
@@ -316,6 +325,7 @@ Known gaps, with fixes open as pull requests: a removal covers one exact spellin
 
 The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
 The rank starts from the Code checks score and moves with face-off votes.
+Every place that shows the Code checks score shows each item and the total to one decimal when it is not whole, and never rounds a score up to its maximum (`lib/check-points.mjs` `formatPoints`): 9.4 of 10 shows as 9.4/10, never 10/10.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).
    Two sites are shown and one is picked.

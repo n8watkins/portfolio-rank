@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { rankingViewsEnabled } from "@/lib/leaderboard";
 import { peekTierMeta, readSiteRow, readTierMeta, standingOf } from "@/lib/tiers-db.mjs";
 import { isPublicTier } from "@/lib/tiers.mjs";
-import { pointFixes, unpackCheck } from "@/lib/check-points.mjs";
+import { formatPoints, pointFixes, unpackCheck } from "@/lib/check-points.mjs";
 import { checkSources, pointsOf } from "@/lib/tiers-store.mjs";
 
 // What a page shows of tiers by ELO (lib/tiers.mjs), and only while
@@ -103,7 +103,7 @@ export async function loadProfileTier(url: string, rawRubric: unknown, hideGrade
   const check = current?.check ?? stored;
   // The rank moves only at a full rebuild: say what it was set from when today's total is different.
   const startedAt = row.seeded === 1 ? row.points : null;
-  const startingPoints = current && startedAt != null && Math.round(current.check.total) !== Math.round(startedAt) ? startedAt : null;
+  const startingPoints = current && startedAt != null && formatPoints(current.check.total, 100) !== formatPoints(startedAt, 100) ? startedAt : null;
   return {
     checkIsCurrent: Boolean(current),
     startingPoints,
