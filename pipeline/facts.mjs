@@ -259,6 +259,13 @@ function ownPageUrl(l, self) {
  */
 export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   const self = host(siteUrl);
+  const homePath = (() => {
+    try {
+      return new URL(siteUrl).pathname.replace(/\/+$/, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
   const seen = new Set();
   const tiers = [[], [], []];
   for (const l of links) {
@@ -274,7 +281,8 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       continue;
     }
     const own = ownPageUrl(l, self);
-    if (!own || seen.has(own.key) || l.inChrome || l.inSocial) continue;
+    // Never the home page itself (a site served under a path, as samrinjaji.github.io/my-portfolio/ is).
+    if (!own || own.path.replace(/\/index\.html?$/, "") === homePath || seen.has(own.key) || l.inChrome || l.inSocial) continue;
     let ok = false;
     if (onProjectsPage) {
       const base = (() => {
@@ -328,9 +336,12 @@ export function projectsPageFor(links, homeUrl) {
   let byText = null;
   for (const l of links) {
     const own = ownPageUrl(l, self);
-    if (!own || own.path === home) continue;
-    if (LISTING_PATH.test(own.path)) return own.key;
-    if (!byPath && PROJECTS_PAGE.test(pathWords(own.path))) byPath = own.key;
+    if (!own) continue;
+    // Read below the home page's own path, so a site served under /my-portfolio/ is not its own projects page.
+    const rel = (home && own.path.startsWith(home) ? own.path.slice(home.length) : own.path).replace(/\/index\.html?$/, "");
+    if (!rel || rel === "/") continue;
+    if (LISTING_PATH.test(rel)) return own.key;
+    if (!byPath && PROJECTS_PAGE.test(pathWords(rel))) byPath = own.key;
     if (!byText && PROJECTS_LINK_TEXT.test(String(l.text ?? ""))) byText = own.key;
   }
   return byPath ?? byText;

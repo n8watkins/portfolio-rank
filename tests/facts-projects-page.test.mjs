@@ -102,6 +102,11 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   const three = `${nav}<section id="projects"><a href="https://a.example/">a</a><a href="https://b.example/">b</a><a href="/projects/c">c</a></section>`;
   assert.equal(projectsPageFor(links(three), url), null);
   assert.equal(projectsPageFor(links(`<a href="/blog">Blog</a><a href="/about">About</a>`), url), null);
+  // A site served under a path: its own home page is never one of its project pages (samrinjaji.github.io/my-portfolio/).
+  const sub = "https://samrin.github.io/my-portfolio/";
+  const subLinks = homeProjectLinks({ html: `<div class="portfolio"><a href="/my-portfolio/">Home</a><a href="/my-portfolio/index.html">Home</a><a href="https://github.com/s/a">a</a></div>`, url: sub, finalUrl: sub });
+  assert.deepEqual(projectCandidates(subLinks, sub).map((c) => c.url), ["https://github.com/s/a"]);
+  assert.equal(projectsPageFor(subLinks, sub), null);
   // A link's words count when the path does not say it ("/stuff" labelled "Explore Work →").
   assert.equal(projectsPageFor(links(`<a href="/stuff">Explore Work →</a>`), url), "https://ana.dev/stuff");
   // A projects page's own links: its single-project pages count, its menu and the listing itself do not.
