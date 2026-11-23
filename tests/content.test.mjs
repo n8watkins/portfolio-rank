@@ -74,15 +74,15 @@ test("fact builders: top grades and page craft are ready, name only positive, vi
   assert.equal(tg.ready, true);
   assertNoBadNames(tg);
   assert.ok(tg.names.length > 0 && tg.names.length <= 5);
-  assert.ok(tg.names.every((n) => n.reason === "has the AI judge's highest grade" && n.url.startsWith("https://top-")));
+  assert.ok(tg.names.every((n) => n.reason === "is in the highest tier" && n.url.startsWith("https://top-")));
   assert.equal(tg.facts.find((f) => f.label === "Portfolios graded by the AI judge").display, "60");
   assert.equal(tg.facts.find((f) => f.label === "Share of all graded portfolios that are top-graded").display, "50%");
   assert.equal(tg.charts.length, 1);
   const pc = await pageCraft(db, { now: MONDAY });
   assert.equal(pc.ready, true);
   assertNoBadNames(pc);
-  // Named only as positive examples: graded S, fits a phone, no console errors, light.
-  assert.ok(pc.names.every((n) => /highest grade, fits a phone screen/.test(n.reason)));
+  // Named only as positive examples: in the highest tier (the Tier, never Gemini's letter), fits a phone, no console errors, light.
+  assert.ok(pc.names.every((n) => /highest tier, fits a phone screen/.test(n.reason)));
   assert.equal(pc.facts.find((f) => f.label === "Median page weight of other portfolios, first load").display, "4.0 MB");
 });
 

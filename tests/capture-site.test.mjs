@@ -28,6 +28,7 @@ import { PRIMARY_MODEL, BACKUP_MODEL } from "../pipeline/gemini.mjs";
 import { planNight, startNight } from "../pipeline/night.mjs";
 import { ensureRankingSchema } from "../lib/ranking/store.mjs";
 import { rankingConfig } from "../lib/ranking/config.mjs";
+import { ensureTierSchema, readSiteRow, writeTierMeta } from "../lib/tiers-db.mjs";
 
 const SITE = `<main style="font:18px system-ui;max-width:800px;margin:40px auto">
 <h1>Jane Doe</h1><h2>Backend engineer</h2>
@@ -54,6 +55,9 @@ const pages = {
   "/refresh-worse": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
   // A refresh whose phone view (the browser's second visit) meets a bot check: see the server below.
   "/phone-bot": `<!doctype html><title>Jane Doe</title><body>${SITE}</body>`,
+  // A new site with 5 of the 6 portfolio signals (name, projects, about, contact, resume): ranked from code as it is stored.
+  "/ranked": `<!doctype html><title>Jane Doe</title><body>${SITE}<section id="about"><h2>About me</h2><p>Projects below.</p>
+    <h2>Projects</h2><p><a href="mailto:jane@mail.invalid">Contact</a> <a href="/resume.pdf">Resume</a></p></section></body>`,
 };
 // A bot check in place of the site, answered with 403 like Cloudflare's.
 const BOT = `<!doctype html><title>Just a moment...</title><body><h1>example.dev</h1><p>Verifying you are human. This may take a few seconds.</p>
@@ -100,13 +104,16 @@ before(async () => {
     sql: "INSERT INTO portfolios (url, name, status, reason, shot_key, meta, page_text, facts, checked_at, captured_at) VALUES (?, 'Old Site', 'live', '', ?, ?, ?, ?, ?, ?)",
     args: [url("/refresh-worse"), OLD.shot_key, OLD.meta, "Jane Doe. ".repeat(300), JSON.stringify({ v: FACTS_VERSION, resume: true, github: false, contact: false }), OLD.captured_at, OLD.captured_at],
   });
+  // A library to be ranked in (an empty one from the last rebuild), so a measured site gets its Starting rank at capture.
+  await ensureTierSchema(db);
+  await writeTierMeta(db, { n: 0, cutoffs: [], hist: [], perPoint: 4, medians: null, pointsHist: [], at: "2026-11-22T00:00:00Z" });
   browser = await chromium.launch();
   const run = async (p, opts = {}) => {
     results[p] = await captureSite(browser, { url: url(p), name: p === "/minimal" ? "Sam Lee" : "Jane Doe" }, { db, s3: null, root, ...opts });
   };
   await Promise.all([run("/picker"), run("/minimal"), run("/empty"), run("/bot"), run("/refresh", { refresh: true }), run("/forced")]);
   // The refreshes for the review flag and the worse-capture record, after the first six (the machine is shared).
-  await Promise.all([run("/refresh-bot", { refresh: true }), run("/phone-bot", { refresh: true }), run("/refresh-worse", { refresh: true })]);
+  await Promise.all([run("/refresh-bot", { refresh: true }), run("/phone-bot", { refresh: true }), run("/refresh-worse", { refresh: true }), run("/ranked")]);
 }, { timeout: 600000 });
 
 after(async () => {
@@ -147,6 +154,20 @@ test("a site behind a mode picker is photographed behind it, on desktop and phon
 test("a minimalist one-screen portfolio with a few links is captured, not blocked", async () => {
   assert.match(results["/minimal"], /^live/);
   assert.equal((await rowOf("/minimal")).status, "live");
+});
+
+test("a stored capture with 4 or more portfolio signals gets its Starting rank at once, with no Gemini grade; fewer signals, none", async () => {
+  assert.match(results["/ranked"], /^live/);
+  const row = await rowOf("/ranked");
+  assert.equal(row.ai_rubric, null);
+  assert.ok(JSON.parse(String(row.facts)).signals.score >= 4, String(row.facts));
+  const tier = await readSiteRow(db, url("/ranked"));
+  assert.equal(tier.member, 1);
+  assert.equal(tier.seeded, 1);
+  assert.ok(typeof tier.points === "number");
+  // The minimal page has fewer signals: not ranked yet.
+  assert.ok(JSON.parse(String((await rowOf("/minimal")).facts)).signals.score < 4);
+  assert.equal((await readSiteRow(db, url("/minimal"))).fresh, true);
 });
 
 test("a new site whose capture is blocked is a failed capture with a retry, and nothing is stored", async () => {
@@ -218,7 +239,7 @@ test("only the capture that shows the site reaches the grading queue", async () 
   };
   const state = await planNight(ctx, await startNight(ctx));
   const live = (await db.execute("SELECT url FROM portfolios WHERE status = 'live' AND ai_rubric IS NULL AND facts IS NOT NULL")).rows.map((r) => String(r.url)).sort();
-  assert.deepEqual(live, [url("/minimal"), url("/picker")].sort(), "the captures that show the site have their evidence");
+  assert.deepEqual(live, [url("/minimal"), url("/picker"), url("/ranked")].sort(), "the captures that show the site have their evidence");
   assert.equal(state.estimate.perStage.grade_new, live.length, "the blocked ones never wait for a grade");
 });
 

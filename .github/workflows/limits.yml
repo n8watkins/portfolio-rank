@@ -3,7 +3,7 @@ name: Free limits snapshot
 # Measures the account-wide free allowances (Turso rows read, written and
 # storage; R2 storage and operations; Workers requests and CPU time) and
 # stores them for /admin/limits (scripts/limits-snapshot.mjs,
-# lib/admin/limits.mjs), in production and in staging. A source whose
+# lib/admin/limits.mjs). A source whose
 # credentials are missing or refused is skipped and logged; the page then
 # shows that row as not measured, or the last measurement with its date. A
 # skipped source is a warning on the run (annotation and summary); a run that
@@ -56,11 +56,6 @@ jobs:
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: node scripts/limits-snapshot.mjs
-      - name: Staging
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.STAGING_TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.STAGING_TURSO_AUTH_TOKEN }}
         run: node scripts/limits-snapshot.mjs
       # Runs even when a snapshot step failed, so one failure hides nothing.
       # The scripts are the last release's (release-code above): until a

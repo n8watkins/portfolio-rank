@@ -1,7 +1,7 @@
 # How PortfolioRank runs
 
 This page is the short answer to "what runs, when, and in what order".
-It was checked against the code on main on 2026-11-21, release v0.6.0.
+It was checked against the code on main on 2026-11-21, release v0.6.0, and the ranking chain again on 2026-11-22 (the Starting rank from code).
 The long version, with every number and reason, is [AUTOMATION.md](../AUTOMATION.md).
 Where the two disagree, the code wins, and this page should be fixed first.
 
@@ -26,7 +26,8 @@ Every job has one of four states.
   It may still run today, and the table says so.
 
 Where a state could not be confirmed from code, the page says "not confirmed".
-Production switches come from `wrangler.jsonc` (top-level `vars`, not the staging block).
+Production switches come from `wrangler.jsonc` (its `vars`).
+There is no staging site since 2026-11-22: changes are tried locally and in CI, then as small trials on production on the owner's word ([DEPLOY.md](../DEPLOY.md), "Trying a change").
 "Per `wrangler.jsonc`" means the value is read from that file.
 A Worker secret or a dashboard-only variable cannot be read from code.
 
@@ -49,6 +50,7 @@ Times below are Pacific, with UTC in brackets, for winter.
 4. **Every hour at :40**: the GitHub fallback for the re-check of failing sites (`recheck.yml`).
    It skips when Cloudflare started a run in the last hour.
 5. **01:00 (09:00 UTC)**: warm the speed and polish scores of listed sites, up to 400 a day (`prewarm.yml`).
+   Every site Gemini graded "a portfolio" or the capture measured is included, so sites ranked from the code checks get their own Lighthouse.
    Running.
 6. **04:00 (12:00 UTC)**: the GitHub fallback for the nightly health check (`health.yml`).
    It skips when Cloudflare started one in the last 30 hours, which is normal.
@@ -75,9 +77,6 @@ Once a week:
 - **Monday 07:00 (15:00 UTC)**: the security scan of dependencies (`security.yml`).
   It also runs on any pull request that changes a lock file.
 - **Monday 08:00 (16:00 UTC; 09:00 in summer)**: model watch, then your goals email (`worker/model-watch.ts`, `worker/goals.ts`).
-- **Monday 10:00 (18:00 UTC)**: staging's data is replaced with production's newest backup (`staging-data.yml`).
-
-Staging only: staging's ratings are rebuilt every 6 hours (`staging-data.yml`), and staging has its own two Worker crons that run only the tasks marked "staging" in `worker/crons.ts`.
 
 Not on a clock: discovery has a daily schedule at 14:00 Pacific (22:00 UTC) that does nothing (`discover.yml`, see section 5).
 
@@ -101,7 +100,7 @@ Each task runs on its own, so one that fails is reported to Sentry and the rest 
    Running.
 7. **Queued visitor requests** (`people queue`, `worker/night.ts` `drainPeople`): finishes visitor grade requests that waited for Gemini.
    The task runs, and there is nothing for it to do while visitor grading is Off.
-8. **Tiers** (`tiers`, `worker/tiers.ts`): once a day, when due, finds the tier cutoffs and rewrites only the letters that changed.
+8. **Tiers** (`tiers`, `worker/tiers.ts`, `lib/tiers-store.mjs` `dailyRun`): once a day, when due, first gives a Starting rank to every listed site measured since that may join and has none (at most 300 a day), then finds the tier cutoffs and rewrites only the letters that changed.
    The other ticks that day do nothing.
    The letters stay hidden from visitors while `RANKING_V2` is false (per `wrangler.jsonc`).
    Running.
@@ -113,9 +112,6 @@ Each task runs on its own, so one that fails is reported to Sentry and the rest 
 
 Nothing checks pages for changes.
 The hourly change fingerprints were removed on 2026-11-22, before they ever ran in production.
-
-Staging runs only some of these (`owner removals`, `removal alerts`, `edge purge`, `tiers`, `review auto-apply`, `people queue`, and `grader`).
-It does not start GitHub jobs, and its emails go only to its own test address.
 
 ## 4. The night's stages, in order
 
@@ -204,12 +200,25 @@ Each chain is a list of steps in the order they happen.
    All of these are listed on the Capture problems page (see "Keeping watch").
 7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), and project link checks that are due (up to 120).
    A link check tests again the links the site's capture chose and only renews which of them load (`pipeline/evidence.mjs`).
-8. **Grade** (night stage 1, `grade_new`).
+8. **Starting rank and Tier** (the capture itself, `lib/tiers-store.mjs` `rankFromCode`, right after a capture is stored; the daily tiers task catches any it missed).
+   This step starts with the release after 2026-11-22; until then a site gets its starting rank only with its Gemini grade.
+   Your rule (2026-11-22): "the starting rank you get is based off of clear verifiable code measurements", and "a site should have a tier" from its first measure.
+   A listed site joins the tiers when it has a good capture, measured facts and at least 4 of the 6 portfolio signals (name, projects, about, contact, resume, GitHub), with no Gemini grade needed.
+   A site with fewer signals waits until Gemini says it is a portfolio or you keep it on your review page.
+   Its starting place is its Code checks score (`lib/check-points.mjs`, 100 points) among the others' points; nobody else's rating or votes move.
+   The code items (resume, GitHub, contact, own domain, project links, footer year) are read from the newest measured facts (`portfolios.facts`, `lib/fresh-facts.mjs`).
+   Equal points go by the date first measured, then the address, never by anything Gemini said.
+   Its Tier (the letter) comes from its place, and votes move it from there.
+   Tier letters are hidden from visitors while `RANKING_V2` is false (per `wrangler.jsonc`), so the leaderboard visitors see today is the older votes board.
+   Lighthouse for every member comes from the nightly prewarm (`scripts/lib/prewarm.mjs`), graded or not; until it has run, those items count the library median.
+   The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
+9. **Grade** (night stage 1, `grade_new`).
    One Gemini request with the screenshot, the page text and the facts.
-   It answers how good the site is and whether it is a portfolio.
+   It answers whether it is a portfolio and writes the Gemini report card (scores and notes).
+   It never sets or moves the Starting rank or the Tier, and its own letter is never shown on a listed site's pages.
    A stored screenshot that does not show the site is checked first and set aside.
    Paused.
-9. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
+10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
    2. Gemini says portfolio: it is listed with its report card.
@@ -217,17 +226,15 @@ Each chain is a list of steps in the order they happen.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
    5. You undid an earlier removal, a rule once listed the site, an earlier grade said portfolio, or another case is waiting: the site stays listed and waits for you.
-10. **Apply the removal.**
+
+   Whatever the outcome, the grade is written with `lib/tiers-store.mjs` `rankForWrite`: a site that already has its Starting rank keeps it exactly, a site without one (it had too few signals) gets it now from its Code checks score, and any answer that is not a "yes" takes the site out of the tiers at once.
+   A site out of the tiers comes back only through the membership rule, at the next daily tiers task, with the rating and votes it had (`seedNewcomers`).
+11. **Apply the removal.**
     With `REVIEW_AUTO_APPLY` true (per `wrangler.jsonc`), the night applies a recorded removal at once.
     The hourly task (hourly task 9) applies any that were left waiting, and also confirms waiting relist rows when both graders say portfolio.
     Every automatic decision shows on your review page with Undo.
-11. **Starting rank** (`lib/tiers-store.mjs` `rankForWrite`, as the grade is written).
-    The site's starting place in the tiers comes from the code checks, not from Gemini's letter.
-    Votes move it from there.
-    The code checks (resume, GitHub, contact, own domain, project links, footer year) are read from the newest measured facts (`portfolios.facts`), not from the copy frozen into the grade, whenever those are at least the grade's measuring version (`lib/fresh-facts.mjs`).
-    So a re-capture, or the whole-list re-measure (`remeasure-all.yml`), changes the points, the fix list and the report card's checks without a new grade.
-    The starting place itself is set again only by a full rebuild (`scripts/refresh-tiers.mjs`).
-    Tier letters are hidden from visitors while `RANKING_V2` is false, so the leaderboard visitors see today is the older votes board.
+    A removed site leaves the order.
+    An undone removal brings it back with its rank: at once when the grade it had comes back, or, when that grade is set aside for one fresh grade, once the fresh grade says it is a portfolio.
 12. **After that** the site takes part in votes and gets the nightly health check.
     It is not graded again, except for one fresh grade after you undo or reject a removal, a re-grade its owner asks for (graded once, after a new capture), and the manual tools.
 
@@ -302,8 +309,8 @@ Known gaps, with fixes open as pull requests: a removal covers one exact spellin
 
 ### Ranking
 
-The grade is Gemini's report card, from one look.
-The rank is a number that moves with face-off votes.
+The grade is Gemini's report card, from one look, and it is kept apart from the ranking.
+The rank starts from the Code checks score and moves with face-off votes.
 
 1. **A person votes** (any time, `app/api/rank/route.ts`).
    Two sites are shown and one is picked.
@@ -370,7 +377,7 @@ Off, and the last step has never been connected to the list.
 1. **The schedule never fires.**
    `discover.yml` has a daily schedule at 14:00 Pacific (22:00 UTC), but the job runs only when the repository variable `DISCOVERY_SCHEDULE` is `on`.
    That variable is not set, so every scheduled run is skipped.
-   A manual run works, and points at the staging database unless `DISCOVERY_TARGET` is `production`.
+   A manual run works only when the repository variable `DISCOVERY_TARGET` is `production`, and then writes to the production database; without it the run stops at its first step.
 2. **Read the sources** (`pipeline/discovery/sources`): GitHub topics, Hacker News and two directories.
 3. **Free check and filter** (`pipeline/discovery/check.mjs`, `filter.mjs`): code drops known sites and obvious junk.
    A site that passes waits for the hand-off (`pending`).
@@ -389,7 +396,7 @@ Each one watches the jobs above.
 | When | What | State |
 | --- | --- | --- |
 | a failed run | The jobs with their own failure notice file or update a GitHub issue: `sync-upstream.yml`, `health.yml`, `recheck.yml`, `backup.yml`, `limits.yml`, `prewarm.yml`, `judge-vote.yml`, `discover.yml`. | Running |
-| a failed run | The others file nothing: `grade.yml`, `security.yml`, `staging-data.yml`, `staging-capture.yml`, `regrade-not-portfolio.yml`. | Running |
+| a failed run | The others file nothing: `grade.yml`, `security.yml`, `regrade-not-portfolio.yml`. | Running |
 | hourly | Night watch: an alert when last night's run never started or died. | Running |
 | hourly | Email caps: an alert at 80% of a cap. | Running |
 | after each night | Owner alerts: quota used up, a stage stopped, parked items, traction, a missing or expiring dispatch token. | Running |
@@ -418,9 +425,6 @@ Each one watches the jobs above.
 | `limits.yml` (Free limits snapshot) | daily 13:30 UTC; manual | free-limit numbers, backup freshness | Running |
 | `prewarm.yml` (Prewarm metrics) | daily 09:00 UTC; manual | warms speed and polish scores | Running |
 | `security.yml` (Security scan) | Monday 15:00 UTC; lock-file pull requests; manual | scans dependencies | Running |
-| `staging-data.yml` (Staging data) | every 6 hours; Monday 18:00 UTC; manual | staging's data and ratings | Running (staging secrets not confirmed) |
-| `staging-capture.yml` (Staging capture) | manual only | captures a sample on staging | Off |
-| `staging.yml` (Staging) | push to main (not docs); labeled pull requests; manual | deploys staging | Running |
 | `deploy.yml` (Deploy) | release tag; a push to main under `data/`; manual | deploys production | Running |
 | `release.yml` (Release) | a `vX.Y.Z` tag; manual | publishes a release | Running |
 | `ci.yml` (CI) | pull requests to main; manual | typecheck, lint, tests, Worker build | Running |

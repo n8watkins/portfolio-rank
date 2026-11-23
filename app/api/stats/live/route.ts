@@ -7,11 +7,12 @@ import { SITE, SITE_URL } from "@/lib/site";
 import { githubStats, liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled, off } from "@/lib/games/server";
 import { testSeam } from "@/lib/grader/server";
+import { tiersShown } from "@/lib/tiers-view";
 
 // GET /api/stats/live (GAMES_V2) -> the live numbers in one answer:
 //   portfolios, graded, gradedThisWeek, votesToday, votes, quizzesPlayed,
 //   ownDomainPct, resumePct, commonRole { key, label, pct }, averageTier
-//   { value, tier }, newest { url, name },
+//   { value, tier } (the members' average Tier, null while RANKING_V2 is off), newest { url, name },
 //   contributors (the community list), stars (PortfolioRank's repository),
 //   at, measuredAt { site, github }
 // The same for everyone and cached at the edge for a minute. Behind it the
@@ -45,7 +46,8 @@ export async function GET() {
     void _s;
     void _g;
     return NextResponse.json(
-      { ...siteNums, ...counts, ...ghNums, at: now.toISOString(), measuredAt: { site: siteAt ?? null, github: ghAt ?? null } },
+      // The average Tier only while tiers are shown (RANKING_V2); never Gemini's letter.
+      { ...siteNums, averageTier: tiersShown() ? siteNums.averageTier : null, ...counts, ...ghNums, at: now.toISOString(), measuredAt: { site: siteAt ?? null, github: ghAt ?? null } },
       { headers: { "cache-control": `public, max-age=${MAX_AGE}` } }
     );
   });

@@ -6,12 +6,11 @@
 import type { CloudflareOptions } from "@sentry/cloudflare";
 import { scrubEvent } from "../lib/sentry-scrub";
 
-export function sentryOptions(env: { SENTRY_DSN?: string; SITE_ENV?: string }): CloudflareOptions {
+export function sentryOptions(env: { SENTRY_DSN?: string }): CloudflareOptions {
   return {
     dsn: env.SENTRY_DSN,
     enabled: Boolean(env.SENTRY_DSN),
-    // "staging" on the staging site (wrangler.jsonc env.staging).
-    environment: env.SITE_ENV === "staging" ? "staging" : "production",
+    environment: "production",
     // Collect nothing about the visitor or the request beyond the page path.
     dataCollection: {
       userInfo: false,

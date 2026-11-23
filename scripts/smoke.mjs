@@ -1,30 +1,24 @@
 // A read-only check of a deployed site, run by the deploy workflow after each
-// deploy (DEPLOY.md "How a change ships"): staging must pass before
-// production deploys, and production is checked right after its deploy.
-//   node scripts/smoke.mjs https://staging.portfoliorank.dev --staging
+// deploy (DEPLOY.md "How a change ships"): production is checked right after
+// its deploy.
 //   node scripts/smoke.mjs https://portfoliorank.dev --moved-from https://portfoliorank.n8builds.dev
 // --moved-from also checks that an old address redirects every path there
 // (worker/canonical-host.ts).
 // It only sends GETs plus the sign-in start (which writes nothing), so it is
 // safe against production. Retries cover the minute a new custom domain or
 // version can take to answer everywhere.
-import { closedToEveryone, openToEveryone } from "./lib/robots.mjs";
+import { openToEveryone } from "./lib/robots.mjs";
 
 const [base, ...flags] = process.argv.slice(2);
 if (!base || !/^https?:\/\//.test(base)) {
-  console.error("usage: node scripts/smoke.mjs BASE_URL [--staging]");
+  console.error("usage: node scripts/smoke.mjs BASE_URL [--moved-from OLD_URL]");
   process.exit(1);
 }
 const origin = new URL(base).origin;
-const staging = flags.includes("--staging");
 const movedFrom = flags.includes("--moved-from") ? flags[flags.indexOf("--moved-from") + 1] : null;
 const failures = [];
 
 const UA = "portfolio-rank-smoke (+https://github.com/n8watkins/portfolio-rank)";
-// The staging Worker answers 404 to requests lacking this header
-// (worker/staging-gate.ts, DEPLOY.md "Staging"); the deploy workflow passes the key.
-const GATE_KEY = process.env.STAGING_GATE_KEY;
-const gate = staging && GATE_KEY ? { "x-staging-gate": GATE_KEY } : {};
 
 async function get(path, init = {}) {
   let last;
@@ -33,7 +27,7 @@ async function get(path, init = {}) {
       const res = await fetch(origin + path, {
         redirect: "manual",
         ...init,
-        headers: { "user-agent": UA, ...gate, ...init.headers },
+        headers: { "user-agent": UA, ...init.headers },
         signal: AbortSignal.timeout(20_000),
       });
       if (res.status < 500) return res;
@@ -72,9 +66,8 @@ await check("home page renders the ranking", async () => {
   const html = await res.text();
   shotPath = html.match(/\/shots\/[0-9a-f]+\/hero\.jpg\?v=[0-9a-z]+/)?.[0] ?? null;
   expect(shotPath, "no screenshot links (an empty ranking?)");
-  expect(html.includes("data-staging-ribbon") === staging, staging ? "no Staging ribbon" : "the Staging ribbon is showing");
-  expect(/<meta name="robots" content="noindex/.test(html) === staging, staging ? "no robots noindex meta tag" : "a robots noindex meta tag");
-  expect(noindexed(res) === staging, staging ? "no X-Robots-Tag: noindex header" : "an X-Robots-Tag: noindex header");
+  expect(!/<meta name="robots" content="noindex/.test(html), "a robots noindex meta tag");
+  expect(!noindexed(res), "an X-Robots-Tag: noindex header");
 });
 
 await check("a page read from the database at request time (/top)", async () => {
@@ -104,8 +97,7 @@ await check("robots.txt", async () => {
   // By group (scripts/lib/robots.mjs): only the rules for every crawler count.
   // Cloudflare's managed robots.txt adds "Disallow: /" for named AI training
   // crawlers in front of ours, and that is not the site closing itself.
-  if (staging) expect(closedToEveryone(text), "does not disallow everything");
-  else expect(openToEveryone(text), "production robots.txt blocks crawlers");
+  expect(openToEveryone(text), "production robots.txt blocks crawlers");
 });
 
 await check("GitHub sign-in starts with this site's callback", async () => {
@@ -145,4 +137,4 @@ if (failures.length) {
   console.log(`\n${failures.length} check(s) failed on ${origin}`);
   process.exit(1);
 }
-console.log(`\nall checks passed on ${origin}${staging ? " (staging)" : ""}`);
+console.log(`\nall checks passed on ${origin}`);

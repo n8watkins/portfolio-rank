@@ -4,6 +4,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { shotBases } from "@/lib/shots";
 import { domainOf, shotUrl, whyFor, type Why } from "@/lib/leaderboard";
 import { readTierMeta, standingOf, topRows } from "@/lib/tiers-db.mjs";
+import { ownerMarks } from "@/lib/ownership/same-site.mjs";
 
 // The ranked board (tiers by ELO, lib/tiers.mjs; RANKING_V2 only): the best
 // ELO first, each with its letter from the daily cutoffs, derived on read. An
@@ -55,8 +56,8 @@ export async function loadRankedBoard(limit = 100): Promise<RankedBoard> {
       .catch(() => 0),
   ]);
   const urls = sites.map((s) => s.url);
-  const [bases, why] = await Promise.all([shotBases(urls), whyFor(urls)]);
-  // A grade its owner hid shows no letter.
-  const rows = sites.map((s) => ({ ...s, tier: why.has(s.url) ? s.tier : "", shot: shotUrl(bases, s.url), why: why.get(s.url) ?? null }));
+  const [bases, why, marks] = await Promise.all([shotBases(urls), whyFor(urls), ownerMarks(db())]);
+  // A grade its owner hid shows no letter; a site Gemini has not graded has its Tier all the same.
+  const rows = sites.map((s) => ({ ...s, tier: marks.gradeHidden(s.url) ? "" : s.tier, shot: shotUrl(bases, s.url), why: why.get(s.url) ?? null }));
   return { rows, total, totalVotes: votes };
 }

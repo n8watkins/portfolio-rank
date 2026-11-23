@@ -24,7 +24,7 @@ function ago(iso: string, now: number) {
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 /** `elo`: the score is a tier by ELO (RANKING_V2), drawn with its plus or minus (EloTierBadge). */
-function BoardRow({ r, tier, elo = false }: { r: BoardItem; tier: boolean; elo?: boolean }) {
+function BoardRow({ r, tier, elo = false, score = true }: { r: BoardItem; tier: boolean; elo?: boolean; score?: boolean }) {
   return (
     <li>
       <a href={r.href} className="group flex items-center gap-3.5 rounded-xl px-2 py-3 transition hover:bg-raised">
@@ -36,12 +36,15 @@ function BoardRow({ r, tier, elo = false }: { r: BoardItem; tier: boolean; elo?:
           <span className="block truncate text-sm font-semibold">{r.name}</span>
           <span className="block truncate text-xs text-mute">{r.line}</span>
         </span>
-        <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? elo ? <EloTierBadge tier={r.score} /> : <TierBadge tier={r.score} /> : r.score}</span>
+        {score && (
+          <span className="flex w-12 shrink-0 justify-end text-sm font-semibold tabular-nums">{tier && r.score ? elo ? <EloTierBadge tier={r.score} /> : <TierBadge tier={r.score} /> : r.score}</span>
+        )}
       </a>
     </li>
   );
 }
 
+/** With no `scoreLabel` the score column is left out (the AI-grade order, where no letter is shown). */
 function Board({ rows, scoreLabel, elo = false }: { rows: BoardItem[]; scoreLabel: string; elo?: boolean }) {
   return (
     <div className="flex flex-1 flex-col">
@@ -49,11 +52,11 @@ function Board({ rows, scoreLabel, elo = false }: { rows: BoardItem[]; scoreLabe
         <span className="w-9 text-right">#</span>
         <span className="w-[4.5rem] max-sm:hidden" />
         <span className="flex-1">Portfolio</span>
-        <span className="w-12 text-right">{scoreLabel}</span>
+        {scoreLabel && <span className="w-12 text-right">{scoreLabel}</span>}
       </div>
       <ol className="flex flex-1 flex-col justify-between">
         {rows.map((r) => (
-          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} elo={elo} />
+          <BoardRow key={r.url} r={r} tier={scoreLabel === "Tier"} elo={elo} score={Boolean(scoreLabel)} />
         ))}
       </ol>
     </div>
@@ -84,7 +87,7 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
             <Swords className="h-5 w-5" aria-hidden />
           </span>
           <p className="font-semibold">The board fills as portfolios are graded</p>
-          <p className="max-w-sm text-sm text-mute">Gemini grades new portfolios every night. Meanwhile, every face-off vote moves two of them.</p>
+          <p className="max-w-sm text-sm text-mute">New portfolios are graded when the AI has room in its daily budget. Meanwhile, every face-off vote moves two of them.</p>
           {ROUTES.faceoff && (
             <a href={ROUTES.faceoff} className="group mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent">
               Vote in a face-off <ArrowRight className="nudge h-4 w-4" aria-hidden />
@@ -92,13 +95,14 @@ export function TopTen({ top, className = "" }: { top: TopTenData; className?: s
           )}
         </div>
       ) : (
-        <Board rows={top.rows} scoreLabel="Tier" />
+        // The AI grade's order with no letter: Gemini's is never shown, and Tiers are hidden while RANKING_V2 is off.
+        <Board rows={top.rows} scoreLabel="" />
       )}
     </section>
   );
 }
 
-/** The portfolios Gemini graded last, with their tier. */
+/** The portfolios Gemini graded last, with their Tier while tiers are shown (never Gemini's letter). */
 export function RecentlyGraded({ items, now, className = "" }: { items: GradedItem[]; now: number; className?: string }) {
   if (items.length === 0) return null;
   return (
@@ -123,7 +127,7 @@ export function RecentlyGraded({ items, now, className = "" }: { items: GradedIt
                   </span>
                 </span>
               </span>
-              <TierBadge tier={r.tier} />
+              {r.tier && <EloTierBadge tier={r.tier} />}
             </a>
           </li>
         ))}
@@ -263,7 +267,7 @@ export function PortfolioOfTheDay({ p }: { p: Potd }) {
         </h2>
         <p className="mt-0.5 text-sm text-mute">{p.line}</p>
         <div className="mt-4 flex items-center gap-3">
-          <TierBadge tier={p.tier} size="lg" />
+          {p.tier && <EloTierBadge tier={p.tier} size="lg" />}
           <p className="text-sm">
             <span className="block font-semibold">
               Top {topPct(p.rank, p.total)}% · #{p.rank} by AI grade

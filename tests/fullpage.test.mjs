@@ -409,5 +409,5 @@ test("preview URLs: versioned files, thumbnails and the top's height; only with 
   assert.equal(fullPagePreviewEnabled({ FULLPAGE_PREVIEW_ENABLED: "true" }), true);
   const wrangler = fs.readFileSync(path.join(import.meta.dirname, "..", "wrangler.jsonc"), "utf8");
   const values = [...wrangler.matchAll(/"FULLPAGE_PREVIEW_ENABLED":\s*"(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(values, ["false", "false"], "off in production and on staging");
+  assert.deepEqual(values, ["false"], "off in production");
 });

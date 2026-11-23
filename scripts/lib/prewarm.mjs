@@ -4,6 +4,9 @@
 // kind, and decides the exit code: a run where most lookups fail is a failed
 // run, so a dead key or quota shows up as a red job instead of a green one.
 
+import { GEMINI_YES_SQL, SIGNALS_SQL } from "../../lib/tiers-store.mjs";
+import { STRONG_SIGNALS } from "../../pipeline/portfolio-guard.mjs";
+
 export const KINDS = ["inspect", "psi"];
 
 // Sites a daily run measures at most: one PageSpeed call each, far inside
@@ -15,20 +18,28 @@ export const PREWARM_LIMIT = 400;
 export const PSI_TTL_MS = 30 * 24 * 3600 * 1000;
 
 /**
- * The sites to prewarm: listed (active(p)), live, graded without an error
- * and not marked "not a portfolio", whatever Gemini's letter, and without a
- * fresh PSI result; never measured first, then the oldest.
+ * The sites to prewarm: listed (active(p)), live, not graded "not a
+ * portfolio", and a library member or one by the membership rule
+ * (lib/tiers-store.mjs libraryMember): Gemini said "a portfolio", or a
+ * captured site with measured facts and at least STRONG_SIGNALS of the six
+ * portfolio signals, or a member already (the owner kept it), so every
+ * member gets its own Lighthouse whether Gemini graded it or not (owner,
+ * 2026-11-22: the Starting rank comes from code); without a fresh PSI
+ * result; never measured first, then the oldest.
  * @param {{ execute: Function }} db
  * @param {{ active: (p: string) => string, limit?: number, now?: number }} options
  */
 export async function prewarmQueue(db, { active, limit = PREWARM_LIMIT, now = Date.now() }) {
+  const tiers = (await db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tier_ratings'")).rows.length > 0;
+  const member = tiers ? "OR EXISTS (SELECT 1 FROM tier_ratings t WHERE t.url = p.url AND t.member = 1)" : "";
   const res = await db.execute({
     sql: `SELECT p.url FROM portfolios p
           LEFT JOIN cache c ON c.k = 'psi:' || p.url
           WHERE p.status = 'live' AND ${active("p")}
-            AND json_valid(p.ai_rubric)
-            AND json_extract(p.ai_rubric, '$.error') IS NULL
-            AND COALESCE(json_extract(p.ai_rubric, '$.is_portfolio'), 1) != 0
+            AND NOT COALESCE(json_valid(p.ai_rubric) AND json_extract(p.ai_rubric, '$.is_portfolio') = 0, 0)
+            AND (${GEMINI_YES_SQL("p")}
+              OR (p.shot_key IS NOT NULL AND COALESCE(json_valid(p.facts), 0) AND ${SIGNALS_SQL("p")} >= ${STRONG_SIGNALS})
+              ${member})
             AND (c.at IS NULL OR c.at < ?)
           ORDER BY COALESCE(c.at, 0), p.url
           LIMIT ?`,

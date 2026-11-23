@@ -21,6 +21,7 @@ import { GRADER_POOL_KEY, gradedPool } from "../lib/grader/report.mjs";
 import { ensureFreshnessSchema, lighthouseDue, linksDue, screenshotsDue } from "../lib/freshness.mjs";
 import { fullPageDue } from "../pipeline/fullpage.mjs";
 import { prewarmQueue } from "../scripts/lib/prewarm.mjs";
+import { ensureTierSchema } from "../lib/tiers-db.mjs";
 import { PORTFOLIO_HTML, T0, answer, col, context, drive, freshDb, site } from "./helpers/door-night.mjs";
 import { ensureReviewSchema, planConfirm } from "../lib/reviews/store.mjs";
 import { assignShownRanks } from "../lib/ranking/store.mjs";
@@ -559,6 +560,9 @@ test("per consumer: the AI's queues take only healthy sites; the free jobs (capt
     sql: "INSERT INTO health_marks (url, pool_stage, pool_started_at, pool_next_at, pool_health, pool_checked_at) VALUES (?, 1, ?, ?, 'suspect', ?)",
     args: [failing, at(T0).toISOString(), at(T0 + H).toISOString(), at(T0).toISOString()],
   });
+  // Each with an A Tier, as polls pick screenshots by the Tier (owner, 2026-11-22), never Gemini's letter.
+  await ensureTierSchema(db);
+  for (const u of all) await db.execute({ sql: "INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded, tier) VALUES (?, 25, 8, 9, 36, 1, 1, 'A')", args: [u] });
   const only = (rows) => rows.map((r) => String(typeof r === "string" ? r : r.url)).filter((u) => all.includes(u)).sort();
   const ai = (name, rows) => assert.deepEqual(only(rows), [ok], `AI_WORK: ${name}`);
   const free = (name, rows) => assert.deepEqual(only(rows), [blank, ok].sort(), `ACTIVE: ${name}`);
@@ -653,7 +657,7 @@ test("one shared definition: no background job writes its own health condition",
     assert.match(fs.readFileSync(f, "utf8"), /\bACTIVE\b/, f);
   }
   // The library and its tiers count a failing site (still shown) and drop a not-working one, as the trigger does.
-  assert.match(fs.readFileSync("lib/tiers-store.mjs", "utf8"), /LISTED_NOT_DOWN\(\)/);
+  assert.match(fs.readFileSync("lib/tiers-store.mjs", "utf8"), /LISTED_NOT_DOWN\(("p")?\)/);
   // So does the comparison pool every reader of which shows it to visitors (lib/grader/report.mjs gradedPool).
   assert.match(fs.readFileSync("lib/grader/report.mjs", "utf8"), /\$\{LISTED_NOT_DOWN\(\)\}/);
   assert.equal(LISTED_NOT_DOWN("p"), "p.delisted_at IS NULL AND COALESCE(p.health, '') != 'down'");

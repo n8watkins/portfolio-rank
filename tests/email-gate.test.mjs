@@ -1,4 +1,4 @@
-// The shared email gate's owner and staging rules (lib/email/gate.mjs). The
+// The shared email gate's owner rules and transports (lib/email/gate.mjs). The
 // older gate tests (caps, outbox, alerts) live in tests/grader.test.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -44,16 +44,11 @@ test("owner mail is not held to the visitors' per-recipient cap, but has its own
   assert.equal(refused, "cap:recipient");
 });
 
-test("staging sends no email through any transport, the mailroom included", async () => {
+test("production emails anyone the gate lets through, by the mailroom and by send_email", async () => {
   const mailed = [];
-  const MAILROOM = { send: async (m) => (mailed.push(m), { ok: true }) };
-  const t = emailTransport({ SITE_ENV: "staging", MAILROOM }, { via: "mailroom" });
-  await assert.rejects(() => t.send({ to: "stranger@example.com", subject: "s", text: "t", kind: "signin" }), /staging sends only to STAGING_EMAIL_TO/);
-  assert.equal(mailed.length, 0);
-  // An address on the allowlist still goes through; production is untouched.
-  const ok = emailTransport({ SITE_ENV: "staging", STAGING_EMAIL_TO: "me@example.com", MAILROOM }, { via: "mailroom" });
-  await ok.send({ to: "ME@example.com", subject: "s", text: "t", kind: "signin" });
-  assert.equal(mailed.length, 1);
+  const MAILROOM = { send: async (m) => (mailed.push(m.to), { ok: true }) };
   await emailTransport({ SITE_ENV: "production", MAILROOM }, { via: "mailroom" }).send({ to: "anyone@example.com", subject: "s", text: "t", kind: "signin" });
-  assert.equal(mailed.length, 2);
+  const SEND_EMAIL = { send: async (m) => mailed.push(m.to) };
+  await emailTransport({ SITE_ENV: "production", EMAIL_FROM: "x@n8builds.dev", SEND_EMAIL }).send({ to: "someone@example.com", subject: "s", text: "t" });
+  assert.deepEqual(mailed, ["anyone@example.com", "someone@example.com"]);
 });

@@ -5,7 +5,7 @@
 # Deploy workflow records it by moving the `production` branch to that
 # release's commit, and nothing else writes that branch. The scheduled jobs
 # that work on the production database run that code too, so a merge to main
-# reaches staging only, and a new release reaches the jobs when its deploy
+# reaches no running site or job, and a new release reaches the jobs when its deploy
 # (with its database changes) has succeeded, not when its tag appears. Going
 # back to an older release moves the branch back, for the site and the jobs
 # alike.

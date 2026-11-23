@@ -1,6 +1,5 @@
 // The report card's "see the whole page" preview has a launch switch:
-// FULLPAGE_PREVIEW_ENABLED in wrangler.jsonc, "false" in production and on
-// staging until its UI ships. The capture stores the full-page frames
+// FULLPAGE_PREVIEW_ENABLED in wrangler.jsonc, "false" until its UI ships. The capture stores the full-page frames
 // (pipeline/fullpage.mjs) and the Worker serves them (worker/shots.ts)
 // either way; while the switch is off no page links to them, because
 // lib/shots.ts fullPagePreview answers null without reading anything.

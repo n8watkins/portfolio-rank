@@ -13,7 +13,7 @@ Disallow: /admin/
 Sitemap: https://portfoliorank.dev/sitemap.xml
 `;
 
-const STAGING = `User-agent: *
+const CLOSED = `User-agent: *
 Disallow: /
 `;
 
@@ -40,12 +40,12 @@ Disallow: /
 # END Cloudflare Managed Content
 `;
 
-test("our own robots.txt: open in production, closed on staging", () => {
+test("our own robots.txt is open; one that disallows everything is closed", () => {
   assert.deepEqual(rulesForEveryone(OURS), { allow: ["/"], disallow: ["/api/", "/admin/"] });
   assert.ok(openToEveryone(OURS));
   assert.ok(!closedToEveryone(OURS));
-  assert.ok(closedToEveryone(STAGING));
-  assert.ok(!openToEveryone(STAGING));
+  assert.ok(closedToEveryone(CLOSED));
+  assert.ok(!openToEveryone(CLOSED));
 });
 
 test("a managed block that disallows named AI crawlers leaves production open to everyone else", () => {
@@ -55,9 +55,9 @@ test("a managed block that disallows named AI crawlers leaves production open to
   assert.ok(!closedToEveryone(text));
 });
 
-test("staging stays closed under the managed block", () => {
-  assert.ok(closedToEveryone(MANAGED + STAGING));
-  assert.ok(!openToEveryone(MANAGED + STAGING));
+test("a closed robots.txt stays closed under the managed block", () => {
+  assert.ok(closedToEveryone(MANAGED + CLOSED));
+  assert.ok(!openToEveryone(MANAGED + CLOSED));
 });
 
 test("a group with several User-agent lines, comments and odd spacing", () => {

@@ -57,12 +57,11 @@ test("with one or two builds there is nothing to remove", () => {
   assert.deepEqual(planPrune([obj("live", 1, 2), obj("prev", 2, 1)], "live").keys, []);
 });
 
-test("finds each environment's cache bucket in wrangler.jsonc", () => {
+test("finds the cache bucket in wrangler.jsonc", () => {
   const config = parseJsonc(fs.readFileSync("wrangler.jsonc", "utf8"));
   assert.equal(cacheBucket(config).bucket, "portfolio-rank-opennext-cache");
-  assert.equal(cacheBucket(config, "staging").bucket, "portfolio-rank-staging-opennext-cache");
   assert.match(cacheBucket(config).accountId, /^[0-9a-f]{32}$/);
-  assert.throws(() => cacheBucket(config, "nope"), /no environment/);
+  assert.throws(() => cacheBucket({ ...config, r2_buckets: [] }), /no NEXT_INC_CACHE_R2_BUCKET bucket/);
 });
 
 test("reads the uploaded build id from the OpenNext cache folder", () => {
