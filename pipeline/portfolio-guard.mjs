@@ -66,6 +66,18 @@ export const HELD_SQL = (col) =>
  * "not_portfolio", and the public Removed page prints the reason.
  */
 export const AI_SAYS_NOT_PORTFOLIO = "AI grading says this is not a portfolio";
+/**
+ * The same, for a site taken off by its address alone (pipeline/junk-rules.mjs
+ * urlNotPortfolio, lib/reviews/door.mjs), which no AI may have seen or which
+ * Gemini called a portfolio: the public reason says what is true.
+ */
+export const ADDRESS_NOT_PORTFOLIO = "Its address is not a portfolio page (a code host, a newsletter or a link-in-bio page)";
+
+/** Whether a health reason keeps a site off the list as "not a portfolio": either reason, the owner's confirmation included. */
+export const notPortfolioReason = (reason) => {
+  const r = String(reason ?? "");
+  return r.startsWith(AI_SAYS_NOT_PORTFOLIO) || r.startsWith(ADDRESS_NOT_PORTFOLIO);
+};
 
 /** What the AI itself answered to "is it a portfolio": its own answer even when a hold or the owner overrode it. */
 export const aiSaysPortfolio = (grade) => (typeof grade?.ai_is_portfolio === "boolean" ? grade.ai_is_portfolio : grade?.is_portfolio !== false);

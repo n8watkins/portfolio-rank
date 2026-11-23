@@ -239,6 +239,7 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
         quotaLeft: summary.estimate?.quotaLeft ?? null,
         stages: summary.stages.map((x: { key: string; label: string; result: string }) => ({ key: x.key, label: x.label, result: x.result })),
         parked: summary.parked,
+        addressBrake: summary.addressBrake ?? null,
       };
     });
     // The night moved ranks and grades: every profile refreshes at its next visit
@@ -249,7 +250,7 @@ export class EndOfDayWorkflow extends WorkflowEntrypoint<NightEnv, NightParams> 
     });
     await step.do("owner alerts", ONCE_MORE, async () => {
       const ctx = engine(this.env, runId);
-      const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked };
+      const night = { night: done.night, estimate: done.quotaLeft == null ? null : { quotaLeft: done.quotaLeft }, stages: done.stages, parked: done.parked, addressBrake: done.addressBrake };
       const startedAt = Date.parse(String(state.startedAt));
       // Open capture problems per group, with the admin page's link (lib/capture-problems.mjs):
       // emailed only when a count rose since the last email.

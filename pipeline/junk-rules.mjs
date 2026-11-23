@@ -43,28 +43,51 @@ const hashOf = (text) => createHash("sha1").update(normalise(text)).digest("hex"
 
 /** The name junkCheck gives urlNotPortfolio's hit. */
 export const ADDRESS_RULE = "not a portfolio address";
-/** The hosts whose own addresses are never a portfolio (a site on a subdomain, such as GitHub Pages, is its own host). */
-export const ADDRESS_HOSTS = ["github.com", "gitlab.com", "bitbucket.org", "linktr.ee", "bio.link", "beacons.ai"];
+/**
+ * The hosts whose own addresses are never a portfolio: code hosts and their
+ * gists, link-in-bio pages. Exact: a site on its own subdomain, such as
+ * GitHub Pages (name.github.io), is its own host and is not caught.
+ */
+export const ADDRESS_HOSTS = ["github.com", "gist.github.com", "gitlab.com", "bitbucket.org", "linktr.ee", "bio.link", "beacons.ai"];
+/**
+ * Hosts caught with every subdomain: a newsletter is not a portfolio page
+ * (owner, 2026-11-23: "any substack should never be considered a portfolio
+ * page"), and each writer's Substack is a subdomain of it.
+ */
+export const ADDRESS_HOST_FAMILIES = ["substack.com"];
 /** The path segments that are never a portfolio's page. */
 export const ADDRESS_PATHS = ["admin", "login", "wp-admin"];
 const ADDRESS_PATH_RE = new RegExp(`/(${ADDRESS_PATHS.join("|")})(/|$)`, "i");
 
+const hostOfUrl = (url) => {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+};
+
 /**
- * A code host, a link-in-bio page, or an admin or login path: never a
- * portfolio, by the address alone. Runs for every address: at the door on
- * every grade, whatever Gemini said, and over the listed roster each night
- * (lib/reviews/door.mjs).
+ * The address's host is never a portfolio (ADDRESS_HOSTS, ADDRESS_HOST_FAMILIES).
+ * The owner's ruling was about hosts ("Someone's GitHub is not a portfolio
+ * page"), so only this overrules a Gemini "yes" or acts on a site no grade has
+ * seen (lib/reviews/door.mjs).
+ */
+export function hostNotPortfolio(url) {
+  const h = hostOfUrl(url);
+  if (!h) return false;
+  return ADDRESS_HOSTS.includes(h) || ADDRESS_HOST_FAMILIES.some((f) => h === f || h.endsWith(`.${f}`));
+}
+
+/**
+ * A host that is never a portfolio (hostNotPortfolio), or an admin or login
+ * path: never a portfolio, by the address alone. The path part is a junk rule
+ * only beside a Gemini "not a portfolio" (junkCheck).
  */
 export function urlNotPortfolio(url) {
-  let u;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
-  }
-  const h = u.hostname.toLowerCase().replace(/^www\./, "");
-  if (ADDRESS_HOSTS.includes(h)) return true;
-  return ADDRESS_PATH_RE.test(u.pathname);
+  if (hostNotPortfolio(url)) return true;
+  if (!hostOfUrl(url)) return false;
+  return ADDRESS_PATH_RE.test(new URL(url).pathname);
 }
 
 /** Page-text hash -> hosts, over every row with 20 words or more. */

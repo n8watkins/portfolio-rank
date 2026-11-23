@@ -226,14 +226,17 @@ Each chain is a list of steps in the order they happen.
    2. Gemini says portfolio: it is listed with its report card, unless its address is not a portfolio page (step 3).
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
-      So does an address that is not a portfolio page by the address alone (`urlNotPortfolio`: a GitHub, GitLab or Bitbucket address, a link-in-bio page, or an admin or login path), whatever Gemini said; your rule (2026-11-23): "Someone's GitHub is not a portfolio page."
+      So does an address whose host is never a portfolio page (`hostNotPortfolio`: a GitHub, GitLab or Bitbucket address or a GitHub gist, any Substack, or a link-in-bio page), whatever Gemini said; your rules (2026-11-23): "Someone's GitHub is not a portfolio page." and "any substack should never be considered a portfolio page."
       A site on its own subdomain, such as `name.github.io`, is a real site and is not caught.
+      An admin or login path is a junk rule only beside Gemini's "not a portfolio", as before.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
    5. You undid an earlier removal, a rule once listed the site, an earlier grade said portfolio, or another case is waiting: the site stays listed and waits for you.
 
    The address rule also runs over every listed site in the night's free part, before any grade, so an address is seen the night it is synced in even while grading is paused (`lib/reviews/door.mjs` `addressRows`).
-   The same ladder applies: a site you ruled on, kept, or took a removal back from, or with a case already open, is left alone; one an earlier grade or a rule called a portfolio waits for you; one never graded gets a recorded removal for the hourly task to apply (step 11).
-   Its rows say "Not a portfolio address" on your review page and are decided by `rule:not-a-portfolio-address`, never in Gemini's name.
+   The same ladder applies: a site you ruled on, kept, or took a removal back from, or with a case already open, is left alone; a site tonight's grade will see is left to the door; one an earlier grade or a rule called a portfolio waits for you; one never graded gets a recorded removal for the hourly task to apply (step 11).
+   A brake: at most 5 such removals a night are applied without you (`ADDRESS_AUTO_PER_NIGHT`). On a night with more, every one waits for you on the review page and the night sends one owner alert saying how many, since so many at once usually means the host list or the list sync changed, not the sites.
+   When Gemini said portfolio, or no grade has seen the site, the row says "Not a portfolio address" on your review page and is decided by `rule:not-a-portfolio-address`, not in Gemini's name; when Gemini itself said not a portfolio, the row is Gemini's, as for any junk rule.
+   The public Removed page then says "Its address is not a portfolio page (a code host, a newsletter or a link-in-bio page)", never "AI grading says".
 
    Whatever the outcome, the grade is written with `lib/tiers-store.mjs` `rankForWrite`: a site that already has its Starting rank keeps it exactly, a site without one (it had too few signals) gets it now from its Code checks score, and any answer that is not a "yes" takes the site out of the tiers at once.
    A site out of the tiers comes back only through the membership rule, at the next daily tiers task, with the rating and votes it had (`seedNewcomers`).

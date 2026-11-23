@@ -54,7 +54,7 @@ import { httpGate, parkedPage, titleOf, visibleText } from "./gate.mjs";
 import { BOT_WALL, capturedBlocked, isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { ensureRosterSchema, NOT_PORTFOLIO } from "./roster.mjs";
 import { portfolioSignals } from "./signals.mjs";
-import { AI_SAYS_NOT_PORTFOLIO, HELD_SQL } from "./portfolio-guard.mjs";
+import { HELD_SQL, notPortfolioReason } from "./portfolio-guard.mjs";
 import { replaceGradeStatements } from "./rubric-history.mjs";
 import { atTheDoor } from "../lib/reviews/door.mjs";
 import { APPLIED, OPEN_CASE_SQL, ensureReviewSchema } from "../lib/reviews/store.mjs";
@@ -592,7 +592,7 @@ export async function runHealthCheck({
     // A removal decided in the review queue (the owner's, or the door's rule; a row on record that
     // nobody undid) stays down with its reason, whatever this check sees, until an Undo or an owner
     // decision changes the grade or the health: it was decided, not seen failing.
-    if (notPortfolio && Number(was?.decided_removal ?? 0) === 1 && String(was?.health ?? "") === "down" && String(was?.health_reason ?? "").startsWith(AI_SAYS_NOT_PORTFOLIO)) {
+    if (notPortfolio && Number(was?.decided_removal ?? 0) === 1 && String(was?.health ?? "") === "down" && notPortfolioReason(was?.health_reason)) {
       r.ok = false;
       r.decidedDown = true;
       r.reason = String(was.health_reason);

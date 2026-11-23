@@ -14,7 +14,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ADDRESS_RULE_ACTOR, DOOR_RULE_ACTOR, autoApplyReviews, decideReviews, ensureReviewSchema, undoReviews } from "../lib/reviews/store.mjs";
-import { doorDecision, syncReviewRows } from "../lib/reviews/door.mjs";
+import { ADDRESS_AUTO_PER_NIGHT, addressRows, doorDecision, syncReviewRows } from "../lib/reviews/door.mjs";
+import { ADDRESS_NOT_PORTFOLIO, AI_SAYS_NOT_PORTFOLIO, notPortfolioReason } from "../pipeline/portfolio-guard.mjs";
+import { hostNotPortfolio, urlNotPortfolio } from "../pipeline/junk-rules.mjs";
+import { kindOf } from "../pipeline/exclusions.mjs";
+import { runHealthCheck } from "../pipeline/health.mjs";
+import { nightConditions } from "../pipeline/alerts.mjs";
+import { PORTFOLIO_HTML } from "./helpers/door-night.mjs";
 import { DAY, T0, answer, col, context, drive, freshDb, grade, hidden, notPortfolio, reviewsOf, signals, site } from "./helpers/door-night.mjs";
 
 const PROFILE = "https://github.com/someone-dev";
@@ -28,6 +34,11 @@ test("at the door: Gemini calls a bare GitHub profile a portfolio, and the addre
   const rows = await reviewsOf(db, PROFILE);
   const applied = rows.filter((r) => String(r.status) === "auto_applied");
   assert.equal(applied.length, 1, JSON.stringify(rows.map((r) => [r.status, r.grp, r.decided_by])));
+  // Review F6: tonight's grade sees it, so the roster pass leaves it to the door: one row, no closed twin under Decided.
+  assert.equal(rows.length, 1, JSON.stringify(rows.map((r) => [r.status, r.grp, r.decided_by])));
+  // Review F1: the public reason says what is true.
+  assert.equal(String(await col(db, PROFILE, "health_reason")), ADDRESS_NOT_PORTFOLIO);
+  assert.equal(kindOf(String(await col(db, PROFILE, "health_reason"))), "not_portfolio");
   const [row] = applied;
   assert.equal(String(row.grp), "door_not_portfolio");
   assert.equal(String(row.decided_by), ADDRESS_RULE_ACTOR, "the address rule's own name, never Gemini's");
@@ -114,6 +125,29 @@ test("the roster: every listed address the rule catches goes through the Removal
   const [c] = await decideReviews(db, { ids: [Number(held.id)], action: "confirm", actor: "admin:owner", onFeed: () => true, now: new Date(T0 + 2 * 3600000) });
   assert.equal(c.ok, true, JSON.stringify(c));
   assert.equal(await hidden(db, "https://github.com/graded-yes"), true);
+  // Review F1: both reasons say the address, the rule's and the owner's, and both file as "not a portfolio".
+  assert.equal(String(await col(db, "https://github.com/never-graded", "health_reason")), ADDRESS_NOT_PORTFOLIO);
+  assert.equal(String(await col(db, "https://github.com/graded-yes", "health_reason")), `${ADDRESS_NOT_PORTFOLIO} (confirmed by the owner)`);
+  for (const u of ["https://github.com/never-graded", "https://github.com/graded-yes"]) assert.equal(kindOf(String(await col(db, u, "health_reason"))), "not_portfolio", u);
+  assert.doesNotMatch(String(await col(db, "https://github.com/never-graded", "health_reason")), /AI grading/);
+
+  // Review F1: the weekly health check keeps an address removal down, though the page itself loads fine.
+  const fetchImpl = async (u) => ({ status: 200, ok: true, url: u, text: async () => PORTFOLIO_HTML });
+  const feed = ["https://github.com/never-graded", "https://github.com/graded-yes"].map((url) => ({ url, name: "x" }));
+  await runHealthCheck({ db, feed, fetchImpl, log: () => {}, now: new Date(T0 + 3 * DAY) });
+  for (const { url } of feed) {
+    assert.equal(String(await col(db, url, "health")), "down", url);
+    assert.equal(await hidden(db, url), true, url);
+  }
+});
+
+test("review F1: one helper reads both reasons; the old one still files as not a portfolio", () => {
+  assert.equal(notPortfolioReason(AI_SAYS_NOT_PORTFOLIO), true);
+  assert.equal(notPortfolioReason(`${AI_SAYS_NOT_PORTFOLIO} (confirmed by the owner)`), true);
+  assert.equal(notPortfolioReason(ADDRESS_NOT_PORTFOLIO), true);
+  assert.equal(notPortfolioReason("HTTP 404"), false);
+  assert.equal(kindOf(ADDRESS_NOT_PORTFOLIO), "not_portfolio");
+  assert.equal(kindOf(AI_SAYS_NOT_PORTFOLIO), "not_portfolio");
 });
 
 test("the roster: a waiting address row is closed, not applied, once the owner or a newer grade has decided", async () => {
@@ -127,4 +161,92 @@ test("the roster: a waiting address row is closed, not applied, once the owner o
   const [r] = await autoApplyReviews(db, { onFeed: () => true, now: new Date(T0 + 3600000) });
   assert.equal(r.closed, true, JSON.stringify(r));
   assert.equal(await hidden(db, url), false);
+});
+
+test("review F2: the brake: more than 5 removals in one night and none is applied without the owner, with one alert", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  const urls = Array.from({ length: ADDRESS_AUTO_PER_NIGHT + 1 }, (_, i) => `https://github.com/brake-${i}`);
+  for (const u of urls) await site(db, u, { n: 2 });
+  const sent = await syncReviewRows(db, { now: new Date(T0) });
+  assert.equal(sent.address.length, urls.length);
+  assert.deepEqual(sent.addressBrake, { removals: 6, limit: 5 });
+  for (const u of urls) {
+    const [row] = await reviewsOf(db, u);
+    const door = JSON.parse(String(row.signals)).door;
+    assert.deepEqual([String(row.grp), String(row.status), door.auto, door.brake], ["door_held", "pending", false, true], u);
+    assert.match(String(row.reason), /more than its limit of 5 a night/);
+  }
+  assert.deepEqual(await autoApplyReviews(db, { onFeed: () => true, now: new Date(T0 + 3600000) }), [], "nothing applied by the rule");
+  for (const u of urls) assert.equal(await hidden(db, u), false, u);
+  // The night's one owner alert.
+  const alerts = nightConditions({ night: "2026-11-23", stages: [], addressBrake: sent.addressBrake }, { reserve: 0 });
+  assert.deepEqual(alerts.map((a) => a.key), ["address-rule-brake"]);
+  assert.match(alerts[0].title, /held 6 removals/);
+  assert.deepEqual(nightConditions({ night: "2026-11-23", stages: [], addressBrake: null }, { reserve: 0 }), []);
+
+  // At the limit: all automatic.
+  const { db: db5 } = await freshDb();
+  await ensureReviewSchema(db5);
+  for (const u of urls.slice(0, ADDRESS_AUTO_PER_NIGHT)) await site(db5, u, { n: 2 });
+  const five = await syncReviewRows(db5, { now: new Date(T0) });
+  assert.equal(five.addressBrake, null);
+  assert.equal((await autoApplyReviews(db5, { onFeed: () => true, now: new Date(T0 + 3600000) })).filter((a) => a.ok).length, 5);
+});
+
+test("review F3 and new hosts: only a host overrules a Gemini 'yes' or acts on an ungraded site; any Substack and gists are hosts", async () => {
+  for (const u of ["https://jane.substack.com/", "https://substack.com/@jane", "https://www.substack.com/", "https://gist.github.com/jane/abc", "https://github.com/jane", "https://linktr.ee/jane"]) {
+    assert.equal(hostNotPortfolio(u), true, u);
+  }
+  for (const u of ["https://jane.github.io/", "https://notsubstack.com/", "https://substack.com.example.org/", "https://jane.dev/admin", "https://jane.dev/login"]) {
+    assert.equal(hostNotPortfolio(u), false, u);
+  }
+  // A path is still a junk rule beside a Gemini "no", and only there.
+  assert.equal(urlNotPortfolio("https://jane.dev/admin"), true);
+  const row = (url) => ({ url, name: "Jane", page_text: "", facts: JSON.stringify({ signals: signals(2) }) });
+  assert.equal(doorDecision({ grade: answer(true), row: row("https://jane.dev/admin") }).outcome, "portfolio");
+  assert.equal(doorDecision({ grade: answer(false), row: row("https://jane.dev/admin") }).outcome, "remove");
+  assert.deepEqual([doorDecision({ grade: answer(true), row: row("https://jane.substack.com/") }).outcome, doorDecision({ grade: answer(true), row: row("https://jane.substack.com/") }).address], ["remove", true]);
+
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  await site(db, "https://jane.dev/login", { n: 2 });
+  await site(db, "https://jane.substack.com/", { n: 2 });
+  assert.deepEqual((await syncReviewRows(db, { now: new Date(T0) })).address, ["https://jane.substack.com/"]);
+});
+
+test("review F5: a row closed because the site was down does not keep the site from the rule once it is back", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  const url = "https://github.com/was-down";
+  await site(db, url, { n: 2 });
+  await syncReviewRows(db, { now: new Date(T0) });
+  await db.execute({ sql: "UPDATE portfolios SET health = 'down' WHERE url = ?", args: [url] });
+  const [closed] = await autoApplyReviews(db, { onFeed: () => true, now: new Date(T0 + 3600000) });
+  assert.equal(closed.closed, true, JSON.stringify(closed));
+  // Back up: the next night writes a new row, which the rule applies.
+  await db.execute({ sql: "UPDATE portfolios SET health = 'live' WHERE url = ?", args: [url] });
+  assert.deepEqual((await syncReviewRows(db, { now: new Date(T0 + DAY) })).address, [url]);
+  const [applied] = await autoApplyReviews(db, { onFeed: () => true, now: new Date(T0 + DAY + 3600000) });
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.equal(await hidden(db, url), true);
+});
+
+test("review F6: sites queued for tonight's grade are left to the door", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  await site(db, "https://github.com/queued", { n: 2 });
+  await site(db, "https://github.com/not-queued", { n: 2 });
+  const skipSql = (p) => `${p}.url = 'https://github.com/queued'`;
+  assert.deepEqual((await syncReviewRows(db, { now: new Date(T0), skipSql })).address, ["https://github.com/not-queued"]);
+});
+
+test("review F7: the cut to the limit comes after graded-no and held sites are left out", async () => {
+  const { db } = await freshDb();
+  await ensureReviewSchema(db);
+  // First by address, and the door's own case already: it must not use up the limit.
+  await site(db, "https://github.com/aaa-graded-no", { n: 2, rubric: { ...answer(false), judged_at: "2026-11-10T00:00:00Z" } });
+  await site(db, "https://github.com/zzz-ungraded", { n: 2 });
+  const { rows } = await addressRows(db, { now: new Date(T0), limit: 1 });
+  assert.deepEqual(rows.map((r) => r.url), ["https://github.com/zzz-ungraded"]);
 });

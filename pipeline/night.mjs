@@ -460,7 +460,11 @@ export async function planNight(ctx, state) {
   // addresses that are not a portfolio page by the address alone go to the
   // review queue (lib/reviews/door.mjs). A failure never stops the night.
   try {
-    const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()) });
+    // When tonight grades new sites, the ones in its queue go to the door in minutes: the roster pass leaves them to it.
+    const grading = (ctx.plan?.stages?.grade_new?.cap ?? 0) > 0;
+    const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()), skipSql: grading ? (p) => `${READY(p)} AND (${UNGRADED(p)} OR ${REQUESTED(p)})` : null });
+    s.addressBrake = sent.addressBrake ?? null;
+    if (sent.addressBrake) ctx.log(`Address rule: ${sent.addressBrake.removals} removals held for the owner (limit ${sent.addressBrake.limit} a night)`);
     await recordSites(ctx, s, "plan", [
       ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
       ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
@@ -1034,6 +1038,8 @@ export async function finishNight(ctx, state) {
     parked,
     humanVotes: HUMAN_VOTES_NOTE,
     polls: s.polls ?? null,
+    // The address rule's brake held tonight's removals for the owner (lib/reviews/door.mjs ADDRESS_AUTO_PER_NIGHT).
+    addressBrake: s.addressBrake ?? null,
     // The sites tonight touched, as written (night_sites; SITE_LISTS, at most SITE_LIST_MAX each, counts in sites.counts).
     sites,
     // New sites set aside for a missing screenshot: waiting for a newer capture, and back in the queue tonight.
