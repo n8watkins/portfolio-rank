@@ -187,7 +187,7 @@ export async function EloGrading() {
           <ol className="grid max-w-2xl list-decimal gap-2 pl-5 text-[15px] text-pretty marker:font-semibold marker:text-accent">
             <li>Collect the quick points from automated checks (your page lists them), then get into face-offs: share your page so people vote.</li>
             <li>Read your report card on your portfolio&apos;s page and fix the weakest part first.</li>
-            <li>Pass every code check: link a resume, your GitHub and a way to reach you; fix broken project links; use your own domain and a current footer year.</li>
+            <li>Pass every code check: link a resume, your GitHub and a way to reach you; link at least three projects that load; use your own domain and a current footer year.</li>
             <li>Show each project with the problem, your part and the outcome, not just a list of tools.</li>
             <li>Make the first screen say who you are and what you do, in your own design.</li>
             <li>Re-grade after a real change, {REGRADE_COOLDOWN_DAYS} days after your last grade at the earliest.</li>

@@ -1,4 +1,6 @@
 import type { QuickFacts } from "@/lib/grader/quick";
+// Relative, so the unit tests can import this file under plain Node.
+import { MIN_PROJECT_LINKS, newProjectRule, projectLinksText } from "../../pipeline/facts.mjs";
 
 // The portfolio checklist (app/api/tools/checklist): the free code checks of
 // "grade my portfolio" (lib/grader/quick.ts, saved under the grader's own
@@ -20,7 +22,7 @@ const TIPS: Record<string, { label: string; tip: string }> = {
   resume: { label: "Resume link", tip: "Link a resume or CV (a PDF or a page) from the home page, labeled \"Resume\". It's the first thing many recruiters look for." },
   github: { label: "GitHub link", tip: "Link your GitHub profile from the home page, so people can see your code." },
   contact: { label: "A way to contact you", tip: "Add a mailto: link, a contact form or a LinkedIn link. If nobody can reach you, the portfolio can't get you hired." },
-  project_links: { label: "Project links load", tip: "Fix or remove project and demo links that answer with an error. A dead demo reads as an abandoned project." },
+  project_links: { label: "Project links load", tip: `Link at least ${MIN_PROJECT_LINKS} projects, each with a demo or a repository that loads, and fix or remove the ones that answer with an error. A dead demo reads as an abandoned project.` },
   own_domain: { label: "Your own domain", tip: "A domain like yourname.dev costs about $10 to $15 a year and looks more serious than a vercel.app or github.io address. Point it at the same host." },
   fresh_footer: { label: "Footer year is current", tip: "Update the © year in your footer, or print it from the current date. An old year makes the site look unmaintained." },
 };
@@ -49,7 +51,13 @@ export function checklistItems(q: QuickFacts, now = new Date()): ChecklistItem[]
     row(
       "project_links",
       checks.project_links ?? null,
-      links?.checked ? `${links.checked} checked, ${links.broken ?? 0} broken${links.blocked ? `, ${links.blocked} wouldn't let us check` : ""}` : "No project links to check"
+      newProjectRule(facts.v)
+        ? // "5 of 8 project links load; 1 behind a bot check", "Project links: none found".
+          (projectLinksText(links, facts.v) ?? "Project links not checked")
+        : // Saved checks from before version 3 keep the words they were shown with.
+          links?.checked
+          ? `${links.checked} checked, ${links.broken ?? 0} broken${links.blocked ? `, ${links.blocked} wouldn't let us check` : ""}`
+          : "No project links to check"
     ),
     row("own_domain", checks.own_domain ?? null, said(checks.own_domain, host || "Yes", host ? `${host} is a free hosting address` : "No")),
     row("fresh_footer", checks.fresh_footer ?? null, year ? `© ${year}${year < now.getUTCFullYear() ? "" : " (current)"}` : "No year in the footer"),

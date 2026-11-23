@@ -3,6 +3,8 @@ import { cached, type CacheMeta } from "@/lib/cache";
 import { isKnownPortfolio } from "@/lib/roster";
 import { safeFetch, readCapped } from "@/lib/safefetch";
 import { CHECK_KINDS } from "@/lib/freshness.mjs";
+import { footerYear } from "@/pipeline/facts.mjs";
+import { stripTags } from "@/pipeline/page-controls.mjs";
 
 /** The body cap for the polish check's page fetch. */
 const MAX_HTML_BYTES = 800_000;
@@ -108,7 +110,9 @@ async function inspect(target: string): Promise<Inspection> {
     favicon = Boolean(ico?.res.ok);
   }
 
-  const yearMatch = html.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]\s*)?(20\d{2})/i);
+  // The same reading as the stored facts (pipeline/facts.mjs footerYear): the mark before or after the year.
+  // Laid out in lines, so a year before the mark counts only where it opens a footer line.
+  const copyrightYear = footerYear(stripTags(html, { lines: true }));
   let githubUrl = scrapeGithub(html);
   let linkedinUrl = scrapeLinkedin(html);
   let xUrl = scrapeX(html);
@@ -150,7 +154,7 @@ async function inspect(target: string): Promise<Inspection> {
     hasContact:
       /mailto:|href=["'][^"']*contact|<form/i.test(html) ||
       /linkedin\.com\/in\//i.test(html),
-    copyrightYear: yearMatch ? Number(yearMatch[1]) : null,
+    copyrightYear,
   };
 }
 

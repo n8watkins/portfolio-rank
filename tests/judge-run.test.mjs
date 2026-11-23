@@ -217,7 +217,7 @@ test("a v2 grade sends one image plus the facts and page text as delimited data,
   assert.equal(g.tier, "A");
   assert.deepEqual(g.usage, { input_tokens: 2100, output_tokens: 120, thoughts_tokens: 30 });
   assert.equal(g.facts.motion, true);
-  assert.equal(g.checks.project_links, false);
+  assert.equal(g.checks.project_links, false, "facts of version 1 keep their rule: one of 4 broken is a fail");
   assert.equal(g.checks.fresh_footer, false);
   assert.equal(typeof g.checks_score, "number");
   assert.equal(g.quality_score, 3.3);
@@ -244,7 +244,7 @@ test("a row captured before v2 gets its page text and facts measured at grade ti
   assert.equal(facts.source, "http");
   assert.equal(facts.github, true);
   assert.equal(facts.footer_year, 2026);
-  assert.deepEqual(facts.project_links, { checked: 1, ok: 1, broken: 0, blocked: 0 });
+  assert.deepEqual(facts.project_links, { checked: 1, ok: 1, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null });
   assert.ok(row.facts_at);
 });
 

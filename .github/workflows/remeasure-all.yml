@@ -39,7 +39,8 @@ on:
       skip_version:
         description: "Skip sites whose stored facts already carry this facts version or newer (0 = skip none)"
         required: false
-        default: "2"
+        # The current FACTS_VERSION (pipeline/facts.mjs): a re-run skips what the first run already measured.
+        default: "3"
 
 # Its own group, deliberately not the nightly's `gemini` group. That group exists
 # so the jobs that call Gemini never split the shared per-minute pace and the
@@ -159,9 +160,9 @@ jobs:
         id: list
         shell: bash
         run: |
-          # An empty skip_version is the default, 2; 0 skips nothing.
+          # An empty skip_version is the default, 3; 0 skips nothing.
           node scripts/remeasure-shard.mjs --shard "$SHARD" --shards "$SHARDS" \
-            --skip-version "${SKIP_VERSION:-2}" --limit "${LIMIT:-0}" --out "$RUNNER_TEMP/shard.txt" | tee "$RUNNER_TEMP/list.log"
+            --skip-version "${SKIP_VERSION:-3}" --limit "${LIMIT:-0}" --out "$RUNNER_TEMP/shard.txt" | tee "$RUNNER_TEMP/list.log"
           echo "count=$(wc -l < "$RUNNER_TEMP/shard.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Re-capture and re-measure
@@ -178,7 +179,7 @@ jobs:
           {
             echo "### Shard $SHARD of $SHARDS"
             echo
-            echo "Code: ${CODE:-production release}. skip_version: ${SKIP_VERSION:-2}. limit: ${LIMIT:-none}."
+            echo "Code: ${CODE:-production release}. skip_version: ${SKIP_VERSION:-3}. limit: ${LIMIT:-none}."
             echo
             echo '```'
             cat "$RUNNER_TEMP/list.log" 2>/dev/null || echo "The list was not made."

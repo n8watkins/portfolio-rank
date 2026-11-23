@@ -106,9 +106,10 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
     // The fact chips from the newest measured facts (lib/fresh-facts.mjs).
     const g = freshGrade(String(r.ai_rubric), r.facts) as Record<string, unknown> | null;
     if (!g || typeof g !== "object") continue;
-    const facts = (factLines(g) as { id: string; pass: boolean | null }[])
+    // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their chip.
+    const facts = (factLines(g) as { id: string; label: string; pass: boolean | null; shownAs: string }[])
       .filter((f) => CHIP[f.id] && typeof f.pass === "boolean")
-      .map((f) => ({ label: CHIP[f.id], pass: f.pass as boolean }));
+      .map((f) => ({ label: f.id === "project_links" && f.shownAs !== f.label ? f.shownAs : CHIP[f.id], pass: f.pass as boolean }));
     const top = (strengthsAndFixes(g).strengths as { title: string; why: string; by: string }[]).find((s) => s.by === "ai");
     out.set(url, { facts, best: top ? { label: top.title, note: top.why } : null });
   }

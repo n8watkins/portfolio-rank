@@ -31,6 +31,39 @@ const RAW = { script: /<\/script/gi, style: /<\/style/gi };
 const CONTROL_ROLES = new Set(["button", "link", "menuitem", "tab"]);
 // Attributes whose value is a URL a control may open: for the GitHub fact only.
 const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
+// An element whose id, class or aria-label says it holds projects ("projects", "project-card", "portfolio",
+// "works", "case-study", "showcase"), and a heading that names them ("Projects", "Selected work", "Things I've
+// built"). Not work experience: "work-experience", "Where I've worked" and a bare "Work" heading are timelines.
+export const PROJECT_ATTR = /\b(?:projects?|portfolio|works?(?!\s*(?:experience|history|place|timeline))|case\s*stud(?:y|ies)|showcase)\b/i;
+export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selected|featured|recent|latest) work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
+// An element or a section that lists where else to find the person ("~ find me ~", "Let's connect",
+// "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
+const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
+const SOCIAL_HEADING = /\b(?:find me|connect|socials?|follow me|elsewhere|get in touch|contact(?: me)?)\b/i;
+// An element or a section that looks like an aside (inAside): the tools the person uses ("Tools I use", "Tech
+// stack", "Skills", "Built with", a "tech-stack" list), a cookie or consent banner, a comment widget. A guess,
+// so it only lowers a link (projectCandidates: not in the projects), never removes it. A projects element or
+// section wins: an aside opens only while none is open, and a projects heading ends an open aside. A heading
+// must name only that, whole ("Tools I use", "My tech stack", "Skills & tools", "~ Technologies ~"):
+// "Bridging Technology & Human Potential" (michellebrenner.com's about section) and "Tools I built" open nothing.
+// Class and id words are whole words ("cookie clicker" is a cookie word; a project card inside the projects wins).
+const ASIDE_ATTR = /\b(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|technolog(?:y|ies)|skills?|uses|cookies?|cookiebot|onetrust|consent|gdpr|disqus|giscus|utterances|comments)\b/i;
+const TOOL_WORD = String.raw`(?:tools?|tool ?box|tool ?kit|tech|tech ?stack|stack|technolog(?:y|ies)|skills|skill ?set|languages|frameworks|uses|what i use|what i work with|built with|powered by)`;
+const ASIDE_HEADING = new RegExp(
+  String.raw`^(?:(?:my|our|the|current)\s+)?${TOOL_WORD}(?:\s*(?:&|and|,)\s*${TOOL_WORD})*(?:\s+(?:i use|i work with|i love|i know|of choice|used))?$`,
+  "i"
+);
+/** A heading's words without the decoration around them ("~ Tools ~", "02. Skills:", "Tech stack 🛠"). */
+const headingCore = (words) => words.replace(/^[^a-z]+|[^a-z]+$/gi, "").replace(/\s+/g, " ");
+// A heading that titles the page or the person rather than a section: "Ana Ruiz - Portfolio", "Ana's
+// portfolio", "Portfolio of Ana Ruiz", "Portfolio website".
+// (The dashes are a hyphen, an en dash and an em dash, U+2013 and U+2014.)
+const TITLE_LIKE = new RegExp(String.raw`\s[-|${String.fromCharCode(0x2013, 0x2014)}:·]\s|['’]s\s+portfolio\b|\bportfolio\s+(?:of|by|website|site)\b`, "i");
+// The page's frame: links here are navigation, credits and profiles, never the projects.
+const CHROME = new Set(["nav", "header", "footer"]);
+const HEADINGS = new Set(["h1", "h2", "h3", "h4"]);
+/** "project-card", "projectsGrid", "my_work" as words, so the patterns above can read them. */
+const attrWords = (v) => String(v ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ");
 const isSpace = (c) => c === " " || c === "\n" || c === "\t" || c === "\r" || c === "\f";
 const isLetter = (c) => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
 
@@ -56,11 +89,14 @@ function resolve(u, baseUrl) {
 
 /**
  * Reads `html` once. Returns { links, controls, text, head, attrValues, generator }:
- *   links      every <a> with a non-empty href, in page order: { raw, href, text } as extractLinks gave them
- *   controls   { tag, label, parts, text, navUrls, attrUrls, inLink }: `parts` the label's pieces (text when
- *              at most LABEL_MAX characters, aria-label, title, image alt, an input's value), `navUrls` URLs
- *              it opens from onclick, `attrUrls` URLs in data-href and the like, `inLink` the href of the
- *              link around it, if any
+ *   links      every <a> with a non-empty href, in page order: { raw, href, text, inProjects, inChrome }:
+ *              `inProjects` it sits in an element whose id, class or aria-label says projects, or in the
+ *              section after a "Projects" heading, and not in the nav, header or footer; `inChrome` it
+ *              sits in the nav, header or footer
+ *   controls   { tag, label, parts, text, navUrls, attrUrls, inLink, inProjects, inChrome }: `parts` the
+ *              label's pieces (text when at most LABEL_MAX characters, aria-label, title, image alt, an
+ *              input's value), `navUrls` URLs it opens from onclick, `attrUrls` URLs in data-href and the
+ *              like, `inLink` the href of the link around it, if any; the last two as for links
  *   text       the visible text (no script or style), tags as spaces
  *   head       the text of the title and h1 elements
  *   attrValues values of attributes whose name ends in "href" or "id"
@@ -79,13 +115,24 @@ export function scanPage(html, baseUrl) {
   const stack = [];
   const openLinks = [];
   const openControls = [];
+  const openHeadings = [];
   let headOpen = 0;
+  // How many open elements hold projects, and how many are the page's frame (nav, header, footer).
+  let projectOpen = 0;
+  let chromeOpen = 0;
+  let socialOpen = 0;
+  let asideOpen = 0;
   const noQuote = { '"': false, "'": false };
 
   const addText = (t) => {
     if (!t || !/\S/.test(t)) return;
     text.push(t);
     if (headOpen) head.push(t);
+    const h = openHeadings.at(-1);
+    if (h && h.len < TEXT_CAP) {
+      h.parts.push(t);
+      h.len += t.length;
+    }
     const l = openLinks.at(-1);
     if (l && l.len < TEXT_CAP) {
       l.parts.push(t);
@@ -101,6 +148,47 @@ export function scanPage(html, baseUrl) {
     if (rec.link) openLinks.splice(openLinks.lastIndexOf(rec.link), 1);
     if (rec.control) openControls.splice(openControls.lastIndexOf(rec.control), 1);
     if (rec.head) headOpen--;
+    if (rec.project) projectOpen--;
+    if (rec.chrome) chromeOpen--;
+    if (rec.social) socialOpen--;
+    if (rec.aside) asideOpen--;
+    // The element a heading's section belongs to closed: its section ends with it.
+    if (scope && scope.parent === rec) endScope();
+    if (rec.heading) {
+      openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
+      // A "Projects" heading opens a projects section, a "Find me" heading a list of profiles: what follows
+      // it, up to the next heading of the same or a higher level, or the end of the element around it.
+      // An h1 is the page's title ("Portfolio", "My Portfolio", "Ana Ruiz - Portfolio") and opens nothing:
+      // only h2 to h4 open a section; a page whose projects sit under an h1 alone is read by its projects
+      // elements (id, class, aria-label) and its repository links. A title-like h2 to h4 opens nothing either.
+      // A projects heading at any level from h2 to h4 ends an open aside ("Skills" h2, then "Projects" h3).
+      const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
+      const titled = rec.heading.level >= 2 && !TITLE_LIKE.test(words);
+      if (titled && scope?.kind === "aside" && PROJECT_HEADING.test(words)) endScope();
+      if (!scope && titled) {
+        const kind = PROJECT_HEADING.test(words)
+          ? "project"
+          : SOCIAL_HEADING.test(words)
+            ? "social"
+            : !projectOpen && ASIDE_HEADING.test(headingCore(words))
+              ? "aside"
+              : null;
+        if (kind) {
+          scope = { kind, level: rec.heading.level, parent: stack.at(-1) ?? null };
+          if (kind === "project") projectOpen++;
+          else if (kind === "social") socialOpen++;
+          else asideOpen++;
+        }
+      }
+    }
+  };
+  /** The section a heading opened, while it lasts. */
+  let scope = null;
+  const endScope = () => {
+    if (scope?.kind === "project") projectOpen--;
+    else if (scope?.kind === "social") socialOpen--;
+    else if (scope?.kind === "aside") asideOpen--;
+    scope = null;
   };
 
   /**
@@ -222,10 +310,33 @@ export function scanPage(html, baseUrl) {
       if (c && attrs.get("alt")) c.alts.push(attrs.get("alt"));
     }
     const rec = { name };
+    if (CHROME.has(name) || /^(?:navigation|banner|contentinfo)$/i.test(String(attrs.get("role") ?? "").trim())) rec.chrome = true;
+    else if (name !== "html" && name !== "body" && name !== "main") {
+      const own = `${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`;
+      const words = attrWords(own);
+      if (PROJECT_ATTR.test(words)) rec.project = true;
+      else if (SOCIAL_ATTR.test(words)) rec.social = true;
+      // Only while no projects element or section is open: a "card-tech" footer in a project card is the card's.
+      else if (!projectOpen && ASIDE_ATTR.test(words)) rec.aside = true;
+    }
+    if (HEADINGS.has(name)) {
+      rec.heading = { parts: [], len: 0, level: Number(name[1]) };
+      // A heading of the same or a higher level ends the section the last one opened.
+      if (scope && rec.heading.level <= scope.level) endScope();
+    }
+    // Where it sits: inside an element that holds projects (itself included), in the page's frame, or in a list of profiles.
+    const where = () => {
+      const chrome = chromeOpen + (rec.chrome ? 1 : 0) > 0;
+      const social = socialOpen + (rec.social ? 1 : 0) > 0;
+      // A projects element opened inside an aside (a "tech-theme" page wrapper) wins over it.
+      const projects = projectOpen + (rec.project ? 1 : 0) > 0;
+      const aside = asideOpen + (rec.aside ? 1 : 0) > 0 && !projects;
+      return { inProjects: projects && !chrome && !social, inChrome: chrome, inSocial: social, inAside: aside };
+    };
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();
     if (name === "a" && raw) {
-      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0 };
+      rec.link = { raw, aria: attrs.get("aria-label") ?? "", parts: [], len: 0, ...where() };
       links.push(rec.link);
     }
     const role = String(attrs.get("role") ?? "").trim().toLowerCase().split(/\s+/)[0];
@@ -259,6 +370,7 @@ export function scanPage(html, baseUrl) {
         navUrls,
         attrUrls,
         inLink: openLinks.at(-1)?.raw ?? null,
+        ...where(),
       };
       controls.push(rec.control);
     }
@@ -268,6 +380,11 @@ export function scanPage(html, baseUrl) {
     if (rec.link) openLinks.push(rec.link);
     if (rec.control) openControls.push(rec.control);
     if (rec.head) headOpen++;
+    if (rec.heading) openHeadings.push(rec.heading);
+    if (rec.project) projectOpen++;
+    if (rec.chrome) chromeOpen++;
+    if (rec.social) socialOpen++;
+    if (rec.aside) asideOpen++;
   }
   addText(s.slice(t0, n));
 
@@ -277,13 +394,13 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim() };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial, inAside: l.inAside };
       })
       .filter(Boolean),
     controls: controls.map((c) => {
       const own = decodeEntities(c.textParts.join(" ")).replace(/\s+/g, " ").trim();
       const parts = [own.length <= LABEL_MAX ? own : "", c.aria, c.title, ...c.alts, c.value].map((x) => decodeEntities(x).replace(/\s+/g, " ").trim()).filter(Boolean);
-      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink };
+      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial, inAside: c.inAside };
     }),
     text: text.join(" "),
     head: head.join(" "),
@@ -292,8 +409,12 @@ export function scanPage(html, baseUrl) {
   };
 }
 
-/** The HTML with every "<...>" replaced by a space, as /<[^>]+>/g did, in one pass. */
-export function stripTags(html) {
+/**
+ * The HTML with every "<...>" replaced by a space, as /<[^>]+>/g did, in one
+ * pass. With `lines`, a block element or <br> becomes a line break instead,
+ * as a browser lays the text out (the footer year reads lines).
+ */
+export function stripTags(html, { lines = false } = {}) {
   const s = String(html ?? "");
   let out = "";
   let i = 0;
@@ -307,11 +428,12 @@ export function stripTags(html) {
       i = gt + 1;
       continue;
     }
-    out += `${s.slice(i, lt)} `;
+    out += `${s.slice(i, lt)}${lines && BLOCK_TAG.test(s.slice(lt + 1, Math.min(gt, lt + 12))) ? "\n" : " "}`;
     i = gt + 1;
   }
   return out + s.slice(i);
 }
+const BLOCK_TAG = /^\/?(?:br|p|div|li|ul|ol|h[1-6]|footer|header|section|article|main|nav|tr|td|table|address|blockquote|pre|hr)(?![a-z0-9])/i;
 
 /**
  * The HTML without its <name>...</name> elements (a space in their place), as

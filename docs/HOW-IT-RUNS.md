@@ -175,7 +175,9 @@ Each chain is a list of steps in the order they happen.
    A change under `data/` on main then rebuilds production's release over the new list (`deploy.yml`).
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, and rows back on it are listed again, with a 15% safety limit.
-   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure.
+   A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
+   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link (`pipeline/capture-projects.mjs`).
+   When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`), `lib/freshness.mjs` `screenshotsDue`.
    A capture is due again for one of two reasons only: it is 90 days old, or a person asked for a new one (your "Re-measure", or a re-grade an owner asked for).
    Asked-for sites go first, then the oldest captures.
@@ -199,6 +201,7 @@ Each chain is a list of steps in the order they happen.
       A change that comes with new measuring code (a new `facts.v`) is recorded as the code's, not the site's.
    All of these are listed on the Capture problems page (see "Keeping watch").
 7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), and project link checks that are due (up to 120).
+   A link check tests again the links the site's capture chose and only renews which of them load (`pipeline/evidence.mjs`).
 8. **Starting rank and Tier** (the capture itself, `lib/tiers-store.mjs` `rankFromCode`, right after a capture is stored; the daily tiers task catches any it missed).
    This step starts with the release after 2026-11-22; until then a site gets its starting rank only with its Gemini grade.
    Your rule (2026-11-22): "the starting rank you get is based off of clear verifiable code measurements", and "a site should have a tier" from its first measure.
