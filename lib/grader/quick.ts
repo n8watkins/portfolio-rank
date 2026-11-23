@@ -1,6 +1,6 @@
 import type { Client } from "@libsql/client";
 import { safeFetch, readCapped } from "@/lib/safefetch";
-import { checkLinks, measureFacts, pageLinks, projectLinkCandidates } from "@/pipeline/facts.mjs";
+import { checkLinks, measureFacts, pageLinks, projectCandidates } from "@/pipeline/facts.mjs";
 import { scanPage } from "@/pipeline/page-controls.mjs";
 import { parkingPhrase, titleOf, visibleText } from "@/pipeline/gate.mjs";
 import { codeChecks } from "@/pipeline/rubric.mjs";
@@ -104,8 +104,9 @@ export async function measureQuick(
     facts.project_links = reuse.facts.project_links;
     linksCheckedAt = reuse.linksCheckedAt!;
   } else {
-    const urls = projectLinkCandidates(pageLinks(html, finalUrl, scan), finalUrl);
-    facts.project_links = await checkLinks(urls, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS });
+    // Candidates with their kind, so the site's own pages count for at most two of the three (pipeline/facts.mjs).
+    const candidates = projectCandidates(pageLinks(html, finalUrl, scan), finalUrl);
+    facts.project_links = await checkLinks(candidates, { fetchImpl: linkFetch(fetcher) as unknown as typeof fetch, timeoutMs: LINK_TIMEOUT_MS });
   }
   // Client-rendered pages send little HTML: the capture measures them properly.
   return {

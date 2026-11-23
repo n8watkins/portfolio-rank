@@ -1,129 +1,44 @@
-// Where a page's projects are when its home page does not link them (facts
-// version 3, pipeline/facts.mjs): the destinations of project buttons that
-// open a URL from script, and the site's own projects page. Both run on the
-// capture's desktop page after everything stored from it was taken (the
-// readings, the screenshots), each under a hard time limit; a failure or a
-// timeout adds nothing and never fails the capture. Nothing here is stored
-// except the URLs they find, and nothing is uploaded.
+// The site's own projects page, for a home page that shows fewer than 3
+// projects (facts version 3, pipeline/facts.mjs projectsPageFor). It runs
+// once per capture, after everything stored from the capture was taken (the
+// readings and every screenshot), in the capture's own browser context, and
+// it is only ever a plain GET of an <a href> on the same host:
+//
+//   1. load the link's address in a new tab;
+//   2. only when that answers an error status (an app served only through its
+//      router answers 404 to a direct load, as eduardconstantin.github.io on
+//      GitHub Pages does), press that same-site link on the home page, so
+//      its router shows the page; never when a service worker controls the
+//      page, since its requests would bypass the guard below.
+//
+// While it runs every request that is not a GET is refused, and so are pings,
+// beacons, event streams and web sockets; a new window is closed at once. The
+// time limit bounds the work, not only the wait: what is still running when
+// it passes is closed. A failure, a timeout, an error status or another host
+// adds nothing and never fails the capture. Nothing is stored but the page's
+// reading, and no screenshot is taken.
 import { readRenderedPage } from "./gate.mjs";
-import { PROJECT_ATTR, PROJECT_HEADING } from "./page-controls.mjs";
 
-/** An element, or the heading above it, that holds projects (as the scanner reads them, ./page-controls.mjs). */
-const PROJECT_SECTION = new RegExp(`${PROJECT_ATTR.source}|${PROJECT_HEADING.source}`, "i");
-/** A button label that opens something: "Visit Website", "View on PyPI", "Live demo", "VS Code Marketplace", "Source code". */
-const PROJECT_DESTINATION = /\b(?:visit|view|open|launch|live|demo|preview|try|source|code|github|repo(?:sitory)?|marketplace|pub\.dev|pypi|npm|app store|play store|website|site)\b/i;
-
-/** The most a button probe and a projects page may take, well inside the capture's SITE_LIMIT_MS (5 minutes). */
-export const BUTTON_PROBE_MS = 10_000;
+/** The most the projects page may take, well inside the capture's SITE_LIMIT_MS (5 minutes). */
 export const PROJECTS_PAGE_MS = 25_000;
-/** At most this many project buttons are pressed. */
-export const MAX_PROJECT_BUTTONS = 12;
 
-/** `work` within `ms`, else `fallback` (the work is left to finish or fail on its own). */
-async function within(work, ms, fallback) {
-  let timer;
-  const late = new Promise((resolve) => (timer = setTimeout(() => resolve(fallback), ms)));
+/** Request kinds that are never a plain page read. */
+const REFUSED_TYPES = new Set(["ping", "beacon", "eventsource", "websocket"]);
+
+const sameHost = (a, b) => {
   try {
-    return await Promise.race([work.catch(() => fallback), late]);
-  } finally {
-    clearTimeout(timer);
+    return new URL(a).hostname.replace(/^www\./, "").toLowerCase() === new URL(b).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return false;
   }
-}
-
-/**
- * Runs in the page: marks the buttons in the projects whose label says they
- * open something ("Visit Website", "View on PyPI", "Live demo", "VS Code
- * Marketplace") and are not in a link, so their handler is the only way to
- * their destination. Returns how many were marked.
- */
-function markProjectButtons({ max, project, destination }) {
-  const projectRe = new RegExp(project, "i");
-  const destRe = new RegExp(destination, "i");
-  const words = (el) => `${el.id ?? ""} ${el.getAttribute?.("class") ?? ""} ${el.getAttribute?.("aria-label") ?? ""}`.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ");
-  const headings = [...document.querySelectorAll("h1,h2,h3")];
-  const inProjects = (el) => {
-    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
-      if (/^(NAV|HEADER|FOOTER)$/.test(a.tagName)) return false;
-      if (projectRe.test(words(a))) return true;
-    }
-    // The nearest h1-h3 above it names the projects.
-    let above = null;
-    for (const h of headings) if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) above = h;
-    return Boolean(above && projectRe.test(above.innerText || ""));
-  };
-  let n = 0;
-  for (const el of document.querySelectorAll("button, [role=button]")) {
-    if (n >= max) break;
-    if (el.closest("a[href]") || el.disabled) continue;
-    const label = `${el.innerText || ""} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""}`.replace(/\s+/g, " ").trim();
-    if (!label || label.length > 60 || !destRe.test(label) || !inProjects(el)) continue;
-    el.setAttribute("data-pr-probe", String(n++));
-  }
-  return n;
-}
-
-/** Runs in the page: presses one marked button with window.open recorded instead of obeyed. */
-function pressProjectButton(i) {
-  const opened = [];
-  const real = window.open;
-  window.open = (u) => {
-    if (u) opened.push(String(u));
-    return null;
-  };
-  const before = location.href;
+};
+const pathOf = (u) => {
   try {
-    document.querySelector(`[data-pr-probe="${i}"]`)?.click();
-  } finally {
-    window.open = real;
+    return new URL(u).pathname.replace(/\/+$/, "");
+  } catch {
+    return "";
   }
-  return { opened, moved: location.href !== before ? location.href : null };
-}
-
-/**
- * The URLs a page's project buttons open from script (nitishkr.fun's "VS Code
- * Marketplace" and "View on PyPI" buttons call window.open from a React
- * handler, so no URL is in the page). Each marked button is pressed once with
- * window.open recorded instead of obeyed and every page load of the main
- * frame refused (its URL is recorded); a route change inside the page is
- * recorded and gone back from. A button that opens a dialog adds nothing.
- * `patterns` are the projects and destination patterns as regex sources.
- */
-export async function readProjectButtons(page, { limitMs = BUTTON_PROBE_MS, max = MAX_PROJECT_BUTTONS } = {}) {
-  const found = [];
-  const start = page.url().replace(/#.*$/, "");
-  let stopped = false;
-  const refuse = (route) => {
-    const req = route.request();
-    if (req.isNavigationRequest() && req.frame() === page.mainFrame()) {
-      found.push(req.url());
-      // 204 No Content: the browser stays on the page (an aborted load would leave an error page).
-      return route.fulfill({ status: 204, body: "" });
-    }
-    return route.continue();
-  };
-  const work = (async () => {
-    const n = await page.evaluate(markProjectButtons, { max, project: PROJECT_SECTION.source, destination: PROJECT_DESTINATION.source });
-    if (!n) return;
-    const home = page.url();
-    await page.route("**/*", refuse);
-    for (let i = 0; i < n && !stopped; i++) {
-      const r = await page.evaluate(pressProjectButton, i).catch(() => null);
-      if (r) found.push(...r.opened, ...(r.moved ? [r.moved] : []));
-      await page.waitForTimeout(250);
-      await page.keyboard.press("Escape").catch(() => {});
-      if (page.url() !== home) await page.goBack({ timeout: 3000 }).catch(() => {});
-    }
-  })();
-  try {
-    await within(work, limitMs, undefined);
-  } finally {
-    stopped = true;
-    await page.unroute("**/*", refuse).catch(() => {});
-  }
-  const home = page.url().replace(/#.*$/, "");
-  // The page itself (going back to it after a route change) is not a destination.
-  return [...new Set(found.filter((u) => /^https?:\/\//i.test(u) && u.replace(/#.*$/, "") !== home && u.replace(/#.*$/, "") !== start))];
-}
+};
 
 /**
  * Whether the page's text was replaced, not just animated: fewer than half of
@@ -144,69 +59,114 @@ export function swapped(before, now) {
   return old.filter((l) => still.has(l)).length < old.length / 2;
 }
 
-const sameHost = (a, b) => {
-  try {
-    return new URL(a).hostname.replace(/^www\./, "").toLowerCase() === new URL(b).hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return false;
+/** The capture's usual waits, shortened, a short scroll, then the reading. */
+async function settleAndRead(p) {
+  await p.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(1000);
+  for (let i = 0; i < 6; i++) {
+    await p.mouse.wheel(0, 1200).catch(() => {});
+    await p.waitForTimeout(250);
   }
-};
+  return p.evaluate(readRenderedPage);
+}
 
 /**
- * The site's own projects page (`url`, same host as the page), read on the
- * capture's desktop page: by pressing the link to it when the page has one
- * (a single-page app routes there without a page load, and a page served
- * only through its app's router, as on GitHub Pages, answers 404 when loaded
- * directly), else by loading it. Then the capture's usual waits, shortened,
- * and a short scroll. Returns { html, text, finalUrl } or null: another host,
- * an error status, a timeout or any failure adds nothing.
+ * The site's own projects page (`url`, same host as `page`, the capture's
+ * desktop page), read as described at the top. Returns { html, text,
+ * finalUrl, via: "load" | "press" } or null. `page` is left on a blank page
+ * when the limit passes during a press: the capture has taken everything
+ * from it. Web sockets stay refused in the context afterwards (Playwright
+ * has no way to lift that route), which matters to nothing: the capture only
+ * writes after this step.
  */
 export async function readProjectsPage(page, url, { limitMs = PROJECTS_PAGE_MS } = {}) {
   if (!sameHost(url, page.url())) return null;
-  let status = null;
-  const onResponse = (r) => {
-    if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) status = r.status();
+  const ctx = page.context();
+  let tab = null;
+  let pressing = false;
+  /** The request's page, or null (a worker's request has none). */
+  const pageOf = (req) => {
+    try {
+      return req.frame().page();
+    } catch {
+      return null;
+    }
   };
-  page.on("response", onResponse);
+  const guard = (route) => {
+    const req = route.request();
+    const from = pageOf(req);
+    // Only plain GETs, and only from the home page and our own tab: a popup's first load never leaves.
+    const elsewhere = from ? from !== page && from !== tab : req.resourceType() === "document";
+    if (req.method() !== "GET" || REFUSED_TYPES.has(req.resourceType()) || elsewhere) return route.abort().catch(() => {});
+    return route.continue().catch(() => {});
+  };
+  // Any window but our own tab (a popup from a script, a link with target=_blank) is closed at once.
+  const onPage = (p) => {
+    if (p !== tab) p.close().catch(() => {});
+  };
+  await ctx.route("**/*", guard);
+  await ctx.routeWebSocket?.(/.*/, (ws) => ws.close()).catch(() => {});
+  // Our own tab first, then the watch for any other window.
+  tab = await ctx.newPage().catch(() => null);
+  ctx.on("page", onPage);
+
   const work = (async () => {
-    const target = new URL(url);
-    const path = target.pathname.replace(/\/+$/, "");
-    const at = () => new URL(page.url()).pathname.replace(/\/+$/, "") === path;
+    const target = pathOf(url);
+    // 1. A plain load of the link's address in a new tab.
+    if (!tab) return null;
+    const res = await tab.goto(url, { waitUntil: "load", timeout: 15000 }).catch(() => null);
+    const status = res?.status() ?? 0;
+    if (res && status < 400) {
+      if (!sameHost(tab.url(), url)) return null; // redirected to another host
+      const seen = await settleAndRead(tab);
+      return { html: seen.html, text: seen.text, finalUrl: tab.url(), via: "load" };
+    }
+    await tab.close().catch(() => {});
+    tab = null;
+    // 2. An error status: press the same-site link on the home page, unless a service worker controls it.
+    if (await page.evaluate(() => Boolean(navigator.serviceWorker?.controller)).catch(() => true)) return null;
     const before = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+    pressing = true;
     const pressed = await page
       .evaluate((p) => {
-        const a = [...document.querySelectorAll("a[href]")].find((x) => x.origin === location.origin && x.pathname.replace(/\/+$/, "") === p);
+        const a = [...document.querySelectorAll("a[href]")].find((x) => x instanceof HTMLAnchorElement && x.origin === location.origin && x.pathname.replace(/\/+$/, "") === p);
         if (!a) return false;
         a.removeAttribute("target");
         a.click();
         return true;
-      }, path)
+      }, target)
       .catch(() => false);
-    // Arrived: the address changed, or the app swapped the page's content without changing it (eduardconstantin.github.io).
+    if (!pressed) return null;
     let arrived = false;
-    if (pressed) {
-      for (let i = 0; i < 16 && !arrived; i++) {
-        await page.waitForTimeout(500);
-        const now = await page.evaluate(() => document.body?.innerText ?? "").catch(() => before);
-        arrived = at() || swapped(before, now);
-      }
+    for (let i = 0; i < 16 && !arrived; i++) {
+      await page.waitForTimeout(500);
+      if (!sameHost(page.url(), url)) return null;
+      const now = await page.evaluate(() => document.body?.innerText ?? "").catch(() => before);
+      arrived = pathOf(page.url()) === target || swapped(before, now);
     }
-    if (!arrived) await page.goto(url, { waitUntil: "load", timeout: 15000 });
-    await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(1000);
-    for (let i = 0; i < 6; i++) {
-      await page.mouse.wheel(0, 1200).catch(() => {});
-      await page.waitForTimeout(250);
-    }
-    if (status != null && status >= 400) return null;
-    if (!sameHost(page.url(), url)) return null;
-    const seen = await page.evaluate(readRenderedPage);
+    if (!arrived || !sameHost(page.url(), url)) return null;
+    const seen = await settleAndRead(page);
     // Its address as linked (an app that kept "/" in the address bar still showed this page).
-    return { html: seen.html, text: seen.text, finalUrl: at() ? page.url() : target.href };
+    return { html: seen.html, text: seen.text, finalUrl: pathOf(page.url()) === target ? page.url() : new URL(url).href, via: "press" };
   })();
+
+  let timer;
+  const late = new Promise((resolve) => (timer = setTimeout(() => resolve("late"), limitMs)));
   try {
-    return await within(work, limitMs, null);
+    const out = await Promise.race([work.catch(() => null), late]);
+    if (out !== "late") return out;
+    // Past the limit: stop what is still running, so nothing goes on after the step (the tab is
+    // closed; the home page, when it was pressed, is sent to a blank page, which ends its scripts).
+    await tab?.close().catch(() => {});
+    if (pressing) await page.goto("about:blank", { timeout: 3000 }).catch(() => {});
+    let t2;
+    await Promise.race([work.catch(() => null), new Promise((r) => (t2 = setTimeout(r, 3000)))]);
+    clearTimeout(t2);
+    return null;
   } finally {
-    page.off("response", onResponse);
+    clearTimeout(timer);
+    await tab?.close().catch(() => {});
+    ctx.off("page", onPage);
+    await ctx.unroute("**/*", guard).catch(() => {});
   }
 }

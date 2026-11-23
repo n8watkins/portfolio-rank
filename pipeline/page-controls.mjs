@@ -40,6 +40,10 @@ export const PROJECT_HEADING = /\b(?:projects?|portfolio|works|(?:my|our|selecte
 // "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
 const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
 const SOCIAL_HEADING = /\b(?:find me|connect|socials?|follow me|elsewhere|get in touch|contact(?: me)?)\b/i;
+// A heading that titles the page or the person rather than a section: "Ana Ruiz - Portfolio", "Ana's
+// portfolio", "Portfolio of Ana Ruiz", "Portfolio website".
+// (The dashes are a hyphen, an en dash and an em dash, U+2013 and U+2014.)
+const TITLE_LIKE = new RegExp(String.raw`\s[-|${String.fromCharCode(0x2013, 0x2014)}:·]\s|['’]s\s+portfolio\b|\bportfolio\s+(?:of|by|website|site)\b`, "i");
 // The page's frame: links here are navigation, credits and profiles, never the projects.
 const CHROME = new Set(["nav", "header", "footer"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4"]);
@@ -131,19 +135,30 @@ export function scanPage(html, baseUrl) {
     if (rec.project) projectOpen--;
     if (rec.chrome) chromeOpen--;
     if (rec.social) socialOpen--;
+    // The element a heading's section belongs to closed: its section ends with it.
+    if (scope && scope.parent === rec) endScope();
     if (rec.heading) {
       openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
-      // A "Projects" heading: what follows it in its section holds the projects; a "Find me" heading, profiles.
-      const parent = stack.at(-1);
-      const words = decodeEntities(rec.heading.parts.join(" "));
-      if (parent && !parent.project && !parent.social && PROJECT_HEADING.test(words)) {
-        parent.project = true;
-        projectOpen++;
-      } else if (parent && !parent.social && !parent.project && SOCIAL_HEADING.test(words)) {
-        parent.social = true;
-        socialOpen++;
+      // A "Projects" heading opens a projects section, a "Find me" heading a list of profiles: what follows
+      // it, up to the next heading of the same or a higher level, or the end of the element around it.
+      // A page title such as "Ana Ruiz - Portfolio" opens nothing.
+      const words = decodeEntities(rec.heading.parts.join(" ")).replace(/\s+/g, " ").trim();
+      if (!scope && !TITLE_LIKE.test(words)) {
+        const kind = PROJECT_HEADING.test(words) ? "project" : SOCIAL_HEADING.test(words) ? "social" : null;
+        if (kind) {
+          scope = { kind, level: rec.heading.level, parent: stack.at(-1) ?? null };
+          if (kind === "project") projectOpen++;
+          else socialOpen++;
+        }
       }
     }
+  };
+  /** The section a heading opened, while it lasts. */
+  let scope = null;
+  const endScope = () => {
+    if (scope?.kind === "project") projectOpen--;
+    else if (scope?.kind === "social") socialOpen--;
+    scope = null;
   };
 
   /**
@@ -271,7 +286,11 @@ export function scanPage(html, baseUrl) {
       if (PROJECT_ATTR.test(words)) rec.project = true;
       else if (SOCIAL_ATTR.test(words)) rec.social = true;
     }
-    if (HEADINGS.has(name)) rec.heading = { parts: [], len: 0 };
+    if (HEADINGS.has(name)) {
+      rec.heading = { parts: [], len: 0, level: Number(name[1]) };
+      // A heading of the same or a higher level ends the section the last one opened.
+      if (scope && rec.heading.level <= scope.level) endScope();
+    }
     // Where it sits: inside an element that holds projects (itself included), in the page's frame, or in a list of profiles.
     const where = () => {
       const chrome = chromeOpen + (rec.chrome ? 1 : 0) > 0;
@@ -353,8 +372,12 @@ export function scanPage(html, baseUrl) {
   };
 }
 
-/** The HTML with every "<...>" replaced by a space, as /<[^>]+>/g did, in one pass. */
-export function stripTags(html) {
+/**
+ * The HTML with every "<...>" replaced by a space, as /<[^>]+>/g did, in one
+ * pass. With `lines`, a block element or <br> becomes a line break instead,
+ * as a browser lays the text out (the footer year reads lines).
+ */
+export function stripTags(html, { lines = false } = {}) {
   const s = String(html ?? "");
   let out = "";
   let i = 0;
@@ -368,11 +391,12 @@ export function stripTags(html) {
       i = gt + 1;
       continue;
     }
-    out += `${s.slice(i, lt)} `;
+    out += `${s.slice(i, lt)}${lines && BLOCK_TAG.test(s.slice(lt + 1, Math.min(gt, lt + 12))) ? "\n" : " "}`;
     i = gt + 1;
   }
   return out + s.slice(i);
 }
+const BLOCK_TAG = /^\/?(?:br|p|div|li|ul|ol|h[1-6]|footer|header|section|article|main|nav|tr|td|table|address|blockquote|pre|hr)(?![a-z0-9])/i;
 
 /**
  * The HTML without its <name>...</name> elements (a space in their place), as

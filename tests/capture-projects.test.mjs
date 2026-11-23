@@ -1,50 +1,58 @@
 // pipeline/capture-projects.mjs in a real (headless) browser against a local
-// server: project buttons that open their project from a script handler (as
-// nitishkr.fun's do), a button that only opens a dialog, and the site's own
-// projects page, reached by its link (a single-page app that answers 404 when
-// the page is loaded directly) or loaded, with its time limit, a failing
-// page and another host adding nothing.
+// server: the site's own projects page is only ever a plain GET of a
+// same-site <a href>. Loaded first; pressed on the home page only when the
+// load answers an error status (an app that answers 404 to a direct load),
+// and never under a service worker. While it runs, nothing but GET requests
+// reach the server (no form or fetch POST, no beacon, no event stream, no web
+// socket), a popup is closed at once, another host or a page that never
+// finishes adds nothing, and the limit bounds the work.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
-import { readProjectButtons, readProjectsPage, swapped } from "../pipeline/capture-projects.mjs";
+import { readProjectsPage, swapped } from "../pipeline/capture-projects.mjs";
 
-const HOME = `<!doctype html><title>Ana</title><body>
-  <nav><a href="/projects">Projects</a><button id="menu">View menu</button></nav>
-  <h1>Ana Ruiz</h1><p>Developer.</p>
-  <section id="projects"><h2>Projects</h2>
-    <div class="card"><h3>Focus</h3><button class="m">VS Code Marketplace</button></div>
-    <div class="card"><h3>Dock</h3><button class="p">View on pub.dev</button></div>
-    <div class="card"><h3>Same site</h3><button class="s">Visit Website</button></div>
-    <div class="card"><h3>Story</h3><button class="d">View details</button><dialog id="dlg">Just a story, no link.</dialog></div>
-  </section>
-  <section><h2>About</h2><button class="a">Visit my blog</button></section>
-  <script>
-    document.querySelector(".m").addEventListener("click", () => window.open("https://marketplace.example/focus", "_blank"));
-    document.querySelector(".p").addEventListener("click", () => window.open("https://pub.example/dock"));
-    document.querySelector(".s").addEventListener("click", () => { location.href = "/projects/same"; });
-    document.querySelector(".d").addEventListener("click", () => document.getElementById("dlg").showModal());
-    document.querySelector(".a").addEventListener("click", () => window.open("https://blog.example/"));
-    document.getElementById("menu").addEventListener("click", () => window.open("https://menu.example/"));
-  </script></body>`;
+const page = (body) => `<!doctype html><title>t</title><body>${body}</body>`;
+// Everything a script on a page might do that is not a plain read.
+const SIDE_EFFECTS = `
+  fetch('/api/like', { method: 'POST', body: 'x' }).catch(() => {});
+  navigator.sendBeacon('/beacon', 'x');
+  setTimeout(() => window.open('/popup-target'), 50);
+  try { new EventSource('/events'); } catch {}
+  try { new WebSocket('ws://' + location.host + '/socket'); } catch {}`;
 // An app whose projects show only through its router: loading /projects directly answers 404.
-const SPA = `<!doctype html><title>Eduard</title><body><nav><a href="/projects" id="p">PROJECTS</a></nav><main id="m"><p>WELCOME</p><p>Short intro line.</p></main>
-  <script>document.getElementById("p").addEventListener("click", (e) => { e.preventDefault();
-    document.getElementById("m").innerHTML = Array.from({ length: 12 }, (_, i) => '<p>Project number ' + i + '</p><a href="https://demo' + i + '.example/">live</a>').join(""); });</script></body>`;
+const SPA = page(`<nav><a href="/app-projects" id="p">PROJECTS</a></nav><main id="m"><p>WELCOME</p><p>Short intro line.</p></main>
+  <script>document.getElementById("p").addEventListener("click", (e) => { e.preventDefault(); ${SIDE_EFFECTS}
+    document.getElementById("m").innerHTML = Array.from({ length: 12 }, (_, i) => '<p>Project number ' + i + '</p><a href="https://demo' + i + '.example/">live</a>').join(""); });</script>`);
+const PAGES = {
+  "/": page(`<nav><a href="/projects">Projects</a></nav><h1>Ana</h1>`),
+  // The projects page itself tries every side effect as it loads.
+  "/projects": page(`<h1>All projects</h1><section id="projects"><a href="https://one.example/">One</a></section><script>${SIDE_EFFECTS}</script>`),
+  "/spa": SPA,
+  "/sw-home": page(`<nav><a href="/sw-projects">Projects</a></nav><p>home</p><script>navigator.serviceWorker.register('/sw.js')</script>`),
+  "/sw.js": "self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', (e) => e.waitUntil(clients.claim())); self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));",
+  "/elsewhere": page(`<h1>Elsewhere</h1>`),
+};
 
 let server;
 let browser;
 let base;
+const hits = [];
 before(async () => {
   server = http.createServer((req, res) => {
-    const html = { "content-type": "text/html" };
-    if (req.url === "/") return res.writeHead(200, html).end(HOME);
-    if (req.url === "/projects") return res.writeHead(200, html).end(`<h1>All projects</h1><a href="https://one.example/">One</a>`);
-    if (req.url === "/spa") return res.writeHead(200, html).end(SPA);
+    hits.push(`${req.method} ${req.url}`);
+    const html = { "content-type": req.url.endsWith(".js") ? "text/javascript" : "text/html" };
     if (req.url === "/slow") return; // never answers
-    if (req.url === "/broken") return res.writeHead(500, html).end("<h1>Server error</h1>");
-    res.writeHead(404, html).end("<h1>404</h1>");
+    if (req.url === "/away") return res.writeHead(302, { location: `http://localhost:${server.address().port}/elsewhere` }).end();
+    if (req.url === "/broken") return res.writeHead(500, html).end(page("<h1>Server error</h1>"));
+    // The app's and the service-worker site's projects pages answer 404 to a direct load (pages served only by their router).
+    if (req.url === "/app-projects" || req.url === "/sw-projects") return res.writeHead(404, html).end(page("<h1>404</h1>"));
+    if (PAGES[req.url]) return res.writeHead(200, html).end(PAGES[req.url]);
+    res.writeHead(404, html).end(page("<h1>404</h1>"));
+  });
+  server.on("upgrade", (req, socket) => {
+    hits.push(`UPGRADE ${req.url}`);
+    socket.destroy();
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -56,41 +64,62 @@ after(async () => {
 });
 
 const open = async (path) => {
-  const page = await (await browser.newContext()).newPage();
-  await page.goto(`${base}${path}`);
-  return page;
+  const ctx = await browser.newContext();
+  const p = await ctx.newPage();
+  await p.goto(`${base}${path}`);
+  return p;
 };
+/** The requests that are not a plain GET of a page, from `from` on. */
+const effects = (from) => hits.slice(from).filter((h) => !h.startsWith("GET ") || /\/(events|socket|beacon|popup-target)/.test(h));
 
-test("project buttons: the URLs their handlers open, never obeyed; dialogs, buttons outside the projects and the menu add nothing", async () => {
-  const page = await open("/");
-  const urls = await readProjectButtons(page);
-  assert.deepEqual(urls.sort(), ["https://marketplace.example/focus", "https://pub.example/dock", `${base}/projects/same`].sort());
-  assert.equal(page.url(), `${base}/`, "the page stayed where it was");
-  assert.equal(page.context().pages().length, 1, "no window was opened");
-  await page.context().close();
-});
-
-test("the projects page: loaded, read, and an app's router reached by pressing its link", async () => {
-  const page = await open("/");
-  const got = await readProjectsPage(page, `${base}/projects`);
+test("a projects page is loaded with a plain GET; its scripts' POST, beacon, popup, event stream and socket never reach the server", async () => {
+  const p = await open("/");
+  const from = hits.length;
+  const got = await readProjectsPage(p, `${base}/projects`);
+  await p.waitForTimeout(500);
+  assert.equal(got?.via, "load");
   assert.equal(got.finalUrl, `${base}/projects`);
   assert.match(got.html, /one\.example/);
-  await page.context().close();
-  const app = await open("/spa");
-  const spa = await readProjectsPage(app, `${base}/projects`);
-  assert.ok(spa, "the app's projects were read");
-  assert.match(spa.html, /demo11\.example/);
-  await app.context().close();
+  assert.deepEqual(effects(from), [], JSON.stringify(hits.slice(from)));
+  assert.equal(p.context().pages().length, 1, "the tab and the popup are closed");
+  await p.context().close();
 });
 
-test("the projects page adds nothing when it fails, is too slow or is on another host", async () => {
-  const page = await open("/");
-  assert.equal(await readProjectsPage(page, `${base}/broken`), null, "an error status");
-  assert.equal(await readProjectsPage(page, "https://other.example/projects"), null, "another host");
+test("an app that answers 404 to a direct load: only its same-site link is pressed, and the press causes no request but GETs", async () => {
+  const p = await open("/spa");
+  const from = hits.length;
+  const got = await readProjectsPage(p, `${base}/app-projects`);
+  await p.waitForTimeout(500);
+  assert.equal(got?.via, "press");
+  assert.match(got.html, /demo11\.example/);
+  assert.deepEqual(effects(from), [], JSON.stringify(hits.slice(from)));
+  assert.equal(p.context().pages().length, 1, "the popup was closed at once");
+  await p.context().close();
+});
+
+test("a page controlled by a service worker is never pressed: the load alone decides", async () => {
+  const p = await open("/sw-home");
+  await p.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 5000 }).catch(() => {});
+  await p.reload();
+  await p.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 5000 });
+  const before = await p.evaluate(() => document.body.innerText);
+  const got = await readProjectsPage(p, `${base}/sw-projects`);
+  assert.equal(got, null, "the load answered 404 and no press was made");
+  assert.equal(p.url(), `${base}/sw-home`);
+  assert.equal(await p.evaluate(() => document.body.innerText), before);
+  await p.context().close();
+});
+
+test("another host, an error status and a page that never finishes add nothing, held to the limit", async () => {
+  const p = await open("/");
+  assert.equal(await readProjectsPage(p, `${base}/away`), null, "redirected to another host name");
+  assert.equal(await readProjectsPage(p, `${base}/broken`), null, "an error status, and no link to press");
+  assert.equal(await readProjectsPage(p, "https://other.example/projects"), null, "another host");
   const t0 = Date.now();
-  assert.equal(await readProjectsPage(page, `${base}/slow`, { limitMs: 2000 }), null, "too slow");
-  assert.ok(Date.now() - t0 < 4000, "held to its limit");
-  await page.context().close();
+  assert.equal(await readProjectsPage(p, `${base}/slow`, { limitMs: 2000 }), null, "too slow");
+  assert.ok(Date.now() - t0 < 5000, `held to its limit (${Date.now() - t0} ms)`);
+  assert.equal(p.context().pages().length, 1, "the tab that never finished is closed");
+  await p.context().close();
 });
 
 test("a page whose text was replaced, not merely animated", () => {

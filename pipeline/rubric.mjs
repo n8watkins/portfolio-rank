@@ -17,7 +17,7 @@
 import { redactContacts } from "./redact.mjs";
 import { SITE_DATA_MARKER } from "./site-data.mjs";
 import { guardVerdict } from "./portfolio-guard.mjs";
-import { MIN_PROJECT_LINKS, projectLinksShare } from "./facts.mjs";
+import { MIN_PROJECT_LINKS, OWN_PAGES_MAX, projectLinksPass } from "./facts.mjs";
 
 export const RUBRIC_VERSION = 2;
 /**
@@ -127,8 +127,8 @@ export const CRITERIA = [
     name: "Project links load",
     by: "code",
     weight: 5 / 17,
-    what: `Project and demo links answer (up to 8 checked, links in the projects and GitHub repositories first, HEAD then GET, 8 s timeout); passes when at least ${MIN_PROJECT_LINKS} load, and fails when fewer load or none were found.`,
-    evidence: "HTTP checks of the page's outbound project links, on the desktop and phone views",
+    what: `Project and demo links answer (up to 8 checked, links in the projects and GitHub repositories first, then the site's own project pages, HEAD then GET, 8 s timeout); passes when at least ${MIN_PROJECT_LINKS} load, the site's own pages counting for at most ${OWN_PAGES_MAX}, and fails when fewer load or none were found; a link behind a bot check is left out. Facts measured before version 3 keep their rule: passes when at least one was checked and none is broken.`,
+    evidence: "HTTP checks of the project links on the desktop and phone views and the site's own projects page",
   },
   {
     id: "own_domain",
@@ -298,8 +298,8 @@ export function codeChecks(facts, now = new Date()) {
     resume: typeof facts.resume === "boolean" ? facts.resume : null,
     github: typeof facts.github === "boolean" ? facts.github : null,
     contact: typeof facts.contact === "boolean" ? facts.contact : null,
-    // At least MIN_PROJECT_LINKS load, as the points count them (lib/check-points.mjs); none found is a fail.
-    project_links: projectLinksShare(links) == null ? null : projectLinksShare(links) >= 1,
+    // By the rule of the facts' own version, as the points count it (pipeline/facts.mjs projectLinksPass).
+    project_links: projectLinksPass(links, facts.v),
     own_domain: typeof facts.own_domain === "boolean" ? facts.own_domain : null,
     fresh_footer: typeof facts.footer_year === "number" ? year - facts.footer_year <= STALE_FOOTER_YEARS : null,
     original: facts.template === undefined ? null : !facts.template,

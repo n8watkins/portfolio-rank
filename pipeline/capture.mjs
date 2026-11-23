@@ -58,7 +58,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { httpGate, isParkingDomain, netloc, parkingPhrase, readRenderedPage, UA } from "./gate.mjs";
 import { homeProjectLinks, measurePage, projectsPageFor } from "./facts.mjs";
-import { readProjectButtons, readProjectsPage } from "./capture-projects.mjs";
+import { readProjectsPage } from "./capture-projects.mjs";
 import { pngDiff } from "./png-diff.mjs";
 import { actionNote, passModal, passModePicker, passSplashGate } from "./splash.mjs";
 import {
@@ -694,17 +694,15 @@ async function captureOnce(browser, entry, { refresh, db, s3, root, fail, stepLi
     // plus a capped check of their project and demo links. A phone view that
     // is blocked (phone.note) or cannot be read adds nothing: the desktop facts stand.
     const phoneSeen = phone.note ? null : await mpage.evaluate(readRenderedPage).catch(() => null);
-    // Everything stored from the desktop page is taken: it may now press project
-    // buttons that open their project from script, and, when the home page shows
-    // fewer than 3 projects, go to the site's own projects page
-    // (./capture-projects.mjs; each time-limited, a failure adds nothing).
+    const mobileJpg = phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 });
+    // Everything stored from both pages is taken. When the home page shows fewer
+    // than 3 projects, the site's own projects page is read (./capture-projects.mjs:
+    // a plain GET of a same-site link, time-limited; a failure adds nothing).
     const homeUrl = page.url();
     const home = { html: seen.html, text: seen.text, url, finalUrl: homeUrl, phone: phoneSeen ? { html: phoneSeen.html, text: phoneSeen.text, finalUrl: mpage.url() } : null };
-    const buttonUrls = await readProjectButtons(page).catch(() => []);
-    const projectsUrl = projectsPageFor(homeProjectLinks({ ...home, buttonUrls }), homeUrl);
+    const projectsUrl = projectsPageFor(homeProjectLinks(home), homeUrl);
     const projectsPage = projectsUrl ? await readProjectsPage(page, projectsUrl).catch(() => null) : null;
-    const facts = await measurePage({ ...home, name, motion, source: "rendered", buttonUrls, projectsPage }, { userAgent: UA }).catch(() => null);
-    const mobileJpg = phoneView.ok ? phoneView.files.crop : await shot(mpage, { type: "jpeg", quality: 75 });
+    const facts = await measurePage({ ...home, name, motion, source: "rendered", projectsPage }, { userAgent: UA }).catch(() => null);
 
     // A browser that died while the views were taken leaves them half made (their own errors are caught): not stored.
     if (await run.watch.lost()) return BROWSER_GONE;

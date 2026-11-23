@@ -1,16 +1,17 @@
-// Projects kept on the site's own pages or opened from buttons (facts version
-// 3, pipeline/facts.mjs projectCandidates, projectsPageFor, measurePage): the
-// home page's projects section, the site's own projects page, the site's
-// pages for single projects, and the destinations of project buttons. The
-// fixtures are the rendered home and projects pages of listed sites as the
-// capture read them on 2026-11-22 (eduardconstantin.github.io's projects page
-// as its app shows it after the PROJECTS link is pressed), cut down to their
-// markup, with emails and phone numbers replaced. Deterministic; no network.
+// Projects kept on the site's own pages (facts version 3, pipeline/facts.mjs
+// projectCandidates, projectsPageFor, measurePage): the home page's projects
+// section, the site's own projects page and its pages for single projects.
+// Buttons are never pressed: a project that opens only from a script handler
+// is not found (nitishkr.fun). The fixtures are the rendered home and projects
+// pages of listed sites as the capture read them on 2026-11-22
+// (eduardconstantin.github.io's projects page as its app shows it after the
+// PROJECTS link is pressed), cut down to their markup, with emails and phone
+// numbers replaced. Deterministic; no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { homeProjectLinks, measurePage, pageLinks, projectCandidates, projectLinksText, projectsPageFor } from "../pipeline/facts.mjs";
+import { homeProjectLinks, measurePage, pageLinks, projectCandidates, projectLinksShare, projectLinksText, projectsPageFor } from "../pipeline/facts.mjs";
 import { codeChecks } from "../pipeline/rubric.mjs";
 
 const fixture = (name) => fs.readFileSync(path.join(import.meta.dirname, "fixtures", "facts", name), "utf8");
@@ -30,7 +31,8 @@ test("shreyanshportfolio.in: a home page with no projects leads to its /projects
   const got = projectCandidates(withProjectsPage("shreyanshportfolio.in", url), url);
   assert.equal(got.length, 8);
   assert.ok(got.every((c) => c.from === "projects_page" && c.kind === "outbound"));
-  assert.equal(got[0].url, "https://mj-silver.vercel.app/");
+  // Its repositories and notebooks; an outbound link on that page outside a projects element or heading is not taken.
+  assert.ok(got.every((c) => c.url.startsWith("https://github.com/")), JSON.stringify(got));
 });
 
 test("www.masirjafri.in: one project on the home page, the rest from its Projects page", () => {
@@ -51,7 +53,11 @@ test("www.adhamdannaway.com: its case studies are its own pages under /portfolio
   assert.equal(got.length, 8);
   assert.ok(got.every((c) => c.kind === "own page" && /^https:\/\/www\.adhamdannaway\.com\/portfolio\/[a-z0-9-]+$/.test(c.url)), JSON.stringify(got));
   assert.ok(!got.some((c) => /\/portfolio$/.test(c.url)), "never the projects page itself");
-  assert.equal(projectLinksText({ checked: got.length, ok: got.length, broken: 0, blocked: 0 }), "8 of 8 project links load");
+  // Its own pages supply at most 2 of the 3: with no project link elsewhere it is two thirds, a fail.
+  const links = { checked: 8, ok: 8, broken: 0, blocked: 0, own_ok: 8 };
+  assert.equal(projectLinksText(links, 3), "8 of 8 project links load");
+  assert.equal(projectLinksShare(links, 3), 2 / 3);
+  assert.equal(codeChecks({ v: 3, project_links: links }).project_links, false);
 });
 
 test("eduardconstantin.github.io: the projects its app shows after PROJECTS is pressed", () => {
@@ -62,36 +68,25 @@ test("eduardconstantin.github.io: the projects its app shows after PROJECTS is p
   assert.ok(got.some((c) => c.url === "https://github.com/eduardconstantin/react-motion-components"));
 });
 
-test("www.rapidtech1898.com: its own solution pages in the home page's portfolio section count, so no other page is read", () => {
+test("www.rapidtech1898.com: its own solution pages count, at most 2 of them, so its Solutions page is read too", () => {
   const url = "https://www.rapidtech1898.com/";
   const home = homeOf("www.rapidtech1898.com", url);
   const got = projectCandidates(home, url);
   const own = got.filter((c) => c.kind === "own page");
   assert.ok(own.length >= 3, JSON.stringify(got));
   assert.ok(own.every((c) => /\/solutions\/portfolio-[a-z-]+\/$/.test(c.url)));
-  assert.equal(projectsPageFor(home, url), null);
-  // Outbound demo and repository links come first, the site's own project pages after.
-  assert.ok(got.findIndex((c) => c.kind === "own page") > -1);
+  // Its own pages show 2 of the 3 the pass counts, so the listing page is read for more.
+  assert.equal(projectsPageFor(home, url), "https://rapidtech1898.com/topic/solutions/");
 });
 
-test("nitishkr.fun: its project buttons carry no URL in the page; the destinations the capture reads from them are projects", () => {
+test("nitishkr.fun: its project buttons carry no URL in the page, and nothing is pressed to find one", () => {
   const url = "https://nitishkr.fun/";
   const html = fixture("nitishkr.fun.home.html");
   assert.match(html, /VS Code Marketplace/);
   const home = homeOf("nitishkr.fun", url);
-  assert.deepEqual(projectCandidates(home, url).map((c) => c.url), ["https://codeberg.org/nk2552003/umd"], "the page alone has one project link");
-  // What pressing them opened on 2026-11-22 (window.open from the buttons' handlers; pipeline/capture-projects.mjs).
-  const buttonUrls = [
-    "https://marketplace.visualstudio.com/items?itemName=NK2552003.focusforge",
-    "https://pub.dev/packages/quiet_dock",
-    "https://pypi.org/project/mac-deep-cleaner/",
-    "https://nk2552003.github.io/Iconoodle/",
-  ];
-  const links = homeProjectLinks({ html, url, finalUrl: url, buttonUrls });
-  const got = projectCandidates(links, url);
-  assert.equal(got.length, 5);
-  assert.deepEqual(got.filter((c) => c.from === "button").map((c) => c.url), buttonUrls);
-  assert.equal(projectsPageFor(links, url), null, "with them it shows enough projects: no other page is read");
+  // What the markup shows: one source link. Its other projects open from script handlers, which are never run.
+  assert.deepEqual(projectCandidates(home, url).map((c) => c.url), ["https://codeberg.org/nk2552003/umd"]);
+  assert.equal(projectsPageFor(home, url), null, "its Projects link is a section of the same page");
 });
 
 test("the projects page is followed only when the home page shows fewer than 3 projects, and only to the same site", () => {
@@ -102,6 +97,11 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   const three = `${nav}<section id="projects"><a href="https://a.example/">a</a><a href="https://b.example/">b</a><a href="/projects/c">c</a></section>`;
   assert.equal(projectsPageFor(links(three), url), null);
   assert.equal(projectsPageFor(links(`<a href="/blog">Blog</a><a href="/about">About</a>`), url), null);
+  // Never a page whose path only contains the word: "/how-it-works", "/networks", "/workshop", a query, a client list.
+  for (const html of [`<a href="/how-it-works">How it works</a>`, `<a href="/networks">Networks</a><a href="/workshop">Workshop</a>`, `<a href="/?page=work">FR</a>`, `<a href="/clients">Our work</a>`, `<a href="/api/download?file=projects">Download</a>`]) {
+    assert.equal(projectsPageFor(links(html), url), null, html);
+  }
+  assert.equal(projectsPageFor(links(`<a href="/es/projects">Proyectos</a>`), url), "https://ana.dev/es/projects");
   // A site served under a path: its own home page is never one of its project pages (samrinjaji.github.io/my-portfolio/).
   const sub = "https://samrin.github.io/my-portfolio/";
   const subLinks = homeProjectLinks({ html: `<div class="portfolio"><a href="/my-portfolio/">Home</a><a href="/my-portfolio/index.html">Home</a><a href="https://github.com/s/a">a</a></div>`, url: sub, finalUrl: sub });
@@ -109,9 +109,12 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   assert.equal(projectsPageFor(subLinks, sub), null);
   // A link's words count when the path does not say it ("/stuff" labelled "Explore Work →").
   assert.equal(projectsPageFor(links(`<a href="/stuff">Explore Work →</a>`), url), "https://ana.dev/stuff");
-  // A projects page's own links: its single-project pages count, its menu and the listing itself do not.
+  // A projects page's own links: its single-project pages and the outbound links in its projects count; its menu,
+  // the listing itself, its paging and tag pages, and outbound links outside the projects (clients, press) do not.
   const page = "https://ana.dev/work";
-  const pageHtml = `<header><a href="/work/menu-item">menu</a></header><main><a href="/work">All</a><a href="/work/alpha">Alpha</a><a href="/case-studies/beta">Beta</a><a href="/blog/post">Post</a><a href="https://demo.example/">Demo</a></main>`;
+  const pageHtml = `<header><a href="/work/menu-item">menu</a></header><main><h1>Work</h1><p>Clients: <a href="https://bigcorp.example/">BigCorp</a></p>
+    <section class="projects"><a href="https://demo.example/">Demo</a><a href="/work/alpha">Alpha</a><a href="/case-studies/beta">Beta</a></section>
+    <a href="/work">All</a><a href="/work?page=2">Next</a><a href="/work/tag/react">React</a><a href="/blog/post">Post</a></main>`;
   const all = [...links(nav), ...pageLinks(pageHtml, page).map((l) => ({ ...l, from: "projects_page", page }))];
   assert.deepEqual(
     projectCandidates(all, url).map((c) => [c.kind, c.url]),
@@ -120,18 +123,37 @@ test("the projects page is followed only when the home page shows fewer than 3 p
   );
 });
 
+test("a 'Portfolio' title heading opens no projects section, and a projects heading's section ends at the next heading", () => {
+  const url = "https://ana.dev/";
+  // The reviewer's case: a person's name heading with "Portfolio", then about, blog and contact pages.
+  const html = `<header><nav><a href="/">Home</a></nav></header><main>
+    <h1>Ana Ruiz - Portfolio</h1><p>I build things.</p>
+    <h2>About</h2><p>Studied at <a href="https://uni.example/">Uni</a>, worked at <a href="https://employer.example/">Employer</a>.</p>
+    <a href="/about">More about me</a> <a href="/blog">Blog</a> <a href="/contact">Contact me</a>
+  </main><footer>© 2026</footer>`;
+  const got = projectCandidates(homeProjectLinks({ html, url, finalUrl: url }), url);
+  assert.deepEqual(got.map((c) => [c.tier, c.url]), [[3, "https://uni.example/"], [3, "https://employer.example/"]], "no own pages, nothing in the projects");
+  // A real projects heading: its section ends at the next h2, so the about section's links are not projects.
+  const sec = `<main><h2>Projects</h2><a href="https://one.example/">One</a><a href="/projects/two">Two</a><h3>Older</h3><a href="https://old.example/">Old</a>
+    <h2>About</h2><a href="https://employer.example/">Employer</a><a href="/about">About</a></main>`;
+  assert.deepEqual(
+    projectCandidates(homeProjectLinks({ html: sec, url, finalUrl: url }), url).map((c) => [c.tier, c.url]),
+    [[1, "https://one.example/"], [1, "https://old.example/"], [2, "https://ana.dev/projects/two"], [3, "https://employer.example/"]]
+  );
+});
+
 test("measurePage records where the checked links came from and keeps the list for the nightly re-check", async () => {
   const url = "https://www.masirjafri.in/";
   const html = fixture("www.masirjafri.in.projects.html");
   const page = html.match(/^<!-- (\S+) -->/)[1];
   const f = await measurePage(
-    { html: fixture("www.masirjafri.in.home.html"), text: "", url, finalUrl: url, projectsPage: { html, finalUrl: page }, buttonUrls: ["https://demo.example/"] },
+    { html: fixture("www.masirjafri.in.home.html"), text: "", url, finalUrl: url, projectsPage: { html, finalUrl: page } },
     { fetchImpl: ok }
   );
   assert.equal(f.project_links.checked, 8);
   assert.equal(codeChecks(f).project_links, true);
   assert.deepEqual(f.views, ["desktop", "projects page"]);
-  assert.deepEqual(f.project_links_from, { home: 1, phone: 0, buttons: 1, projects_page: { url: page, count: 6 }, own_pages: 0 });
+  assert.deepEqual(f.project_links_from, { home: 1, phone: 0, projects_page: { url: page, count: 7 }, own_pages: 0 });
   assert.equal(f.project_candidates.length, 8);
   assert.deepEqual(Object.keys(f.project_candidates[0]).sort(), ["from", "kind", "url"]);
   // Without a projects page or buttons: no projects page is recorded.

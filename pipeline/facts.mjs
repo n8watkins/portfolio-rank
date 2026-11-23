@@ -8,6 +8,7 @@
 // HEAD is refused), capped in number and time, never to private addresses.
 import { GH_RESERVED, RESUME_PATH, RESUME_WORDS, controlFacts, isGithubProfile, scanPage, stripTags } from "./page-controls.mjs";
 import { portfolioSignals } from "./signals.mjs";
+import { parkingPhrase } from "./gate.mjs";
 
 // 2 (2026-11-21): resume, GitHub, contact, project links and in-page
 // sections also come from buttons and other non-link controls
@@ -25,31 +26,76 @@ export const LINK_TIMEOUT_MS = 8000;
 /** The fewest project links that load for "project links load" to pass (and for full project points, lib/check-points.mjs). */
 export const MIN_PROJECT_LINKS = 3;
 
+/** The most of the MIN_PROJECT_LINKS a site's own pages may supply: one link elsewhere that loads is always needed. */
+export const OWN_PAGES_MAX = 2;
+/** The facts version whose project-link rule is the one below; older facts keep the rule they were measured under. */
+export const PROJECT_RULE_VERSION = 3;
+const isLinks = (l) => Boolean(l && typeof l === "object" && typeof l.checked === "number");
+const n = (x) => Number(x) || 0;
+/** Whether facts of `version` (their `v`; none is version 0) are read with the version 3 project-link rule. */
+export const newProjectRule = (version) => n(version) >= PROJECT_RULE_VERSION;
+
 /**
- * How much of "project links load" a check earns, 0 to 1: a third for each
- * link that loads, full at MIN_PROJECT_LINKS (a dead link among them costs
- * nothing once three load); 0 when none were found. Null when it was never
- * checked, or when every link found was behind a bot check (it could not be
- * told). The rubric's pass (pipeline/rubric.mjs codeChecks) is a share of 1,
+ * How much of "project links load" a check earns, 0 to 1, or null when it
+ * cannot be told. One rule per facts version, so what a visitor sees never
+ * changes for a site until it is measured again:
+ *
+ *   version 3 and newer: a third for each project link that loads, full at
+ *   MIN_PROJECT_LINKS; a site's own pages count for at most OWN_PAGES_MAX of
+ *   them, so a host that answers every address cannot pass on its own pages.
+ *   A link behind a bot check is neither loading nor broken: it is left out,
+ *   and when the ones behind a bot check could have made the difference
+ *   (2 load and 1 is behind one) the result is unknown, not a fail. None
+ *   found is 0;
+ *   versions 1 and 2 (the rule they were measured under): the loading share
+ *   of the links checked, times checked / MIN_PROJECT_LINKS up to 1; none
+ *   found is 0.
+ *
+ * The rubric's pass (projectLinksPass) is a share of 1 under the same rule,
  * and the automated checks score (lib/check-points.mjs) is this share of its
- * points, so the two always agree.
+ * points.
  */
-export function projectLinksShare(links) {
-  if (!links || typeof links !== "object" || typeof links.checked !== "number") return null;
-  const ok = Number(links.ok) || 0;
-  if (links.checked > 0 && ok === 0 && (Number(links.blocked) || 0) >= links.checked) return null;
-  return Math.min(1, ok / MIN_PROJECT_LINKS);
+export function projectLinksShare(links, version) {
+  if (!isLinks(links)) return null;
+  if (!newProjectRule(version)) return links.checked > 0 ? (n(links.ok) / links.checked) * Math.min(1, links.checked / MIN_PROJECT_LINKS) : 0;
+  const blocked = n(links.blocked);
+  if (links.checked > 0 && blocked >= links.checked) return null;
+  const own = Math.min(n(links.own_ok), n(links.ok));
+  const counted = n(links.ok) - own + Math.min(own, OWN_PAGES_MAX);
+  if (counted >= MIN_PROJECT_LINKS) return 1;
+  if (counted + blocked >= MIN_PROJECT_LINKS) return null;
+  return counted / MIN_PROJECT_LINKS;
 }
 
 /**
- * The project-link check in words, wherever it is shown: "5 of 8 project
- * links load", "Project links: none found" when there were none to check, or
- * null when they were never checked.
+ * Pass (true), fail (false) or unknown (null) for "project links load", by
+ * the rule of the facts' version (projectLinksShare): version 3 passes at a
+ * share of 1; versions 1 and 2 passed when at least one was checked and none
+ * was broken.
  */
-export function projectLinksText(links) {
-  if (!links || typeof links !== "object" || typeof links.checked !== "number") return null;
+export function projectLinksPass(links, version) {
+  if (!isLinks(links)) return null;
+  if (!newProjectRule(version)) return links.checked > 0 ? n(links.broken) === 0 : null;
+  const share = projectLinksShare(links, version);
+  return share == null ? null : share >= 1;
+}
+
+/**
+ * The project-link check in words, wherever it is shown, or null when it was
+ * never checked. Version 3: "5 of 8 project links load" (links behind a bot
+ * check left out of both numbers and named after), "Project links: none
+ * found". Versions 1 and 2 keep the words they were shown with: "4 of 5
+ * load, 1 broken", "No project links to check".
+ */
+export function projectLinksText(links, version) {
+  if (!isLinks(links)) return null;
+  if (!newProjectRule(version)) return links.checked ? `${n(links.ok)} of ${links.checked} load${n(links.broken) ? `, ${n(links.broken)} broken` : ""}` : "No project links to check";
   if (links.checked <= 0) return "Project links: none found";
-  return `${Number(links.ok) || 0} of ${links.checked} project links load`;
+  const blocked = n(links.blocked);
+  const tested = links.checked - blocked;
+  const wall = blocked ? `${blocked} behind a bot check` : "";
+  if (tested <= 0) return `Project links: ${wall}`;
+  return `${n(links.ok)} of ${tested} project links load${wall ? `; ${wall}` : ""}`;
 }
 
 // Free hosting subdomains: a site served from one is not on its own domain.
@@ -133,7 +179,15 @@ const YEAR = String.raw`((?:19|20)\d{2})`;
 // A hyphen, an en dash or an em dash between the two years of a range (U+2013, U+2014).
 const RANGE_DASH = `\\s*[-${String.fromCharCode(0x2013, 0x2014)}]\\s*`;
 const MARK_THEN_YEAR = new RegExp(String.raw`${COPYRIGHT_MARK}\s*(?:\d{4}${RANGE_DASH})?${YEAR}(?!\d)`, "gi");
-const YEAR_THEN_MARK = new RegExp(String.raw`(?<!\d)${YEAR}(?:${RANGE_DASH}${YEAR})?\s*${COPYRIGHT_MARK}`, "gi");
+// The year first only where it opens a footer line: at the start of a line or after a separator
+// ("|", "•", "·", "/", a bracket, or a spaced dash), with nothing but spaces before its mark on the same
+// line. So "since 2019 © All rights reserved", "Graduated 2018" above "© Jane Doe" and a phone number
+// ending in a year are never footer years.
+const SAME_LINE_DASH = `[ \\t]*[-${String.fromCharCode(0x2013, 0x2014)}][ \\t]*`;
+const YEAR_THEN_MARK = new RegExp(
+  String.raw`(?:^[ \t]*|[|•·/(\[][ \t]*|[ \t][-${String.fromCharCode(0x2013, 0x2014)}][ \t]+)${YEAR}(?:${SAME_LINE_DASH}${YEAR})?[ \t]*${COPYRIGHT_MARK}`,
+  "gim"
+);
 
 /** The highest plausible copyright year on the page, or null. */
 export function footerYear(text, now = new Date()) {
@@ -212,16 +266,24 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   return projectCandidates(links, siteUrl, max).map((c) => c.url);
 }
 
-// A same-site page that lists the projects ("/projects", "Work", "Portfolio", "Case studies", "/solutions/"),
-// read from a link's words or its path. Not work experience or a work history.
-const PROJECTS_PAGE = /\b(?:projects?|works?(?!\s*(?:experience|history|place|timeline))|my work|portfolios?|case\s*stud(?:y|ies)|solutions?|showcase)\b/i;
-/** "/case-studies/my_app" as words, so PROJECTS_PAGE can read a path. */
-const pathWords = (p) => decodeURIComponent(String(p ?? "")).replace(/[-_/.]+/g, " ");
+// A path segment that names a list of projects: "/projects", "/work", "/portfolio", "/case-studies",
+// "/solutions". Whole segments only, so "/how-it-works", "/networks" and "/workshop" are not.
+const LISTING_SEGMENT = /^(?:projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase)$/i;
+// A segment that is never a project page, wherever it sits ("/projects/tag/react", "/about", "/blog/post").
+const NOT_PROJECT_SEGMENT =
+  /^(?:about(?:-me|-us)?|contact(?:-me|-us)?|blog|posts?|articles?|news|press|resume|cv|tags?|category|categories|page|search|feed|rss|privacy|terms|cookies|legal|login|logout|sign-?in|sign-?up|register|account|cart|checkout|shop|store|faq|pricing|services|clients|team|careers|jobs|how-it-works)$/i;
+const segmentsOf = (p) => String(p ?? "").split("/").filter(Boolean).map((s) => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+});
 const sameHost = (a, b) => a.replace(/^www\./, "") === b.replace(/^www\./, "");
 
 /**
  * A link to a page of the site itself, as the URL that is checked: http(s),
- * not the home page, not a file, without its fragment. Null otherwise.
+ * not the home page, not a file, no query, without its fragment. Null otherwise.
  */
 function ownPageUrl(l, self) {
   let u;
@@ -232,29 +294,42 @@ function ownPageUrl(l, self) {
   }
   if (u.protocol !== "http:" && u.protocol !== "https:" || !sameHost(u.hostname.toLowerCase(), self)) return null;
   const p = u.pathname.replace(/\/+$/, "");
-  if (!p || /\.(pdf|png|jpe?g|gif|svg|webp|zip|xml|txt|ico|css|js)$/i.test(p)) return null;
+  if (!p || u.search || /\.(pdf|png|jpe?g|gif|svg|webp|zip|xml|txt|ico|css|js|json)$/i.test(p)) return null;
   u.hash = "";
   return { key: u.href, path: p.toLowerCase() };
+}
+
+/**
+ * Whether a same-site path is a page for one project: it sits under a
+ * listing ("/projects/foo", "/portfolio/bar", "/solutions/x"), or under
+ * `base` (the projects page's own path), and no segment is an about,
+ * contact, blog, resume, tag or category page. The listing itself is not one.
+ */
+function isOwnProjectPath(path, base = "") {
+  const segs = segmentsOf(path);
+  if (!segs.length || segs.some((s) => NOT_PROJECT_SEGMENT.test(s))) return false;
+  const underListing = segs.slice(0, -1).some((s) => LISTING_SEGMENT.test(s));
+  const underBase = base !== "" && path.startsWith(`${base}/`);
+  return underListing || underBase;
 }
 
 /**
  * The project-link candidates with where each came from, at most `max`, in
  * this order:
  *   1. outbound demo and repository links in the projects: links inside a
- *      projects element or section (`inProjects`), GitHub repositories outside
- *      the nav, header and footer, the destinations a project button opens
- *      (`from: "button"`), and every outbound link in the main content of the
- *      site's projects page (`from: "projects_page"`);
- *   2. the site's own pages for single projects: a same-site link in a home
- *      page projects section, or on the projects page a same-site link outside
- *      its nav, header and footer whose path says project, work, portfolio,
- *      case study or solution, or sits under the projects page's own path
- *      ("/projects/foo" from "/projects");
- *   3. every other outbound link, in page order.
+ *      projects element or section (`inProjects`) and GitHub repositories
+ *      outside the nav, header and footer, on the home page (both views) or
+ *      on the site's projects page (`from: "projects_page"`);
+ *   2. the site's own pages for single projects (isOwnProjectPath): in a home
+ *      page projects section, or on the projects page outside its nav,
+ *      header and footer;
+ *   3. every other outbound link of the home page, in page order. The
+ *      projects page adds no links of this kind: a client list or a press
+ *      page called "Work" does not make its links projects.
  * A profile, a link in a "find me" list, the site's home page and the
  * projects page itself are never candidates. `links` carry `from` ("home",
- * "phone", "projects_page" or "button"; "home" when missing) and, for the
- * projects page, its address in `page`. Returns [{ url, from, kind }], kind
+ * "phone" or "projects_page"; "home" when missing) and, for the projects
+ * page, its address in `page`. Returns [{ url, from, kind, tier }], kind
  * "outbound" or "own page".
  */
 export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
@@ -275,27 +350,23 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
     if (p) {
       // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
       if (seen.has(p.key) || (l.inSocial && !p.repo)) continue;
+      const inProjects = Boolean(l.inProjects) || (p.repo && !l.inChrome);
+      if (onProjectsPage && !inProjects) continue;
       seen.add(p.key);
-      const inProjects = l.inProjects || from === "button" || (p.repo && !l.inChrome) || (onProjectsPage && !l.inChrome);
       tiers[inProjects ? 0 : 2].push({ url: p.key, from, kind: "outbound" });
       continue;
     }
     const own = ownPageUrl(l, self);
     // Never the home page itself (a site served under a path, as samrinjaji.github.io/my-portfolio/ is).
     if (!own || own.path.replace(/\/index\.html?$/, "") === homePath || seen.has(own.key) || l.inChrome || l.inSocial) continue;
+    const rel = homePath && own.path.startsWith(`${homePath}/`) ? own.path.slice(homePath.length) : own.path;
     let ok = false;
     if (onProjectsPage) {
-      const base = (() => {
-        try {
-          return new URL(l.page).pathname.replace(/\/+$/, "").toLowerCase();
-        } catch {
-          return "";
-        }
-      })();
-      ok = own.path !== base && (PROJECTS_PAGE.test(pathWords(own.path)) || (base !== "" && own.path.startsWith(`${base}/`)));
+      const base = pathOfUrl(l.page);
+      ok = own.path !== base && isOwnProjectPath(rel, homePath && base.startsWith(homePath) ? base.slice(homePath.length) : base);
     } else {
-      // In a home page projects section; not its "All projects" link to the listing page itself.
-      ok = Boolean(l.inProjects) && !LISTING_PATH.test(own.path);
+      // In a home page projects section, with a project page's path.
+      ok = Boolean(l.inProjects) && isOwnProjectPath(rel);
     }
     if (!ok) continue;
     seen.add(own.key);
@@ -307,44 +378,51 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 /** A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies". Not "How I work". */
 const PROJECTS_LINK_TEXT = /^\s*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view)\s+)?(?:projects?|works?|portfolio|case stud(?:y|ies)|solutions|showcase)\s*[→›»↗]?\s*$/i;
 
-/** A page that lists projects rather than shows one: "/projects", "/work", "/portfolio", "/case-studies". */
-const LISTING_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:projects?|works?|my-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase)$/i;
+const pathOfUrl = (u) => {
+  try {
+    return new URL(u).pathname.replace(/\/+$/, "").toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * The projects a home page shows itself, as the pass counts them: its
+ * outbound demo and repository links, and its own project pages up to
+ * OWN_PAGES_MAX.
+ */
+function shownProjects(links, homeUrl) {
+  const c = projectCandidates(links, homeUrl, Infinity);
+  return c.filter((x) => x.tier === 1).length + Math.min(OWN_PAGES_MAX, c.filter((x) => x.tier === 2).length);
+}
 
 /**
  * The site's own projects page to read when the home page shows fewer than
  * MIN_PROJECT_LINKS projects (pure): the first same-site link, nav links
- * included, whose path or text says projects, work, portfolio, case studies,
- * solutions or showcase, on the same host, not the home page and not a link
- * to a section of the page itself. `links` are the home page's (desktop and
- * phone, `from` set); `homeUrl` the page's final address. Returns the address
- * or null.
+ * included, whose last path segment is a listing ("/projects", "/work",
+ * "/portfolio", "/case-studies", "/solutions", "/es/projects", "/topic/
+ * portfolios"), else the first whose whole label names one ("Projects",
+ * "Explore Work →"); never a path with an about, blog, contact, client,
+ * how-it-works or similar segment, a query, the home page or a section of
+ * it. `links` are the home page's (desktop and phone, `from` set); `homeUrl`
+ * its final address. Returns the address or null.
  */
 export function projectsPageFor(links, homeUrl) {
   const self = host(homeUrl);
-  const home = (() => {
-    try {
-      return new URL(homeUrl).pathname.replace(/\/+$/, "").toLowerCase();
-    } catch {
-      return "";
-    }
-  })();
-  // The projects the home page shows itself: its candidates of the first two kinds.
-  const shown = projectCandidates(links, homeUrl, Infinity).filter((c) => c.tier <= 2).length;
-  if (shown >= MIN_PROJECT_LINKS) return null;
-  // A listing path ("/projects") first, then any path that says projects ("/topic/portfolios/"), then a link's words.
-  let byPath = null;
+  const home = pathOfUrl(homeUrl);
+  if (shownProjects(links, homeUrl) >= MIN_PROJECT_LINKS) return null;
   let byText = null;
   for (const l of links) {
     const own = ownPageUrl(l, self);
     if (!own) continue;
     // Read below the home page's own path, so a site served under /my-portfolio/ is not its own projects page.
     const rel = (home && own.path.startsWith(home) ? own.path.slice(home.length) : own.path).replace(/\/index\.html?$/, "");
-    if (!rel || rel === "/") continue;
-    if (LISTING_PATH.test(rel)) return own.key;
-    if (!byPath && PROJECTS_PAGE.test(pathWords(rel))) byPath = own.key;
+    const segs = segmentsOf(rel);
+    if (!segs.length || segs.some((s) => NOT_PROJECT_SEGMENT.test(s))) continue;
+    if (LISTING_SEGMENT.test(segs.at(-1))) return own.key;
     if (!byText && PROJECTS_LINK_TEXT.test(String(l.text ?? ""))) byText = own.key;
   }
-  return byPath ?? byText;
+  return byText;
 }
 
 /**
@@ -421,7 +499,7 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
     resume,
     github,
     contact: contactLink || /<form\b/i.test(raw),
-    footer_year: footerYear(text) ?? footerYear(stripTags(raw)),
+    footer_year: footerYear(text) ?? footerYear(stripTags(raw, { lines: true })),
     internal_pages: internal.size,
     sections: sections.size,
     template,
@@ -431,16 +509,21 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
     words,
     project_links: null,
     measured_at: now.toISOString(),
+    // A host's error or placeholder page served 200: mergeViews adds nothing from it.
+    ...(isErrorPage({ html: raw, text }) ? { error_page: true } : {}),
   };
 }
 
 /**
  * Check links: HEAD, then GET when HEAD is refused. A link "loads" on 2xx/3xx;
  * 401/403/429/999 is a bot wall (blocked, not broken); 404, 410, 5xx, DNS
- * failures and timeouts are broken. Returns { checked, ok, broken, blocked }.
+ * failures and timeouts are broken. `urls` are addresses or candidates
+ * ({ url, kind }, projectCandidates). Returns { checked, ok, broken, blocked,
+ * own_ok }: `own_ok` how many of the loading ones are the site's own pages
+ * (kind "own page"), which count for at most OWN_PAGES_MAX of the pass.
  */
 export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent } = {}) {
-  const res = { checked: 0, ok: 0, broken: 0, blocked: 0 };
+  const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0 };
   const headers = { Accept: "text/html,*/*;q=0.8", ...(userAgent ? { "User-Agent": userAgent } : {}) };
   async function one(url) {
     let h;
@@ -470,14 +553,16 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     if ([401, 403, 429, 999].includes(status)) return "blocked";
     return "broken";
   }
-  const queue = [...urls];
+  const queue = urls.map((u) => (typeof u === "string" ? { url: u, kind: "outbound" } : u));
   await Promise.all(
     Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
       while (queue.length) {
-        const verdict = await one(queue.shift());
+        const c = queue.shift();
+        const verdict = await one(c.url);
         if (!verdict) continue;
         res.checked++;
         res[verdict]++;
+        if (verdict === "ok" && c.kind === "own page") res.own_ok++;
       }
     })
   );
@@ -497,7 +582,8 @@ const higher = (a, b) => (typeof a === "number" && typeof b === "number" ? Math.
  * is the desktop view's. No phone facts: the desktop facts as they are.
  */
 export function mergeViews(desktop, phone) {
-  if (!phone) return desktop;
+  // A phone reading that is an error or placeholder page (served 200) adds nothing.
+  if (!phone || phone.error_page) return desktop;
   const signals = Object.fromEntries(SIGNAL_KEYS.map((k) => [k, Boolean(desktop.signals?.[k] || phone.signals?.[k])]));
   return {
     ...desktop,
@@ -515,17 +601,33 @@ export function mergeViews(desktop, phone) {
 
 const readable = (v) => Boolean(v && typeof v.html === "string" && v.html.trim());
 
+// Error and placeholder pages a host serves with a 200 ("There isn't a GitHub Pages site here", Netlify's
+// "Page not found", Vercel's "DEPLOYMENT_NOT_FOUND", Heroku's "no such app"), read as the desktop view's
+// parking and blocked rules read a page that is not the site (./gate.mjs parkingPhrase, ./capture-blocked.mjs).
+const HOST_ERROR =
+  /there isn['’]t a github pages site here|site not found|page not found|404[:\s-]+(?:not found|page)|deployment[_\s]not[_\s]found|this deployment (?:cannot|could not) be found|no such app|this site can['’]t be reached|domain (?:is )?not (?:configured|connected)|project not found/i;
+
+/**
+ * Whether a reading ({ html, text }) is a host's error or placeholder page,
+ * or a parked domain, though it answered 200: a short page (at most
+ * BLOCK_PAGE_WORDS words) that says so, or a parking phrase.
+ */
+export function isErrorPage({ html = "", text = "" } = {}) {
+  const t = String(text || stripTags(html)).replace(/\s+/g, " ").trim();
+  if (parkingPhrase({ html, text: t })) return true;
+  return t.split(" ").filter(Boolean).length <= BLOCK_PAGE_WORDS && HOST_ERROR.test(t);
+}
+const BLOCK_PAGE_WORDS = 150;
+
 /**
  * The home page's links as the project-link candidates read them (pure): the
- * desktop reading's, the phone reading's (`input.phone`) and the destinations
- * the page's project buttons open (`input.buttonUrls`, read by the capture),
- * each with `from`. For projectsPageFor and measurePage.
+ * desktop reading's and the phone reading's (`input.phone`, unless it is an
+ * error page), each with `from`. For projectsPageFor and measurePage.
  */
 export function homeProjectLinks(input) {
   const base = input.finalUrl || input.url;
   const links = pageLinks(input.html, base).map((l) => ({ ...l, from: "home" }));
-  if (readable(input.phone)) links.push(...pageLinks(input.phone.html, input.phone.finalUrl || base).map((l) => ({ ...l, from: "phone" })));
-  for (const href of input.buttonUrls ?? []) links.push({ raw: href, href, text: "", inProjects: true, from: "button" });
+  if (readable(input.phone) && !isErrorPage(input.phone)) links.push(...pageLinks(input.phone.html, input.phone.finalUrl || base).map((l) => ({ ...l, from: "phone" })));
   return links;
 }
 
@@ -535,7 +637,6 @@ function sourcesOf(candidates, projectsPage) {
   return {
     home: count("home"),
     phone: count("phone"),
-    buttons: count("button"),
     projects_page: projectsPage ? { url: projectsPage, count: count("projects_page") } : null,
     own_pages: candidates.filter((c) => c.kind === "own page").length,
   };
@@ -544,25 +645,25 @@ function sourcesOf(candidates, projectsPage) {
 /**
  * measureFacts plus the project-link check. `input.phone` ({ html, text,
  * finalUrl }), when given, is the same page read at 390 wide: it is measured
- * too and merged in (mergeViews). The candidates (projectCandidates) come from
- * both views, the destinations of the page's project buttons
- * (`input.buttonUrls`) and, when the capture read it, the site's own projects
- * page (`input.projectsPage`: { html, finalUrl }), so one check covers them
- * all. `views` records what was read, `project_links_from` where the
- * candidates checked came from.
+ * too and merged in (mergeViews), unless it is an error or placeholder page
+ * (isErrorPage). The candidates (projectCandidates) come from both views and,
+ * when the capture read it, the site's own projects page
+ * (`input.projectsPage`: { html, finalUrl }), so one check covers them all.
+ * `views` records what was read, `project_links_from` where the candidates
+ * checked came from.
  */
 export async function measurePage(input, { fetchImpl = globalThis.fetch, userAgent, timeoutMs } = {}) {
-  const { phone = null, projectsPage = null, buttonUrls = [], ...desktopInput } = input;
+  const { phone = null, projectsPage = null, ...desktopInput } = input;
   const scan = scanPage(desktopInput.html, desktopInput.finalUrl || desktopInput.url);
   let facts = measureFacts({ ...desktopInput, scan });
   const views = ["desktop"];
-  if (readable(phone)) {
+  if (readable(phone) && !isErrorPage(phone)) {
     const phoneBase = phone.finalUrl || facts.final_url;
     const phoneFacts = measureFacts({ ...desktopInput, html: phone.html, text: phone.text ?? "", finalUrl: phoneBase });
     facts = mergeViews(facts, phoneFacts);
     views.push("phone");
   }
-  const links = homeProjectLinks({ ...desktopInput, finalUrl: facts.final_url, phone, buttonUrls });
+  const links = homeProjectLinks({ ...desktopInput, finalUrl: facts.final_url, phone });
   let projectsPageUrl = null;
   if (readable(projectsPage) && projectsPage.finalUrl) {
     projectsPageUrl = projectsPage.finalUrl;
@@ -570,10 +671,8 @@ export async function measurePage(input, { fetchImpl = globalThis.fetch, userAge
     views.push("projects page");
   }
   const candidates = projectCandidates(links, facts.final_url);
-  facts.project_links = await checkLinks(
-    candidates.map((c) => c.url),
-    { fetchImpl, userAgent, timeoutMs }
-  );
+  // With their kind: the site's own pages count for at most OWN_PAGES_MAX of the pass (projectLinksShare).
+  facts.project_links = await checkLinks(candidates, { fetchImpl, userAgent, timeoutMs });
   // The links checked, with where each came from: the nightly re-check (pipeline/evidence.mjs) tests these again.
   facts.project_candidates = candidates.map(({ url, from, kind }) => ({ url, from, kind }));
   facts.project_links_from = sourcesOf(candidates, projectsPageUrl);

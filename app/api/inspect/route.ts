@@ -112,7 +112,8 @@ async function inspect(target: string): Promise<Inspection> {
   }
 
   // The same reading as the stored facts (pipeline/facts.mjs footerYear): the mark before or after the year.
-  const copyrightYear = footerYear(stripTags(html));
+  // Laid out in lines, so a year before the mark counts only where it opens a footer line.
+  const copyrightYear = footerYear(stripTags(html, { lines: true }));
   let githubUrl = scrapeGithub(html);
   let linkedinUrl = scrapeLinkedin(html);
   let xUrl = scrapeX(html);

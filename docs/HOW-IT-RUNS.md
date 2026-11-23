@@ -181,7 +181,7 @@ Each chain is a list of steps in the order they happen.
 5. **Capture** (`sync-upstream.yml`, `pipeline/capture.mjs`).
    The database roster is synced first: rows not on the list are marked delisted, with a 15% safety limit.
    A browser then visits each new site, takes the screenshots, and saves the page text and the facts code can measure, read from both the desktop and the phone view (`pipeline/facts.mjs`, facts version 3).
-   When the home page shows fewer than 3 projects, it also presses the project buttons that open a project from script and reads the site's own projects page, one page at most (`pipeline/capture-projects.mjs`).
+   When the home page shows fewer than 3 projects, it also reads the site's own projects page, one page at most and only by a plain GET of a same-site link (`pipeline/capture-projects.mjs`).
    When the measuring code changes, only the owner's manual `remeasure-all.yml` brings the whole list to the new version at once.
    The same step re-captures up to 150 older sites (`NIGHTLY_REFRESH`, per `wrangler.jsonc`).
 6. **Capture checks** (same step, code only).

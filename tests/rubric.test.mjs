@@ -129,8 +129,10 @@ test("code checks: pass, fail or unknown; unknown is left out of checks_score", 
   const c = codeChecks(facts, now);
   assert.deepEqual(c, { resume: true, github: false, contact: true, project_links: true, own_domain: true, fresh_footer: true, original: true });
   assert.equal(checksScore(c), Math.round((100 * 15) / 17), "GitHub missing: 2 of 17");
-  // Every link found was behind a bot check (checkLinks counts those as checked): it could not be told.
-  const unknown = codeChecks({ ...facts, footer_year: null, project_links: { checked: 2, ok: 0, broken: 0, blocked: 2 } }, now);
+  // Facts without a version keep the rule they were measured under (pipeline/facts.mjs projectLinksPass):
+  // nothing checked is unknown. Version 3 is tested in tests/facts-v3.test.mjs.
+  const unknown = codeChecks({ ...facts, footer_year: null, project_links: { checked: 0, ok: 0, broken: 0, blocked: 2 } }, now);
+  assert.equal(codeChecks({ ...facts, v: 3, project_links: { checked: 2, ok: 0, broken: 0, blocked: 2 } }, now).project_links, null, "version 3: all behind a bot check");
   assert.equal(unknown.fresh_footer, null);
   assert.equal(unknown.project_links, null);
   assert.equal(checksScore(unknown), Math.round((100 * 8) / 10), "known: resume 2, GitHub 2 (missing), contact 4, domain 2 seventeenths; the template counts for nothing");
@@ -225,7 +227,7 @@ test("link checks: HEAD then GET, bot walls are blocked, not broken", async () =
   };
   const urls = ["ok", "no-head", "gone", "wall", "down", "dns"].map((p) => `https://site.test/${p}`);
   const r = await checkLinks([...urls, "http://127.0.0.1/x"], { fetchImpl, concurrency: 2 });
-  assert.deepEqual(r, { checked: 6, ok: 2, broken: 3, blocked: 1 });
+  assert.deepEqual(r, { checked: 6, ok: 2, broken: 3, blocked: 1, own_ok: 0 });
   assert.ok(seen.includes("GET https://site.test/no-head"));
   assert.ok(!seen.some((s) => s.includes("127.0.0.1")), "private addresses are never fetched");
 });

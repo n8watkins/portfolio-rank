@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { createClient } from "@libsql/client";
 import { nightsSince, pageEvidence, reportLines, sitesStillWaiting } from "../pipeline/evidence.mjs";
-import { ensureRosterSchema } from "../pipeline/roster.mjs";
+import { ACTIVE, ensureRosterSchema } from "../pipeline/roster.mjs";
+import { ensureFreshnessSchema, linksDue } from "../lib/freshness.mjs";
 import { listen } from "./helpers/listen.mjs";
 
 const RENDERED_TEXT = "Ada Lovelace - engineer. Projects: Engine, Notes. About me. Contact. Resume. GitHub.";
@@ -88,30 +89,50 @@ test("a link re-check tests again the links the capture chose, and keeps the ren
     assert.equal(facts.words, 14);
     assert.equal(facts.v, 3, "the stored version stays");
     assert.deepEqual(facts.project_candidates, CHOSEN, "the capture's list is kept");
-    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0 });
+    // The own page loads and is counted as one (own_ok), so the version 3 rule can cap it.
+    assert.deepEqual(facts.project_links, { checked: 3, ok: 2, broken: 1, blocked: 0, own_ok: 1 });
     assert.notEqual(facts.measured_at, RENDERED_FACTS.measured_at);
     assert.equal(after.facts_at, facts.measured_at, "the link check due date moves on");
   });
 });
 
-test("a link re-check never replaces a capture's links with a plain fetch's: facts without the chosen list stay as they are", async () => {
+test("a link re-check of facts of version 1 and 2 picks the links on a plain fetch as before, and keeps their version", async () => {
   const db = await setup();
   await withSite(async (url) => {
     await insert(db, { url, pageText: RENDERED_TEXT, facts: RENDERED_FACTS });
     const row = (await db.execute({ sql: "SELECT url, name, meta, page_text, facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-    let asked = 0;
-    const out = await pageEvidence(db, row, {
-      force: true,
-      fetchImpl: async (...a) => {
-        asked++;
-        return fetchFor(url)(...a);
-      },
-    });
-    assert.equal(out.measured, false);
-    assert.equal(asked, 0, "nothing fetched");
-    const after = (await db.execute({ sql: "SELECT facts FROM portfolios WHERE url = ?", args: [url] })).rows[0];
-    assert.deepEqual(JSON.parse(String(after.facts)), RENDERED_FACTS);
+    const out = await pageEvidence(db, row, { force: true, fetchImpl: fetchFor(url) });
+    assert.equal(out.measured, true);
+    const after = (await db.execute({ sql: "SELECT page_text, facts, facts_at FROM portfolios WHERE url = ?", args: [url] })).rows[0];
+    const facts = JSON.parse(String(after.facts));
+    assert.equal(after.page_text, RENDERED_TEXT);
+    assert.equal(facts.v, 1, "the old rule still reads it");
+    assert.equal(facts.project_links.checked, 2);
+    assert.equal(facts.project_links.broken, 1);
+    assert.equal(facts.project_candidates, undefined, "no list is made up from a plain fetch");
+    assert.equal(after.facts_at, facts.measured_at);
   });
+});
+
+test("the link re-check queue moves on: version 3 rows are reached behind 130 older rows, reachable or not", async () => {
+  const db = await setup();
+  await ensureFreshnessSchema(db);
+  // 130 version 2 rows whose page does not answer, all due long ago, and one version 3 row due a little later.
+  const old = Array.from({ length: 130 }, (_, i) => `https://old${String(i).padStart(3, "0")}.example/`);
+  for (const url of old) await insert(db, { url, pageText: RENDERED_TEXT, facts: { ...RENDERED_FACTS, v: 2, measured_at: "2026-01-01T00:00:00.000Z" } });
+  const v3 = "https://new.example/";
+  await insert(db, { url: v3, pageText: RENDERED_TEXT, facts: { ...RENDERED_FACTS, v: 3, project_candidates: CHOSEN, measured_at: "2026-02-01T00:00:00.000Z" } });
+  const fetchImpl = async (input) => new Response("", { status: String(input).startsWith("https://old") ? 503 : 200 });
+  const reached = new Set();
+  for (let night = 0; night < 3 && !reached.has(v3); night++) {
+    for (const row of await linksDue(db, { limit: 120, active: ACTIVE })) {
+      reached.add(String(row.url));
+      await pageEvidence(db, row, { force: true, fetchImpl });
+    }
+  }
+  assert.ok(reached.has(v3), "the version 3 row was reached on a later night");
+  const after = JSON.parse(String((await db.execute({ sql: "SELECT facts FROM portfolios WHERE url = ?", args: [v3] })).rows[0].facts));
+  assert.equal(after.project_links.checked, 3);
 });
 
 test("an unreachable page leaves stored evidence untouched on a link re-check", async () => {
