@@ -456,15 +456,19 @@ export async function planNight(ctx, state) {
     s.polls = { error: msg(e) };
     ctx.log(`Polls: scheduling failed: ${msg(e)}`);
   }
-  // Free too: bot-walled sites and listed sites whose signals collapsed go to
-  // the owner's review queue (lib/reviews/door.mjs). A failure never stops the night.
+  // Free too: bot-walled sites, listed sites whose signals collapsed, and listed
+  // addresses that are not a portfolio page by the address alone go to the
+  // review queue (lib/reviews/door.mjs). A failure never stops the night.
   try {
     const sent = await syncReviewRows(ctx.db, { now: new Date(ctx.now()) });
     await recordSites(ctx, s, "plan", [
       ...sent.botWall.map((url) => ({ url, entries: [["review", { url, why: "bot wall: the capture never got past a bot check" }]] })),
       ...sent.collapsed.map((url) => ({ url, entries: [["review", { url, why: "the portfolio signals collapsed (weekly health check)" }]] })),
+      ...sent.address.map((url) => ({ url, entries: [["review", { url, why: "its address is not a portfolio page (the address rule)" }]] })),
     ]);
-    if (sent.botWall.length || sent.collapsed.length) ctx.log(`Review queue: ${sent.botWall.length} bot-walled and ${sent.collapsed.length} collapsed site(s) sent to the owner`);
+    if (sent.botWall.length || sent.collapsed.length || sent.address.length) {
+      ctx.log(`Review queue: ${sent.botWall.length} bot-walled, ${sent.collapsed.length} collapsed and ${sent.address.length} not-a-portfolio address(es) sent to the Removal rule or the owner`);
+    }
   } catch (e) {
     ctx.log(`Review queue: writing the free rows failed: ${msg(e)}`);
   }

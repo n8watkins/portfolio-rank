@@ -177,6 +177,9 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **A junk rule is not protected by the signals** (agent, 2026-11-16). Status: building.
   The junk rules ([pipeline/junk-rules.mjs](../pipeline/junk-rules.mjs): an unedited template, a placeholder name such as "John Doe", a parked or for-sale page, a code host or link-in-bio address) run before the guard, and a hit is removed automatically like any other "no", even with 6 of 6 signals.
   Why: a starter template carries every portfolio signal by design.
+- **The address rule runs for every address** (owner, 2026-11-23: "Someone's GitHub is not a portfolio page."). Status: building.
+  The code host, link-in-bio and admin or login address rule ([pipeline/junk-rules.mjs](../pipeline/junk-rules.mjs) `urlNotPortfolio`) now runs on every grade at the door, also when Gemini says portfolio, and over every listed site each night, through the same Removal rule and ladder (an earlier grade or rule that called it a portfolio waits for the owner; Undo as for any removal).
+  Why: github.com/ThiagoSousa81 was graded a portfolio by Gemini, so the rule never ran and the site was listed until #280 excluded it by hand.
 - **A rule's verdict is the rule's, never the owner's** (owner, 2026-11-16). Status: building.
   A grade a rule decided carries the review kind `rule_applied` and names the rule; only the owner's own Confirm is an owner verdict (`owner_confirmed`), and only that holds over every later grade.
   A rule's earlier verdict does not bind a later grade, but it is weighed: a later "no" against a rule's "portfolio", or a re-grade's "no" on a site an earlier grade called a portfolio, is held for the owner instead of being removed by a rule.

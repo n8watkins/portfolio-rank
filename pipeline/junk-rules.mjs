@@ -41,7 +41,20 @@ function normalise(text) {
 
 const hashOf = (text) => createHash("sha1").update(normalise(text)).digest("hex");
 
-/** A code host, a link-in-bio page, or an admin or login path: never a portfolio. */
+/** The name junkCheck gives urlNotPortfolio's hit. */
+export const ADDRESS_RULE = "not a portfolio address";
+/** The hosts whose own addresses are never a portfolio (a site on a subdomain, such as GitHub Pages, is its own host). */
+export const ADDRESS_HOSTS = ["github.com", "gitlab.com", "bitbucket.org", "linktr.ee", "bio.link", "beacons.ai"];
+/** The path segments that are never a portfolio's page. */
+export const ADDRESS_PATHS = ["admin", "login", "wp-admin"];
+const ADDRESS_PATH_RE = new RegExp(`/(${ADDRESS_PATHS.join("|")})(/|$)`, "i");
+
+/**
+ * A code host, a link-in-bio page, or an admin or login path: never a
+ * portfolio, by the address alone. Runs for every address: at the door on
+ * every grade, whatever Gemini said, and over the listed roster each night
+ * (lib/reviews/door.mjs).
+ */
 export function urlNotPortfolio(url) {
   let u;
   try {
@@ -50,8 +63,8 @@ export function urlNotPortfolio(url) {
     return false;
   }
   const h = u.hostname.toLowerCase().replace(/^www\./, "");
-  if (/^(github\.com|gitlab\.com|bitbucket\.org|linktr\.ee|bio\.link|beacons\.ai)$/.test(h)) return true;
-  return /\/(admin|login|wp-admin)(\/|$)/i.test(u.pathname);
+  if (ADDRESS_HOSTS.includes(h)) return true;
+  return ADDRESS_PATH_RE.test(u.pathname);
 }
 
 /** Page-text hash -> hosts, over every row with 20 words or more. */
@@ -80,7 +93,7 @@ export function junkCheck(row, dupIndex = new Map()) {
       : PARKED.some((re) => re.test(text))
         ? "parked or for sale"
         : urlNotPortfolio(row.url)
-          ? "not a portfolio address"
+          ? ADDRESS_RULE
           : null;
   if (rule) return { junk: true, review: false, rule };
   const dup = text && words(normalise(text)) >= MIN_DUP_WORDS && [...(dupIndex.get(hashOf(text)) ?? [])].some((h) => h !== hostOf(row.url));

@@ -223,11 +223,17 @@ Each chain is a list of steps in the order they happen.
 10. **The removal rule** (the same moment, `lib/reviews/door.mjs` `doorDecision`, `atTheDoor`).
    Every AI grade goes through it:
    1. You ruled on the site before: your verdict stands.
-   2. Gemini says portfolio: it is listed with its report card.
+   2. Gemini says portfolio: it is listed with its report card, unless its address is not a portfolio page (step 3).
    3. Gemini says not a portfolio, the code finds fewer than 4 of 6 portfolio signals, and nothing earlier argues for the site: a removal is recorded.
       A junk rule that fires (`pipeline/junk-rules.mjs`) also lands here, even with 4 or more signals.
+      So does an address that is not a portfolio page by the address alone (`urlNotPortfolio`: a GitHub, GitLab or Bitbucket address, a link-in-bio page, or an admin or login path), whatever Gemini said; your rule (2026-11-23): "Someone's GitHub is not a portfolio page."
+      A site on its own subdomain, such as `name.github.io`, is a real site and is not caught.
    4. Gemini says not a portfolio but the code finds 4 or more signals, or never measured them: the site stays listed and a row waits for you.
    5. You undid an earlier removal, a rule once listed the site, an earlier grade said portfolio, or another case is waiting: the site stays listed and waits for you.
+
+   The address rule also runs over every listed site in the night's free part, before any grade, so an address is seen the night it is synced in even while grading is paused (`lib/reviews/door.mjs` `addressRows`).
+   The same ladder applies: a site you ruled on, kept, or took a removal back from, or with a case already open, is left alone; one an earlier grade or a rule called a portfolio waits for you; one never graded gets a recorded removal for the hourly task to apply (step 11).
+   Its rows say "Not a portfolio address" on your review page and are decided by `rule:not-a-portfolio-address`, never in Gemini's name.
 
    Whatever the outcome, the grade is written with `lib/tiers-store.mjs` `rankForWrite`: a site that already has its Starting rank keeps it exactly, a site without one (it had too few signals) gets it now from its Code checks score, and any answer that is not a "yes" takes the site out of the tiers at once.
    A site out of the tiers comes back only through the membership rule, at the next daily tiers task, with the rating and votes it had (`seedNewcomers`).
