@@ -211,6 +211,8 @@ test("a visitor reports a profile's screenshot at phone width; the owner sees it
     // Two handled groups (one per Mark handled); Reopen on the latest puts back only that report.
     await a.locator("[data-problem-handled] summary").click();
     const groups = a.locator(`[data-problem-handled-site="${SITE}"]`);
+    // The card leaves at once; the handled list arrives with the page's refresh.
+    await groups.nth(1).waitFor({ state: "attached" });
     assert.equal(await groups.count(), 2);
     await groups.first().locator("[data-problem-reopen]").click();
     await a.locator(`[data-problem-site="${SITE}"]`).waitFor();
