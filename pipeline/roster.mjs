@@ -27,7 +27,7 @@
 import { createClient } from "@libsql/client";
 import path from "path";
 import { HIDDEN_INDEX } from "../lib/hidden.mjs";
-import { VALID_MARKS, ensureHealthSchema } from "./not-working.mjs";
+import { NOT_ANSWERING_SQL, VALID_MARKS, ensureHealthSchema } from "./not-working.mjs";
 import { isWebAddress, listKey, spellingKey, splitSites } from "./list-key.mjs";
 import { CLEANUP_SHARE_ENV, DELIST_MAX_SHARE, allowedShare, excludedUrl, jobSummary } from "./list-util.mjs";
 
@@ -119,18 +119,19 @@ export async function ensureRosterSchema(db) {
  * SQL condition for rows the free background jobs may work on (captures and
  * their retries, the screenshot refresh, tall images,
  * Lighthouse, link checks, PageSpeed prewarm, the door's review rows): the
- * rule main has always had (on the list, not taken off it: 'down'), less the
- * sites on the not-answering ladder while its marks hold
- * (pipeline/not-working.mjs VALID_MARKS). Everything else keeps its capture
- * work: a site 'suspect' for a blocked capture or a page with the wrong
- * thing (that is how it recovers), and one whose row something else changed
- * since (the review queue's confirm, which queues a capture). Reads the
- * health_marks table, which ensureRosterSchema creates (as lib/schema.mjs
- * does). `p` is the table alias.
+ * rule main has always had (on the list, not taken off it: 'down', which
+ * includes the temporary pool), less the failing sites on the ladder that do
+ * not answer, while its marks hold (pipeline/not-working.mjs VALID_MARKS,
+ * NOT_ANSWERING_SQL). Everything else keeps its capture work: a site failing
+ * for a blocked capture or a page with the wrong thing (that is how it
+ * recovers), and one whose row something else changed since (the review
+ * queue's confirm, which queues a capture). Reads the health_marks table,
+ * which ensureRosterSchema creates (as lib/schema.mjs does). `p` is the
+ * table alias.
  */
 export const ACTIVE = (p = "portfolios") =>
   `${p}.delisted_at IS NULL AND COALESCE(${p}.health, '') != 'down'
-   AND NOT EXISTS (SELECT 1 FROM health_marks lm WHERE lm.url = ${p}.url AND ${VALID_MARKS("lm", p)})`;
+   AND NOT (${NOT_ANSWERING_SQL(`${p}.health_reason`)} AND EXISTS (SELECT 1 FROM health_marks lm WHERE lm.url = ${p}.url AND ${VALID_MARKS("lm", p)}))`;
 
 /**
  * SQL condition for rows the AI may spend on (grading, re-grading, AI

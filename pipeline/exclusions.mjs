@@ -1,19 +1,22 @@
-// Our list wins: sites the health check confirmed down, and sites not working
-// for LEAVE_AFTER_DAYS (./not-working.mjs), go into data/excluded.json with
-// the reason and the evidence, and out of data/feed.json, so generate_feed.py
-// keeps them out even while the community list still has them. The health
-// workflow exports once a week (EXPORT_EVERY_DAYS) and commits both files
-// through the same bot pull request flow as the daily upstream sync.
+// Our list wins: sites in the temporary pool for LEAVE_AFTER_DAYS
+// (./not-working.mjs) go to the archive, data/excluded.json, with the reason
+// and the evidence, and out of data/feed.json, so generate_feed.py keeps them
+// out even while the community list still has them; so do removals decided in
+// the review queue ("not a portfolio"). The health workflow exports once a
+// week (EXPORT_EVERY_DAYS) and commits the files through the same bot pull
+// request flow as the daily upstream sync.
 //
 // data/excluded.json holds objects:
 //   { url, name, reason, kind, removed, first_failed?, last_checked?, checks?,
 //     decided_by?, evidence?, duplicate_of?, recheck_after? }
-// kind: "down" (failed to load, parked, hijacked or blank; checked again
-// monthly from its removal, see planDeadRecheck), "dead" (the name
-// no longer resolves, or a 404 or broken deploy; checked again after
-// recheck_after, see planDeadRecheck), "duplicate" (duplicate_of: the address
+// kind: "down" (archived after 90 days failing health checks: does not load,
+// parked, blank, a social redirect, a blocked capture) and "dead" (the name no
+// longer resolves, or a 404 or broken deploy): the archive, checked again on
+// days 7, 14 and 21 after archiving and then monthly (./not-working.mjs
+// archiveCheckDue, planDeadRecheck); "duplicate" (duplicate_of: the address
 // kept), "not_portfolio" (graded so by the AI, settled by a code rule, or
-// decided by the owner) or "owner_request" (a takedown). decided_by says who
+// decided by the owner) or "owner_request" (a takedown): never checked again.
+// decided_by says who
 // ("owner", "ai:<models>", "code:<rule>", "health:dns", "rule:duplicate") and
 // evidence keeps what they said; /removed shows only kind, reason and date
 // (lib/removed-kinds.mjs). Every reader matches on the URL alone
@@ -25,7 +28,20 @@ import { APPLIED_REMOVAL_WHERE, checkSite, mapPool, normKey } from "./health.mjs
 import { excludedUrl, readJson } from "./list-util.mjs";
 import { isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
 import { notPortfolioReason } from "./portfolio-guard.mjs";
-import { LEAVE_AFTER_DAYS, NOT_WORKING, VALID_MARKS, columnsOf, ensureHealthSchema, leavesOnFreshFailure, notAnswering } from "./not-working.mjs";
+import { LEFT_LIST } from "./build-feed.mjs";
+import {
+  ARCHIVE_EVERY_DAYS,
+  ARCHIVE_FIRST_DAYS,
+  LEAVE_AFTER_DAYS,
+  NOT_WORKING,
+  VALID_MARKS,
+  archiveCheckDue,
+  columnsOf,
+  ensureHealthSchema,
+  leavesOnFreshFailure,
+  nextArchiveCheck,
+  returnStatements,
+} from "./not-working.mjs";
 
 // Refuse to exclude more than this share of the list in one go.
 export const MAX_EXCLUDE_SHARE = 0.1;
@@ -78,53 +94,22 @@ export async function removalDecider(db, url) {
 
 export { excludedUrl, readJson };
 
-// A dead entry is checked again this long after the last check, and at most this many a run.
-export const DEAD_RECHECK_DAYS = 91;
+// The archive check (owner, 2026-11-23: "once a month to see if they pass any health checks"): at most this
+// many archived entries a run, this many at a time as the main check does, and none starts after this long,
+// so the nightly job (health.yml, 120 minutes) is never at risk: the rest wait for the next run. The checks
+// are planned with the weekly export, so each lands within a week of its day (./not-working.mjs
+// archiveCheckDue: days 7, 14 and 21 after archiving, while the site's row is still kept, then monthly).
 export const DEAD_RECHECK_LIMIT = 40;
-// They run this many at a time, as the main check does, and none starts after this long, so the nightly job
-// (health.yml, 120 minutes) is never at risk: the rest wait for the next run.
 export const DEAD_RECHECK_CONCURRENCY = 8;
 export const DEAD_RECHECK_BUDGET_MS = 15 * 60000;
-// A "down" entry removed for not answering is checked again (owner, 2026-11-16: a paused Vercel project or
-// a missing deployment often comes back) on these days after its removal, while its row is still kept (the
-// row of a site off the list is deleted 30 days after it leaves, pipeline/roster.mjs PURGE_AFTER_DAYS, and a
-// site back after that would return ungraded). The checks are planned with the weekly export, so each
-// lands within a week of its day: the last one before day 28. Then monthly, under the same cap a run.
-export const DOWN_RECHECK_FIRST_DAYS = [7, 14, 21];
-export const DOWN_RECHECK_DAYS = 30;
-/** Days to the next check of an entry of this kind, or 0 for a kind that is never checked again. */
-export const recheckDays = (kind) => (kind === "dead" ? DEAD_RECHECK_DAYS : kind === "down" ? DOWN_RECHECK_DAYS : 0);
-
-const addDays = (day, days) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
-
-/** The next check of a "down" entry removed on `removed` (YYYY-MM-DD), checked on `day`: DOWN_RECHECK_FIRST_DAYS, then monthly. */
-export function nextDownCheck(removed, day) {
-  const valid = /^\d{4}-\d{2}-\d{2}$/.test(String(removed ?? ""));
-  const first = valid ? DOWN_RECHECK_FIRST_DAYS.map((d) => addDays(String(removed), d)).find((d) => d > day) : null;
-  return first ?? addDays(day, DOWN_RECHECK_DAYS);
-}
+export { ARCHIVE_EVERY_DAYS, ARCHIVE_FIRST_DAYS };
 
 /**
- * Whether a "down" entry was removed for not answering (the name, the
- * connection, TLS, an HTTP error, a paused or missing deployment): only those
- * can come back by answering again. One removed for what the site showed (a
- * blank page, a blocked capture, a parked page, a redirect to a profile) is
- * never re-checked: an answer says nothing about that.
+ * The day an excluded entry is due for its archive check, or null when it
+ * never is (./not-working.mjs archiveCheckDue: only "down" and "dead", never
+ * a removal the owner or a "not a portfolio" decision made).
  */
-export const removedForNotAnswering = (reason) => notAnswering(reason);
-
-/**
- * The day an excluded entry is due for its check, or null when it never is:
- * recheck_after when set; for a "down" entry removed for not answering
- * without one, its first check day (DOWN_RECHECK_FIRST_DAYS) after its removal.
- */
-export function recheckDue(e) {
-  if (!e || typeof e !== "object" || !recheckDays(e.kind)) return null;
-  if (e.kind === "down" && !removedForNotAnswering(e.reason)) return null;
-  if (e.recheck_after) return String(e.recheck_after);
-  if (e.kind === "down") return /^\d{4}-\d{2}-\d{2}$/.test(String(e.removed ?? "")) ? addDays(String(e.removed), DOWN_RECHECK_FIRST_DAYS[0]) : "";
-  return "";
-}
+export const recheckDue = archiveCheckDue;
 
 /**
  * Whether an excluded site is back: the same full check that removed it
@@ -142,12 +127,13 @@ export const passesFullCheck =
   };
 
 /**
- * The dead and down entries due for their check (recheckDue on or before
- * today), at most `limit` a run: one that passes the full check now
+ * The archived entries due for their check (recheckDue on or before today),
+ * at most `limit` a run: one that passes the full check now
  * (`answers(url, entry)`, by default passesFullCheck with `render`) leaves
- * the list (it returns with the next sync if the community list still has
- * it, and the weekly health check looks at it like any listed site); one
- * that doesn't gets its next check recheckDays(kind) later. The checks run
+ * the archive (it returns with the next sync, from the community list or
+ * from our own record of it, applyExport, and the nightly health check looks
+ * at it like any listed site); one that doesn't gets its next check
+ * (nextArchiveCheck). An inconclusive check is not a pass. The checks run
  * `concurrency` at a time (a dead server takes a minute or two to give up),
  * and none starts once `budgetMs` has passed (by `clock`): those not checked
  * stay due for the next run. Returns { excluded, back: [urls], still: [urls],
@@ -182,8 +168,9 @@ export async function planDeadRecheck({
   return {
     excluded: excluded
       .filter((e) => !back.has(e))
-      .map((e) => (still.has(e) ? { ...e, last_checked: day, recheck_after: e.kind === "down" ? nextDownCheck(e.removed, day) : addDays(day, recheckDays(e.kind)) } : e)),
+      .map((e) => (still.has(e) ? { ...e, last_checked: day, recheck_after: nextArchiveCheck(e.removed, day) } : e)),
     back: [...back].map((e) => e.url),
+    backEntries: [...back],
     still: [...still].map((e) => e.url),
     left: due.length - back.size - still.size,
   };
@@ -222,10 +209,15 @@ export async function markExported(db, now = new Date()) {
 /**
  * A planned export applied to the files' contents (idempotent): entries
  * `added` (not already there) and dropped from the feed, entries `back`
- * removed, entries `still` failing given their new check dates.
- * plan: { added: [entry], back: [url], still: [{ url, last_checked, recheck_after }] }.
+ * removed, entries `still` failing given their new check dates. With
+ * `additions` (data/additions.json), each site back from the archive is also
+ * recorded there as one our list keeps (build-feed.mjs LEFT_LIST, `left_on`
+ * the day it came back), so it is listed again even when the community list
+ * dropped it while it was archived; the feed build drops the record when the
+ * community list has it.
+ * plan: { added: [entry], back: [url], returning?: [{ url, name }], day?, still: [{ url, last_checked, recheck_after }] }.
  */
-export function applyExport({ excluded, feed }, plan) {
+export function applyExport({ excluded, feed, additions }, plan) {
   const key = (u) => normKey(u);
   const back = new Set(plan.back.map(key));
   const still = new Map(plan.still.map((s) => [key(s.url), s]));
@@ -238,7 +230,17 @@ export function applyExport({ excluded, feed }, plan) {
   const have = new Set(out.map((e) => key(excludedUrl(e))));
   for (const a of plan.added) if (!have.has(key(a.url))) out.push(a);
   const drop = new Set(plan.added.map((a) => key(a.url)));
-  return { excluded: out, feed: feed.filter((p) => !drop.has(key(p.url))) };
+  const files = { excluded: out, feed: feed.filter((p) => !drop.has(key(p.url))) };
+  if (!Array.isArray(additions)) return files;
+  const names = new Map((plan.returning ?? []).map((r) => [key(r.url), r.name]));
+  const known = new Set([...additions.map((a) => key(a?.url ?? "")), ...files.feed.map((p) => key(p.url))]);
+  const recorded = [...additions];
+  for (const url of plan.back) {
+    if (known.has(key(url))) continue;
+    known.add(key(url));
+    recorded.push({ name: String(names.get(key(url)) ?? "").trim() || url, url, source: LEFT_LIST, left_on: plan.day ?? new Date().toISOString().slice(0, 10) });
+  }
+  return { ...files, additions: recorded };
 }
 
 /**
@@ -269,7 +271,7 @@ export function exportLanded({ excluded }, plan) {
  * `dryRun` plans and returns the same and writes nothing.
  * Returns { files, plan: { added: [urls], back, still } | null, planned, landed, held }.
  */
-export async function weeklyExport({ db, excluded, feed, render, answers, now = new Date(), dryRun = false, log = () => {} }) {
+export async function weeklyExport({ db, excluded, feed, additions, render, answers, now = new Date(), dryRun = false, log = () => {} }) {
   // Today's additions: the only entries ever applied.
   const today = await planExclusions({ db, excluded, feed, now, readOnly: dryRun });
   const todayAdds = new Map(today.added.map((a) => [normKey(a.url), a]));
@@ -284,7 +286,9 @@ export async function weeklyExport({ db, excluded, feed, render, answers, now = 
       stored = null;
     }
     // The additions this plan chose that today's state still plans (and main does not carry yet).
-    const current = stored ? { added: stored.added.filter((u) => todayAdds.has(normKey(u))), back: stored.back, still: stored.still } : null;
+    const current = stored
+      ? { added: stored.added.filter((u) => todayAdds.has(normKey(u))), back: stored.back, still: stored.still, ...(stored.returning ? { returning: stored.returning } : {}), ...(stored.day ? { day: stored.day } : {}) }
+      : null;
     if (current && exportLanded({ excluded }, current)) {
       landed = true;
       if (!dryRun) {
@@ -307,7 +311,8 @@ export async function weeklyExport({ db, excluded, feed, render, answers, now = 
     if (dead.left) log(`export: ${dead.left} removed site(s) due for their check were left for the next run (time budget)`);
     const stillSet = new Set(dead.still);
     const still = dead.excluded.filter((e) => typeof e === "object" && stillSet.has(e.url)).map((e) => ({ url: e.url, last_checked: e.last_checked, recheck_after: e.recheck_after }));
-    pending = { added: today.added.map((a) => a.url), back: dead.back, still };
+    const returning = dead.backEntries.map((e) => ({ url: e.url, name: e.name ?? null }));
+    pending = { added: today.added.map((a) => a.url), back: dead.back, still, returning, day: now.toISOString().slice(0, 10) };
     const empty = !pending.added.length && !pending.back.length && !pending.still.length;
     if (!dryRun) {
       if (dead.back.length) {
@@ -316,14 +321,23 @@ export async function weeklyExport({ db, excluded, feed, render, answers, now = 
                   AND EXISTS (SELECT 1 FROM portfolios p WHERE p.url = health_marks.url AND ${VALID_MARKS("health_marks", "p")})`,
           args: [now.toISOString(), ...dead.back],
         });
+        // The owner's Health pool page lists what came back from the archive (./not-working.mjs health_returns).
+        await db.batch(
+          returnStatements(
+            dead.backEntries.map((e) => ({ url: e.url, at: now.toISOString(), reason: e.reason ?? null, since: e.removed ?? null, hidden: true })),
+            "archive",
+            now
+          ),
+          "write"
+        );
       }
       if (empty) await markExported(db, now);
       else await cacheSet(db, PENDING_EXPORT_KEY, JSON.stringify(pending), now.getTime());
     }
     if (empty) pending = null;
   }
-  const entries = pending ? { added: pending.added.map((u) => todayAdds.get(normKey(u))).filter(Boolean), back: pending.back, still: pending.still } : null;
-  return { files: entries ? applyExport({ excluded, feed }, entries) : null, plan: pending, planned, landed, held: today.held };
+  const entries = pending ? { ...pending, added: pending.added.map((u) => todayAdds.get(normKey(u))).filter(Boolean) } : null;
+  return { files: entries ? applyExport({ excluded, feed, additions }, entries) : null, plan: pending, planned, landed, held: today.held };
 }
 
 /**
@@ -366,18 +380,19 @@ export async function planExclusions({ db, excluded, feed, now = new Date(), rea
       held.push({ url, why: "a good capture replaced the blocked one this failure was about" });
       continue;
     }
-    // Not working (./not-working.mjs): hidden, but on the list until it has been so LEAVE_AFTER_DAYS AND a
-    // check made on or after that day has failed, so a site never leaves on a check weeks old. A row down
-    // for not answering with no ladder (from before the pool, or its marks voided) waits for its next
-    // nightly check, which puts it on the ladder (not working since its first failure).
-    if (kind === "down" && (Number(r.pool_stage ?? 0) === NOT_WORKING || notAnswering(r.health_reason))) {
+    // Every health failure (down or a duplicate) is in the temporary pool (./not-working.mjs): hidden, but on
+    // the list until it has been so LEAVE_AFTER_DAYS AND a check made on or after that day has failed, so a
+    // site never goes to the archive on a check weeks old. A row down with no ladder (from before the pool,
+    // the old weekly-counted rule, or its marks voided) waits for its next nightly check, which puts it on
+    // the ladder (in the pool since its first failure).
+    if (kind !== "not_portfolio") {
       const since = r.pool_since == null ? null : String(r.pool_since);
       if (Number(r.pool_stage ?? 0) !== NOT_WORKING) {
-        held.push({ url, why: "down for not answering; its next check puts it on the not-working ladder" });
+        held.push({ url, why: "down with no ladder; its next check puts it in the temporary pool" });
         continue;
       }
       if (!leavesOnFreshFailure(since, r.last_fail_at == null ? null : String(r.last_fail_at))) {
-        held.push({ url, why: `not working since ${String(since).slice(0, 10)}; it leaves the list only when a check on or after day ${LEAVE_AFTER_DAYS} fails` });
+        held.push({ url, why: `in the temporary pool since ${String(since).slice(0, 10)}; it is archived only when a check on or after day ${LEAVE_AFTER_DAYS} fails` });
         continue;
       }
     }

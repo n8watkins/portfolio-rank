@@ -5,20 +5,22 @@
 // for sale, isn't blank, isn't a duplicate of another entry, and wasn't graded
 // "not a portfolio"; redirects to another domain are reported as moves (and
 // possible hijacks) for a person to look at. One bad check never removes
-// anything:
+// anything, and no failed check ever writes a row to the owner's review queue:
 //
-//   a site that does not answer (./not-working.mjs notAnswering: paused
-//   hosting, a deleted deployment, a dead domain, a refused connection):
-//   the not-working ladder of ./not-working.mjs (out of the AI's work at the
-//   first failure, hidden when the next day's re-check fails too, off the
-//   list after 90 days). The nightly run leaves a site on that ladder to the
-//   hourly re-check, so a site is never checked twice in an hour and a stage
-//   is never counted twice
-//   a site that answers with the wrong thing (parked, blank, a redirect to a
-//   social profile, a duplicate, a blocked capture):
-//   live --fail--> suspect --fail--> ... --fail (FAILS_TO_DOWN failed checks
-//   in a row, on distinct weeks, spanning at least DOWN_AFTER_DAYS)--> down
-//   any state --pass--> live (fail count reset, the ladder cleared)
+//   every failed check, whatever its kind (the site does not answer: paused
+//   hosting, a deleted deployment, a dead domain, a refused connection, an
+//   HTTP error; or it answers with the wrong thing: parked or for sale, blank,
+//   a redirect to a social profile, a blocked capture of a site never
+//   captured; or it duplicates another entry): the one ladder of
+//   ./not-working.mjs (out of the AI's work at the first failure, hidden in
+//   the temporary pool when the next day's re-check fails too, archived after
+//   90 days). The nightly run leaves a site on that ladder to the hourly
+//   re-check, so a site is never checked twice in an hour and a stage is
+//   never counted twice
+//   any state --pass--> live (the ladder cleared, back exactly as it was)
+//   low portfolio signals (./signals.mjs needsReview): never a failure; the
+//   site stays listed and its signals are recorded as unread (the code could
+//   not read it)
 //   inconclusive: the state stays as it was. That is a bot wall (403/429, or
 //   a page the capture's own rule calls a bot check, ./capture-blocked.mjs),
 //   and anything that says nothing about the site: a timeout, a dropped
@@ -29,9 +31,10 @@
 //   a run that could not tell for over MAX_UNKNOWN_SHARE of the sites, or
 //   whose browser never started, records nothing and fails; a site unknown
 //   for UNKNOWN_DAYS_TO_OWNER days running goes to the owner (/admin/alerts)
-//   a site whose stored capture reason is the bot wall is never failed: every
-//   result is inconclusive while that reason stands (owner, 2026-11-16:
-//   bot-walled sites wait for his review)
+//   a site whose stored capture reason is the bot wall is never failed for
+//   the wall: a pass while it is not failing is inconclusive (owner,
+//   2026-11-16: bot-walled sites wait for his review); a real failure this
+//   check sees counts like any site's (owner, 2026-11-23)
 //   a site that never had a good capture fails while its last capture was
 //   blocked by a gate or an empty page (./capture-blocked.mjs)
 //
@@ -47,8 +50,9 @@
 // nightly capture starts in the same minute as the nightly run, so this
 // happens on ordinary nights too.
 //
-// Down sites are added to data/excluded.json (pipeline/exclusions.mjs), so the
-// list drops them; until then the site and the background jobs skip them.
+// Sites in the temporary pool for LEAVE_AFTER_DAYS are archived: added to
+// data/excluded.json (pipeline/exclusions.mjs), so the list drops them; until
+// then the site and the background jobs skip them.
 
 import { httpGate, parkedPage, titleOf, visibleText } from "./gate.mjs";
 import { BOT_WALL, capturedBlocked, isBlockedReason, isBotWallReason } from "./capture-blocked.mjs";
@@ -73,8 +77,8 @@ import {
   failOnLadder,
   holdOnLadder,
   leavesList,
-  notAnswering,
   poolOf,
+  pruneReturns,
 } from "./not-working.mjs";
 import { listKey } from "./list-key.mjs";
 import { isHiddenRow } from "../lib/hidden.mjs";
@@ -88,18 +92,8 @@ import { clearPoolStatement } from "../lib/games/pool.mjs";
  */
 const CLEAR_POOLS = [clearPoolStatement(), { sql: "DELETE FROM cache WHERE k = ?", args: [GRADER_POOL_KEY] }];
 
-// Thresholds of the ladder for sites that answer with the wrong thing (a
-// site that does not answer has ./not-working.mjs's). Failures count once a
-// week whatever the number of runs, so 3 counted failures span 14 days even
-// with a run every night.
-export const FAILS_TO_DOWN = 3;
-export const DOWN_AFTER_DAYS = 13;
-// A failed check counts only on a week of its own: the n-th counted failure
-// comes at least (n - 1) * FAIL_WEEK_DAYS after the first. Two runs on one bad
-// day count once. Six days, not seven, so a weekly run that starts a little
-// early still counts.
-export const FAIL_WEEK_DAYS = 6;
-// When the check could not tell (timeouts, dropped connections, DNS, a broken
+// Every failed check takes the one ladder of ./not-working.mjs (its
+// thresholds are there). When the check could not tell (timeouts, dropped connections, DNS, a broken
 // browser) for more than this share of sites in one run, the runner is the
 // likelier culprit: the run records nothing and fails, like MAX_FAIL_SHARE.
 export const MAX_UNKNOWN_SHARE = 0.15;
@@ -354,15 +348,13 @@ export function findDuplicates(entries) {
 
 /**
  * The state machine. prev: { health, fails, firstFailAt, lastFailAt, pool }
- * from the row and health_marks (or null); result: { ok, reason } with ok
- * true, false or null (inconclusive). Five rules, in order: a pass restores;
- * could-not-tell changes nothing; not answering is the not-working ladder;
- * down stays down; a page with the wrong thing is the weekly-counted rule.
- * In that rule a failure counts only on a week of its own: at least FAIL_WEEK_DAYS after
- * the last counted one (lastFailAt; for a row from before it was kept, the
- * n-th counted failure at least (n - 1) * FAIL_WEEK_DAYS after the first).
- * One in the same week updates the reason and nothing else.
- * Returns the new { health, fails, firstFailAt, lastFailAt, reason }.
+ * from the row and health_marks (or null); result: { ok, reason, decided? }
+ * with ok true, false or null (inconclusive). Four rules, in order: a pass
+ * restores; could-not-tell changes nothing; a removal decided in the review
+ * queue stays down (`decided`); every other failure is the one ladder of
+ * ./not-working.mjs, whatever its kind (not answering, parked, blank, a
+ * redirect to a social profile, a duplicate, a blocked capture).
+ * Returns the new { health, fails, firstFailAt, lastFailAt, reason, pool }.
  */
 export function nextHealth(prev, result, now = new Date()) {
   const keptReason = () => (prev?.health && prev.health !== "live" ? prev.reason ?? result.reason : result.reason);
@@ -373,34 +365,19 @@ export function nextHealth(prev, result, now = new Date()) {
     if (prev?.pool) return holdOnLadder(prev, keptReason(), now);
     return { health: prev?.health ?? null, fails: Number(prev?.fails ?? 0), firstFailAt: prev?.firstFailAt ?? null, lastFailAt: prev?.lastFailAt ?? null, reason: keptReason(), pool: null };
   }
-  // 3. The not-working ladder (./not-working.mjs): a site that does not answer, and a not-working site
-  //    that fails in any way. A row already down that does not answer and has no ladder (from before the
-  //    pool, or its marks voided) is not working since its first failure, so it never shows again and
-  //    still leaves the list only on a fresh failed check.
-  const answers = !notAnswering(result.reason);
-  if (prev?.pool && (!answers || prev.pool.stage >= NOT_WORKING)) return failOnLadder(prev, result, now);
-  if (!prev?.pool && !answers) {
-    if (prev?.health !== "down") return failOnLadder(prev, result, now);
+  // 3. A removal decided in the review queue stays down with its reason, off the ladder: it was decided,
+  //    not seen failing, so no check of the site decides it (an Undo or the owner does).
+  if (result.decided) {
+    return { health: "down", fails: Number(prev?.fails ?? 0), firstFailAt: prev?.firstFailAt ?? now.toISOString(), lastFailAt: prev?.lastFailAt ?? null, reason: result.reason, pool: null };
+  }
+  // 4. The one ladder (./not-working.mjs). A row already down with no ladder (from before the pool, the
+  //    old weekly-counted rule, or its marks voided) is in the pool since its first failure, so it never
+  //    shows again on a failure and goes to the archive only on a fresh failed check.
+  if (!prev?.pool && prev?.health === "down") {
     const since = prev.firstFailAt ?? now.toISOString();
     return failOnLadder({ ...prev, pool: { stage: NOT_WORKING, startedAt: since, since, nextAt: null, unclear: 0 } }, result, now);
   }
-  // 4. Down stays down until a check passes (confirmed by the weekly-counted rule, decided in the review
-  //    queue, or not working with marks a later change voided): a failure never shows it again.
-  if (prev?.health === "down") {
-    return { health: "down", fails: Number(prev.fails ?? 0), firstFailAt: prev.firstFailAt ?? now.toISOString(), lastFailAt: prev.lastFailAt ?? null, reason: result.reason, pool: null };
-  }
-  // 5. A page that answers with the wrong thing: the weekly-counted rule. A failing site that leaves the
-  //    not-answering ladder this way (it answers now) counts from this failure.
-  if (prev?.pool) prev = { ...prev, fails: 0, firstFailAt: null, lastFailAt: null, pool: null };
-  const before = Number(prev?.fails ?? 0);
-  const firstFailAt = prev?.firstFailAt ?? now.toISOString();
-  const days = (from) => (now.getTime() - new Date(from).getTime()) / 86400000;
-  const span = days(firstFailAt);
-  const last = before > 0 ? prev?.lastFailAt ?? null : null;
-  const newWeek = before === 0 || (last ? days(last) >= FAIL_WEEK_DAYS : span >= before * FAIL_WEEK_DAYS);
-  const fails = newWeek ? before + 1 : before;
-  const down = fails >= FAILS_TO_DOWN && span >= DOWN_AFTER_DAYS;
-  return { health: down ? "down" : "suspect", fails, firstFailAt, lastFailAt: newWeek ? now.toISOString() : last, reason: result.reason, pool: null };
+  return failOnLadder(prev, result, now);
 }
 
 /**
@@ -585,6 +562,26 @@ export async function runHealthCheck({
 
   // Duplicates are failures too, only after loading. A "not a portfolio" grade never is.
   const dupes = findDuplicates(results.filter((r) => r.ok));
+  // A site on the ladder as a duplicate whose original is not in this run (the hourly re-check takes only the
+  // due sites) is still a duplicate while the original is listed under the same address, or the address this
+  // site now ends at: otherwise a re-check would pass it every time and the nightly run fail it again.
+  const inRun = new Set(results.map((r) => r.url));
+  const dupOf = (row) => (String(row?.health_reason ?? "").startsWith("duplicate of ") ? String(row.health_reason).slice("duplicate of ".length) : null);
+  const askOriginals = [...new Set(results.filter((r) => r.ok && !dupes.has(r.url) && dupOf(rows.get(r.url)) && !inRun.has(dupOf(rows.get(r.url)))).map((r) => dupOf(rows.get(r.url))))];
+  if (askOriginals.length) {
+    const originals = new Map();
+    for (let i = 0; i < askOriginals.length; i += 400) {
+      const part = askOriginals.slice(i, i + 400);
+      const got = await db.execute({ sql: `SELECT url, final_url FROM portfolios WHERE delisted_at IS NULL AND url IN (${part.map(() => "?").join(",")})`, args: part });
+      for (const o of got.rows) originals.set(String(o.url), o.final_url == null ? null : String(o.final_url));
+    }
+    for (const r of results) {
+      const original = r.ok && !dupes.has(r.url) ? dupOf(rows.get(r.url)) : null;
+      if (!original || !originals.has(original)) continue;
+      const theirs = new Set([normKey(original), ...(originals.get(original) ? [normKey(originals.get(original))] : [])]);
+      if ([r.url, r.finalUrl].filter(Boolean).some((u) => theirs.has(normKey(u)))) dupes.set(r.url, original);
+    }
+  }
   const toDoor = [];
   for (const r of results) {
     const was = rows.get(r.url);
@@ -595,6 +592,7 @@ export async function runHealthCheck({
     if (notPortfolio && Number(was?.decided_removal ?? 0) === 1 && String(was?.health ?? "") === "down" && notPortfolioReason(was?.health_reason)) {
       r.ok = false;
       r.decidedDown = true;
+      r.decided = true;
       r.reason = String(was.health_reason);
       continue;
     }
@@ -612,22 +610,27 @@ export async function runHealthCheck({
   // (./capture-blocked.mjs). A good capture since then (status 'live')
   // clears both cases.
   // - A gate, a picker or a nearly empty page that this check sees as up
-  //   fails, with the capture's reason, so a site that stays blocked ends up
-  //   confirmed down and excluded as broken (exclusions.mjs kind "down"),
-  //   never as "not a portfolio".
-  // - A bot wall is never a failure (owner, 2026-11-16: bot-walled sites go
-  //   to him for review): whatever this check sees (a pass, a failure, a
-  //   wall of its own), the result is inconclusive, so the state stays as it
-  //   was and the site stays hidden (lib/hidden.mjs) instead of being shown
-  //   uncaptured or counted down; its needs_review mark is kept below.
-  // A bot wall this check meets itself stays inconclusive in both cases.
+  //   fails, with the capture's reason, so a site that stays blocked takes
+  //   the ladder into the pool and the archive as broken (exclusions.mjs kind
+  //   "down"), never as "not a portfolio".
+  // - A bot wall alone is never a failure (owner, 2026-11-16 and 2026-11-23):
+  //   the capture's wall never fails the site, and a pass of a site that is
+  //   not failing is inconclusive, so the state stays as it was and the site
+  //   stays hidden (lib/hidden.mjs) instead of being shown uncaptured; its
+  //   needs_review mark is kept below. A real failure this check sees (it
+  //   does not load, an HTTP error, parked, blank) counts like any site's,
+  //   and a pass of a bot-walled site on the ladder brings it back as it was;
+  //   the owner is asked about the wall once more after that
+  //   (lib/reviews/door.mjs syncReviewRows).
+  // A bot wall this check meets itself stays inconclusive in every case.
   const botWalled = new Set();
   for (const r of results) {
     const row = rows.get(r.url);
     if (!row) continue;
     if (isBotWallReason(row.reason)) {
       botWalled.add(r.url);
-      if (r.ok !== null && !r.decidedDown) {
+      const failing = Number(row.pool_valid ?? 0) === 1 || ["suspect", "down"].includes(String(row.health ?? ""));
+      if (r.ok === true && !failing) {
         r.ok = null;
         r.reason = String(row.reason);
       }
@@ -681,7 +684,7 @@ export async function runHealthCheck({
     // of an hour; the ladder's next re-check counts from the failure it saw).
     const at = r.at ?? now;
     const stamp = at.toISOString();
-    // A removal decided in the review queue is down with its reason (rule 4 of nextHealth), off the ladder.
+    // A removal decided in the review queue is down with its reason (rule 3 of nextHealth), off the ladder.
     const next = nextHealth(r.decidedDown ? { ...prev, pool: null } : prev, r, at);
     const marks = nextUnknown(row ? { unknownSince: str(row.unknown_since) } : null, r, at);
     const pool = next.pool ?? null;
@@ -694,10 +697,12 @@ export async function runHealthCheck({
     const purgeState = goneNow ? PURGE_GONE : backNow ? PURGE_BACK : 0;
     // A passing site whose last capture failed gets recaptured on the next sync.
     const retryNow = r.ok === true && row && String(row.status) !== "live";
-    // Signals only from a page that loaded; otherwise the last ones stay.
+    // Signals only from a page that loaded; otherwise the last ones stay. Low signals change nothing about
+    // the site (owner's default, 2026-11-23): it stays listed, recorded as one the code could not read.
     const signals = r.signals
       ? JSON.stringify({
           ...r.signals,
+          ...(r.signals.needsReview ? { unread: true } : {}),
           checked_at: stamp,
           // A move to another domain, and whether it looks like a hijack.
           ...(r.moved ? { moved_to: r.finalUrl, hijack: Boolean(r.hijack) } : {}),
@@ -770,7 +775,18 @@ export async function runHealthCheck({
     // A marks row only when there is something to keep or to clear: a ladder, a counted failure, a streak
     // of could-not-tell, a profile to purge, or a row already there. A healthy site without one gets none.
     const needMark = Number(row?.has_marks ?? 0) === 1 || Boolean(pool) || Boolean(next.lastFailAt) || Boolean(marks.unknownSince) || purgeState > 0;
-    plans.push({ r, prev, next, marks, hiddenBefore, hiddenAfter, stmts: needMark ? [stmt, mark] : [stmt] });
+    // Back from the ladder (failing, or hidden in the temporary pool): recorded for the owner's Health pool
+    // page, written only when the row above was (changes() is that statement's count), before the marks.
+    const back = r.ok === true && (Boolean(prev?.pool) || prev?.health === "suspect" || prev?.health === "down");
+    const returned = back
+      ? [
+          {
+            sql: "INSERT INTO health_returns (url, at, from_where, reason, since, hidden) SELECT ?, ?, 'pool', ?, ?, ? WHERE changes() > 0",
+            args: [r.url, stamp, prev.reason || null, prev.pool?.since ?? prev.pool?.startedAt ?? prev.firstFailAt ?? null, hiddenBefore ? 1 : 0],
+          },
+        ]
+      : [];
+    plans.push({ r, prev, next, marks, hiddenBefore, hiddenAfter, back, stmts: [stmt, ...returned, ...(needMark ? [mark] : [])] });
   }
   const written = [];
   if (dryRun) {
@@ -783,6 +799,8 @@ export async function runHealthCheck({
       // A site hidden or shown leaves the cached games pool and grader pool in the same write, as every
       // other hide path does (CLEAR_POOLS).
       if (chunk.some((p) => p.hiddenBefore !== p.hiddenAfter)) stmts.push(...CLEAR_POOLS);
+      // The log of returns keeps RETURNS_KEEP_DAYS.
+      if (chunk.some((p) => p.back)) stmts.push(pruneReturns(now));
       const res = await db.batch(stmts, "write");
       let at = 0;
       for (const p of chunk) {
@@ -949,10 +967,10 @@ async function toTheDoor(db, url, now) {
 
 const cell = (s) => String(s ?? "").replace(/\|/g, "/");
 
-/** The not-working pool's one line for a job summary: re-checked, back, failing for the first time, hidden, leaving the list. */
+/** The temporary pool's one line for a job summary: re-checked, back, failing for the first time, hidden, going to the archive. */
 export function poolLine(s) {
   const n = (a) => (Array.isArray(a) ? a.length : Number(a ?? 0));
-  return `Not-working pool: ${s.due != null ? `${s.checked} re-checked, ` : ""}${n(s.returned)} back, ${n(s.newlyFailing)} failing for the first time (out of AI work), ${n(s.newlyHidden)} newly hidden, ${n(s.leavingList)} not working ${LEAVE_AFTER_DAYS}+ days (leave the list with the weekly export).`;
+  return `Temporary pool: ${s.due != null ? `${s.checked} re-checked, ` : ""}${n(s.returned)} back, ${n(s.newlyFailing)} failing for the first time (out of AI work), ${n(s.newlyHidden)} newly hidden, ${n(s.leavingList)} in the pool ${LEAVE_AFTER_DAYS}+ days (archived with the weekly export).`;
 }
 
 /** Markdown summary for GITHUB_STEP_SUMMARY. */
@@ -961,11 +979,11 @@ export function healthSummary(s) {
   const lines = [
     `## Health check${s.dryRun ? " (dry run: nothing written)" : ""}`,
     "",
-    `Checked ${s.checked} listed site(s): ${s.live} live, ${s.suspect} suspect, ${s.down} down, ${s.recovered} recovered, ${s.inconclusive.length} inconclusive (bot checks, timeouts, dropped connections), ${s.needsReview.length} need review.`,
+    `Checked ${s.checked} listed site(s): ${s.live} live, ${s.suspect} failing, ${s.down} in the pool or down, ${s.recovered} recovered, ${s.inconclusive.length} inconclusive (bot checks, timeouts, dropped connections), ${s.needsReview.length} the code could not read (low signals, still listed).`,
     "",
     poolLine(s),
     "",
-    `A site that does not answer leaves the AI's work at its first failed check and is hidden when its re-check the next day fails too (the not-working pool, pipeline/not-working.mjs); ${s.leftToRecheck ? `${s.leftToRecheck} site(s) on that ladder were left to the hourly re-check. ` : ""}A site that answers with the wrong thing (parked, blank, a duplicate) is confirmed down after ${FAILS_TO_DOWN} failed checks on different weeks, spanning at least ${DOWN_AFTER_DAYS} days. An inconclusive check leaves the state unchanged, and a site whose capture met a bot wall is never counted down.`,
+    `A site that fails a check (it does not answer, is parked or blank, redirects to a social profile, or duplicates another entry) leaves the AI's work at once and is hidden in the temporary pool when its re-check the next day fails too (pipeline/not-working.mjs); ${s.leftToRecheck ? `${s.leftToRecheck} site(s) on that ladder were left to the hourly re-check. ` : ""}One passing check brings it back as it was. An inconclusive check leaves the state unchanged, a bot wall alone never counts, and nothing here goes to the owner's review queue.`,
     "",
   ];
   if (s.dryRun && s.changes) {
@@ -974,7 +992,7 @@ export function healthSummary(s) {
     lines.push("");
   }
   if (s.newlyHidden?.length) {
-    lines.push(`### Not working (hidden ${s.dryRun ? "if written" : "now"})`, "", "| URL | Reason |", "| --- | --- |");
+    lines.push(`### Into the temporary pool (hidden ${s.dryRun ? "if written" : "now"})`, "", "| URL | Reason |", "| --- | --- |");
     for (const d of s.newlyHidden) lines.push(`| ${cell(d.url)} | ${cell(d.reason)} |`);
     lines.push("");
   }
@@ -1030,9 +1048,9 @@ export function healthSummary(s) {
   }
   if (s.needsReview.length) {
     lines.push(
-      "### Needs review (looks little like a portfolio)",
+      "### The code could not read these sites (low portfolio signals)",
       "",
-      "Not removed or hidden by this check: a listed, graded site here goes to the owner's review queue (\"signals collapsed\"), and he decides. Listed sites are not graded again for it.",
+      "Not removed, hidden, pooled or sent to the owner's review queue: each loaded, so it stays listed as it is. The low reading is recorded with its signals (unread), usually a page the reader could not read (an intro screen, a desktop-style design).",
       "",
       "| URL | Signals (of 6) |",
       "| --- | ---: |"

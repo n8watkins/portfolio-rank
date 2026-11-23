@@ -27,7 +27,7 @@ import {
   isBotWallReason,
   readBlockedInputs,
 } from "../pipeline/capture-blocked.mjs";
-import { DOWN_AFTER_DAYS, FAILS_TO_DOWN, runHealthCheck } from "../pipeline/health.mjs";
+import { runHealthCheck } from "../pipeline/health.mjs";
 import { planExclusions } from "../pipeline/exclusions.mjs";
 import { ensureRosterSchema } from "../pipeline/roster.mjs";
 import { HIDDEN_WHERE } from "../lib/hidden.mjs";
@@ -319,7 +319,7 @@ test("health check: a bot-walled, never-captured site is never failed, stays hid
   const db = tempDb();
   await seed(db);
   const start = Date.parse("2026-11-11T00:00:00Z");
-  for (let i = 0; i < FAILS_TO_DOWN + 1; i++) {
+  for (let i = 0; i < 4; i++) {
     const s = await runHealthCheck({ db, feed, fetchImpl, now: new Date(start + i * 7 * DAY), log: () => {} });
     for (const url of [WALLED, WALLED_OPEN]) assert.ok(s.inconclusive.some((x) => x.url === url), `${url} is inconclusive`);
   }
@@ -341,7 +341,7 @@ test("health check: a bot-walled, never-captured site is never failed, stays hid
   assert.equal(signals.needsReview, false);
 });
 
-test("health check: a blank site that stays blocked is confirmed down and excluded as broken, never as not a portfolio", async () => {
+test("health check: a blank site that stays blocked goes into the temporary pool and, after 90 days, the archive as broken, never as not a portfolio", async () => {
   const db = tempDb();
   await seed(db);
   // Healthy sites around them (the exclusions refuse to drop more than a tenth of the list at once).
@@ -353,15 +353,24 @@ test("health check: a blank site that stays blocked is confirmed down and exclud
     return other ? { status: 200, ok: true, url, text: async () => body(other.name) } : fetchImpl(url);
   };
   const start = Date.parse("2026-11-11T00:00:00Z");
-  // Weekly checks: FAILS_TO_DOWN of them spanning at least DOWN_AFTER_DAYS.
-  for (let i = 0; i < FAILS_TO_DOWN; i++) {
-    await runHealthCheck({ db, feed: all, fetchImpl: fetchAll, now: new Date(start + i * Math.ceil(DOWN_AFTER_DAYS / (FAILS_TO_DOWN - 1)) * DAY), log: () => {} });
-  }
-  assert.equal((await rowOf(db, EMPTY)).health, "down");
+  const HOUR = 3600000;
+  // The nightly run, then the ladder's re-checks of the site (the hourly job's own call): an hour later, the next day.
+  await runHealthCheck({ db, feed: all, fetchImpl: fetchAll, now: new Date(start), log: () => {} });
+  const recheck = (t) => runHealthCheck({ db, feed: [feed[0]], fetchImpl: fetchAll, now: new Date(t), scheduled: "check", alerts: false, doorLimit: 0, log: () => {} });
+  await recheck(start + HOUR);
+  assert.equal((await rowOf(db, EMPTY)).health, "suspect", "never hidden on the first day");
+  await recheck(start + DAY);
+  assert.equal((await rowOf(db, EMPTY)).health, "down", "in the temporary pool the next day");
   for (const url of [WALLED, WALLED_OPEN, EMPTY_WALLED]) assert.equal((await rowOf(db, url)).health, null, `${url} is not failed`);
   assert.equal((await rowOf(db, GOOD_WALLED)).health, "live");
+  // Not archived before 90 days in the pool.
+  assert.deepEqual((await planExclusions({ db, excluded: [], feed: all, now: new Date(start + 20 * DAY) })).added, []);
+  // Its check on day 90 still fails: archived with the next weekly export.
+  const day90 = start + DAY + 90 * DAY;
+  await db.execute({ sql: "UPDATE health_marks SET pool_next_at = ? WHERE url = ?", args: [new Date(day90).toISOString(), EMPTY] });
+  await recheck(day90);
 
-  const plan = await planExclusions({ db, excluded: [], feed: all, now: new Date(start + 20 * DAY) });
+  const plan = await planExclusions({ db, excluded: [], feed: all, now: new Date(day90) });
   assert.deepEqual(plan.added.map((a) => a.url), [EMPTY]);
   assert.equal(plan.added[0].kind, "down", "broken, not not_portfolio");
   assert.match(plan.added[0].reason, /^capture blocked: /);

@@ -1,9 +1,18 @@
-// The not-working pool (owner, 2026-11-16): a listed site that stops
-// answering (paused hosting, a deleted deployment, a dead domain, a refused
-// connection) leaves the AI's work at once, and the site itself a day later
-// if it is still not answering. Nothing is deleted on the way: the row, the
-// grade, the votes, the ratings and the screenshots stay, so a site that
-// answers again comes back exactly as it was. Nobody is emailed about it.
+// The temporary pool and the archive (owner, 2026-11-16 and 2026-11-23: "if
+// something is failing a health check, it doesn't go to review by me ... it
+// gets automatically disabled and goes to a pool and that pool gets
+// periodically checked. And after 90 days, it gets put into the archived
+// section ... once a month to see if they pass any health checks").
+//
+// One ladder for every failed health check: a site that does not answer (the
+// name does not resolve, nothing answers, TLS fails, an HTTP error), one that
+// answers with the wrong thing (a parked or for-sale page, a blank page, a
+// redirect to a social profile, a blocked capture of a site that never had a
+// good one) and a duplicate of another entry. It leaves the AI's work at once,
+// and the site itself a day later if it still fails. Nothing is deleted on
+// the way: the row, the grade, the votes, the ratings and the screenshots
+// stay, so a site that passes again comes back exactly as it was. Nobody is
+// emailed about it and nothing goes to the owner's review queue.
 //
 //   live --first failed check--> failing (health 'suspect', stage 1):
 //        out of grading, AI comparisons, polls and blog facts
@@ -11,41 +20,40 @@
 //        marks hold); still shown
 //   stage 1 --re-check about RECHECK_AFTER_MS later fails--> stage 2
 //   stage 2 --re-check CONFIRM_AFTER_MS after the first failure fails-->
-//        not working (health 'down', stage 3, pool_since): hidden from
-//        visitors everywhere (lib/hidden.mjs HIDDEN_WHERE), its profile
-//        answers not found (lib/hidden.mjs GONE_WHERE)
-//   not working: re-checked on POOL_CADENCE; after LEAVE_AFTER_DAYS it leaves
-//        the list (pipeline/exclusions.mjs planExclusions, data/excluded.json
-//        through the weekly pull request), where the monthly re-check of
-//        removed "down" entries can still bring it back
-//   any stage --a full check passes--> live, the ladder cleared
+//        in the temporary pool (health 'down', stage 3, pool_since): hidden
+//        from visitors everywhere (lib/hidden.mjs HIDDEN_WHERE: the list,
+//        rankings, tiers, games), its profile answers not found
+//        (lib/hidden.mjs GONE_WHERE)
+//   in the pool: re-checked on POOL_CADENCE; after LEAVE_AFTER_DAYS it goes to
+//        the archive (pipeline/exclusions.mjs planExclusions, data/excluded.json
+//        through the weekly pull request), where the archive check
+//        (archiveCheckDue) can still bring it back
+//   any stage --a full check passes--> live, the ladder cleared, back exactly
+//        as it was (recorded in health_returns)
 //   any stage --a check that could not tell--> nothing changes (neither
 //        advanced nor cleared); the re-check comes back after an hour, then
 //        2, 4, 8... hours up to a day (UNCLEAR_MAX_WAIT_MS), and time unknown
 //        counts toward the owner's 28-day alert (pipeline/health.mjs)
-//   stage 1 or 2 --the page answers, with the wrong thing (parked, blank)-->
-//        off this ladder, onto the weekly-counted rule from that failure;
-//   not working --any failure--> still not working, on its cadence
+//   in the pool --any failure--> still in the pool, on its cadence
 //
 // A check counts as a stage's re-check only when it comes when that re-check
 // is due (pool_next_at, less DUE_SLACK_MS): two failures on one bad day never
-// skip a stage. The re-checks are the same full check the nightly run makes
-// (pipeline/health.mjs checkSite, with the browser's second opinion), run
-// hourly for the sites that are due (pipeline/recheck.mjs,
-// .github/workflows/recheck.yml); the nightly run leaves sites on the ladder
-// to it.
+// skip a stage, so one bad night never hides a site. The re-checks are the
+// same full check the nightly run makes (pipeline/health.mjs checkSite, with
+// the browser's second opinion), run hourly for the sites that are due
+// (pipeline/recheck.mjs, .github/workflows/recheck.yml); the nightly run
+// leaves sites on the ladder to it.
 //
-// Only a site that does not answer joins the ladder (notAnswering). One that
-// answers with the wrong thing (a parked page, a blank page, a redirect to a
-// social profile, a duplicate, a blocked capture) is on the weekly-counted
-// rule of pipeline/health.mjs, a bot wall or a check that could not tell is
-// never a failure at all, and a row 'down' for any reason stays down until a
-// check passes (pipeline/health.mjs nextHealth). A new failure always starts
-// the ladder at its own time. A row already 'down' for not answering with no
-// ladder (from before the pool, or its marks voided) joins it as not working
-// since its first failure, at its next failed check.
+// Never a failed check: a bot wall, a check that could not tell (a timeout, a
+// dropped connection, a browser that did not start), a "not a portfolio"
+// grade, and low portfolio signals (the code could not read the site; it
+// stays listed). A removal decided in the review queue stays down with its
+// reason (pipeline/health.mjs nextHealth). A new failure always starts the
+// ladder at its own time. A row already 'down' with no ladder (from before
+// the pool, or its marks voided) joins it as in the pool since its first
+// failure, at its next failed check.
 //
-// A not-working site leaves the list only on a fresh failed check: its
+// A site in the pool goes to the archive only on a fresh failed check: its
 // cadence brings a check at day LEAVE_AFTER_DAYS, and the export takes it
 // only once a check on or after that day has failed (last_fail_at).
 //
@@ -94,10 +102,84 @@ export const NOT_WORKING = 3;
  * does not resolve, nothing answers at the address, TLS fails, an HTTP error
  * (a paused deployment's 402, a deleted deployment's 404, a 5xx). A page that
  * answers with the wrong thing (parked, blank, a redirect, a blocked capture,
- * a duplicate) is not. The same reasons are the ones a removed "down" entry
- * can come back from (pipeline/exclusions.mjs recheckDue).
+ * a duplicate) is not. Both take the same ladder; the reason is only shown.
  */
 export const notAnswering = (reason) => /^(HTTP \d|does not load|DNS|connect timeout|TLS|timeout|connection dropped)/.test(String(reason ?? ""));
+
+/** notAnswering in SQL (never NULL) on the column `col` (tests/not-working.test.mjs keeps the two equal). */
+export const NOT_ANSWERING_SQL = (col) =>
+  `COALESCE(${col} GLOB 'HTTP [0-9]*' OR ${["does not load", "DNS", "connect timeout", "TLS", "timeout", "connection dropped"].map((w) => `substr(${col}, 1, ${w.length}) = '${w}'`).join(" OR ")}, 0)`;
+
+// ---------------------------------------------------------------------------
+// The archive: data/excluded.json entries of the health kinds (owner, 2026-11-23)
+
+/** The excluded kinds the archive check looks at: removed for failing health checks. Never "not_portfolio", "duplicate" or "owner_request". */
+export const ARCHIVE_KINDS = ["down", "dead"];
+/** DEFAULT: the first archive checks, on these days after the site was archived, while its row is still kept (pipeline/roster.mjs PURGE_AFTER_DAYS, 30). */
+export const ARCHIVE_FIRST_DAYS = [7, 14, 21];
+/** The owner's number: then once a month. */
+export const ARCHIVE_EVERY_DAYS = 30;
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const addDays = (day, days) => new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
+
+/**
+ * Whether an excluded entry is in the archive: a health kind, and never a
+ * removal the owner decided (decided_by "owner"). A "not a portfolio"
+ * decision has its own kind (pipeline/exclusions.mjs kindOf), so it is never
+ * here; neither is a duplicate or an owner's request. Those are never brought
+ * back by a health check.
+ */
+export function inArchive(e) {
+  if (!e || typeof e !== "object" || !ARCHIVE_KINDS.includes(String(e.kind ?? ""))) return false;
+  return String(e.decided_by ?? "") !== "owner";
+}
+
+/** The archive check after one made on `day` (YYYY-MM-DD) of a site archived on `removed`: ARCHIVE_FIRST_DAYS, then every ARCHIVE_EVERY_DAYS. */
+export function nextArchiveCheck(removed, day) {
+  const first = DAY_RE.test(String(removed ?? "")) ? ARCHIVE_FIRST_DAYS.map((d) => addDays(String(removed), d)).find((d) => d > day) : null;
+  return first ?? addDays(day, ARCHIVE_EVERY_DAYS);
+}
+
+/**
+ * The day an archived entry is due for its check (YYYY-MM-DD; "" for now), or
+ * null when it is not in the archive. The entry's recheck_after, but never
+ * more than ARCHIVE_EVERY_DAYS after its last check (or its archiving), so an
+ * entry written under an older, slower rule (91 days for "dead") is still
+ * checked monthly. With neither date, the first of ARCHIVE_FIRST_DAYS.
+ */
+export function archiveCheckDue(e) {
+  if (!inArchive(e)) return null;
+  const base = [e.last_checked, e.removed].map((d) => String(d ?? "").slice(0, 10)).find((d) => DAY_RE.test(d)) ?? null;
+  const monthly = base ? addDays(base, ARCHIVE_EVERY_DAYS) : null;
+  const after = DAY_RE.test(String(e.recheck_after ?? "")) ? String(e.recheck_after) : null;
+  if (after && monthly) return after < monthly ? after : monthly;
+  if (after) return after;
+  if (DAY_RE.test(String(e.removed ?? ""))) return addDays(String(e.removed), ARCHIVE_FIRST_DAYS[0]);
+  return "";
+}
+
+/** Days the log of returns is kept (the owner's page shows the last RETURNS_SHOWN_DAYS). */
+export const RETURNS_KEEP_DAYS = 120;
+export const RETURNS_SHOWN_DAYS = 30;
+
+/** The statement that drops the log's rows older than RETURNS_KEEP_DAYS. */
+export const pruneReturns = (now = new Date()) => ({ sql: "DELETE FROM health_returns WHERE at < ?", args: [iso(now.getTime() - RETURNS_KEEP_DAYS * DAY)] });
+
+/**
+ * Statements recording that sites came back (`from`: "pool" or "archive"):
+ * [{ url, at, reason, since, hidden }], and the prune.
+ */
+export function returnStatements(items, from, now = new Date()) {
+  if (!items.length) return [];
+  return [
+    ...items.map((i) => ({
+      sql: "INSERT INTO health_returns (url, at, from_where, reason, since, hidden) VALUES (?, ?, ?, ?, ?, ?)",
+      args: [i.url, i.at ?? now.toISOString(), from, i.reason ?? null, i.since ?? null, i.hidden ? 1 : 0],
+    })),
+    pruneReturns(now),
+  ];
+}
 
 
 /** Days between re-checks of a site not working for `ageDays` days (POOL_CADENCE). */
@@ -129,7 +211,8 @@ export function poolOf(row) {
 }
 
 /**
- * One check that failed because the site does not answer. prev: { health,
+ * One failed check (any kind: the site does not answer, or answers with the
+ * wrong thing, or duplicates another entry). prev: { health,
  * fails, firstFailAt, lastFailAt, reason, pool } (pool: poolOf, or null).
  * Returns the new { health, fails, firstFailAt, lastFailAt, reason, pool }.
  * A site not on the ladder joins it at stage 1 now; one on it advances when
@@ -247,8 +330,14 @@ export const DUE_COUNT_SQL = `SELECT COUNT(*) AS n FROM (${DUE_SQL})`;
 export const dueCutoff = (now = new Date()) => iso(now.getTime() + DUE_SLACK_MS);
 
 /**
- * SQL: the pool as the owner's admin page shows it: listed sites failing or
- * not working for not answering, with their ladder.
+ * SQL (one argument: the cut-off, as ISO text): the sites that came back
+ * since the cut-off, newest first, for the owner's Health pool page.
+ */
+export const RETURNS_SQL = `SELECT url, at, from_where, reason, since, hidden FROM health_returns WHERE at >= ? ORDER BY at DESC, id DESC`;
+
+/**
+ * SQL: the pool as the owner's admin pages show it: listed sites failing (not
+ * hidden yet) or in the temporary pool (hidden), with their ladder.
  */
 export const POOL_SQL = `SELECT p.url, p.name, p.health, p.health_reason, p.health_checked_at,
     m.pool_stage, m.pool_started_at, m.pool_next_at, m.pool_since

@@ -5,7 +5,7 @@ import { SITE } from "@/lib/site";
 export const metadata = {
   title: "Removed portfolios - PortfolioRank",
   description:
-    "Portfolios PortfolioRank took off its list, with the reason and the date: sites confirmed down over two weeks of checks, duplicates and removal requests.",
+    "Portfolios PortfolioRank took off its list, with the reason and the date: sites that failed their checks for 90 days, duplicates, sites that are not a portfolio, and removal requests.",
 };
 
 type Removal = {
@@ -46,14 +46,16 @@ export default function RemovedPage() {
           <h1 className="text-3xl font-bold tracking-tight">Removed portfolios</h1>
           <div className="mt-3 space-y-3 text-sm leading-relaxed text-mute">
             <p>
-              Every week PortfolioRank checks each site on its list. A site is only
-              removed after it fails three checks in a row spanning at least two
-              weeks, so a short outage never takes anyone off. Bot checks that block
-              automated visitors don&apos;t count as failures.
+              Every night PortfolioRank checks each site on its list. A site that
+              fails is checked again an hour later and the next day, and is hidden
+              only if it still fails then. It is taken off the list only after 90
+              days of failing checks, so a short outage never takes anyone off. Bot
+              checks that block automated visitors don&apos;t count as failures.
             </p>
             <p>
-              A site whose domain is gone, or that only shows an error page, is
-              checked again every few months and comes back when it works.
+              A site taken off because it was down or gone is checked again a week,
+              two weeks and three weeks later, then every month, and comes back when
+              it works.
             </p>
             <p>
               Is your site back up, or was it removed by mistake?{" "}

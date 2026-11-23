@@ -261,9 +261,15 @@ test("a blocked refresh writes one review row for a listed, graded site and leav
   assert.equal(decided.ok, true);
   await recordRefreshFailure(db, url, `error: ${BOT_WALL_REASON}`, new Date("2026-11-24T04:00:00Z"), { needsReview: true });
   assert.equal((await pendingOf(db, url)).length, 0);
-  // A later capture got through (captured_at moves), then a re-capture is blocked again: a new episode, a new row.
+  // A later capture got through (captured_at moves), then a re-capture meets the wall again: the owner marked
+  // this site's wall checked, so it holds and nothing is written (owner, 2026-11-23).
   await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-25 03:00:00' WHERE url = ?", args: [url] });
   await recordRefreshFailure(db, url, `error: ${BOT_WALL_REASON}`, new Date("2026-11-26T04:00:00Z"), { needsReview: true });
+  assert.equal((await pendingOf(db, url)).length, 0, "his Mark checked holds");
+  // The site then failed a real health check and came back from the temporary pool: he is asked once more.
+  await db.execute({ sql: "INSERT INTO health_returns (url, at, from_where) VALUES (?, '2026-11-26T05:00:00.000Z', 'pool')", args: [url] });
+  await db.execute({ sql: "UPDATE portfolios SET captured_at = '2026-11-26 06:00:00' WHERE url = ?", args: [url] });
+  await recordRefreshFailure(db, url, `error: ${BOT_WALL_REASON}`, new Date("2026-11-26T07:00:00Z"), { needsReview: true });
   rows = await pendingOf(db, url);
   assert.equal(rows.length, 1);
   // And once a capture gets through, that row closes by itself.

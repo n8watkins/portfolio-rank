@@ -13,6 +13,7 @@ export const ADMIN_PAGES = [
   { href: "/admin/alerts", label: "Alerts" },
   { href: "/admin/review", label: "Review" },
   { href: "/admin/capture-problems", label: "Capture problems" },
+  { href: "/admin/health-pool", label: "Health pool" },
 ] as const;
 
 /**

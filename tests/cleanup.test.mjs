@@ -23,8 +23,6 @@ import {
 } from "../pipeline/roster.mjs";
 import {
   checkSite,
-  DOWN_AFTER_DAYS,
-  FAILS_TO_DOWN,
   findDuplicates,
   healthSummary,
   nextHealth,
@@ -336,28 +334,24 @@ test("findDuplicates keeps the first entry for the same URL or the same final UR
   assert.deepEqual([...d], [["https://www.a.dev/", "https://a.dev"], ["https://b.dev", "https://b.vercel.app"]]);
 });
 
-test(`state machine: down only after ${FAILS_TO_DOWN} failed checks spanning ${DOWN_AFTER_DAYS}+ days; a pass recovers`, () => {
+test("state machine: every failure takes the one ladder: a failure once is never hidden, a second on a later day is; a pass recovers", () => {
   const t0 = new Date("2026-11-01T00:00:00Z");
   const at = (days) => new Date(t0.getTime() + days * DAY);
-  // A site that answers with the wrong thing (a site that does not answer has the not-working ladder: tests/not-working.test.mjs).
   const fail = { ok: false, reason: "renders blank" };
   let s = nextHealth(null, fail, at(0));
-  assert.deepEqual([s.health, s.fails], ["suspect", 1]);
-  // Three failures in two days (manual runs) are still only suspect, and count as one: each failed check needs a week of its own.
+  assert.deepEqual([s.health, s.fails, s.pool.stage], ["suspect", 1, 1]);
+  // Fails once and recovers: never hidden.
+  assert.equal(nextHealth(s, { ok: true }, at(0.05)).health, "live");
+  // The hour's re-check and the next day's: hidden.
+  s = nextHealth(s, fail, at(0.05));
+  assert.equal(s.health, "suspect");
   s = nextHealth(s, fail, at(1));
-  s = nextHealth(s, fail, at(2));
-  assert.deepEqual([s.health, s.fails], ["suspect", 1]);
-  // Weekly cadence: day 0, 7, 14 -> down.
-  let w = nextHealth(null, fail, at(0));
-  w = nextHealth(w, fail, at(7));
-  assert.equal(w.health, "suspect");
-  w = nextHealth(w, fail, at(14));
-  assert.deepEqual([w.health, w.fails, w.firstFailAt], ["down", 3, at(0).toISOString()]);
+  assert.deepEqual([s.health, s.firstFailAt], ["down", at(0).toISOString()]);
   // A bot wall leaves the state alone.
-  const same = nextHealth(w, { ok: null, reason: "blocked by a bot check" }, at(21));
-  assert.deepEqual([same.health, same.fails], ["down", 3]);
+  const same = nextHealth(s, { ok: null, reason: "blocked by a bot check" }, at(1.5));
+  assert.equal(same.health, "down");
   // Passing recovers.
-  assert.deepEqual(nextHealth(w, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "", pool: null });
+  assert.deepEqual(nextHealth(s, { ok: true }, at(21)), { health: "live", fails: 0, firstFailAt: null, lastFailAt: null, reason: "", pool: null });
 });
 
 test("runHealthCheck records states and schedules a recapture for recovered failed captures; a 'not a portfolio' grade is not a failed check", async () => {
@@ -387,7 +381,7 @@ test("runHealthCheck records states and schedules a recapture for recovered fail
   assert.deepEqual([rows["https://bob.dev"].health, rows["https://bob.dev"].health_reason], ["suspect", "HTTP 404"]);
   // The grade goes to the review queue (tests/health-false-failures.test.mjs), never into the health state.
   assert.equal(rows["https://cara.dev"].health, "live");
-  assert.match(healthSummary(s), /2 live, 1 suspect/);
+  assert.match(healthSummary(s), /2 live, 1 failing/);
 });
 
 test("runHealthCheck records nothing when most sites fail at once (the runner, not the sites)", async () => {
@@ -421,7 +415,14 @@ test("ACTIVE() keeps delisted, down and unanswering rows out of the free jobs; A
 // ---------------------------------------------------------------------------
 // exclusions
 
-test("planExclusions adds confirmed-down listed sites with evidence and drops them from the feed", async () => {
+/** Marks a 'down' row as 90+ days in the temporary pool, its last check failed on or after day 90 (pipeline/not-working.mjs). */
+const inPoolSince = (db, url, since, checked = null) =>
+  db.execute({
+    sql: "INSERT INTO health_marks (url, pool_stage, pool_health, pool_checked_at, pool_since, pool_started_at, last_fail_at) VALUES (?, 3, 'down', ?, ?, ?, ?)",
+    args: [url, checked, since, since, new Date(Date.parse(since) + 91 * DAY).toISOString()],
+  });
+
+test("planExclusions archives sites 90 days in the temporary pool with evidence and drops them from the feed; a down row with no ladder waits", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
   const feed = roster(30);
@@ -430,7 +431,11 @@ test("planExclusions adds confirmed-down listed sites with evidence and drops th
           VALUES (?, 'down', 'renders blank', 3, '2026-11-01T16:00:00Z', '2026-11-15T16:00:00Z')`,
     args: [feed[3].url],
   });
+  await inPoolSince(db, feed[3].url, "2026-08-01T00:00:00.000Z", "2026-11-15T16:00:00Z");
   await db.execute({ sql: "INSERT INTO portfolios (url, health, health_reason) VALUES (?, 'down', 'duplicate of x')", args: [feed[4].url] });
+  await inPoolSince(db, feed[4].url, "2026-08-01T00:00:00.000Z");
+  // Down by the old weekly-counted rule, no ladder: held until its next check puts it in the pool.
+  await db.execute({ sql: "INSERT INTO portfolios (url, health, health_reason, health_fails) VALUES (?, 'down', 'renders blank', 3)", args: [feed[6].url] });
   // Already excluded (legacy string form): not added twice.
   await db.execute({ sql: "INSERT INTO portfolios (url, health) VALUES (?, 'down')", args: [feed[5].url] });
   const plan = await planExclusions({ db, excluded: [feed[5].url], feed, now: new Date("2026-11-15T17:00:00Z") });
@@ -449,13 +454,17 @@ test("planExclusions adds confirmed-down listed sites with evidence and drops th
   assert.equal(plan.excluded.length, 3);
   assert.equal(plan.feed.length, 28);
   assert.ok(!plan.feed.some((p) => p.url === feed[3].url));
+  assert.match(plan.held.find((h) => h.url === feed[6].url).why, /its next check puts it in the temporary pool/);
 });
 
 test("planExclusions refuses to exclude more than 10% of the list at once", async () => {
   const { db } = tempDb();
   await ensureRosterSchema(db);
   const feed = roster(20);
-  for (const p of feed.slice(0, 3)) await db.execute({ sql: "INSERT INTO portfolios (url, health) VALUES (?, 'down')", args: [p.url] });
+  for (const p of feed.slice(0, 3)) {
+    await db.execute({ sql: "INSERT INTO portfolios (url, health) VALUES (?, 'down')", args: [p.url] });
+    await inPoolSince(db, p.url, "2026-08-01T00:00:00.000Z");
+  }
   await assert.rejects(planExclusions({ db, excluded: [], feed }), /refusing/);
 });
 
