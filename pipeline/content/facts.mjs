@@ -204,8 +204,8 @@ export async function topGrades(db, { now }) {
   if (best.length < MIN_GROUP || rest.length < MIN_GROUP) return notReady(kind, `${best.length} S/A and ${rest.length} other grades; ${MIN_GROUP} of each needed`);
   const b = sheet(kind, {
     now,
-    headline: "What the AI grader rewards, and what it marks down",
-    angle: "Compare the AI judge's scores on each axis for the top-graded portfolios with the rest: what the grader rewards, where even good portfolios lose points, and the one change a reader can copy.",
+    headline: "What the top portfolios get right in the first five seconds",
+    angle: "Compare the AI judge's five-second test (can a visitor tell who the person is and what they do) for the top-graded portfolios with the rest: how much the first screen matters, and the one change a reader can copy.",
     dataLink: `${SITE_URL}/top`,
     query: "portfolios: current AI grades (ai_rubric) of listed, visible portfolios",
   });
@@ -228,7 +228,13 @@ export async function topGrades(db, { now }) {
     restIds.push([AXIS_LABELS[k], ir]);
     per.push({ k, label: AXIS_LABELS[k], mb, mr, gap: mb - mr, ib, ir });
   }
-  if (per.length) {
+  if (per.length === 1) {
+    // One kept score (rubric v3): its gap, and no comparison across axes.
+    const [x] = per;
+    const gapId = b.fact(`How far the top-graded portfolios lead the rest on ${x.label}, in points on a 1 to 5 scale`, x.gap, `${fmt.dec(x.gap)} points`);
+    b.notable([x.ib, x.ir], `The top-graded portfolios average {{${x.ib}}} on ${x.label}, against {{${x.ir}}} for the rest`);
+    b.notable([gapId], `the top-graded portfolios lead the rest by {{${gapId}}} on ${x.label}`);
+  } else if (per.length) {
     const lead = extremes(per, (x) => x.gap, "max");
     const small = extremes(per, (x) => x.gap, "min");
     const leadId = b.fact(lead.length > 1 ? "The axes where the top-graded portfolios lead the rest by the most (tied)" : "The axis where the top-graded portfolios lead the rest by the most", lead.map((x) => x.label).join(" and "), joinWords(lead.map((x) => x.label)));
@@ -251,7 +257,7 @@ export async function topGrades(db, { now }) {
     b.notable([leadId, gapId], lead.length > 1 ? `{{${leadId}}} tie for the biggest lead of the top-graded portfolios, {{${gapId}}} each` : `the biggest lead of the top-graded portfolios is {{${gapId}}} on {{${leadId}}}`);
   }
   b.chart({
-    title: "Average score by axis: the top-graded portfolios against the rest",
+    title: "Average five-second test score: the top-graded portfolios against the rest",
     unit: "",
     max: 5,
     categories: bestIds.map(([l]) => l),
@@ -259,7 +265,7 @@ export async function topGrades(db, { now }) {
       { name: `Top-graded (top ${fmt.pct(best.length / rows.length)})`, facts: bestIds.map(([, id]) => id) },
       { name: "Everyone else", facts: restIds.map(([, id]) => id) },
     ],
-    alt: "Bar chart of the average AI score per axis, the top-graded portfolios next to all others; the top group leads on every axis.",
+    alt: "Bar chart of the average AI five-second test score, the top-graded portfolios next to all others.",
   });
   // Up to 5 tier S sites with a name, highest total first: named only for being in tier S.
   const named = rows

@@ -56,7 +56,7 @@ export function SiteFooter() {
         <div className="max-w-xs">
           <Wordmark />
           <p className="mt-3 text-sm text-mute">
-            The best developer portfolios, ranked by people and AI. {PORTFOLIO_COUNT_LABEL} portfolios, listed by{" "}
+            The best developer portfolios, ranked by code checks and people&apos;s votes. {PORTFOLIO_COUNT_LABEL} portfolios, listed by{" "}
             <a
               href="https://github.com/emmabostian/developer-portfolios"
               target="_blank"

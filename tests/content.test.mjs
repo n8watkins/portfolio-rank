@@ -129,7 +129,9 @@ test("fact builders: people's votes, who wins when grades differ and which trait
   assert.equal(s.ready, true, s.reason);
   assertNoBadNames(s);
   assert.equal(s.facts.find((f) => f.label === "People's votes between two graded portfolios").display, "41", "votes with a removed site are not counted");
-  assert.equal(s.facts.find((f) => /won by the better-graded one/.test(f.label)).display, "85%", "35 of 41");
+  // Gemini's letter is never read (rubric v3): the higher five-second test score wins 35 of 41 here.
+  assert.equal(s.facts.find((f) => /won by the higher-scoring one/.test(f.label)).display, "85%", "35 of 41");
+  assert.ok(!s.facts.some((f) => /better-graded/.test(f.label)));
   assert.ok(s.facts.some((f) => /with dark mode by default, when only one/.test(f.label)));
   assert.deepEqual(s.names.map((n) => n.url), ["https://top-1.dev"]);
   assert.equal(s.examples[0].url, "https://top-1.dev");
@@ -176,53 +178,50 @@ export const ph = (sheet, label) => {
   return `{{${f.id}}}`;
 };
 
-/** A draft that passes every code check, for the top-grades sheet built with a lower motion score. */
+/** A draft that passes every code check, for the top-grades sheet (rubric v3: the five-second test is its one AI score). */
 function goodDraft(sheet, over = {}) {
   const named = sheet.names[0];
   const shot = sheet.screenshots[0];
-  const lowTop = ph(sheet, "Average motion score (1 to 5) of the top-graded portfolios");
-  const lowRest = ph(sheet, "Average motion score (1 to 5) of all other graded portfolios");
+  const lowTop = ph(sheet, "Average the five-second test score (1 to 5) of the top-graded portfolios");
+  const lowRest = ph(sheet, "Average the five-second test score (1 to 5) of all other graded portfolios");
   const share = ph(sheet, "Share of all graded portfolios that are top-graded");
-  const gap = ph(sheet, "The biggest lead, in points on a 1 to 5 scale");
-  const lead = ph(sheet, "The axes where the top-graded portfolios lead the rest by the most (tied)");
-  const nLead = ph(sheet, "Number of axes sharing the biggest lead");
+  const gap = ph(sheet, "How far the top-graded portfolios lead the rest on the five-second test, in points on a 1 to 5 scale");
   const total = ph(sheet, "Portfolios graded by the AI judge");
   const example = sheet.examples[0];
   const [n1, n2, n3] = sheet.names;
-  void nLead;
   return {
-    title: "Even the best portfolios are weak on motion",
+    title: "The best portfolios win the first five seconds",
     alt_title_a: "Developer portfolio grades: what the top-graded sites share",
-    alt_title_b: "The one axis where nobody scores well",
-    subtitle: "We compared the AI judge's scores of top portfolios with everyone else.",
+    alt_title_b: "The first screen is where top portfolios pull ahead",
+    subtitle: "We compared the AI judge's five-second test of top portfolios with everyone else.",
     tags: ["portfolios", "data"],
     share_line: `${share} of graded portfolios are top-graded. Here is what they do differently.`,
     newsletter_blurb: "What the top portfolios share, from our grades.",
-    tldr: [`Motion is the lowest-scoring axis for every group: ${lowTop} for the top-graded portfolios, ${lowRest} for the rest.`, `Only ${share} of all graded portfolios are top-graded.`, `${lead} tie for the biggest lead, at ${gap}.`],
+    tldr: [`The top-graded portfolios average ${lowTop} on the five-second test, against ${lowRest} for the rest.`, `Only ${share} of all graded portfolios are top-graded.`, `They lead by ${gap}.`],
     body: [
-      `Motion is the lowest-scoring axis for every group we graded.`,
+      `The five-second test is where the top portfolios pull ahead of every other group we graded.`,
       `The top-graded portfolios average ${lowTop} on it, against ${lowRest} for the rest.`,
       `We graded ${total} portfolios with the same rubric, and only ${share} of them are top-graded.`,
-      "If you change one thing on your portfolio this week, add a little purposeful motion to the first screen.",
+      "If you change one thing on your portfolio this week, say who you are and what you do on the first screen.",
       "",
-      "### Top portfolios lead on most axes",
+      "### Top portfolios lead on the first screen",
       para(3),
       "",
       para(4, 3),
       "",
-      "Every axis tells the same story in a different way.",
+      "The first screen tells the whole story in a single glance.",
       "Reviewers notice a page that knows what it wants to say.",
       "Each choice on it points at one idea about the developer.",
       "",
-      "Motion is the exception, and an interesting one for anyone building a portfolio this month.",
-      "Most sites either skip it entirely or add so much that it gets in the way of reading.",
-      "A single subtle transition on the first screen is usually enough to feel considered.",
-      "Anything beyond that should earn its place by explaining something a static page cannot.",
+      "Clarity is the lesson, and an easy one for anyone building a portfolio this month.",
+      "Most sites either bury the role or crowd it with so much that it gets in the way of reading.",
+      "A single plain line on the first screen is usually enough to feel considered.",
+      "Anything beyond that should earn its place by explaining something the line cannot.",
       "",
       "[[image:inline-1]]",
       "",
-      `> **${gap} ahead on ${lead}**`,
-      "> Several axes tie for the widest lead between the top-graded portfolios and the rest.",
+      `> **${gap} ahead on the five-second test**`,
+      "> That is the gap between the top-graded portfolios and the rest.",
       "",
       "### The first screen carries the most weight",
       para(3, 2),
@@ -260,8 +259,8 @@ function goodDraft(sheet, over = {}) {
       "Start with the first screen today.",
     ].join("\n"),
     images: [
-      { slot: "hero", purpose: "the gap at a glance", kind: "chart", chart_id: "c1", alt: "Top portfolios lead on every axis." },
-      { slot: "inline-1", purpose: "evidence", kind: "chart", chart_id: "c1", alt: "Average scores by axis." },
+      { slot: "hero", purpose: "the gap at a glance", kind: "chart", chart_id: "c1", alt: "Top portfolios lead on the five-second test." },
+      { slot: "inline-1", purpose: "evidence", kind: "chart", chart_id: "c1", alt: "Average five-second test scores." },
       { slot: "inline-2", purpose: "an S portfolio", kind: "screenshot", site_url: shot.url, alt: `The first screen of ${named.name}'s portfolio.` },
     ],
     ...over,
@@ -1054,36 +1053,33 @@ test("quality: the TL;DR has exactly three bullets, each with a fact placeholder
   assert.match(bare.problems.join(";"), /bullet 2 has no fact placeholder/);
 });
 
-test("quality: ties are computed as facts and a superlative a tie contradicts is rejected", async () => {
-  const { sheet, roster } = await sheetAndRoster();
-  const nLead = sheet.facts.find((f) => f.label === "Number of axes sharing the biggest lead");
-  assert.equal(nLead.value, 5, "five axes share the lead; motion is the exception");
-  const lead = sheet.facts.find((f) => f.label.startsWith("The axes where the top-graded portfolios lead the rest by the most"));
-  assert.match(lead.display, /^visual design, .* and memorability$|storytelling/);
-  assert.equal(sheet.superlatives.find((x) => x.term === "biggest lead").tied, true);
+test("quality: a superlative a tie contradicts is rejected", async () => {
+  const { sheet: base, roster } = await sheetAndRoster();
+  // Rubric v3 leaves the top-grades sheet one AI score (the five-second test), so it has no ties of its own;
+  // the check is generic, so a tie is added to a copy of the sheet the way a builder records one.
+  const lead = base.facts.find((f) => f.label.startsWith("How far the top-graded portfolios lead"));
+  const nTie = { id: "f900", label: "Number of items sharing the biggest lead", value: 2, display: "2", tone: "neutral", about: null };
+  const sheet = { ...base, facts: [...base.facts, nTie], superlatives: [...base.superlatives, { term: "biggest lead", factIds: [lead.id], tied: true, tieFactId: nTie.id }] };
   const leadPh = `{{${lead.id}}}`;
-  const bad = goodDraft(sheet, { subtitle: `Top portfolios have their largest lead on ${leadPh}.` });
+  const bad = goodDraft(sheet, { subtitle: `Top portfolios have their largest lead, ${leadPh}, on the first screen.` });
   const r = checkOf(bad, sheet, roster, "superlatives");
   assert.equal(r.ok, false);
   assert.match(r.problems[0], /sheet shows a tie/);
-  assert.equal(checkOf(goodDraft(sheet, { subtitle: `Top portfolios have their largest lead on ${leadPh}, tied.` }), sheet, roster, "superlatives").ok, true);
-  assert.equal(checkOf(goodDraft(sheet, { subtitle: `The largest lead is on ${leadPh}, shared by {{${nLead.id}}} axes.` }), sheet, roster, "superlatives").ok, true);
-  assert.equal(checkOf(goodDraft(sheet), sheet, roster, "superlatives").ok, true);
-  // With no distinct leader at all, every axis ties.
-  const flat = await topGrades(await fixture(), { now: MONDAY });
-  assert.equal(flat.facts.find((f) => f.label === "Number of axes sharing the biggest lead").value, 6);
+  assert.equal(checkOf(goodDraft(sheet, { subtitle: `Top portfolios have their largest lead, ${leadPh}, tied.` }), sheet, roster, "superlatives").ok, true);
+  assert.equal(checkOf(goodDraft(sheet, { subtitle: `The largest lead is ${leadPh}, shared by {{${nTie.id}}} items.` }), sheet, roster, "superlatives").ok, true);
+  assert.equal(checkOf(goodDraft(base), base, roster, "superlatives").ok, true);
 });
 
 test("quality: a notable fact is flagged and the draft must lead with it", async () => {
   const { sheet, roster } = await sheetAndRoster();
   assert.ok(sheet.notable.length >= 1 && sheet.notable.length <= 2);
-  assert.match(sheet.notable[0].why, /motion is the lowest-scoring axis for every group/);
+  assert.match(sheet.notable[0].why, /average \{\{f\d+\}\} on the five-second test, against \{\{f\d+\}\} for the rest/);
   const d = goodDraft(sheet);
   assert.equal(checkOf(d, sheet, roster, "hook").ok, true);
-  const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^Motion is[^\n]*\nThe top-graded[^\n]*\n/, "") });
+  const noHook = goodDraft(sheet, { tldr: [d.tldr[1], d.tldr[2], d.tldr[0]], body: d.body.replace(/^The five-second test is[^\n]*\nThe top-graded[^\n]*\n/, "") });
   assert.equal(checkOf(noHook, sheet, roster, "hook").ok, false);
   const writerView = sheetForWriter(sheet);
-  assert.ok(writerView.notable_facts.length >= 1 && writerView.ties.length >= 1 && writerView.example_sites.length >= 1);
+  assert.ok(writerView.notable_facts.length >= 1 && writerView.example_sites.length >= 1);
 });
 
 test("quality: Try this points to a named positive example with a link", async () => {
