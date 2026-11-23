@@ -297,7 +297,7 @@ The back end is built; the poll card on home and the `/polls` page come with the
 - **Weeks:** each poll owns one Pacific week, Monday 00:00 to the next Monday 00:00 ([lib/polls/week.mjs](lib/polls/week.mjs)); its id is that Monday's date.
 - **Kinds:** `hero` (two real screenshots side by side, "Which hero section is better?", options Left and Right with the portfolio's URL) and `text` (2 to 4 written options).
 - **Every night, free** ([pipeline/polls.mjs](pipeline/polls.mjs) `schedulePolls`, called by `planNight` before the AI stages): this week has a poll, and so does next week when it starts before the next run.
-  When nothing was written ahead, code makes one without Gemini: a hero poll between two sites graded S or A whose screenshots exist, or the next unused evergreen text poll.
+  When nothing was written ahead, code makes one without Gemini: a hero poll between two sites with a Tier in the S or A family whose screenshots exist, or the next unused evergreen text poll.
   It also deletes per-person vote rows 30 days after a poll closes (the totals stay) and old rate-limit windows.
 - **Content stage, Gemini** (`pollsContent`): when fewer than 2 future weeks have a poll, one request to 3.5 Flash-Lite writes 4 candidates from aggregate data only (percentages of graded sites with a resume link, GitHub link, contact and so on; never a name or a site).
   Code then checks each one: known kind and topic, question length, 2 to 4 distinct options, no negative wording, no links, handles or roster names or domains, not a repeat of any earlier poll, at most one hero poll; code picks the hero poll's two sites (S or A only, not shown in the last 12 weeks, screenshots checked in R2).
@@ -387,7 +387,7 @@ Every route below answers 404 until the Worker variable `GAMES_V2` is `"true"` (
   A request whose site has not been captured again since waits; one whose new screenshot is gone keeps the grade and is marked `failed`.
   Nothing else re-grades a site: a person asking is the only way (owner, 2026-11-21 and 2026-11-22).
   Every claim step and action is written to `claim_log`, the audit log.
-- **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, average tier, the newest entry) come from one pass over the listed portfolios, cached an hour.
+- **Live stats** ([lib/games/stats.mjs](lib/games/stats.mjs)): the list numbers (graded, graded this week, % own domain and % resume link from the grades' facts, most common role from taglines, the members' average Tier from the tier store (shown only while `RANKING_V2` is on), the newest entry) come from one pass over the listed portfolios, cached an hour.
   Stars and the community list's contributors come from the GitHub API, cached a day.
   Votes today (Pacific, through the `votes_created_idx` index), all votes and quizzes finished are read on each edge-cache miss.
 - **Report download** (`printView` and `renderReportHtml` in [lib/grader/report.mjs](lib/grader/report.mjs)): a print-optimised HTML page with a "Save as PDF" button, not a PDF made on the Worker (a Worker PDF library ships Latin-1 fonts only, or a megabyte-scale font).
@@ -650,7 +650,7 @@ files (and de-dupes) a GitHub **issue on failure**, so nothing fails silently.
 | **`recheck.yml`** | started by the Worker's hourly cron at :15 when a site is due; fallback schedule hourly at :40 (skips when Cloudflare started a run in the last hour) + manual | The not-working pool's re-checks that are due (`pipeline/recheck-run.mjs`); an hour with none due is one query and no install. No Gemini, no email | TURSO |
 | **`judge-vote.yml`** | manual only | Fallback: the ranking v2 comparisons and recompute, within the accountant's share, only when the repository variable `RANKING_V2` is `true` (it is not set, so a run does nothing) | TURSO, GEMINI, SHOTS_BASE_URL |
 | **`backup.yml`** | daily 05:00 UTC + manual | Gzip snapshot of every table but `cache` and `matchups`, with the schema, → private R2 bucket `portfolio-rank-backups`; restore with `scripts/restore-db.mjs` ([docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) section G) | TURSO, R2_ACCOUNT_ID, R2_BACKUP_* |
-| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for every listed graded portfolio (whatever Gemini's letter; not "not a portfolio") without a fresh PSI result (never measured first, then oldest), up to 400 a day, by hitting the prod API | TURSO |
+| **`prewarm.yml`** | daily 09:00 UTC + manual | Warm the PSI (Lighthouse) + inspect (polish) caches for every listed portfolio graded or measured by the capture (not "not a portfolio"), so every tiers member has its own, without a fresh PSI result (never measured first, then oldest), up to 400 a day, by hitting the prod API | TURSO |
 | **`grade.yml`** | started by the Worker for each "grade my portfolio" request (no schedule, no inputs) | Captures every waiting grade request behind the filtering proxy, uploads the screenshots to the private prefix, grades free-tier requests through the people queue ("Grade my portfolio" above) | TURSO, R2, GEMINI |
 
 The fallback schedules of `sync-upstream.yml` and `health.yml` are kept on purpose: a `fallback-guard` job skips the scheduled run when Cloudflare started the workflow in the last 20 hours (30 for the health check, whose fallback runs daily at 12:00 UTC, 7.5 hours after Cloudflare's start), so they only run when Cloudflare could not start them (no token, or the Worker down); a scheduled `sync-upstream.yml` run then also grades, so grading never stops.
@@ -679,9 +679,10 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
   Resume, GitHub and contact come from links and from buttons, `role="button"` and `onclick` controls (a resume needs a resume-like label such as "View Resume", GitHub a github.com URL on the control, and only a short label is read for contact words), a URL a button navigates to from its onclick is a project link (not URLs in data- attributes), and links inside HTML comments do not count ([pipeline/page-controls.mjs](pipeline/page-controls.mjs); facts version 2, measured in the audit in [scripts/experiments/facts-audit/](scripts/experiments/facts-audit/)).
   Stored facts carry their version (`v`, `FACTS_VERSION`); a row gets the new facts at its next capture, or for the whole list at once from the manual `remeasure-all.yml`.
   A grade keeps the copy of the facts and the code checks it was made with, and is never rewritten for new facts, but nothing reads that copy while the row has newer ones: wherever a grade's code items are used (resume, GitHub, contact, own domain, project links, footer year), they come from `portfolios.facts` when its version is at least the grade's copy's, and from the grade's copy otherwise ([lib/fresh-facts.mjs](lib/fresh-facts.mjs)).
-  That covers the automated checks score and its fix list (the full tiers rebuild, a new grade's starting rank, and the profile's breakdown, which is made on read), the report card's "checks passed", the fact chips on the leaderboard and the home page, the printable report and the list's numbers.
+  That covers the Code checks score and its fix list (the full tiers rebuild, a new site's Starting rank, and the profile's breakdown, which is made on read), the report card's Code checks score, the fact chips on the leaderboard and the home page, the printable report and the list's numbers.
+  A site Gemini never graded is scored the same way from its own measured facts ([lib/fresh-facts.mjs](lib/fresh-facts.mjs) `checksReading`), so one site has one number on the profile, its report card and the printable report.
   Gemini's answer is never changed, and the removal rule still reads the signals stored with the grade.
-  A starting rank is set from the points once (the rebuild, or the grade's write), so new facts move it only at the next full rebuild (`scripts/refresh-tiers.mjs`).
+  A Starting rank is set from the points once (at capture, the daily tiers task, or a grade's write when the site had none), so new facts move it only at the next full rebuild (`scripts/refresh-tiers.mjs`).
   A project shown in a projects section counts as a project link when its GitHub or demo URL is a link or is written in its button; a "Projects" button that only scrolls to that section is not a link itself, but it counts for the `projects` signal and as an in-page section.
   A grade sends one image (the settled top of the page, local capture or R2 `hero.jpg`), the facts and the page text in a `<site_data>` block the system instruction marks as untrusted, with thinking at `minimal` and a strict JSON schema.
   Rows captured before v2 get their text and facts measured when graded (plain HTTP, or a browser when the server sends under 200 characters; `--no-browser` turns that off) and stored.
@@ -724,6 +725,28 @@ Its ELO-era AI votes, which ran by hand while `RANKING_V2` was not set, were rem
 - **Which model judged:** each rubric stores the model that actually answered in `ai_rubric.model`, and each comparison stores it in `comparisons.model`.
 - **The ELO-era AI votes** (`judge.mjs pairwise`) were removed on 2026-11-22 (owner, 2026-11-21).
   The votes they cast stay in `votes` (rater `ai:flash-lite`, with `votes.model`), and ranking v2 imports them as `legacy-pairwise` comparisons.
+
+## Starting rank from code (owner, 2026-11-22)
+
+The owner's rule: "the starting rank you get is based off of clear verifiable code measurements", Gemini's grading "separate from the ranking", and "a site should have a tier" from its first measure; the Starting tier is by place in the Code checks score only, with no gates, and votes decide after the start.
+
+All of this starts with the next release: every production job runs released code, and merging changes nothing in production.
+
+- **Who is ranked** ([lib/tiers-store.mjs](lib/tiers-store.mjs) `libraryMember`): a listed site that is not hidden (health `down`), not removed by its verified owner, not graded "not a portfolio" and not waiting for its one fresh grade after an Undo, which Gemini graded "a portfolio" (every member before this rule), or which has a good capture (`status` live, a screenshot, and a stored page that shows the site, `lib/reviews/stored-capture.mjs`), measured facts and at least 4 of the 6 portfolio signals (`pipeline/portfolio-guard.mjs` `STRONG_SIGNALS`).
+  A measured site with fewer signals and no Gemini answer waits; two things rank it later: Gemini's "yes" (as the grade is written, `rankForWrite`), or the owner keeping it on the review page ([lib/reviews/keep.mjs](lib/reviews/keep.mjs)).
+- **When** a site gets its Starting rank: right after its capture is stored (`pipeline/capture.mjs` calls `rankFromCode`), in the daily tiers task for any it missed (`dailyRun`: `seedNewcomers`, at most 300 a day, then the cutoffs), and in the full rebuild.
+  Each newcomer is placed among the members by its points (the rebuild's points histogram and medians), as a new grade always was; nobody else's rating or votes move.
+- **The order**: the Code checks score, then the date first measured (the first grade for sites graded before this rule, else the date stored with the rank, else the capture date), then the address ([lib/tiers.mjs](lib/tiers.mjs) `compareSeed`); Gemini's score is never read.
+  The stored `gkey` (Gemini's grade key) is kept and no longer read by the order.
+- **Gemini's later grade** never moves a site that has its Starting rank; its "not a portfolio" goes through the Removal rule exactly as before, and a site that answer leaves listed only for review stays ranked; any answer that is not a "yes" takes the site out of the order at once (`rankForWrite`).
+- **Leaving and coming back**: the trigger `tier_member_out` only ever takes a site out (delisted, health `down`, or graded "not a portfolio"); it replaces `tier_member_sync`, which needed a Gemini letter and so would have dropped every code-ranked site.
+  A site comes back only through the membership rule: the next daily tiers task (`seedNewcomers`) puts it back with the rating, votes and starting points it had, or a Gemini "yes" as the grade is written.
+  So a site that recovers from `down` is out until the next daily run (at most about a day), where the old trigger put a graded site back at the health check's own write.
+- **Where the rank lives**: `tier_ratings` (the tier store); a Gemini grade still keeps its copy in `ai_rubric.rank`, and a site without a grade has none.
+- **Lighthouse**: the nightly prewarm measures every listed site the membership rule accepts (Gemini's "yes", or a capture with facts and 4 or more signals, or a member already), so code-ranked sites get their own speed scores.
+- **Shown in whole points**: the profile, the tier card and the printable report round the total and each item; the order uses the exact value.
+- **Gemini's letter** is never shown or counted as a site's grade: the profile's report card has a neutral "AI" mark, the home page and the old leaderboard show the Tier only while `RANKING_V2` is on and nothing otherwise, and polls, live stats and blog facts choose by the Tier (`lib/tiers-letters.mjs` `siteTiers`).
+  The visitor grader ("Grade my portfolio", off) still shows Gemini's letter on its own reports until the letter is retired.
 
 ## Ranking v2 (built, not switched on)
 

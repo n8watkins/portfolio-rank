@@ -1,8 +1,10 @@
 // Tiers by ELO (lib/tiers.mjs) on the hourly Cron Trigger ("15 * * * *",
 // worker/index.ts), incremental (owner decision 2026-11-13): votes move their
 // two portfolios at once (lib/tiers-db.mjs applyFaceoff); here, once a day,
-// the cutoffs are found and only the letters that changed are rewritten
-// (dailyTiers: a few thousand rows read at most, never the whole library).
+// sites measured by code that have no Starting rank yet get one, then the
+// cutoffs are found and only the letters that changed are rewritten
+// (lib/tiers-store.mjs dailyRun: seedNewcomers, one pass over the list for
+// the sites still to rank, then dailyTiers, a few thousand rows read at most).
 // The very first run, with no tier data yet, is the full rebuild
 // (lib/tiers-store.mjs refreshTiers). No AI request.
 //
@@ -10,8 +12,8 @@
 // whose letter changed are purged by their tag (profileTag), and every profile
 // after a full rebuild.
 import { db as database } from "../lib/db";
-import { dailyDue, dailyTiers, readTierMeta } from "../lib/tiers-db.mjs";
-import { refreshTiers } from "../lib/tiers-store.mjs";
+import { dailyDue, readTierMeta } from "../lib/tiers-db.mjs";
+import { dailyRun, refreshTiers } from "../lib/tiers-store.mjs";
 import { PROFILES_TAG, profileTag } from "./edge-cache";
 import { type PurgeTags, purgeProfilesOf } from "./tier-purge";
 
@@ -29,7 +31,7 @@ export async function tiersTick(scheduledTime: number, { purgeTags }: { purgeTag
     }
     if (!dailyDue(meta, scheduledTime)) return { skipped: "not_due" };
     let purged = 0;
-    const r = await dailyTiers(db, { now: scheduledTime, purge: async (urls: string[]) => void (purged = await purgeProfilesOf(urls, purgeTags, profileTag)) });
+    const r = await dailyRun(db, { now: scheduledTime, purge: async (urls: string[]) => void (purged = await purgeProfilesOf(urls, purgeTags, profileTag)) });
     log("tiers.daily", { ...r, purged });
     return { ...r, purged };
   } catch (e) {

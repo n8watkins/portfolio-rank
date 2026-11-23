@@ -96,14 +96,19 @@ test("points from automated checks: 100 in all, measured from saved data, the me
   assert.deepEqual(pointFixes(unpackCheck(rows)), pointFixes(noImage));
 });
 
-test("starting ranks: by points (then the Gemini score), evenly from the best to the last, held loosely", () => {
+test("starting ranks: by points, then the date first measured, then the address (never Gemini), evenly from the best to the last, held loosely", () => {
   assert.deepEqual(seedRating(1, 101), { mu: 33, sigma: 25 / 3 });
   assert.deepEqual(seedRating(101, 101), { mu: 17, sigma: 25 / 3 });
   assert.equal(seedRating(51, 101).mu, 25);
+  // Equal points: the one measured first leads, whatever Gemini's score (key) says.
   const a = { url: "a", points: 80, key: 10, first: 1 };
   const b = { url: "b", points: 80, key: 20, first: 2 };
   const c = { url: "c", points: 90, key: 0, first: 3 };
-  assert.deepEqual([a, b, c].sort(compareSeed).map((x) => x.url), ["c", "b", "a"]);
+  assert.deepEqual([a, b, c].sort(compareSeed).map((x) => x.url), ["c", "a", "b"]);
+  // Equal points and dates: the address; a Gemini score far apart changes nothing.
+  const d = { url: "d", points: 80, key: 99, first: 1 };
+  assert.deepEqual([d, a].sort(compareSeed).map((x) => x.url), ["a", "d"]);
+  assert.deepEqual([{ ...a, key: 99 }, { ...d, key: 0 }].sort(compareSeed).map((x) => x.url), ["a", "d"]);
   // A seeded portfolio has its letter at once, with no votes at all: A to C by place, never S (not earned) or D (reserved).
   const order = orderLibrary(Array.from({ length: 200 }, (_, i) => ({ url: `s${i}`, ...seedRating(i + 1, 200), seeded: true })));
   const ranks = rankLibrary(order);

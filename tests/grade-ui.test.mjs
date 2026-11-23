@@ -369,14 +369,17 @@ test("a listed site's report offers the claim; the verified owner hides the grad
   await owner.context.close();
 });
 
-test("how grading works: the five tiers, the bands, what's checked, how votes combine; in the sitemap", async () => {
+test("how grading works: the Code checks score, the bands, what's checked, how votes combine; never the AI's letter; in the sitemap", async () => {
   for (const width of [1440, 390]) {
     const { page: p, context, errors } = await freshPage(width);
     await p.goto(`${BASE}/grading`);
     await p.getByRole("heading", { level: 1, name: "How grading works" }).waitFor();
-    for (const t of ["S", "A", "B", "C", "D"]) await p.getByRole("img", { name: `Tier ${t}` }).first().waitFor();
-    for (const name of ["Five tiers, S to D", "Facts by code, quality by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
-    assert.equal(await p.getByRole("region", { name: "Facts by code, quality by AI" }).getByRole("listitem").count(), 11, "6 code checks (no template) and 5 AI axes");
+    for (const name of ["The Code checks score, out of 100", "Facts by code, a report card by AI", "How people's votes combine"]) await p.getByRole("heading", { name }).waitFor();
+    assert.equal(await p.getByRole("region", { name: "The Code checks score, out of 100" }).getByRole("listitem").count(), 13, "the 13 items of lib/check-points.mjs");
+    assert.equal(await p.getByRole("region", { name: "Facts by code, a report card by AI" }).getByRole("listitem").count(), 11, "6 code checks (no template) and 5 AI axes");
+    // The AI never sets the rank: no letter scale, no "the AI makes the call".
+    assert.equal(await p.getByText("The AI makes the call").count(), 0);
+    assert.equal(await p.getByRole("img", { name: /^Tier [SABCD]$/ }).count(), 0);
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     assert.deepEqual(errors, []);
     await context.close();
