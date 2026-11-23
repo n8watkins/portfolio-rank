@@ -192,6 +192,14 @@ Each chain is a list of steps in the order they happen.
       A site that was never captured gets a row on your review page at the night's plan step.
    3. A page with only a canvas or video is held back and marked for review, but no review row is written for it yet.
       The fix is open as #266.
+   4. A re-capture of a site that already has a good capture never replaces or fails it: the site waits 1, 2, 4, 8, 16 then 30 days before the next try (`refresh_failures`).
+      From the next release, a re-capture that meets a bot or security check, or a dialog still covering the page, also puts the site on your review list: a row on your review page ("Mark checked" records that you looked), and the stored capture and grade stay as they are.
+      The row closes by itself once a later re-capture gets through.
+      A gate, loader or mode picker still in the way, a page of only a canvas or video, or an error status does not go to your review list after a re-capture; it stays a refresh failure with its reason.
+      Neither does a bot check seen only on the phone-size visit, after the desktop view showed the site.
+   5. From the next release, a re-capture that lost a résumé, GitHub or contact link the old capture had, or most of its text, is recorded (`capture_changes`).
+      A change that comes with new measuring code (a new `facts.v`) is recorded as the code's, not the site's.
+   All of these are listed on the Capture problems page (see "Keeping watch").
 7. **More free measuring** (same workflow, in this order): tall page images for older captures (up to 100 a night), page text and facts for sites waiting for a grade (up to 300), and project link checks that are due (up to 120).
 8. **Grade** (night stage 1, `grade_new`).
    One Gemini request with the screenshot, the page text and the facts.
@@ -379,6 +387,8 @@ Each one watches the jobs above.
 | hourly | Night watch: an alert when last night's run never started or died. | Running |
 | hourly | Email caps: an alert at 80% of a cap. | Running |
 | after each night | Owner alerts: quota used up, a stage stopped, parked items, traction, a missing or expiring dispatch token. | Running |
+| after each night | Owner alerts: a weekly summary of the open capture problems, each group's count and its change since the last email, with the page's link (`lib/capture-problems.mjs`). Emailed at most once in 7 days, and only when a count has gone up since the last email (a rise inside the 7 days is reported after them if it is still there; after the alert clears, a problem that comes back counts as new). The other nights it is shown in the admin but not emailed. Never on staging. | Off until the next release |
+| any time | The Capture problems page (`/admin/capture-problems`), listed sites only: A a re-capture failed and the old capture is kept, B a first capture failed, C the stored capture is a bot check or has under 200 characters of text (captures from before page text was stored are counted apart as not checked), D a re-capture got worse. Each row has its reason, capture date and thumbnail, Gemini's grade, the health state and whether it has an open row on your review page. | Off until the next release |
 | daily | A backup of the database (`backup.yml`), and a check that it is fresh (`limits.yml`). | Running |
 | daily | A snapshot of free limits for Turso, R2 and Workers (`limits.yml`). | Running |
 | weekly | Model watch and your goals email (Worker), and the security scan (`security.yml`). | Running |

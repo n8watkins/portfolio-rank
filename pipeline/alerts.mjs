@@ -17,6 +17,12 @@
 //                            GitHub Actions: GITHUB_DISPATCH_TOKEN is not set
 //   dispatch-token:expiring  that token expires within 14 days, or has
 //                            (dispatchTokenConditions)
+//   capture-problems         open capture problems per group, with the admin
+//                            page's link (lib/capture-problems.mjs): open
+//                            while a count is above zero; a weekly summary,
+//                            emailed at most once in 7 days and only when a
+//                            count rose since the last email (a quiet
+//                            condition the other nights, below)
 // Levels: ALERT_TRACTION (JSON, {"peopleGrades": 50, "humanVotes": 300}).
 //
 // Email: one interface, { send({ to, subject, text }) }, which throws when
@@ -26,7 +32,13 @@
 // no send_email binding, EMAIL_FROM or OWNER_EMAIL the sender is null:
 // alerts are recorded and logged but not delivered, and a day's alert is
 // only marked sent once the email went out.
-import { ALERT_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
+//
+// A condition may be `quiet`: it is recorded and stays open (the admin sees
+// it), but no email goes out for it that run. Every email sent stores its
+// title (owner_alerts.sent_title), so a condition can compare what holds now
+// with what the owner was last told. `repeats: false` changes the email's
+// last line, for a condition that is not emailed every day it holds.
+import { ALERT_COLUMNS, ALERT_TABLES, applyTables } from "../lib/pipeline-schema.mjs";
 import { quotaDay } from "./quota-day.mjs";
 import { createEmailGate, emailCaps, emailTransport } from "../lib/email/gate.mjs";
 
@@ -74,7 +86,7 @@ export function emailSender(env, { db } = {}) {
 }
 
 export async function ensureAlertSchema(db) {
-  await applyTables(db, ALERT_TABLES);
+  await applyTables(db, ALERT_TABLES, ALERT_COLUMNS);
 }
 
 /** The conditions an end-of-day run's summary (pipeline/night.mjs finishNight) shows. */
@@ -175,10 +187,11 @@ export async function tractionConditions(db, { now = new Date(), levels = tracti
 
 /**
  * Records `conditions` (all that hold now among the keys `scope` covers),
- * sends each one that wasn't sent today, and clears the ones in scope that
- * no longer hold. Returns { sent, unsent, active, cleared }.
+ * sends each one that wasn't sent today (a `quiet` one only records), and
+ * clears the ones in scope that no longer hold. Returns { sent, unsent,
+ * quiet, active, cleared }.
  * @param {{ execute: Function }} db
- * @param {{ conditions: { key: string, kind: string, title: string, detail?: string }[], scope?: (key: string) => boolean, now?: Date,
+ * @param {{ conditions: { key: string, kind: string, title: string, detail?: string, quiet?: boolean, repeats?: boolean }[], scope?: (key: string) => boolean, now?: Date,
  *   email?: null | { send(m: { to: string, subject: string, text: string }): Promise<void> }, to?: string | null, log?: (line: string) => void }} options
  */
 export async function reconcileAlerts(db, { conditions, scope = () => true, now = new Date(), email = null, to = null, log = () => {} }) {
@@ -186,7 +199,7 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
   const at = now.toISOString();
   const day = quotaDay(now).day;
   const holding = new Set(conditions.map((c) => c.key));
-  const out = { sent: [], unsent: [], active: [...holding], cleared: [] };
+  const out = { sent: [], unsent: [], quiet: [], active: [...holding], cleared: [] };
   for (const c of conditions) {
     await db.execute({
       sql: `INSERT INTO owner_alerts (key, kind, title, detail, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)
@@ -195,6 +208,10 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
               cleared_at = NULL`,
       args: [c.key, c.kind, c.title, c.detail ?? "", at, at],
     });
+    if (c.quiet) {
+      out.quiet.push(c.key);
+      continue;
+    }
     const row = (await db.execute({ sql: "SELECT last_sent_day, first_seen FROM owner_alerts WHERE key = ?", args: [c.key] })).rows[0];
     if (row?.last_sent_day === day) continue; // one email per condition per day
     if (!email || !to) {
@@ -207,7 +224,7 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
       await email.send({
         to,
         subject: `${c.kind === "good" ? "" : "[PortfolioRank] "}${c.title}`,
-        text: `${c.detail ?? ""}\n\nOngoing since ${since}. This email repeats once a day until it clears.`,
+        text: `${c.detail ?? ""}\n\nOngoing since ${since}. ${c.repeats === false ? "This email comes at most once a week, and only when a count has gone up." : "This email repeats once a day until it clears."}`,
       });
     } catch (e) {
       // Refused by the email gate's caps or failed at the provider: tried again on the next run.
@@ -215,7 +232,7 @@ export async function reconcileAlerts(db, { conditions, scope = () => true, now 
       log(`owner alert not emailed: ${c.title} (${String(e?.message ?? e).slice(0, 120)})`);
       continue;
     }
-    await db.execute({ sql: "UPDATE owner_alerts SET last_sent_day = ?, sends = sends + 1 WHERE key = ?", args: [day, c.key] });
+    await db.execute({ sql: "UPDATE owner_alerts SET last_sent_day = ?, sends = sends + 1, sent_title = ? WHERE key = ?", args: [day, c.title, c.key] });
     out.sent.push(c.key);
   }
   const open = (await db.execute("SELECT key FROM owner_alerts WHERE cleared_at IS NULL")).rows.map((r) => String(r.key));

@@ -215,6 +215,34 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
   A listed site's verified owner's "Re-grade" asks for a new capture; the night's "grade new sites" stage grades the site once from a capture newer than the request, ahead of new sites and inside the same cap, keeps the old grade in `rubric_history` and closes the request, so it can be asked again later.
   Nothing else re-grades a listed site.
 
+### Capture problems the owner can see (2026-11-22)
+
+- **A Capture problems page in the admin, and one line in the nightly alert** (owner, 2026-11-22: yes to a "Capture problems" list). Status: building (#275).
+  Why: a whole-list re-capture that day left 100 sites on their old capture and 11 more got worse, and the owner could see none of it, because a failed re-capture of a site with a good capture was recorded only in `refresh_failures`.
+  `/admin/capture-problems` lists four groups of listed sites, newest first (`lib/capture-problems.mjs` has each rule):
+  A, a re-capture of a live site failed and the old capture is kept (its `refresh_failures` row);
+  B, a listed site has no good capture (`status` error, dead or parked);
+  C, the stored capture is bad (its page text reads as a bot check by the capture's own `isBotWallPage`, or is empty, or under 200 characters);
+  D, a re-capture got worse (it lost a résumé, GitHub or contact link the old facts had, or kept under 30% of an old text over 500 characters).
+  A capture with no stored page text at all was made before captures stored it (#57, 2026-11-10), so it was never measured: it is not in C, and the page counts it apart as not checked.
+  D is recorded at capture time in `capture_changes`, and only facts of the same version (`facts.v`) are compared: a change that comes with new measuring code is listed apart as the code's, not counted.
+  A site the health check marks down or suspect is not a capture problem; its health state is a column.
+  "On your review list" means the site has an open row on `/admin/review`, never the `needs_review` flag alone, which the weekly health check rewrites.
+- **The capture-problems alert is a weekly summary** (owner, 2026-11-22: "lets just do a weekly capture alert"). Status: building (#275).
+  The night's owner alert holds it while any count is above zero, with each group's count, its change since the last email in plain words, and the page's link; never on staging.
+  An email goes out on a night when both hold: a group's count is above its lowest since the last email (zero after the alert cleared, which it does when every count reaches zero), and at least 7 days have passed since the last email that was actually sent (`owner_alerts.last_sent_day`).
+  A rise inside those 7 days is held: if the count is still above that lowest point on the first night after the gap, that night's email reports it; if it has gone, nothing is sent.
+  A failed email does not start the 7 days and is tried again the next night.
+  Every other night the alert is recorded quiet: the admin sees it, no email goes out.
+  The lowest counts are kept in `capture_problem_alert`, starting from the last email's counts (`owner_alerts.sent_title`).
+  Why: about 100 old re-capture failures in group A would otherwise send the same email every night, and a daily email for small changes is more than the owner wants.
+- **A re-capture that hits a bot check or a covering dialog goes to the owner's review list** (owner, 2026-11-22, with the Capture problems list; his standing rule "bot-walled sites go to owner review", applied to re-captures). Status: building (#275).
+  A re-capture that meets a bot or security check, or a dialog still on top after the capture tried to close it, writes a pending row in its own group, `recapture_blocked` ("Re-capture blocked"), on `/admin/review` (`lib/reviews/door.mjs` `blockedRefreshReview`, the same "Mark checked" decision as a first capture's bot wall), and the good stored capture and grade stay as they are.
+  One row per episode: none while the site has another open case, none again after he decided one since the stored capture was made, and the row closes by itself once a later re-capture gets through.
+  This is narrower than a first capture: a gate, loader or mode picker still in the way, a page of only a canvas, video or image, and an error status on a page that shows a site stay refresh failures in group A, with their reason.
+  A bot check seen only on the phone-size visit, after the desktop view of the same capture showed the site, does not go to review either: it stays a refresh failure in group A with that reason.
+  Why: that day 28 of 33 bot checks were phone-view only, on sites whose stored capture is good, so they may be the site's protection answering our own second visit rather than a wall a visitor meets.
+
 ## Ranking
 
 - **OpenSkill ratings, seeded from the grade** (owner asked the agent to pick, 2026-11-10). Status: planned.
