@@ -59,7 +59,7 @@ export const PROJECT_ATTR = whole(`${STRONG_WORDS}|${WEAK_WORDS}`, CJK_WORDS);
 // certificates, awards, testimonials, clients, a network ("Network & recognition."), what was written or said
 // about the person, and other people's code ("Contributions", "Repos I like"). Its links are lowered.
 const NOT_PROJECT_HEADING = whole(
-  String.raw`experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition|featured in|as seen in|press|articles?|posts?|blog|talks?|publications?|contributions?|repos i like|starred|favou?rite repos`
+  String.raw`experiences?|employment|careers?|work history|education|certifications?|certificates?|credentials?|awards?|honou?rs|testimonials?|clients?|network|recognition|featured in|as seen in|press|articles?|posts?|blog|talks?|publications?|contributions?|repos i like|starred|favou?rite repos|platforms|partners|integrations|sponsors|brands|companies|trusted by|worked with`
 );
 /** Whether a heading opens a projects section: a strong word, or a weak one with no not-projects word. */
 const projectHeading = (words) => STRONG.test(words) || (WEAK.test(words) && !NOT_PROJECT_HEADING.test(words));
@@ -220,12 +220,14 @@ export function scanPage(html, baseUrl) {
       const titled = rec.heading.level >= 2 && !TITLE_LIKE.test(words);
       if (titled && (scope?.kind === "aside" || scope?.kind === "other") && PROJECT_HEADING.test(words)) endScope();
       if (!scope && titled) {
-        // "Work Experiences", "Education", "Network & recognition." are never projects, whatever their classes.
+        // "Work Experiences", "Education", "Network & recognition." are never projects, whatever their classes. Inside
+        // a projects element only an h2 says so ("section.projects > h2 Clients"): an h3 or h4 there is a card's
+        // title ("Dashboard for Companies' Data Analysis", "E-Commerce Platforms").
         const kind = PROJECT_HEADING.test(words)
           ? "project"
           : SOCIAL_HEADING.test(words)
             ? "social"
-            : NOT_PROJECT_HEADING.test(words)
+            : NOT_PROJECT_HEADING.test(words) && (!projectOpen || rec.heading.level <= 2)
               ? "other"
               : !projectOpen && ASIDE_HEADING.test(headingCore(words))
                 ? "aside"

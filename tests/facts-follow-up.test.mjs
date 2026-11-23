@@ -192,10 +192,15 @@ test("the words that mark a projects section, in English and other languages, wh
     assert.deepEqual(tiers(`<main><section ${attr}>${demos}</section></main>`), [1, 1], attr);
   }
   // A not-projects word wins over a weak projects word; a strong one wins over it.
-  for (const h of ["Featured clients", "Featured in", "Featured articles", "Open source contributions", "Milestones", "Collaborators", "Labels"]) {
+  // "Products & platforms." is sujanbhatta.tech's wall of platforms it integrated with, not its products.
+  for (const h of ["Featured clients", "Featured in", "Featured articles", "Open source contributions", "Milestones", "Collaborators", "Labels", "Products &amp; platforms.", "Apps we worked with"]) {
     assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${demos}</section></main>`), [3, 3], h);
   }
   assert.deepEqual(tiers(`<main><section><h2>Projects &amp; experience</h2>${demos}</section></main>`), [1, 1]);
+  // Inside a projects element an h3 is a card's title, even one with a not-projects word (sebascherny.github.io,
+  // hezy.netlify.app); an h2 there still ends the projects ("Clients").
+  assert.deepEqual(tiers(`<main><section id="projects"><div><h3>Dashboard for Companies' Data Analysis</h3>${demos}</div><div><h3>E-Commerce Platforms</h3><a href="https://three.example/">x</a></div></section></main>`), [1, 1, 1]);
+  assert.deepEqual(tiers(`<main><section class="projects"><h2>Clients</h2>${demos}</section></main>`), [3, 3]);
   // Not inside other words: a class "label laboratory" is neither "lab".
   assert.deepEqual(tiers(`<main><section class="label laboratory">${demos}</section></main>`), [3, 3]);
 });
