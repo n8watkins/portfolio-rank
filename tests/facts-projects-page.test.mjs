@@ -194,9 +194,10 @@ test("tool lists, article sites, cookie banners and comment widgets: the host li
   assert.deepEqual(show(`<section><h2>Projects</h2><div class="project-tech"><a href="https://a.example/">Live</a></div></section>`), [[1, "https://a.example/"]]);
   assert.deepEqual(show(`<section class="skills-projects"><a href="https://a.example/">a</a></section>`), [[1, "https://a.example/"]]);
   assert.deepEqual(show(`<section class="houses causes"><h2>Projects</h2><a href="https://a.example/">a</a></section>`), [[1, "https://a.example/"]]);
-  // "Tools I built" is the person's own tools; an id "tools" around it only lowers the outbound link, and the repository stays.
-  assert.deepEqual(show(`<section><h2>Tools I built</h2><a href="https://a.example/">a</a><a href="https://github.com/ana/t">t</a></section>`), [[1, "https://github.com/ana/t"], [3, "https://a.example/"]]);
-  assert.deepEqual(show(`<section id="tools"><h2>Tools I built</h2><a href="https://a.example/">a</a><a href="https://github.com/ana/t">t</a></section>`), [[1, "https://github.com/ana/t"], [3, "https://a.example/"]]);
+  // "Tools I built" is the person's own tools: a heading that says "I built" opens a projects section, even in an
+  // element with id "tools".
+  assert.deepEqual(show(`<section><h2>Tools I built</h2><a href="https://a.example/">a</a><a href="https://github.com/ana/t">t</a></section>`), [[1, "https://a.example/"], [1, "https://github.com/ana/t"]]);
+  assert.deepEqual(show(`<section id="tools"><h2>Tools I built</h2><a href="https://a.example/">a</a><a href="https://github.com/ana/t">t</a></section>`), [[1, "https://a.example/"], [1, "https://github.com/ana/t"]]);
   // A page wrapper "tech-theme": the projects inside it win, the rest is lowered, nothing is dropped.
   assert.deepEqual(show(`<div class="app tech-theme"><section id="projects"><a href="https://a.example/">a</a></section><p><a href="https://b.example/">b</a></p></div>`), [[1, "https://a.example/"], [3, "https://b.example/"]]);
   // A project card named "cookie-clicker" inside the projects is a project.

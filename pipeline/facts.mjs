@@ -352,7 +352,11 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 
 // A path segment that names a list of projects: "/projects", "/work", "/portfolio", "/case-studies",
 // "/solutions". Whole segments only, so "/how-it-works", "/networks" and "/workshop" are not.
-const LISTING_SEGMENT = /^(?:projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase)$/i;
+// Other languages and the label scan's names too: "/proyectos", "/projets", "/made" (milan.milanovic.org), "/lab".
+// A page name's extension is read off first: "projects.html" (josephmansilla.github.io) is "projects".
+const LISTING_WORDS = String.raw`projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|项目|作品|made|builds|lab|creations|obras|trabalhos|trabajos|travaux|r[eé]alisations`;
+const LISTING_NAME = new RegExp(String.raw`^(?:${LISTING_WORDS})$`, "iu");
+const LISTING_SEGMENT = { test: (s) => LISTING_NAME.test(String(s).replace(/\.(?:html?|php)$/i, "")) };
 // A segment that a GET could act on: sign-in and sign-out, subscription and account actions ("/unsubscribe",
 // "/logout", "/delete", "/pay"). Never requested, wherever it sits, even as a project's own name.
 const ACTION_SEGMENT =
@@ -506,8 +510,14 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   return [...tiers[0].map((c) => ({ ...c, tier: 1 })), ...own, ...tiers[2].map((c) => ({ ...c, tier: LOW_TIER }))].slice(0, max);
 }
 
-/** A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies". Not "How I work". */
-const PROJECTS_LINK_TEXT = /^\s*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view)\s+)?(?:projects?|works?|portfolio|case stud(?:y|ies)|solutions|showcase)\s*[→›»↗]?\s*$/i;
+/**
+ * A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies",
+ * "Proyectos", "Mis proyectos", "Made", "Réalisations". Not "How I work".
+ */
+const PROJECTS_LINK_TEXT = new RegExp(
+  String.raw`^\s*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view|mis|meus|mes|meine|i miei|mijn|мои)\s+)?(?:projects?|works?|portfolio|portafolio|portf[oó]lio|case stud(?:y|ies)|solutions|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|项目|作品|made|builds|lab|creations|obras|trabalhos|trabajos|travaux|r[eé]alisations)\s*[→›»↗]?\s*$`,
+  "iu"
+);
 
 const pathOfUrl = (u) => {
   try {

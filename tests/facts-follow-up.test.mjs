@@ -3,7 +3,7 @@
 // a credit is never a project, and an address on a code host is not a portfolio site. Real markup, cut down.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkLinks, homeProjectLinks, isCodeHostAddress, measurePage, projectCandidates, projectLinksPass, projectLinksText } from "../pipeline/facts.mjs";
+import { checkLinks, homeProjectLinks, isCodeHostAddress, measurePage, projectCandidates, projectLinksPass, projectLinksText, projectsPageFor } from "../pipeline/facts.mjs";
 import { codeChecks } from "../pipeline/rubric.mjs";
 import { urlNotPortfolio } from "../pipeline/junk-rules.mjs";
 
@@ -188,9 +188,26 @@ test("the words that mark a projects section, in English and other languages, wh
     "Projets", "Proyectos", "Mis proyectos", "Projekte", "Projetos", "Projetos pessoais", "Progetti", "Projecten", "Projekty", "Проекты", "Мои проекты", "Проекти", "项目", "我的项目", "專案", "作品", "プロジェクト", "프로젝트", "Portafolio", "Portfólio", "Trabajos", "Travaux"]) {
     assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${demos}</section></main>`), [1, 1], h);
   }
-  for (const attr of ['id="projetos"', 'id="proyectos"', 'class="apps"', 'class="lab"', 'id="featured"', 'class="open-source"', 'class="mis-proyectos"', 'id="проекты"']) {
+  // Ids and classes: strong words anywhere; a weak word only as a whole id (any) or a whole class ("work" phrases).
+  for (const attr of ['id="projetos"', 'id="proyectos"', 'id="apps"', 'id="lab"', 'id="featured-apps"', 'id="open-source"', 'class="mis-proyectos"', 'id="проекты"', 'class="selected-work"', 'class="works"', 'class="featured-projects"']) {
     assert.deepEqual(tiers(`<main><section ${attr}>${demos}</section></main>`), [1, 1], attr);
   }
+  // Not projects (the second review): a not-projects word in the name, bare "featured", a weak word as a class.
+  for (const attr of ['id="featured-posts"', 'class="featured-in"', 'class="featured-image"', 'class="card featured"', 'id="featured"', 'class="apps"', 'class="products"', 'class="lab"', 'class="app-store-badges"', 'class="as-seen-in"', 'id="press"', 'id="clients"']) {
+    assert.deepEqual(tiers(`<main><section ${attr}>${demos}</section></main>`), [3, 3], attr);
+  }
+  // A heading that says the person built, made, founded or worked on things is a strong projects heading, up to 14
+  // words; "client work" is strong; "Highlights" is not a projects word.
+  for (const h of ["Here are some of the projects I've worked on", "Some of the things I have built recently", "Things I built", "What have I built?", "What I've been building", "Things I've worked on", "Stuff I've made", "Products and platforms I built", "Apps &amp; integrations I built", "Companies I founded", "Things we shipped", "Client work", "Client projects", "Freelance work", "Recent builds"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${demos}</section></main>`), [1, 1], h);
+  }
+  for (const h of ["Highlights", "Places I worked at", "项目管理经验", "项目复盘", "我的作品集 blog 文章", "3 apps / 8 months", "20+ builds"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${demos}</section></main>`), [3, 3], h);
+  }
+  // On a page of h1s, the first h1 is the title even if it says "My Portfolio"; only the "projects" family opens.
+  assert.deepEqual(tiers(`<main><h1>My Portfolio</h1><p>hi <a href="https://employer.example/">e</a></p><h1>Skills</h1><h1>Contact</h1></main>`), [3]);
+  assert.deepEqual(tiers(`<main><h1>Ana</h1><h1>Portfolio</h1>${demos}<h1>Contact</h1></main>`), [3, 3]);
+  assert.deepEqual(tiers(`<main><h1>Projects</h1>${demos}<h1>About</h1><h1>Contact</h1></main>`), [3, 3], "the first h1 never opens a section");
   // A not-projects word wins over a weak projects word; a strong one wins over it.
   // "Products & platforms." is sujanbhatta.tech's wall of platforms it integrated with, not its products.
   for (const h of ["Featured clients", "Featured in", "Featured articles", "Open source contributions", "Milestones", "Collaborators", "Labels", "Products &amp; platforms.", "Apps we worked with"]) {
@@ -234,6 +251,27 @@ test("a heading's link-less wrapper hands its section only to the next element; 
   assert.deepEqual(show(`<main><div><h2>Projects</h2></div><div><a href="https://one.example/">one</a></div><section><p class="title">Clients</p><a href="https://client1.example/">c1</a></section></main>`), [[1, "https://one.example/"], [3, "https://client1.example/"]]);
   // adhamdannaway.com: "<div><h3>Some of my latest work</h3></div><ul id="thumbs">" then the case studies.
   assert.deepEqual(show(`<section><div><div><h3>Some of my latest work</h3></div><ul id="thumbs"><li><a href="/portfolio/a">a</a></li><li><a href="/portfolio/b">b</a></li></ul><p><a href="https://other.example/">o</a></p></div></section>`), [[2, "https://ana.dev/portfolio/a"], [2, "https://ana.dev/portfolio/b"], [3, "https://other.example/"]]);
+});
+
+test("the site's projects page is found by a label in another language and by a page name with .html", () => {
+  const pick = (html, u = "https://ana.dev/") => projectsPageFor(homeProjectLinks({ html, url: u, finalUrl: u }), u);
+  // josephmansilla.github.io: "Proyectos" to projects.html, under the site's own path.
+  assert.equal(pick(`<nav><a href="index.html">Home</a><a href="projects.html">Proyectos</a></nav>`, "https://josephmansilla.github.io/portfolio/"), "https://josephmansilla.github.io/portfolio/projects.html");
+  // milan.milanovic.org: "Made" to /made/.
+  assert.equal(pick(`<nav><a href="/made/">Made</a></nav>`), "https://ana.dev/made/");
+  for (const [html, want] of [
+    [`<nav><a href="/proyectos">Proyectos</a></nav>`, "https://ana.dev/proyectos"],
+    [`<nav><a href="/projets">Projets</a></nav>`, "https://ana.dev/projets"],
+    [`<nav><a href="/work.html">Work</a></nav>`, "https://ana.dev/work.html"],
+    [`<nav><a href="/stuff">Mis proyectos</a></nav>`, "https://ana.dev/stuff"],
+    [`<nav><a href="/x">Réalisations</a></nav>`, "https://ana.dev/x"],
+  ]) {
+    assert.equal(pick(html), want, html);
+  }
+  // Still not: a page about the person, a blog, a theatre designer's fields of work (no rule for those).
+  for (const html of [`<nav><a href="/about.html">About</a></nav>`, `<nav><a href="/blog.php">Blog</a></nav>`, `<nav><a href="/projection">Projection Design</a><a href="/lighting">Lighting Design</a></nav>`]) {
+    assert.equal(pick(html), null, html);
+  }
 });
 
 test("named project pages and credits with a few words, the reviewer's cases", () => {
