@@ -37,10 +37,11 @@ const when = (v: string | null) => {
   const t = v ? Date.parse(v) : NaN;
   return Number.isFinite(t) ? new Date(t).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", timeZone: TZ }) : null;
 };
+// The address as listed (www kept): a duplicate and its original can differ by it alone.
 const domainOf = (url: string) => {
   try {
     const u = new URL(url);
-    return `${u.hostname.replace(/^www\./, "")}${u.pathname.replace(/\/$/, "")}`;
+    return `${u.hostname}${u.pathname.replace(/\/$/, "")}`;
   } catch {
     return url;
   }
@@ -86,7 +87,8 @@ function Site({ url, name, reason, facts, badge, data }: { url: string; name: st
 
 function Section({ id, title, count, about, empty, children }: { id: string; title: string; count: number; about: React.ReactNode; empty: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="mt-8 scroll-mt-6" aria-labelledby={`${id}-heading`} data-health-section={id}>
+    // scroll-mt clears the sticky site header, so a count card's link lands on the section's heading.
+    <section id={id} className="mt-8 scroll-mt-28" aria-labelledby={`${id}-heading`} data-health-section={id}>
       <h2 id={`${id}-heading`} className="flex flex-wrap items-baseline gap-x-2 text-lg font-bold tracking-tight">
         <span>{title}</span>
         <span className="text-sm font-semibold text-mute tabular-nums">{n(count)}</span>
@@ -105,8 +107,8 @@ export default async function AdminHealthPoolPage() {
   const counts = [
     { id: "pool", label: "In the temporary pool", value: p.pool.length },
     { id: "failing", label: "Failing, not hidden yet", value: p.failing.length },
-    { id: "archive", label: "In the archive", value: p.archive.length },
     { id: "returned", label: `Back in the last ${RETURNS_SHOWN_DAYS} days`, value: p.returned.length },
+    { id: "archive", label: "In the archive", value: p.archive.length },
   ];
 
   return (
@@ -164,6 +166,27 @@ export default async function AdminHealthPoolPage() {
       </Section>
 
       <Section
+        id="returned"
+        title={`Back in the last ${RETURNS_SHOWN_DAYS} days`}
+        count={p.returned.length}
+        about="Sites that passed a check while failing, in the pool, or in the archive, and came back."
+        empty="None."
+      >
+        {p.returned.map((s) => (
+          <Site
+            key={`${s.url}:${s.at}`}
+            url={s.url}
+            name=""
+            reason={s.reason ? `Was: ${s.reason}` : ""}
+            badge={{ text: s.from === "archive" ? "From the archive" : s.hidden ? "From the pool" : "Was failing", cls: tagUp }}
+            data={{ "data-returned-site": s.url }}
+            facts={[day(s.at) && `Back ${day(s.at)}`, day(s.since) && `${s.from === "archive" ? "archived" : "failing"} since ${day(s.since)}`]}
+          />
+        ))}
+      </Section>
+
+      {/* Last: the longest list. */}
+      <Section
         id="archive"
         title="In the archive"
         count={p.archive.length}
@@ -184,26 +207,6 @@ export default async function AdminHealthPoolPage() {
             badge={{ text: s.kind === "dead" ? "Gone" : "Down", cls: tagDown }}
             data={{ "data-archive-site": s.url }}
             facts={[day(s.archived) && `Archived ${day(s.archived)}`, day(s.lastChecked) && `last checked ${day(s.lastChecked)}`, day(s.next) && `next check ${day(s.next)}`]}
-          />
-        ))}
-      </Section>
-
-      <Section
-        id="returned"
-        title={`Back in the last ${RETURNS_SHOWN_DAYS} days`}
-        count={p.returned.length}
-        about="Sites that passed a check while failing, in the pool, or in the archive, and came back."
-        empty="None."
-      >
-        {p.returned.map((s) => (
-          <Site
-            key={`${s.url}:${s.at}`}
-            url={s.url}
-            name=""
-            reason={s.reason ? `Was: ${s.reason}` : ""}
-            badge={{ text: s.from === "archive" ? "From the archive" : s.hidden ? "From the pool" : "Was failing", cls: tagUp }}
-            data={{ "data-returned-site": s.url }}
-            facts={[day(s.at) && `Back ${day(s.at)}`, day(s.since) && `${s.from === "archive" ? "archived" : "failing"} since ${day(s.since)}`]}
           />
         ))}
       </Section>
