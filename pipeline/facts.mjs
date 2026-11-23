@@ -797,11 +797,15 @@ export function measureFacts({ html = "", text = "", url, finalUrl, name = "", m
  * are on neither the nonsense page nor the home page (`homeText`) hold at
  * least OWN_PAGE_MIN_WORDS distinct words (ownText); two own pages with the
  * same text of their own count once. An own page that answered but failed
- * that is counted as checked, not loading, in `own_unverified`.
+ * that is counted as checked, not loading, in `own_unverified`. When the
+ * nonsense page answers 2xx but says it is not found (its title or first h1,
+ * saysNotFound: a "soft 404", as an app that draws its pages in the browser
+ * serves), the host tells its pages apart itself: an own page loads when it
+ * answers 2xx and does not say so, and is broken when it does.
  *
  * Returns { checked, ok, broken, blocked, own_ok, own_unverified, own_check }:
  * `own_ok` how many of the loading ones are own pages, `own_check` "status",
- * "text" or null (no own pages).
+ * "text", "not_found_page" or null (no own pages).
  */
 export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs = LINK_TIMEOUT_MS, concurrency = 4, userAgent, homeText = "", lowLinks = LOW_LINKS } = {}) {
   const res = { checked: 0, ok: 0, broken: 0, blocked: 0, own_ok: 0, own_unverified: 0, own_check: null };
@@ -811,7 +815,7 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     try {
       const r = await fetchImpl(url, { method: "GET", redirect: "follow", headers, signal: AbortSignal.timeout(timeoutMs) });
       const html = await readCapped(r, OWN_PAGE_MAX_BYTES);
-      return { status: r.status, lines: textLines(html) };
+      return { status: r.status, lines: textLines(html), notFound: saysNotFound(html) };
     } catch {
       return null;
     }
@@ -852,11 +856,15 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
   // Once per check: does the host answer an address that cannot exist?
   const firstOwn = queue.find((c) => c.kind === "own page");
   let byText = null;
+  let notFoundPage = false;
   if (firstOwn) {
     const probe = await getPage(nonsenseUrl(firstOwn.url));
+    // A host that answers 200 but says the made-up address is not found (nevo.is-a.dev: "NEVO | Project Not Found",
+    // its pages drawn in the browser) tells its pages apart itself: own pages count when they answer and do not say so.
+    if (probe && probe.status >= 200 && probe.status < 300 && probe.notFound) notFoundPage = true;
     // The lines every page of the site shares (its menu, header, footer): the nonsense page's and the home page's.
-    byText = probe && probe.status >= 200 && probe.status < 300 ? { frame: new Set([...probe.lines, ...textLines(homeText, { html: false })]) } : null;
-    res.own_check = byText ? "text" : "status";
+    else byText = probe && probe.status >= 200 && probe.status < 300 ? { frame: new Set([...probe.lines, ...textLines(homeText, { html: false })]) } : null;
+    res.own_check = notFoundPage ? "not_found_page" : byText ? "text" : "status";
   }
   const seenTexts = new Set();
   /** An own page on a host that answers every address: loads only with text of its own. */
@@ -869,6 +877,13 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
     seenTexts.add(mine.key);
     return real ? "ok" : "own_unverified";
   }
+  /** An own page on a host whose made-up address says "not found": loads when it answers and does not say so. */
+  async function ownByNotFound(url) {
+    const got = await getPage(url);
+    if (!got) return "broken";
+    if (got.status >= 400) return [401, 403, 429, 999].includes(got.status) ? "blocked" : "broken";
+    return got.notFound ? "broken" : "ok";
+  }
   const done = [];
   await Promise.all(
     Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
@@ -876,7 +891,8 @@ export async function checkLinks(urls, { fetchImpl = globalThis.fetch, timeoutMs
         const c = queue.shift();
         let verdict;
         try {
-          if (c.kind === "own page" && byText && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByText(c.url);
+          if (c.kind === "own page" && notFoundPage && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByNotFound(c.url);
+          else if (c.kind === "own page" && byText && !isPrivateHost(new URL(c.url).hostname)) verdict = await ownByText(c.url);
           else verdict = await one(c.url);
         } catch {
           verdict = null;
@@ -931,6 +947,24 @@ export function textLines(src, { html = true } = {}) {
     .map((l) => l.replace(/\s+/g, " ").trim().toLowerCase())
     .filter(Boolean);
 }
+// A short line (its title, a heading) that says the page was not found: "NEVO | Project Not Found", "404",
+// "This page does not exist", "Page introuvable".
+const NOT_FOUND_LINE =
+  /(?<![\p{L}\p{N}])(?:404|not found|no such page|does(?:n['’]t| not) exist|(?:could(?:n['’]t| not)|can['’]?t|cannot) (?:be )?find|introuvable|no encontrad[ao]|nicht gefunden|non trovat[ao]|não encontrad[ao])(?![\p{L}\p{N}])/iu;
+/**
+ * Whether a page's HTML says it was not found: its title or its first h1, at most 10 words, says so. Only those,
+ * so a menu or a post titled "Fixing 404 errors" further down never makes a page "not found".
+ */
+export function saysNotFound(html) {
+  const s = String(html ?? "");
+  const title = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(s)?.[1] ?? "";
+  const h1 = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(s)?.[1] ?? "";
+  return [title, h1].some((t) => {
+    const line = stripTags(t).replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+    return line !== "" && line.split(" ").length <= 10 && NOT_FOUND_LINE.test(line);
+  });
+}
+
 /**
  * An own page's text of its own: its lines that are not in `frame` (the lines of the nonsense page and the
  * home page), as `words` (how many distinct words of 3 letters or more they hold) and `key` (the same text

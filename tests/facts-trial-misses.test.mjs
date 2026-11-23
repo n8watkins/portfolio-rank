@@ -22,6 +22,7 @@ import {
   projectLinksPass,
   projectLinksText,
   projectsPageFor,
+  saysNotFound,
   textLines,
 } from "../pipeline/facts.mjs";
 
@@ -205,6 +206,24 @@ test("a hash route's page: its outbound project links count as the projects page
   const html = `<nav><a href="#/home">Home</a></nav><div><h1>Projects</h1><a href="https://github.com/chiragsamal/zomato">Zomato</a> <a href="https://github.com/chiragsamal">GitHub</a></div>`;
   const got = fromPages({ home: "https://chiragsamal.github.io/", page, pageHtml: html });
   assert.deepEqual(got.map((c) => [c.url, c.from, c.tier]), [["https://github.com/chiragsamal/zomato", "projects_page", 1]]);
+});
+
+// Found in the sample of 40 sites after the fixes (nevo.is-a.dev): its project pages are drawn in the browser, so
+// a plain fetch of one is the same shell as a made-up address, but the made-up one says "Project Not Found".
+test("nevo.is-a.dev: a host whose made-up address answers 200 but says not found tells its own pages apart", async () => {
+  const SC = fixture("nevo.is-a.dev.smart-care.html");
+  const nf = fakeHost({ "/projects/smart-care": [200, SC], "/projects/drawly": [200, SC.replace(/Smart Care/g, "Drawly")], "/projects/gone": [200, fixture("nevo.is-a.dev.nonsense.html")] }, [200, fixture("nevo.is-a.dev.nonsense.html")]);
+  const r = await checkLinks(["/projects/smart-care", "/projects/drawly", "/projects/gone"].map((p) => ({ url: `https://nevo.is-a.dev${p}`, kind: "own page", tier: 2 })), { fetchImpl: nf, homeText: "NEVO" });
+  assert.deepEqual([r.own_check, r.ok, r.own_ok, r.broken, r.own_unverified], ["not_found_page", 2, 2, 1, 0], "a page that says not found is broken");
+  // The same shell pages on a host whose made-up address does not say so: they still cannot be told apart.
+  const shell = fakeHost({}, [200, SC]);
+  const t = await checkLinks([{ url: "https://nevo.is-a.dev/projects/smart-care", kind: "own page", tier: 2 }], { fetchImpl: shell, homeText: "NEVO" });
+  assert.deepEqual([t.own_check, t.ok, t.own_unverified], ["text", 0, 1]);
+  // Only the title or the first h1 says so: a menu or a post about 404 errors further down does not.
+  assert.equal(saysNotFound("<title>Ana | Page not found</title>"), true);
+  assert.equal(saysNotFound("<title>Ana</title><h1>404</h1>"), true);
+  assert.equal(saysNotFound("<title>Ana</title><h1>Ana Ruiz</h1><h2>Fixing 404 errors in Next.js</h2><p>Not found</p>"), false);
+  assert.equal(saysNotFound(BH_NONSENSE), false, "bhavaniravi.com's made-up address is its home page, not a not-found page");
 });
 
 // Found in the sample of 40 sites after the fixes (houssambouzid.dev).
