@@ -47,10 +47,29 @@ const whole = (alternatives, anywhere = "") =>
   new RegExp(String.raw`(?<!\p{L})(?:${alternatives})(?!\p{L})${anywhere ? `|${anywhere}` : ""}`, "iu");
 // The "projects" family: the word itself in each language. Only these make an h1 a section's title (close()).
 const PROJECTS_FAMILY = String.raw`projects?|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти`;
-// A heading that says the person built, made, created, shipped or founded things, or worked on them, whatever
-// other words it holds: "Things I built", "What have I built?", "What I've been building", "Companies I founded",
-// "Products and platforms I built", "Here are some of the projects I've worked on". Not "I worked at".
-const MADE_IT = String.raw`(?:i|we)(?:\s*(?:'|’)\s*(?:ve|m|re)|\s+have|\s+am|\s+are)?(?:\s+been)?\s+(?:built|building|made|making|created|creating|shipped|shipping|founded|launched|worked on|working on)|(?:have|did)\s+(?:i|we)\s+(?:built|build|made|make|created|create|shipped|ship)`;
+// A heading that says the person built, made, created, shipped or founded things, or worked on them (madeIt):
+// "Things I built", "What have I built?", "What I've been building", "Things I've worked on", "Stuff I've made",
+// "Companies I founded", "Products and platforms I built". The verb needs a made-things word for its object
+// (MADE_THINGS) and none of MADE_NOT ("What I've worked on at Google", "Teams we built", "I'm working on my
+// master's degree", "We are building the future of fintech", "Places I've made coffee"). A present tense
+// ("building", "working on") is a weak word unless the heading asks "What I'm building". Not "I worked at".
+const MADE_PAST = new RegExp(
+  String.raw`(?<!\p{L})(?:(?:i|we)(?:\s*(?:'|’)\s*ve|\s+have)?(?:\s+been)?\s+(?:built|made|created|shipped|founded|launched|worked on)|(?:have|did)\s+(?:i|we)\s+(?:built|build|made|make|created|create|shipped|ship))(?!\p{L})`,
+  "iu"
+);
+const MADE_NOW = new RegExp(String.raw`(?<!\p{L})(?:i|we)(?:\s*(?:'|’)\s*(?:ve|m|re)|\s+have|\s+am|\s+are)?(?:\s+been)?\s+(?:building|making|creating|shipping|working on)(?!\p{L})`, "iu");
+const MADE_THINGS = new RegExp(
+  String.raw`(?<!\p{L})(?:things|stuff|what|projects?|apps?|products?|tools?|sites?|websites?|companies|startups?|platforms?|integrations?|work|games?|librar(?:y|ies)|plugins?|extensions?)(?!\p{L})`,
+  "iu"
+);
+const MADE_NOT = /\bat\s+\p{Lu}|\b(?:this|my) (?:site|website|portfolio|blog)\b|\bmy (?:degree|master|masters|master's|thesis|phd|bachelor)|\bthe future\b|\bteams?\b|\bcoffee\b|\bcareer\b/iu;
+/** "strong", "weak" or null: what a heading that says the person made things is worth (see MADE_PAST). */
+function madeIt(words) {
+  if (!MADE_THINGS.test(words) || MADE_NOT.test(words)) return null;
+  if (MADE_PAST.test(words)) return "strong";
+  if (MADE_NOW.test(words)) return /^\W*what\b/i.test(words) ? "strong" : "weak";
+  return null;
+}
 const STRONG_ATTR_WORDS = String.raw`${PROJECTS_FAMILY}|portfolio|portafolio|portf[oó]lio|case\s*stud(?:y|ies)|showcase|my creations|client work|freelance (?:work|projects)|trabajos|travaux`;
 const CJK_WORDS = "项目|專案|作品|プロジェクト|프로젝트";
 // Chinese, Japanese and Korean words that say a heading is about something else: experience, management, a blog,
@@ -58,7 +77,7 @@ const CJK_WORDS = "项目|專案|作品|プロジェクト|프로젝트";
 const CJK_NOT = /经验|经历|博客|文章|管理|复盘|总结|笔记|ブログ|経験|블로그|경력/u;
 // "What I build" is mubaidr.js.org's (the label scan).
 const WEAK_WORDS = String.raw`works|(?:my|our|selected|featured|recent|latest|past|personal|side|some of my) ?work|works? ?samples?|featured|open ?source|apps|products|experiments|lab|playground|builds|creations|what i build|things i build`;
-const STRONG = whole(`${STRONG_ATTR_WORDS}|${MADE_IT}`, CJK_WORDS);
+const STRONG = whole(STRONG_ATTR_WORDS, CJK_WORDS);
 const WEAK = whole(WEAK_WORDS);
 const STRONG_ATTR = whole(STRONG_ATTR_WORDS, CJK_WORDS);
 // A heading that says its section is not projects, whatever the classes around it: work experience, education,
@@ -77,12 +96,14 @@ const STAT = /^[\s\d.,+%x×]*\d[\d.,+%x×]*\s*\p{L}+(?:\s*[/|·,-]\s*[\d.,+%x×]
  * experience, management or a blog win over a projects word there.
  */
 const projectHeading = (words) => {
-  if (STAT.test(words)) return false;
+  // "How I built my homelab" is an article's title.
+  if (STAT.test(words) || /^\W*how\b/i.test(words)) return false;
   const latin = words.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length;
   const cjk = (words.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu) ?? []).length;
   if (cjk && CJK_NOT.test(words)) return false;
-  if (latin <= 14 && cjk <= 12 && STRONG.test(words)) return true;
-  return latin <= 7 && cjk <= 8 && WEAK.test(words) && !NOT_PROJECT_HEADING.test(words);
+  const made = madeIt(words);
+  if (latin <= 14 && cjk <= 12 && (STRONG.test(words) || made === "strong")) return true;
+  return latin <= 7 && cjk <= 8 && (WEAK.test(words) || made === "weak") && !NOT_PROJECT_HEADING.test(words);
 };
 /** A heading that names projects (projectHeading: strong words win, weak ones yield to not-projects words). */
 export const PROJECT_HEADING = { test: (words) => projectHeading(String(words)) };
@@ -268,7 +289,11 @@ export function scanPage(html, baseUrl) {
       const firstH1 = rec.heading.level === 1 && h1Seen++ === 0;
       const h1Section = h1Sections && !firstH1 && H1_PROJECTS.test(words) && PROJECT_HEADING.test(words);
       const titled = (rec.heading.level >= 2 || h1Section) && !TITLE_LIKE.test(words);
-      if (titled && (scope?.kind === "aside" || scope?.kind === "other") && PROJECT_HEADING.test(words)) endScope();
+      // A projects heading ends an open tool list; an experience or blog section ends only at a heading with the
+      // word "projects" in some language (or at an h2, by level): "<h2>Work Experience</h2><h3>What I've worked
+      // on</h3>" and "<h2>Latest posts</h2><h3>How I built my homelab</h3>" stay what they are.
+      const endsOther = scope?.kind === "other" && H1_PROJECTS.test(words) && PROJECT_HEADING.test(words);
+      if (titled && ((scope?.kind === "aside" && PROJECT_HEADING.test(words)) || endsOther)) endScope();
       if (!scope && titled) {
         // "Work Experiences", "Education", "Network & recognition." are never projects, whatever their classes. Inside
         // a projects element only an h2 says so ("section.projects > h2 Clients"): an h3 or h4 there is a card's

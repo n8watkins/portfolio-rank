@@ -352,11 +352,18 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 
 // A path segment that names a list of projects: "/projects", "/work", "/portfolio", "/case-studies",
 // "/solutions". Whole segments only, so "/how-it-works", "/networks" and "/workshop" are not.
-// Other languages and the label scan's names too: "/proyectos", "/projets", "/made" (milan.milanovic.org), "/lab".
-// A page name's extension is read off first: "projects.html" (josephmansilla.github.io) is "projects".
-const LISTING_WORDS = String.raw`projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|项目|作品|made|builds|lab|creations|obras|trabalhos|trabajos|travaux|r[eé]alisations`;
+// Other languages too: "/proyectos", "/projets". A page name's extension is read off first: "projects.html"
+// (josephmansilla.github.io) is "projects".
+const LISTING_WORDS = String.raw`projects?|works?|my-work|selected-work|portfolios?|case-stud(?:y|ies)|solutions?|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|项目|作品|obras|trabalhos|trabajos|travaux|r[eé]alisations`;
+const pageName = (s) => String(s).replace(/\.(?:html?|php)$/i, "");
 const LISTING_NAME = new RegExp(String.raw`^(?:${LISTING_WORDS})$`, "iu");
-const LISTING_SEGMENT = { test: (s) => LISTING_NAME.test(String(s).replace(/\.(?:html?|php)$/i, "")) };
+const LISTING_SEGMENT = { test: (s) => LISTING_NAME.test(pageName(s)) };
+// Names that are a projects page only as the site's first path segment and under a label that says the same:
+// "/made" labelled "Made" (milan.milanovic.org), "/lab" labelled "Lab". Not "/research/lab", not "/ci/builds"
+// labelled "CI", and never a listing above a project's own page ("/builds/1234").
+const MAKER_PAGE = /^(?:made|builds|lab|creations)$/i;
+const makerPage = (segs, label) =>
+  segs.length === 1 && MAKER_PAGE.test(pageName(segs[0])) && new RegExp(String.raw`(?<!\p{L})${pageName(segs[0])}(?!\p{L})`, "iu").test(String(label ?? ""));
 // A segment that a GET could act on: sign-in and sign-out, subscription and account actions ("/unsubscribe",
 // "/logout", "/delete", "/pay"). Never requested, wherever it sits, even as a project's own name.
 const ACTION_SEGMENT =
@@ -512,10 +519,10 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 
 /**
  * A link whose whole label names the projects page: "Projects", "My work", "Explore Work →", "Case studies",
- * "Proyectos", "Mis proyectos", "Made", "Réalisations". Not "How I work".
+ * "Proyectos", "Mis proyectos", "Réalisations". Not "How I work". ("Made", "Lab": only with their own path, makerPage.)
  */
 const PROJECTS_LINK_TEXT = new RegExp(
-  String.raw`^\s*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view|mis|meus|mes|meine|i miei|mijn|мои)\s+)?(?:projects?|works?|portfolio|portafolio|portf[oó]lio|case stud(?:y|ies)|solutions|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|项目|作品|made|builds|lab|creations|obras|trabalhos|trabajos|travaux|r[eé]alisations)\s*[→›»↗]?\s*$`,
+  String.raw`^\s*(?:(?:my|all|our|selected|featured|recent|view all|see all|explore|view|mis|meus|mes|meine|i miei|mijn|мои)\s+)?(?:projects?|works?|portfolio|portafolio|portf[oó]lio|case stud(?:y|ies)|solutions|showcase|projets|proyectos|projekte|projetos|progetti|projecten|projekty|проекты|проекти|项目|作品|obras|trabalhos|trabajos|travaux|r[eé]alisations)\s*[→›»↗]?\s*$`,
   "iu"
 );
 
@@ -558,7 +565,7 @@ export function projectsPageFor(links, homeUrl) {
     const rel = (home && own.path.startsWith(home) ? own.path.slice(home.length) : own.path).replace(/\/index\.html?$/, "");
     const segs = segmentsOf(rel);
     if (!segs.length || segs.some((s) => NOT_PROJECT_SEGMENT.test(s))) continue;
-    if (LISTING_SEGMENT.test(segs.at(-1))) return own.key;
+    if (LISTING_SEGMENT.test(segs.at(-1)) || makerPage(segs, l.text)) return own.key;
     if (!byText && PROJECTS_LINK_TEXT.test(String(l.text ?? ""))) byText = own.key;
   }
   return byText;

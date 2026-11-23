@@ -280,3 +280,40 @@ test("named project pages and credits with a few words, the reviewer's cases", (
   assert.deepEqual(show(`<main><p>Made with care by <a href="https://github.com/ana/site">me</a></p></main>`), []);
   assert.deepEqual(show(`<main><p>Made with love and coffee by <a href="https://credit.example/">me</a></p></main>`), []);
 });
+
+test("an 'I built' heading needs made things for its object, never ends an experience or blog section, never opens with 'How'", () => {
+  const others = `<p><a href="https://employer.example/">Google</a> <a href="https://uni.example/">MIT</a></p>`;
+  const tiers = (html) => show(html).map(([t]) => t);
+  for (const h of ["What I've worked on at Google", "Teams we built", "How I built this site", "I'm working on my master's degree", "We are building the future of fintech", "Places I've made coffee", "Where I've worked", "Who I've worked for", "Companies I've worked with", "How I built a CRM in a weekend"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${others}</section></main>`), [3, 3], h);
+  }
+  for (const h of ["Things I built", "What have I built?", "What I've been building", "What I'm working on", "Things I've worked on", "Stuff I've made", "Companies I founded", "Products and platforms I built", "Apps &amp; integrations I built"]) {
+    assert.deepEqual(tiers(`<main><section><h2>${h}</h2>${others}</section></main>`), [1, 1], h);
+  }
+  // Inside a section that is not projects, such a heading opens nothing and ends nothing.
+  assert.deepEqual(tiers(`<main><section><h2>Work Experience</h2><div><h3>What I've worked on</h3>${others}</div></section></main>`), [3, 3]);
+  assert.deepEqual(tiers(`<main><section><h2>Experience</h2><h3>Things we shipped at Acme</h3>${others}</section></main>`), [3, 3]);
+  assert.deepEqual(tiers(`<main><section><h2>Experience</h2><div><h4>Senior Engineer</h4><p>What I worked on</p>${others}</div></section></main>`), [3, 3]);
+  assert.deepEqual(tiers(`<main><section><h2>Latest posts</h2><article><h3>How I built my homelab</h3>${others}</article></section></main>`), [3, 3]);
+  // A "projects" word in an h3 still ends it; an h2 ends it by its level.
+  assert.deepEqual(tiers(`<main><section><h2>Experience</h2><h3>Side projects</h3>${others}</section></main>`), [1, 1]);
+  assert.deepEqual(tiers(`<main><h2>Experience</h2><p>x</p><h2>Things I built</h2>${others}</main>`), [1, 1]);
+});
+
+test("made, builds, lab and creations name the projects page only as the first path segment, with a label that says the same", () => {
+  const pick = (html) => projectsPageFor(homeProjectLinks({ html, url: "https://ana.dev/", finalUrl: "https://ana.dev/" }), "https://ana.dev/");
+  for (const [html, want] of [
+    [`<nav><a href="/made">Made</a></nav>`, "https://ana.dev/made"],
+    [`<nav><a href="/lab">Lab</a></nav>`, "https://ana.dev/lab"],
+    [`<nav><a href="/builds">My builds</a></nav>`, "https://ana.dev/builds"],
+    [`<nav><a href="/research/lab">Lab</a></nav>`, null],
+    [`<nav><a href="/ci/builds">CI</a></nav>`, null],
+    [`<nav><a href="/lab">Research</a></nav>`, null],
+    [`<nav><a href="/berlin">Made in Berlin</a></nav>`, null],
+  ]) {
+    assert.equal(pick(html), want, html);
+  }
+  // Never a listing above a project's own page: "/builds/1234" is a build, not a project page.
+  const url = "https://ana.dev/";
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: `<section id="projects"><a href="/builds/1234">b</a><a href="/lab/thing">l</a><a href="/made/coffee">m</a></section>`, url, finalUrl: url }), url), []);
+});
