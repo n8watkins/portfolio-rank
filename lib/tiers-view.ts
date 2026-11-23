@@ -29,6 +29,13 @@ export type ProfileTier = {
   /** Its starting rank came from automated checks. */
   seeded: boolean;
   check: ReturnType<typeof unpackCheck>;
+  /** The breakdown was made now from the saved checks (true), or is the one stored when the rank was set (false). */
+  checkIsCurrent: boolean;
+  /**
+   * The points total the starting rank was set from (the breakdown stored with the rank at the last
+   * rebuild), when it differs from the current one; null when they agree or there is none.
+   */
+  startingPoints: number | null;
   fixes: { id: string; gain: number; text: string }[];
 };
 
@@ -59,8 +66,13 @@ export async function loadProfileTier(url: string, rawRubric: unknown, hideGrade
   const hasTier = graded && !hideGrade && s.tier != null;
   // The breakdown and the fixes from the saved checks and the newest measured facts (lib/fresh-facts.mjs), as the
   // report card reads them; the one stored with the rank at the last rebuild when they can't be read.
-  const check = stored && sources ? pointsOf(grade, sources, meta?.medians ?? null) : stored;
+  const current = stored && sources ? pointsOf(grade, sources, meta?.medians ?? null) : null;
+  const check = current ?? stored;
+  // The rank moves only at a full rebuild: say what it was set from when today's total is different.
+  const startingPoints = current && stored && Math.round(current.total) !== Math.round(stored.total) ? stored.total : null;
   return {
+    checkIsCurrent: Boolean(current),
+    startingPoints,
     shown: hasTier && isPublicTier(s.tier) ? s.tier : null,
     hasTier,
     elo: s.elo,
