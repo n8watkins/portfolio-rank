@@ -437,10 +437,17 @@ export function geminiAnswered(g) {
   return (typeof g.tier === "string" && g.tier !== "") || versionOf(g) >= 3;
 }
 
-/** SQL (never NULL) for geminiAnswered on a JSON column, e.g. GEMINI_ANSWERED_SQL("p.ai_rubric"). */
+/**
+ * SQL (never NULL) for geminiAnswered on a JSON column, e.g. GEMINI_ANSWERED_SQL("p.ai_rubric"). A CASE, so
+ * json_extract never runs on text that is not JSON (an AND inside an expression is not guaranteed to stop early).
+ */
 export const GEMINI_ANSWERED_SQL = (col) =>
-  `COALESCE(json_valid(${col}) AND json_extract(${col}, '$.error') IS NULL
-    AND (json_extract(${col}, '$.tier') IS NOT NULL OR CAST(json_extract(${col}, '$.rubric_version') AS INTEGER) >= 3), 0)`;
+  `(CASE WHEN json_valid(${col}) THEN COALESCE(json_extract(${col}, '$.error') IS NULL
+    AND (json_extract(${col}, '$.tier') IS NOT NULL OR CAST(json_extract(${col}, '$.rubric_version') AS INTEGER) >= 3), 0) ELSE 0 END)`;
+
+/** SQL (never NULL): GEMINI_ANSWERED_SQL and the stored answer is not "not a portfolio". */
+export const GEMINI_SAYS_PORTFOLIO_SQL = (col) =>
+  `(CASE WHEN ${GEMINI_ANSWERED_SQL(col)} THEN COALESCE(json_extract(${col}, '$.is_portfolio'), 1) != 0 ELSE 0 END)`;
 
 /**
  * A stored grade with the dropped outputs left out (DROPPED_OUTPUTS), for

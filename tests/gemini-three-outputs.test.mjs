@@ -108,6 +108,8 @@ test("the SQL forms agree with the code: a v3 row is answered and a yes; an owne
     ["https://err.dev", { error: "no_usable_captures", rubric_version: 3 }],
   ];
   for (const [url, g] of rows) await db.execute({ sql: "INSERT INTO portfolios (url, ai_rubric) VALUES (?, ?)", args: [url, JSON.stringify(g)] });
+  // Text that is not JSON never reaches json_extract (an error in SQLite): the SQL is a CASE.
+  await db.execute({ sql: "INSERT INTO portfolios (url, ai_rubric) VALUES (?, ?)", args: ["https://broken.dev", "{not json"] });
   const answered = (await db.execute(`SELECT url FROM portfolios p WHERE ${GEMINI_ANSWERED_SQL("p.ai_rubric")} ORDER BY url`)).rows.map((r) => r.url);
   assert.deepEqual(answered, ["https://v2.dev", "https://v3-no.dev", "https://v3.dev"]);
   const yes = (await db.execute(`SELECT url FROM portfolios p WHERE ${GEMINI_YES_SQL("p")} ORDER BY url`)).rows.map((r) => r.url);

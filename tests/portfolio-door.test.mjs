@@ -395,7 +395,7 @@ test("one night over a mixed set of new sites: every outcome, the summary lists 
   assert.equal(await hidden(db, S.no3), true, "no, 3 signals: removed");
   assert.equal(await hidden(db, S.junk), true, "junk: removed despite 6 signals");
   assert.equal(await hidden(db, S.no5), false, "no, 5 signals: kept for the owner");
-  assert.equal((await grade(db, S.recaptured)).tier, "B", "a newer capture clears the missing-screenshot marker");
+  assert.equal((await grade(db, S.recaptured)).rubric_version, 3, "a newer capture clears the missing-screenshot marker: a real v3 grade");
   assert.equal((await grade(db, S.waiting)).error, "no_usable_captures", "still waiting for a newer capture");
   assert.equal((await grade(db, S.missing)).error, "no_usable_captures");
   assert.equal(await grade(db, S.bad), null);

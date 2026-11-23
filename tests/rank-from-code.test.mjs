@@ -528,6 +528,8 @@ test("no reader shows or counts Gemini's letter: stats, polls and the pages read
   assert.doesNotMatch(read("lib/games/stats.mjs"), /TIER_VALUE\[tier\]/);
   assert.doesNotMatch(read("pipeline/polls.mjs"), /ai_rubric, '\$\.tier'\) IN/);
   assert.doesNotMatch(read("pipeline/content/facts.mjs"), /rubric\.tier === "S"/);
-  assert.match(read("app/report/print/route.ts"), /showTier: false/);
+  // The printable report has no letter at all now (rubric v3, lib/grader/report.mjs printView).
+  assert.doesNotMatch(read("lib/grader/report.mjs"), /showTier/);
+  assert.doesNotMatch(read("lib/freshness.mjs"), /'\$\.tier'\) IN/);
   assert.doesNotMatch(read("app/grading/page.tsx"), /The AI makes the call/);
 });

@@ -6,7 +6,7 @@ import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { factLines } from "@/lib/grader/report.mjs";
 import { freshGrade } from "@/lib/fresh-facts.mjs";
-import { GEMINI_ANSWERED_SQL, fiveSecondOf, geminiAnswered } from "@/pipeline/rubric.mjs";
+import { GEMINI_SAYS_PORTFOLIO_SQL, fiveSecondOf, geminiAnswered } from "@/pipeline/rubric.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
@@ -177,8 +177,7 @@ async function recentlyGraded(count = 6): Promise<GradedItem[]> {
       `SELECT url, json_extract(ai_rubric, '$.judged_at') AS at
        FROM portfolios
        WHERE delisted_at IS NULL AND ai_rubric IS NOT NULL AND json_valid(ai_rubric)
-         AND ${GEMINI_ANSWERED_SQL("ai_rubric")} AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
-         AND COALESCE(json_extract(ai_rubric, '$.is_portfolio'), 1) != 0
+         AND ${GEMINI_SAYS_PORTFOLIO_SQL("ai_rubric")} AND json_extract(ai_rubric, '$.judged_at') IS NOT NULL
        ORDER BY at DESC LIMIT 30`
     );
     return { items: res.rows.map((r) => ({ url: String(r.url), at: String(r.at) })) };
