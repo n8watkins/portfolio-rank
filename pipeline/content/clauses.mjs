@@ -50,6 +50,8 @@ function namedText(f, name, url) {
   if (/^is at number$/i.test(rest)) return `${link} is ${ph(f.id)} on the board this week.`;
   if (/^climbed, in places$/i.test(rest)) return `${link} climbed ${ph(f.id)} places this week.`;
   if (/^page weight, first load$/i.test(rest)) return `${link} weighs ${ph(f.id)} on first load.`;
+  // The fact's display is "the highest tier", so the label's own words are not repeated ("is in the highest tier the highest tier").
+  if ((m = rest.match(/^is in the highest tier(.*)$/i))) return `${link} is in ${ph(f.id)}${m[1]}.`;
   return `${link}: ${rest} ${ph(f.id)}.`;
 }
 
@@ -140,7 +142,8 @@ export function clausesOf(sheet) {
     const rest = parts.slice(1).map((p) => p.replace(`[${name}](${url}) `, "").replace(/\.$/, ""));
     const text = rest.length ? `${parts[0].replace(/\.$/, "")}, and ${rest.join(", and ")}.` : parts[0];
     const axes = fs.flatMap((f) => (f.label.match(/scores 5 out of 5 on (.+)$/i)?.[1] ?? "").split(/,\s*|\s+and\s+/)).filter(Boolean);
-    add({ text, facts: ids, kind: "example", about: url, name, axes });
+    // The other wording, for when it lands right after another site's sentence (compose.mjs puts back a dropped clause).
+    add({ text, alt: `Another one to study: ${text}`, facts: ids, kind: "example", about: url, name, axes });
   }
   return out;
 }
