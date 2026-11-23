@@ -263,6 +263,14 @@ AI grading was paused in production until these rules were built ([lib/reviews/d
 - **Open method** (agent, 2026-11-10). Status: planned.
   A public method page and a downloadable comparison log (pair, model, prompt version, winner), so anyone can recompute the board.
   Why: a leaderboard nobody can check is worth little.
+- **The Starting rank comes from code; Gemini is kept apart from the ranking** (owner, 2026-11-22). Status: building (`feat/rank-from-code`).
+  In his words: "the starting rank you get is based off of clear verifiable code measurements"; "I want the Gemini grading and whether it's a portfolio or not to be separate from the ranking, we can give it a rank. If Gemini says it's not a portfolio and that's the rule set up to remove it, then we can remove it"; "a site should have a tier".
+  A listed site with a good capture, measured facts and at least 4 of the 6 portfolio signals gets its Starting rank and Tier from the Code checks score as soon as it is measured, with no Gemini grade; a site with fewer signals is ranked once Gemini says it is a portfolio or the owner keeps it.
+  The Starting tier is by place in the Code checks score only, with no gates; after the start, votes decide ("the ranking is just a starting point").
+  Equal points are split by the date first measured, then the address, never by Gemini's score.
+  Gemini's "not a portfolio" still goes through the Removal rule unchanged, and a removal takes the site out of the order.
+  Gemini's own letter is never shown or counted as a site's grade: the Tier shows where tiers are shown (`RANKING_V2`), and nothing otherwise (AUTOMATION.md "Starting rank from code").
+  Why: one look by a model is an opinion; a rank people compete on should rest on measurements anyone can check and fix, and every site should have one from the start.
 
 ## Gemini budget, one key
 

@@ -569,7 +569,13 @@ test("live stats: one pass over the list, today's votes by Pacific day, GitHub n
   assert.equal(s.ownDomainPct, 67);
   assert.equal(s.resumePct, 67);
   assert.deepEqual(s.commonRole, { key: "fullstack", label: "Full stack", pct: 67 });
-  assert.deepEqual(s.averageTier, { value: 3.33, tier: "B" });
+  // The average Tier comes from the tier store, never from Gemini's letters (S, B, C here; owner, 2026-11-22): none yet.
+  assert.equal(s.averageTier, null);
+  for (const [url, tier] of [["https://a.dev", "A"], ["https://b.dev", "B"], ["https://c.dev", "C+"]]) {
+    await db.execute({ sql: "INSERT INTO tier_ratings (url, mu, sigma, rating, bucket, member, seeded, tier) VALUES (?, 25, 8, 9, 36, 1, 1, ?)", args: [url, tier] });
+  }
+  // A 9, B 6, C+ 4 on lib/tiers.mjs tierValue's scale: 6.33, about B.
+  assert.deepEqual((await siteStats(db, { feed, now: T0 })).averageTier, { value: 6.33, tier: "B" });
   assert.equal("changedThisMonth" in s, false, "change detection was removed, so there is no such number");
   assert.deepEqual(s.newest, { url: "https://d.dev", name: "D" });
 
