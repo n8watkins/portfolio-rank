@@ -461,9 +461,10 @@ const SITE_SECTION_SEGMENT = new RegExp(
 // "Home", "Achievements", "Get in touch", "Let's talk →", "Sobre mí", "Next project", "Older posts". Such a link on
 // the projects page is never a project, whatever its address ("/start" labelled "Home").
 const SECTION_LABEL = new RegExp(
-  String.raw`^(?:` +
+  String.raw`^(?:(?:my|our|view|see|read|view my|see my|read my|more|other|all)\s+)?(?:` +
     [
-      String.raw`home|homepage|start|main page|about(?: me| us)?|contact(?: me| us)?|get in touch|let'?s talk|let’s talk|say hi|say hello|hire me|work with me|book a call|schedule a call|reach out|blog|posts|articles|writing|notes|newsletter|resume|cv|my cv|my resume|uses|now|talks|speaking|achievements|accomplishments|certifications|certificates|awards|honou?rs|publications|papers|research|experience|education|skills|stack|tech stack|tools|resources|journey|timeline|my story|testimonials|recommendations|team|authors?`,
+      String.raw`home|homepage|start|main page|about(?: me| us)?|contact(?: me| us)?|get in touch|let'?s talk|let’s talk|say hi|say hello|hire me|work with me|book a call|schedule a call|reach out|blog|posts|articles|writing|notes|newsletter|resume|cv|uses|now|talks|speaking|achievements|accomplishments|certifications|certificates|awards|honou?rs|publications|papers|research|experience|education|skills|stack|tech stack|tools|resources|journey|timeline|story|testimonials|recommendations|team|authors?`,
+      String.raw`what i use|what i'?m (?:doing|up to)(?: now)?|what i’m (?:doing|up to)(?: now)?|who i am|(?:slash )?pages|quién soy|quien soy|wer ich bin|schreib mir|écris[- ]moi|ecris[- ]moi|qui suis[- ]je|contactez[- ]moi`,
       String.raw`privacy(?: policy)?|cookie policy|cookies|terms(?: of (?:service|use))?|imprint|impressum|datenschutz|legal|legal notice|mentions légales|aviso legal|accessibility|credits|sitemap|rss|feed|topics|series|tags|categories`,
       String.raw`inicio|accueil|startseite|sobre(?: mí| mi| mim)?|acerca de(?: mí)?|à propos|a propos|qui suis-je|über mich|uber mich|chi sono|over mij|o mnie|contacto|contato|contatti|kontakt|contactez-moi|me contacter|escríbeme|escribeme`,
       String.raw`(?:next|previous|prev|older|newer|more)(?: (?:project|projects|post|posts|page|work|case study))?|(?:see|view|show) (?:all|more)(?: projects| work)?|all projects|back(?: to (?:top|home|projects|work))?|load more|page \d+|\d+`,
@@ -490,30 +491,57 @@ const YEAR_SEGMENT = /^(?:19|20)\d{2}$/;
 
 /**
  * Whether a same-site link on the site's own projects page, in its main content, is a page for one project
- * whatever its path ("/rht", "/apps/lasttimei"): it is not another listing ("/work"), its first segment is not a
- * language ("/en", "/pt-br": "/ai-chat" and "/go-cli" are projects), and no segment is a section of the site
- * (about, contact, blog, resume, tags, NOT_PROJECT_SEGMENT, SITE_SECTION_SEGMENT), an action, a year or a page
- * number. The home page, the projects page itself, its menus (menuLinks) and links labelled as a section
- * (SECTION_LABEL) are left out by the caller. On the projects page only: on the home page a same-site link is a
- * section of the site far more often than a project.
+ * whatever its path ("/rht", "/apps/lasttimei"), read with its label (labelOf): it is not another listing
+ * ("/work"), its first segment is not a language ("/en", "/pt-br": "/ai-chat" and "/go-cli" are projects), no
+ * segment is an action, and its whole label does not name a section of the site or a step through a list
+ * (SECTION_LABEL: "About", "Get in touch", "Next project", "2"). Below the top of the site no segment is a section
+ * of the site (NOT_PROJECT_SEGMENT, SITE_SECTION_SEGMENT: "/topics/react", "/blog/post"), a year or a page number.
+ * At the top of the site the path alone does not decide, since a project may be named like a section: "/notes/"
+ * labelled "Notes, a markdown app", "/tools/" labelled "Dev Tools Hub" and "/2048/" labelled "2048" (the game) are
+ * projects; "/notes" labelled "Notes" and "/achievements" labelled "My achievements" are not, nor is a link with
+ * no label at a section's path. The home page, the projects page itself and its menus (menuLinks) are left out by
+ * the caller. On the projects page only: on the home page a same-site link is a section of the site far more often
+ * than a project.
  */
-function isProjectsPageLink(path) {
+function isProjectsPageLink(path, label = "") {
   const segs = segmentsOf(path).map(pageName);
-  if (!segs.length || LISTING_SEGMENT.test(segs.at(-1)) || MAKER_PAGE.test(segs.at(-1)) || isLanguage(segs[0]) || /^\d+$/.test(segs.at(-1))) return false;
-  return !segs.some((s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s) || YEAR_SEGMENT.test(s));
+  if (!segs.length || LISTING_SEGMENT.test(segs.at(-1)) || MAKER_PAGE.test(segs.at(-1)) || isLanguage(segs[0]) || segs.some((s) => ACTION_SEGMENT.test(s))) return false;
+  // A project named by a number, labelled by the same number ("/2048/" "2048"), is the one place a number is a name.
+  const namedByNumber = segs.length === 1 && /^\d+$/.test(segs[0]) && label === segs[0];
+  if (!namedByNumber && SECTION_LABEL.test(label)) return false;
+  const section = (s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s);
+  if (segs.length === 1) return namedByNumber || ((label !== "" || !section(segs[0])) && !/^\d+$/.test(segs[0]) && !YEAR_SEGMENT.test(segs[0]));
+  return !/^\d+$/.test(segs.at(-1)) && !segs.some((s) => section(s) || YEAR_SEGMENT.test(s));
+}
+
+/**
+ * Whether a same-site link names a section of the site, by its whole label or by a word of its path
+ * ("/my-certifications", "/achievements-and-awards"): only to tell a menu from a grid (menuLinks).
+ */
+function isSectionLink(l, self) {
+  if (SECTION_LABEL.test(labelOf(l))) return true;
+  try {
+    const u = new URL(l.href);
+    if (!sameHost(u.hostname.toLowerCase(), self)) return false;
+    const words = segmentsOf(u.pathname).map(pageName).flatMap((s) => [s, ...s.split(/[-_]+/)]);
+    return words.some((s) => NOT_PROJECT_SEGMENT.test(s) || SITE_SECTION_SEGMENT.test(s));
+  } catch {
+    return false;
+  }
 }
 
 /** How deep a menu may sit below the container its links share: "<div><a>", "<ul><li><a>", "<ul><li><span><a>". */
 const MENU_DEPTH = 3;
 /**
- * The projects page's links that sit in a menu, whatever it is built from (a "<div class="navbar">" is no <nav>):
- * a link to the home page or to the projects page itself (not an in-page anchor) marks the smallest element around
- * it that holds at least 3 links, and the links at the same depth in that element are a menu when most of their
- * labels are 1 to 3 words (MENU_LABEL_WORDS). A grid of project cards links neither the home page nor the
- * projects page, so it is never one (amanhimself.dev's apps); a lone "Back home" link above the cards sits at
- * another depth than they do, and a breadcrumb's "Home" beside cards whose links carry a title and a description
- * (bhavaniravi.com's) does not make the cards a menu. `links` are the projects page's,
- * with `anc` (./page-controls.mjs scanPage). Returns a Set of them.
+ * The projects page's own-page links that sit in a menu, whatever it is built from (a "<div class="navbar">" is no
+ * <nav>, its home link may be a logo image): a link to the home page or to the projects page itself (not an
+ * in-page anchor, nor a card labelled with the site's address) marks the smallest element around it that holds at
+ * least 3 links, and the links at the same depth in that element are a menu when at least MENU_OWN_SHARE of them
+ * go to the site's own pages and at least half of those (the home and projects links aside) name a section of the
+ * site by label or path (isSectionLink). Only the own pages in it are taken out, never a demo or a repository. So a
+ * card grid whose one card is the portfolio itself ("Live" to "/"), a breadcrumb's "Home" beside cards named
+ * "Todo App" or "Chat", a logo beside project links, and a "← home" line above one paragraph per project are not
+ * menus. `links` are the projects page's, with `anc` (./page-controls.mjs scanPage). Returns a Set of them.
  */
 function menuLinks(links, homeUrl, pageUrl) {
   const strip = (p) => p.replace(/\/index\.html?$/i, "").replace(/\/+$/, "").toLowerCase();
@@ -543,21 +571,35 @@ function menuLinks(links, homeUrl, pageUrl) {
     }
   }
   const out = new Set();
+  const ownSite = (l) => {
+    if (String(l.raw ?? "").startsWith("#")) return false;
+    try {
+      return sameHost(new URL(l.href).hostname.toLowerCase(), self);
+    } catch {
+      return false;
+    }
+  };
   for (const m of menus) {
     const group = links.filter((l) => {
       const k = l.anc?.indexOf(m.id) ?? -1;
       return k >= 0 && l.anc.length - 1 - k === m.depth;
     });
-    // A menu's labels are a word or three ("Home", "Achievements", "Get in touch"); a breadcrumb's "Home" beside
-    // project cards whose links hold a title and a description (bhavaniravi.com's) makes no menu of the cards.
-    // A label that is an address ("github.com", "nan-mo-hoam.com") is a project card's, never a menu's.
-    const short = group.filter((l) => !isAddressLabel(l) && labelOf(l).split(" ").filter(Boolean).length <= MENU_LABEL_WORDS).length;
-    if (short >= group.length * 0.7) for (const l of group) out.add(l);
+    // A menu links the site's own pages: a card grid's "Live" and "Code" links go out (one card's "Live" that points
+    // back to the portfolio itself does not make the grid a menu).
+    const own = group.filter(ownSite);
+    if (own.length < group.length * MENU_OWN_SHARE) continue;
+    // And it names the site's sections ("Achievements", "Certifications", "/publications"), whatever the length of
+    // its labels; a breadcrumb's "Home" beside cards named "Todo App", "Chat", "Weather" makes no menu of them.
+    const others = own.filter((l) => !isFrameTarget(l));
+    const sections = others.filter((l) => isSectionLink(l, self)).length;
+    if (!others.length || sections < others.length / 2) continue;
+    // Only the site's own pages are taken out: a demo or a repository is never a menu item.
+    for (const l of own) out.add(l);
   }
   return out;
 }
-/** The most words in a menu link's label (menuLinks). */
-const MENU_LABEL_WORDS = 3;
+/** The least share of a menu's links that go to the site's own pages (menuLinks). */
+const MENU_OWN_SHARE = 0.7;
 /** A label that is a web address: "github.com", "younes-megaache.com", "app.example.dev/demo". */
 const ADDRESS_LABEL = /^(?:https?:\/\/)?(?:www\.)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?$/iu;
 const isAddressLabel = (l) => ADDRESS_LABEL.test(String(l.text ?? "").replace(/\s+/g, " ").trim());
@@ -604,7 +646,8 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   })();
   const seen = new Set();
   const tiers = [[], [], []];
-  // The projects page's menus, whatever they are built from (menuLinks): their links are its frame.
+  // The projects page's menus, whatever they are built from (menuLinks): their links to the site's own pages are
+  // its frame (a demo or a repository never is).
   const pageLinksOnly = links.filter((l) => l.from === "projects_page");
   const menu = pageLinksOnly.length ? menuLinks(pageLinksOnly, siteUrl, pageLinksOnly[0].page) : new Set();
   for (const l of links) {
@@ -647,7 +690,7 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
       // Under a listing or the projects page's own path; or, in its main content (not an aside), a page of the site
       // at any path that is not one of its section pages (amanhimself.dev's apps at "/rht", "/lasttimei").
       // Not in an aside, a section that is not projects or a list of profiles, and not labelled as a section of the site.
-      ok = own.path !== base && (isOwnProjectPath(rel, relBase) || (!l.inAside && !l.inOther && !SECTION_LABEL.test(labelOf(l)) && isProjectsPageLink(rel)));
+      ok = own.path !== base && (isOwnProjectPath(rel, relBase) || (!l.inAside && !l.inOther && isProjectsPageLink(rel, labelOf(l))));
     } else {
       // In a home page projects section, with a project page's path, or a page of its own whose name says
       // project ("project-sync.html", sebascherny.github.io's case studies at the site's root).
@@ -684,16 +727,27 @@ export function projectCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
 export const PER_HOST_MAX = 3;
 const CODE_HOST = /^(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)$/i;
 /**
- * What PER_HOST_MAX counts per: the host without "www.", or on a code host the repository's owner and name
- * ("github.com/ana/app"), since each repository is a project of its own.
+ * What PER_HOST_MAX and the one-link-per-repository rule count per: the host without "www.", or on a code host
+ * the repository's owner and name ("github.com/ana/app"), since each repository is a project of its own; and a
+ * folder of a repository, linked by its tree or a file in it, is a project of its own too
+ * ("github.com/ana/js-projects/tree/main/calculator" and ".../blob/main/todo/index.html" are two, a beginner's one
+ * repository of practice projects). Releases, tags, the wiki, issues, commits and a file at the repository's top
+ * ("blob/main/README.md") are the repository's.
  */
 export function hostKey(url) {
   try {
     const u = new URL(url);
     const h = u.hostname.toLowerCase().replace(/^www\./, "");
     if (!CODE_HOST.test(h)) return h;
-    const [owner = "", repo = ""] = u.pathname.split("/").filter(Boolean);
-    return `${h}/${owner.toLowerCase()}/${repo.toLowerCase().replace(/\.git$/, "")}`;
+    const segs = u.pathname.split("/").filter(Boolean).map((s) => s.toLowerCase());
+    const [owner = "", repo = ""] = segs;
+    const key = `${h}/${owner}/${repo.replace(/\.git$/, "")}`;
+    // GitHub, Bitbucket and Codeberg: /tree/<branch>/<dir> or /blob/<branch>/<dir>/<file>; GitLab puts "-" first.
+    const rest = segs.slice(2)[0] === "-" ? segs.slice(3) : segs.slice(2);
+    const kind = rest[0];
+    if (kind === "tree" || kind === "src") return rest.length >= 3 ? `${key}/${rest[2]}` : key;
+    if (kind === "blob") return rest.length >= 4 ? `${key}/${rest[2]}` : key;
+    return key;
   } catch {
     return "";
   }
@@ -1101,11 +1155,13 @@ export function ownText(lines, frame) {
   const mine = [...new Set(lines.filter((l) => !frame.has(l)))];
   const all = mine.join(" ");
   const noSpace = all.match(NO_SPACE_LETTER) ?? [];
-  const words = new Set(all.replace(NO_SPACE_LETTER, " ").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+  // Korean is written with spaces, but most of its words are two syllables: a Hangul word counts from two.
+  const words = new Set(all.replace(NO_SPACE_LETTER, " ").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 || (w.length === 2 && HANGUL_WORD.test(w))));
   return { words: words.size + Math.floor(noSpace.length / NO_SPACE_LETTERS_PER_WORD), key: [...mine].sort().join("\n") };
 }
 const NO_SPACE_LETTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}\p{Script=Tibetan}]/gu;
 export const NO_SPACE_LETTERS_PER_WORD = 3;
+const HANGUL_WORD = /^\p{Script=Hangul}+$/u;
 /** The body of a response as text, at most `max` bytes. */
 async function readCapped(r, max) {
   if (!r.body?.getReader) return String((await r.text?.()) ?? "").slice(0, max);

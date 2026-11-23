@@ -139,7 +139,7 @@ test("on the projects page, a same-site link to a section of the site, a languag
     `<p>Posted in <a href="/2024/05/launch">May 2024</a>. Also: <a href="/resume">my resume</a>, <a href="/work">all work</a>.</p>`,
     `<div class="pagination"><a href="/projects/page/2">2</a> <a href="/projects/2">3</a> <a href="/projects?page=4">4</a> <a href="/archive/older">Older posts →</a></div>`,
     `<p><a href="/privacy-policy">Privacy</a> <a href="/impressum">Impressum</a> <a href="/datenschutz">Datenschutz</a> <a href="/logout">Sign out</a> <a href="/search?q=x">Search</a></p>`,
-    `<p>Also see <a href="/achievements">what I achieved</a>, <a href="/certifications">my certificates</a>, <a href="/awards">awards</a>, <a href="/publications">papers</a>, <a href="/research">research</a>, <a href="/stack">my stack</a>, <a href="/tools">tools</a>, <a href="/resources">resources</a>, <a href="/journey">my journey</a>, <a href="/timeline">timeline</a>, <a href="/authors/ana">Ana</a>.</p>`,
+    `<p>Also see <a href="/achievements">My achievements</a>, <a href="/certifications">my certificates</a>, <a href="/awards">awards</a>, <a href="/publications">papers</a>, <a href="/research">research</a>, <a href="/stack">my stack</a>, <a href="/tools">tools</a>, <a href="/resources">resources</a>, <a href="/journey">my journey</a>, <a href="/timeline">timeline</a>, <a href="/authors/ana">Ana</a>.</p>`,
     `<p><a href="/contacto">Escríbeme</a> <a href="/sobre-mi">Quién soy</a> <a href="/kontakt">Schreib mir</a> <a href="/a-propos">Qui suis-je</a> <a href="/ueber-mich">Wer ich bin</a></p>`,
     `<aside class="tools"><a href="/stack-tool">Tool</a></aside>`,
   ].join("\n");
@@ -178,6 +178,71 @@ test("younes-megaache.com: a project card that links the site itself, labelled w
     ${card("Nan Mo Hoam's website", "https://nan-mo-hoam.com", "nan-mo-hoam.com")}</div></main>`;
   const got = fromPages({ home: "https://younes-megaache.com/", page: "https://younes-megaache.com/projects", pageHtml: html }).map((c) => c.url);
   assert.deepEqual(got, ["https://appgallery.huawei.com/app/C105867571", "https://github.com/megaacheyounes/Bananalyzer", "https://nan-mo-hoam.com/"]);
+});
+
+// Second review of #287: a card that links back to the site must never take its grid with it.
+test("a card grid with Live and Code links keeps every project when one card's Live is the portfolio itself or a placeholder", () => {
+  const card = (name, live, code) => `<div class="card"><img alt="${name}"><h3>${name}</h3><div class="links"><a href="${live}">Live</a><a href="${code}">Code</a></div></div>`;
+  const grid = (cards) => `<main><h1>Projects</h1><div class="grid">${cards.join("")}</div></main>`;
+  const three = [
+    card("Weather", "https://weather-ana.vercel.app/", "https://github.com/ana/weather"),
+    card("Chat", "https://chat-ana.netlify.app/", "https://github.com/ana/chat"),
+    card("Todo", "https://todo-ana.vercel.app/", "https://github.com/ana/todo"),
+  ];
+  const six = ["https://weather-ana.vercel.app/", "https://github.com/ana/weather", "https://chat-ana.netlify.app/", "https://github.com/ana/chat", "https://todo-ana.vercel.app/", "https://github.com/ana/todo"];
+  assert.deepEqual(ownOf(grid(three)), six);
+  // The fourth card is this portfolio: its Live goes to "/". Then a placeholder Live to "/projects".
+  assert.deepEqual(ownOf(grid([...three, card("This portfolio", "/", "https://github.com/ana/portfolio")])), [...six, "https://github.com/ana/portfolio"]);
+  assert.deepEqual(ownOf(grid([...three, card("Soon", "/projects", "https://github.com/ana/soon")])), [...six, "https://github.com/ana/soon"]);
+});
+
+test("a breadcrumb, a logo or a '← home' line beside projects with short names does not make them a menu", () => {
+  // A breadcrumb "Home" in the same container as cards whose links are just their names.
+  const crumbAndCards = `<main><div class="wrap"><a href="/">Home</a><a href="/todo-app">Todo App</a><a href="/chat">Chat</a><a href="/weather">Weather</a></div></main>`;
+  assert.deepEqual(ownOf(crumbAndCards), ["https://ana.dev/todo-app", "https://ana.dev/chat", "https://ana.dev/weather"]);
+  // A logo image linking home, beside project links at the same depth, no nav or header.
+  const logo = `<div class="page"><a href="/"><img alt=""></a><a href="https://weather-ana.vercel.app/">Weather</a><a href="https://chat-ana.netlify.app/">Chat</a><a href="/todo-app">Todo</a></div>`;
+  assert.deepEqual(ownOf(logo), ["https://weather-ana.vercel.app/", "https://chat-ana.netlify.app/", "https://ana.dev/todo-app"]);
+  // A minimal page: a home line, then one paragraph per project.
+  const minimal = `<body><p><a href="/">← home</a></p><p><a href="/budget">Budget</a>: a budget for two.</p><p><a href="https://github.com/ana/notes">Notes</a>: notes that sync.</p><p><a href="/tracker">Tracker</a>: habits.</p></body>`;
+  assert.deepEqual(ownOf(minimal), ["https://github.com/ana/notes", "https://ana.dev/budget", "https://ana.dev/tracker"]);
+});
+
+test("a div menu is still a menu with an image logo for its home link and long labels, and only its own pages go", () => {
+  const menu = `<div class="topbar"><a href="/"><img alt=""></a><a href="/achievements-and-awards">Achievements and awards I received</a>
+    <a href="/my-certifications">Professional certifications I hold</a><a href="/musings">Musings</a><a href="/publications">Selected publications and papers</a></div>`;
+  // "/musings" names no section, but the menu it sits in does.
+  assert.deepEqual(ownOf(`${menu}${cardsPage()}`), PROJECTS_ONLY);
+  // A repository in a menu is not taken out with it.
+  const withRepo = menu.replace("</div>", `<a href="https://github.com/ana/dotfiles">dotfiles</a></div>`);
+  assert.deepEqual(ownOf(`${withRepo}${cardsPage()}`), ["https://github.com/ana/dotfiles", ...PROJECTS_ONLY]);
+});
+
+test("root-level project pages named like a section count by their label; the same paths labelled as sections do not", () => {
+  const link = (p, label) => `<div class="card"><a href="${p}">${label}</a><p>A line about it.</p></div>`;
+  const page = (cards) => `<main><div class="grid">${cards.join("")}</div></main>`;
+  assert.deepEqual(ownOf(page([link("/2048/", "2048"), link("/notes/", "Notes, a markdown app"), link("/timeline/", "Timeline.js"), link("/tools/", "Dev Tools Hub"), link("/resume/", "Resume Builder")])), [
+    "https://ana.dev/2048/",
+    "https://ana.dev/notes/",
+    "https://ana.dev/timeline/",
+    "https://ana.dev/tools/",
+    "https://ana.dev/resume/",
+  ]);
+  assert.deepEqual(ownOf(page([link("/notes/", "Notes"), link("/timeline/", "Timeline"), link("/tools/", "My tools"), link("/resume/", "Resume"), link("/2048/", "Page 2048"), link("/2024/", "2023"), link("/achievements", "")])), []);
+  // Below the top of the site the path still decides.
+  assert.deepEqual(ownOf(page([link("/topics/react", "React apps"), link("/blog/2048", "2048")])), []);
+});
+
+test("a beginner's one repository of practice projects: each folder is a project; releases and the wiki fold into it", () => {
+  assert.notEqual(hostKey("https://github.com/ana/js-projects/tree/main/calculator"), hostKey("https://github.com/ana/js-projects/tree/main/todo"));
+  assert.equal(hostKey("https://github.com/ana/js-projects/blob/main/todo/index.html"), hostKey("https://github.com/ana/js-projects/tree/main/todo"));
+  for (const into of ["releases/tag/v1", "wiki", "issues/3", "commit/abc123", "blob/main/README.md", "tree/main"]) {
+    assert.equal(hostKey(`https://github.com/ana/app/${into}`), "github.com/ana/app", into);
+  }
+  assert.notEqual(hostKey("https://gitlab.com/ana/practice/-/tree/main/clock"), hostKey("https://gitlab.com/ana/practice/-/tree/main/quiz"));
+  const home = "https://ana.dev/";
+  const section = `<section id="projects">${["calculator", "todo", "weather"].map((d) => `<a href="https://github.com/ana/js-projects/tree/main/${d}">${d}</a>`).join(" ")} <a href="https://github.com/ana/js-projects/releases">Releases</a></section>`;
+  assert.deepEqual(projectCandidates(homeProjectLinks({ html: section, url: home, finalUrl: home }), home).map((c) => c.url), ["calculator", "todo", "weather"].map((d) => `https://github.com/ana/js-projects/tree/main/${d}`).concat("https://github.com/ana/js-projects/releases"));
 });
 
 test("a language is only an ISO 639-1 code at the start of the path; 'ai-chat', 'go-cli', 'ml-lab' and 'ui-kit' are projects", () => {
@@ -333,6 +398,15 @@ test("krupal-portfolio.vercel.app: a 'Company Experiences' column title inside '
   // Only as the column's first text, holding no link: a project card that mentions experience is a project.
   const card = `<section id="projects"><h2>Projects</h2><div><a href="https://exp.example/">Exp</a><p>Experiences</p><a href="https://two.example/">Two</a></div></section>`;
   assert.deepEqual(cands(card).map(([, t]) => t), [1, 1]);
+});
+
+test("a project page written in Korean counts its two-syllable words; a thin one still does not", async () => {
+  const page = (body) => `<html><head><title>Ana</title></head><body><header><a href="/">Ana</a></header><main>${body}</main></body></html>`;
+  const ko = page(`<h1>식단 관리 앱</h1><p>매일 먹은 음식을 사진으로 기록하면 영양 성분을 자동 분석해 주는 식단 관리 앱입니다. 목표 체중과 활동량에 맞춰 하루 권장 칼로리를 계산하고, 일주일 단위 리포트와 맞춤 식단 추천을 제공합니다. 가족 계정 연동, 알림 설정, 데이터 백업 기능도 지원합니다.</p>`);
+  const thin = page(`<h1>식단 관리 앱</h1><p>준비 중입니다.</p>`);
+  const f = fakeHost({ "/projects/ko": [200, ko], "/projects/thin": [200, thin] }, [200, page("")]);
+  const r = await checkLinks(["ko", "thin"].map((p) => ({ url: `https://ana.dev/projects/${p}`, kind: "own page", tier: 2 })), { fetchImpl: f, homeText: "Ana" });
+  assert.deepEqual([r.own_check, r.ok, r.own_unverified], ["text", 1, 1]);
 });
 
 test("a project page written in Chinese, Japanese or Thai counts by its letters; a thin one still does not", async () => {
