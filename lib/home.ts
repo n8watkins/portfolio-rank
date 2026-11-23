@@ -5,6 +5,7 @@ import { heroOf, shotBases } from "@/lib/shots";
 import { hiddenUrls } from "@/lib/roster";
 import { CONTRIBUTOR_COUNT_LABEL } from "@/lib/portfolio-count";
 import { gradedPool, factLines, judgmentLines } from "@/lib/grader/report.mjs";
+import { freshGrade } from "@/lib/fresh-facts.mjs";
 import { liveCounts, siteStats } from "@/lib/games/stats.mjs";
 import { gamesEnabled } from "@/lib/games/server";
 import { rankedSites } from "@/lib/tiers-board";
@@ -235,14 +236,12 @@ async function portfolioOfTheDay(pool: (PoolSite & { aiRank: number })[], skip: 
     const p = candidates[(day * 37 + k) % candidates.length];
     const [shots, row] = await Promise.all([
       shotBases([p.url]),
-      db().execute({ sql: "SELECT ai_rubric FROM portfolios WHERE url = ?", args: [p.url] }),
+      db().execute({ sql: "SELECT ai_rubric, facts FROM portfolios WHERE url = ?", args: [p.url] }),
     ]);
     const base = shots.get(p.url);
     if (!base) continue;
-    let grade: Record<string, unknown> = {};
-    try {
-      grade = JSON.parse(String(row.rows[0]?.ai_rubric ?? "{}"));
-    } catch {}
+    // Its fact lines from the newest measured facts (lib/fresh-facts.mjs).
+    const grade = (freshGrade(String(row.rows[0]?.ai_rubric ?? "{}"), row.rows[0]?.facts) ?? {}) as Record<string, unknown>;
     const judgments = (judgmentLines(grade) as { label: string; score: number | null; note: string }[])
       .filter((j) => typeof j.score === "number" && j.note)
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));

@@ -23,10 +23,10 @@ const get = async (path) => {
 
 /** What only tiers by ELO would show; none of it may appear with the flag off. */
 const TIER_MARKERS = [
-  "Starting rank from automated checks",
+  "Starting rank",
   "Report card: how to improve",
   "real vote",
-  "Automated checks:",
+  "Automated checks",
   "Quickest points",
   "Your tier comes from your place",
   "Points from automated checks",

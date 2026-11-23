@@ -22,6 +22,7 @@ import { ProfileV2, profileMetadata } from "./profile-v2";
 import { loadSeoExtras, profileJsonLd } from "@/lib/profile";
 import { indexable, profileDescription, type SeoFacts } from "@/lib/profile-seo";
 import { jsonLdHtml } from "@/lib/json-ld";
+import { freshGrade } from "@/lib/fresh-facts.mjs";
 
 // Rendered on first visit and then served from the cache, re-rendered at most
 // every 5 minutes (ISR); nothing here depends on who is looking - the ♥ state
@@ -108,12 +109,16 @@ function publicGrade(raw: unknown): null | {
   checks?: number;
   axes: { key: string; label: string; score: number; note?: string }[];
 } {
-  if (typeof raw !== "string") return null;
-  let r: Record<string, { score?: number; note?: string } | string | undefined>;
-  try {
-    r = JSON.parse(raw);
-  } catch {
-    return null;
+  type Raw = Record<string, { score?: number; note?: string } | string | undefined>;
+  let r: Raw;
+  if (raw && typeof raw === "object") r = raw as Raw;
+  else if (typeof raw !== "string") return null;
+  else {
+    try {
+      r = JSON.parse(raw);
+    } catch {
+      return null;
+    }
   }
   const tier = r.tier as string | undefined;
   if (!tier || !["S", "A", "B", "C", "D"].includes(tier)) return null;
@@ -184,7 +189,7 @@ export default async function PortfolioPage({
 
   const rubricRow = (
     await db().execute({
-      sql: "SELECT ai_rubric FROM portfolios WHERE url = ?",
+      sql: "SELECT ai_rubric, facts FROM portfolios WHERE url = ?",
       args: [url],
     })
   ).rows[0];
@@ -193,7 +198,8 @@ export default async function PortfolioPage({
   // Fresh, never the minute cache: this render is kept at the edge for a day.
   const owner = await ownerState(db(), url, { fresh: true });
   if (owner.removedAt) notFound();
-  const grade = owner.hideGrade ? null : publicGrade(rubricRow?.ai_rubric);
+  // "Checks passed" from the newest measured facts, as the points below read them (lib/fresh-facts.mjs).
+  const grade = owner.hideGrade ? null : publicGrade(freshGrade(rubricRow?.ai_rubric, rubricRow?.facts));
   // Tiers by ELO, only while RANKING_V2 is on (lib/tiers-view.ts); null otherwise, and the page stays as it was.
   const eloTier = await loadProfileTier(url, rubricRow?.ai_rubric, owner.hideGrade);
 

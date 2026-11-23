@@ -38,7 +38,11 @@ export function ProfileTier({ t }: { t: Data }) {
                 {t.shown && t.of != null && <span className="font-normal text-mute"> of {t.of.toLocaleString("en-US")} ranked portfolios</span>}
               </p>
               <p className="text-sm text-mute">
-                {t.seeded ? `Starting rank from automated checks · ${votes}. Votes move it from here.` : `ELO from ${votes}. It moves as people vote.`}
+                {t.seeded
+                  ? t.startingPoints != null
+                    ? `Starting rank set from automated checks when they scored ${t.startingPoints} of 100 · ${votes}. Votes move it from here.`
+                    : `Starting rank from automated checks · ${votes}. Votes move it from here.`
+                  : `ELO from ${votes}. It moves as people vote.`}
                 <span className="block text-xs">{settling}</span>
               </p>
             </>
@@ -56,7 +60,7 @@ export function ProfileTier({ t }: { t: Data }) {
         <div className="mt-4 grid grid-cols-1 gap-4 border-t border-edge pt-4 md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
           <div>
             <h3 className="text-sm font-semibold">
-              Automated checks: <span className="tabular-nums">{t.check.total}</span> of 100 points
+              {t.checkIsCurrent ? "Automated checks now" : "Automated checks"}: <span className="tabular-nums">{t.check.total}</span> of 100
             </h3>
             <ul className="mt-2 grid grid-cols-1 gap-x-6 text-sm sm:grid-cols-2">
               {t.check.items.map((i) => (

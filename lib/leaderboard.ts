@@ -7,6 +7,7 @@ import { heroOf, mshotsUrl, shotBases } from "@/lib/shots";
 import { topPct } from "@/lib/games/pool.mjs";
 import { ownerMarks } from "@/lib/ownership/same-site.mjs";
 import { factLines, strengthsAndFixes } from "@/lib/grader/report.mjs";
+import { freshGrade } from "@/lib/fresh-facts.mjs";
 import { shownPlaces } from "@/lib/ranking/places.mjs";
 
 // What the /top page shows, read on the server: one page of a ranking view
@@ -94,7 +95,7 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   const out = new Map<string, Why>();
   if (!urls.length) return out;
   const grades = await db().execute({
-    sql: `SELECT url, ai_rubric FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL`,
+    sql: `SELECT url, ai_rubric, facts FROM portfolios WHERE url IN (${marks(urls.length)}) AND ai_rubric IS NOT NULL`,
     args: urls,
   });
   // A grade hidden under any spelling of the site (lib/ownership/same-site.mjs).
@@ -102,12 +103,8 @@ export async function whyFor(urls: string[]): Promise<Map<string, Why>> {
   for (const r of grades.rows) {
     const url = String(r.url);
     if (gradeHidden(url)) continue;
-    let g: Record<string, unknown> | null = null;
-    try {
-      g = JSON.parse(String(r.ai_rubric));
-    } catch {
-      continue;
-    }
+    // The fact chips from the newest measured facts (lib/fresh-facts.mjs).
+    const g = freshGrade(String(r.ai_rubric), r.facts) as Record<string, unknown> | null;
     if (!g || typeof g !== "object") continue;
     // Project links say how many load ("5 of 8 project links load") for facts of version 3; older ones keep their chip.
     const facts = (factLines(g) as { id: string; label: string; pass: boolean | null; shownAs: string }[])

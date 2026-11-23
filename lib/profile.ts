@@ -14,6 +14,7 @@ import type { QuickFacts } from "@/lib/grader/quick";
 import type { PsiResult } from "@/lib/tools/psi";
 import type { ShareResult } from "@/lib/tools/share";
 import { psiKey, quickKey, shareKey } from "@/lib/tools/keys";
+import { freshGrade } from "@/lib/fresh-facts.mjs";
 
 // Everything a portfolio's profile (/p/<address>) shows, for a listed
 // portfolio or one added through "Add your portfolio" (the discovery
@@ -121,7 +122,7 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   if (owner.removedAt) return null;
 
   const [rubricRow, jobRow, seenRow, cacheRows, stars, saves, rating] = await Promise.all([
-    listed ? client.execute({ sql: `SELECT ai_rubric, (${GONE_WHERE}) AS gone FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]) : null,
+    listed ? client.execute({ sql: `SELECT ai_rubric, facts, (${GONE_WHERE}) AS gone FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]) : null,
     client.execute({ sql: "SELECT id, status, reason, result FROM grade_jobs WHERE site_key = ? ORDER BY created_at DESC LIMIT 1", args: [siteKey] }).then((r) => r.rows[0]),
     listed ? null : seen(client, url),
     client.execute({ sql: "SELECT k, v, at FROM cache WHERE k IN (?, ?, ?, ?)", args: [quickKey(siteKey), shareKey(url), psiKey("mobile", url), psiKey("desktop", url)] }).then((r) => r.rows),
@@ -145,7 +146,8 @@ export async function loadProfile(url: string): Promise<Profile | null> {
   const share = read<ShareResult>(shareKey(url));
 
   const jobResult = jobRow?.status === "done" && jobRow.result ? String(jobRow.result) : null;
-  const report = owner.hideGrade ? null : reportCard(rubricRow?.ai_rubric ?? jobResult);
+  // A listed site's code checks from its newest measured facts (lib/fresh-facts.mjs).
+  const report = owner.hideGrade ? null : reportCard(rubricRow?.ai_rubric != null ? freshGrade(rubricRow.ai_rubric, rubricRow.facts) : jobResult);
   const standing: Standing = rating ? { elo: Number(rating.elo), faceoffs: Number(rating.votes) } : { elo: BASE_ELO, faceoffs: 0 };
   const stage: Profile["stage"] = listed
     ? "listed"
@@ -203,7 +205,7 @@ export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "
   await ensureSchema();
   const client = db();
   const [row, inspect, owner] = await Promise.all([
-    client.execute({ sql: `SELECT ai_rubric, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]),
+    client.execute({ sql: `SELECT ai_rubric, facts, (${HIDDEN_WHERE}) AS hidden FROM portfolios WHERE url = ?`, args: [url] }).then((r) => r.rows[0]),
     client.execute({ sql: "SELECT v FROM cache WHERE k = ?", args: [`inspect:${url}`] }).then((r) => r.rows[0]),
     ownerState(client, url, { fresh: true }),
   ]);
@@ -212,7 +214,7 @@ export const loadSeoExtras = cache(async (url: string): Promise<Pick<SeoFacts, "
     inspected = inspect ? JSON.parse(String(inspect.v)) : null;
   } catch {}
   return {
-    report: owner.hideGrade ? null : reportCard(row?.ai_rubric),
+    report: owner.hideGrade || row?.ai_rubric == null ? null : reportCard(freshGrade(row.ai_rubric, row.facts)),
     hidden: Number(row?.hidden ?? 0) === 1,
     socials: socialsFrom(inspected),
   };
