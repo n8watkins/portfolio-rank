@@ -97,7 +97,7 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
         // A visitor changed a report after this page loaded: show the fresh list, with that report still open.
         setErrors((e) => ({
           ...e,
-          [`handle:${site.url}`]: `${plural(b.stale!.length, "report")} changed since this page loaded and ${b.stale!.length === 1 ? "stays" : "stay"} open. Read ${b.stale!.length === 1 ? "it" : "them"}, then mark handled again.`,
+          [key]: `${plural(b.stale!.length, "report")} changed since this page loaded and ${b.stale!.length === 1 ? "stays" : "stay"} open. Read ${b.stale!.length === 1 ? "it" : "them"}, then mark handled again.`,
         }));
       } else {
         setGone((g) => new Set(g).add(key));
@@ -205,7 +205,7 @@ export function ProblemReports({ open, handled }: { open: ReportedSite[]; handle
               const domain = domainOf(s.url);
               const key = `reopen:${s.key}`;
               return (
-                <li key={s.key}className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm" data-problem-handled-site={s.url}>
+                <li key={s.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm" data-problem-handled-site={s.url}>
                   <div className="min-w-0 flex-1 basis-64">
                     <p className="font-semibold break-all">{domain}</p>
                     <p className="text-xs text-mute text-pretty">

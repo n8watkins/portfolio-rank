@@ -36,6 +36,8 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
   const interactive = useRef(false);
   const [needsTick, setNeedsTick] = useState(false);
   const widget = useRef<TurnstileHandle>(null);
+  // Each send's number; closing the panel moves it on, which stops that send's wait and drops it.
+  const attempt = useRef(0);
   const id = useId();
 
   const show = () => {
@@ -54,14 +56,17 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
    * tools forms do). Without one the request still goes, and the server
    * decides (lib/turnstile.ts).
    */
-  async function waitForToken() {
+  async function waitForToken(mine: number) {
     const start = Date.now();
-    while (!token.current && !widgetFailed.current && Date.now() - start < (interactive.current ? 120_000 : 4_500)) {
+    while (attempt.current === mine && !token.current && !widgetFailed.current && Date.now() - start < (interactive.current ? 120_000 : 4_500)) {
       await new Promise((r) => setTimeout(r, 150));
     }
     return token.current;
   }
   const close = () => {
+    attempt.current++;
+    setBusy(false);
+    setNeedsTick(false);
     setOpen(false);
     // A sent report starts fresh next time; an unsent one keeps what was picked.
     if (sent) {
@@ -80,15 +85,20 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
       document.getElementById(`${id}-reason-${REASONS[0].key}`)?.focus();
       return;
     }
+    const mine = ++attempt.current;
     setBusy(true);
     setError(null);
-    const turnstileToken = await waitForToken();
+    const turnstileToken = await waitForToken(mine);
+    // Closed while waiting for the check: nothing is sent (close() already cleared busy).
+    if (attempt.current !== mine) return;
     try {
       const res = await fetch("/api/problem-reports", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url, reason, note: note.trim() || undefined, ...(turnstileToken ? { turnstileToken } : {}) }),
       });
+      // Closed while it was on its way: it may have been stored, but this panel no longer shows the outcome.
+      if (attempt.current !== mine) return;
       // A token is good for one request: ask for a fresh one, but never reset a challenge still waiting for its tick.
       // A widget that failed to run gets another go for the next send.
       if (turnstileToken || widgetFailed.current) {
@@ -103,9 +113,9 @@ export function ReportProblem({ url, domain, className = "" }: { url: string; do
       const b = (await res.json().catch(() => ({}))) as { error?: string };
       setError(ERRORS[b.error ?? ""] ?? "That didn't send. Try again in a moment.");
     } catch {
-      setError("We couldn't reach PortfolioRank. Check your connection and try again.");
+      if (attempt.current === mine) setError("We couldn't reach PortfolioRank. Check your connection and try again.");
     } finally {
-      setBusy(false);
+      if (attempt.current === mine) setBusy(false);
     }
   }
 

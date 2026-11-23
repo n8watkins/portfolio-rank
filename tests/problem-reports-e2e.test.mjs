@@ -271,6 +271,60 @@ test("Cloudflare's checkbox: the panel says to tick it, sends nothing without th
   }
 });
 
+test("closing the panel while it waits for the checkbox drops that send: nothing posts later, and reopening starts clean", async () => {
+  const browser = await chromium.launch({ args: ["--mute-audio"] });
+  try {
+    const ctx = await context(browser, { viewport: { width: 390, height: 844 } });
+    const p = await ctx.newPage();
+    // The same stand-in as above: each widget asks for a tick; the test ticks the newest one.
+    await p.addInitScript(() => {
+      window.turnstile = {
+        render(el, opts) {
+          el.textContent = "Verify you are human";
+          setTimeout(() => opts["before-interactive-callback"]?.(), 50);
+          window.__tick = () => opts.callback("ticked-token");
+          return "w1";
+        },
+        reset() {},
+        remove() {},
+      };
+    });
+    const posts = [];
+    await p.route("**/api/problem-reports", (route) => {
+      posts.push(route.request().postDataJSON());
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    });
+    await p.goto(profile(TICK));
+    await p.locator("[data-report-open]").click();
+    let dialog = p.getByRole("dialog", { name: "Report a problem" });
+    await dialog.getByLabel("The screenshot is wrong or broken").check();
+    await dialog.locator("[data-report-send]").click();
+    await dialog.locator("[data-report-tick]").waitFor();
+    // Close it mid-wait.
+    await p.keyboard.press("Escape");
+    await p.locator("dialog[open]").waitFor({ state: "detached" }).catch(() => {});
+    assert.equal(await p.locator("dialog[open]").count(), 0);
+
+    // Reopen: Send works, no stale error or tick message from the dropped send.
+    await p.locator("[data-report-open]").click();
+    dialog = p.getByRole("dialog", { name: "Report a problem" });
+    await dialog.waitFor();
+    assert.equal(await dialog.locator("[data-report-send]").isEnabled(), true, "Send is not stuck");
+    assert.equal(await dialog.locator("[data-report-error]").count(), 0);
+    assert.equal(await dialog.locator("[data-report-send]").textContent(), "Send report");
+    // A tick on the new widget sends exactly one report, from the new send; the dropped one never posts.
+    await dialog.locator("[data-report-send]").click();
+    await dialog.locator("[data-report-tick]").waitFor();
+    await p.evaluate(() => window.__tick());
+    await p.getByRole("dialog", { name: "Thanks for telling us" }).waitFor();
+    await p.waitForTimeout(1000);
+    assert.equal(posts.length, 1, "one post, with the token");
+    assert.equal(posts[0].turnstileToken, "ticked-token");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("offline: the panel says it couldn't reach the site, keeps the report, and sends it once back", async () => {
   const browser = await chromium.launch({ args: ["--mute-audio"] });
   try {

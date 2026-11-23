@@ -15,7 +15,7 @@ import path from "node:path";
 import { createClient } from "@libsql/client";
 import { migrate } from "../lib/schema.mjs";
 import { rateLimit } from "../lib/polls/store.mjs";
-import { NOTE_MAX, REASON_KEYS, cleanNote, cleanSiteUrl, listReports, markHandled, openCount, reopenReports, saveReport } from "../lib/problem-reports/store.mjs";
+import { NOTE_MAX, REASON_KEYS, isProblemReportAlert, cleanNote, cleanSiteUrl, listReports, markHandled, openCount, reopenReports, saveReport } from "../lib/problem-reports/store.mjs";
 import { CAP_ALERT_KEY, LIMITS, takeReport } from "../lib/problem-reports/intake.mjs";
 
 const SITE = "https://e2e-reported.dev";
@@ -95,6 +95,12 @@ test("the source files hold no raw invisible or text-direction characters", () =
     const line = text.split("\n").findIndex((l) => bad.test(l));
     assert.equal(line, -1, `${f} line ${line + 1}`);
   }
+});
+
+test("the admin list: attributes are spaced, and the stale message is keyed by the group like every other message", () => {
+  const src = fs.readFileSync(new URL("../components/admin/ProblemReports.tsx", import.meta.url), "utf8");
+  assert.equal(/\}[A-Za-z-]+=/.test(src), false, "no JSX attribute glued to the one before it");
+  assert.equal(src.includes("site.url}`]"), false, "messages are keyed by site.key, never site.url");
 });
 
 test("cleanSiteUrl: http(s) only, no credentials, bounded", () => {
@@ -353,6 +359,55 @@ test("intake: past the whole site's day cap: thanks, nothing stored, one log lin
   assert.equal(calls.alerts.length, 1);
   assert.equal(calls.alerts[0].key, CAP_ALERT_KEY);
   assert.equal(calls.alerts[0].quiet, true);
+});
+
+test("intake: a failing owner alert still thanks the visitor, is logged, and is tried again by the next request", async () => {
+  const db = await freshDb();
+  let fail = true;
+  const alerts = [];
+  const logs = [];
+  const run = (i) =>
+    takeReport({
+      db,
+      body: { url: SITE, reason: "screenshot" },
+      visitor: `v${i}`,
+      network: `n${i}`,
+      verify: async () => "ok",
+      known: async () => true,
+      rateLimit: (key, opts) => rateLimit(db, key, opts),
+      log: (f) => logs.push(f.event),
+      alert: async (c) => {
+        if (fail) throw new Error("database is locked");
+        alerts.push(c.key);
+      },
+      now: T0,
+    });
+  for (let i = 0; i < LIMITS.ALL_DAY; i++) await rateLimit(db, "report:all", { limit: LIMITS.ALL_DAY, windowMs: 86_400_000, now: T0 });
+  assert.deepEqual(await run(0), { status: 200, body: { ok: true } }, "the thanks, not a 500");
+  assert.deepEqual(logs, ["problem_reports_daily_cap", "problem_reports_alert_failed"]);
+  assert.equal(await slots(db, "report:all-logged"), 0, "the day's mark is not spent on a failed alert");
+  fail = false;
+  assert.equal((await run(1)).status, 200);
+  assert.deepEqual(alerts, [CAP_ALERT_KEY], "the next request records it");
+  assert.equal((await run(2)).status, 200);
+  assert.deepEqual(alerts, [CAP_ALERT_KEY], "and only once that day");
+});
+
+test("the cap alert: raised by the route's reconcile, left alone by the night's, cleared by Mark handled's", async () => {
+  const { reconcileAlerts, activeAlerts } = await import("../pipeline/alerts.mjs");
+  const db = await freshDb();
+  const open = async () => (await activeAlerts(db)).map((a) => a.key);
+  assert.equal(isProblemReportAlert(CAP_ALERT_KEY), true);
+  assert.equal(isProblemReportAlert("newsletter-stopped:1"), false);
+  // As app/api/problem-reports/route.ts raises it.
+  await reconcileAlerts(db, { conditions: [{ key: CAP_ALERT_KEY, kind: "problem", title: "cap", quiet: true }], scope: (k) => k === CAP_ALERT_KEY, now: new Date(T0) });
+  assert.deepEqual(await open(), [CAP_ALERT_KEY]);
+  // The night's reconcile (worker/night.ts, its scope excludes isProblemReportAlert; tests/ops-schedules.test.mjs checks it does) holds none of it.
+  await reconcileAlerts(db, { conditions: [], scope: (k) => !isProblemReportAlert(k), now: new Date(T0 + 6 * 3_600_000) });
+  assert.deepEqual(await open(), [CAP_ALERT_KEY], "the night leaves it open");
+  // As app/api/admin/problem-reports/route.ts clears it on Mark handled.
+  await reconcileAlerts(db, { conditions: [], scope: (k) => k === CAP_ALERT_KEY, now: new Date(T0 + 7 * 3_600_000) });
+  assert.deepEqual(await open(), []);
 });
 
 test("retention: handled reports go 180 days after handling; open ones stay", async () => {
