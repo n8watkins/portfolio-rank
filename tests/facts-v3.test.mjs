@@ -51,8 +51,10 @@ test("yashitanamdeo.github.io: the projects are checked, not the school and empl
     "https://covid19-tracker-84ef4.web.app/",
     "https://github.com/yashitanamdeo/Covid19-tracker",
   ]);
-  // The about section's university and club and the experience section's employers (main checked these first) are left out.
-  for (const notProject of ["https://www.svvv.edu.in/", "https://www.internationalmun.org/", "https://internship.suvenconsultants.com/", "https://www.theforage.com/"]) {
+  // The about section's university, club and the experience section's employers (main checked these first) come
+  // only after every project link: here the university takes the last free slot.
+  assert.deepEqual(got.slice(7), ["https://www.svvv.edu.in/"]);
+  for (const notProject of ["https://www.internationalmun.org/", "https://internship.suvenconsultants.com/", "https://www.theforage.com/"]) {
     assert.ok(!got.includes(notProject), notProject);
   }
 });
@@ -128,6 +130,20 @@ test("project candidates: a projects section or heading first, GitHub repositori
   const got = candidates(many, url);
   assert.equal(got.length, 8);
   assert.ok(got.every((u) => /^https:\/\/p\d\./.test(u)));
+});
+
+test("profiles never fill a project-link slot: freelancing, link lists, coding, film and book sites, a CodePen profile", () => {
+  const url = "https://ana.dev/";
+  const html = ["https://www.upwork.com/freelancers/~01", "https://www.fiverr.com/ana", "https://linktr.ee/ana", "https://www.kaggle.com/ana", "https://www.imdb.com/name/nm1/", "https://goodreads.com/ana", "https://codepen.io/ana", "https://codepen.io/ana/pen/abc", "https://demo.example/"]
+    .map((h) => `<a href="${h}">x</a>`)
+    .join("");
+  assert.deepEqual(candidates(html, url), ["https://codepen.io/ana/pen/abc", "https://demo.example/"]);
+  // A "find me" list (stimmie.dev keeps 26 profiles there) and a "Let's connect" block are profiles, whatever their hosts.
+  const lists = `<section><h2>~ find me ~</h2><a href="https://oeis.org/wiki/User:Ana">OEIS</a><a href="https://www.strava.com/athletes/1">Strava</a></section>
+    <div class="socials"><a href="https://last.fm/user/ana">Last.fm</a></div>
+    <section><h2>Let's connect</h2><a href="https://github.com/ana/dotfiles">dotfiles</a></section>
+    <section><h2>~ stimmieverse ~</h2><a href="https://room.ana.dev/">Room</a></section>`;
+  assert.deepEqual(candidates(lists, url), ["https://github.com/ana/dotfiles", "https://room.ana.dev/"]);
 });
 
 test("footer year: the mark before or after the year, ranges, never a bare year", () => {

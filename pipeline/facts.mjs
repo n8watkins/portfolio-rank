@@ -56,6 +56,15 @@ export function projectLinksText(links) {
 export const FREE_HOSTS =
   /\.(vercel\.app|netlify\.app|github\.io|gitlab\.io|framer\.website|framer\.app|framer\.ai|pages\.dev|workers\.dev|web\.app|firebaseapp\.com|surge\.sh|onrender\.com|herokuapp\.com|glitch\.me|replit\.app|repl\.co|wixsite\.com|squarespace\.com|webflow\.io|carrd\.co|notion\.site|super\.site|wordpress\.com|blogspot\.com|neocities\.org|fly\.dev|railway\.app|azurewebsites\.net|amplifyapp\.com|translate\.goog)$/i;
 
+// Profiles on sites for freelancing, link lists, competitive coding, data
+// science, art, film, books and anime (the grading preview's retest,
+// 2026-11-22: stimmie.dev's "find me" list, hellosagar's Upwork and Fiverr):
+// a profile is never a project, so it never fills a project-link slot.
+const PROFILE_HOSTS =
+  /(^|\.)(upwork\.com|fiverr\.com|freelancer\.com|toptal\.com|linktr\.ee|bio\.link|beacons\.ai|kaggle\.com|codeforces\.com|codechef\.com|hackerearth\.com|geeksforgeeks\.org|kattis\.com|topcoder\.com|imdb\.com|goodreads\.com|letterboxd\.com|myanimelist\.net|anilist\.co|deviantart\.com|artstation\.com|youpic\.com|500px\.com|flickr\.com|unsplash\.com|pinterest\.com|reddit\.com|twitch\.tv|spotify\.com|soundcloud\.com|substack\.com|producthunt\.com|wellfound\.com|angel\.co|glassdoor\.com|indeed\.com)$/i;
+/** A CodePen profile (codepen.io/name), not one of its pens (codepen.io/name/pen/id). */
+const isCodepenProfile = (u) => /(^|\.)codepen\.io$/i.test(u.hostname) && u.pathname.split("/").filter(Boolean).length <= 1;
+
 // Hosts that are profiles or services, not project demos.
 const NOT_PROJECT =
   /(^|\.)(linkedin\.com|twitter\.com|x\.com|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|threads\.net|threads\.com|bsky\.app|mastodon\.social|dribbble\.com|behance\.net|medium\.com|dev\.to|hashnode\.com|stackoverflow\.com|leetcode\.com|hackerrank\.com|discord\.gg|discord\.com|t\.me|wa\.me|calendly\.com|cal\.com|buymeacoffee\.com|ko-fi\.com|patreon\.com|google\.com|googleapis\.com|gstatic\.com|fonts\.googleapis\.com|w3\.org|schema\.org|creativecommons\.org|vercel\.com|netlify\.com|nextjs\.org|reactjs\.org|react\.dev|gatsbyjs\.com|astro\.build|tailwindcss\.com|fontawesome\.com|unsplash\.com|icons8\.com|flaticon\.com|credly\.com|coursera\.org|udemy\.com)$/i;
@@ -157,7 +166,7 @@ export { isGithubProfile };
  */
 export function pageLinks(html, baseUrl, scan = null) {
   const page = scan ?? scanPage(html, baseUrl);
-  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome })));
+  const fromControls = page.controls.flatMap((c) => c.navUrls.map((href) => ({ raw: href, href, text: c.label, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial })));
   return [...page.links, ...fromControls];
 }
 
@@ -182,7 +191,7 @@ function projectUrl(l, self) {
     const segs = u.pathname.split("/").filter(Boolean);
     if (segs.length < 2 || GH_RESERVED.test(segs[0])) return null; // a profile, not a repository
     repo = true;
-  } else if (NOT_PROJECT.test(h) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
+  } else if (NOT_PROJECT.test(h) || PROFILE_HOSTS.test(h) || isCodepenProfile(u) || /\.(pdf|png|jpe?g|gif|svg|webp|zip)$/i.test(u.pathname)) {
     return null;
   }
   u.hash = "";
@@ -206,7 +215,8 @@ export function projectLinkCandidates(links, siteUrl, max = LINK_CHECK_MAX) {
   const rest = [];
   for (const l of links) {
     const p = projectUrl(l, self);
-    if (!p || seen.has(p.key)) continue;
+    // A list of where else to find the person ("Find me", "Let's connect") holds profiles, not projects.
+    if (!p || seen.has(p.key) || (l.inSocial && !p.repo)) continue;
     seen.add(p.key);
     (l.inProjects || (p.repo && !l.inChrome) ? first : rest).push(p.key);
   }

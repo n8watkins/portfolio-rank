@@ -36,6 +36,10 @@ const URL_ATTRS = new Set(["data-href", "data-url", "data-link", "formaction"]);
 // built"). Not work experience: "work-experience", "Where I've worked" and a bare "Work" heading are timelines.
 const PROJECT_ATTR = /\b(?:projects?|portfolio|works?(?!\s*(?:experience|history|place|timeline))|case\s*stud(?:y|ies)|showcase)\b/i;
 const PROJECT_HEADING = /\b(?:projects?|portfolio|works|my work|selected work|featured work|recent work|case stud(?:y|ies)|things i(?:'|’)?ve built|what i(?:'|’)?ve built|showcase)\b/i;
+// An element or a section that lists where else to find the person ("~ find me ~", "Let's connect",
+// "Socials", "Contact"): links there are profiles, never projects (stimmie.dev's 26 profile links).
+const SOCIAL_ATTR = /\b(?:socials?|social links|find me|connect|follow|elsewhere|contact)\b/i;
+const SOCIAL_HEADING = /\b(?:find me|connect|socials?|follow me|elsewhere|get in touch|contact(?: me)?)\b/i;
 // The page's frame: links here are navigation, credits and profiles, never the projects.
 const CHROME = new Set(["nav", "header", "footer"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4"]);
@@ -97,6 +101,7 @@ export function scanPage(html, baseUrl) {
   // How many open elements hold projects, and how many are the page's frame (nav, header, footer).
   let projectOpen = 0;
   let chromeOpen = 0;
+  let socialOpen = 0;
   const noQuote = { '"': false, "'": false };
 
   const addText = (t) => {
@@ -125,13 +130,18 @@ export function scanPage(html, baseUrl) {
     if (rec.head) headOpen--;
     if (rec.project) projectOpen--;
     if (rec.chrome) chromeOpen--;
+    if (rec.social) socialOpen--;
     if (rec.heading) {
       openHeadings.splice(openHeadings.lastIndexOf(rec.heading), 1);
-      // A "Projects" heading: what follows it in its section holds the projects.
+      // A "Projects" heading: what follows it in its section holds the projects; a "Find me" heading, profiles.
       const parent = stack.at(-1);
-      if (parent && !parent.project && PROJECT_HEADING.test(decodeEntities(rec.heading.parts.join(" ")))) {
+      const words = decodeEntities(rec.heading.parts.join(" "));
+      if (parent && !parent.project && !parent.social && PROJECT_HEADING.test(words)) {
         parent.project = true;
         projectOpen++;
+      } else if (parent && !parent.social && !parent.project && SOCIAL_HEADING.test(words)) {
+        parent.social = true;
+        socialOpen++;
       }
     }
   };
@@ -256,10 +266,18 @@ export function scanPage(html, baseUrl) {
     }
     const rec = { name };
     if (CHROME.has(name) || /^(?:navigation|banner|contentinfo)$/i.test(String(attrs.get("role") ?? "").trim())) rec.chrome = true;
-    else if (name !== "html" && name !== "body" && name !== "main" && PROJECT_ATTR.test(attrWords(`${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`))) rec.project = true;
+    else if (name !== "html" && name !== "body" && name !== "main") {
+      const words = attrWords(`${attrs.get("id") ?? ""} ${attrs.get("class") ?? ""} ${attrs.get("aria-label") ?? ""}`);
+      if (PROJECT_ATTR.test(words)) rec.project = true;
+      else if (SOCIAL_ATTR.test(words)) rec.social = true;
+    }
     if (HEADINGS.has(name)) rec.heading = { parts: [], len: 0 };
-    // Where it sits: inside an element that holds projects (itself included), and not in the page's frame.
-    const where = () => ({ inProjects: projectOpen + (rec.project ? 1 : 0) > 0 && chromeOpen + (rec.chrome ? 1 : 0) === 0, inChrome: chromeOpen + (rec.chrome ? 1 : 0) > 0 });
+    // Where it sits: inside an element that holds projects (itself included), in the page's frame, or in a list of profiles.
+    const where = () => {
+      const chrome = chromeOpen + (rec.chrome ? 1 : 0) > 0;
+      const social = socialOpen + (rec.social ? 1 : 0) > 0;
+      return { inProjects: projectOpen + (rec.project ? 1 : 0) > 0 && !chrome && !social, inChrome: chrome, inSocial: social };
+    };
     const href = attrs.get("href");
     const raw = href == null ? "" : decodeEntities(href).trim();
     if (name === "a" && raw) {
@@ -310,6 +328,7 @@ export function scanPage(html, baseUrl) {
     if (rec.heading) openHeadings.push(rec.heading);
     if (rec.project) projectOpen++;
     if (rec.chrome) chromeOpen++;
+    if (rec.social) socialOpen++;
   }
   addText(s.slice(t0, n));
 
@@ -319,13 +338,13 @@ export function scanPage(html, baseUrl) {
         const href = resolve(l.raw, baseUrl);
         if (!href) return null;
         const t = l.parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome };
+        return { raw: l.raw, href, text: `${t} ${l.aria}`.trim(), inProjects: l.inProjects, inChrome: l.inChrome, inSocial: l.inSocial };
       })
       .filter(Boolean),
     controls: controls.map((c) => {
       const own = decodeEntities(c.textParts.join(" ")).replace(/\s+/g, " ").trim();
       const parts = [own.length <= LABEL_MAX ? own : "", c.aria, c.title, ...c.alts, c.value].map((x) => decodeEntities(x).replace(/\s+/g, " ").trim()).filter(Boolean);
-      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome };
+      return { tag: c.tag, label: parts.join(" "), parts, text: own.slice(0, 200), navUrls: c.navUrls, attrUrls: c.attrUrls, inLink: c.inLink, inProjects: c.inProjects, inChrome: c.inChrome, inSocial: c.inSocial };
     }),
     text: text.join(" "),
     head: head.join(" "),
