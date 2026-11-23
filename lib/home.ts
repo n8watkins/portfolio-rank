@@ -82,12 +82,22 @@ async function boardOrder(limit: number): Promise<{ sites: PoolSite[]; total: nu
  * /top by up to an hour; the Top 10 reads the order fresh (topTen). No Gemini
  * answer is read (owner, 2026-11-23).
  */
-async function rankedPool(): Promise<{ pool: PoolSite[]; total: number }> {
+export async function rankedPool(): Promise<{ pool: PoolSite[]; total: number }> {
   await ensureSchema();
   const { sites, total } = await cached<{ sites: PoolSite[]; total: number }>("home", `pool:${rankingV2() ? "tiers" : "elo"}`, { ttlMs: HOUR }, () =>
     boardOrder(POOL_SIZE)
   );
   return { pool: sites, total };
+}
+
+/**
+ * The cached pool without the sites hidden now: a site hidden after the pool
+ * was cached leaves the showcase and the portfolio of the day at once (the
+ * hide paths also drop the cached pool, lib/games/pool.mjs HOME_POOL_KEYS).
+ */
+export async function visiblePool(): Promise<{ pool: PoolSite[]; total: number; hidden: Set<string> }> {
+  const [{ pool, total }, hidden] = await Promise.all([rankedPool(), hiddenUrls()]);
+  return { pool: pool.filter((p) => !hidden.has(p.url)), total, hidden };
 }
 
 /**
@@ -316,8 +326,7 @@ export type HomeData = Awaited<ReturnType<typeof homeData>>;
 
 export async function homeData() {
   await ensureSchema();
-  const { pool, total: ranked } = await rankedPool();
-  const hidden = await hiddenUrls();
+  const { pool, total: ranked, hidden } = await visiblePool();
   const total = FEED.filter((p) => !hidden.has(p.url)).length;
   const [show, top, recent, stats, poll] = await Promise.all([showcase(pool), topTen(), recentlyGraded(), liveStats(total), polls()]);
   const potd = await portfolioOfTheDay(pool, ranked, new Set(show.map((s) => s.url)));

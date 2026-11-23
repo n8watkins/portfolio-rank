@@ -63,6 +63,13 @@ test("with RANKING_V2 off, the home order is the ELO board /top renders, place f
   assert.ok(!order.includes(sites[14]), "no votes, not on the board");
 });
 
+test("tied ELO sites keep one order (by address), so the cached pool and /top agree", async () => {
+  const sites = feed.slice(30, 34).map((p) => p.url);
+  await db().execute("DELETE FROM ratings");
+  for (const url of [...sites].reverse()) await db().execute({ sql: "INSERT OR REPLACE INTO ratings (url, elo, votes) VALUES (?, 1500, 3)", args: [url] });
+  assert.deepEqual((await eloOrder(10)).map((r) => r.url), [...sites].sort());
+});
+
 test("the home page reads /top's order in each flag state, never hides a database error, and caches its pool", () => {
   const src = fs.readFileSync(new URL("../lib/home.ts", import.meta.url), "utf8");
   const has = (re, msg) => assert.ok(re.test(src), msg);

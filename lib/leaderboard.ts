@@ -261,7 +261,7 @@ const MIN_VOTES = 1;
  */
 export async function eloOrder(limit: number): Promise<{ url: string; elo: number; votes: number }[]> {
   const hidden = await hiddenUrls();
-  const res = await db().execute({ sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC LIMIT ?", args: [MIN_VOTES, limit + 50] });
+  const res = await db().execute({ sql: "SELECT url, elo, votes FROM ratings WHERE votes >= ? ORDER BY elo DESC, url LIMIT ?", args: [MIN_VOTES, limit + 50] });
   return res.rows
     .map((r) => ({ url: String(r.url), elo: Number(r.elo), votes: Number(r.votes) }))
     .filter((r) => byUrl.has(r.url) && !hidden.has(r.url))
